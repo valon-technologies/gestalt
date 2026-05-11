@@ -78,9 +78,9 @@ func NewAgentManagerCreateSessionRequest(input AgentManagerCreateSessionInput) (
 	if err != nil {
 		return nil, err
 	}
-	var workspace *AgentProtocolWorkspace
+	var workspace *proto.AgentWorkspace
 	if input.Workspace != nil {
-		workspace = NewAgentWorkspace(*input.Workspace)
+		workspace = agentProtocolWorkspaceToProto(NewAgentWorkspace(*input.Workspace))
 	}
 	return &proto.AgentManagerCreateSessionRequest{
 		ProviderName:   input.ProviderName,
@@ -99,7 +99,7 @@ func NewAgentManagerGetSessionRequest(input AgentManagerGetSessionInput) *proto.
 func NewAgentManagerListSessionsRequest(input AgentManagerListSessionsInput) *proto.AgentManagerListSessionsRequest {
 	return &proto.AgentManagerListSessionsRequest{
 		ProviderName: input.ProviderName,
-		State:        input.State,
+		State:        proto.AgentSessionState(input.State),
 		Limit:        input.Limit,
 		SummaryOnly:  input.SummaryOnly,
 	}
@@ -113,13 +113,17 @@ func NewAgentManagerUpdateSessionRequest(input AgentManagerUpdateSessionInput) (
 	return &proto.AgentManagerUpdateSessionRequest{
 		SessionId: input.SessionID,
 		ClientRef: input.ClientRef,
-		State:     input.State,
+		State:     proto.AgentSessionState(input.State),
 		Metadata:  metadata,
 	}, nil
 }
 
 func NewAgentManagerCreateTurnRequest(input AgentManagerCreateTurnInput) (*proto.AgentManagerCreateTurnRequest, error) {
-	messages, err := agentMessagesFromInputs(input.Messages)
+	nativeMessages, err := agentMessagesFromInputs(input.Messages)
+	if err != nil {
+		return nil, err
+	}
+	messages, err := agentMessagePtrsToProto(nativeMessages)
 	if err != nil {
 		return nil, err
 	}
@@ -139,8 +143,8 @@ func NewAgentManagerCreateTurnRequest(input AgentManagerCreateTurnInput) (*proto
 		SessionId:      input.SessionID,
 		Model:          input.Model,
 		Messages:       messages,
-		ToolRefs:       agentToolRefsFromInputs(input.ToolRefs),
-		ToolSource:     input.ToolSource,
+		ToolRefs:       agentToolRefPtrsToProto(agentToolRefsFromInputs(input.ToolRefs)),
+		ToolSource:     proto.AgentToolSourceMode(input.ToolSource),
 		ResponseSchema: responseSchema,
 		Metadata:       metadata,
 		IdempotencyKey: input.IdempotencyKey,
@@ -155,7 +159,7 @@ func NewAgentManagerGetTurnRequest(input AgentManagerGetTurnInput) *proto.AgentM
 func NewAgentManagerListTurnsRequest(input AgentManagerListTurnsInput) *proto.AgentManagerListTurnsRequest {
 	return &proto.AgentManagerListTurnsRequest{
 		SessionId:   input.SessionID,
-		Status:      input.Status,
+		Status:      proto.AgentExecutionStatus(input.Status),
 		Limit:       input.Limit,
 		SummaryOnly: input.SummaryOnly,
 	}

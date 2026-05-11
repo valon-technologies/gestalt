@@ -17,25 +17,42 @@ from google.protobuf import json_format
 from google.protobuf import struct_pb2 as _struct_pb2
 
 from gestalt import (
+    AGENT_EXECUTION_STATUS_CANCELED,
+    AGENT_EXECUTION_STATUS_SUCCEEDED,
+    AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
+    AGENT_INTERACTION_STATE_PENDING,
+    AGENT_INTERACTION_STATE_RESOLVED,
+    AGENT_INTERACTION_TYPE_APPROVAL,
+    AGENT_SESSION_STATE_ACTIVE,
+    AGENT_SESSION_STATE_ARCHIVED,
     ENV_AGENT_HOST_SOCKET,
     ENV_AGENT_HOST_SOCKET_TOKEN,
     ENV_AGENT_MANAGER_SOCKET,
     ENV_AGENT_MANAGER_SOCKET_TOKEN,
     AgentHost,
+    AgentInteraction,
     AgentManager,
     AgentManagerCreateTurnInput,
     AgentManagerResolveInteractionInput,
     AgentMessage,
     AgentMessageInput,
+    AgentMessagePart,
     AgentMessagePartImageRefInput,
     AgentMessagePartInput,
     AgentMessagePartToolCallInput,
     AgentMessagePartToolResultInput,
     AgentProvider,
+    AgentProviderCapabilities,
     AgentSession,
     AgentToolRefInput,
     AgentTurn,
     AgentTurnEvent,
+    Error,
+    ListAgentProviderInteractionsResponse,
+    ListAgentProviderSessionsResponse,
+    ListAgentProviderTurnEventsResponse,
+    ListAgentProviderTurnsResponse,
+    ListAgentToolsRequest,
     MetadataProvider,
     ProviderKind,
     ProviderMetadata,
@@ -47,10 +64,7 @@ from gestalt import (
     agent_message_part_from_dict,
     agent_message_to_dict,
     agent_message_to_proto_dict,
-    message_from_dict,
-    message_to_dict,
     protocol,
-    struct_from_dict,
 )
 from gestalt.protocol import v1 as protocol_v1
 from gestalt.testing import agent_pb2 as _agent_pb2
@@ -105,44 +119,44 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
     def warnings(self) -> list[str]:
         return ["set OPENAI_API_KEY"]
 
-    def CreateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.AgentSession(
+    def create_session(self, request: Any) -> Any:
+        return AgentSession(
             id=request.session_id,
             provider_name="py-agent",
             model=request.model,
             client_ref=request.client_ref,
-            state=agent_pb2.AGENT_SESSION_STATE_ACTIVE,
+            state=AGENT_SESSION_STATE_ACTIVE,
             metadata=request.metadata,
             created_by=request.created_by,
         )
 
-    def GetSession(self, request: Any, context: grpc.ServicerContext) -> Any:
-        metadata = struct_pb2.Struct()
-        metadata.update({"source": "py-test"})
-        return agent_pb2.AgentSession(
+    def get_session(self, request: Any) -> Any:
+        if request.session_id == "missing-session":
+            raise Error(404, "agent session 'missing-session' was not found")
+        return AgentSession(
             id=request.session_id,
             provider_name="py-agent",
             model="gpt-5.1",
             client_ref="cli-session-1",
-            state=agent_pb2.AGENT_SESSION_STATE_ARCHIVED,
-            metadata=metadata,
+            state=AGENT_SESSION_STATE_ARCHIVED,
+            metadata={"source": "py-test"},
         )
 
-    def ListSessions(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.ListAgentProviderSessionsResponse(
+    def list_sessions(self, request: Any) -> Any:
+        return ListAgentProviderSessionsResponse(
             sessions=[
-                agent_pb2.AgentSession(
+                AgentSession(
                     id="session-1",
                     provider_name="py-agent",
                     model="gpt-5.1",
                     client_ref="cli-session-1",
-                    state=agent_pb2.AGENT_SESSION_STATE_ARCHIVED,
+                    state=AGENT_SESSION_STATE_ARCHIVED,
                 )
             ]
         )
 
-    def UpdateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.AgentSession(
+    def update_session(self, request: Any) -> Any:
+        return AgentSession(
             id=request.session_id,
             provider_name="py-agent",
             model="gpt-5.1",
@@ -151,13 +165,13 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             metadata=request.metadata,
         )
 
-    def CreateTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.AgentTurn(
+    def create_turn(self, request: Any) -> Any:
+        return AgentTurn(
             id=request.turn_id,
             session_id=request.session_id,
             provider_name="py-agent",
             model=request.model,
-            status=agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
+            status=AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
             messages=request.messages,
             output_text="echo:Plan it",
             status_message="waiting for input",
@@ -165,45 +179,45 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             execution_ref=request.execution_ref,
         )
 
-    def GetTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.AgentTurn(
+    def get_turn(self, request: Any) -> Any:
+        return AgentTurn(
             id=request.turn_id,
             session_id="session-1",
             provider_name="py-agent",
             model="gpt-5.1",
-            status=agent_pb2.AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
+            status=AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT,
             output_text="echo:Plan it",
             status_message="waiting for input",
         )
 
-    def ListTurns(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.ListAgentProviderTurnsResponse(
+    def list_turns(self, request: Any) -> Any:
+        return ListAgentProviderTurnsResponse(
             turns=[
-                agent_pb2.AgentTurn(
+                AgentTurn(
                     id="turn-1",
                     session_id=request.session_id,
                     provider_name="py-agent",
                     model="gpt-5.1",
-                    status=agent_pb2.AGENT_EXECUTION_STATUS_SUCCEEDED,
+                    status=AGENT_EXECUTION_STATUS_SUCCEEDED,
                     status_message="done",
                 )
             ]
         )
 
-    def CancelTurn(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.AgentTurn(
+    def cancel_turn(self, request: Any) -> Any:
+        return AgentTurn(
             id=request.turn_id,
             session_id="session-1",
             provider_name="py-agent",
             model="gpt-5.1",
-            status=agent_pb2.AGENT_EXECUTION_STATUS_CANCELED,
+            status=AGENT_EXECUTION_STATUS_CANCELED,
             status_message=request.reason,
         )
 
-    def ListTurnEvents(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.ListAgentProviderTurnEventsResponse(
+    def list_turn_events(self, request: Any) -> Any:
+        return ListAgentProviderTurnEventsResponse(
             events=[
-                agent_pb2.AgentTurnEvent(
+                AgentTurnEvent(
                     id=f"{request.turn_id}-event-1",
                     turn_id=request.turn_id,
                     seq=1,
@@ -211,7 +225,7 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
                     source="py-agent",
                     visibility="private",
                 ),
-                agent_pb2.AgentTurnEvent(
+                AgentTurnEvent(
                     id=f"{request.turn_id}-event-2",
                     turn_id=request.turn_id,
                     seq=2,
@@ -222,46 +236,46 @@ class _AgentRuntimeProvider(AgentProvider, MetadataProvider, WarningsProvider):
             ]
         )
 
-    def GetInteraction(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.AgentInteraction(
+    def get_interaction(self, request: Any) -> Any:
+        return AgentInteraction(
             id=request.interaction_id,
             turn_id="turn-1",
             session_id="session-1",
-            type=agent_pb2.AGENT_INTERACTION_TYPE_APPROVAL,
-            state=agent_pb2.AGENT_INTERACTION_STATE_PENDING,
+            type=AGENT_INTERACTION_TYPE_APPROVAL,
+            state=AGENT_INTERACTION_STATE_PENDING,
             title="Approve command",
             prompt="Run git status?",
         )
 
-    def ListInteractions(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.ListAgentProviderInteractionsResponse(
+    def list_interactions(self, request: Any) -> Any:
+        return ListAgentProviderInteractionsResponse(
             interactions=[
-                agent_pb2.AgentInteraction(
+                AgentInteraction(
                     id="interaction-1",
                     turn_id=request.turn_id,
                     session_id="session-1",
-                    type=agent_pb2.AGENT_INTERACTION_TYPE_APPROVAL,
-                    state=agent_pb2.AGENT_INTERACTION_STATE_PENDING,
+                    type=AGENT_INTERACTION_TYPE_APPROVAL,
+                    state=AGENT_INTERACTION_STATE_PENDING,
                     title="Approve command",
                     prompt="Run git status?",
                 )
             ]
         )
 
-    def ResolveInteraction(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.AgentInteraction(
+    def resolve_interaction(self, request: Any) -> Any:
+        return AgentInteraction(
             id=request.interaction_id,
             turn_id="turn-1",
             session_id="session-1",
-            type=agent_pb2.AGENT_INTERACTION_TYPE_APPROVAL,
-            state=agent_pb2.AGENT_INTERACTION_STATE_RESOLVED,
+            type=AGENT_INTERACTION_TYPE_APPROVAL,
+            state=AGENT_INTERACTION_STATE_RESOLVED,
             title="Approve command",
             prompt="Run git status?",
             resolution=request.resolution,
         )
 
-    def GetCapabilities(self, request: Any, context: grpc.ServicerContext) -> Any:
-        return agent_pb2.AgentProviderCapabilities(
+    def get_capabilities(self, request: Any) -> Any:
+        return AgentProviderCapabilities(
             streaming_text=True,
             tool_calls=True,
             parallel_tool_calls=False,
@@ -723,9 +737,9 @@ class AgentTransportTests(unittest.TestCase):
         turn = AgentTurn(id="turn-1", created_at=created_at)
         event = AgentTurnEvent(id="event-1", created_at=created_at)
 
-        self.assertEqual(session.created_at.ToDatetime(tzinfo=timezone.utc), created_at)
-        self.assertEqual(turn.created_at.ToDatetime(tzinfo=timezone.utc), created_at)
-        self.assertEqual(event.created_at.ToDatetime(tzinfo=timezone.utc), created_at)
+        self.assertEqual(session.created_at, created_at)
+        self.assertEqual(turn.created_at, created_at)
+        self.assertEqual(event.created_at, created_at)
 
     def test_agent_message_dict_helpers_preserve_presence(self) -> None:
         message = agent_message_from_dict(
@@ -760,8 +774,6 @@ class AgentTransportTests(unittest.TestCase):
             }
         )
 
-        self.assertTrue(message.HasField("metadata"))
-        self.assertTrue(message.parts[0].tool_call.HasField("arguments"))
         self.assertEqual(
             agent_message_to_dict(message),
             {
@@ -829,15 +841,13 @@ class AgentTransportTests(unittest.TestCase):
             agent_pb2.AGENT_MESSAGE_PART_TYPE_TOOL_CALL,
         )
         self.assertEqual(message.parts[0].tool_call.id, "call-1")
-        self.assertTrue(message.parts[0].tool_call.arguments.fields["ok"].bool_value)
+        self.assertEqual(message.parts[0].tool_call.arguments, {"ok": True})
         self.assertEqual(
             message.parts[1].type,
             agent_pb2.AGENT_MESSAGE_PART_TYPE_TOOL_RESULT,
         )
         self.assertEqual(message.parts[1].tool_result.tool_call_id, "call-1")
-        self.assertTrue(
-            message.parts[1].tool_result.output.fields["accepted"].bool_value
-        )
+        self.assertEqual(message.parts[1].tool_result.output, {"accepted": True})
         self.assertEqual(
             message.parts[2].type,
             agent_pb2.AGENT_MESSAGE_PART_TYPE_IMAGE_REF,
@@ -857,11 +867,16 @@ class AgentTransportTests(unittest.TestCase):
     def test_agent_message_proto_dict_helpers_preserve_protobuf_json_shape(
         self,
     ) -> None:
-        message = AgentMessage(role="assistant")
-        message.metadata.CopyFrom(struct_from_dict({"tenant": "acme"}))
-        part = message.parts.add()
-        part.type = agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT
-        part.text = "hello"
+        message = AgentMessage(
+            role="assistant",
+            metadata={"tenant": "acme"},
+            parts=[
+                AgentMessagePart(
+                    type=agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
+                    text="hello",
+                )
+            ],
+        )
 
         raw = agent_message_to_proto_dict(message)
 
@@ -877,11 +892,6 @@ class AgentTransportTests(unittest.TestCase):
                 ],
                 "metadata": {"tenant": "acme"},
             },
-        )
-        self.assertEqual(message_to_dict(message), raw)
-        self.assertEqual(
-            message_to_dict(message_from_dict(raw, AgentMessage())),
-            raw,
         )
         self.assertEqual(
             agent_message_to_proto_dict(agent_message_from_proto_dict(raw)),
@@ -1021,6 +1031,45 @@ class AgentTransportTests(unittest.TestCase):
         self.assertTrue(capabilities.interactions)
         self.assertTrue(capabilities.resumable_turns)
 
+    def test_agent_provider_native_errors_map_to_grpc_statuses(self) -> None:
+        channel = grpc.insecure_channel(f"unix:{_runtime_socket}")
+        provider_client = agent_pb2_grpc.AgentProviderStub(channel)
+
+        with self.assertRaises(grpc.RpcError) as raised:
+            provider_client.GetSession(
+                agent_pb2.GetAgentProviderSessionRequest(session_id="missing-session")
+            )
+
+        rpc_error: Any = raised.exception
+        self.assertEqual(rpc_error.code(), grpc.StatusCode.NOT_FOUND)
+        self.assertIn("missing-session", rpc_error.details())
+
+    def test_agent_provider_missing_methods_map_to_unimplemented(self) -> None:
+        socket_path = _fresh_socket("py-agent-partial-runtime")
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+        adapter = _runtime._servable_target(
+            AgentProvider(), runtime_kind=ProviderKind.AGENT
+        )
+        _runtime._register_services(server=server, servable=adapter)
+        server.add_insecure_port(f"unix:{socket_path}")
+        server.start()
+        try:
+            channel = grpc.insecure_channel(f"unix:{socket_path}")
+            provider_client = agent_pb2_grpc.AgentProviderStub(channel)
+
+            with self.assertRaises(grpc.RpcError) as raised:
+                provider_client.GetCapabilities(
+                    agent_pb2.GetAgentProviderCapabilitiesRequest()
+                )
+
+            rpc_error: Any = raised.exception
+            self.assertEqual(rpc_error.code(), grpc.StatusCode.UNIMPLEMENTED)
+            self.assertIn("get_capabilities", rpc_error.details())
+        finally:
+            server.stop(grace=0).wait()
+            if os.path.exists(socket_path):
+                os.remove(socket_path)
+
     def test_agent_host_roundtrip(self) -> None:
         with AgentHost() as host:
             list_response = host.list_tools_for_turn(
@@ -1104,7 +1153,7 @@ class AgentTransportTests(unittest.TestCase):
     def test_agent_host_accepts_large_internal_responses(self) -> None:
         with AgentHost() as host:
             list_response = host.list_tools(
-                agent_pb2.ListAgentToolsRequest(
+                ListAgentToolsRequest(
                     session_id="session-1",
                     turn_id="turn-1",
                     page_token="large",

@@ -115,7 +115,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecuteTool: %v", err)
 	}
-	if resp.GetStatus() != 207 || resp.GetBody() != `{"ok":true}` {
+	if resp.Status != 207 || resp.Body != `{"ok":true}` {
 		t.Fatalf("response = %#v", resp)
 	}
 	listResp, err := client.ListToolsForTurn(context.Background(), gestalt.AgentHostListToolsInput{
@@ -129,7 +129,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
-	if len(listResp.GetTools()) != 1 || listResp.GetTools()[0].GetId() != "tool-2" || listResp.GetTools()[0].GetMcpName() != "slack__send_message" || listResp.GetNextPageToken() != "next-page" {
+	if len(listResp.Tools) != 1 || listResp.Tools[0].ID != "tool-2" || listResp.Tools[0].MCPName != "slack__send_message" || listResp.NextPageToken != "next-page" {
 		t.Fatalf("list response = %#v", listResp)
 	}
 	connResp, err := client.ResolveConnectionForTurn(context.Background(), gestalt.AgentHostResolveConnectionInput{
@@ -142,7 +142,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveConnection: %v", err)
 	}
-	if connResp.GetConnectionId() != "vertex-ai" || connResp.GetHeaders()["authorization"] != "Bearer token" || connResp.GetParams()["endpoint"] != "vertex-endpoint" {
+	if connResp.ConnectionID != "vertex-ai" || connResp.Headers["authorization"] != "Bearer token" || connResp.Params["endpoint"] != "vertex-endpoint" {
 		t.Fatalf("connection response = %#v", connResp)
 	}
 

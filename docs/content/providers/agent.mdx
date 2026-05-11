@@ -967,7 +967,7 @@ Providers that support deployer-defined session setup must advertise
     ```python
     from gestalt import AgentProviderCapabilities
 
-    def GetCapabilities(self, request, context):
+    def get_capabilities(self, request):
         return AgentProviderCapabilities(
             supports_session_start=True,
         )
@@ -1022,12 +1022,16 @@ prepared `root` and `cwd` first.
     }
 
     func (p *Provider) CreateSession(ctx context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
-        prepared := req.GetPreparedWorkspace()
-        if prepared != nil {
-            // Launch the vendor harness with prepared.GetCwd() as its working directory.
+        if req.PreparedWorkspace != nil {
+            cwd := req.PreparedWorkspace.Cwd
+            // Launch the vendor harness with cwd as its working directory.
         }
 
-        return &gestalt.AgentSession{Id: req.GetSessionId()}, nil
+        return &gestalt.AgentSession{
+            ID:           req.SessionID,
+            ProviderName: "example",
+            State:        gestalt.AgentSessionStateActive,
+        }, nil
     }
     ```
   </Tabs.Tab>
@@ -1035,20 +1039,15 @@ prepared `root` and `cwd` first.
     ```python
     from gestalt import AgentProviderCapabilities, AgentSession, AGENT_SESSION_STATE_ACTIVE
 
-    def GetCapabilities(self, request, context):
+    def get_capabilities(self, request):
         return AgentProviderCapabilities(
             supports_prepared_workspace=True,
         )
 
 
-    def CreateSession(self, request, context):
-        prepared = (
-            request.prepared_workspace
-            if request.HasField("prepared_workspace")
-            else None
-        )
-        if prepared:
-            cwd = prepared.cwd
+    def create_session(self, request):
+        if request.prepared_workspace:
+            cwd = request.prepared_workspace.cwd
             # Launch the vendor harness with cwd as its working directory.
 
         return AgentSession(
@@ -1082,7 +1081,7 @@ prepared `root` and `cwd` first.
         Ok(gestalt::AgentSession {
             id: request.session_id,
             provider_name: "example".to_string(),
-            state: gestalt::AgentSessionState::Active as i32,
+            state: gestalt::AgentSessionState::Active,
             ..Default::default()
         })
     }
@@ -1129,7 +1128,7 @@ Agent providers opt in to Gestalt integration tools by advertising
     ```python
     from gestalt import AgentProviderCapabilities, AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
 
-    def GetCapabilities(self, request, context):
+    def get_capabilities(self, request):
         return AgentProviderCapabilities(
             tool_calls=True,
             supported_tool_sources=[
@@ -1146,7 +1145,7 @@ Agent providers opt in to Gestalt integration tools by advertising
     ) -> gestalt::Result<gestalt::AgentProviderCapabilities> {
         Ok(gestalt::AgentProviderCapabilities {
             tool_calls: true,
-            supported_tool_sources: vec![gestalt::AgentToolSourceMode::McpCatalog as i32],
+            supported_tool_sources: vec![gestalt::AgentToolSourceMode::McpCatalog],
             ..Default::default()
         })
     }
@@ -1213,26 +1212,26 @@ provider-owned inference.
       defer host.Close()
 
       listed, err := host.ListToolsForTurn(ctx, gestalt.AgentHostListToolsInput{
-        SessionID: turn.GetSessionId(),
-        TurnID:    turn.GetTurnId(),
-        RunGrant:  turn.GetRunGrant(),
+        SessionID: turn.SessionID,
+        TurnID:    turn.TurnID,
+        RunGrant:  turn.RunGrant,
         PageSize:  25,
         Query:     "issue",
       })
       if err != nil {
         return "", err
       }
-      if len(listed.GetTools()) == 0 {
+      if len(listed.Tools) == 0 {
         return "", fmt.Errorf("no granted tools matched the query")
       }
 
       result, err := host.ExecuteToolForTurn(ctx, gestalt.AgentHostExecuteToolInput{
-        SessionID:      turn.GetSessionId(),
-        TurnID:         turn.GetTurnId(),
+        SessionID:      turn.SessionID,
+        TurnID:         turn.TurnID,
         ToolCallID:     "call-1",
-        ToolID:         listed.GetTools()[0].GetId(),
-        RunGrant:       turn.GetRunGrant(),
-        IdempotencyKey: turn.GetIdempotencyKey() + ":call-1",
+        ToolID:         listed.Tools[0].ID,
+        RunGrant:       turn.RunGrant,
+        IdempotencyKey: turn.IdempotencyKey + ":call-1",
         Arguments:      map[string]any{"query": "AIT-231"},
       })
       if err != nil {
@@ -1240,18 +1239,18 @@ provider-owned inference.
       }
 
       connection, err := host.ResolveConnectionForTurn(ctx, gestalt.AgentHostResolveConnectionInput{
-        SessionID:  turn.GetSessionId(),
-        TurnID:     turn.GetTurnId(),
+        SessionID:  turn.SessionID,
+        TurnID:     turn.TurnID,
         Connection: "model",
         Instance:   "default",
-        RunGrant:   turn.GetRunGrant(),
+        RunGrant:   turn.RunGrant,
       })
       if err != nil {
         return "", err
       }
 
-      _ = connection.GetHeaders()
-      return result.GetBody(), nil
+      _ = connection.Headers
+      return result.Body, nil
     }
     ```
   </Tabs.Tab>
@@ -1456,47 +1455,49 @@ own events.
 
     import (
       "context"
+      "time"
 
       gestalt "github.com/valon-technologies/gestalt/sdk/go"
     )
 
-    type Provider struct{}
+    type Provider struct {
+      gestalt.UnimplementedAgentProvider
+    }
 
     func New() *Provider { return &Provider{} }
-
-    func (p *Provider) Configure(_ context.Context, _ string, _ map[string]any) error {
-      return nil
-    }
 
     func actorFromSubject(subject *gestalt.AgentSubjectContext) *gestalt.AgentActor {
       if subject == nil {
         return nil
       }
       return &gestalt.AgentActor{
-        SubjectId:   subject.GetSubjectId(),
-        SubjectKind: subject.GetSubjectKind(),
-        DisplayName: subject.GetDisplayName(),
-        AuthSource:  subject.GetAuthSource(),
+        SubjectID:   subject.SubjectID,
+        SubjectKind: subject.SubjectKind,
+        DisplayName: subject.DisplayName,
+        AuthSource:  subject.AuthSource,
       }
     }
 
     func (p *Provider) CreateSession(ctx context.Context, req *gestalt.CreateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
+      now := time.Now()
       return &gestalt.AgentSession{
-        Id:           req.GetSessionId(),
+        ID:           req.SessionID,
         ProviderName: "example",
-        Model:        req.GetModel(),
-        ClientRef:    req.GetClientRef(),
+        Model:        req.Model,
+        ClientRef:    req.ClientRef,
         State:        gestalt.AgentSessionStateActive,
-        CreatedBy:    req.GetCreatedBy(),
+        CreatedBy:    req.CreatedBy,
+        CreatedAt:    now,
+        UpdatedAt:    now,
       }, nil
     }
 
     func (p *Provider) GetSession(_ context.Context, req *gestalt.GetAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
       return &gestalt.AgentSession{
-        Id:           req.GetSessionId(),
+        ID:           req.SessionID,
         ProviderName: "example",
         State:        gestalt.AgentSessionStateActive,
-        CreatedBy:    actorFromSubject(req.GetSubject()),
+        CreatedBy:    actorFromSubject(req.Subject),
       }, nil
     }
 
@@ -1506,35 +1507,41 @@ own events.
 
     func (p *Provider) UpdateSession(_ context.Context, req *gestalt.UpdateAgentProviderSessionRequest) (*gestalt.AgentSession, error) {
       return &gestalt.AgentSession{
-        Id:           req.GetSessionId(),
+        ID:           req.SessionID,
         ProviderName: "example",
-        ClientRef:    req.GetClientRef(),
-        State:        req.GetState(),
-        CreatedBy:    actorFromSubject(req.GetSubject()),
+        ClientRef:    req.ClientRef,
+        State:        req.State,
+        CreatedBy:    actorFromSubject(req.Subject),
+        UpdatedAt:    time.Now(),
       }, nil
     }
 
     func (p *Provider) CreateTurn(ctx context.Context, req *gestalt.CreateAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
+      now := time.Now()
       return &gestalt.AgentTurn{
-        Id:           req.GetTurnId(),
-        SessionId:    req.GetSessionId(),
+        ID:           req.TurnID,
+        SessionID:    req.SessionID,
         ProviderName: "example",
-        Model:        req.GetModel(),
+        Model:        req.Model,
         Status:       gestalt.AgentExecutionStatusRunning,
-        Messages:     req.GetMessages(),
-        CreatedBy:    req.GetCreatedBy(),
-        ExecutionRef: req.GetExecutionRef(),
+        Messages:     req.Messages,
+        CreatedBy:    req.CreatedBy,
+        CreatedAt:    now,
+        StartedAt:    &now,
+        ExecutionRef: req.ExecutionRef,
       }, nil
     }
 
     func (p *Provider) GetTurn(_ context.Context, req *gestalt.GetAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
+      completedAt := time.Now()
       return &gestalt.AgentTurn{
-        Id:           req.GetTurnId(),
-        SessionId:    "session-1",
+        ID:           req.TurnID,
+        SessionID:    "session-1",
         ProviderName: "example",
         Status:       gestalt.AgentExecutionStatusSucceeded,
         OutputText:   "done",
-        CreatedBy:    actorFromSubject(req.GetSubject()),
+        CreatedBy:    actorFromSubject(req.Subject),
+        CompletedAt:  &completedAt,
       }, nil
     }
 
@@ -1543,13 +1550,15 @@ own events.
     }
 
     func (p *Provider) CancelTurn(_ context.Context, req *gestalt.CancelAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
+      completedAt := time.Now()
       return &gestalt.AgentTurn{
-        Id:            req.GetTurnId(),
-        SessionId:     "session-1",
+        ID:            req.TurnID,
+        SessionID:     "session-1",
         ProviderName:  "example",
         Status:        gestalt.AgentExecutionStatusCanceled,
         StatusMessage: "operator requested",
-        CreatedBy:     actorFromSubject(req.GetSubject()),
+        CreatedBy:     actorFromSubject(req.Subject),
+        CompletedAt:   &completedAt,
       }, nil
     }
 
@@ -1558,7 +1567,7 @@ own events.
     }
 
     func (p *Provider) GetInteraction(_ context.Context, req *gestalt.GetAgentProviderInteractionRequest) (*gestalt.AgentInteraction, error) {
-      return &gestalt.AgentInteraction{Id: req.GetInteractionId()}, nil
+      return &gestalt.AgentInteraction{ID: req.InteractionID}, nil
     }
 
     func (p *Provider) ListInteractions(context.Context, *gestalt.ListAgentProviderInteractionsRequest) (*gestalt.ListAgentProviderInteractionsResponse, error) {
@@ -1566,10 +1575,12 @@ own events.
     }
 
     func (p *Provider) ResolveInteraction(_ context.Context, req *gestalt.ResolveAgentProviderInteractionRequest) (*gestalt.AgentInteraction, error) {
+      resolvedAt := time.Now()
       return &gestalt.AgentInteraction{
-        Id:         req.GetInteractionId(),
+        ID:         req.InteractionID,
         State:      gestalt.AgentInteractionStateResolved,
-        Resolution: req.GetResolution(),
+        Resolution: req.Resolution,
+        ResolvedAt: &resolvedAt,
       }, nil
     }
 
@@ -1619,7 +1630,7 @@ own events.
         )
 
     class ExampleAgent(AgentProvider):
-        def CreateSession(self, request, context):
+        def create_session(self, request):
             return AgentSession(
                 id=request.session_id,
                 provider_name="example",
@@ -1629,7 +1640,7 @@ own events.
                 created_by=request.created_by,
             )
 
-        def GetSession(self, request, context):
+        def get_session(self, request):
             return AgentSession(
                 id=request.session_id,
                 provider_name="example",
@@ -1637,10 +1648,10 @@ own events.
                 created_by=actor_from_subject(request.subject),
             )
 
-        def ListSessions(self, request, context):
+        def list_sessions(self, request):
             return ListAgentProviderSessionsResponse()
 
-        def UpdateSession(self, request, context):
+        def update_session(self, request):
             return AgentSession(
                 id=request.session_id,
                 provider_name="example",
@@ -1649,7 +1660,7 @@ own events.
                 created_by=actor_from_subject(request.subject),
             )
 
-        def CreateTurn(self, request, context):
+        def create_turn(self, request):
             return AgentTurn(
                 id=request.turn_id,
                 session_id=request.session_id,
@@ -1661,7 +1672,7 @@ own events.
                 execution_ref=request.execution_ref,
             )
 
-        def GetTurn(self, request, context):
+        def get_turn(self, request):
             return AgentTurn(
                 id=request.turn_id,
                 session_id="session-1",
@@ -1671,10 +1682,10 @@ own events.
                 created_by=actor_from_subject(request.subject),
             )
 
-        def ListTurns(self, request, context):
+        def list_turns(self, request):
             return ListAgentProviderTurnsResponse()
 
-        def CancelTurn(self, request, context):
+        def cancel_turn(self, request):
             return AgentTurn(
                 id=request.turn_id,
                 session_id="session-1",
@@ -1684,26 +1695,26 @@ own events.
                 created_by=actor_from_subject(request.subject),
             )
 
-        def ListTurnEvents(self, request, context):
+        def list_turn_events(self, request):
             return ListAgentProviderTurnEventsResponse()
 
-        def GetInteraction(self, request, context):
+        def get_interaction(self, request):
             return AgentInteraction(
                 id=request.interaction_id,
                 state=AGENT_INTERACTION_STATE_PENDING,
             )
 
-        def ListInteractions(self, request, context):
+        def list_interactions(self, request):
             return ListAgentProviderInteractionsResponse()
 
-        def ResolveInteraction(self, request, context):
+        def resolve_interaction(self, request):
             return AgentInteraction(
                 id=request.interaction_id,
                 state=AGENT_INTERACTION_STATE_RESOLVED,
                 resolution=request.resolution,
             )
 
-        def GetCapabilities(self, request, context):
+        def get_capabilities(self, request):
             return AgentProviderCapabilities(
                 streaming_text=True,
                 tool_calls=True,
@@ -1737,28 +1748,28 @@ own events.
     impl gestalt::AgentProvider for ExampleAgent {
         async fn create_session(
             &self,
-            req: gestalt::CreateAgentProviderSessionRequest,
+            request: gestalt::CreateAgentProviderSessionRequest,
         ) -> gestalt::Result<gestalt::AgentSession> {
             Ok(gestalt::AgentSession {
-                id: req.session_id,
+                id: request.session_id,
                 provider_name: "example".into(),
-                model: req.model,
-                client_ref: req.client_ref,
-                state: gestalt::AgentSessionState::Active as i32,
-                created_by: req.created_by,
+                model: request.model,
+                client_ref: request.client_ref,
+                state: gestalt::AgentSessionState::Active,
+                created_by: request.created_by,
                 ..Default::default()
             })
         }
 
         async fn get_session(
             &self,
-            req: gestalt::GetAgentProviderSessionRequest,
+            request: gestalt::GetAgentProviderSessionRequest,
         ) -> gestalt::Result<gestalt::AgentSession> {
             Ok(gestalt::AgentSession {
-                id: req.session_id,
+                id: request.session_id,
                 provider_name: "example".into(),
-                state: gestalt::AgentSessionState::Active as i32,
-                created_by: actor_from_subject(req.subject),
+                state: gestalt::AgentSessionState::Active,
+                created_by: actor_from_subject(request.subject),
                 ..Default::default()
             })
         }
@@ -1772,46 +1783,46 @@ own events.
 
         async fn update_session(
             &self,
-            req: gestalt::UpdateAgentProviderSessionRequest,
+            request: gestalt::UpdateAgentProviderSessionRequest,
         ) -> gestalt::Result<gestalt::AgentSession> {
             Ok(gestalt::AgentSession {
-                id: req.session_id,
+                id: request.session_id,
                 provider_name: "example".into(),
-                client_ref: req.client_ref,
-                state: req.state,
-                created_by: actor_from_subject(req.subject),
+                client_ref: request.client_ref,
+                state: request.state,
+                created_by: actor_from_subject(request.subject),
                 ..Default::default()
             })
         }
 
         async fn create_turn(
             &self,
-            req: gestalt::CreateAgentProviderTurnRequest,
+            request: gestalt::CreateAgentProviderTurnRequest,
         ) -> gestalt::Result<gestalt::AgentTurn> {
             Ok(gestalt::AgentTurn {
-                id: req.turn_id,
-                session_id: req.session_id,
+                id: request.turn_id,
+                session_id: request.session_id,
                 provider_name: "example".into(),
-                model: req.model,
-                status: gestalt::AgentExecutionStatus::Running as i32,
-                messages: req.messages,
-                created_by: req.created_by,
-                execution_ref: req.execution_ref,
+                model: request.model,
+                status: gestalt::AgentExecutionStatus::Running,
+                messages: request.messages,
+                created_by: request.created_by,
+                execution_ref: request.execution_ref,
                 ..Default::default()
             })
         }
 
         async fn get_turn(
             &self,
-            req: gestalt::GetAgentProviderTurnRequest,
+            request: gestalt::GetAgentProviderTurnRequest,
         ) -> gestalt::Result<gestalt::AgentTurn> {
             Ok(gestalt::AgentTurn {
-                id: req.turn_id,
+                id: request.turn_id,
                 session_id: "session-1".into(),
                 provider_name: "example".into(),
-                status: gestalt::AgentExecutionStatus::Succeeded as i32,
+                status: gestalt::AgentExecutionStatus::Succeeded,
                 output_text: "done".into(),
-                created_by: actor_from_subject(req.subject),
+                created_by: actor_from_subject(request.subject),
                 ..Default::default()
             })
         }
@@ -1825,15 +1836,15 @@ own events.
 
         async fn cancel_turn(
             &self,
-            req: gestalt::CancelAgentProviderTurnRequest,
+            request: gestalt::CancelAgentProviderTurnRequest,
         ) -> gestalt::Result<gestalt::AgentTurn> {
             Ok(gestalt::AgentTurn {
-                id: req.turn_id,
+                id: request.turn_id,
                 session_id: "session-1".into(),
                 provider_name: "example".into(),
-                status: gestalt::AgentExecutionStatus::Canceled as i32,
+                status: gestalt::AgentExecutionStatus::Canceled,
                 status_message: "operator requested".into(),
-                created_by: actor_from_subject(req.subject),
+                created_by: actor_from_subject(request.subject),
                 ..Default::default()
             })
         }
@@ -1851,7 +1862,7 @@ own events.
         ) -> gestalt::Result<gestalt::AgentInteraction> {
             Ok(gestalt::AgentInteraction {
                 id: request.interaction_id,
-                state: gestalt::AgentInteractionState::Pending as i32,
+                state: gestalt::AgentInteractionState::Pending,
                 ..Default::default()
             })
         }
@@ -1865,12 +1876,12 @@ own events.
 
         async fn resolve_interaction(
             &self,
-            req: gestalt::ResolveAgentProviderInteractionRequest,
+            request: gestalt::ResolveAgentProviderInteractionRequest,
         ) -> gestalt::Result<gestalt::AgentInteraction> {
             Ok(gestalt::AgentInteraction {
-                id: req.interaction_id,
-                state: gestalt::AgentInteractionState::Resolved as i32,
-                resolution: req.resolution,
+                id: request.interaction_id,
+                state: gestalt::AgentInteractionState::Resolved,
+                resolution: request.resolution,
                 ..Default::default()
             })
         }

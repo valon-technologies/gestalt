@@ -24,8 +24,8 @@ use gestalt::{
     AgentManagerListInteractionsInput, AgentManagerListSessionsInput,
     AgentManagerListTurnEventsInput, AgentManagerListTurnsInput,
     AgentManagerResolveInteractionInput, AgentManagerUpdateSessionInput, AgentMessageInput,
-    AgentMessagePartInput, AgentToolRefInput, ENV_AGENT_MANAGER_SOCKET,
-    ENV_AGENT_MANAGER_SOCKET_TOKEN, Request,
+    AgentMessagePartInput, AgentMessagePartType as NativeAgentMessagePartType, AgentToolRefInput,
+    ENV_AGENT_MANAGER_SOCKET, ENV_AGENT_MANAGER_SOCKET_TOKEN, Request,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -447,7 +447,6 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
     let fetched_session = manager
         .get_session(AgentManagerGetSessionInput {
             session_id: "session-managed-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("get session");
@@ -475,7 +474,7 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
                 role: "user".to_string(),
                 text: "Summarize this".to_string(),
                 parts: vec![AgentMessagePartInput {
-                    part_type: AgentMessagePartType::Text,
+                    part_type: NativeAgentMessagePartType::Text,
                     text: "Summarize this".to_string(),
                     ..Default::default()
                 }],
@@ -489,7 +488,6 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
     let fetched_turn = manager
         .get_turn(AgentManagerGetTurnInput {
             turn_id: "turn-managed-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("get turn");
@@ -504,7 +502,6 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .cancel_turn(AgentManagerCancelTurnInput {
             turn_id: "turn-managed-1".to_string(),
             reason: "user canceled".to_string(),
-            ..Default::default()
         })
         .await
         .expect("cancel turn");
@@ -513,14 +510,12 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
             turn_id: "turn-managed-1".to_string(),
             after_seq: 0,
             limit: 10,
-            ..Default::default()
         })
         .await
         .expect("list turn events");
     let interactions = manager
         .list_interactions(AgentManagerListInteractionsInput {
             turn_id: "turn-managed-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("list interactions");
@@ -531,7 +526,6 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
             resolution: Some(serde_json::json!({
                 "approved": true
             })),
-            ..Default::default()
         })
         .await
         .expect("resolve interaction");
@@ -549,10 +543,8 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
     assert_eq!(interactions.interactions.len(), 1);
     assert_eq!(resolved.id, "interaction-1");
     assert_eq!(
-        AgentInteractionState::try_from(resolved.state)
-            .expect("valid interaction state")
-            .as_str_name(),
-        "AGENT_INTERACTION_STATE_RESOLVED"
+        AgentInteractionState::try_from(resolved.state).expect("valid interaction state"),
+        AgentInteractionState::Resolved
     );
 
     let seen = server.seen.lock().expect("lock seen").clone();
@@ -788,7 +780,6 @@ async fn request_agent_manager_uses_embedded_invocation_token() {
     let response = manager
         .get_session(AgentManagerGetSessionInput {
             session_id: "session-managed-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("get session");

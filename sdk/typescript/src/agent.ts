@@ -1,11 +1,8 @@
 import {
   create,
-  fromJson,
-  isMessage,
-  type JsonValue,
+  type JsonObject,
   type MessageInitShape,
 } from "@bufbuild/protobuf";
-import { ValueSchema, type Value } from "@bufbuild/protobuf/wkt";
 import {
   Code,
   ConnectError,
@@ -17,20 +14,24 @@ import {
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
-  AgentExecutionStatus,
+  AgentActorSchema,
   AgentHost as AgentHostService,
   AgentInteractionSchema,
-  AgentInteractionState,
-  AgentInteractionType,
-  AgentMessagePartType,
+  AgentMessageSchema,
+  AgentMessagePartSchema,
   AgentProvider as AgentProviderService,
   AgentProviderCapabilitiesSchema,
   AgentSessionSchema,
-  AgentSessionState,
-  AgentToolSourceMode,
+  AgentToolRefSchema,
   AgentTurnDisplaySchema,
   AgentTurnEventSchema,
   AgentTurnSchema,
+  AgentExecutionStatus as ProtoAgentExecutionStatus,
+  AgentInteractionState as ProtoAgentInteractionState,
+  AgentInteractionType as ProtoAgentInteractionType,
+  AgentMessagePartType as ProtoAgentMessagePartType,
+  AgentSessionState as ProtoAgentSessionState,
+  AgentToolSourceMode as ProtoAgentToolSourceMode,
   ExecuteAgentToolRequestSchema,
   GetAgentProviderCapabilitiesRequestSchema,
   ListAgentToolsRequestSchema,
@@ -39,43 +40,52 @@ import {
   ListAgentProviderTurnEventsResponseSchema,
   ListAgentProviderTurnsResponseSchema,
   ResolveAgentConnectionRequestSchema,
-  type AgentActor,
-  type AgentInteraction,
-  type AgentMessage,
-  type AgentMessagePart,
-  type AgentMessagePartImageRef,
-  type AgentMessagePartToolCall,
-  type AgentMessagePartToolResult,
-  type AgentProviderCapabilities,
-  type AgentSession,
-  type AgentToolRef,
-  type AgentTurn,
-  type AgentTurnDisplay,
-  type AgentTurnEvent,
-  type CancelAgentProviderTurnRequest,
-  type CreateAgentProviderSessionRequest,
-  type CreateAgentProviderTurnRequest,
-  type ExecuteAgentToolRequest,
-  type ExecuteAgentToolResponse,
-  type GetAgentProviderCapabilitiesRequest,
-  type GetAgentProviderInteractionRequest,
-  type GetAgentProviderSessionRequest,
-  type GetAgentProviderTurnRequest,
-  type ListAgentToolsRequest,
-  type ListAgentToolsResponse,
-  type ListAgentProviderInteractionsRequest,
-  type ListAgentProviderSessionsRequest,
-  type ListAgentProviderTurnEventsRequest,
-  type ListAgentProviderTurnsRequest,
-  type ListedAgentTool,
-  type ResolveAgentConnectionRequest,
-  type ResolveAgentProviderInteractionRequest,
-  type ResolvedAgentConnection,
-  type ResolvedAgentTool,
-  type UpdateAgentProviderSessionRequest,
+  type AgentActor as ProtoAgentActor,
+  type AgentInteraction as ProtoAgentInteraction,
+  type AgentMessage as ProtoAgentMessage,
+  type AgentMessagePart as ProtoAgentMessagePart,
+  type AgentMessagePartImageRef as ProtoAgentMessagePartImageRef,
+  type AgentMessagePartToolCall as ProtoAgentMessagePartToolCall,
+  type AgentMessagePartToolResult as ProtoAgentMessagePartToolResult,
+  type AgentSession as ProtoAgentSession,
+  type AgentSubjectContext as ProtoAgentSubjectContext,
+  type AgentToolRef as ProtoAgentToolRef,
+  type AgentTurn as ProtoAgentTurn,
+  type AgentTurnDisplay as ProtoAgentTurnDisplay,
+  type AgentTurnEvent as ProtoAgentTurnEvent,
+  type CancelAgentProviderTurnRequest as ProtoCancelAgentProviderTurnRequest,
+  type CreateAgentProviderSessionRequest as ProtoCreateAgentProviderSessionRequest,
+  type CreateAgentProviderTurnRequest as ProtoCreateAgentProviderTurnRequest,
+  type ExecuteAgentToolRequest as ProtoExecuteAgentToolRequest,
+  type ExecuteAgentToolResponse as ProtoExecuteAgentToolResponse,
+  type GetAgentProviderCapabilitiesRequest as ProtoGetAgentProviderCapabilitiesRequest,
+  type GetAgentProviderInteractionRequest as ProtoGetAgentProviderInteractionRequest,
+  type GetAgentProviderSessionRequest as ProtoGetAgentProviderSessionRequest,
+  type GetAgentProviderTurnRequest as ProtoGetAgentProviderTurnRequest,
+  type ListAgentToolsRequest as ProtoListAgentToolsRequest,
+  type ListAgentToolsResponse as ProtoListAgentToolsResponse,
+  type ListAgentProviderInteractionsRequest as ProtoListAgentProviderInteractionsRequest,
+  type ListAgentProviderSessionsRequest as ProtoListAgentProviderSessionsRequest,
+  type ListAgentProviderTurnEventsRequest as ProtoListAgentProviderTurnEventsRequest,
+  type ListAgentProviderTurnsRequest as ProtoListAgentProviderTurnsRequest,
+  type ListedAgentTool as ProtoListedAgentTool,
+  type ResolveAgentConnectionRequest as ProtoResolveAgentConnectionRequest,
+  type ResolveAgentProviderInteractionRequest as ProtoResolveAgentProviderInteractionRequest,
+  type ResolvedAgentConnection as ProtoResolvedAgentConnection,
+  type ResolvedAgentTool as ProtoResolvedAgentTool,
+  type UpdateAgentProviderSessionRequest as ProtoUpdateAgentProviderSessionRequest,
 } from "./internal/gen/v1/agent_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
-import { structFromObject, type JsonObjectInput } from "./protocol.ts";
+import {
+  dateFromTimestamp,
+  jsonFromValue,
+  jsonObjectFromStruct,
+  structFromObject,
+  timestampFromDate,
+  valueFromJson,
+  type JsonInput,
+  type JsonObjectInput,
+} from "./protocol.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 
 /** Environment variable containing the agent-host service target. */
@@ -84,81 +94,421 @@ export const ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET";
 export const ENV_AGENT_HOST_SOCKET_TOKEN = `${ENV_AGENT_HOST_SOCKET}_TOKEN`;
 const AGENT_HOST_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
-/**
- * Generated agent protocol message types commonly used by authored providers.
- *
- * These are re-exported so provider code can type sessions, turns, messages,
- * interactions, and host-tool requests without importing from `gen`.
- */
-export type {
-  AgentActor,
-  AgentInteraction,
-  AgentMessage,
-  AgentMessagePart,
-  AgentMessagePartImageRef,
-  AgentMessagePartToolCall,
-  AgentMessagePartToolResult,
-  AgentProviderCapabilities,
-  AgentSession,
-  AgentToolRef,
-  AgentTurn,
-  AgentTurnDisplay,
-  AgentTurnEvent,
-  CancelAgentProviderTurnRequest,
-  CreateAgentProviderSessionRequest,
-  CreateAgentProviderTurnRequest,
-  ExecuteAgentToolRequest,
-  ExecuteAgentToolResponse,
-  GetAgentProviderCapabilitiesRequest,
-  GetAgentProviderInteractionRequest,
-  GetAgentProviderSessionRequest,
-  GetAgentProviderTurnRequest,
-  ListAgentToolsRequest,
-  ListAgentToolsResponse,
-  ListAgentProviderInteractionsRequest,
-  ListAgentProviderSessionsRequest,
-  ListAgentProviderTurnEventsRequest,
-  ListAgentProviderTurnsRequest,
-  ListedAgentTool,
-  ResolveAgentConnectionRequest,
-  ResolveAgentProviderInteractionRequest,
-  ResolvedAgentConnection,
-  ResolvedAgentTool,
-  UpdateAgentProviderSessionRequest,
-};
-export {
-  AgentExecutionStatus,
-  AgentInteractionState,
-  AgentInteractionType,
-  AgentMessagePartType,
-  AgentSessionState,
-  AgentToolSourceMode,
-};
+/** Native message-part type constants for authored agent messages. */
+export const AgentMessagePartType = {
+  UNSPECIFIED: ProtoAgentMessagePartType.UNSPECIFIED,
+  TEXT: ProtoAgentMessagePartType.TEXT,
+  JSON: ProtoAgentMessagePartType.JSON,
+  TOOL_CALL: ProtoAgentMessagePartType.TOOL_CALL,
+  TOOL_RESULT: ProtoAgentMessagePartType.TOOL_RESULT,
+  IMAGE_REF: ProtoAgentMessagePartType.IMAGE_REF,
+} as const;
+export type AgentMessagePartType =
+  (typeof AgentMessagePartType)[keyof typeof AgentMessagePartType];
 
-/** JSON-like value accepted for an agent turn display payload. */
-export type AgentTurnDisplayValue =
-  | JsonValue
-  | Value
-  | MessageInitShape<typeof ValueSchema>;
+/** Native tool-source constants for authored agent provider capabilities. */
+export const AgentToolSourceMode = {
+  UNSPECIFIED: ProtoAgentToolSourceMode.UNSPECIFIED,
+  MCP_CATALOG: ProtoAgentToolSourceMode.MCP_CATALOG,
+} as const;
+export type AgentToolSourceMode =
+  (typeof AgentToolSourceMode)[keyof typeof AgentToolSourceMode];
 
-/** Initializer for a turn display with JSON-like input/output/error fields. */
-export type AgentTurnDisplayInit = Omit<
-  MessageInitShape<typeof AgentTurnDisplaySchema>,
-  "$typeName" | "input" | "output" | "error"
-> & {
-  input?: AgentTurnDisplayValue | undefined;
-  output?: AgentTurnDisplayValue | undefined;
-  error?: AgentTurnDisplayValue | undefined;
-};
+/** Native execution-status constants for authored agent turns. */
+export const AgentExecutionStatus = {
+  UNSPECIFIED: ProtoAgentExecutionStatus.UNSPECIFIED,
+  PENDING: ProtoAgentExecutionStatus.PENDING,
+  RUNNING: ProtoAgentExecutionStatus.RUNNING,
+  SUCCEEDED: ProtoAgentExecutionStatus.SUCCEEDED,
+  FAILED: ProtoAgentExecutionStatus.FAILED,
+  CANCELED: ProtoAgentExecutionStatus.CANCELED,
+  WAITING_FOR_INPUT: ProtoAgentExecutionStatus.WAITING_FOR_INPUT,
+} as const;
+export type AgentExecutionStatus =
+  (typeof AgentExecutionStatus)[keyof typeof AgentExecutionStatus];
 
-/** Initializer for a turn event with authored display payload helpers. */
-export type AgentTurnEventInit = Omit<
-  MessageInitShape<typeof AgentTurnEventSchema>,
-  "$typeName" | "display"
-> & {
-  display?: AgentTurnDisplayInit | undefined;
-};
+/** Native session-state constants for authored agent sessions. */
+export const AgentSessionState = {
+  UNSPECIFIED: ProtoAgentSessionState.UNSPECIFIED,
+  ACTIVE: ProtoAgentSessionState.ACTIVE,
+  ARCHIVED: ProtoAgentSessionState.ARCHIVED,
+} as const;
+export type AgentSessionState =
+  (typeof AgentSessionState)[keyof typeof AgentSessionState];
 
+/** Native interaction-type constants for authored agent interactions. */
+export const AgentInteractionType = {
+  UNSPECIFIED: ProtoAgentInteractionType.UNSPECIFIED,
+  APPROVAL: ProtoAgentInteractionType.APPROVAL,
+  CLARIFICATION: ProtoAgentInteractionType.CLARIFICATION,
+  INPUT: ProtoAgentInteractionType.INPUT,
+} as const;
+export type AgentInteractionType =
+  (typeof AgentInteractionType)[keyof typeof AgentInteractionType];
+
+/** Native interaction-state constants for authored agent interactions. */
+export const AgentInteractionState = {
+  UNSPECIFIED: ProtoAgentInteractionState.UNSPECIFIED,
+  PENDING: ProtoAgentInteractionState.PENDING,
+  RESOLVED: ProtoAgentInteractionState.RESOLVED,
+  CANCELED: ProtoAgentInteractionState.CANCELED,
+} as const;
+export type AgentInteractionState =
+  (typeof AgentInteractionState)[keyof typeof AgentInteractionState];
+
+export interface AgentMessagePartToolCall {
+  id?: string | undefined;
+  toolId?: string | undefined;
+  arguments?: JsonObjectInput | undefined;
+}
+
+export interface AgentMessagePartToolResult {
+  toolCallId?: string | undefined;
+  status?: number | undefined;
+  content?: string | undefined;
+  output?: JsonObjectInput | undefined;
+}
+
+export interface AgentMessagePartImageRef {
+  uri?: string | undefined;
+  mimeType?: string | undefined;
+}
+
+export interface AgentMessagePart {
+  type?: AgentMessagePartType | undefined;
+  text?: string | undefined;
+  json?: JsonObjectInput | undefined;
+  toolCall?: AgentMessagePartToolCall | undefined;
+  toolResult?: AgentMessagePartToolResult | undefined;
+  imageRef?: AgentMessagePartImageRef | undefined;
+}
+
+export interface AgentMessage {
+  role?: string | undefined;
+  text?: string | undefined;
+  parts?: readonly AgentMessagePart[] | undefined;
+  metadata?: JsonObjectInput | undefined;
+}
+
+export interface AgentActor {
+  subjectId?: string | undefined;
+  subjectKind?: string | undefined;
+  displayName?: string | undefined;
+  authSource?: string | undefined;
+}
+
+export interface AgentSubjectContext {
+  subjectId?: string | undefined;
+  subjectKind?: string | undefined;
+  credentialSubjectId?: string | undefined;
+  displayName?: string | undefined;
+  authSource?: string | undefined;
+}
+
+export interface AgentToolRef {
+  plugin?: string | undefined;
+  operation?: string | undefined;
+  connection?: string | undefined;
+  instance?: string | undefined;
+  title?: string | undefined;
+  description?: string | undefined;
+  system?: string | undefined;
+}
+
+export interface ResolvedAgentTool {
+  id?: string | undefined;
+  name?: string | undefined;
+  description?: string | undefined;
+  parametersSchema?: JsonObjectInput | undefined;
+}
+
+export interface AgentProviderCapabilities {
+  streamingText?: boolean | undefined;
+  toolCalls?: boolean | undefined;
+  parallelToolCalls?: boolean | undefined;
+  structuredOutput?: boolean | undefined;
+  interactions?: boolean | undefined;
+  resumableTurns?: boolean | undefined;
+  reasoningSummaries?: boolean | undefined;
+  boundedListHydration?: boolean | undefined;
+  supportedToolSources?: readonly AgentToolSourceMode[] | undefined;
+  supportsSessionStart?: boolean | undefined;
+  supportsPreparedWorkspace?: boolean | undefined;
+}
+
+export interface AgentSession {
+  id?: string | undefined;
+  providerName?: string | undefined;
+  model?: string | undefined;
+  clientRef?: string | undefined;
+  state?: AgentSessionState | undefined;
+  metadata?: JsonObjectInput | undefined;
+  createdBy?: AgentActor | undefined;
+  createdAt?: Date | undefined;
+  updatedAt?: Date | undefined;
+  lastTurnAt?: Date | undefined;
+}
+
+export interface AgentSessionStartHookOutput {
+  additionalContext?: boolean | undefined;
+  metadata?: boolean | undefined;
+}
+
+export interface AgentSessionStartHook {
+  id?: string | undefined;
+  type?: string | undefined;
+  command?: readonly string[] | undefined;
+  cwd?: string | undefined;
+  timeout?: string | undefined;
+  env?: Record<string, string> | undefined;
+  output?: AgentSessionStartHookOutput | undefined;
+}
+
+export interface AgentSessionStartConfig {
+  hooks?: readonly AgentSessionStartHook[] | undefined;
+}
+
+export interface AgentPreparedWorkspace {
+  root?: string | undefined;
+  cwd?: string | undefined;
+}
+
+export interface CreateAgentProviderSessionRequest {
+  sessionId: string;
+  idempotencyKey: string;
+  model: string;
+  clientRef: string;
+  metadata?: JsonObjectInput | undefined;
+  createdBy?: AgentActor | undefined;
+  subject?: AgentSubjectContext | undefined;
+  sessionStart?: AgentSessionStartConfig | undefined;
+  preparedWorkspace?: AgentPreparedWorkspace | undefined;
+}
+
+export interface GetAgentProviderSessionRequest {
+  sessionId: string;
+  subject?: AgentSubjectContext | undefined;
+}
+
+export interface ListAgentProviderSessionsRequest {
+  subject?: AgentSubjectContext | undefined;
+  sessionIds: readonly string[];
+  state: AgentSessionState;
+  limit: number;
+  summaryOnly: boolean;
+}
+
+export interface ListAgentProviderSessionsResponse {
+  sessions: readonly AgentSession[];
+}
+
+export interface UpdateAgentProviderSessionRequest {
+  sessionId: string;
+  clientRef: string;
+  state: AgentSessionState;
+  metadata?: JsonObjectInput | undefined;
+  subject?: AgentSubjectContext | undefined;
+}
+
+export interface AgentTurn {
+  id?: string | undefined;
+  sessionId?: string | undefined;
+  providerName?: string | undefined;
+  model?: string | undefined;
+  status?: AgentExecutionStatus | undefined;
+  messages?: readonly AgentMessage[] | undefined;
+  outputText?: string | undefined;
+  structuredOutput?: JsonObjectInput | undefined;
+  statusMessage?: string | undefined;
+  createdBy?: AgentActor | undefined;
+  createdAt?: Date | undefined;
+  startedAt?: Date | undefined;
+  completedAt?: Date | undefined;
+  executionRef?: string | undefined;
+}
+
+export interface AgentTurnDisplay {
+  kind?: string | undefined;
+  phase?: string | undefined;
+  text?: string | undefined;
+  label?: string | undefined;
+  ref?: string | undefined;
+  parentRef?: string | undefined;
+  input?: JsonInput | undefined;
+  output?: JsonInput | undefined;
+  error?: JsonInput | undefined;
+  action?: string | undefined;
+  format?: string | undefined;
+  language?: string | undefined;
+}
+
+export interface CreateAgentProviderTurnRequest {
+  turnId: string;
+  sessionId: string;
+  idempotencyKey: string;
+  model: string;
+  messages: readonly AgentMessage[];
+  tools: readonly ResolvedAgentTool[];
+  responseSchema?: JsonObjectInput | undefined;
+  metadata?: JsonObjectInput | undefined;
+  createdBy?: AgentActor | undefined;
+  executionRef: string;
+  toolRefs: readonly AgentToolRef[];
+  toolSource: AgentToolSourceMode;
+  subject?: AgentSubjectContext | undefined;
+  modelOptions?: JsonObjectInput | undefined;
+  runGrant: string;
+}
+
+export interface GetAgentProviderTurnRequest {
+  turnId: string;
+  subject?: AgentSubjectContext | undefined;
+}
+
+export interface ListAgentProviderTurnsRequest {
+  sessionId: string;
+  subject?: AgentSubjectContext | undefined;
+  turnIds: readonly string[];
+  status: AgentExecutionStatus;
+  limit: number;
+  summaryOnly: boolean;
+}
+
+export interface ListAgentProviderTurnsResponse {
+  turns: readonly AgentTurn[];
+}
+
+export interface CancelAgentProviderTurnRequest {
+  turnId: string;
+  reason: string;
+  subject?: AgentSubjectContext | undefined;
+}
+
+export interface AgentTurnEvent {
+  id?: string | undefined;
+  turnId?: string | undefined;
+  seq?: bigint | number | undefined;
+  type?: string | undefined;
+  source?: string | undefined;
+  visibility?: string | undefined;
+  data?: JsonObjectInput | undefined;
+  createdAt?: Date | undefined;
+  display?: AgentTurnDisplay | undefined;
+}
+
+export interface ListAgentProviderTurnEventsRequest {
+  turnId: string;
+  afterSeq: bigint;
+  limit: number;
+  subject?: AgentSubjectContext | undefined;
+}
+
+export interface ListAgentProviderTurnEventsResponse {
+  events: readonly AgentTurnEvent[];
+}
+
+export interface AgentInteraction {
+  id?: string | undefined;
+  type?: AgentInteractionType | undefined;
+  state?: AgentInteractionState | undefined;
+  title?: string | undefined;
+  prompt?: string | undefined;
+  request?: JsonObjectInput | undefined;
+  resolution?: JsonObjectInput | undefined;
+  createdAt?: Date | undefined;
+  resolvedAt?: Date | undefined;
+  turnId?: string | undefined;
+  sessionId?: string | undefined;
+}
+
+export interface GetAgentProviderInteractionRequest {
+  interactionId: string;
+  subject?: AgentSubjectContext | undefined;
+}
+
+export interface ListAgentProviderInteractionsRequest {
+  turnId: string;
+  subject?: AgentSubjectContext | undefined;
+}
+
+export interface ListAgentProviderInteractionsResponse {
+  interactions: readonly AgentInteraction[];
+}
+
+export interface ResolveAgentProviderInteractionRequest {
+  interactionId: string;
+  resolution?: JsonObjectInput | undefined;
+  subject?: AgentSubjectContext | undefined;
+}
+
+export interface GetAgentProviderCapabilitiesRequest {}
+
+export interface ExecuteAgentToolRequest {
+  sessionId: string;
+  turnId: string;
+  toolCallId: string;
+  toolId: string;
+  arguments?: JsonObjectInput | undefined;
+  idempotencyKey?: string | undefined;
+  runGrant?: string | undefined;
+}
+
+export interface ExecuteAgentToolResponse {
+  status: number;
+  body: string;
+}
+
+export interface AgentToolAnnotations {
+  readOnlyHint?: boolean | undefined;
+  idempotentHint?: boolean | undefined;
+  destructiveHint?: boolean | undefined;
+  openWorldHint?: boolean | undefined;
+}
+
+export interface ListedAgentTool {
+  id: string;
+  mcpName: string;
+  title: string;
+  description: string;
+  inputSchema: string;
+  outputSchema: string;
+  annotations?: AgentToolAnnotations | undefined;
+  ref?: AgentToolRef | undefined;
+  tags: readonly string[];
+  searchText: string;
+}
+
+export interface ListAgentToolsRequest {
+  sessionId: string;
+  turnId: string;
+  pageSize?: number | undefined;
+  pageToken?: string | undefined;
+  runGrant?: string | undefined;
+  query?: string | undefined;
+}
+
+export interface ListAgentToolsResponse {
+  tools: readonly ListedAgentTool[];
+  nextPageToken: string;
+}
+
+export interface ResolveAgentConnectionRequest {
+  sessionId: string;
+  turnId: string;
+  connection: string;
+  instance?: string | undefined;
+  runGrant?: string | undefined;
+}
+
+export interface ResolvedAgentConnection {
+  connectionId: string;
+  connection: string;
+  instance: string;
+  mode: string;
+  headers: Record<string, string>;
+  params: Record<string, string>;
+  expiresAt?: Date | undefined;
+}
 /** Plain-object input for listing tools available to one agent turn. */
 export interface AgentHostListToolsInput {
   sessionId: string;
@@ -193,43 +543,43 @@ export interface AgentHostResolveConnectionInput {
 export interface AgentProviderOptions extends ProviderBaseOptions {
   createSession?: (
     request: CreateAgentProviderSessionRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentSessionSchema>>;
+  ) => MaybePromise<AgentSession>;
   getSession?: (
     request: GetAgentProviderSessionRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentSessionSchema>>;
+  ) => MaybePromise<AgentSession>;
   listSessions?: (
     request: ListAgentProviderSessionsRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentSessionSchema>[]>;
+  ) => MaybePromise<readonly AgentSession[] | ListAgentProviderSessionsResponse>;
   updateSession?: (
     request: UpdateAgentProviderSessionRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentSessionSchema>>;
+  ) => MaybePromise<AgentSession>;
   createTurn?: (
     request: CreateAgentProviderTurnRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentTurnSchema>>;
+  ) => MaybePromise<AgentTurn>;
   getTurn?: (
     request: GetAgentProviderTurnRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentTurnSchema>>;
+  ) => MaybePromise<AgentTurn>;
   listTurns?: (
     request: ListAgentProviderTurnsRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentTurnSchema>[]>;
+  ) => MaybePromise<readonly AgentTurn[] | ListAgentProviderTurnsResponse>;
   cancelTurn?: (
     request: CancelAgentProviderTurnRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentTurnSchema>>;
+  ) => MaybePromise<AgentTurn>;
   listTurnEvents?: (
     request: ListAgentProviderTurnEventsRequest,
-  ) => MaybePromise<AgentTurnEventInit[]>;
+  ) => MaybePromise<readonly AgentTurnEvent[] | ListAgentProviderTurnEventsResponse>;
   getInteraction?: (
     request: GetAgentProviderInteractionRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentInteractionSchema>>;
+  ) => MaybePromise<AgentInteraction>;
   listInteractions?: (
     request: ListAgentProviderInteractionsRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentInteractionSchema>[]>;
+  ) => MaybePromise<readonly AgentInteraction[] | ListAgentProviderInteractionsResponse>;
   resolveInteraction?: (
     request: ResolveAgentProviderInteractionRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentInteractionSchema>>;
+  ) => MaybePromise<AgentInteraction>;
   getCapabilities?: (
     request: GetAgentProviderCapabilitiesRequest,
-  ) => MaybePromise<MessageInitShape<typeof AgentProviderCapabilitiesSchema>>;
+  ) => MaybePromise<AgentProviderCapabilities>;
 }
 
 /** Runtime provider implementation for the Gestalt agent host contract. */
@@ -269,7 +619,7 @@ export class AgentProvider extends ProviderBase {
 
   async createSession(
     request: CreateAgentProviderSessionRequest,
-  ): Promise<MessageInitShape<typeof AgentSessionSchema>> {
+  ): Promise<AgentSession> {
     return await requireAgentProviderHandler(
       "create session",
       this.createSessionHandler,
@@ -279,7 +629,7 @@ export class AgentProvider extends ProviderBase {
 
   async getSession(
     request: GetAgentProviderSessionRequest,
-  ): Promise<MessageInitShape<typeof AgentSessionSchema>> {
+  ): Promise<AgentSession> {
     return await requireAgentProviderHandler(
       "get session",
       this.getSessionHandler,
@@ -289,7 +639,7 @@ export class AgentProvider extends ProviderBase {
 
   async listSessions(
     request: ListAgentProviderSessionsRequest,
-  ): Promise<MessageInitShape<typeof AgentSessionSchema>[]> {
+  ): Promise<readonly AgentSession[] | ListAgentProviderSessionsResponse> {
     return await requireAgentProviderHandler(
       "list sessions",
       this.listSessionsHandler,
@@ -299,7 +649,7 @@ export class AgentProvider extends ProviderBase {
 
   async updateSession(
     request: UpdateAgentProviderSessionRequest,
-  ): Promise<MessageInitShape<typeof AgentSessionSchema>> {
+  ): Promise<AgentSession> {
     return await requireAgentProviderHandler(
       "update session",
       this.updateSessionHandler,
@@ -309,7 +659,7 @@ export class AgentProvider extends ProviderBase {
 
   async createTurn(
     request: CreateAgentProviderTurnRequest,
-  ): Promise<MessageInitShape<typeof AgentTurnSchema>> {
+  ): Promise<AgentTurn> {
     return await requireAgentProviderHandler(
       "create turn",
       this.createTurnHandler,
@@ -319,7 +669,7 @@ export class AgentProvider extends ProviderBase {
 
   async getTurn(
     request: GetAgentProviderTurnRequest,
-  ): Promise<MessageInitShape<typeof AgentTurnSchema>> {
+  ): Promise<AgentTurn> {
     return await requireAgentProviderHandler(
       "get turn",
       this.getTurnHandler,
@@ -329,7 +679,7 @@ export class AgentProvider extends ProviderBase {
 
   async listTurns(
     request: ListAgentProviderTurnsRequest,
-  ): Promise<MessageInitShape<typeof AgentTurnSchema>[]> {
+  ): Promise<readonly AgentTurn[] | ListAgentProviderTurnsResponse> {
     return await requireAgentProviderHandler(
       "list turns",
       this.listTurnsHandler,
@@ -339,7 +689,7 @@ export class AgentProvider extends ProviderBase {
 
   async cancelTurn(
     request: CancelAgentProviderTurnRequest,
-  ): Promise<MessageInitShape<typeof AgentTurnSchema>> {
+  ): Promise<AgentTurn> {
     return await requireAgentProviderHandler(
       "cancel turn",
       this.cancelTurnHandler,
@@ -349,7 +699,7 @@ export class AgentProvider extends ProviderBase {
 
   async listTurnEvents(
     request: ListAgentProviderTurnEventsRequest,
-  ): Promise<AgentTurnEventInit[]> {
+  ): Promise<readonly AgentTurnEvent[] | ListAgentProviderTurnEventsResponse> {
     return await requireAgentProviderHandler(
       "list turn events",
       this.listTurnEventsHandler,
@@ -359,7 +709,7 @@ export class AgentProvider extends ProviderBase {
 
   async getInteraction(
     request: GetAgentProviderInteractionRequest,
-  ): Promise<MessageInitShape<typeof AgentInteractionSchema>> {
+  ): Promise<AgentInteraction> {
     return await requireAgentProviderHandler(
       "get interaction",
       this.getInteractionHandler,
@@ -369,7 +719,7 @@ export class AgentProvider extends ProviderBase {
 
   async listInteractions(
     request: ListAgentProviderInteractionsRequest,
-  ): Promise<MessageInitShape<typeof AgentInteractionSchema>[]> {
+  ): Promise<readonly AgentInteraction[] | ListAgentProviderInteractionsResponse> {
     return await requireAgentProviderHandler(
       "list interactions",
       this.listInteractionsHandler,
@@ -379,7 +729,7 @@ export class AgentProvider extends ProviderBase {
 
   async resolveInteraction(
     request: ResolveAgentProviderInteractionRequest,
-  ): Promise<MessageInitShape<typeof AgentInteractionSchema>> {
+  ): Promise<AgentInteraction> {
     return await requireAgentProviderHandler(
       "resolve interaction",
       this.resolveInteractionHandler,
@@ -388,11 +738,8 @@ export class AgentProvider extends ProviderBase {
   }
 
   async getCapabilities(
-    request: GetAgentProviderCapabilitiesRequest = create(
-      GetAgentProviderCapabilitiesRequestSchema,
-      {},
-    ),
-  ): Promise<MessageInitShape<typeof AgentProviderCapabilitiesSchema>> {
+    request: GetAgentProviderCapabilitiesRequest = {},
+  ): Promise<AgentProviderCapabilities> {
     return await requireAgentProviderHandler(
       "get capabilities",
       this.getCapabilitiesHandler,
@@ -406,54 +753,520 @@ export function defineAgentProvider(options: AgentProviderOptions): AgentProvide
   return new AgentProvider(options);
 }
 
-function normalizeAgentTurnEvents(
-  events: AgentTurnEventInit[],
-): MessageInitShape<typeof AgentTurnEventSchema>[] {
-  return events.map((event) => normalizeAgentTurnEvent(event));
-}
-
-function normalizeAgentTurnEvent(
-  event: AgentTurnEventInit,
-): MessageInitShape<typeof AgentTurnEventSchema> {
-  const display = event.display;
+function agentTurnDisplayToProto(
+  display: AgentTurnDisplay | undefined,
+): MessageInitShape<typeof AgentTurnDisplaySchema> | undefined {
   if (!display) {
-    return event as MessageInitShape<typeof AgentTurnEventSchema>;
-  }
-  return {
-    ...event,
-    display: {
-      ...display,
-      input: normalizeAgentTurnDisplayValue(display.input),
-      output: normalizeAgentTurnDisplayValue(display.output),
-      error: normalizeAgentTurnDisplayValue(display.error),
-    },
-  } as MessageInitShape<typeof AgentTurnEventSchema>;
-}
-
-function normalizeAgentTurnDisplayValue(value: unknown): Value | undefined {
-  if (value === undefined) {
     return undefined;
   }
-  if (isMessage(value, ValueSchema)) {
-    return value;
-  }
-  if (isValueInit(value)) {
-    return create(ValueSchema, value);
-  }
-  return fromJson(ValueSchema, value as JsonValue);
+  return {
+    kind: display.kind ?? "",
+    phase: display.phase ?? "",
+    text: display.text ?? "",
+    label: display.label ?? "",
+    ref: display.ref ?? "",
+    parentRef: display.parentRef ?? "",
+    input: display.input === undefined ? undefined : valueFromJson(display.input),
+    output: display.output === undefined ? undefined : valueFromJson(display.output),
+    error: display.error === undefined ? undefined : valueFromJson(display.error),
+    action: display.action ?? "",
+    format: display.format ?? "",
+    language: display.language ?? "",
+  };
 }
 
-function isValueInit(value: unknown): value is MessageInitShape<typeof ValueSchema> {
-  if (value === null || typeof value !== "object") {
-    return false;
+function createAgentProviderSessionRequestFromProto(
+  request: ProtoCreateAgentProviderSessionRequest,
+): CreateAgentProviderSessionRequest {
+  return {
+    sessionId: request.sessionId,
+    idempotencyKey: request.idempotencyKey,
+    model: request.model,
+    clientRef: request.clientRef,
+    metadata: optionalObjectFromStruct(request.metadata),
+    createdBy: agentActorFromProto(request.createdBy),
+    subject: agentSubjectFromProto(request.subject),
+    sessionStart: request.sessionStart === undefined ? undefined : {
+      hooks: request.sessionStart.hooks.map((hook) => ({
+        id: hook.id,
+        type: hook.type,
+        command: [...hook.command],
+        cwd: hook.cwd,
+        timeout: hook.timeout,
+        env: { ...hook.env },
+        output: hook.output === undefined ? undefined : {
+          additionalContext: hook.output.additionalContext,
+          metadata: hook.output.metadata,
+        },
+      })),
+    },
+    preparedWorkspace: request.preparedWorkspace === undefined ? undefined : {
+      root: request.preparedWorkspace.root,
+      cwd: request.preparedWorkspace.cwd,
+    },
+  };
+}
+
+function getAgentProviderSessionRequestFromProto(
+  request: ProtoGetAgentProviderSessionRequest,
+): GetAgentProviderSessionRequest {
+  return {
+    sessionId: request.sessionId,
+    subject: agentSubjectFromProto(request.subject),
+  };
+}
+
+function listAgentProviderSessionsRequestFromProto(
+  request: ProtoListAgentProviderSessionsRequest,
+): ListAgentProviderSessionsRequest {
+  return {
+    subject: agentSubjectFromProto(request.subject),
+    sessionIds: [...request.sessionIds],
+    state: request.state as AgentSessionState,
+    limit: request.limit,
+    summaryOnly: request.summaryOnly,
+  };
+}
+
+function updateAgentProviderSessionRequestFromProto(
+  request: ProtoUpdateAgentProviderSessionRequest,
+): UpdateAgentProviderSessionRequest {
+  return {
+    sessionId: request.sessionId,
+    clientRef: request.clientRef,
+    state: request.state as AgentSessionState,
+    metadata: optionalObjectFromStruct(request.metadata),
+    subject: agentSubjectFromProto(request.subject),
+  };
+}
+
+function createAgentProviderTurnRequestFromProto(
+  request: ProtoCreateAgentProviderTurnRequest,
+): CreateAgentProviderTurnRequest {
+  return {
+    turnId: request.turnId,
+    sessionId: request.sessionId,
+    idempotencyKey: request.idempotencyKey,
+    model: request.model,
+    messages: request.messages.map(agentMessageFromProto),
+    tools: request.tools.map(resolvedAgentToolFromProto),
+    responseSchema: optionalObjectFromStruct(request.responseSchema),
+    metadata: optionalObjectFromStruct(request.metadata),
+    createdBy: agentActorFromProto(request.createdBy),
+    executionRef: request.executionRef,
+    toolRefs: request.toolRefs.map(agentToolRefFromProto),
+    toolSource: request.toolSource as AgentToolSourceMode,
+    subject: agentSubjectFromProto(request.subject),
+    modelOptions: optionalObjectFromStruct(request.modelOptions),
+    runGrant: request.runGrant,
+  };
+}
+
+function getAgentProviderTurnRequestFromProto(
+  request: ProtoGetAgentProviderTurnRequest,
+): GetAgentProviderTurnRequest {
+  return {
+    turnId: request.turnId,
+    subject: agentSubjectFromProto(request.subject),
+  };
+}
+
+function listAgentProviderTurnsRequestFromProto(
+  request: ProtoListAgentProviderTurnsRequest,
+): ListAgentProviderTurnsRequest {
+  return {
+    sessionId: request.sessionId,
+    subject: agentSubjectFromProto(request.subject),
+    turnIds: [...request.turnIds],
+    status: request.status as AgentExecutionStatus,
+    limit: request.limit,
+    summaryOnly: request.summaryOnly,
+  };
+}
+
+function cancelAgentProviderTurnRequestFromProto(
+  request: ProtoCancelAgentProviderTurnRequest,
+): CancelAgentProviderTurnRequest {
+  return {
+    turnId: request.turnId,
+    reason: request.reason,
+    subject: agentSubjectFromProto(request.subject),
+  };
+}
+
+function listAgentProviderTurnEventsRequestFromProto(
+  request: ProtoListAgentProviderTurnEventsRequest,
+): ListAgentProviderTurnEventsRequest {
+  return {
+    turnId: request.turnId,
+    afterSeq: request.afterSeq,
+    limit: request.limit,
+    subject: agentSubjectFromProto(request.subject),
+  };
+}
+
+function getAgentProviderInteractionRequestFromProto(
+  request: ProtoGetAgentProviderInteractionRequest,
+): GetAgentProviderInteractionRequest {
+  return {
+    interactionId: request.interactionId,
+    subject: agentSubjectFromProto(request.subject),
+  };
+}
+
+function listAgentProviderInteractionsRequestFromProto(
+  request: ProtoListAgentProviderInteractionsRequest,
+): ListAgentProviderInteractionsRequest {
+  return {
+    turnId: request.turnId,
+    subject: agentSubjectFromProto(request.subject),
+  };
+}
+
+function resolveAgentProviderInteractionRequestFromProto(
+  request: ProtoResolveAgentProviderInteractionRequest,
+): ResolveAgentProviderInteractionRequest {
+  return {
+    interactionId: request.interactionId,
+    resolution: optionalObjectFromStruct(request.resolution),
+    subject: agentSubjectFromProto(request.subject),
+  };
+}
+
+function agentSessionToProto(
+  session: AgentSession,
+): MessageInitShape<typeof AgentSessionSchema> {
+  return {
+    id: session.id ?? "",
+    providerName: session.providerName ?? "",
+    model: session.model ?? "",
+    clientRef: session.clientRef ?? "",
+    state: session.state ?? AgentSessionState.UNSPECIFIED,
+    metadata: optionalStruct(session.metadata),
+    createdBy: agentActorToProto(session.createdBy),
+    createdAt: optionalTimestamp(session.createdAt),
+    updatedAt: optionalTimestamp(session.updatedAt),
+    lastTurnAt: optionalTimestamp(session.lastTurnAt),
+  };
+}
+
+function agentTurnToProto(turn: AgentTurn): MessageInitShape<typeof AgentTurnSchema> {
+  return {
+    id: turn.id ?? "",
+    sessionId: turn.sessionId ?? "",
+    providerName: turn.providerName ?? "",
+    model: turn.model ?? "",
+    status: turn.status ?? AgentExecutionStatus.UNSPECIFIED,
+    messages: turn.messages?.map(agentMessageToProto) ?? [],
+    outputText: turn.outputText ?? "",
+    structuredOutput: optionalStruct(turn.structuredOutput),
+    statusMessage: turn.statusMessage ?? "",
+    createdBy: agentActorToProto(turn.createdBy),
+    createdAt: optionalTimestamp(turn.createdAt),
+    startedAt: optionalTimestamp(turn.startedAt),
+    completedAt: optionalTimestamp(turn.completedAt),
+    executionRef: turn.executionRef ?? "",
+  };
+}
+
+function agentTurnEventToProto(
+  event: AgentTurnEvent,
+): MessageInitShape<typeof AgentTurnEventSchema> {
+  return {
+    id: event.id ?? "",
+    turnId: event.turnId ?? "",
+    seq: typeof event.seq === "number" ? BigInt(event.seq) : (event.seq ?? 0n),
+    type: event.type ?? "",
+    source: event.source ?? "",
+    visibility: event.visibility ?? "",
+    data: optionalStruct(event.data),
+    createdAt: optionalTimestamp(event.createdAt),
+    display: agentTurnDisplayToProto(event.display),
+  };
+}
+
+function agentInteractionToProto(
+  interaction: AgentInteraction,
+): MessageInitShape<typeof AgentInteractionSchema> {
+  return {
+    id: interaction.id ?? "",
+    type: interaction.type ?? AgentInteractionType.UNSPECIFIED,
+    state: interaction.state ?? AgentInteractionState.UNSPECIFIED,
+    title: interaction.title ?? "",
+    prompt: interaction.prompt ?? "",
+    request: optionalStruct(interaction.request),
+    resolution: optionalStruct(interaction.resolution),
+    createdAt: optionalTimestamp(interaction.createdAt),
+    resolvedAt: optionalTimestamp(interaction.resolvedAt),
+    turnId: interaction.turnId ?? "",
+    sessionId: interaction.sessionId ?? "",
+  };
+}
+
+function capabilitiesToProto(
+  capabilities: AgentProviderCapabilities,
+): MessageInitShape<typeof AgentProviderCapabilitiesSchema> {
+  return {
+    streamingText: capabilities.streamingText ?? false,
+    toolCalls: capabilities.toolCalls ?? false,
+    parallelToolCalls: capabilities.parallelToolCalls ?? false,
+    structuredOutput: capabilities.structuredOutput ?? false,
+    interactions: capabilities.interactions ?? false,
+    resumableTurns: capabilities.resumableTurns ?? false,
+    reasoningSummaries: capabilities.reasoningSummaries ?? false,
+    boundedListHydration: capabilities.boundedListHydration ?? false,
+    supportedToolSources: [...(capabilities.supportedToolSources ?? [])],
+    supportsSessionStart: capabilities.supportsSessionStart ?? false,
+    supportsPreparedWorkspace: capabilities.supportsPreparedWorkspace ?? false,
+  };
+}
+
+function agentMessageFromProto(message: ProtoAgentMessage): AgentMessage {
+  return {
+    role: message.role,
+    text: message.text,
+    parts: message.parts.map(agentMessagePartFromProto),
+    metadata: optionalObjectFromStruct(message.metadata),
+  };
+}
+
+function agentMessageToProto(
+  message: AgentMessage,
+): MessageInitShape<typeof AgentMessageSchema> {
+  return {
+    role: message.role ?? "",
+    text: message.text ?? "",
+    parts: message.parts?.map(agentMessagePartToProto) ?? [],
+    metadata: optionalStruct(message.metadata),
+  };
+}
+
+function agentMessagePartFromProto(part: ProtoAgentMessagePart): AgentMessagePart {
+  return {
+    type: part.type as AgentMessagePartType,
+    text: part.text,
+    json: optionalObjectFromStruct(part.json),
+    toolCall: part.toolCall === undefined ? undefined : {
+      id: part.toolCall.id,
+      toolId: part.toolCall.toolId,
+      arguments: optionalObjectFromStruct(part.toolCall.arguments),
+    },
+    toolResult: part.toolResult === undefined ? undefined : {
+      toolCallId: part.toolResult.toolCallId,
+      status: part.toolResult.status,
+      content: part.toolResult.content,
+      output: optionalObjectFromStruct(part.toolResult.output),
+    },
+    imageRef: part.imageRef === undefined ? undefined : {
+      uri: part.imageRef.uri,
+      mimeType: part.imageRef.mimeType,
+    },
+  };
+}
+
+function agentMessagePartToProto(
+  part: AgentMessagePart,
+): MessageInitShape<typeof AgentMessagePartSchema> {
+  return {
+    type: part.type ?? AgentMessagePartType.UNSPECIFIED,
+    text: part.text ?? "",
+    json: optionalStruct(part.json),
+    toolCall: part.toolCall === undefined ? undefined : {
+      id: part.toolCall.id ?? "",
+      toolId: part.toolCall.toolId ?? "",
+      arguments: optionalStruct(part.toolCall.arguments),
+    },
+    toolResult: part.toolResult === undefined ? undefined : {
+      toolCallId: part.toolResult.toolCallId ?? "",
+      status: part.toolResult.status ?? 0,
+      content: part.toolResult.content ?? "",
+      output: optionalStruct(part.toolResult.output),
+    },
+    imageRef: part.imageRef === undefined ? undefined : {
+      uri: part.imageRef.uri ?? "",
+      mimeType: part.imageRef.mimeType ?? "",
+    },
+  };
+}
+
+function resolvedAgentToolFromProto(tool: ProtoResolvedAgentTool): ResolvedAgentTool {
+  return {
+    id: tool.id,
+    name: tool.name,
+    description: tool.description,
+    parametersSchema: optionalObjectFromStruct(tool.parametersSchema),
+  };
+}
+
+function agentActorFromProto(actor?: ProtoAgentActor | undefined): AgentActor | undefined {
+  if (actor === undefined) {
+    return undefined;
   }
-  const kind = (value as { kind?: unknown }).kind;
-  return (
-    kind !== null &&
-    typeof kind === "object" &&
-    typeof (kind as { case?: unknown }).case === "string" &&
-    "value" in kind
-  );
+  return {
+    subjectId: actor.subjectId,
+    subjectKind: actor.subjectKind,
+    displayName: actor.displayName,
+    authSource: actor.authSource,
+  };
+}
+
+function agentActorToProto(actor?: AgentActor | undefined): ProtoAgentActor | undefined {
+  if (actor === undefined) {
+    return undefined;
+  }
+  return create(AgentActorSchema, {
+    subjectId: actor.subjectId ?? "",
+    subjectKind: actor.subjectKind ?? "",
+    displayName: actor.displayName ?? "",
+    authSource: actor.authSource ?? "",
+  });
+}
+
+function agentSubjectFromProto(
+  subject?: ProtoAgentSubjectContext | undefined,
+): AgentSubjectContext | undefined {
+  if (subject === undefined) {
+    return undefined;
+  }
+  return {
+    subjectId: subject.subjectId,
+    subjectKind: subject.subjectKind,
+    credentialSubjectId: subject.credentialSubjectId,
+    displayName: subject.displayName,
+    authSource: subject.authSource,
+  };
+}
+
+function agentToolRefFromProto(ref: ProtoAgentToolRef): AgentToolRef {
+  return {
+    plugin: ref.plugin,
+    operation: ref.operation,
+    connection: ref.connection,
+    instance: ref.instance,
+    title: ref.title,
+    description: ref.description,
+    system: ref.system,
+  };
+}
+
+function agentToolRefToProto(ref?: AgentToolRef | undefined): ProtoAgentToolRef | undefined {
+  if (ref === undefined) {
+    return undefined;
+  }
+  return create(AgentToolRefSchema, {
+    plugin: ref.plugin ?? "",
+    operation: ref.operation ?? "",
+    connection: ref.connection ?? "",
+    instance: ref.instance ?? "",
+    title: ref.title ?? "",
+    description: ref.description ?? "",
+    system: ref.system ?? "",
+  });
+}
+
+function optionalStruct(value?: JsonObjectInput | undefined): JsonObject | undefined {
+  return value === undefined ? undefined : structFromObject(value);
+}
+
+function optionalObjectFromStruct(
+  value?: JsonObject | undefined,
+): JsonObjectInput | undefined {
+  return value === undefined ? undefined : jsonObjectFromStruct(value);
+}
+
+function optionalTimestamp(value?: Date | undefined) {
+  return value === undefined ? undefined : timestampFromDate(value);
+}
+
+function executeToolRequestToProto(
+  request: ExecuteAgentToolRequest,
+): ProtoExecuteAgentToolRequest {
+  return create(ExecuteAgentToolRequestSchema, {
+    sessionId: request.sessionId,
+    turnId: request.turnId,
+    toolCallId: request.toolCallId,
+    toolId: request.toolId,
+    arguments: optionalStruct(request.arguments),
+    idempotencyKey: request.idempotencyKey ?? "",
+    runGrant: request.runGrant ?? "",
+  });
+}
+
+function executeToolResponseFromProto(
+  response: ProtoExecuteAgentToolResponse,
+): ExecuteAgentToolResponse {
+  return {
+    status: response.status,
+    body: response.body,
+  };
+}
+
+function listToolsRequestToProto(request: ListAgentToolsRequest): ProtoListAgentToolsRequest {
+  return create(ListAgentToolsRequestSchema, {
+    sessionId: request.sessionId,
+    turnId: request.turnId,
+    pageSize: request.pageSize ?? 0,
+    pageToken: request.pageToken ?? "",
+    runGrant: request.runGrant ?? "",
+    query: request.query ?? "",
+  });
+}
+
+function listToolsResponseFromProto(
+  response: ProtoListAgentToolsResponse,
+): ListAgentToolsResponse {
+  return {
+    tools: response.tools.map(listedToolFromProto),
+    nextPageToken: response.nextPageToken,
+  };
+}
+
+function listedToolFromProto(tool: ProtoListedAgentTool): ListedAgentTool {
+  return {
+    id: tool.id,
+    mcpName: tool.mcpName,
+    title: tool.title,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    outputSchema: tool.outputSchema,
+    annotations: tool.annotations === undefined ? undefined : {
+      readOnlyHint: tool.annotations.readOnlyHint,
+      idempotentHint: tool.annotations.idempotentHint,
+      destructiveHint: tool.annotations.destructiveHint,
+      openWorldHint: tool.annotations.openWorldHint,
+    },
+    ref: tool.ref === undefined ? undefined : agentToolRefFromProto(tool.ref),
+    tags: [...tool.tags],
+    searchText: tool.searchText,
+  };
+}
+
+function resolveConnectionRequestToProto(
+  request: ResolveAgentConnectionRequest,
+): ProtoResolveAgentConnectionRequest {
+  return create(ResolveAgentConnectionRequestSchema, {
+    sessionId: request.sessionId,
+    turnId: request.turnId,
+    connection: request.connection,
+    instance: request.instance ?? "",
+    runGrant: request.runGrant ?? "",
+  });
+}
+
+function resolvedConnectionFromProto(
+  connection: ProtoResolvedAgentConnection,
+): ResolvedAgentConnection {
+  return {
+    connectionId: connection.connectionId,
+    connection: connection.connection,
+    instance: connection.instance,
+    mode: connection.mode,
+    headers: { ...connection.headers },
+    params: { ...connection.params },
+    expiresAt: connection.expiresAt === undefined
+      ? undefined
+      : dateFromTimestamp(connection.expiresAt),
+  };
 }
 
 /** Runtime type guard for agent providers loaded from user modules. */
@@ -490,7 +1303,9 @@ export class AgentHost {
   async executeTool(
     request: ExecuteAgentToolRequest,
   ): Promise<ExecuteAgentToolResponse> {
-    return await this.client.executeTool(request);
+    return executeToolResponseFromProto(
+      await this.client.executeTool(executeToolRequestToProto(request)),
+    );
   }
 
   /** Executes a host tool using plain TypeScript request fields. */
@@ -498,15 +1313,15 @@ export class AgentHost {
     input: AgentHostExecuteToolInput,
   ): Promise<ExecuteAgentToolResponse> {
     return await this.executeTool(
-      create(ExecuteAgentToolRequestSchema, {
+      {
         sessionId: input.sessionId,
         turnId: input.turnId,
         toolCallId: input.toolCallId,
         toolId: input.toolId,
-        arguments: input.arguments === undefined ? undefined : structFromObject(input.arguments),
+        arguments: input.arguments,
         runGrant: input.runGrant ?? "",
         idempotencyKey: input.idempotencyKey ?? "",
-      }),
+      },
     );
   }
 
@@ -514,7 +1329,9 @@ export class AgentHost {
   async listTools(
     request: ListAgentToolsRequest,
   ): Promise<ListAgentToolsResponse> {
-    return await this.client.listTools(request);
+    return listToolsResponseFromProto(
+      await this.client.listTools(listToolsRequestToProto(request)),
+    );
   }
 
   /** Lists host tools using plain TypeScript request fields. */
@@ -522,14 +1339,14 @@ export class AgentHost {
     input: AgentHostListToolsInput,
   ): Promise<ListAgentToolsResponse> {
     return await this.listTools(
-      create(ListAgentToolsRequestSchema, {
+      {
         sessionId: input.sessionId,
         turnId: input.turnId,
         runGrant: input.runGrant ?? "",
         pageSize: input.pageSize ?? 0,
         pageToken: input.pageToken ?? "",
         query: input.query ?? "",
-      }),
+      },
     );
   }
 
@@ -537,7 +1354,9 @@ export class AgentHost {
   async resolveConnection(
     request: ResolveAgentConnectionRequest,
   ): Promise<ResolvedAgentConnection> {
-    return await this.client.resolveConnection(request);
+    return resolvedConnectionFromProto(
+      await this.client.resolveConnection(resolveConnectionRequestToProto(request)),
+    );
   }
 
   /** Resolves an agent connection using plain TypeScript request fields. */
@@ -545,13 +1364,13 @@ export class AgentHost {
     input: AgentHostResolveConnectionInput,
   ): Promise<ResolvedAgentConnection> {
     return await this.resolveConnection(
-      create(ResolveAgentConnectionRequestSchema, {
+      {
         sessionId: input.sessionId,
         turnId: input.turnId,
         connection: input.connection,
         instance: input.instance ?? "",
         runGrant: input.runGrant ?? "",
-      }),
+      },
     );
   }
 }
@@ -615,104 +1434,154 @@ export function createAgentProviderService(
     async createSession(request) {
       return create(
         AgentSessionSchema,
-        await invokeAgentProvider("create session", () =>
-          provider.createSession(request),
+        agentSessionToProto(
+          await invokeAgentProvider("create session", () =>
+            provider.createSession(createAgentProviderSessionRequestFromProto(request)),
+          ),
         ),
       );
     },
     async getSession(request) {
       return create(
         AgentSessionSchema,
-        await invokeAgentProvider("get session", () =>
-          provider.getSession(request),
+        agentSessionToProto(
+          await invokeAgentProvider("get session", () =>
+            provider.getSession(getAgentProviderSessionRequestFromProto(request)),
+          ),
         ),
       );
     },
     async listSessions(request) {
+      const response = await invokeAgentProvider("list sessions", () =>
+        provider.listSessions(listAgentProviderSessionsRequestFromProto(request)),
+      );
       return create(ListAgentProviderSessionsResponseSchema, {
-        sessions: await invokeAgentProvider("list sessions", () =>
-          provider.listSessions(request),
-        ),
+        sessions: listSessionsResult(response).map(agentSessionToProto),
       });
     },
     async updateSession(request) {
       return create(
         AgentSessionSchema,
-        await invokeAgentProvider("update session", () =>
-          provider.updateSession(request),
+        agentSessionToProto(
+          await invokeAgentProvider("update session", () =>
+            provider.updateSession(updateAgentProviderSessionRequestFromProto(request)),
+          ),
         ),
       );
     },
     async createTurn(request) {
       return create(
         AgentTurnSchema,
-        await invokeAgentProvider("create turn", () =>
-          provider.createTurn(request),
+        agentTurnToProto(
+          await invokeAgentProvider("create turn", () =>
+            provider.createTurn(createAgentProviderTurnRequestFromProto(request)),
+          ),
         ),
       );
     },
     async getTurn(request) {
       return create(
         AgentTurnSchema,
-        await invokeAgentProvider("get turn", () => provider.getTurn(request)),
+        agentTurnToProto(
+          await invokeAgentProvider("get turn", () =>
+            provider.getTurn(getAgentProviderTurnRequestFromProto(request)),
+          ),
+        ),
       );
     },
     async listTurns(request) {
+      const response = await invokeAgentProvider("list turns", () =>
+        provider.listTurns(listAgentProviderTurnsRequestFromProto(request)),
+      );
       return create(ListAgentProviderTurnsResponseSchema, {
-        turns: await invokeAgentProvider("list turns", () =>
-          provider.listTurns(request),
-        ),
+        turns: listTurnsResult(response).map(agentTurnToProto),
       });
     },
     async cancelTurn(request) {
       return create(
         AgentTurnSchema,
-        await invokeAgentProvider("cancel turn", () =>
-          provider.cancelTurn(request),
+        agentTurnToProto(
+          await invokeAgentProvider("cancel turn", () =>
+            provider.cancelTurn(cancelAgentProviderTurnRequestFromProto(request)),
+          ),
         ),
       );
     },
     async listTurnEvents(request) {
+      const response = await invokeAgentProvider("list turn events", () =>
+        provider.listTurnEvents(listAgentProviderTurnEventsRequestFromProto(request)),
+      );
       return create(ListAgentProviderTurnEventsResponseSchema, {
-        events: normalizeAgentTurnEvents(
-          await invokeAgentProvider("list turn events", () =>
-            provider.listTurnEvents(request),
-          ),
-        ),
+        events: listTurnEventsResult(response).map(agentTurnEventToProto),
       });
     },
     async getInteraction(request) {
       return create(
         AgentInteractionSchema,
-        await invokeAgentProvider("get interaction", () =>
-          provider.getInteraction(request),
+        agentInteractionToProto(
+          await invokeAgentProvider("get interaction", () =>
+            provider.getInteraction(getAgentProviderInteractionRequestFromProto(request)),
+          ),
         ),
       );
     },
     async listInteractions(request) {
-      return create(ListAgentProviderInteractionsResponseSchema, {
-        interactions: await invokeAgentProvider("list interactions", () =>
-          provider.listInteractions(request),
+      const response = await invokeAgentProvider("list interactions", () =>
+        provider.listInteractions(
+          listAgentProviderInteractionsRequestFromProto(request),
         ),
+      );
+      return create(ListAgentProviderInteractionsResponseSchema, {
+        interactions: listInteractionsResult(response).map(agentInteractionToProto),
       });
     },
     async resolveInteraction(request) {
       return create(
         AgentInteractionSchema,
-        await invokeAgentProvider("resolve interaction", () =>
-          provider.resolveInteraction(request),
+        agentInteractionToProto(
+          await invokeAgentProvider("resolve interaction", () =>
+            provider.resolveInteraction(
+              resolveAgentProviderInteractionRequestFromProto(request),
+            ),
+          ),
         ),
       );
     },
     async getCapabilities(request) {
       return create(
         AgentProviderCapabilitiesSchema,
-        await invokeAgentProvider("get capabilities", () =>
-          provider.getCapabilities(request),
+        capabilitiesToProto(
+          await invokeAgentProvider("get capabilities", () =>
+            provider.getCapabilities({}),
+          ),
         ),
       );
     },
   };
+}
+
+function listSessionsResult(
+  value: readonly AgentSession[] | ListAgentProviderSessionsResponse,
+): readonly AgentSession[] {
+  return "sessions" in value ? value.sessions : value;
+}
+
+function listTurnsResult(
+  value: readonly AgentTurn[] | ListAgentProviderTurnsResponse,
+): readonly AgentTurn[] {
+  return "turns" in value ? value.turns : value;
+}
+
+function listTurnEventsResult(
+  value: readonly AgentTurnEvent[] | ListAgentProviderTurnEventsResponse,
+): readonly AgentTurnEvent[] {
+  return "events" in value ? value.events : value;
+}
+
+function listInteractionsResult(
+  value: readonly AgentInteraction[] | ListAgentProviderInteractionsResponse,
+): readonly AgentInteraction[] {
+  return "interactions" in value ? value.interactions : value;
 }
 
 async function requireAgentProviderHandler<Request, Response>(

@@ -1,24 +1,26 @@
 from __future__ import annotations
 
-import dataclasses as _dataclasses
 import datetime as _dt
 import os
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any, TypeAlias
 
 import grpc
-from typing_extensions import TypedDict, Unpack
 
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._grpc_transport import host_service_channel
 from ._protocol import (
     JsonObjectInput,
+    datetime_from_timestamp,
     has_field,
     message_from_dict,
     message_to_dict,
     struct_from_dict,
     struct_to_dict,
+    timestamp_from_datetime,
+    value_from_json,
 )
 from ._protocol import (
     copy_message as _copy,
@@ -70,10 +72,11 @@ AGENT_SESSION_STATE_ARCHIVED = pb.AGENT_SESSION_STATE_ARCHIVED
 AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = pb.AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
 AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = pb.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
 
-TimestampInput: TypeAlias = _dt.datetime | Mapping[str, Any] | None
+TimestampInput: TypeAlias = _dt.datetime | None
+JsonObject: TypeAlias = dict[str, Any]
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentMessageInput:
     role: str = ""
     text: str = ""
@@ -81,7 +84,7 @@ class AgentMessageInput:
     metadata: Any | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentMessagePartInput:
     type: int = AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
     text: str = ""
@@ -91,14 +94,14 @@ class AgentMessagePartInput:
     image_ref: Any | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentMessagePartToolCallInput:
     id: str = ""
     tool_id: str = ""
     arguments: Any | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentMessagePartToolResultInput:
     tool_call_id: str = ""
     status: int = 0
@@ -106,13 +109,13 @@ class AgentMessagePartToolResultInput:
     output: Any | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentMessagePartImageRefInput:
     uri: str = ""
     mime_type: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentToolRefInput:
     plugin: str = ""
     operation: str = ""
@@ -123,20 +126,20 @@ class AgentToolRefInput:
     system: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentWorkspaceGitCheckoutInput:
     url: str = ""
     ref: str = ""
     path: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentWorkspaceInput:
     checkouts: Sequence[Any] | None = None
     cwd: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerCreateSessionInput:
     provider_name: str = ""
     model: str = ""
@@ -146,12 +149,12 @@ class AgentManagerCreateSessionInput:
     workspace: Any | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerGetSessionInput:
     session_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerListSessionsInput:
     provider_name: str = ""
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
@@ -159,7 +162,7 @@ class AgentManagerListSessionsInput:
     summary_only: bool = False
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerUpdateSessionInput:
     session_id: str = ""
     client_ref: str = ""
@@ -167,7 +170,7 @@ class AgentManagerUpdateSessionInput:
     metadata: Any | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerCreateTurnInput:
     session_id: str = ""
     model: str = ""
@@ -180,12 +183,12 @@ class AgentManagerCreateTurnInput:
     model_options: Any | None = None
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerGetTurnInput:
     turn_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerListTurnsInput:
     session_id: str = ""
     status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
@@ -193,322 +196,433 @@ class AgentManagerListTurnsInput:
     summary_only: bool = False
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerCancelTurnInput:
     turn_id: str = ""
     reason: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerListTurnEventsInput:
     turn_id: str = ""
     after_seq: int = 0
     limit: int = 0
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerListInteractionsInput:
     turn_id: str = ""
 
 
-@_dataclasses.dataclass(slots=True)
+@dataclass(slots=True)
 class AgentManagerResolveInteractionInput:
     turn_id: str = ""
     interaction_id: str = ""
     resolution: Any | None = None
 
 
-class AgentSessionInput(TypedDict, total=False):
-    id: str
-    provider_name: str
-    model: str
-    client_ref: str
-    state: int | str
-    metadata: JsonObjectInput | None
-    created_by: Any
-    created_at: TimestampInput
-    updated_at: TimestampInput
-    last_turn_at: TimestampInput
+@dataclass(slots=True)
+class AgentMessagePartToolCall:
+    id: str = ""
+    tool_id: str = ""
+    arguments: JsonObjectInput | None = None
+
+
+@dataclass(slots=True)
+class AgentMessagePartToolResult:
+    tool_call_id: str = ""
+    status: int = 0
+    content: str = ""
+    output: JsonObjectInput | None = None
+
+
+@dataclass(slots=True)
+class AgentMessagePartImageRef:
+    uri: str = ""
+    mime_type: str = ""
+
+
+@dataclass(slots=True)
+class AgentMessagePart:
+    type: int = AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
+    text: str = ""
+    json: JsonObjectInput | None = None
+    tool_call: AgentMessagePartToolCall | Mapping[str, Any] | None = None
+    tool_result: AgentMessagePartToolResult | Mapping[str, Any] | None = None
+    image_ref: AgentMessagePartImageRef | Mapping[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class AgentMessage:
+    role: str = ""
+    text: str = ""
+    parts: Iterable[AgentMessagePart | Mapping[str, Any]] = field(default_factory=list)
+    metadata: JsonObjectInput | None = None
+
+
+@dataclass(slots=True)
+class AgentActor:
+    subject_id: str = ""
+    subject_kind: str = ""
+    display_name: str = ""
+    auth_source: str = ""
+
+
+@dataclass(slots=True)
+class AgentSubjectContext:
+    subject_id: str = ""
+    subject_kind: str = ""
+    credential_subject_id: str = ""
+    display_name: str = ""
+    auth_source: str = ""
+
+
+@dataclass(slots=True)
+class AgentToolRef:
+    plugin: str = ""
+    operation: str = ""
+    connection: str = ""
+    instance: str = ""
+    title: str = ""
+    description: str = ""
+    system: str = ""
+
+
+@dataclass(slots=True)
+class AgentProviderCapabilities:
+    streaming_text: bool = False
+    tool_calls: bool = False
+    parallel_tool_calls: bool = False
+    structured_output: bool = False
+    interactions: bool = False
+    resumable_turns: bool = False
+    reasoning_summaries: bool = False
+    bounded_list_hydration: bool = False
+    supported_tool_sources: Iterable[int] = field(default_factory=list)
+    supports_session_start: bool = False
+    supports_prepared_workspace: bool = False
+
+
+@dataclass(slots=True)
+class AgentSession:
+    id: str = ""
+    provider_name: str = ""
+    model: str = ""
+    client_ref: str = ""
+    state: int = AGENT_SESSION_STATE_UNSPECIFIED
+    metadata: JsonObjectInput | None = None
+    created_by: AgentActor | Mapping[str, Any] | None = None
+    created_at: TimestampInput = None
+    updated_at: TimestampInput = None
+    last_turn_at: TimestampInput = None
+
+
+@dataclass(slots=True)
+class AgentSessionStartHookOutput:
+    additional_context: bool = False
+    metadata: bool = False
+
 
-
-class AgentTurnInput(TypedDict, total=False):
-    id: str
-    session_id: str
-    provider_name: str
-    model: str
-    status: int | str
-    messages: Iterable[Any]
-    output_text: str
-    structured_output: JsonObjectInput | None
-    status_message: str
-    execution_ref: str
-    created_by: Any
-    created_at: TimestampInput
-    started_at: TimestampInput
-    completed_at: TimestampInput
-
-
-class AgentTurnEventInput(TypedDict, total=False):
-    id: str
-    turn_id: str
-    seq: int
-    type: str
-    source: str
-    visibility: str
-    data: JsonObjectInput | None
-    created_at: TimestampInput
-
-
-def AgentMessage(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent message protocol value."""
-
-    return pb.AgentMessage(*args, **kwargs)
-
-
-def AgentMessagePart(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent message part protocol value."""
-
-    return pb.AgentMessagePart(*args, **kwargs)
-
-
-def AgentMessagePartToolCall(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent tool-call message part payload."""
-
-    return pb.AgentMessagePartToolCall(*args, **kwargs)
-
-
-def AgentMessagePartToolResult(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent tool-result message part payload."""
-
-    return pb.AgentMessagePartToolResult(*args, **kwargs)
-
-
-def AgentMessagePartImageRef(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent image-reference message part payload."""
-
-    return pb.AgentMessagePartImageRef(*args, **kwargs)
-
-
-def AgentActor(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent actor protocol value."""
-
-    return pb.AgentActor(*args, **kwargs)
-
-
-def AgentSubjectContext(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent subject context protocol value."""
-
-    return pb.AgentSubjectContext(*args, **kwargs)
-
-
-def AgentToolRef(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent tool reference protocol value."""
-
-    return pb.AgentToolRef(*args, **kwargs)
-
-
-def AgentProviderCapabilities(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider capabilities protocol value."""
-
-    return pb.AgentProviderCapabilities(*args, **kwargs)
-
-
-def AgentSession(*args: Any, **kwargs: Unpack[AgentSessionInput]) -> Any:
-    """Create an agent session protocol value."""
-
-    return pb.AgentSession(*args, **kwargs)
-
-
-def AgentSessionStartConfig(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent session start config."""
-
-    return pb.AgentSessionStartConfig(*args, **kwargs)
-
-
-def AgentSessionStartHook(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent session start hook."""
-
-    return pb.AgentSessionStartHook(*args, **kwargs)
-
-
-def AgentSessionStartHookOutput(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent session start hook output."""
-
-    return pb.AgentSessionStartHookOutput(*args, **kwargs)
-
-
-def AgentTurn(*args: Any, **kwargs: Unpack[AgentTurnInput]) -> Any:
-    """Create an agent turn protocol value."""
-
-    return pb.AgentTurn(*args, **kwargs)
-
-
-def AgentTurnEvent(*args: Any, **kwargs: Unpack[AgentTurnEventInput]) -> Any:
-    """Create an agent turn event protocol value."""
-
-    return pb.AgentTurnEvent(*args, **kwargs)
-
-
-def AgentTurnDisplay(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent turn display payload."""
-
-    return pb.AgentTurnDisplay(*args, **kwargs)
-
-
-def AgentInteraction(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent interaction protocol value."""
-
-    return pb.AgentInteraction(*args, **kwargs)
-
-
-def CreateAgentProviderSessionRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider session request."""
-
-    return pb.CreateAgentProviderSessionRequest(*args, **kwargs)
-
-
-def GetAgentProviderSessionRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider get-session request."""
-
-    return pb.GetAgentProviderSessionRequest(*args, **kwargs)
-
-
-def ListAgentProviderSessionsRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider list-sessions request."""
-
-    return pb.ListAgentProviderSessionsRequest(*args, **kwargs)
-
-
-def ListAgentProviderSessionsResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider list-sessions response."""
-
-    return pb.ListAgentProviderSessionsResponse(*args, **kwargs)
-
-
-def UpdateAgentProviderSessionRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider update-session request."""
-
-    return pb.UpdateAgentProviderSessionRequest(*args, **kwargs)
-
-
-def CreateAgentProviderTurnRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider turn request."""
-
-    return pb.CreateAgentProviderTurnRequest(*args, **kwargs)
-
-
-def GetAgentProviderTurnRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider get-turn request."""
-
-    return pb.GetAgentProviderTurnRequest(*args, **kwargs)
-
-
-def ListAgentProviderTurnsRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider list-turns request."""
-
-    return pb.ListAgentProviderTurnsRequest(*args, **kwargs)
-
-
-def ListAgentProviderTurnsResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider list-turns response."""
-
-    return pb.ListAgentProviderTurnsResponse(*args, **kwargs)
-
-
-def CancelAgentProviderTurnRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider cancel-turn request."""
-
-    return pb.CancelAgentProviderTurnRequest(*args, **kwargs)
-
-
-def ListAgentProviderTurnEventsRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider list-turn-events request."""
-
-    return pb.ListAgentProviderTurnEventsRequest(*args, **kwargs)
-
-
-def ListAgentProviderTurnEventsResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider list-turn-events response."""
-
-    return pb.ListAgentProviderTurnEventsResponse(*args, **kwargs)
-
-
-def ListAgentProviderInteractionsResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider list-interactions response."""
-
-    return pb.ListAgentProviderInteractionsResponse(*args, **kwargs)
-
-
-def GetAgentProviderInteractionRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider get-interaction request."""
-
-    return pb.GetAgentProviderInteractionRequest(*args, **kwargs)
-
-
-def ListAgentProviderInteractionsRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider list-interactions request."""
-
-    return pb.ListAgentProviderInteractionsRequest(*args, **kwargs)
-
-
-def ResolveAgentProviderInteractionRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider resolve-interaction request."""
-
-    return pb.ResolveAgentProviderInteractionRequest(*args, **kwargs)
-
-
-def GetAgentProviderCapabilitiesRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent-provider capabilities request."""
-
-    return pb.GetAgentProviderCapabilitiesRequest(*args, **kwargs)
-
-
-def ExecuteAgentToolRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent host ExecuteTool request."""
-
-    return pb.ExecuteAgentToolRequest(*args, **kwargs)
-
-
-def ExecuteAgentToolResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent host ExecuteTool response."""
-
-    return pb.ExecuteAgentToolResponse(*args, **kwargs)
-
-
-def ListAgentToolsRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent host ListTools request."""
-
-    return pb.ListAgentToolsRequest(*args, **kwargs)
-
-
-def ListAgentToolsResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent host ListTools response."""
-
-    return pb.ListAgentToolsResponse(*args, **kwargs)
-
-
-def ListedAgentTool(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent host listed-tool value."""
-
-    return pb.ListedAgentTool(*args, **kwargs)
-
-
-def ResolvedAgentTool(*args: Any, **kwargs: Any) -> Any:
-    """Create a resolved agent tool value."""
-
-    return pb.ResolvedAgentTool(*args, **kwargs)
-
-
-def ResolveAgentConnectionRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent host ResolveConnection request."""
-
-    return pb.ResolveAgentConnectionRequest(*args, **kwargs)
-
-
-def ResolvedAgentConnection(*args: Any, **kwargs: Any) -> Any:
-    """Create an agent host ResolveConnection response."""
-
-    return pb.ResolvedAgentConnection(*args, **kwargs)
+@dataclass(slots=True)
+class AgentSessionStartHook:
+    id: str = ""
+    type: str = ""
+    command: Iterable[str] = field(default_factory=list)
+    cwd: str = ""
+    timeout: str = ""
+    env: Mapping[str, str] = field(default_factory=dict)
+    output: AgentSessionStartHookOutput | Mapping[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class AgentSessionStartConfig:
+    hooks: Iterable[AgentSessionStartHook | Mapping[str, Any]] = field(
+        default_factory=list
+    )
+
+
+@dataclass(slots=True)
+class AgentPreparedWorkspace:
+    root: str = ""
+    cwd: str = ""
+
+
+@dataclass(slots=True)
+class CreateAgentProviderSessionRequest:
+    session_id: str = ""
+    idempotency_key: str = ""
+    model: str = ""
+    client_ref: str = ""
+    metadata: JsonObject | None = None
+    created_by: AgentActor | None = None
+    subject: AgentSubjectContext | None = None
+    session_start: AgentSessionStartConfig | None = None
+    prepared_workspace: AgentPreparedWorkspace | None = None
+
+
+@dataclass(slots=True)
+class GetAgentProviderSessionRequest:
+    session_id: str = ""
+    subject: AgentSubjectContext | None = None
+
+
+@dataclass(slots=True)
+class ListAgentProviderSessionsRequest:
+    subject: AgentSubjectContext | None = None
+    session_ids: Iterable[str] = field(default_factory=list)
+    state: int = AGENT_SESSION_STATE_UNSPECIFIED
+    limit: int = 0
+    summary_only: bool = False
+
+
+@dataclass(slots=True)
+class ListAgentProviderSessionsResponse:
+    sessions: Iterable[AgentSession | Mapping[str, Any]] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class UpdateAgentProviderSessionRequest:
+    session_id: str = ""
+    client_ref: str = ""
+    state: int = AGENT_SESSION_STATE_UNSPECIFIED
+    metadata: JsonObject | None = None
+    subject: AgentSubjectContext | None = None
+
+
+@dataclass(slots=True)
+class AgentTurn:
+    id: str = ""
+    session_id: str = ""
+    provider_name: str = ""
+    model: str = ""
+    status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
+    messages: Iterable[AgentMessage | Mapping[str, Any]] = field(default_factory=list)
+    output_text: str = ""
+    structured_output: JsonObjectInput | None = None
+    status_message: str = ""
+    created_by: AgentActor | Mapping[str, Any] | None = None
+    created_at: TimestampInput = None
+    started_at: TimestampInput = None
+    completed_at: TimestampInput = None
+    execution_ref: str = ""
+
+
+@dataclass(slots=True)
+class AgentTurnDisplay:
+    kind: str = ""
+    phase: str = ""
+    text: str = ""
+    label: str = ""
+    ref: str = ""
+    parent_ref: str = ""
+    input: Any = None
+    output: Any = None
+    error: Any = None
+    action: str = ""
+    format: str = ""
+    language: str = ""
+
+
+@dataclass(slots=True)
+class ResolvedAgentTool:
+    id: str = ""
+    name: str = ""
+    description: str = ""
+    parameters_schema: JsonObjectInput | None = None
+
+
+@dataclass(slots=True)
+class CreateAgentProviderTurnRequest:
+    turn_id: str = ""
+    session_id: str = ""
+    idempotency_key: str = ""
+    model: str = ""
+    messages: Iterable[AgentMessage] = field(default_factory=list)
+    tools: Iterable[ResolvedAgentTool] = field(default_factory=list)
+    response_schema: JsonObject | None = None
+    metadata: JsonObject | None = None
+    created_by: AgentActor | None = None
+    execution_ref: str = ""
+    tool_refs: Iterable[AgentToolRef] = field(default_factory=list)
+    tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
+    subject: AgentSubjectContext | None = None
+    model_options: JsonObject | None = None
+    run_grant: str = ""
+
+
+@dataclass(slots=True)
+class GetAgentProviderTurnRequest:
+    turn_id: str = ""
+    subject: AgentSubjectContext | None = None
+
+
+@dataclass(slots=True)
+class ListAgentProviderTurnsRequest:
+    session_id: str = ""
+    subject: AgentSubjectContext | None = None
+    turn_ids: Iterable[str] = field(default_factory=list)
+    status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
+    limit: int = 0
+    summary_only: bool = False
+
+
+@dataclass(slots=True)
+class ListAgentProviderTurnsResponse:
+    turns: Iterable[AgentTurn | Mapping[str, Any]] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class CancelAgentProviderTurnRequest:
+    turn_id: str = ""
+    reason: str = ""
+    subject: AgentSubjectContext | None = None
+
+
+@dataclass(slots=True)
+class AgentTurnEvent:
+    id: str = ""
+    turn_id: str = ""
+    seq: int = 0
+    type: str = ""
+    source: str = ""
+    visibility: str = ""
+    data: JsonObjectInput | None = None
+    created_at: TimestampInput = None
+    display: AgentTurnDisplay | Mapping[str, Any] | None = None
+
+
+@dataclass(slots=True)
+class ListAgentProviderTurnEventsRequest:
+    turn_id: str = ""
+    after_seq: int = 0
+    limit: int = 0
+    subject: AgentSubjectContext | None = None
+
+
+@dataclass(slots=True)
+class ListAgentProviderTurnEventsResponse:
+    events: Iterable[AgentTurnEvent | Mapping[str, Any]] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class AgentInteraction:
+    id: str = ""
+    type: int = AGENT_INTERACTION_TYPE_UNSPECIFIED
+    state: int = AGENT_INTERACTION_STATE_UNSPECIFIED
+    title: str = ""
+    prompt: str = ""
+    request: JsonObjectInput | None = None
+    resolution: JsonObjectInput | None = None
+    created_at: TimestampInput = None
+    resolved_at: TimestampInput = None
+    turn_id: str = ""
+    session_id: str = ""
+
+
+@dataclass(slots=True)
+class GetAgentProviderInteractionRequest:
+    interaction_id: str = ""
+    subject: AgentSubjectContext | None = None
+
+
+@dataclass(slots=True)
+class ListAgentProviderInteractionsRequest:
+    turn_id: str = ""
+    subject: AgentSubjectContext | None = None
+
+
+@dataclass(slots=True)
+class ListAgentProviderInteractionsResponse:
+    interactions: Iterable[AgentInteraction | Mapping[str, Any]] = field(
+        default_factory=list
+    )
+
+
+@dataclass(slots=True)
+class ResolveAgentProviderInteractionRequest:
+    interaction_id: str = ""
+    resolution: JsonObject | None = None
+    subject: AgentSubjectContext | None = None
+
+
+@dataclass(slots=True)
+class GetAgentProviderCapabilitiesRequest:
+    pass
+
+
+@dataclass(slots=True)
+class ExecuteAgentToolRequest:
+    session_id: str = ""
+    turn_id: str = ""
+    tool_call_id: str = ""
+    tool_id: str = ""
+    arguments: JsonObjectInput | None = None
+    idempotency_key: str = ""
+    run_grant: str = ""
+
+
+@dataclass(slots=True)
+class ExecuteAgentToolResponse:
+    status: int = 0
+    body: str = ""
+
+
+@dataclass(slots=True)
+class AgentToolAnnotations:
+    read_only_hint: bool | None = None
+    idempotent_hint: bool | None = None
+    destructive_hint: bool | None = None
+    open_world_hint: bool | None = None
+
+
+@dataclass(slots=True)
+class ListedAgentTool:
+    id: str = ""
+    mcp_name: str = ""
+    title: str = ""
+    description: str = ""
+    input_schema: str = ""
+    output_schema: str = ""
+    annotations: AgentToolAnnotations | None = None
+    ref: AgentToolRef | None = None
+    tags: Iterable[str] = field(default_factory=list)
+    search_text: str = ""
+
+
+@dataclass(slots=True)
+class ListAgentToolsResponse:
+    tools: Iterable[ListedAgentTool] = field(default_factory=list)
+    next_page_token: str = ""
+
+
+@dataclass(slots=True)
+class ListAgentToolsRequest:
+    session_id: str = ""
+    turn_id: str = ""
+    page_size: int = 0
+    page_token: str = ""
+    run_grant: str = ""
+    query: str = ""
+
+
+@dataclass(slots=True)
+class ResolveAgentConnectionRequest:
+    session_id: str = ""
+    turn_id: str = ""
+    connection: str = ""
+    instance: str = ""
+    run_grant: str = ""
+
+
+@dataclass(slots=True)
+class ResolvedAgentConnection:
+    connection_id: str = ""
+    connection: str = ""
+    instance: str = ""
+    mode: str = ""
+    headers: Mapping[str, str] = field(default_factory=dict)
+    params: Mapping[str, str] = field(default_factory=dict)
+    expires_at: TimestampInput = None
 
 
 def AgentManagerCreateSessionRequest(*args: Any, **kwargs: Any) -> Any:
@@ -577,6 +691,724 @@ def AgentManagerResolveInteractionRequest(*args: Any, **kwargs: Any) -> Any:
     return pb.AgentManagerResolveInteractionRequest(*args, **kwargs)
 
 
+def create_agent_provider_session_request_from_proto(
+    request: Any,
+) -> CreateAgentProviderSessionRequest:
+    return CreateAgentProviderSessionRequest(
+        session_id=request.session_id,
+        idempotency_key=request.idempotency_key,
+        model=request.model,
+        client_ref=request.client_ref,
+        metadata=struct_to_dict(request.metadata)
+        if has_field(request, "metadata")
+        else None,
+        created_by=agent_actor_from_proto(request.created_by)
+        if has_field(request, "created_by")
+        else None,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+        session_start=agent_session_start_config_from_proto(request.session_start)
+        if has_field(request, "session_start")
+        else None,
+        prepared_workspace=prepared_workspace_from_proto(request.prepared_workspace)
+        if has_field(request, "prepared_workspace")
+        else None,
+    )
+
+
+def get_agent_provider_session_request_from_proto(
+    request: Any,
+) -> GetAgentProviderSessionRequest:
+    return GetAgentProviderSessionRequest(
+        session_id=request.session_id,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+    )
+
+
+def list_agent_provider_sessions_request_from_proto(
+    request: Any,
+) -> ListAgentProviderSessionsRequest:
+    return ListAgentProviderSessionsRequest(
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+        session_ids=list(request.session_ids),
+        state=request.state,
+        limit=request.limit,
+        summary_only=request.summary_only,
+    )
+
+
+def update_agent_provider_session_request_from_proto(
+    request: Any,
+) -> UpdateAgentProviderSessionRequest:
+    return UpdateAgentProviderSessionRequest(
+        session_id=request.session_id,
+        client_ref=request.client_ref,
+        state=request.state,
+        metadata=struct_to_dict(request.metadata)
+        if has_field(request, "metadata")
+        else None,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+    )
+
+
+def create_agent_provider_turn_request_from_proto(
+    request: Any,
+) -> CreateAgentProviderTurnRequest:
+    return CreateAgentProviderTurnRequest(
+        turn_id=request.turn_id,
+        session_id=request.session_id,
+        idempotency_key=request.idempotency_key,
+        model=request.model,
+        messages=[agent_message_from_proto(message) for message in request.messages],
+        tools=[resolved_agent_tool_from_proto(tool) for tool in request.tools],
+        response_schema=struct_to_dict(request.response_schema)
+        if has_field(request, "response_schema")
+        else None,
+        metadata=struct_to_dict(request.metadata)
+        if has_field(request, "metadata")
+        else None,
+        created_by=agent_actor_from_proto(request.created_by)
+        if has_field(request, "created_by")
+        else None,
+        execution_ref=request.execution_ref,
+        tool_refs=[agent_tool_ref_from_proto(ref) for ref in request.tool_refs],
+        tool_source=request.tool_source,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+        model_options=struct_to_dict(request.model_options)
+        if has_field(request, "model_options")
+        else None,
+        run_grant=request.run_grant,
+    )
+
+
+def get_agent_provider_turn_request_from_proto(
+    request: Any,
+) -> GetAgentProviderTurnRequest:
+    return GetAgentProviderTurnRequest(
+        turn_id=request.turn_id,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+    )
+
+
+def list_agent_provider_turns_request_from_proto(
+    request: Any,
+) -> ListAgentProviderTurnsRequest:
+    return ListAgentProviderTurnsRequest(
+        session_id=request.session_id,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+        turn_ids=list(request.turn_ids),
+        status=request.status,
+        limit=request.limit,
+        summary_only=request.summary_only,
+    )
+
+
+def cancel_agent_provider_turn_request_from_proto(
+    request: Any,
+) -> CancelAgentProviderTurnRequest:
+    return CancelAgentProviderTurnRequest(
+        turn_id=request.turn_id,
+        reason=request.reason,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+    )
+
+
+def list_agent_provider_turn_events_request_from_proto(
+    request: Any,
+) -> ListAgentProviderTurnEventsRequest:
+    return ListAgentProviderTurnEventsRequest(
+        turn_id=request.turn_id,
+        after_seq=request.after_seq,
+        limit=request.limit,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+    )
+
+
+def get_agent_provider_interaction_request_from_proto(
+    request: Any,
+) -> GetAgentProviderInteractionRequest:
+    return GetAgentProviderInteractionRequest(
+        interaction_id=request.interaction_id,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+    )
+
+
+def list_agent_provider_interactions_request_from_proto(
+    request: Any,
+) -> ListAgentProviderInteractionsRequest:
+    return ListAgentProviderInteractionsRequest(
+        turn_id=request.turn_id,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+    )
+
+
+def resolve_agent_provider_interaction_request_from_proto(
+    request: Any,
+) -> ResolveAgentProviderInteractionRequest:
+    return ResolveAgentProviderInteractionRequest(
+        interaction_id=request.interaction_id,
+        resolution=struct_to_dict(request.resolution)
+        if has_field(request, "resolution")
+        else None,
+        subject=agent_subject_context_from_proto(request.subject)
+        if has_field(request, "subject")
+        else None,
+    )
+
+
+def agent_session_to_proto(value: AgentSession | Mapping[str, Any]) -> Any:
+    session = _coerce(value, AgentSession, "AgentSession")
+    out = pb.AgentSession(
+        id=session.id,
+        provider_name=session.provider_name,
+        model=session.model,
+        client_ref=session.client_ref,
+        state=_int_field(session.state),
+    )
+    _copy_struct(out, "metadata", session.metadata)
+    _copy_message(out, "created_by", agent_actor_to_proto(session.created_by))
+    _copy_timestamp(out, "created_at", session.created_at)
+    _copy_timestamp(out, "updated_at", session.updated_at)
+    _copy_timestamp(out, "last_turn_at", session.last_turn_at)
+    return out
+
+
+def list_agent_provider_sessions_response_to_proto(
+    value: ListAgentProviderSessionsResponse | Mapping[str, Any],
+) -> Any:
+    response = _coerce(
+        value,
+        ListAgentProviderSessionsResponse,
+        "ListAgentProviderSessionsResponse",
+    )
+    return pb.ListAgentProviderSessionsResponse(
+        sessions=[agent_session_to_proto(session) for session in response.sessions]
+    )
+
+
+def agent_turn_to_proto(value: AgentTurn | Mapping[str, Any]) -> Any:
+    turn = _coerce(value, AgentTurn, "AgentTurn")
+    out = pb.AgentTurn(
+        id=turn.id,
+        session_id=turn.session_id,
+        provider_name=turn.provider_name,
+        model=turn.model,
+        status=_int_field(turn.status),
+        messages=[agent_message_to_proto(message) for message in turn.messages],
+        output_text=turn.output_text,
+        status_message=turn.status_message,
+        execution_ref=turn.execution_ref,
+    )
+    _copy_struct(out, "structured_output", turn.structured_output)
+    _copy_message(out, "created_by", agent_actor_to_proto(turn.created_by))
+    _copy_timestamp(out, "created_at", turn.created_at)
+    _copy_timestamp(out, "started_at", turn.started_at)
+    _copy_timestamp(out, "completed_at", turn.completed_at)
+    return out
+
+
+def list_agent_provider_turns_response_to_proto(
+    value: ListAgentProviderTurnsResponse | Mapping[str, Any],
+) -> Any:
+    response = _coerce(
+        value, ListAgentProviderTurnsResponse, "ListAgentProviderTurnsResponse"
+    )
+    return pb.ListAgentProviderTurnsResponse(
+        turns=[agent_turn_to_proto(turn) for turn in response.turns]
+    )
+
+
+def agent_turn_event_to_proto(value: AgentTurnEvent | Mapping[str, Any]) -> Any:
+    event = _coerce(value, AgentTurnEvent, "AgentTurnEvent")
+    out = pb.AgentTurnEvent(
+        id=event.id,
+        turn_id=event.turn_id,
+        seq=_int_field(event.seq),
+        type=event.type,
+        source=event.source,
+        visibility=event.visibility,
+    )
+    _copy_struct(out, "data", event.data)
+    _copy_timestamp(out, "created_at", event.created_at)
+    _copy_message(out, "display", agent_turn_display_to_proto(event.display))
+    return out
+
+
+def list_agent_provider_turn_events_response_to_proto(
+    value: ListAgentProviderTurnEventsResponse | Mapping[str, Any],
+) -> Any:
+    response = _coerce(
+        value,
+        ListAgentProviderTurnEventsResponse,
+        "ListAgentProviderTurnEventsResponse",
+    )
+    return pb.ListAgentProviderTurnEventsResponse(
+        events=[agent_turn_event_to_proto(event) for event in response.events]
+    )
+
+
+def agent_interaction_to_proto(value: AgentInteraction | Mapping[str, Any]) -> Any:
+    interaction = _coerce(value, AgentInteraction, "AgentInteraction")
+    out = pb.AgentInteraction(
+        id=interaction.id,
+        type=_int_field(interaction.type),
+        state=_int_field(interaction.state),
+        title=interaction.title,
+        prompt=interaction.prompt,
+        turn_id=interaction.turn_id,
+        session_id=interaction.session_id,
+    )
+    _copy_struct(out, "request", interaction.request)
+    _copy_struct(out, "resolution", interaction.resolution)
+    _copy_timestamp(out, "created_at", interaction.created_at)
+    _copy_timestamp(out, "resolved_at", interaction.resolved_at)
+    return out
+
+
+def list_agent_provider_interactions_response_to_proto(
+    value: ListAgentProviderInteractionsResponse | Mapping[str, Any],
+) -> Any:
+    response = _coerce(
+        value,
+        ListAgentProviderInteractionsResponse,
+        "ListAgentProviderInteractionsResponse",
+    )
+    return pb.ListAgentProviderInteractionsResponse(
+        interactions=[
+            agent_interaction_to_proto(interaction)
+            for interaction in response.interactions
+        ]
+    )
+
+
+def agent_provider_capabilities_to_proto(
+    value: AgentProviderCapabilities | Mapping[str, Any],
+) -> Any:
+    capabilities = _coerce(
+        value, AgentProviderCapabilities, "AgentProviderCapabilities"
+    )
+    return pb.AgentProviderCapabilities(
+        streaming_text=capabilities.streaming_text,
+        tool_calls=capabilities.tool_calls,
+        parallel_tool_calls=capabilities.parallel_tool_calls,
+        structured_output=capabilities.structured_output,
+        interactions=capabilities.interactions,
+        resumable_turns=capabilities.resumable_turns,
+        reasoning_summaries=capabilities.reasoning_summaries,
+        bounded_list_hydration=capabilities.bounded_list_hydration,
+        supported_tool_sources=[
+            _int_field(source) for source in capabilities.supported_tool_sources
+        ],
+        supports_session_start=capabilities.supports_session_start,
+        supports_prepared_workspace=capabilities.supports_prepared_workspace,
+    )
+
+
+def agent_message_from_proto(value: Any) -> AgentMessage:
+    return AgentMessage(
+        role=value.role,
+        text=value.text,
+        parts=[agent_message_part_from_proto(part) for part in value.parts],
+        metadata=struct_to_dict(value.metadata)
+        if has_field(value, "metadata")
+        else None,
+    )
+
+
+def agent_message_to_proto(value: AgentMessage | Mapping[str, Any]) -> Any:
+    message = _coerce(value, AgentMessage, "AgentMessage")
+    out = pb.AgentMessage(
+        role=message.role,
+        text=message.text,
+        parts=[agent_message_part_to_proto(part) for part in message.parts],
+    )
+    _copy_struct(out, "metadata", message.metadata)
+    return out
+
+
+def agent_message_part_from_proto(value: Any) -> AgentMessagePart:
+    return AgentMessagePart(
+        type=value.type,
+        text=value.text,
+        json=struct_to_dict(value.json) if has_field(value, "json") else None,
+        tool_call=agent_tool_call_from_proto(value.tool_call)
+        if has_field(value, "tool_call")
+        else None,
+        tool_result=agent_tool_result_from_proto(value.tool_result)
+        if has_field(value, "tool_result")
+        else None,
+        image_ref=agent_image_ref_from_proto(value.image_ref)
+        if has_field(value, "image_ref")
+        else None,
+    )
+
+
+def agent_message_part_to_proto(value: AgentMessagePart | Mapping[str, Any]) -> Any:
+    part = _coerce(value, AgentMessagePart, "AgentMessagePart")
+    part_type = _int_field(part.type)
+    if part_type == pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED:
+        part_type = _infer_agent_message_part_type(part)
+    out = pb.AgentMessagePart(type=part_type, text=part.text)
+    _copy_struct(out, "json", part.json)
+    _copy_message(out, "tool_call", agent_tool_call_to_proto(part.tool_call))
+    _copy_message(out, "tool_result", agent_tool_result_to_proto(part.tool_result))
+    _copy_message(out, "image_ref", agent_image_ref_to_proto(part.image_ref))
+    return out
+
+
+def agent_tool_call_from_proto(value: Any) -> AgentMessagePartToolCall:
+    return AgentMessagePartToolCall(
+        id=value.id,
+        tool_id=value.tool_id,
+        arguments=struct_to_dict(value.arguments)
+        if has_field(value, "arguments")
+        else None,
+    )
+
+
+def agent_tool_call_to_proto(
+    value: AgentMessagePartToolCall | Mapping[str, Any] | None,
+) -> Any | None:
+    if value is None:
+        return None
+    tool_call = _coerce(value, AgentMessagePartToolCall, "tool_call")
+    out = pb.AgentMessagePartToolCall(id=tool_call.id, tool_id=tool_call.tool_id)
+    _copy_struct(out, "arguments", tool_call.arguments)
+    return out
+
+
+def agent_tool_result_from_proto(value: Any) -> AgentMessagePartToolResult:
+    return AgentMessagePartToolResult(
+        tool_call_id=value.tool_call_id,
+        status=value.status,
+        content=value.content,
+        output=struct_to_dict(value.output) if has_field(value, "output") else None,
+    )
+
+
+def agent_tool_result_to_proto(
+    value: AgentMessagePartToolResult | Mapping[str, Any] | None,
+) -> Any | None:
+    if value is None:
+        return None
+    tool_result = _coerce(value, AgentMessagePartToolResult, "tool_result")
+    out = pb.AgentMessagePartToolResult(
+        tool_call_id=tool_result.tool_call_id,
+        status=_int_field(tool_result.status),
+        content=tool_result.content,
+    )
+    _copy_struct(out, "output", tool_result.output)
+    return out
+
+
+def agent_image_ref_from_proto(value: Any) -> AgentMessagePartImageRef:
+    return AgentMessagePartImageRef(uri=value.uri, mime_type=value.mime_type)
+
+
+def agent_image_ref_to_proto(
+    value: AgentMessagePartImageRef | Mapping[str, Any] | None,
+) -> Any | None:
+    if value is None:
+        return None
+    image_ref = _coerce(value, AgentMessagePartImageRef, "image_ref")
+    return pb.AgentMessagePartImageRef(uri=image_ref.uri, mime_type=image_ref.mime_type)
+
+
+def agent_actor_from_proto(value: Any) -> AgentActor:
+    return AgentActor(
+        subject_id=value.subject_id,
+        subject_kind=value.subject_kind,
+        display_name=value.display_name,
+        auth_source=value.auth_source,
+    )
+
+
+def agent_actor_to_proto(value: AgentActor | Mapping[str, Any] | None) -> Any | None:
+    if value is None:
+        return None
+    actor = _coerce(value, AgentActor, "AgentActor")
+    return pb.AgentActor(
+        subject_id=actor.subject_id,
+        subject_kind=actor.subject_kind,
+        display_name=actor.display_name,
+        auth_source=actor.auth_source,
+    )
+
+
+def agent_subject_context_from_proto(value: Any) -> AgentSubjectContext:
+    return AgentSubjectContext(
+        subject_id=value.subject_id,
+        subject_kind=value.subject_kind,
+        credential_subject_id=value.credential_subject_id,
+        display_name=value.display_name,
+        auth_source=value.auth_source,
+    )
+
+
+def agent_subject_context_to_proto(
+    value: AgentSubjectContext | Mapping[str, Any] | None,
+) -> Any | None:
+    if value is None:
+        return None
+    subject = _coerce(value, AgentSubjectContext, "AgentSubjectContext")
+    return pb.AgentSubjectContext(
+        subject_id=subject.subject_id,
+        subject_kind=subject.subject_kind,
+        credential_subject_id=subject.credential_subject_id,
+        display_name=subject.display_name,
+        auth_source=subject.auth_source,
+    )
+
+
+def prepared_workspace_from_proto(value: Any) -> AgentPreparedWorkspace:
+    return AgentPreparedWorkspace(root=value.root, cwd=value.cwd)
+
+
+def agent_session_start_config_from_proto(value: Any) -> AgentSessionStartConfig:
+    return AgentSessionStartConfig(
+        hooks=[agent_session_start_hook_from_proto(hook) for hook in value.hooks]
+    )
+
+
+def agent_session_start_hook_from_proto(value: Any) -> AgentSessionStartHook:
+    return AgentSessionStartHook(
+        id=value.id,
+        type=value.type,
+        command=list(value.command),
+        cwd=value.cwd,
+        timeout=value.timeout,
+        env=dict(value.env),
+        output=AgentSessionStartHookOutput(
+            additional_context=value.output.additional_context,
+            metadata=value.output.metadata,
+        )
+        if has_field(value, "output")
+        else None,
+    )
+
+
+def resolved_agent_tool_from_proto(value: Any) -> ResolvedAgentTool:
+    return ResolvedAgentTool(
+        id=value.id,
+        name=value.name,
+        description=value.description,
+        parameters_schema=struct_to_dict(value.parameters_schema)
+        if has_field(value, "parameters_schema")
+        else None,
+    )
+
+
+def agent_tool_ref_from_proto(value: Any) -> AgentToolRef:
+    return AgentToolRef(
+        plugin=value.plugin,
+        operation=value.operation,
+        connection=value.connection,
+        instance=value.instance,
+        title=value.title,
+        description=value.description,
+        system=value.system,
+    )
+
+
+def agent_tool_ref_to_proto(
+    value: AgentToolRef | Mapping[str, Any] | None,
+) -> Any | None:
+    if value is None:
+        return None
+    ref = _coerce(value, AgentToolRef, "AgentToolRef")
+    return pb.AgentToolRef(
+        plugin=ref.plugin,
+        operation=ref.operation,
+        connection=ref.connection,
+        instance=ref.instance,
+        title=ref.title,
+        description=ref.description,
+        system=ref.system,
+    )
+
+
+def agent_turn_display_to_proto(
+    value: AgentTurnDisplay | Mapping[str, Any] | None,
+) -> Any | None:
+    if value is None:
+        return None
+    display = _coerce(value, AgentTurnDisplay, "AgentTurnDisplay")
+    out = pb.AgentTurnDisplay(
+        kind=display.kind,
+        phase=display.phase,
+        text=display.text,
+        label=display.label,
+        ref=display.ref,
+        parent_ref=display.parent_ref,
+        action=display.action,
+        format=display.format,
+        language=display.language,
+    )
+    _copy_value(out, "input", display.input)
+    _copy_value(out, "output", display.output)
+    _copy_value(out, "error", display.error)
+    return out
+
+
+def execute_agent_tool_response_from_proto(value: Any) -> ExecuteAgentToolResponse:
+    return ExecuteAgentToolResponse(status=_int_field(value.status), body=value.body)
+
+
+def list_agent_tools_response_from_proto(value: Any) -> ListAgentToolsResponse:
+    return ListAgentToolsResponse(
+        tools=[listed_agent_tool_from_proto(tool) for tool in value.tools],
+        next_page_token=value.next_page_token,
+    )
+
+
+def listed_agent_tool_from_proto(value: Any) -> ListedAgentTool:
+    return ListedAgentTool(
+        id=value.id,
+        mcp_name=value.mcp_name,
+        title=value.title,
+        description=value.description,
+        input_schema=value.input_schema,
+        output_schema=value.output_schema,
+        annotations=agent_tool_annotations_from_proto(value.annotations)
+        if has_field(value, "annotations")
+        else None,
+        ref=agent_tool_ref_from_proto(value.ref) if has_field(value, "ref") else None,
+        tags=list(value.tags),
+        search_text=value.search_text,
+    )
+
+
+def agent_tool_annotations_from_proto(value: Any) -> AgentToolAnnotations:
+    return AgentToolAnnotations(
+        read_only_hint=value.read_only_hint
+        if has_field(value, "read_only_hint")
+        else None,
+        idempotent_hint=value.idempotent_hint
+        if has_field(value, "idempotent_hint")
+        else None,
+        destructive_hint=value.destructive_hint
+        if has_field(value, "destructive_hint")
+        else None,
+        open_world_hint=value.open_world_hint
+        if has_field(value, "open_world_hint")
+        else None,
+    )
+
+
+def resolved_agent_connection_from_proto(value: Any) -> ResolvedAgentConnection:
+    return ResolvedAgentConnection(
+        connection_id=value.connection_id,
+        connection=value.connection,
+        instance=value.instance,
+        mode=value.mode,
+        headers=dict(value.headers),
+        params=dict(value.params),
+        expires_at=datetime_from_timestamp(value.expires_at)
+        if has_field(value, "expires_at")
+        else None,
+    )
+
+
+def execute_agent_tool_request_to_proto(
+    value: ExecuteAgentToolRequest | Mapping[str, Any],
+) -> Any:
+    request = _coerce(value, ExecuteAgentToolRequest, "ExecuteAgentToolRequest")
+    out = pb.ExecuteAgentToolRequest(
+        session_id=request.session_id,
+        turn_id=request.turn_id,
+        tool_call_id=request.tool_call_id,
+        tool_id=request.tool_id,
+        idempotency_key=request.idempotency_key,
+        run_grant=request.run_grant,
+    )
+    _copy_struct(out, "arguments", request.arguments)
+    return out
+
+
+def list_agent_tools_request_to_proto(
+    value: ListAgentToolsRequest | Mapping[str, Any],
+) -> Any:
+    request = _coerce(value, ListAgentToolsRequest, "ListAgentToolsRequest")
+    return pb.ListAgentToolsRequest(
+        session_id=request.session_id,
+        turn_id=request.turn_id,
+        page_size=_int_field(request.page_size),
+        page_token=request.page_token,
+        run_grant=request.run_grant,
+        query=request.query,
+    )
+
+
+def resolve_agent_connection_request_to_proto(
+    value: ResolveAgentConnectionRequest | Mapping[str, Any],
+) -> Any:
+    request = _coerce(
+        value,
+        ResolveAgentConnectionRequest,
+        "ResolveAgentConnectionRequest",
+    )
+    return pb.ResolveAgentConnectionRequest(
+        session_id=request.session_id,
+        turn_id=request.turn_id,
+        connection=request.connection,
+        instance=request.instance,
+        run_grant=request.run_grant,
+    )
+
+
+def _coerce(value: Any, cls: type[Any], field_name: str) -> Any:
+    if isinstance(value, cls):
+        return value
+    mapping = _dataclass_mapping(value)
+    if mapping is not None:
+        return cls(**dict(mapping))
+    if isinstance(value, Mapping):
+        return cls(**dict(value))
+    raise TypeError(f"{field_name} must be {cls.__name__} or a mapping")
+
+
+def _copy_message(target: Any, field: str, value: Any | None) -> None:
+    if value is not None:
+        getattr(target, field).CopyFrom(value)
+
+
+def _copy_struct(target: Any, field: str, value: JsonObjectInput | None) -> None:
+    if value is not None:
+        getattr(target, field).CopyFrom(struct_from_dict(value))
+
+
+def _copy_timestamp(target: Any, field: str, value: TimestampInput) -> None:
+    timestamp = timestamp_from_datetime(value)
+    if timestamp is not None:
+        getattr(target, field).CopyFrom(timestamp)
+
+
+def _copy_value(target: Any, field: str, value: Any) -> None:
+    if value is not None:
+        getattr(target, field).CopyFrom(value_from_json(value))
+
+
 def agent_actor_to_dict(actor: Any) -> dict[str, Any]:
     """Convert an ``AgentActor`` protocol value to a plain dictionary."""
 
@@ -587,10 +1419,10 @@ def agent_actor_to_dict(actor: Any) -> dict[str, Any]:
 
 
 def agent_actor_from_dict(value: Mapping[str, Any] | None) -> Any:
-    """Create an ``AgentActor`` protocol value from a plain dictionary."""
+    """Create an ``AgentActor`` from a plain dictionary."""
 
     data = dict(value or {})
-    return pb.AgentActor(
+    return AgentActor(
         subject_id=data.get("subject_id", ""),
         subject_kind=data.get("subject_kind", ""),
         display_name=data.get("display_name", ""),
@@ -614,10 +1446,10 @@ def agent_subject_context_to_dict(subject: Any) -> dict[str, Any]:
 
 
 def agent_subject_context_from_dict(value: Mapping[str, Any] | None) -> Any:
-    """Create an ``AgentSubjectContext`` protocol value from a dictionary."""
+    """Create an ``AgentSubjectContext`` from a dictionary."""
 
     data = dict(value or {})
-    return pb.AgentSubjectContext(
+    return AgentSubjectContext(
         subject_id=data.get("subject_id", ""),
         subject_kind=data.get("subject_kind", ""),
         credential_subject_id=data.get("credential_subject_id", ""),
@@ -635,8 +1467,10 @@ def prepared_workspace_to_dict(workspace: Any) -> dict[str, Any]:
 def prepared_workspace_from_dict(value: Mapping[str, Any] | None) -> Any:
     """Create ``PreparedAgentWorkspace`` from a dictionary."""
 
-    data = dict(value or {})
-    return pb.PreparedAgentWorkspace(
+    data = (
+        dict(_mapping_value(value, "prepared_workspace")) if value is not None else {}
+    )
+    return AgentPreparedWorkspace(
         root=data.get("root", ""),
         cwd=data.get("cwd", ""),
     )
@@ -659,11 +1493,11 @@ def agent_tool_ref_to_dict(tool_ref: Any) -> dict[str, Any]:
     )
 
 
-def agent_tool_ref_from_dict(value: Any | None) -> Any:
-    """Create an ``AgentToolRef`` protocol value from a dictionary."""
+def agent_tool_ref_from_dict(value: Mapping[str, Any] | None) -> Any:
+    """Create an ``AgentToolRef`` from a dictionary."""
 
     data = dict(_mapping_value(value, "tool_ref")) if value is not None else {}
-    return pb.AgentToolRef(
+    return AgentToolRef(
         plugin=data.get("plugin", ""),
         operation=data.get("operation", ""),
         connection=data.get("connection", ""),
@@ -682,11 +1516,19 @@ def agent_message_part_to_dict(part: Any) -> dict[str, Any]:
         value["text"] = part.text
     if has_field(part, "json"):
         value["json"] = struct_to_dict(part.json)
+    elif getattr(part, "json", None) is not None:
+        value["json"] = part.json
     if has_field(part, "tool_call"):
+        value["tool_call"] = _tool_call_to_dict(part.tool_call)
+    elif getattr(part, "tool_call", None) is not None:
         value["tool_call"] = _tool_call_to_dict(part.tool_call)
     if has_field(part, "tool_result"):
         value["tool_result"] = _tool_result_to_dict(part.tool_result)
+    elif getattr(part, "tool_result", None) is not None:
+        value["tool_result"] = _tool_result_to_dict(part.tool_result)
     if has_field(part, "image_ref"):
+        value["image_ref"] = _image_ref_to_dict(part.image_ref)
+    elif getattr(part, "image_ref", None) is not None:
         value["image_ref"] = _image_ref_to_dict(part.image_ref)
     return value
 
@@ -694,34 +1536,36 @@ def agent_message_part_to_dict(part: Any) -> dict[str, Any]:
 def agent_message_part_from_dict(value: Any) -> Any:
     """Create an ``AgentMessagePart`` from a lower-snake-case dictionary."""
 
-    data = dict(_mapping_value(value, "part"))
-    part_type = data.get("type", pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED)
-    if part_type == pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED:
-        part_type = _agent_message_part_type(data)
-    part = pb.AgentMessagePart(type=part_type)
-    if "text" in data:
-        part.text = str(data["text"])
-    if data.get("json") is not None:
-        part.json.CopyFrom(struct_from_dict(data["json"]))
-    if data.get("tool_call") is not None:
-        part.tool_call.CopyFrom(_tool_call_from_dict(data["tool_call"]))
-    if data.get("tool_result") is not None:
-        part.tool_result.CopyFrom(_tool_result_from_dict(data["tool_result"]))
-    if data.get("image_ref") is not None:
-        part.image_ref.CopyFrom(_image_ref_from_dict(data["image_ref"]))
+    data = dict(_mapping_value(value, "AgentMessagePart"))
+    part = AgentMessagePart(
+        type=data.get("type", pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED),
+        text=str(data.get("text", "")),
+        json=data.get("json"),
+        tool_call=_tool_call_from_dict(data["tool_call"])
+        if data.get("tool_call") is not None
+        else None,
+        tool_result=_tool_result_from_dict(data["tool_result"])
+        if data.get("tool_result") is not None
+        else None,
+        image_ref=_image_ref_from_dict(data["image_ref"])
+        if data.get("image_ref") is not None
+        else None,
+    )
+    if _int_field(part.type) == pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED:
+        part.type = _infer_agent_message_part_type(part)
     return part
 
 
-def _agent_message_part_type(data: Mapping[str, Any]) -> int:
-    if data.get("tool_call") is not None:
+def _infer_agent_message_part_type(part: AgentMessagePart) -> int:
+    if part.tool_call is not None:
         return pb.AGENT_MESSAGE_PART_TYPE_TOOL_CALL
-    if data.get("tool_result") is not None:
+    if part.tool_result is not None:
         return pb.AGENT_MESSAGE_PART_TYPE_TOOL_RESULT
-    if data.get("image_ref") is not None:
+    if part.image_ref is not None:
         return pb.AGENT_MESSAGE_PART_TYPE_IMAGE_REF
-    if data.get("json") is not None:
+    if part.json is not None:
         return pb.AGENT_MESSAGE_PART_TYPE_JSON
-    if data.get("text"):
+    if part.text:
         return pb.AGENT_MESSAGE_PART_TYPE_TEXT
     return pb.AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
 
@@ -734,6 +1578,8 @@ def agent_message_to_dict(message: Any) -> dict[str, Any]:
         value["parts"] = [agent_message_part_to_dict(part) for part in message.parts]
     if has_field(message, "metadata"):
         value["metadata"] = struct_to_dict(message.metadata)
+    elif getattr(message, "metadata", None) is not None:
+        value["metadata"] = message.metadata
     return value
 
 
@@ -746,18 +1592,16 @@ def agent_messages_to_dicts(messages: Iterable[Any]) -> list[dict[str, Any]]:
 def agent_message_from_dict(value: Any) -> Any:
     """Create an ``AgentMessage`` protocol value from a dictionary."""
 
-    data = dict(_mapping_value(value, "message"))
-    message = pb.AgentMessage(
+    data = dict(_mapping_value(value, "AgentMessage"))
+    return AgentMessage(
         role=data.get("role", ""),
         text=data.get("text", ""),
-    )
-    for part in data.get("parts", []) or []:
-        message.parts.append(
+        parts=[
             agent_message_part_from_dict(_mapping_value(part, "parts[]"))
-        )
-    if data.get("metadata") is not None:
-        message.metadata.CopyFrom(struct_from_dict(data["metadata"]))
-    return message
+            for part in data.get("parts", []) or []
+        ],
+        metadata=data.get("metadata"),
+    )
 
 
 def agent_messages_from_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any]:
@@ -769,7 +1613,10 @@ def agent_messages_from_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any
 def agent_message_to_proto_dict(message: Any) -> dict[str, Any]:
     """Convert an ``AgentMessage`` to protobuf JSON dictionary form."""
 
-    value = message_to_dict(message, preserving_proto_field_name=True)
+    value = message_to_dict(
+        agent_message_to_proto(message),
+        preserving_proto_field_name=True,
+    )
     if not isinstance(value, dict):
         raise TypeError("AgentMessage protobuf JSON projection must be an object")
     return value
@@ -778,7 +1625,7 @@ def agent_message_to_proto_dict(message: Any) -> dict[str, Any]:
 def agent_message_from_proto_dict(value: Mapping[str, Any]) -> Any:
     """Create an ``AgentMessage`` from protobuf JSON dictionary form."""
 
-    return message_from_dict(dict(value), pb.AgentMessage())
+    return agent_message_from_proto(message_from_dict(dict(value), pb.AgentMessage()))
 
 
 def agent_messages_to_proto_dicts(messages: Iterable[Any]) -> list[dict[str, Any]]:
@@ -814,10 +1661,20 @@ class AgentHost:
 
         self._channel.close()
 
-    def execute_tool(self, request: Any) -> Any:
-        """Execute a host tool using an agent protocol request message."""
+    def execute_tool(
+        self,
+        request: ExecuteAgentToolRequest | Mapping[str, Any],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> ExecuteAgentToolResponse:
+        """Execute a host tool using native request fields."""
 
-        return _grpc_call(self._stub.ExecuteTool, request)
+        response = _grpc_call(
+            self._stub.ExecuteTool,
+            execute_agent_tool_request_to_proto(request),
+            timeout_seconds=timeout_seconds,
+        )
+        return execute_agent_tool_response_from_proto(response)
 
     def execute_tool_for_turn(
         self,
@@ -829,25 +1686,37 @@ class AgentHost:
         arguments: JsonObjectInput | None = None,
         run_grant: str = "",
         idempotency_key: str = "",
-    ) -> Any:
+        timeout_seconds: float | None = None,
+    ) -> ExecuteAgentToolResponse:
         """Execute a host tool using plain Python request fields."""
 
-        request = pb.ExecuteAgentToolRequest(
-            session_id=session_id,
-            turn_id=turn_id,
-            tool_call_id=tool_call_id,
-            tool_id=tool_id,
-            run_grant=run_grant,
-            idempotency_key=idempotency_key,
+        return self.execute_tool(
+            ExecuteAgentToolRequest(
+                session_id=session_id,
+                turn_id=turn_id,
+                tool_call_id=tool_call_id,
+                tool_id=tool_id,
+                arguments=arguments,
+                run_grant=run_grant,
+                idempotency_key=idempotency_key,
+            ),
+            timeout_seconds=timeout_seconds,
         )
-        if arguments is not None:
-            request.arguments.CopyFrom(struct_from_dict(arguments))
-        return self.execute_tool(request)
 
-    def list_tools(self, request: Any) -> Any:
+    def list_tools(
+        self,
+        request: ListAgentToolsRequest | Mapping[str, Any],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> ListAgentToolsResponse:
         """List host tools visible to the current agent request."""
 
-        return _grpc_call(self._stub.ListTools, request)
+        response = _grpc_call(
+            self._stub.ListTools,
+            list_agent_tools_request_to_proto(request),
+            timeout_seconds=timeout_seconds,
+        )
+        return list_agent_tools_response_from_proto(response)
 
     def list_tools_for_turn(
         self,
@@ -858,24 +1727,36 @@ class AgentHost:
         page_size: int = 0,
         page_token: str = "",
         query: str = "",
-    ) -> Any:
+        timeout_seconds: float | None = None,
+    ) -> ListAgentToolsResponse:
         """List host tools using plain Python request fields."""
 
         return self.list_tools(
-            pb.ListAgentToolsRequest(
+            ListAgentToolsRequest(
                 session_id=session_id,
                 turn_id=turn_id,
                 run_grant=run_grant,
                 page_size=page_size,
                 page_token=page_token,
                 query=query,
-            )
+            ),
+            timeout_seconds=timeout_seconds,
         )
 
-    def resolve_connection(self, request: Any) -> Any:
+    def resolve_connection(
+        self,
+        request: ResolveAgentConnectionRequest | Mapping[str, Any],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> ResolvedAgentConnection:
         """Resolve an agent connection for the current turn."""
 
-        return _grpc_call(self._stub.ResolveConnection, request)
+        response = _grpc_call(
+            self._stub.ResolveConnection,
+            resolve_agent_connection_request_to_proto(request),
+            timeout_seconds=timeout_seconds,
+        )
+        return resolved_agent_connection_from_proto(response)
 
     def resolve_connection_for_turn(
         self,
@@ -885,17 +1766,19 @@ class AgentHost:
         connection: str,
         instance: str = "",
         run_grant: str = "",
-    ) -> Any:
+        timeout_seconds: float | None = None,
+    ) -> ResolvedAgentConnection:
         """Resolve an agent connection using plain Python request fields."""
 
         return self.resolve_connection(
-            pb.ResolveAgentConnectionRequest(
+            ResolveAgentConnectionRequest(
                 session_id=session_id,
                 turn_id=turn_id,
                 connection=connection,
                 instance=instance,
                 run_grant=run_grant,
-            )
+            ),
+            timeout_seconds=timeout_seconds,
         )
 
     def __enter__(self) -> AgentHost:
@@ -912,13 +1795,13 @@ class AgentHost:
 def _agent_message_value(value: Any) -> Any:
     if isinstance(value, pb.AgentMessage):
         return _copy(value)
-    return agent_message_from_dict(_mapping_value(value, "messages[]"))
+    return agent_message_to_proto(value)
 
 
 def _agent_tool_ref_value(value: Any) -> Any:
     if isinstance(value, pb.AgentToolRef):
         return _copy(value)
-    return agent_tool_ref_from_dict(_mapping_value(value, "tool_refs[]"))
+    return agent_tool_ref_to_proto(value)
 
 
 def _agent_workspace_value(value: Any | None) -> Any | None:
@@ -1199,19 +2082,29 @@ class AgentManager:
         self.close()
 
 
-def _grpc_call(method: Any, request: Any) -> Any:
+def _grpc_call(
+    method: Any, request: Any, *, timeout_seconds: float | None = None
+) -> Any:
     try:
-        return method(request)
+        if timeout_seconds is None:
+            return method(request)
+        timeout = _positive_float(timeout_seconds)
+        if timeout is None:
+            return method(request)
+        return method(request, timeout=timeout)
     except grpc.RpcError:
         raise
 
 
 def _message_fields(message: Any, fields: tuple[str, ...]) -> dict[str, Any]:
     value: dict[str, Any] = {}
-    for field in fields:
-        current = getattr(message, field, None)
-        if current:
-            value[field] = current
+    for field_name in fields:
+        if isinstance(message, Mapping):
+            current = message.get(field_name)
+        else:
+            current = getattr(message, field_name, None)
+        if current is not None and current != "":
+            value[field_name] = current
     return value
 
 
@@ -1224,42 +2117,60 @@ def _mapping_value(value: Any, field: str) -> Mapping[str, Any]:
     return value
 
 
+def _int_field(value: Any) -> int:
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return 0
+        if text.removeprefix("-").isdigit():
+            return int(text)
+        enum_value = getattr(pb, text, None)
+        if isinstance(enum_value, int):
+            return enum_value
+    return int(value or 0)
+
+
+def _positive_float(value: float) -> float | None:
+    timeout = float(value)
+    return timeout if timeout > 0 else None
+
+
 def _tool_call_to_dict(tool_call: Any) -> dict[str, Any]:
     value = _message_fields(tool_call, ("id", "tool_id"))
     if has_field(tool_call, "arguments"):
         value["arguments"] = struct_to_dict(tool_call.arguments)
+    elif _message_value(tool_call, "arguments") is not None:
+        value["arguments"] = _message_value(tool_call, "arguments")
     return value
 
 
 def _tool_call_from_dict(value: Any) -> Any:
     data = dict(_mapping_value(value, "tool_call"))
-    tool_call = pb.AgentMessagePartToolCall(
+    return AgentMessagePartToolCall(
         id=data.get("id", ""),
         tool_id=data.get("tool_id", ""),
+        arguments=data.get("arguments"),
     )
-    if data.get("arguments") is not None:
-        tool_call.arguments.CopyFrom(struct_from_dict(data["arguments"]))
-    return tool_call
 
 
 def _tool_result_to_dict(tool_result: Any) -> dict[str, Any]:
     value = _message_fields(tool_result, ("tool_call_id", "content"))
-    value["status"] = tool_result.status
+    value["status"] = _message_value(tool_result, "status", 0)
     if has_field(tool_result, "output"):
         value["output"] = struct_to_dict(tool_result.output)
+    elif _message_value(tool_result, "output") is not None:
+        value["output"] = _message_value(tool_result, "output")
     return value
 
 
 def _tool_result_from_dict(value: Any) -> Any:
     data = dict(_mapping_value(value, "tool_result"))
-    tool_result = pb.AgentMessagePartToolResult(
+    return AgentMessagePartToolResult(
         tool_call_id=data.get("tool_call_id", ""),
         status=data.get("status", 0),
         content=data.get("content", ""),
+        output=data.get("output"),
     )
-    if data.get("output") is not None:
-        tool_result.output.CopyFrom(struct_from_dict(data["output"]))
-    return tool_result
 
 
 def _image_ref_to_dict(image_ref: Any) -> dict[str, Any]:
@@ -1268,7 +2179,13 @@ def _image_ref_to_dict(image_ref: Any) -> dict[str, Any]:
 
 def _image_ref_from_dict(value: Any) -> Any:
     data = dict(_mapping_value(value, "image_ref"))
-    return pb.AgentMessagePartImageRef(
+    return AgentMessagePartImageRef(
         uri=data.get("uri", ""),
         mime_type=data.get("mime_type", ""),
     )
+
+
+def _message_value(message: Any, field: str, default: Any = None) -> Any:
+    if isinstance(message, Mapping):
+        return message.get(field, default)
+    return getattr(message, field, default)

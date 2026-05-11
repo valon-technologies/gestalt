@@ -62,8 +62,11 @@ The top-level `gestalt` package exposes the supported authoring API:
   `AgentManager`, and `PluginInvoker` for calling sibling host services.
 - `gestalt.telemetry` for provider-authored GenAI spans and metrics.
 
-The SDK also exposes authored protocol helpers for agent, workflow,
-authorization, and authentication request payloads. Workflow helpers such as
+The SDK also exposes authored protocol helpers for workflow, authorization,
+and authentication request payloads. Agent provider handlers receive and return
+native dataclasses such as `CreateAgentProviderTurnRequest`, `AgentSession`,
+and `AgentTurn`; structured fields accept dictionaries or dataclass instances,
+and timestamp fields use timezone-aware `datetime` values. Workflow helpers such as
 `bound_workflow_target`, `workflow_signal`, and `bound_workflow_run` accept
 plain dictionaries, dataclass instances, and native `datetime` values for
 structured payloads and timestamp fields, then build the protocol messages used

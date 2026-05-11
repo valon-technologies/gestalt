@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 )
@@ -101,115 +102,432 @@ func (UnimplementedAgentProvider) GetCapabilities(context.Context, *GetAgentProv
 	return nil, Unimplemented("agent get capabilities is not implemented")
 }
 
-// Agent protocol type aliases expose request, response, and model messages
-// through the SDK package so provider implementations do not need to import
-// generated protobuf packages directly.
+// AgentMessage is one provider-visible conversation message.
+type AgentMessage struct {
+	Role     string
+	Text     string
+	Parts    []AgentMessagePart
+	Metadata map[string]any
+}
+
+type AgentMessagePartToolCall struct {
+	ID        string
+	ToolID    string
+	Arguments map[string]any
+}
+
+type AgentMessagePartToolResult struct {
+	ToolCallID string
+	Status     int32
+	Content    string
+	Output     map[string]any
+}
+
+type AgentMessagePartImageRef struct {
+	URI      string
+	MimeType string
+}
+
+type AgentMessagePart struct {
+	Type       AgentMessagePartType
+	Text       string
+	JSON       map[string]any
+	ToolCall   *AgentMessagePartToolCall
+	ToolResult *AgentMessagePartToolResult
+	ImageRef   *AgentMessagePartImageRef
+}
+
+type AgentActor struct {
+	SubjectID   string
+	SubjectKind string
+	DisplayName string
+	AuthSource  string
+}
+
+type AgentSubjectContext struct {
+	SubjectID           string
+	SubjectKind         string
+	CredentialSubjectID string
+	DisplayName         string
+	AuthSource          string
+}
+
+type AgentProtocolWorkspace struct {
+	Checkouts []AgentProtocolWorkspaceGitCheckout
+	Cwd       string
+}
+
+type AgentProtocolWorkspaceGitCheckout struct {
+	URL  string
+	Ref  string
+	Path string
+}
+
+type AgentPreparedWorkspace struct {
+	Root string
+	Cwd  string
+}
+
+type ResolvedAgentTool struct {
+	ID               string
+	Name             string
+	Description      string
+	ParametersSchema map[string]any
+}
+
+type AgentToolRef struct {
+	Plugin      string
+	Operation   string
+	Connection  string
+	Instance    string
+	Title       string
+	Description string
+	System      string
+}
+
+type AgentProviderCapabilities struct {
+	StreamingText             bool
+	ToolCalls                 bool
+	ParallelToolCalls         bool
+	StructuredOutput          bool
+	Interactions              bool
+	ResumableTurns            bool
+	ReasoningSummaries        bool
+	BoundedListHydration      bool
+	SupportedToolSources      []AgentToolSourceMode
+	SupportsSessionStart      bool
+	SupportsPreparedWorkspace bool
+}
+
+type GetAgentProviderCapabilitiesRequest struct{}
+
+type AgentInteraction struct {
+	ID         string
+	Type       AgentInteractionType
+	State      AgentInteractionState
+	Title      string
+	Prompt     string
+	Request    map[string]any
+	Resolution map[string]any
+	CreatedAt  time.Time
+	ResolvedAt *time.Time
+	TurnID     string
+	SessionID  string
+}
+
+type AgentSession struct {
+	ID           string
+	ProviderName string
+	Model        string
+	ClientRef    string
+	State        AgentSessionState
+	Metadata     map[string]any
+	CreatedBy    *AgentActor
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	LastTurnAt   *time.Time
+}
+
+type CreateAgentProviderSessionRequest struct {
+	SessionID         string
+	IdempotencyKey    string
+	Model             string
+	ClientRef         string
+	Metadata          map[string]any
+	CreatedBy         *AgentActor
+	Subject           *AgentSubjectContext
+	SessionStart      *AgentSessionStartConfig
+	PreparedWorkspace *AgentPreparedWorkspace
+}
+
+type AgentSessionStartConfig struct {
+	Hooks []AgentSessionStartHook
+}
+
+type AgentSessionStartHook struct {
+	ID      string
+	Type    string
+	Command []string
+	Cwd     string
+	Timeout string
+	Env     map[string]string
+	Output  *AgentSessionStartHookOutput
+}
+
+type AgentSessionStartHookOutput struct {
+	AdditionalContext bool
+	Metadata          bool
+}
+
+type GetAgentProviderSessionRequest struct {
+	SessionID string
+	Subject   *AgentSubjectContext
+}
+
+type ListAgentProviderSessionsRequest struct {
+	Subject     *AgentSubjectContext
+	SessionIDs  []string
+	State       AgentSessionState
+	Limit       int32
+	SummaryOnly bool
+}
+
+type ListAgentProviderSessionsResponse struct {
+	Sessions []AgentSession
+}
+
+type UpdateAgentProviderSessionRequest struct {
+	SessionID string
+	ClientRef string
+	State     AgentSessionState
+	Metadata  map[string]any
+	Subject   *AgentSubjectContext
+}
+
+type AgentTurn struct {
+	ID               string
+	SessionID        string
+	ProviderName     string
+	Model            string
+	Status           AgentExecutionStatus
+	Messages         []AgentMessage
+	OutputText       string
+	StructuredOutput map[string]any
+	StatusMessage    string
+	CreatedBy        *AgentActor
+	CreatedAt        time.Time
+	StartedAt        *time.Time
+	CompletedAt      *time.Time
+	ExecutionRef     string
+}
+
+type AgentTurnDisplay struct {
+	Kind      string
+	Phase     string
+	Text      string
+	Label     string
+	Ref       string
+	ParentRef string
+	Input     any
+	Output    any
+	Error     any
+	Action    string
+	Format    string
+	Language  string
+}
+
+type CreateAgentProviderTurnRequest struct {
+	TurnID         string
+	SessionID      string
+	IdempotencyKey string
+	Model          string
+	Messages       []AgentMessage
+	Tools          []ResolvedAgentTool
+	ResponseSchema map[string]any
+	Metadata       map[string]any
+	CreatedBy      *AgentActor
+	ExecutionRef   string
+	ToolRefs       []AgentToolRef
+	ToolSource     AgentToolSourceMode
+	Subject        *AgentSubjectContext
+	ModelOptions   map[string]any
+	RunGrant       string
+}
+
+type GetAgentProviderTurnRequest struct {
+	TurnID  string
+	Subject *AgentSubjectContext
+}
+
+type ListAgentProviderTurnsRequest struct {
+	SessionID   string
+	Subject     *AgentSubjectContext
+	TurnIDs     []string
+	Status      AgentExecutionStatus
+	Limit       int32
+	SummaryOnly bool
+}
+
+type ListAgentProviderTurnsResponse struct {
+	Turns []AgentTurn
+}
+
+type CancelAgentProviderTurnRequest struct {
+	TurnID  string
+	Reason  string
+	Subject *AgentSubjectContext
+}
+
+type AgentTurnEvent struct {
+	ID         string
+	TurnID     string
+	Seq        int64
+	Type       string
+	Source     string
+	Visibility string
+	Data       map[string]any
+	CreatedAt  time.Time
+	Display    *AgentTurnDisplay
+}
+
+type ListAgentProviderTurnEventsRequest struct {
+	TurnID   string
+	AfterSeq int64
+	Limit    int32
+	Subject  *AgentSubjectContext
+}
+
+type ListAgentProviderTurnEventsResponse struct {
+	Events []AgentTurnEvent
+}
+
+type GetAgentProviderInteractionRequest struct {
+	InteractionID string
+	Subject       *AgentSubjectContext
+}
+
+type ListAgentProviderInteractionsRequest struct {
+	TurnID  string
+	Subject *AgentSubjectContext
+}
+
+type ListAgentProviderInteractionsResponse struct {
+	Interactions []AgentInteraction
+}
+
+type ResolveAgentProviderInteractionRequest struct {
+	InteractionID string
+	Resolution    map[string]any
+	Subject       *AgentSubjectContext
+}
+
+type ExecuteAgentToolRequest struct {
+	SessionID      string
+	TurnID         string
+	ToolCallID     string
+	ToolID         string
+	Arguments      map[string]any
+	IdempotencyKey string
+	RunGrant       string
+}
+
+type ExecuteAgentToolResponse struct {
+	Status int32
+	Body   string
+}
+
+type AgentToolAnnotations struct {
+	ReadOnlyHint    *bool
+	IdempotentHint  *bool
+	DestructiveHint *bool
+	OpenWorldHint   *bool
+}
+
+type ListedAgentTool struct {
+	ID           string
+	MCPName      string
+	Title        string
+	Description  string
+	InputSchema  string
+	OutputSchema string
+	Annotations  *AgentToolAnnotations
+	Ref          *AgentToolRef
+	Tags         []string
+	SearchText   string
+}
+
+type ListAgentToolsRequest struct {
+	SessionID string
+	TurnID    string
+	PageSize  int32
+	PageToken string
+	RunGrant  string
+	Query     string
+}
+
+type ListAgentToolsResponse struct {
+	Tools         []ListedAgentTool
+	NextPageToken string
+}
+
+type ResolveAgentConnectionRequest struct {
+	SessionID  string
+	TurnID     string
+	Connection string
+	Instance   string
+	RunGrant   string
+}
+
+type ResolvedAgentConnection struct {
+	ConnectionID string
+	Connection   string
+	Instance     string
+	Mode         string
+	Headers      map[string]string
+	Params       map[string]string
+	ExpiresAt    *time.Time
+}
+
 type (
-	// AgentMessage is a protocol alias exposed for provider implementations.
-	AgentMessage                           = proto.AgentMessage
-	AgentMessagePartToolCall               = proto.AgentMessagePartToolCall
-	AgentMessagePartToolResult             = proto.AgentMessagePartToolResult
-	AgentMessagePartImageRef               = proto.AgentMessagePartImageRef
-	AgentMessagePart                       = proto.AgentMessagePart
-	AgentActor                             = proto.AgentActor
-	AgentSubjectContext                    = proto.AgentSubjectContext
-	AgentProtocolWorkspace                 = proto.AgentWorkspace
-	AgentProtocolWorkspaceGitCheckout      = proto.AgentWorkspaceGitCheckout
-	AgentPreparedWorkspace                 = proto.PreparedAgentWorkspace
-	ResolvedAgentTool                      = proto.ResolvedAgentTool
-	AgentToolRef                           = proto.AgentToolRef
-	AgentProviderCapabilities              = proto.AgentProviderCapabilities
-	GetAgentProviderCapabilitiesRequest    = proto.GetAgentProviderCapabilitiesRequest
-	AgentInteraction                       = proto.AgentInteraction
-	AgentSession                           = proto.AgentSession
-	CreateAgentProviderSessionRequest      = proto.CreateAgentProviderSessionRequest
-	AgentSessionStartConfig                = proto.AgentSessionStartConfig
-	AgentSessionStartHook                  = proto.AgentSessionStartHook
-	AgentSessionStartHookOutput            = proto.AgentSessionStartHookOutput
-	GetAgentProviderSessionRequest         = proto.GetAgentProviderSessionRequest
-	ListAgentProviderSessionsRequest       = proto.ListAgentProviderSessionsRequest
-	ListAgentProviderSessionsResponse      = proto.ListAgentProviderSessionsResponse
-	UpdateAgentProviderSessionRequest      = proto.UpdateAgentProviderSessionRequest
-	AgentTurn                              = proto.AgentTurn
-	AgentTurnDisplay                       = proto.AgentTurnDisplay
-	CreateAgentProviderTurnRequest         = proto.CreateAgentProviderTurnRequest
-	GetAgentProviderTurnRequest            = proto.GetAgentProviderTurnRequest
-	ListAgentProviderTurnsRequest          = proto.ListAgentProviderTurnsRequest
-	ListAgentProviderTurnsResponse         = proto.ListAgentProviderTurnsResponse
-	CancelAgentProviderTurnRequest         = proto.CancelAgentProviderTurnRequest
-	AgentTurnEvent                         = proto.AgentTurnEvent
-	ListAgentProviderTurnEventsRequest     = proto.ListAgentProviderTurnEventsRequest
-	ListAgentProviderTurnEventsResponse    = proto.ListAgentProviderTurnEventsResponse
-	GetAgentProviderInteractionRequest     = proto.GetAgentProviderInteractionRequest
-	ListAgentProviderInteractionsRequest   = proto.ListAgentProviderInteractionsRequest
-	ListAgentProviderInteractionsResponse  = proto.ListAgentProviderInteractionsResponse
-	ResolveAgentProviderInteractionRequest = proto.ResolveAgentProviderInteractionRequest
-	ExecuteAgentToolRequest                = proto.ExecuteAgentToolRequest
-	ExecuteAgentToolResponse               = proto.ExecuteAgentToolResponse
-	ListedAgentTool                        = proto.ListedAgentTool
-	ListAgentToolsRequest                  = proto.ListAgentToolsRequest
-	ListAgentToolsResponse                 = proto.ListAgentToolsResponse
-	ResolveAgentConnectionRequest          = proto.ResolveAgentConnectionRequest
-	ResolvedAgentConnection                = proto.ResolvedAgentConnection
-	AgentManagerCreateSessionRequest       = proto.AgentManagerCreateSessionRequest
-	AgentManagerGetSessionRequest          = proto.AgentManagerGetSessionRequest
-	AgentManagerListSessionsRequest        = proto.AgentManagerListSessionsRequest
-	AgentManagerListSessionsResponse       = proto.AgentManagerListSessionsResponse
-	AgentManagerUpdateSessionRequest       = proto.AgentManagerUpdateSessionRequest
-	AgentManagerCreateTurnRequest          = proto.AgentManagerCreateTurnRequest
-	AgentManagerGetTurnRequest             = proto.AgentManagerGetTurnRequest
-	AgentManagerListTurnsRequest           = proto.AgentManagerListTurnsRequest
-	AgentManagerListTurnsResponse          = proto.AgentManagerListTurnsResponse
-	AgentManagerCancelTurnRequest          = proto.AgentManagerCancelTurnRequest
-	AgentManagerListTurnEventsRequest      = proto.AgentManagerListTurnEventsRequest
-	AgentManagerListTurnEventsResponse     = proto.AgentManagerListTurnEventsResponse
-	AgentManagerListInteractionsRequest    = proto.AgentManagerListInteractionsRequest
-	AgentManagerListInteractionsResponse   = proto.AgentManagerListInteractionsResponse
-	AgentManagerResolveInteractionRequest  = proto.AgentManagerResolveInteractionRequest
+	AgentManagerCreateSessionRequest      = proto.AgentManagerCreateSessionRequest
+	AgentManagerGetSessionRequest         = proto.AgentManagerGetSessionRequest
+	AgentManagerListSessionsRequest       = proto.AgentManagerListSessionsRequest
+	AgentManagerListSessionsResponse      = proto.AgentManagerListSessionsResponse
+	AgentManagerUpdateSessionRequest      = proto.AgentManagerUpdateSessionRequest
+	AgentManagerCreateTurnRequest         = proto.AgentManagerCreateTurnRequest
+	AgentManagerGetTurnRequest            = proto.AgentManagerGetTurnRequest
+	AgentManagerListTurnsRequest          = proto.AgentManagerListTurnsRequest
+	AgentManagerListTurnsResponse         = proto.AgentManagerListTurnsResponse
+	AgentManagerCancelTurnRequest         = proto.AgentManagerCancelTurnRequest
+	AgentManagerListTurnEventsRequest     = proto.AgentManagerListTurnEventsRequest
+	AgentManagerListTurnEventsResponse    = proto.AgentManagerListTurnEventsResponse
+	AgentManagerListInteractionsRequest   = proto.AgentManagerListInteractionsRequest
+	AgentManagerListInteractionsResponse  = proto.AgentManagerListInteractionsResponse
+	AgentManagerResolveInteractionRequest = proto.AgentManagerResolveInteractionRequest
 )
 
 type (
 	// AgentMessagePartType identifies the payload kind in an agent message part.
-	AgentMessagePartType  = proto.AgentMessagePartType
-	AgentToolSourceMode   = proto.AgentToolSourceMode
-	AgentExecutionStatus  = proto.AgentExecutionStatus
-	AgentSessionState     = proto.AgentSessionState
-	AgentInteractionType  = proto.AgentInteractionType
-	AgentInteractionState = proto.AgentInteractionState
+	AgentMessagePartType  int32
+	AgentToolSourceMode   int32
+	AgentExecutionStatus  int32
+	AgentSessionState     int32
+	AgentInteractionType  int32
+	AgentInteractionState int32
 )
 
 // Agent protocol enum constants provide stable SDK names for common generated
 // enum values.
 const (
-	AgentMessagePartTypeUnspecified = proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
-	AgentMessagePartTypeText        = proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT
-	AgentMessagePartTypeJSON        = proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON
-	AgentMessagePartTypeToolCall    = proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL
-	AgentMessagePartTypeToolResult  = proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT
-	AgentMessagePartTypeImageRef    = proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF
+	AgentMessagePartTypeUnspecified AgentMessagePartType = AgentMessagePartType(proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_UNSPECIFIED)
+	AgentMessagePartTypeText        AgentMessagePartType = AgentMessagePartType(proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT)
+	AgentMessagePartTypeJSON        AgentMessagePartType = AgentMessagePartType(proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_JSON)
+	AgentMessagePartTypeToolCall    AgentMessagePartType = AgentMessagePartType(proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_CALL)
+	AgentMessagePartTypeToolResult  AgentMessagePartType = AgentMessagePartType(proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TOOL_RESULT)
+	AgentMessagePartTypeImageRef    AgentMessagePartType = AgentMessagePartType(proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_IMAGE_REF)
 
-	AgentToolSourceModeUnspecified = proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
-	AgentToolSourceModeMCPCatalog  = proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG
+	AgentToolSourceModeUnspecified AgentToolSourceMode = AgentToolSourceMode(proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED)
+	AgentToolSourceModeMCPCatalog  AgentToolSourceMode = AgentToolSourceMode(proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG)
 
-	AgentExecutionStatusUnspecified     = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED
-	AgentExecutionStatusPending         = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING
-	AgentExecutionStatusRunning         = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING
-	AgentExecutionStatusSucceeded       = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED
-	AgentExecutionStatusFailed          = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED
-	AgentExecutionStatusCanceled        = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED
-	AgentExecutionStatusWaitingForInput = proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT
+	AgentExecutionStatusUnspecified     AgentExecutionStatus = AgentExecutionStatus(proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED)
+	AgentExecutionStatusPending         AgentExecutionStatus = AgentExecutionStatus(proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING)
+	AgentExecutionStatusRunning         AgentExecutionStatus = AgentExecutionStatus(proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_RUNNING)
+	AgentExecutionStatusSucceeded       AgentExecutionStatus = AgentExecutionStatus(proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED)
+	AgentExecutionStatusFailed          AgentExecutionStatus = AgentExecutionStatus(proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_FAILED)
+	AgentExecutionStatusCanceled        AgentExecutionStatus = AgentExecutionStatus(proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_CANCELED)
+	AgentExecutionStatusWaitingForInput AgentExecutionStatus = AgentExecutionStatus(proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_WAITING_FOR_INPUT)
 
-	AgentSessionStateUnspecified = proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED
-	AgentSessionStateActive      = proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE
-	AgentSessionStateArchived    = proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED
+	AgentSessionStateUnspecified AgentSessionState = AgentSessionState(proto.AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED)
+	AgentSessionStateActive      AgentSessionState = AgentSessionState(proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE)
+	AgentSessionStateArchived    AgentSessionState = AgentSessionState(proto.AgentSessionState_AGENT_SESSION_STATE_ARCHIVED)
 
-	AgentInteractionTypeUnspecified   = proto.AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED
-	AgentInteractionTypeInput         = proto.AgentInteractionType_AGENT_INTERACTION_TYPE_INPUT
-	AgentInteractionTypeApproval      = proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL
-	AgentInteractionTypeClarification = proto.AgentInteractionType_AGENT_INTERACTION_TYPE_CLARIFICATION
+	AgentInteractionTypeUnspecified   AgentInteractionType = AgentInteractionType(proto.AgentInteractionType_AGENT_INTERACTION_TYPE_UNSPECIFIED)
+	AgentInteractionTypeInput         AgentInteractionType = AgentInteractionType(proto.AgentInteractionType_AGENT_INTERACTION_TYPE_INPUT)
+	AgentInteractionTypeApproval      AgentInteractionType = AgentInteractionType(proto.AgentInteractionType_AGENT_INTERACTION_TYPE_APPROVAL)
+	AgentInteractionTypeClarification AgentInteractionType = AgentInteractionType(proto.AgentInteractionType_AGENT_INTERACTION_TYPE_CLARIFICATION)
 
-	AgentInteractionStateUnspecified = proto.AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED
-	AgentInteractionStatePending     = proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING
-	AgentInteractionStateResolved    = proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED
-	AgentInteractionStateCanceled    = proto.AgentInteractionState_AGENT_INTERACTION_STATE_CANCELED
+	AgentInteractionStateUnspecified AgentInteractionState = AgentInteractionState(proto.AgentInteractionState_AGENT_INTERACTION_STATE_UNSPECIFIED)
+	AgentInteractionStatePending     AgentInteractionState = AgentInteractionState(proto.AgentInteractionState_AGENT_INTERACTION_STATE_PENDING)
+	AgentInteractionStateResolved    AgentInteractionState = AgentInteractionState(proto.AgentInteractionState_AGENT_INTERACTION_STATE_RESOLVED)
+	AgentInteractionStateCanceled    AgentInteractionState = AgentInteractionState(proto.AgentInteractionState_AGENT_INTERACTION_STATE_CANCELED)
 )

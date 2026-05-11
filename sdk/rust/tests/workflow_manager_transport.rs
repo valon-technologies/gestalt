@@ -654,7 +654,6 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
                 name: "slack.event".to_string(),
                 ..Default::default()
             }),
-            ..Default::default()
         })
         .await
         .expect("signal run");
@@ -682,7 +681,6 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     let fetched_definition = manager
         .get_definition(WorkflowManagerGetDefinitionInput {
             definition_id: "definition-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("get definition");
@@ -691,14 +689,12 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
             definition_id: "definition-1".to_string(),
             provider_name: "secondary".to_string(),
             target: Some(plugin_target("roadmap", "status")),
-            ..Default::default()
         })
         .await
         .expect("update definition");
     manager
         .delete_definition(WorkflowManagerDeleteDefinitionInput {
             definition_id: "definition-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("delete definition");
@@ -716,7 +712,6 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     let fetched = manager
         .get_schedule(WorkflowManagerGetScheduleInput {
             schedule_id: "sched-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("get schedule");
@@ -735,21 +730,18 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     let paused = manager
         .pause_schedule(WorkflowManagerPauseScheduleInput {
             schedule_id: "sched-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("pause schedule");
     let resumed = manager
         .resume_schedule(WorkflowManagerResumeScheduleInput {
             schedule_id: "sched-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("resume schedule");
     manager
         .delete_schedule(WorkflowManagerDeleteScheduleInput {
             schedule_id: "sched-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("delete schedule");
@@ -770,7 +762,6 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     let fetched_trigger = manager
         .get_trigger(WorkflowManagerGetEventTriggerInput {
             trigger_id: "trg-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("get trigger");
@@ -791,21 +782,18 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     let paused_trigger = manager
         .pause_trigger(WorkflowManagerPauseEventTriggerInput {
             trigger_id: "trg-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("pause trigger");
     let resumed_trigger = manager
         .resume_trigger(WorkflowManagerResumeEventTriggerInput {
             trigger_id: "trg-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("resume trigger");
     manager
         .delete_trigger(WorkflowManagerDeleteEventTriggerInput {
             trigger_id: "trg-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("delete trigger");
@@ -1150,7 +1138,6 @@ async fn request_workflow_manager_uses_embedded_invocation_token() {
     let response = manager
         .get_schedule(WorkflowManagerGetScheduleInput {
             schedule_id: "sched-1".to_string(),
-            ..Default::default()
         })
         .await
         .expect("get schedule");

@@ -40,6 +40,7 @@ const (
 	CodeOutOfRange         StatusCode = "out_of_range"
 	CodeUnauthenticated    StatusCode = "unauthenticated"
 	CodePermissionDenied   StatusCode = "permission_denied"
+	CodeUnavailable        StatusCode = "unavailable"
 	CodeUnimplemented      StatusCode = "unimplemented"
 	CodeInternal           StatusCode = "internal"
 )
@@ -64,6 +65,7 @@ func FailedPrecondition(message string) error { return StatusError(CodeFailedPre
 func OutOfRange(message string) error         { return StatusError(CodeOutOfRange, message) }
 func Unauthenticated(message string) error    { return StatusError(CodeUnauthenticated, message) }
 func PermissionDenied(message string) error   { return StatusError(CodePermissionDenied, message) }
+func Unavailable(message string) error        { return StatusError(CodeUnavailable, message) }
 func Unimplemented(message string) error      { return StatusError(CodeUnimplemented, message) }
 func Internal(message string) error           { return StatusError(CodeInternal, message) }
 
@@ -209,6 +211,8 @@ func grpcCode(code StatusCode) codes.Code {
 		return codes.Unauthenticated
 	case CodePermissionDenied:
 		return codes.PermissionDenied
+	case CodeUnavailable:
+		return codes.Unavailable
 	case CodeUnimplemented:
 		return codes.Unimplemented
 	case CodeInternal:

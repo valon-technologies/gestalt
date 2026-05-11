@@ -7,7 +7,6 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // EnvAgentHostSocket names the environment variable containing the agent-host
@@ -82,14 +81,9 @@ func (c *AgentHostClient) Close() error {
 	return nil
 }
 
-// ExecuteTool executes a host tool using an agent protocol request.
-func (c *AgentHostClient) ExecuteTool(ctx context.Context, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
-	return c.client.ExecuteTool(ctx, req)
-}
-
-// ExecuteToolForTurn executes a host tool using plain Go request fields.
-func (c *AgentHostClient) ExecuteToolForTurn(ctx context.Context, input AgentHostExecuteToolInput) (*proto.ExecuteAgentToolResponse, error) {
-	var arguments *structpb.Struct
+// ExecuteTool executes a host tool using plain Go request fields.
+func (c *AgentHostClient) ExecuteTool(ctx context.Context, input AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error) {
+	var arguments *Struct
 	if input.Arguments != nil {
 		var err error
 		arguments, err = StructFromAny(input.Arguments)
@@ -97,7 +91,7 @@ func (c *AgentHostClient) ExecuteToolForTurn(ctx context.Context, input AgentHos
 			return nil, err
 		}
 	}
-	return c.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
+	resp, err := c.client.ExecuteTool(ctx, &proto.ExecuteAgentToolRequest{
 		SessionId:      input.SessionID,
 		TurnId:         input.TurnID,
 		ToolCallId:     input.ToolCallID,
@@ -106,16 +100,21 @@ func (c *AgentHostClient) ExecuteToolForTurn(ctx context.Context, input AgentHos
 		RunGrant:       input.RunGrant,
 		IdempotencyKey: input.IdempotencyKey,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return executeAgentToolResponseFromProto(resp), nil
 }
 
-// ListTools lists host tools visible to the current agent request.
-func (c *AgentHostClient) ListTools(ctx context.Context, req *proto.ListAgentToolsRequest) (*proto.ListAgentToolsResponse, error) {
-	return c.client.ListTools(ctx, req)
+// ExecuteToolForTurn executes a host tool using plain Go request fields.
+func (c *AgentHostClient) ExecuteToolForTurn(ctx context.Context, input AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error) {
+	return c.ExecuteTool(ctx, input)
 }
 
-// ListToolsForTurn lists host tools using plain Go request fields.
-func (c *AgentHostClient) ListToolsForTurn(ctx context.Context, input AgentHostListToolsInput) (*proto.ListAgentToolsResponse, error) {
-	return c.ListTools(ctx, &proto.ListAgentToolsRequest{
+// ListTools lists host tools visible to the current agent request using plain
+// Go request fields.
+func (c *AgentHostClient) ListTools(ctx context.Context, input AgentHostListToolsInput) (*ListAgentToolsResponse, error) {
+	resp, err := c.client.ListTools(ctx, &proto.ListAgentToolsRequest{
 		SessionId: input.SessionID,
 		TurnId:    input.TurnID,
 		RunGrant:  input.RunGrant,
@@ -123,21 +122,35 @@ func (c *AgentHostClient) ListToolsForTurn(ctx context.Context, input AgentHostL
 		PageToken: input.PageToken,
 		Query:     input.Query,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return listAgentToolsResponseFromProto(resp), nil
 }
 
-// ResolveConnection resolves a configured agent connection for the current turn.
-func (c *AgentHostClient) ResolveConnection(ctx context.Context, req *proto.ResolveAgentConnectionRequest) (*proto.ResolvedAgentConnection, error) {
-	return c.client.ResolveConnection(ctx, req)
+// ListToolsForTurn lists host tools using plain Go request fields.
+func (c *AgentHostClient) ListToolsForTurn(ctx context.Context, input AgentHostListToolsInput) (*ListAgentToolsResponse, error) {
+	return c.ListTools(ctx, input)
 }
 
-// ResolveConnectionForTurn resolves an agent connection using plain Go request
-// fields.
-func (c *AgentHostClient) ResolveConnectionForTurn(ctx context.Context, input AgentHostResolveConnectionInput) (*proto.ResolvedAgentConnection, error) {
-	return c.ResolveConnection(ctx, &proto.ResolveAgentConnectionRequest{
+// ResolveConnection resolves a configured agent connection for the current turn
+// using plain Go request fields.
+func (c *AgentHostClient) ResolveConnection(ctx context.Context, input AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error) {
+	resp, err := c.client.ResolveConnection(ctx, &proto.ResolveAgentConnectionRequest{
 		SessionId:  input.SessionID,
 		TurnId:     input.TurnID,
 		Connection: input.Connection,
 		Instance:   input.Instance,
 		RunGrant:   input.RunGrant,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return resolvedAgentConnectionFromProto(resp), nil
+}
+
+// ResolveConnectionForTurn resolves an agent connection using plain Go request
+// fields.
+func (c *AgentHostClient) ResolveConnectionForTurn(ctx context.Context, input AgentHostResolveConnectionInput) (*ResolvedAgentConnection, error) {
+	return c.ResolveConnection(ctx, input)
 }

@@ -203,7 +203,7 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 	if got.GetInvocationToken() != "parent-token" {
 		t.Fatalf("invocation token = %q, want parent-token", got.GetInvocationToken())
 	}
-	if got.GetMessages()[0].GetParts()[0].GetType() != gestalt.AgentMessagePartTypeText {
+	if got.GetMessages()[0].GetParts()[0].GetType() != proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT {
 		t.Fatalf("message part type = %s, want text", got.GetMessages()[0].GetParts()[0].GetType())
 	}
 	if metadata := gestalt.MapFromStruct(got.GetMessages()[0].GetMetadata()); metadata["source"] != "native" {
