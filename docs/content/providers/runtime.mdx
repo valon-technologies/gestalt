@@ -154,7 +154,8 @@ directory and passes the manifest entrypoint args.
 ```yaml
 plugins:
   support:
-    source: https://artifacts.example.com/support/v0.1.0/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/httpbin
     runtime:
       provider: modal
       image: ghcr.io/example/support-plugin@sha256:...

@@ -167,8 +167,8 @@ If you need to reference one release directly, use the release metadata URL:
 
 ```yaml
 plugins:
-  my-plugin:
-    source: https://artifacts.example.com/plugin/my-plugin/v0.0.1-alpha.1/provider-release.yaml
+  github:
+    source: https://github.com/valon-technologies/gestalt-providers/releases/download/plugins/github/v0.0.1-alpha.1/provider-release.yaml
 ```
 
 UI bundles use the same pattern under `providers.ui.<name>`:
@@ -177,7 +177,7 @@ UI bundles use the same pattern under `providers.ui.<name>`:
 providers:
   ui:
     dashboard:
-      source: https://artifacts.example.com/ui/default/v1.2.0/provider-release.yaml
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/ui/default/v1.2.0/provider-release.yaml
       path: /dashboard
       config:
         brand_name: Acme
@@ -368,13 +368,13 @@ gestaltd provider repo list --config ./gestalt.yaml
 Add a repository to your user-level store:
 
 ```sh
-gestaltd provider repo add acme https://artifacts.example.com/gestalt/provider-index.yaml
+gestaltd provider repo add valon https://registry.gestaltd.ai/provider-index.yaml
 ```
 
 Add a repository to project config:
 
 ```sh
-gestaltd provider repo add acme https://artifacts.example.com/gestalt/provider-index.yaml \
+gestaltd provider repo add valon https://registry.gestaltd.ai/provider-index.yaml \
   --config ./gestalt.yaml
 ```
 
@@ -382,8 +382,8 @@ The project form writes:
 
 ```yaml
 providerRepositories:
-  acme:
-    url: https://artifacts.example.com/gestalt/provider-index.yaml
+  valon:
+    url: https://registry.gestaltd.ai/provider-index.yaml
 ```
 
 Project config overrides the repository URL for that project. A user-level

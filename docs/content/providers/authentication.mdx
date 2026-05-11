@@ -38,7 +38,8 @@ under
 providers:
   authentication:
     oidc:
-      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/auth/oidc
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}

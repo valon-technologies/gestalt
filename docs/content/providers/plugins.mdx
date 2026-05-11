@@ -60,7 +60,8 @@ their package layouts.
 plugins:
   github:
     displayName: GitHub
-    source: https://artifacts.example.com/plugin/github/v0.0.1-alpha.1/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/github
     config:
       apiBaseUrl: https://api.github.com
       clientId: ${GITHUB_CLIENT_ID}
@@ -158,13 +159,14 @@ Use `allowedOperations` to publish only a subset of a large plugin catalog:
 
 ```yaml
 plugins:
-  support:
-    source: https://artifacts.example.com/plugin/support/v2.4.0/provider-release.yaml
+  github:
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/github
     allowedOperations:
-      tickets.list:
-        alias: list_tickets
-      tickets.get:
-        alias: get_ticket
+      issues.list:
+        alias: list_issues
+      issues.get:
+        alias: get_issue
 ```
 
 Use `egress.allowedHosts` when a plugin needs explicit outbound access:

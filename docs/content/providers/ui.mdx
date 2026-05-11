@@ -101,10 +101,11 @@ Reference a published bundle in production:
 ```yaml
 providers:
   ui:
-    roadmap:
-      source: https://artifacts.example.com/ui/customer-roadmap-review/v0.0.1/provider-release.yaml
-      path: /create-customer-roadmap-review
-      authorizationPolicy: roadmap_review
+    console:
+      source:
+        package: github.com/valon-technologies/gestalt-providers/ui/default
+      path: /console
+      authorizationPolicy: console
 ```
 
 When `authorizationPolicy` is set, Gestalt authenticates the caller, resolves

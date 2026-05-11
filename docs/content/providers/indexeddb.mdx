@@ -49,11 +49,13 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
       config:
         dsn: ${SYSTEM_DATABASE_URL}
     workplaceHub:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
       config:
         dsn: ${APP_DATABASE_URL}
 
@@ -178,7 +180,7 @@ providers:
         dsn: sqlite://gestalt.db
 ```
 
-For production, reference a published release metadata URL:
+For production, use the first-party package source:
 
 ```yaml
 server:
@@ -188,7 +190,8 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -202,7 +205,8 @@ Other first-party IndexedDB providers use their own config blocks:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/dynamodb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb
       config:
         table: gestalt
         region: us-east-1
@@ -213,7 +217,8 @@ providers:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/mongodb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/mongodb
       config:
         uri: ${MONGODB_URI}
         database: gestalt

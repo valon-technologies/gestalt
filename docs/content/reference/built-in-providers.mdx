@@ -22,7 +22,8 @@ Authentication providers handle platform login. They are configured under `provi
 providers:
   authentication:
     oidc:
-      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/auth/oidc
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -49,13 +50,15 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
       config:
         dsn: ${DATABASE_URL}
 
   authorization:
     indexeddb:
-      source: https://artifacts.example.com/authorization/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/authorization/indexeddb
       config:
         indexeddb: main
 ```
@@ -76,7 +79,8 @@ server:
 providers:
   indexeddb:
     main:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -98,7 +102,8 @@ own `runtime` block.
 runtime:
   providers:
     modal:
-      source: https://artifacts.example.com/runtime/modal/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/runtime/modal
       default: true
       config:
         app: gestalt-runtime
@@ -125,13 +130,15 @@ configured under `providers.workflow.<name>`, then referenced by top-level
 providers:
   indexeddb:
     workflow_state:
-      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
       config:
         dsn: ${DATABASE_URL}
 
   workflow:
     local:
-      source: https://artifacts.example.com/workflow/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/workflow/indexeddb
       indexeddb:
         provider: workflow_state
         db: workflow
@@ -172,7 +179,8 @@ configured under named entries in `providers.s3`, then bound into plugins with
 providers:
   s3:
     assets:
-      source: https://artifacts.example.com/s3/s3/v0.0.1-alpha.1/provider-release.yaml
+      source:
+        package: github.com/valon-technologies/gestalt-providers/s3/s3
       config:
         region: us-east-1
         endpoint: https://s3.us-east-1.amazonaws.com
@@ -227,9 +235,10 @@ Plugins and installable runtime providers are published separately from [`valon-
 ```yaml
 plugins:
   jira:
-    source: https://artifacts.example.com/plugin/jira/v0.0.1-alpha.1/provider-release.yaml
+    source:
+      package: github.com/valon-technologies/gestalt-providers/plugins/jira
 ```
 
 ## Community and Custom Providers
 
-Third-party authentication providers, datastore providers, and plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish a release with `provider-release.yaml`, and reference that metadata URL in config the same way you would reference any first-party provider.
+Third-party authentication providers, datastore providers, and plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish it through a provider index, and reference that package source in config. For one-off releases, you can still point directly at the exact `provider-release.yaml` URL.
