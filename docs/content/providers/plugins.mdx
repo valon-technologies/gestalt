@@ -322,6 +322,638 @@ Common auth types are `oauth2`, `mcp_oauth`, `bearer`, `manual`, and `none`.
 Operator-supplied app credentials such as `clientId` and `clientSecret` go in
 the plugin's `config` block when the provider requires them.
 
+## Building a plugin-backed application
+
+A plugin can be the backend for a small application when it combines executable
+operations, host-managed authentication, an authorization policy, persistent
+state, object storage, workflow schedules, and a mounted UI bundle.
+
+This example application, `workspace_review`, stores review items in
+IndexedDB, writes generated reports to S3, runs a nightly cron through the
+workflow provider, and serves a lightweight browser UI at `/workspace-review`.
+
+Use a `plugin/` plus sibling `ui/` layout:
+
+```text
+workspace-review/
+  plugin/
+    manifest.yaml
+    package.json
+    provider.ts
+  ui/
+    manifest.yaml
+    out/
+      index.html
+      app.js
+      styles.css
+```
+
+The plugin manifest owns the operations and points at the sibling UI bundle:
+
+```yaml
+kind: plugin
+source: github.com/acme/plugins/workspace-review
+version: 0.1.0
+displayName: Workspace Review
+description: Review workspace changes and publish nightly summaries.
+spec:
+  mcp: true
+  connections:
+    default:
+      mode: none
+      auth:
+        type: none
+  ui:
+    path: ../ui/manifest.yaml
+```
+
+The UI bundle is just static assets. Route rules are required when the mounted
+plugin binds an `authorizationPolicy`:
+
+```yaml
+kind: ui
+source: github.com/acme/ui/workspace-review
+version: 0.1.0
+displayName: Workspace Review UI
+description: Browser UI for workspace review.
+spec:
+  assetRoot: out
+  routes:
+    - path: /
+      allowedRoles: [viewer, admin]
+    - path: /admin/*
+      allowedRoles: [admin]
+```
+
+The deployment config wires the application into host services. Platform
+authentication protects the mounted UI and HTTP operation routes; the policy
+controls who may use the app; IndexedDB, S3, and workflow providers are exposed
+only through the bindings declared here.
+
+```yaml
+server:
+  baseUrl: https://gestalt.example.com
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    authentication: oidc
+    authorization: authz
+    indexeddb: main
+
+authorization:
+  policies:
+    workspace_review:
+      default: deny
+      members:
+        - subjectID: user:reviewer
+          role: viewer
+        - subjectID: user:admin
+          role: admin
+        - subjectID: service_account:workspace-review-nightly
+          role: admin
+
+providers:
+  authentication:
+    oidc:
+      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret:
+          secret:
+            provider: default
+            name: oidc-client-secret
+
+  authorization:
+    authz:
+      source: https://artifacts.example.com/authorization/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      indexeddb:
+        provider: main
+        db: authz
+
+  indexeddb:
+    main:
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        dsn: ${DATABASE_URL}
+
+  s3:
+    reports:
+      source: https://artifacts.example.com/s3/s3/v0.0.1-alpha.1/provider-release.yaml
+      config:
+        region: us-east-1
+        endpoint: https://s3.us-east-1.amazonaws.com
+
+  workflow:
+    local:
+      source: https://artifacts.example.com/workflow/indexeddb/v0.0.1-alpha.1/provider-release.yaml
+      default: true
+      indexeddb:
+        provider: main
+        db: workflow
+      config:
+        pollInterval: 1s
+
+plugins:
+  workspace_review:
+    source: ./workspace-review/plugin/manifest.yaml
+    auth:
+      provider: server
+    authorizationPolicy: workspace_review
+    ui:
+      path: /workspace-review
+    indexeddb:
+      provider: main
+      db: workspace_review
+      objectStores:
+        - items
+        - reports
+    s3:
+      - reports
+    capabilities:
+      workflow:
+        operations:
+          - events.publish
+
+workflows:
+  schedules:
+    nightly_summary:
+      provider: local
+      cron: "0 3 * * *"
+      timezone: America/New_York
+      runAs:
+        subject:
+          id: service_account:workspace-review-nightly
+      target:
+        plugin:
+          name: workspace_review
+          operation: reports.generateNightly
+          input:
+            bucket: workspace-review-reports
+```
+
+This example intentionally shows the complete application wiring in one place.
+Use the provider pages as the source of truth for each block:
+[Authentication](/providers/authentication),
+[Authorization](/providers/authorization),
+[IndexedDB](/providers/indexeddb),
+[S3](/providers/s3),
+[Workflow](/providers/workflow), and
+[UI](/providers/ui).
+
+In plugin code, open host services from the request context or language SDK.
+The plugin does not know database DSNs, S3 credentials, or workflow storage
+details; those come from the deployment bindings above.
+
+<Tabs items={['Python', 'Rust', 'TypeScript', 'Go']}>
+  <Tabs.Tab>
+    ```python
+    import datetime as dt
+    import json
+
+    import gestalt
+
+
+    plugin = gestalt.Plugin("workspace_review")
+
+
+    class SaveItemInput(gestalt.Model):
+        id: str
+        title: str
+        status: str
+
+
+    @plugin.operation(id="items.save", method="POST")
+    def save_item(input: SaveItemInput) -> dict[str, bool]:
+        db = gestalt.IndexedDB()
+        db.object_store("items").put(
+            {
+                "id": input.id,
+                "title": input.title,
+                "status": input.status,
+                "updatedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
+            }
+        )
+        db.close()
+        return {"ok": True}
+
+
+    class NightlyReportInput(gestalt.Model):
+        bucket: str
+
+
+    @plugin.operation(id="reports.generateNightly", method="POST")
+    def generate_nightly(
+        input: NightlyReportInput, request: gestalt.Request
+    ) -> dict[str, str]:
+        db = gestalt.IndexedDB()
+        s3 = gestalt.S3("reports")
+
+        object_key = f"nightly/{request.idempotency_key}.json"
+        report = s3.object(input.bucket, object_key)
+        report.write_bytes(
+            json.dumps({"generatedAt": dt.datetime.now(dt.timezone.utc).isoformat()}).encode(),
+            gestalt.WriteOptions(content_type="application/json"),
+        )
+        access = report.create_access_url(
+            gestalt.PresignOptions(
+                method=gestalt.PresignMethod.GET,
+                expires=dt.timedelta(seconds=900),
+            )
+        )
+
+        db.object_store("reports").put(
+            {
+                "id": request.idempotency_key,
+                "url": access.url,
+                "createdAt": dt.datetime.now(dt.timezone.utc).isoformat(),
+            }
+        )
+
+        event = gestalt.WorkflowEvent(
+            type="workspace_review.report.generated",
+            source="workspace_review",
+            subject="nightly",
+            datacontenttype="application/json",
+        )
+        event.data.update({"reportUrl": access.url})
+        with request.workflow_manager() as workflows:
+            workflows.publish_event(
+                gestalt.WorkflowManagerPublishEventRequest(event=event)
+            )
+
+        db.close()
+        s3.close()
+        return {"reportUrl": access.url}
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::collections::BTreeMap;
+
+    use gestalt::{
+        proto::v1::{WorkflowEvent, WorkflowManagerPublishEventRequest},
+        IndexedDB, PresignMethod, PresignOptions, S3,
+    };
+    use prost_types::{value::Kind, Struct, Value};
+    use serde::{Deserialize, Serialize};
+    use serde_json::json;
+
+    #[derive(Deserialize)]
+    struct SaveItemInput {
+        id: String,
+        title: String,
+        status: String,
+    }
+
+    #[derive(Serialize)]
+    struct SaveItemOutput {
+        ok: bool,
+    }
+
+    async fn save_item(input: SaveItemInput) -> Result<SaveItemOutput, Box<dyn std::error::Error>> {
+        let db = IndexedDB::connect().await?;
+        let mut items = db.object_store("items");
+        let updated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs()
+            .to_string();
+
+        items
+            .put(BTreeMap::from([
+                ("id".to_string(), json!(input.id)),
+                ("title".to_string(), json!(input.title)),
+                ("status".to_string(), json!(input.status)),
+                ("updatedAt".to_string(), json!(updated_at)),
+            ]))
+            .await?;
+
+        Ok(SaveItemOutput { ok: true })
+    }
+
+    #[derive(Deserialize)]
+    struct NightlyReportInput {
+        bucket: String,
+    }
+
+    #[derive(Serialize)]
+    struct NightlyReportOutput {
+        report_url: String,
+    }
+
+    async fn generate_nightly(
+        request: &gestalt::Request,
+        input: NightlyReportInput,
+    ) -> Result<NightlyReportOutput, Box<dyn std::error::Error>> {
+        let db = IndexedDB::connect().await?;
+        let mut reports = db.object_store("reports");
+        let generated_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs()
+            .to_string();
+
+        let s3 = S3::connect_named("reports").await?;
+        let key = format!("nightly/{}.json", request.idempotency_key);
+        let mut report = s3.object(&input.bucket, &key);
+        report
+            .write_json(&json!({ "generatedAt": generated_at.clone() }), None)
+            .await?;
+        let access = report
+            .create_access_url(Some(PresignOptions {
+                method: PresignMethod::Get,
+                expires: std::time::Duration::from_secs(900),
+                ..PresignOptions::default()
+            }))
+            .await?;
+
+        reports
+            .put(BTreeMap::from([
+                ("id".to_string(), json!(request.idempotency_key)),
+                ("url".to_string(), json!(access.url.clone())),
+                ("createdAt".to_string(), json!(generated_at)),
+            ]))
+            .await?;
+
+        let mut workflows = request.workflow_manager().await?;
+        workflows
+            .publish_event(WorkflowManagerPublishEventRequest {
+                event: Some(WorkflowEvent {
+                    r#type: "workspace_review.report.generated".to_string(),
+                    source: "workspace_review".to_string(),
+                    subject: "nightly".to_string(),
+                    datacontenttype: "application/json".to_string(),
+                    data: Some(Struct {
+                        fields: BTreeMap::from([(
+                            "reportUrl".to_string(),
+                            Value {
+                                kind: Some(Kind::StringValue(access.url.clone())),
+                            },
+                        )]),
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })
+            .await?;
+
+        Ok(NightlyReportOutput {
+            report_url: access.url,
+        })
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import {
+      IndexedDB,
+      PresignMethod,
+      S3,
+      WorkflowManager,
+      definePlugin,
+      ok,
+      operation,
+      s,
+    } from "@valon-technologies/gestalt";
+
+    export const plugin = definePlugin({
+      operations: [
+        operation({
+          id: "items.save",
+          method: "POST",
+          input: s.object({
+            id: s.string(),
+            title: s.string(),
+            status: s.string(),
+          }),
+          output: s.object({ ok: s.boolean() }),
+          async handler(input) {
+            const db = new IndexedDB();
+            await db.objectStore("items").put({
+              id: input.id,
+              title: input.title,
+              status: input.status,
+              updatedAt: new Date().toISOString(),
+            });
+            return ok({ ok: true });
+          },
+        }),
+        operation({
+          id: "reports.generateNightly",
+          method: "POST",
+          input: s.object({ bucket: s.string() }),
+          output: s.object({ reportUrl: s.string() }),
+          async handler(input, request) {
+            const db = new IndexedDB();
+            const s3 = new S3("reports");
+            const object = s3.object(
+              input.bucket,
+              `nightly/${request.idempotencyKey}.json`,
+            );
+
+            await object.write(
+              new TextEncoder().encode(
+                JSON.stringify({ generatedAt: new Date().toISOString() }),
+              ),
+              { contentType: "application/json" },
+            );
+            const access = await object.createAccessUrl({
+              method: PresignMethod.Get,
+              expiresSeconds: 900,
+            });
+
+            await db.objectStore("reports").put({
+              id: request.idempotencyKey,
+              url: access.url,
+              createdAt: new Date().toISOString(),
+            });
+
+            const workflows = new WorkflowManager(request);
+            await workflows.publishEvent({
+              event: {
+                type: "workspace_review.report.generated",
+                source: "workspace_review",
+                subject: "nightly",
+                datacontenttype: "application/json",
+                data: { reportUrl: access.url },
+              },
+            });
+
+            return ok({ reportUrl: access.url });
+          },
+        }),
+      ],
+    });
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```go
+    package provider
+
+    import (
+      "context"
+      "encoding/json"
+      "net/http"
+      "time"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+      "google.golang.org/protobuf/types/known/structpb"
+    )
+
+    type Provider struct{}
+
+    type SaveItemInput struct {
+      ID     string `json:"id" required:"true"`
+      Title  string `json:"title" required:"true"`
+      Status string `json:"status" required:"true"`
+    }
+
+    type SaveItemOutput struct {
+      OK bool `json:"ok"`
+    }
+
+    func (p *Provider) saveItem(
+      ctx context.Context,
+      input SaveItemInput,
+      _ gestalt.Request,
+    ) (gestalt.Response[SaveItemOutput], error) {
+      db, err := gestalt.IndexedDB()
+      if err != nil {
+        return gestalt.Response[SaveItemOutput]{}, err
+      }
+      defer db.Close()
+
+      items := db.ObjectStore("items")
+      if err := items.Put(ctx, gestalt.Record{
+        "id":        input.ID,
+        "title":     input.Title,
+        "status":    input.Status,
+        "updatedAt": time.Now().UTC().Format(time.RFC3339),
+      }); err != nil {
+        return gestalt.Response[SaveItemOutput]{}, err
+      }
+      return gestalt.OK(SaveItemOutput{OK: true}), nil
+    }
+
+    type NightlyReportInput struct {
+      Bucket string `json:"bucket" required:"true"`
+    }
+
+    type NightlyReportOutput struct {
+      ReportURL string `json:"reportUrl"`
+    }
+
+    func (p *Provider) generateNightly(
+      ctx context.Context,
+      input NightlyReportInput,
+      req gestalt.Request,
+    ) (gestalt.Response[NightlyReportOutput], error) {
+      db, err := gestalt.IndexedDB()
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      defer db.Close()
+
+      s3, err := gestalt.S3("reports")
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      defer s3.Close()
+
+      body, err := json.Marshal(map[string]string{
+        "generatedAt": time.Now().UTC().Format(time.RFC3339),
+      })
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      obj := s3.Object(input.Bucket, "nightly/"+req.IdempotencyKey+".json")
+      if _, err := obj.WriteBytes(ctx, body, &gestalt.WriteOptions{
+        ContentType: "application/json",
+      }); err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      access, err := obj.CreateAccessUrl(ctx, &gestalt.ObjectAccessURLOptions{
+        Method:  gestalt.PresignMethodGet,
+        Expires: 15 * time.Minute,
+      })
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+
+      if err := db.ObjectStore("reports").Put(ctx, gestalt.Record{
+        "id":        req.IdempotencyKey,
+        "url":       access.URL,
+        "createdAt": time.Now().UTC().Format(time.RFC3339),
+      }); err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+
+      workflows, err := req.WorkflowManager()
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      data, err := structpb.NewStruct(map[string]any{"reportUrl": access.URL})
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      _, err = workflows.PublishEvent(ctx, &gestalt.WorkflowManagerPublishEventRequest{
+        Event: &gestalt.WorkflowEvent{
+          Type:            "workspace_review.report.generated",
+          Source:          "workspace_review",
+          Subject:         "nightly",
+          Datacontenttype: "application/json",
+          Data:            data,
+        },
+      })
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+
+      return gestalt.OK(NightlyReportOutput{ReportURL: access.URL}), nil
+    }
+
+    var Router = gestalt.MustRouter(
+      gestalt.Register(
+        gestalt.Operation[SaveItemInput, SaveItemOutput]{
+          ID: "items.save", Method: http.MethodPost,
+        },
+        (*Provider).saveItem,
+      ),
+      gestalt.Register(
+        gestalt.Operation[NightlyReportInput, NightlyReportOutput]{
+          ID: "reports.generateNightly", Method: http.MethodPost,
+        },
+        (*Provider).generateNightly,
+      ),
+    )
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+The frontend can stay small because Gestalt already handles sessions and static
+asset serving. A mounted UI calls the plugin operations on the same origin:
+
+```js
+export async function saveItem(item) {
+  const response = await fetch("/api/v1/workspace_review/items.save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(item),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Save failed: ${response.status}`);
+  }
+  return response.json();
+}
+```
+
+Run the app locally from the plugin directory. `provider dev` detects the
+sibling UI manifest and mounts it with the same synthesized local config:
+
+```sh
+gestaltd provider validate --path ./workspace-review/plugin --config ./dev.yaml
+gestaltd provider dev --path ./workspace-review/plugin --config ./dev.yaml
+```
+
 ## Filtering operations and egress
 
 Use `allowedOperations` to publish only a subset of a large plugin catalog:
@@ -356,15 +988,1204 @@ operators should treat `egress.allowedHosts` as declarative policy plus
 best-effort enforcement unless the selected runtime explicitly supports
 hostname-based egress controls.
 
+
 ## Building your own plugin
 
-Plugin implementation details, declarative surfaces, local testing, and custom
-release packaging now live under [Custom Providers > Plugin](/custom-providers/plugins).
+Use this section for the plugin manifest and SDK implementation surface. For the
+shared package model, provider search/add commands, and release mechanics, see
+[Provider packages](/providers#provider-packages) and
+[Releasing provider packages](/providers#releasing-provider-packages).
+
+### Manifest
+
+You declare static metadata, connections, and passthrough surfaces in a manifest file. Gestalt accepts `manifest.yaml`, `manifest.yml`, or `manifest.json`.
+
+<Tabs items={['YAML', 'JSON']}>
+  <Tabs.Tab>
+    ```yaml
+    kind: plugin
+    source: github.com/your-org/plugins/slack
+    version: 0.0.1
+    displayName: Slack
+    description: Send messages, search conversations, and manage channels.
+    spec:
+      mcp: true
+      connections:
+        default:
+          auth:
+            type: oauth2
+            authorizationUrl: https://slack.com/oauth/v2/authorize
+            tokenUrl: https://slack.com/api/oauth.v2.access
+            accessTokenPath: authed_user.access_token
+            scopeParam: user_scope
+            scopeSeparator: ','
+            scopes:
+              - channels:read
+              - chat:write
+              - search:read
+              - users:read
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```json
+    {
+      "kind": "plugin",
+      "source": "github.com/your-org/plugins/slack",
+      "version": "0.0.1",
+      "displayName": "Slack",
+      "description": "Send messages, search conversations, and manage channels.",
+      "spec": {
+        "mcp": true,
+        "connections": {
+          "default": {
+            "auth": {
+              "type": "oauth2",
+              "authorizationUrl": "https://slack.com/oauth/v2/authorize",
+              "tokenUrl": "https://slack.com/api/oauth.v2.access",
+              "accessTokenPath": "authed_user.access_token",
+              "scopeParam": "user_scope",
+              "scopeSeparator": ",",
+              "scopes": ["channels:read", "chat:write", "search:read", "users:read"]
+            }
+          }
+        }
+      }
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+The manifest is the source of truth for display name, description, the connection model, and any passthrough API surfaces (REST, OpenAPI, GraphQL, or MCP). Setting `spec.mcp: true` exposes the plugin's operations through Gestalt's MCP server. See [Provider Manifests](/reference/plugin-manifests) for the full field reference.
+
+`source` may include nested segments after the repository, such as `github.com/your-org/plugins/catalog/slack`. Gestalt keeps the final segment as the plugin name and uses the full path for release tag resolution.
+
+### Creating a project
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    You need Go 1.26+ and a running `gestaltd` instance for testing.
+
+    ```sh
+    mkdir slack && cd slack
+    go mod init github.com/your-org/plugins/slack
+    go get github.com/valon-technologies/gestalt/sdk/go@latest
+    ```
+
+    Recommended layout:
+
+    ```text
+    slack/
+      go.mod
+      manifest.yaml
+      provider.go
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    You need Python 3.10+ and a running `gestaltd` instance for testing.
+
+    ```sh
+    mkdir slack && cd slack
+    ```
+
+    Recommended layout:
+
+    ```text
+    slack/
+      pyproject.toml
+      manifest.yaml
+      provider.py
+    ```
+
+    Point `pyproject.toml` at the module that Gestalt should load:
+
+    ```toml
+    [project]
+    name = "gestalt-slack"
+    version = "0.0.1"
+    dependencies = ["gestalt-sdk"]
+
+    [tool.uv]
+    package = false
+
+    [tool.gestalt]
+    provider = "provider"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    You need the current stable Rust toolchain, Cargo, and a running `gestaltd` instance for testing.
+
+    ```sh
+    mkdir slack && cd slack
+    cargo init --lib
+    ```
+
+    Recommended layout:
+
+    ```text
+    slack/
+      Cargo.toml
+      manifest.yaml
+      src/
+        lib.rs
+    ```
+
+    Add the SDK and schema dependencies to `Cargo.toml`:
+
+    ```toml
+    [package]
+    name = "gestalt-slack"
+    version = "0.0.1"
+    edition = "2024"
+
+    [dependencies]
+    gestalt = { package = "gestalt-sdk", version = "0.0.1-alpha.12" }
+    schemars = { version = "0.8", features = ["derive"] }
+    serde = { version = "1", features = ["derive"] }
+    serde_json = "1"
+    ```
+
+    Use the current `gestalt-sdk` version from crates.io when you create a new
+    provider.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    You need Bun 1.3+ and a running `gestaltd` instance for testing.
+
+    ```sh
+    mkdir slack && cd slack
+    bun init -y
+    bun add @valon-technologies/gestalt@0.0.1-alpha.16
+    ```
+
+    Recommended layout:
+
+    ```text
+    slack/
+      package.json
+      manifest.yaml
+      provider.ts
+    ```
+
+    Point `package.json` at the source file Gestalt should load:
+
+    ```json
+    {
+      "name": "gestalt-slack",
+      "version": "0.0.1",
+      "private": true,
+      "type": "module",
+      "dependencies": {
+        "@valon-technologies/gestalt": "0.0.1-alpha.16"
+      },
+      "gestalt": {
+        "provider": {
+          "kind": "plugin",
+          "target": "./provider.ts#plugin"
+        }
+      }
+    }
+    ```
+
+    A string `gestalt.provider` target defaults to a plugin provider. For authentication
+    or datastore providers, use an object with an explicit kind:
+
+    ```json
+    {
+      "gestalt": {
+        "provider": {
+          "kind": "authentication",
+          "target": "./auth.ts#provider"
+        }
+      }
+    }
+    ```
+
+    Use `"plugin"` when you need to spell the plugin kind explicitly.
+  </Tabs.Tab>
+</Tabs>
+
+### Defining operations
+
+Operations are the callable units of a plugin. Each operation has an ID, an HTTP method, input and output types, and a handler function. You do not write an entrypoint. Gestalt synthesizes the executable wrapper automatically for local source execution and release.
+
+The following example defines a `conversations.getMessage` operation that fetches a single Slack message by channel and timestamp. The handler uses the caller's OAuth token from the request context to call the Slack API.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package provider
+
+    import (
+      "context"
+      "net/http"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type Provider struct{}
+
+    type GetMessageInput struct {
+      Channel string `json:"channel" doc:"Channel ID"        required:"true"`
+      TS      string `json:"ts"      doc:"Message timestamp" required:"true"`
+    }
+
+    type GetMessageOutput struct {
+      Message map[string]any `json:"message"`
+    }
+
+    var (
+      getMessageOp = gestalt.Operation[GetMessageInput, GetMessageOutput]{
+        ID:          "conversations.getMessage",
+        Method:      http.MethodGet,
+        Description: "Get a single message from a Slack channel",
+      }
+      Router = gestalt.MustRouter(
+        gestalt.Register(getMessageOp, (*Provider).getMessage),
+      )
+    )
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(_ context.Context, _ string, _ map[string]any) error {
+      return nil
+    }
+
+    func (p *Provider) getMessage(
+      ctx context.Context,
+      input GetMessageInput,
+      req gestalt.Request,
+    ) (gestalt.Response[GetMessageOutput], error) {
+      // Call Slack API using req.Token as Bearer token.
+      // Fetch conversations.history filtered to the single message at input.TS.
+      return gestalt.OK(GetMessageOutput{Message: map[string]any{"ts": input.TS}}), nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+
+    class GetMessageInput(gestalt.Model):
+        channel: str = gestalt.field(description="Channel ID")
+        ts: str = gestalt.field(description="Message timestamp")
+
+
+    class GetMessageOutput(gestalt.Model):
+        message: dict
+
+
+    @gestalt.operation(
+        method="GET",
+        description="Get a single message from a Slack channel",
+    )
+    def conversations_getMessage(
+        input: GetMessageInput, req: gestalt.Request
+    ) -> GetMessageOutput:
+        # Call Slack API using req.token as Bearer token.
+        # Fetch conversations.history filtered to the single message at input.ts.
+        return GetMessageOutput(message={"ts": input.ts})
+    ```
+
+    The top-level `configure(name, config)` function runs once at startup if defined. It does not need a decorator.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use serde::{Deserialize, Serialize};
+    use std::sync::Arc;
+
+    pub struct Provider;
+
+    #[gestalt::async_trait]
+    impl gestalt::Provider for Provider {
+        async fn configure(
+            &self, _name: &str, _config: serde_json::Map<String, serde_json::Value>,
+        ) -> gestalt::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[derive(Deserialize, schemars::JsonSchema)]
+    pub struct GetMessageInput {
+        #[schemars(description = "Channel ID")]
+        channel: String,
+        #[schemars(description = "Message timestamp")]
+        ts: String,
+    }
+
+    #[derive(Serialize, schemars::JsonSchema)]
+    pub struct GetMessageOutput {
+        message: serde_json::Value,
+    }
+
+    pub fn router() -> gestalt::Result<gestalt::Router<Provider>> {
+        gestalt::Router::new().register(
+            gestalt::Operation::<GetMessageInput, GetMessageOutput>::new(
+                "conversations.getMessage",
+            )
+            .method("GET")
+            .description("Get a single message from a Slack channel"),
+            |_provider: Arc<Provider>, input: GetMessageInput, request: gestalt::Request| async move {
+                // Call Slack API using request.token as Bearer token.
+                let _ = (input, request);
+                todo!("fetch conversations.history")
+            },
+        )
+    }
+
+    gestalt::export_provider!(constructor = Provider, router = router);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
+
+    export const plugin = definePlugin({
+      operations: [
+        operation({
+          id: "conversations.getMessage",
+          method: "GET",
+          description: "Get a single message from a Slack channel",
+          readOnly: true,
+          input: s.object({
+            channel: s.string({ description: "Channel ID" }),
+            ts: s.string({ description: "Message timestamp" }),
+          }),
+          output: s.object({
+            message: s.object({
+              ts: s.string({ description: "Message timestamp" }),
+            }),
+          }),
+          async handler(input, request) {
+            // Call Slack API using request.token as Bearer token.
+            // Fetch conversations.history filtered to the single message at input.ts.
+            return ok({ message: { ts: input.ts } });
+          },
+        }),
+      ],
+    });
+    ```
+
+    The `package.json` field `gestalt.provider` points Gestalt at the provider
+    module and optional export. Use a string target such as
+    `./provider.ts#plugin` for plugin providers, or an object with `kind` and
+    `target` for authentication and datastore providers.
+  </Tabs.Tab>
+</Tabs>
+
+By default, input decode failures return a structured `400` response, and unhandled errors return a structured `500` response. Return a non-2xx response explicitly when the operation wants to signal a deliberate application-level error.
+
+### Input parameter conventions
+
+The router derives catalog parameters from the input type. Fields are required by default unless marked optional. Nested types are emitted as `object` parameters and collections as `array`.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    type ListMessagesInput struct {
+      Channel string `json:"channel"            doc:"Channel ID"              required:"true"`
+      Limit   int    `json:"limit,omitempty"    doc:"Maximum messages"        default:"100"`
+      Oldest  string `json:"oldest,omitempty"   doc:"Unix timestamp bound"`
+    }
+    ```
+
+    `json:"name"` sets the parameter name. `json:",omitempty"` makes the parameter optional. `doc:"..."` sets the description, `required:"true|false"` overrides the default inference, and `default:"..."` sets a scalar default.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    class ListMessagesInput(gestalt.Model):
+        channel: str = gestalt.field(description="Channel ID")
+        limit: int = gestalt.field(description="Maximum messages", default=100)
+        oldest: str | None = gestalt.field(description="Unix timestamp bound", default=None)
+    ```
+
+    Fields without a default are required. Use `gestalt.field(description="...")` for descriptions and `default=...` for default values.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    #[derive(serde::Deserialize, schemars::JsonSchema)]
+    struct ListMessagesInput {
+        #[schemars(description = "Channel ID")]
+        channel: String,
+        #[serde(default = "default_limit")]
+        #[schemars(description = "Maximum messages")]
+        limit: u32,
+        #[schemars(description = "Unix timestamp bound")]
+        oldest: Option<String>,
+    }
+
+    fn default_limit() -> u32 {
+        100
+    }
+    ```
+
+    Fields are required unless you model them as `Option<T>` or provide a serde default. Use `schemars(description = "...")` for catalog descriptions and serde defaults for scalar defaults.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    const ListMessagesInput = s.object({
+      channel: s.string({ description: "Channel ID" }),
+      limit: s.integer({ description: "Maximum messages", default: 100 }),
+      oldest: s.optional(s.string({ description: "Unix timestamp bound" })),
+    });
+    ```
+
+    TypeScript plugins describe runtime input schemas explicitly. Requiredness,
+    descriptions, defaults, nested objects, and arrays come from that schema
+    definition rather than from erased TypeScript types.
+  </Tabs.Tab>
+</Tabs>
+
+### Hosted HTTP endpoints
+
+Hosted HTTP endpoints let an external product call a plugin through a stable
+HTTP route, while the plugin still handles the request as a normal operation.
+They are useful for webhooks, Slack slash commands, Slack event callbacks, and
+other inbound requests whose path, signature verification, body shape, or
+acknowledgment response needs to match the calling product.
+
+The endpoint declaration belongs in the plugin manifest under `spec.http` and
+`spec.securitySchemes`. Deployment config selects the plugin and may override
+fields, but most deployments do not need a separate route declaration. If the
+configured plugin key is `slack` and the binding path is `/commands/support`,
+Gestalt mounts the route at `/api/v1/slack/commands/support` on
+`server.baseUrl`.
+
+Each binding names a security scheme. Use `type: none` only for routes that are
+intentionally unsigned; signed production webhooks should use `hmac`, `apiKey`,
+or `http` verification. The binding then targets an operation ID. Gestalt
+verifies the request, decodes query/body parameters, optionally resolves a more
+specific subject, and invokes the target operation.
+
+```yaml
+kind: plugin
+source: github.com/your-org/plugins/slack
+version: 0.0.1
+spec:
+  securitySchemes:
+    slack_signed:
+      type: hmac
+      secret:
+        env: SLACK_SIGNING_SECRET
+      signatureHeader: X-Slack-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "v0:{header:X-Slack-Request-Timestamp}:{raw_body}"
+      timestampHeader: X-Slack-Request-Timestamp
+      maxAgeSeconds: 300
+  http:
+    support_command:
+      path: /commands/support
+      method: POST
+      credentialMode: none
+      security: slack_signed
+      target: handle_support_command
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded: {}
+      ack:
+        status: 200
+        body:
+          status: accepted
+```
+
+Implement the target operation in the plugin SDK:
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package provider
+
+    import (
+      "context"
+      "net/http"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type Provider struct{}
+
+    type SlackCommandInput struct {
+      TeamID    string `json:"team_id"    required:"true"`
+      UserID    string `json:"user_id"    required:"true"`
+      ChannelID string `json:"channel_id" required:"true"`
+      Text      string `json:"text,omitempty"`
+    }
+
+    type SlackCommandOutput struct {
+      OK bool `json:"ok"`
+    }
+
+    var (
+      supportCommandOp = gestalt.Operation[SlackCommandInput, SlackCommandOutput]{
+        ID:     "handle_support_command",
+        Method: http.MethodPost,
+      }
+      Router = gestalt.MustRouter(
+        gestalt.Register(supportCommandOp, (*Provider).handleSupportCommand),
+      )
+    )
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(_ context.Context, _ string, _ map[string]any) error {
+      return nil
+    }
+
+    func (p *Provider) handleSupportCommand(
+      ctx context.Context,
+      input SlackCommandInput,
+      req gestalt.Request,
+    ) (gestalt.Response[SlackCommandOutput], error) {
+      // Run the Slack command workflow. The host already verified the signature.
+      return gestalt.OK(SlackCommandOutput{OK: true}), nil
+    }
+
+    func (p *Provider) ResolveHTTPSubject(
+      ctx context.Context,
+      req gestalt.HTTPSubjectRequest,
+    ) (*gestalt.Subject, error) {
+      teamID, _ := req.Params["team_id"].(string)
+      userID, _ := req.Params["user_id"].(string)
+      if teamID == "" || userID == "" {
+        return nil, gestalt.Error(http.StatusBadRequest, "missing Slack subject fields")
+      }
+      return &gestalt.Subject{
+        ID:          "slack:" + teamID + ":" + userID,
+        Kind:        "user",
+        DisplayName: userID,
+        AuthSource:  "slack",
+      }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+
+    plugin = gestalt.Plugin("slack")
+
+
+    class SlackCommandInput(gestalt.Model):
+        team_id: str
+        user_id: str
+        channel_id: str
+        text: str = gestalt.field(default="")
+
+
+    @plugin.operation(id="handle_support_command", method="POST")
+    def handle_support_command(
+        input: SlackCommandInput, req: gestalt.Request
+    ) -> dict[str, bool]:
+        # Run the Slack command workflow. The host already verified the signature.
+        return {"ok": True}
+
+
+    @plugin.http_subject
+    def resolve_http_subject(
+        request: gestalt.HTTPSubjectRequest,
+    ) -> gestalt.Subject | None:
+        team_id = str(request.params.get("team_id") or "")
+        user_id = str(request.params.get("user_id") or "")
+        if not team_id or not user_id:
+            raise gestalt.http_subject_error(400, "missing Slack subject fields")
+        return gestalt.Subject(
+            id=f"slack:{team_id}:{user_id}",
+            kind="user",
+            display_name=user_id,
+            auth_source="slack",
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    The Rust high-level plugin SDK can serve the webhook target operation. It
+    does not currently expose an HTTP subject hook, so use Go, Python, or
+    TypeScript when the webhook must derive a custom subject.
+
+    ```rust
+    use serde::{Deserialize, Serialize};
+    use std::sync::Arc;
+
+    pub struct Provider;
+
+    #[derive(Deserialize, schemars::JsonSchema)]
+    pub struct SlackCommandInput {
+        team_id: String,
+        user_id: String,
+        channel_id: String,
+        #[serde(default)]
+        text: String,
+    }
+
+    #[derive(Serialize, schemars::JsonSchema)]
+    pub struct SlackCommandOutput {
+        ok: bool,
+    }
+
+    pub fn router() -> gestalt::Result<gestalt::Router<Provider>> {
+        gestalt::Router::new().register(
+            gestalt::Operation::<SlackCommandInput, SlackCommandOutput>::new(
+                "handle_support_command",
+            )
+            .method("POST"),
+            |_provider: Arc<Provider>, input: SlackCommandInput, request: gestalt::Request| async move {
+                // Run the Slack command workflow. The host already verified the signature.
+                let _ = (input, request);
+                Ok(gestalt::ok(SlackCommandOutput { ok: true }))
+            },
+        )
+    }
+
+    gestalt::export_provider!(constructor = Provider, router = router);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import {
+      definePlugin,
+      httpSubjectError,
+      ok,
+      operation,
+      s,
+    } from "@valon-technologies/gestalt";
+
+    export const plugin = definePlugin({
+      resolveHTTPSubject(request) {
+        const teamID = String(request.params.team_id ?? "");
+        const userID = String(request.params.user_id ?? "");
+        if (!teamID || !userID) {
+          throw httpSubjectError(400, "missing Slack subject fields");
+        }
+        return {
+          id: `slack:${teamID}:${userID}`,
+          kind: "user",
+          displayName: userID,
+          authSource: "slack",
+        };
+      },
+      operations: [
+        operation({
+          id: "handle_support_command",
+          method: "POST",
+          input: s.object({
+            team_id: s.string(),
+            user_id: s.string(),
+            channel_id: s.string(),
+            text: s.optional(s.string()),
+          }),
+          output: s.object({ ok: s.boolean() }),
+          async handler(input, request) {
+            // Run the Slack command workflow. The host already verified the signature.
+            return ok({ ok: true });
+          },
+        }),
+      ],
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Request query parameters are included in the operation input. JSON object
+bodies merge into the input by field name, form-encoded bodies become string
+parameters, and unsupported body types are passed as `rawBody`. If `ack` is
+configured, Gestalt sends that response immediately and runs the operation
+asynchronously. Without `ack`, the caller receives the operation response.
+
+### Declarative plugins
+
+Not every plugin needs executable code. If the upstream API is already reachable over HTTP, you can expose it as a set of REST operations declared entirely in the manifest. Gestalt forwards each invocation to the upstream, injecting the caller's credentials automatically. No provider process runs.
+
+The following manifest exposes three Slack API endpoints as Gestalt operations, with no code at all:
+
+```yaml
+kind: plugin
+source: github.com/your-org/plugins/slack-readonly
+version: 0.0.1
+displayName: Slack (read-only)
+description: Read Slack channels and messages via the REST API.
+spec:
+  mcp: true
+  surfaces:
+    rest:
+      baseUrl: https://slack.com
+      operations:
+        - name: conversations.list
+          description: List conversations and channels
+          method: GET
+          path: /api/conversations.list
+          parameters:
+            - name: limit
+              type: int
+              in: query
+            - name: types
+              type: string
+              in: query
+        - name: conversations.history
+          description: Read message history for a channel
+          method: GET
+          path: /api/conversations.history
+          parameters:
+            - name: channel
+              type: string
+              in: query
+              required: true
+            - name: limit
+              type: int
+              in: query
+            - name: oldest
+              type: string
+              in: query
+        - name: users.list
+          description: List workspace users
+          method: GET
+          path: /api/users.list
+          parameters:
+            - name: limit
+              type: int
+              in: query
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorizationUrl: https://slack.com/oauth/v2/authorize
+        tokenUrl: https://slack.com/api/oauth.v2.access
+        accessTokenPath: authed_user.access_token
+        scopeParam: user_scope
+        scopeSeparator: ','
+        scopes:
+          - channels:read
+          - users:read
+```
+
+You configure a declarative plugin the same way as any other. Point the config at the manifest, and the declared operations appear in the catalog:
+
+```yaml
+plugins:
+  slack-readonly:
+    source: ./slack-readonly/manifest.yaml
+```
+
+```sh
+gestalt plugin invoke slack-readonly conversations.list -p limit=5
+```
+
+Gestalt handles OAuth token injection, request formatting, and response passthrough. The `spec.surfaces.rest.baseUrl` is the root for all declared paths, and each operation's `parameters` define how input fields map to query parameters or request body fields.
+
+You can also declare OpenAPI, GraphQL, and MCP surfaces using `spec.surfaces.openapi`, `spec.surfaces.graphql`, and `spec.surfaces.mcp`. See [Provider Manifests](/reference/plugin-manifests) for the full surface schema.
+
+### Operation ID conventions
+
+Operation IDs should use period-separated hierarchical names. The Slack plugin uses `conversations.list`, `conversations.history`, `chat.postMessage`, and `users.info`.
+
+This convention enables prefix matching in the CLI. When you run `gestalt plugin invoke slack conversations`, the CLI joins the space-separated segments with periods and shows all operations whose ID starts with `conversations.`. This makes large catalogs navigable without memorizing every operation name.
+
+### Dynamic catalogs
+
+By default, the operation catalog is static and materialized at startup. If your plugin needs to expose different operations depending on the caller's credentials or runtime state, implement a session catalog.
+
+A Slack plugin could use this to check which Slack workspace the caller is connected to and adjust the available operations accordingly.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    Implement the `SessionCatalogProvider` interface on your provider:
+
+    ```go
+    func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*gestalt.Catalog, error) {
+        return &gestalt.Catalog{
+            Name:        "slack-session",
+            DisplayName: "Slack",
+            Operations: []*gestalt.CatalogOperation{
+                {
+                    Id:     "conversations.getMessage",
+                    Method: http.MethodGet,
+                    ReadOnly: true,
+                },
+            },
+        }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Register a dynamic session catalog with `@gestalt.session_catalog`:
+
+    ```python
+    @gestalt.session_catalog
+    def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
+        return gestalt.Catalog(
+            name="slack-session",
+            display_name="Slack",
+            operations=[
+                gestalt.CatalogOperation(
+                    id="conversations.getMessage",
+                    method="GET",
+                    read_only=True,
+                )
+            ],
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Return a request-scoped catalog from the provider:
+
+    ```rust
+    #[gestalt::async_trait]
+    impl gestalt::Provider for Provider {
+        fn supports_session_catalog(&self) -> bool {
+            true
+        }
+
+        async fn catalog_for_request(
+            &self,
+            request: &gestalt::Request,
+        ) -> gestalt::Result<Option<gestalt::Catalog>> {
+            Ok(Some(gestalt::Catalog {
+                name: "slack-session".to_string(),
+                display_name: "Slack".to_string(),
+                operations: vec![gestalt::CatalogOperation {
+                    id: "conversations.getMessage".to_string(),
+                    method: "GET".to_string(),
+                    read_only: true,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }))
+        }
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Export a `sessionCatalog` function from your plugin provider definition:
+
+    ```typescript
+    export const plugin = definePlugin({
+      sessionCatalog(request) {
+        return {
+          name: "slack-session",
+          displayName: "Slack",
+          operations: [
+            {
+              id: "conversations.getMessage",
+              method: "GET",
+              readOnly: true,
+            },
+          ],
+        };
+      },
+      operations: [/* ... */],
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Post-connect metadata
+
+Plugins can derive additional connection metadata after Gestalt completes a
+credential exchange. Use a post-connect hook when the upstream connect response
+contains workspace, tenant, or account identifiers that should be stored with
+the connection and reused by later operation requests. Return only non-secret
+metadata; Gestalt already stores access and refresh tokens separately.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    Implement the `PostConnectCapable` interface on your provider:
+
+    ```go
+    import (
+      "context"
+      "encoding/json"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    func (p *Provider) PostConnect(ctx context.Context, token *gestalt.ConnectedToken) (map[string]string, error) {
+      upstream := map[string]string{}
+      if token.MetadataJSON != "" {
+        _ = json.Unmarshal([]byte(token.MetadataJSON), &upstream)
+      }
+
+      return map[string]string{
+        "slack_team_id": upstream["team_id"],
+        "subject_id":    token.SubjectID,
+        "connection":    token.Connection,
+        "instance":      token.Instance,
+      }, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Register a post-connect hook with `@gestalt.post_connect`:
+
+    ```python
+    import gestalt
+
+
+    @gestalt.post_connect
+    def capture_workspace(token: gestalt.ConnectedToken) -> dict[str, str]:
+        return {
+            "slack_team_id": token.metadata.get("team_id", ""),
+            "subject_id": token.subject_id,
+            "connection": token.connection,
+            "instance": token.instance,
+        }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    The Rust high-level plugin SDK currently exposes dynamic session catalogs
+    but does not expose a post-connect hook. Use Go, Python, or TypeScript when
+    your provider needs to derive connection metadata during the connect flow.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Provide a `postConnect` handler in the plugin definition:
+
+    ```typescript
+    import { definePlugin } from "@valon-technologies/gestalt";
+
+    export const plugin = definePlugin({
+      postConnect(token) {
+        return {
+          slack_team_id: token.metadata.team_id ?? "",
+          subject_id: token.subjectId,
+          connection: token.connection,
+          instance: token.instance,
+        };
+      },
+      operations: [/* ... */],
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Testing locally
+
+Use the provider-local commands when you are iterating on a source plugin.
+`gestaltd provider dev` and `gestaltd provider validate` synthesize a local
+Gestalt config around the target plugin instead of requiring a hand-written
+temp config. If the plugin manifest declares `spec.ui.path`, Gestalt mounts
+that owned UI automatically. For the common `plugin/` + sibling `ui/` layout,
+the local commands also detect `../ui/manifest.yaml` and wire it in
+automatically during local development.
+
+When no config file supplies an explicit `plugins.<name>.ui.path`, the inferred
+local UI path comes from the manifest `source` slug. For example,
+`github.com/acme/tools/plugins/vm-style-guide` mounts at `/vm-style-guide`.
+The plugin key remains API-safe, so the same plugin may still be addressed as
+`vm_style_guide` in local integration APIs.
+
+Validate the plugin in isolation:
+
+```sh
+gestaltd provider validate --path ./slack
+```
+
+Run the plugin locally with browser-facing UI available:
+
+```sh
+gestaltd provider dev --path ./slack
+```
+
+Validate or serve the UI bundle directly when you are working on the frontend
+itself:
+
+```sh
+gestaltd provider validate --path ./ui
+gestaltd provider dev --path ./ui
+```
+
+When the plugin needs supporting providers, extra plugins, or explicit mounted
+UIs, layer real config overlays on top of the synthesized baseline:
+
+```sh
+gestaltd provider validate --path ./slack --config ./dev/support.yaml
+gestaltd provider dev --path ./slack --config ./dev/support.yaml
+```
+
+Repeated `--config` flags merge left-to-right, and `null` deletes inherited
+entries. That makes it possible to boot some supporting providers while
+suppressing others for a local session.
+
+#### Attaching local code to a remote server
+
+Use remote provider dev when you want a remote Gestalt instance to handle auth,
+authorization, connections, secrets, and host services, but route a selected
+plugin implementation to your local machine. For the normal single-plugin case,
+a path-only attach is enough:
+
+```sh
+export GESTALT_URL=https://gestalt.example.com
+
+gestaltd provider dev --remote "$GESTALT_URL" --path ./slack
+```
+
+The remote URL is environment-agnostic; it can point at any `gestaltd` instance
+that exposes provider-dev attach targets and has opted in with
+`server.dev.attachmentState`. Use `attachmentState: indexeddb` on shared or
+load-balanced servers so attachment metadata and queued provider/UI calls are
+available to every replica. The target plugin must also opt into private remote
+attach with `dev.attach.allowedRoles`. The CLI
+opens a browser approval page for the interactive happy path; approve it with
+your normal browser session and enter the verification code shown in your
+terminal. API-token callers must use a token with the `provider_dev.attach`
+action for that plugin. The local command replaces only the source plugin
+attached by your authenticated session. Providers that are not attached locally
+continue to run through the remote server and its existing configuration.
+
+```yaml
+server:
+  dev:
+    attachmentState: indexeddb
+
+authorization:
+  policies:
+    provider_devs:
+      default: deny
+      members:
+        - subjectID: user:usr_123
+          role: developer
+
+plugins:
+  slack:
+    authorizationPolicy: provider_devs
+    dev:
+      attach:
+        allowedRoles:
+          - developer
+```
+
+For non-interactive attach, create or supply an API token with an action
+permission. Provider scopes and operation permissions are intentionally not
+enough, and this action does not grant normal invocation access:
+
+```json
+{
+  "name": "slack local dev",
+  "permissions": [
+    {
+      "plugin": "slack",
+      "actions": ["provider_dev.attach"]
+    }
+  ]
+}
+```
+`attachmentState: indexeddb` stores attachment metadata and queued provider/UI
+calls in the selected host IndexedDB, so attach traffic can move across
+`gestaltd` replicas. Process-local remote attachment state is not exposed as a
+supported server mode because it is unsafe for load-balanced or multi-replica
+servers.
+Remote provider dev uses `--remote-token` first, then `GESTALT_API_KEY` for
+non-interactive direct attach. Stored CLI credentials are intentionally not used
+for direct attach; without an explicit token, the CLI uses browser approval. An
+API token used for direct attach must include
+`permissions[].actions: ["provider_dev.attach"]` for every attached plugin.
+Stored CLI credentials are not sent on the direct attach path. Use
+`--remote-token` or `GESTALT_API_KEY` for non-interactive automation.
+
+Remote attach creates an owner-scoped attachment. The server returns an
+`attachId` and a one-time dispatcher secret; the CLI uses both for local
+poll/complete traffic. Other users keep seeing the deployed provider and UI.
+Owner cleanup can detach a stuck attachment by `attachId`:
+
+```sh
+gestaltd provider attach list --remote "$GESTALT_URL"
+gestaltd provider attach show --remote "$GESTALT_URL" att_123
+gestaltd provider attach detach --remote "$GESTALT_URL" att_123
+```
+
+These diagnostic commands use `--remote-token`, `GESTALT_API_KEY`, or a matching
+stored Gestalt CLI credential for the same remote URL. They do not require
+`provider_dev.attach` because they only list, inspect, or detach attachments
+owned by the authenticated principal. Diagnostic list/get responses never expose
+dispatcher secrets, host-service env, plugin config, access tokens, or browser
+binding URLs.
+
+For `--remote --path` without `--config`, Gestalt matches the local manifest
+`source` to a configured plugin on the remote server. The remote plugin's
+configured auth, authorization, connections, plugin config, mounted UI settings,
+secret references, and host services are preserved; only the implementation is
+routed to your local source tree. If more than one remote plugin uses the same
+manifest `source`, or the manifest has no `source`, pass `--name`:
+
+```sh
+gestaltd provider dev --remote "$GESTALT_URL" --path ./slack --name slack
+```
+
+Use layered config files only when you want explicit local config overrides or
+when you want to attach multiple local plugins in one session:
+
+```sh
+gestaltd provider dev \
+  --remote "$GESTALT_URL" \
+  --config ./base.yaml \
+  --config ./prod.yaml \
+  --path ./slack \
+  --name slack
+```
+
+You can also attach every source-backed plugin from layered config overlays:
+
+```sh
+gestaltd provider dev \
+  --remote "$GESTALT_URL" \
+  --config ./base.yaml \
+  --config ./prod.yaml \
+  --config ./dev/local-plugins.yaml
+```
+
+Config-driven remote attach uses the same merge behavior as local development,
+so overlays can choose which plugins are local by adding source-backed plugin
+entries, choose which remote/supporting providers are disabled by setting
+inherited config entries to `null`, and send explicit local plugin config to the
+remote session.
+Unlike local `provider dev` and `provider validate`, remote provider dev allows
+missing local environment substitutions while loading config. That keeps
+unrelated deployment-only env vars from blocking attach; if the attached plugin
+itself needs a literal env-substituted value, set that env var locally or pass a
+small local overlay.
+
+Remote provider dev tunnels plugin RPC, catalog, post-connect, host-service
+calls, and plugin-owned UI assets for mounted UIs that already exist on the
+remote server. For the `plugin/` + sibling `ui/` layout, the sibling UI is
+bundled for the local provider session automatically. Raw GraphQL surfaces are
+not tunneled in v1.
+
+For TypeScript plugins, `provider dev` runs `bun install` automatically when the
+plugin has a `package.json` but no `node_modules`. Source UI release builds use
+the same dependency bootstrap for Bun-managed build workdirs before
+`release.build.command` when dependencies are missing. Keep
+`@valon-technologies/gestalt` current enough for the host-service features your
+plugin uses; for example, remote IndexedDB host-service calls require an SDK
+version with `tls://` host-service transport support.
+
+Hosted HTTP bindings stay layered on top of operations. A plugin defines an
+operation like `handle_command` in code, then attaches `/command` by declaring a
+manifest `spec.http` binding that targets that operation. Local source
+execution and `gestaltd provider release` preserve those manifest
+`spec.securitySchemes` / `spec.http` entries in the effective packaged
+manifest.
+
+Once the local server is running, invoke an operation:
+
+```sh
+gestalt plugin invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1712161829.000300
+```
+
+If your plugin makes outbound HTTP requests and you see 403 errors, check
+`allowedHosts`. In deployments with executable-plugin sandboxing enabled,
+requests to hosts not in the allowlist are rejected. That sandboxing story is
+still runtime-dependent today, so unsupported environments may fail differently.
+Add every upstream domain the provider contacts to `allowedHosts` in the config
+or manifest.
+
+### Hybrid providers
+
+A manifest can define passthrough surfaces alongside executable operations. The passthrough surfaces are forwarded by the host directly to the upstream API, while the executable operations are handled by the provider process.
+
+The first-party Slack plugin is a hybrid provider. It declares 14 REST operations in its manifest (such as `chat.postMessage`, `conversations.list`, and `users.info`) that Gestalt forwards directly to the Slack API. On top of those, it defines 3 executable operations (such as `conversations.getMessage`) that add custom logic like URL parsing and multi-API orchestration. Both sets of operations appear in the same catalog.
+
+Do not define the same operation ID in both a passthrough surface and an executable operation. If two surfaces expose the same ID, the provider fails validation at startup. Use `allowedOperations` to filter or alias collisions when needed.
 
 ## What to read next
 
 For configuration, see [Configuration](/configuration). For operation
 invocation, see [HTTP API](/reference/http-api). For manifest fields, see
 [Provider Manifests](/reference/plugin-manifests). For authorization behavior,
-see [Authorization](/providers/authorization). To build a plugin, see
-[Custom Plugin](/custom-providers/plugins).
+see [Authorization](/providers/authorization).

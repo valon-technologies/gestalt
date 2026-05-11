@@ -1,3 +1,5 @@
+import { Tabs } from 'nextra/components'
+
 # UI
 
 UI providers are static asset bundles. Gestalt serves each configured
@@ -138,15 +140,79 @@ Plugin-backed mounted UIs also inherit the owning plugin's route-auth provider
 when that plugin declares `auth.provider`; direct `providers.ui` bundles and
 the built-in admin UI continue using the server-wide auth provider.
 
+
 ## Building your own UI bundle
 
-Asset-root layout, build hooks, and release packaging now live under
-[Custom Providers > UI](/custom-providers/ui) and
-[Custom Providers > Releasing](/custom-providers/releasing).
+### Manifest
+
+The Default UI manifest declares `spec.assetRoot`, which points to the directory containing the built static assets. The source field identifies the provider in the registry.
+
+```yaml
+kind: ui
+source: github.com/valon-technologies/gestalt-providers/ui/default
+version: 0.0.1
+displayName: Default UI
+description: Default Gestalt UI bundle.
+release:
+  build:
+    command:
+      - sh
+      - ./build.sh
+spec:
+  assetRoot: out
+  routes:
+    - path: /
+      allowedRoles: [viewer, admin]
+    - path: /admin/*
+      allowedRoles: [admin]
+```
+
+The `assetRoot` path is relative to the manifest file. It should contain the output of your frontend build (typically an `index.html` and accompanying JS, CSS, and image files).
+
+`spec.routes` is optional unless a deployment binds the UI to
+`providers.ui.<name>.authorizationPolicy`. In that case, Gestalt uses these
+route rules to enforce role-based access before serving the mounted route or
+its static assets. At least one route must cover `/`, and every route must
+declare non-empty `allowedRoles`.
+
+### Build step
+
+If your UI needs a build step before packaging, use `release.build` to run it automatically during `gestaltd provider release`. This runs before source-manifest preparation, so the built assets are included in the release archive.
+
+The Default UI uses a shell script that runs `npm ci && npm run build` to produce the static output:
+
+```yaml
+kind: ui
+source: github.com/valon-technologies/gestalt-providers/ui/default
+version: 0.0.1
+release:
+  build:
+    command:
+      - npm
+      - run
+      - build
+spec:
+  assetRoot: out
+```
+
+The command runs relative to the manifest directory. After the build completes, Gestalt packages everything under `assetRoot` into the release archive. You can use any build tool here -- `npm run build`, `vite build`, `next build && next export` -- as long as it writes output to the directory specified in `assetRoot`.
+
+### Deploying the bundle
+
+Mount custom UI bundles with the same `providers.ui` and plugin-backed `ui`
+bindings shown in
+[Configuring `providers.ui`](/providers/ui#configuring-providersui). Locked
+deployment behavior is documented in
+[Locked deployments](/providers/ui#locked-deployments), and the built-in admin
+UI behavior is documented in [The admin UI](/providers/ui#the-admin-ui).
+
+UI bundles use the common provider package release system. See
+[Releasing provider packages](/providers#releasing-provider-packages) for
+release archives, tag resolution, prepared state, and published
+`provider-release.yaml` URLs.
 
 ## What to read next
 
 - [Configuration](/configuration): `providers.ui`, `plugins.<name>.ui.path`, and headless deployments
 - [Client UI](/client/web): what the default client exposes
 - [Authorization](/providers/authorization): route and role semantics
-- [Custom UI](/custom-providers/ui): advanced authoring docs

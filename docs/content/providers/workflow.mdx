@@ -746,9 +746,9 @@ Run responses include `id`, `provider`, `status`, `target`, `trigger`,
 `createdBy`, `createdAt`, `startedAt`, `completedAt`, `statusMessage`, and
 `resultBody`. The `trigger.kind` value is `schedule`, `event`, or `manual`.
 
-If you are implementing a provider or another event producer, see
-[Custom Providers > Workflow](/custom-providers/workflow) for the
-`PublishEvent` interface and the provider-side contract.
+If you are implementing a provider or another event producer, the
+[Building your own workflow provider](#building-your-own-workflow-provider)
+section covers the `PublishEvent` interface and provider-side contract.
 
 ## How execution works
 
@@ -764,15 +764,478 @@ subject.
 
 ## Building your own workflow provider
 
-Implementation details for the workflow runtime surface, host callbacks, and
-release flow live under
-[Custom Providers > Workflow](/custom-providers/workflow).
+### Manifest
+
+A workflow provider manifest declares `kind: workflow`:
+
+```yaml
+kind: workflow
+source: github.com/your-org/workflow/example
+version: 0.0.1
+displayName: Example Workflow
+description: Workflow provider with custom run and schedule storage.
+spec:
+  configSchemaPath: ./workflow_config.json
+```
+
+### Provider interface
+
+The workflow protocol is a state and dispatch surface. A provider stores
+workflow objects and reports their current state. When one of those objects
+should execute, the provider calls back into Gestalt through `WorkflowHost` so
+the host can invoke the target plugin operation or agent target under the right
+subject and authorization ceiling.
+
+The full protocol includes:
+
+| Method | Purpose |
+| --- | --- |
+| `StartRun` / `GetRun` / `ListRuns` / `CancelRun` | Manage workflow runs |
+| `SignalRun` / `SignalOrStartRun` | Attach signals to an existing run or create a keyed run before signaling it |
+| `UpsertSchedule` / `GetSchedule` / `ListSchedules` / `DeleteSchedule` / `PauseSchedule` / `ResumeSchedule` | Manage schedules |
+| `UpsertEventTrigger` / `GetEventTrigger` / `ListEventTriggers` / `DeleteEventTrigger` / `PauseEventTrigger` / `ResumeEventTrigger` | Manage triggers |
+| `PutExecutionReference` / `GetExecutionReference` / `ListExecutionReferences` | Persist delayed-execution identity and permission records |
+| `PublishEvent` | Deliver an event into the provider |
+
+Go and Rust expose the complete generated workflow provider service. Python
+currently registers run, signal, schedule, trigger, and publish methods through
+the SDK runtime. TypeScript currently exposes the core run, schedule, trigger,
+and publish methods through `defineWorkflowProvider`. If you need signal or
+execution-reference methods before the handwritten TypeScript and Python helpers
+grow those methods, implement that provider in Go or Rust, or serve the
+generated protocol directly.
+
+The examples below show the core authored shape. Production workflow providers
+should persist returned IDs, timestamps, status, execution references, and
+signal sequence numbers exactly as stored.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package exampleworkflow
+
+    import (
+        "context"
+
+        proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+    )
+
+    type Provider struct{}
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
+        return nil
+    }
+
+    func (p *Provider) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+        return &proto.BoundWorkflowRun{
+            Id:     req.GetTarget().GetPlugin().GetPluginName() + ":run-1",
+            Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
+            Target: req.GetTarget(),
+        }, nil
+    }
+
+    func (p *Provider) GetRun(_ context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+        return &proto.BoundWorkflowRun{
+            Id: req.GetRunId(),
+        }, nil
+    }
+
+    func (p *Provider) ListRuns(context.Context, *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+        return &proto.ListWorkflowProviderRunsResponse{}, nil
+    }
+
+    func (p *Provider) CancelRun(_ context.Context, req *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+        return &proto.BoundWorkflowRun{
+            Id:     req.GetRunId(),
+            Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED,
+        }, nil
+    }
+
+    func (p *Provider) UpsertSchedule(_ context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+        return &proto.BoundWorkflowSchedule{
+            Id:     req.GetScheduleId(),
+            Cron:   req.GetCron(),
+            Target: req.GetTarget(),
+            Paused: req.GetPaused(),
+        }, nil
+    }
+
+    func (p *Provider) GetSchedule(_ context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+        return &proto.BoundWorkflowSchedule{Id: req.GetScheduleId()}, nil
+    }
+
+    func (p *Provider) ListSchedules(context.Context, *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
+        return &proto.ListWorkflowProviderSchedulesResponse{}, nil
+    }
+
+    func (p *Provider) DeleteSchedule(context.Context, *proto.DeleteWorkflowProviderScheduleRequest) error {
+        return nil
+    }
+
+    func (p *Provider) PauseSchedule(_ context.Context, req *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+        return &proto.BoundWorkflowSchedule{Id: req.GetScheduleId(), Paused: true}, nil
+    }
+
+    func (p *Provider) ResumeSchedule(_ context.Context, req *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+        return &proto.BoundWorkflowSchedule{Id: req.GetScheduleId(), Paused: false}, nil
+    }
+
+    func (p *Provider) UpsertEventTrigger(_ context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+        return &proto.BoundWorkflowEventTrigger{
+            Id:     req.GetTriggerId(),
+            Match:  req.GetMatch(),
+            Target: req.GetTarget(),
+            Paused: req.GetPaused(),
+        }, nil
+    }
+
+    func (p *Provider) GetEventTrigger(_ context.Context, req *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+        return &proto.BoundWorkflowEventTrigger{Id: req.GetTriggerId()}, nil
+    }
+
+    func (p *Provider) ListEventTriggers(context.Context, *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error) {
+        return &proto.ListWorkflowProviderEventTriggersResponse{}, nil
+    }
+
+    func (p *Provider) DeleteEventTrigger(context.Context, *proto.DeleteWorkflowProviderEventTriggerRequest) error {
+        return nil
+    }
+
+    func (p *Provider) PauseEventTrigger(_ context.Context, req *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+        return &proto.BoundWorkflowEventTrigger{Id: req.GetTriggerId(), Paused: true}, nil
+    }
+
+    func (p *Provider) ResumeEventTrigger(_ context.Context, req *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+        return &proto.BoundWorkflowEventTrigger{Id: req.GetTriggerId(), Paused: false}, nil
+    }
+
+    func (p *Provider) PublishEvent(context.Context, *proto.PublishWorkflowProviderEventRequest) error {
+        return nil
+    }
+
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+    class ExampleWorkflow(gestalt.WorkflowProvider):
+        def configure(self, name: str, config: dict) -> None:
+            pass
+
+        def StartRun(self, request, context):
+            return gestalt.BoundWorkflowRun(
+                id=f"{request.target.plugin.plugin_name}:run-1",
+                status=gestalt.WORKFLOW_RUN_STATUS_PENDING,
+                target=request.target,
+            )
+
+        def GetRun(self, request, context):
+            return gestalt.BoundWorkflowRun(id=request.run_id)
+
+        def ListRuns(self, request, context):
+            return gestalt.ListWorkflowProviderRunsResponse(runs=[])
+
+        def CancelRun(self, request, context):
+            return gestalt.BoundWorkflowRun(
+                id=request.run_id,
+                status=gestalt.WORKFLOW_RUN_STATUS_CANCELED,
+            )
+
+        def UpsertSchedule(self, request, context):
+            return gestalt.BoundWorkflowSchedule(
+                id=request.schedule_id,
+                cron=request.cron,
+                target=request.target,
+                paused=request.paused,
+            )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use tonic::{Request, Response, Status};
+
+    use gestalt::generated::v1 as proto;
+
+    #[derive(Default)]
+    struct ExampleWorkflow;
+
+    #[gestalt::async_trait]
+    impl gestalt::WorkflowProvider for ExampleWorkflow {
+        async fn start_run(
+            &self,
+            request: Request<proto::StartWorkflowProviderRunRequest>,
+        ) -> Result<Response<proto::BoundWorkflowRun>, Status> {
+            let req = request.into_inner();
+            let plugin_name = req
+                .target
+                .as_ref()
+                .and_then(|target| target.plugin.as_ref())
+                .map(|plugin| plugin.plugin_name.clone())
+                .unwrap_or_else(|| "workflow".into());
+            Ok(Response::new(proto::BoundWorkflowRun {
+                id: format!("{plugin_name}:run-1"),
+                status: proto::WorkflowRunStatus::Pending as i32,
+                target: req.target,
+                ..Default::default()
+            }))
+        }
+
+        async fn get_run(
+            &self,
+            request: Request<proto::GetWorkflowProviderRunRequest>,
+        ) -> Result<Response<proto::BoundWorkflowRun>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::BoundWorkflowRun {
+                id: req.run_id,
+                ..Default::default()
+            }))
+        }
+
+        async fn list_runs(
+            &self,
+            _request: Request<proto::ListWorkflowProviderRunsRequest>,
+        ) -> Result<Response<proto::ListWorkflowProviderRunsResponse>, Status> {
+            Ok(Response::new(proto::ListWorkflowProviderRunsResponse { runs: vec![] }))
+        }
+
+        async fn cancel_run(
+            &self,
+            request: Request<proto::CancelWorkflowProviderRunRequest>,
+        ) -> Result<Response<proto::BoundWorkflowRun>, Status> {
+            let req = request.into_inner();
+            Ok(Response::new(proto::BoundWorkflowRun {
+                id: req.run_id,
+                status: proto::WorkflowRunStatus::Canceled as i32,
+                ..Default::default()
+            }))
+        }
+
+        async fn publish_event(
+            &self,
+            _request: Request<proto::PublishWorkflowProviderEventRequest>,
+        ) -> Result<Response<()>, Status> {
+            Ok(Response::new(()))
+        }
+    }
+
+    gestalt::export_workflow_provider!(constructor = ExampleWorkflow::default);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import {
+      WorkflowRunStatus,
+      defineWorkflowProvider,
+    } from "@valon-technologies/gestalt";
+
+    export const provider = defineWorkflowProvider({
+      async configure(_name, _config) {},
+
+      async startRun(request) {
+        return {
+          id: `${request.target?.plugin?.pluginName ?? "workflow"}:run-1`,
+          status: WorkflowRunStatus.PENDING,
+          target: request.target,
+        };
+      },
+
+      async getRun(request) {
+        return {
+          id: request.runId,
+        };
+      },
+
+      async listRuns(_request) {
+        return [];
+      },
+
+      async cancelRun(request) {
+        return {
+          id: request.runId,
+          status: WorkflowRunStatus.CANCELED,
+        };
+      },
+
+      async upsertSchedule(request) {
+        return {
+          id: request.scheduleId,
+          cron: request.cron,
+          target: request.target,
+          paused: request.paused,
+        };
+      },
+
+      async getSchedule(request) {
+        return { id: request.scheduleId };
+      },
+
+      async listSchedules(_request) {
+        return [];
+      },
+
+      async deleteSchedule(_request) {},
+
+      async pauseSchedule(request) {
+        return { id: request.scheduleId, paused: true };
+      },
+
+      async resumeSchedule(request) {
+        return { id: request.scheduleId, paused: false };
+      },
+
+      async upsertEventTrigger(request) {
+        return {
+          id: request.triggerId,
+          match: request.match,
+          target: request.target,
+          paused: request.paused,
+        };
+      },
+
+      async getEventTrigger(request) {
+        return { id: request.triggerId };
+      },
+
+      async listEventTriggers(_request) {
+        return [];
+      },
+
+      async deleteEventTrigger(_request) {},
+
+      async pauseEventTrigger(request) {
+        return { id: request.triggerId, paused: true };
+      },
+
+      async resumeEventTrigger(request) {
+        return { id: request.triggerId, paused: false };
+      },
+
+      async publishEvent(_request) {},
+    });
+    ```
+
+    Point `package.json` at the workflow provider with `gestalt.provider`:
+
+    ```json
+    {
+      "gestalt": {
+        "provider": {
+          "kind": "workflow",
+          "target": "./workflow.ts#provider"
+        }
+      }
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Signals and execution references
+
+Signals let a workflow caller deliver additional payloads into a run after it
+has started. `SignalRun` targets an existing `run_id`. `SignalOrStartRun`
+accepts a `workflow_key`, target, idempotency key, and signal. It should return
+the run, the stored signal, and `started_run: true` when it created the run.
+This is useful for workflows where many external events should coalesce into
+one active run.
+
+Execution references store the subject, credential subject, caller plugin, and
+allowed plugin operations that delayed execution may use later. Config-managed
+workflows and user-owned workflows both rely on this reference when a provider
+fires a run after the creating request has ended.
+
+### Workflow host
+
+Workflow providers call back into Gestalt through the workflow host socket to
+invoke target plugin operations.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    host, err := gestalt.WorkflowHost()
+    if err != nil {
+        return nil, err
+    }
+    defer host.Close()
+
+    resp, err := host.InvokeOperation(ctx, gestalt.InvokeWorkflowOperationInput{
+        Target: &gestalt.BoundWorkflowTargetInput{
+            Plugin: &gestalt.BoundWorkflowPluginTargetInput{
+                PluginName: "roadmap",
+                Operation:  "sync_items",
+            },
+        },
+        RunID: "run-1",
+    })
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    with gestalt.WorkflowHost() as host:
+        resp = host.invoke_operation(
+            gestalt.InvokeWorkflowOperationInput(
+                target=gestalt.BoundWorkflowTargetInput(
+                    plugin=gestalt.BoundWorkflowPluginTargetInput(
+                        plugin_name="roadmap",
+                        operation="sync_items",
+                    ),
+                ),
+                run_id="run-1",
+            )
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    let mut host = gestalt::WorkflowHost::connect().await?;
+    let resp = host
+        .invoke_operation(gestalt::InvokeWorkflowOperationInput {
+            target: Some(gestalt::BoundWorkflowTargetInput::Plugin(
+                gestalt::BoundWorkflowPluginTargetInput {
+                    plugin_name: "roadmap".into(),
+                    operation: "sync_items".into(),
+                    ..Default::default()
+                },
+            )),
+            run_id: "run-1".into(),
+            ..Default::default()
+        })
+        .await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { WorkflowHost } from "@valon-technologies/gestalt";
+
+    const host = new WorkflowHost();
+    const resp = await host.invokeOperation({
+      target: {
+        plugin: {
+          pluginName: "roadmap",
+          operation: "sync_items",
+        },
+      },
+      runId: "run-1",
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Deploying the provider
+
+Configure workflow providers with the same `providers.workflow`, optional
+`providers.workflow.<name>.indexeddb`, and top-level `workflows:` shape shown in
+[Configuring `providers.workflow`](/providers/workflow#configuring-providersworkflow)
+and [Defining config-managed workflows](/providers/workflow#defining-config-managed-workflows).
+For package publishing, lock/sync, and release behavior, see
+[Releasing provider packages](/providers#releasing-provider-packages).
 
 ## What to read next
 
 If you want the surrounding config model, read [Configuration](/configuration)
 and the full [Config File](/reference/config-file) reference. For route and
 command details, see [HTTP API](/reference/http-api) and [CLI](/client/cli).
-If you need provider implementation details, continue to
-[Custom Workflow Providers](/custom-providers/workflow) or the
-[Built-in Providers](/reference/built-in-providers) reference.
+The [Built-in Providers](/reference/built-in-providers) reference lists
+first-party workflow provider packages.

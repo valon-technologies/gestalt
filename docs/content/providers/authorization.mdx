@@ -385,7 +385,7 @@ allowed to assume an external identity. This client is for reads only; Gestalt
 still owns relationship writes and model lifecycle for managed authorization
 state.
 
-<Tabs items={['Go', 'Python', 'TypeScript']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
     import (
@@ -454,6 +454,39 @@ state.
     ```
   </Tabs.Tab>
   <Tabs.Tab>
+    ```rust
+    use gestalt::{
+        Authorization, AuthorizationAction, AuthorizationResource,
+        SubjectSearchRequest,
+    };
+
+    async fn users_for_slack_identity(
+        team_id: &str,
+        slack_user_id: &str,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let mut authz = Authorization::connect().await?;
+        let subjects = authz
+            .search_subjects(SubjectSearchRequest {
+                resource: AuthorizationResource::new(
+                    "slack_identity",
+                    format!("team:{team_id}:user:{slack_user_id}"),
+                ),
+                action: AuthorizationAction::new("assume"),
+                subject_type: "user".to_string(),
+                page_size: 10,
+                ..Default::default()
+            })
+            .await?;
+
+        Ok(subjects
+            .subjects
+            .into_iter()
+            .map(|subject| subject.id)
+            .collect())
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
     ```ts
     import { Authorization, type Request } from "@valon-technologies/gestalt";
 
@@ -481,9 +514,6 @@ state.
     ```
   </Tabs.Tab>
 </Tabs>
-
-The Rust SDK does not currently expose a read-only authorization host-service
-client wrapper.
 
 ## First-party authorization providers
 
@@ -527,11 +557,170 @@ more than one entry exists under `providers.authorization`, set
 Built-in admin authorization membership and inspection APIs use the selected
 provider. Static policy members still take precedence over dynamic grants.
 
+
 ## Building your own authorization provider
 
-Implementation details for the decision plane, relationship control plane, and
-model lifecycle now live under
-[Custom Providers > Authorization](/custom-providers/authorization).
+### Manifest
+
+An authorization provider manifest declares `kind: authorization`:
+
+```yaml
+kind: authorization
+source: github.com/your-org/authorization/example
+version: 0.0.1
+displayName: Example Authorization
+description: Authorization provider with custom model and relationship storage.
+spec:
+  configSchemaPath: ./authorization_config.json
+```
+
+### Provider interface
+
+Authorization provider authoring is currently exposed through the Go SDK.
+
+The provider contract uses the decision plane, relationship control plane, and
+model lifecycle surfaces described in
+[Authorization provider architecture](/providers/authorization#authorization-provider-architecture).
+The example below shows the shape of a minimal in-memory provider; the remaining
+methods follow the same request/response pattern.
+
+### Observability
+
+Provider authors do not need to emit the baseline `gestaltd` authorization
+metrics. `gestaltd` wraps the configured provider interface and records
+`gestaltd.authorization.provider.operation.*` for every provider method. When
+the provider is used for provider-backed subject access, `gestaltd` also records
+`gestaltd.authorization.provider.evaluate.*` around the batched authorization
+checks it performs.
+
+When OTLP tracing is enabled, preserve the `context.Context` passed into
+provider methods for downstream calls so provider work remains attached to the
+same trace tree.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package exampleauthz
+
+    import (
+        "context"
+        "fmt"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type Provider struct {
+        modelID string
+    }
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
+        p.modelID, _ = config["modelId"].(string)
+        return nil
+    }
+
+    func (p *Provider) Evaluate(_ context.Context, req *gestalt.AccessEvaluationRequest) (*gestalt.AccessDecision, error) {
+        allowed := req.GetAction().GetName() == "read"
+        return &gestalt.AccessDecision{
+            Allowed: allowed,
+            ModelId: p.modelID,
+        }, nil
+    }
+
+    func (p *Provider) EvaluateMany(ctx context.Context, req *gestalt.AccessEvaluationsRequest) (*gestalt.AccessEvaluationsResponse, error) {
+        decisions := make([]*gestalt.AccessDecision, 0, len(req.GetRequests()))
+        for _, item := range req.GetRequests() {
+            decision, err := p.Evaluate(ctx, item)
+            if err != nil {
+                return nil, err
+            }
+            decisions = append(decisions, decision)
+        }
+        return &gestalt.AccessEvaluationsResponse{Decisions: decisions}, nil
+    }
+
+    func (p *Provider) SearchResources(context.Context, *gestalt.ResourceSearchRequest) (*gestalt.ResourceSearchResponse, error) {
+        return &gestalt.ResourceSearchResponse{ModelId: p.modelID}, nil
+    }
+
+    func (p *Provider) SearchSubjects(context.Context, *gestalt.SubjectSearchRequest) (*gestalt.SubjectSearchResponse, error) {
+        return &gestalt.SubjectSearchResponse{ModelId: p.modelID}, nil
+    }
+
+    func (p *Provider) SearchActions(context.Context, *gestalt.ActionSearchRequest) (*gestalt.ActionSearchResponse, error) {
+        return &gestalt.ActionSearchResponse{ModelId: p.modelID}, nil
+    }
+
+    func (p *Provider) GetMetadata(context.Context) (*gestalt.AuthorizationMetadata, error) {
+        return &gestalt.AuthorizationMetadata{
+            Capabilities:  []string{"evaluate", "relationships", "models"},
+            ActiveModelId: p.modelID,
+        }, nil
+    }
+
+    func (p *Provider) ReadRelationships(context.Context, *gestalt.ReadRelationshipsRequest) (*gestalt.ReadRelationshipsResponse, error) {
+        return &gestalt.ReadRelationshipsResponse{ModelId: p.modelID}, nil
+    }
+
+    func (p *Provider) WriteRelationships(context.Context, *gestalt.WriteRelationshipsRequest) error {
+        return nil
+    }
+
+    func (p *Provider) GetActiveModel(context.Context) (*gestalt.GetActiveModelResponse, error) {
+        if p.modelID == "" {
+            return &gestalt.GetActiveModelResponse{}, nil
+        }
+        return &gestalt.GetActiveModelResponse{
+            Model: &gestalt.AuthorizationModelRef{Id: p.modelID, Version: "v1"},
+        }, nil
+    }
+
+    func (p *Provider) ListModels(context.Context, *gestalt.ListModelsRequest) (*gestalt.ListModelsResponse, error) {
+        if p.modelID == "" {
+            return &gestalt.ListModelsResponse{}, nil
+        }
+        return &gestalt.ListModelsResponse{
+            Models: []*gestalt.AuthorizationModelRef{{Id: p.modelID, Version: "v1"}},
+        }, nil
+    }
+
+    func (p *Provider) WriteModel(_ context.Context, req *gestalt.WriteModelRequest) (*gestalt.AuthorizationModelRef, error) {
+        if req.GetModel() == nil {
+            return nil, fmt.Errorf("model is required")
+        }
+        p.modelID = "example-model"
+        return &gestalt.AuthorizationModelRef{Id: p.modelID, Version: "v1"}, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Authorization provider implementation is currently exposed through the Go
+    SDK. Python provider or plugin code can still call the configured
+    authorization provider through the `Authorization` host-service client in
+    [Using `Authorization` from provider code](/providers/authorization#using-authorization-from-provider-code).
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Authorization provider implementation is currently exposed through the Go
+    SDK. Rust provider or plugin code can still call the configured
+    authorization provider through the `Authorization` host-service client in
+    [Using `Authorization` from provider code](/providers/authorization#using-authorization-from-provider-code).
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Authorization provider implementation is currently exposed through the Go
+    SDK. TypeScript provider or plugin code can still call the configured
+    authorization provider through the `Authorization` host-service client in
+    [Using `Authorization` from provider code](/providers/authorization#using-authorization-from-provider-code).
+  </Tabs.Tab>
+</Tabs>
+
+### Deploying the provider
+
+Configure a custom authorization provider through the same
+`providers.authorization` and `server.providers.authorization` blocks shown in
+[Configuring `providers.authorization`](/providers/authorization#configuring-providersauthorization).
+For package publishing, use the common flow in
+[Releasing provider packages](/providers#releasing-provider-packages).
 
 ## What to read next
 
@@ -542,5 +731,3 @@ see how these semantics apply to concrete surfaces, read
 [Plugin](/providers/plugins), [Workflow](/providers/workflow), and
 [UI](/providers/ui). For the relationship between authorization and
 credentials, read [External Credentials](/providers/external-credentials).
-For provider implementation details, see
-[Custom Authorization Providers](/custom-providers/authorization).

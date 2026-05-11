@@ -14,7 +14,6 @@ export default {
     display: "children",
   },
   "-- advanced": { type: "separator", title: "Advanced" },
-  "custom-providers": "Custom Providers",
   architecture: "Architecture",
   reference: "Reference",
   troubleshooting: "Troubleshooting",

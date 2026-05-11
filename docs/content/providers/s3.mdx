@@ -211,7 +211,311 @@ can still be locked and prepared with `gestaltd lock` and
 `gestaltd sync --locked`, just like auth, indexeddb, cache, and secrets
 providers.
 
+
 ## Building your own S3 provider
 
-The provider interface, SDK authoring details, and custom release flow live
-under [Custom Providers > S3](/custom-providers/s3).
+### Manifest
+
+An S3 provider manifest declares `kind: s3`:
+
+```yaml
+kind: s3
+source: github.com/acme/gestalt-providers/s3/minio
+version: 0.0.1-alpha.1
+displayName: MinIO S3
+description: S3-compatible object storage provider backed by MinIO.
+spec:
+  configSchemaPath: ./config.schema.json
+```
+
+### Provider interface
+
+Implement the SDK's authored `S3Provider` surface. The SDK adapts this typed
+interface to the underlying gRPC service:
+
+| Method | Purpose |
+| --- | --- |
+| `HeadObject` | Return metadata for one object reference. |
+| `ReadObject` | Stream one object: metadata frame first, then byte frames. |
+| `WriteObject` | Accept one metadata frame followed by byte frames, then return committed metadata. |
+| `DeleteObject` | Delete one object reference. |
+| `ListObjects` | List objects by bucket, prefix, delimiter, and continuation token. |
+| `CopyObject` | Copy an object server-side between object references. |
+| `PresignObject` | Produce a presigned request URL plus required headers. |
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package s3provider
+
+    import (
+      "bytes"
+      "context"
+      "io"
+      "time"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type Provider struct{}
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
+      _ = config
+      return nil
+    }
+
+    func (p *Provider) HeadObject(ctx context.Context, ref gestalt.ObjectRef) (gestalt.ObjectMeta, error) {
+      _ = ctx
+      return gestalt.ObjectMeta{
+        Ref:          ref,
+        ETag:         "",
+        Size:         0,
+        ContentType:  "application/octet-stream",
+        LastModified: time.Now(),
+        Metadata:     map[string]string{},
+      }, nil
+    }
+
+    func (p *Provider) ReadObject(ctx context.Context, ref gestalt.ObjectRef, opts *gestalt.ReadOptions) (gestalt.ObjectMeta, io.ReadCloser, error) {
+      _ = opts
+      meta, err := p.HeadObject(ctx, ref)
+      if err != nil {
+        return gestalt.ObjectMeta{}, nil, err
+      }
+      return meta, io.NopCloser(bytes.NewReader(nil)), nil
+    }
+
+    func (p *Provider) WriteObject(ctx context.Context, ref gestalt.ObjectRef, body io.Reader, opts *gestalt.WriteOptions) (gestalt.ObjectMeta, error) {
+      _ = body
+      _ = opts
+      return p.HeadObject(ctx, ref)
+    }
+
+    func (p *Provider) DeleteObject(context.Context, gestalt.ObjectRef) error {
+      return nil
+    }
+
+    func (p *Provider) ListObjects(context.Context, gestalt.ListOptions) (gestalt.ListPage, error) {
+      return gestalt.ListPage{}, nil
+    }
+
+    func (p *Provider) CopyObject(ctx context.Context, source gestalt.ObjectRef, destination gestalt.ObjectRef, opts *gestalt.CopyOptions) (gestalt.ObjectMeta, error) {
+      _ = source
+      _ = opts
+      return p.HeadObject(ctx, destination)
+    }
+
+    func (p *Provider) PresignObject(context.Context, gestalt.ObjectRef, *gestalt.PresignOptions) (gestalt.PresignResult, error) {
+      return gestalt.PresignResult{
+        URL:       "https://example.invalid/object",
+        Method:    gestalt.PresignMethodGet,
+        ExpiresAt: time.Now().Add(time.Minute),
+        Headers:   map[string]string{},
+      }, nil
+    }
+
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    The Python SDK exposes S3 client helpers for provider code that consumes
+    object storage. New custom S3 provider implementations should use the Go or
+    TypeScript authored provider surface until the Python server-side S3 adapter
+    is promoted to the same level.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::pin::Pin;
+
+    use futures_core::Stream;
+    use gestalt::{self, proto::v1 as proto};
+    use tonic::{Request, Response, Status};
+
+    #[derive(Default)]
+    pub struct MinioS3;
+
+    #[gestalt::async_trait]
+    impl gestalt::S3Provider for MinioS3 {
+        async fn configure(
+            &self,
+            _name: &str,
+            _config: serde_json::Map<String, serde_json::Value>,
+        ) -> gestalt::Result<()> {
+            Ok(())
+        }
+    }
+
+    type ReadObjectStream =
+        Pin<Box<dyn Stream<Item = Result<proto::ReadObjectChunk, Status>> + Send>>;
+
+    #[gestalt::async_trait]
+    impl proto::s3_server::S3 for MinioS3 {
+        type ReadObjectStream = ReadObjectStream;
+
+        async fn head_object(
+            &self,
+            _request: Request<proto::HeadObjectRequest>,
+        ) -> Result<Response<proto::HeadObjectResponse>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn read_object(
+            &self,
+            _request: Request<proto::ReadObjectRequest>,
+        ) -> Result<Response<Self::ReadObjectStream>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn write_object(
+            &self,
+            _request: Request<tonic::Streaming<proto::WriteObjectRequest>>,
+        ) -> Result<Response<proto::WriteObjectResponse>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn delete_object(
+            &self,
+            _request: Request<proto::DeleteObjectRequest>,
+        ) -> Result<Response<()>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn list_objects(
+            &self,
+            _request: Request<proto::ListObjectsRequest>,
+        ) -> Result<Response<proto::ListObjectsResponse>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn copy_object(
+            &self,
+            _request: Request<proto::CopyObjectRequest>,
+        ) -> Result<Response<proto::CopyObjectResponse>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn presign_object(
+            &self,
+            _request: Request<proto::PresignObjectRequest>,
+        ) -> Result<Response<proto::PresignObjectResponse>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+    }
+
+    gestalt::export_s3_provider!(constructor = MinioS3::default);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { PresignMethod, defineS3Provider } from "@valon-technologies/gestalt";
+
+    export const provider = defineS3Provider({
+      async configure(name, config) {
+        void name;
+        void config.endpoint;
+      },
+
+      async headObject(ref) {
+        return {
+          ref,
+          etag: "",
+          size: 0n,
+          contentType: "",
+          lastModified: new Date(),
+          metadata: {},
+          storageClass: "",
+        };
+      },
+
+      async readObject(ref) {
+        return {
+          meta: await this.headObject(ref),
+          body: new Uint8Array(),
+        };
+      },
+
+      async writeObject(ref, body, options) {
+        void body;
+        void options;
+        return await this.headObject(ref);
+      },
+
+      async deleteObject(ref) {
+        void ref;
+      },
+
+      async listObjects(options) {
+        void options;
+        return {
+          objects: [],
+          commonPrefixes: [],
+          nextContinuationToken: "",
+          hasMore: false,
+        };
+      },
+
+      async copyObject(source, destination, options) {
+        void source;
+        void options;
+        return await this.headObject(destination);
+      },
+
+      async presignObject(ref, options) {
+        return {
+          url: `https://example.invalid/${ref.bucket}/${encodeURIComponent(ref.key)}`,
+          method: options?.method ?? PresignMethod.Get,
+          headers: { ...(options?.headers ?? {}) },
+          expiresAt: new Date(Date.now() + 60_000),
+        };
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+`gestalt.S3Provider` adds runtime lifecycle wiring and a `serve()` helper for
+languages that expose the server-side S3 provider surface.
+
+### Plugin access
+
+Plugin-side S3 usage is documented in
+[Using `S3` from a plugin](/providers/s3#using-s3-from-a-plugin). Provider
+authors implement the S3 service surface; Gestalt handles configured plugin
+bindings, SDK sockets, and host-mediated object access URLs.
+
+### Deploying the provider
+
+Custom S3 providers are wired into Gestalt the same way as first-party ones:
+
+```yaml
+providers:
+  s3:
+    assets:
+      source: ./providers/s3/custom/manifest.yaml
+      config:
+        endpoint: http://127.0.0.1:9000
+        region: us-east-1
+
+plugins:
+  media:
+    source: ./plugins/media/manifest.yaml
+    s3:
+      - assets
+```
+
+For the first-party config shape and binding model, see
+[Configuring the first-party S3 provider](/providers/s3#configuring-the-first-party-s3-provider).
+For packaging and published release URLs, see
+[Releasing provider packages](/providers#releasing-provider-packages).
+
+### Implementation notes
+
+- Treat object references as `{bucket, key, version_id}` values, not filesystem paths.
+- Keep reads and writes streaming. Do not require the caller to buffer the full object in memory.
+- Preserve backend metadata that fits the portable model: `etag`, `size`, `content_type`, `last_modified`, `metadata`, and `storage_class`.
+- `CopyObject` conditionals apply to the source object, not the destination object.
+- Map missing objects to `NotFound`, conditional failures to `FailedPrecondition`, and invalid ranges to `OutOfRange` so SDK error mapping stays portable.
+- `PresignObject` should return only caller-required headers. Do not leak transport-generated headers such as `Host`.
+- Implement multipart upload and multipart copy internally when the backend needs them, or reject above the single-request S3 limit explicitly. Do not silently rely on backend-specific `PutObject` / `CopyObject` failures.
+- Plugin-scoped presigning is disabled by the host transport because signed URLs would expose the internal namespace prefix used to isolate plugin data.
