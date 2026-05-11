@@ -649,38 +649,9 @@ source packages use the same release flow without catalog generation. Pass
 `--platform linux/amd64,darwin/arm64` to build explicit targets. Pass `--platform all` in CI release jobs to build the
 full supported platform matrix for source builds.
 
-Executable source plugins declare hosted HTTP routes in the manifest with
-`spec.securitySchemes` and `spec.http`. During local source execution and
-`provider release`, Gestalt preserves those manifest blocks in the effective
-manifest and released archive:
-
-```yaml
-spec:
-  securitySchemes:
-    signed:
-      type: hmac
-      secret:
-        env: REQUEST_SIGNING_SECRET
-      signatureHeader: X-Request-Signature
-      signaturePrefix: v0=
-      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
-      timestampHeader: X-Request-Timestamp
-      maxAgeSeconds: 300
-  http:
-    command:
-      path: /command
-      method: POST
-      security: signed
-      target: handle_command
-      requestBody:
-        required: true
-        content:
-          application/x-www-form-urlencoded: {}
-      ack:
-        status: 200
-        body:
-          status: accepted
-```
+Executable plugin providers can declare hosted HTTP routes in `spec.http`. See
+[Plugin](/providers/plugins#hosted-http-endpoints) for route and security
+scheme examples.
 
 For non-host Python targets, point Gestalt at a matching interpreter with
 `GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as
