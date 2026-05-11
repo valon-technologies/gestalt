@@ -31,43 +31,19 @@ Each provider kind has its own documentation page. Those pages describe the
 configuration shape, runtime model, SDK examples, and custom provider contract
 for that kind:
 
-<Cards>
-  <Cards.Card title="Authentication" href="/providers/authentication">
-    Platform login providers.
-  </Cards.Card>
-  <Cards.Card title="Authorization" href="/providers/authorization">
-    Subject authorization providers.
-  </Cards.Card>
-  <Cards.Card title="External Credentials" href="/providers/external-credentials">
-    Subject-scoped credential storage.
-  </Cards.Card>
-  <Cards.Card title="Agent" href="/providers/agent">
-    Global agent-provider pool and selection model.
-  </Cards.Card>
-  <Cards.Card title="Cache" href="/providers/cache">
-    Plugin-bound cache backends.
-  </Cards.Card>
-  <Cards.Card title="IndexedDB" href="/providers/indexeddb">
-    Storage backends.
-  </Cards.Card>
-  <Cards.Card title="Plugin" href="/providers/plugins">
-    Choosing and configuring plugin providers.
-  </Cards.Card>
-  <Cards.Card title="Runtime" href="/providers/runtime">
-    Hosted execution backends for executable plugins.
-  </Cards.Card>
-  <Cards.Card title="S3" href="/providers/s3">
-    S3-compatible object store providers.
-  </Cards.Card>
-  <Cards.Card title="Secret" href="/providers/secrets">
-    Built-in and external secret managers.
-  </Cards.Card>
-  <Cards.Card title="UI" href="/providers/ui">
-    Public UI bundles.
-  </Cards.Card>
-  <Cards.Card title="Workflow" href="/providers/workflow">
-    Workflow run, schedule, and event-trigger backends.
-  </Cards.Card>
+<Cards num={6} className="provider-kind-cards">
+  <Cards.Card title="Authentication" href="/providers/authentication" />
+  <Cards.Card title="Authorization" href="/providers/authorization" />
+  <Cards.Card title="External Credentials" href="/providers/external-credentials" />
+  <Cards.Card title="Agent" href="/providers/agent" />
+  <Cards.Card title="Cache" href="/providers/cache" />
+  <Cards.Card title="IndexedDB" href="/providers/indexeddb" />
+  <Cards.Card title="Plugin" href="/providers/plugins" />
+  <Cards.Card title="Runtime" href="/providers/runtime" />
+  <Cards.Card title="S3" href="/providers/s3" />
+  <Cards.Card title="Secret" href="/providers/secrets" />
+  <Cards.Card title="UI" href="/providers/ui" />
+  <Cards.Card title="Workflow" href="/providers/workflow" />
 </Cards>
 
 For the canonical manifest schema, use
