@@ -2,7 +2,7 @@
 asIndexPage: true
 ---
 
-import { Tabs } from 'nextra/components'
+import { Cards, Tabs } from 'nextra/components'
 
 # Providers
 
@@ -31,18 +31,44 @@ Each provider kind has its own documentation page. Those pages describe the
 configuration shape, runtime model, SDK examples, and custom provider contract
 for that kind:
 
-- [Authentication](/providers/authentication): platform login providers
-- [Authorization](/providers/authorization): subject authorization providers
-- [External Credentials](/providers/external-credentials): subject-scoped credential storage
-- [Agent](/providers/agent): global agent-provider pool and selection model
-- [Cache](/providers/cache): plugin-bound cache backends
-- [IndexedDB](/providers/indexeddb): storage backends
-- [Plugin](/providers/plugins): choosing and configuring plugin providers
-- [Runtime](/providers/runtime): hosted execution backends for executable plugins
-- [S3](/providers/s3): S3-compatible object store providers
-- [Secret](/providers/secrets): built-in and external secret managers
-- [UI](/providers/ui): public UI bundles
-- [Workflow](/providers/workflow): workflow run, schedule, and event-trigger backends
+<Cards>
+  <Cards.Card title="Authentication" href="/providers/authentication">
+    Platform login providers.
+  </Cards.Card>
+  <Cards.Card title="Authorization" href="/providers/authorization">
+    Subject authorization providers.
+  </Cards.Card>
+  <Cards.Card title="External Credentials" href="/providers/external-credentials">
+    Subject-scoped credential storage.
+  </Cards.Card>
+  <Cards.Card title="Agent" href="/providers/agent">
+    Global agent-provider pool and selection model.
+  </Cards.Card>
+  <Cards.Card title="Cache" href="/providers/cache">
+    Plugin-bound cache backends.
+  </Cards.Card>
+  <Cards.Card title="IndexedDB" href="/providers/indexeddb">
+    Storage backends.
+  </Cards.Card>
+  <Cards.Card title="Plugin" href="/providers/plugins">
+    Choosing and configuring plugin providers.
+  </Cards.Card>
+  <Cards.Card title="Runtime" href="/providers/runtime">
+    Hosted execution backends for executable plugins.
+  </Cards.Card>
+  <Cards.Card title="S3" href="/providers/s3">
+    S3-compatible object store providers.
+  </Cards.Card>
+  <Cards.Card title="Secret" href="/providers/secrets">
+    Built-in and external secret managers.
+  </Cards.Card>
+  <Cards.Card title="UI" href="/providers/ui">
+    Public UI bundles.
+  </Cards.Card>
+  <Cards.Card title="Workflow" href="/providers/workflow">
+    Workflow run, schedule, and event-trigger backends.
+  </Cards.Card>
+</Cards>
 
 For the canonical manifest schema, use
 [Provider Manifests](/reference/plugin-manifests). For the full server and
