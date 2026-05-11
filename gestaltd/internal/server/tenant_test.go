@@ -41,7 +41,7 @@ func TestTenantScopeAttachedBeforeAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/v1/integrations: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -77,7 +77,7 @@ func TestTenantMiddlewareRejectsUnknownTenantHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/v1/auth/info: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
 	}
@@ -102,7 +102,7 @@ func TestTenantMiddlewareSkipsHealth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /health: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -143,7 +143,7 @@ func TestTenantMiddlewareSkipsAdminRoutes(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GET %s: %v", tc.path, err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode == http.StatusNotFound {
 				t.Fatalf("status = 404, tenant middleware should not gate %s", tc.path)
 			}
