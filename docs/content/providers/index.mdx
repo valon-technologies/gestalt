@@ -175,6 +175,7 @@ The command writes a package source and updates the lockfile by default:
 server:
   providers:
     indexeddb: main
+    authentication: oidc
 
 providers:
   authentication:
@@ -189,43 +190,7 @@ providers:
             provider: default
             name: oidc-client-secret
 
-  indexeddb:
-    main:
-      source:
-        package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-      config:
-        dsn: ${DATABASE_URL}
-
-  cache:
-    session:
-      source:
-        package: github.com/valon-technologies/gestalt-providers/cache/valkey
-      config:
-        address: ${VALKEY_ADDR}
-
-  s3:
-    assets:
-      source: ./providers/s3/minio/manifest.yaml
-      config:
-        endpoint: http://127.0.0.1:9000
-        region: us-east-1
-        accessKeyId: ${MINIO_ROOT_USER}
-        secretAccessKey:
-          secret:
-            provider: default
-            name: minio-root-password
-
-plugins:
-  github:
-    source:
-      package: github.com/valon-technologies/gestalt-providers/plugins/github
-    cache:
-      - session
-
-  media:
-    source: ./plugins/media/manifest.yaml
-    s3:
-      - assets
+  # Other provider entries omitted.
 ```
 
 ### Add providers by kind
