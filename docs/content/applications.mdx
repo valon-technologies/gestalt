@@ -32,6 +32,8 @@ workspace-review/
     provider.ts
   ui/
     manifest.yaml
+    src/
+      app.tsx
     out/
       index.html
       app.js
@@ -58,9 +60,12 @@ spec:
     path: ../ui/manifest.yaml
 ```
 
-The UI bundle is static assets. Route rules are required when the mounted
-plugin binds an `authorizationPolicy`. For UI package details, see
-[Providers > UI](/providers/ui).
+The UI bundle is static assets. Its `assetRoot` points at built browser files,
+not at the frontend source tree. The directory name is not special; `out`,
+`dist`, or `build` all work as long as the directory contains static assets
+such as `index.html`, JavaScript, CSS, and images. Route rules are required
+when the mounted plugin binds an `authorizationPolicy`. For UI package details,
+see [Providers > UI](/providers/ui).
 
 ```yaml
 kind: ui
