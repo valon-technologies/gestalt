@@ -125,22 +125,25 @@ plugins:
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
+    use gestalt::{InvokeOptions, Request};
+    use serde_json::{json, Value};
+
     async fn load_linked_issue(
-        request: &gestalt::Request,
+        request: &Request,
         issue_number: i64,
-    ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    ) -> Result<Value, Box<dyn std::error::Error>> {
         let mut invoker = request.invoker().await?;
 
         let result = invoker
             .invoke(
                 "github",
                 "issues.get",
-                serde_json::json!({
+                json!({
                     "owner": "acme",
                     "repo": "roadmap",
                     "number": issue_number,
                 }),
-                Some(gestalt::InvokeOptions {
+                Some(InvokeOptions {
                     connection: "default".to_string(),
                     idempotency_key: request.idempotency_key.clone(),
                     ..Default::default()
