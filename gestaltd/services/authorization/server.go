@@ -114,6 +114,16 @@ func (s *authorizationProviderServer) GetMetadata(ctx context.Context, _ *emptyp
 	return resp, nil
 }
 
+func (s *authorizationProviderServer) WriteRelationships(ctx context.Context, req *proto.WriteRelationshipsRequest) (*emptypb.Empty, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "request is required")
+	}
+	if err := s.provider.WriteRelationships(ctx, req); err != nil {
+		return nil, authorizationProviderRPCError("write relationships", err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
 func authorizationHostCapabilities(provider core.AuthorizationProvider) []string {
 	capabilities := []string{capabilitySearchSubjects}
 	if _, ok := provider.(core.AuthorizationProviderEffectiveSearch); ok {

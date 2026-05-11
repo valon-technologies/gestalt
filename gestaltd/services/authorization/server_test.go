@@ -2,13 +2,19 @@ package authorization
 
 import (
 	"context"
+	"net"
 	"reflect"
+	"sync"
 	"testing"
 
 	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 func TestRemoteAuthorizationProviderOptionalCapabilitiesFollowMetadata(t *testing.T) {
@@ -67,6 +73,99 @@ func TestProviderServerPreservesOptionalStatusCodes(t *testing.T) {
 	if got := status.Code(err); got != codes.Unimplemented {
 		t.Fatalf("Expand code = %v, want %v (err=%v)", got, codes.Unimplemented, err)
 	}
+}
+
+func TestProviderServerWriteRelationshipsForwardsRequest(t *testing.T) {
+	t.Parallel()
+
+	provider := &recordingWriteAuthorizationProvider{
+		fakeAuthorizationProvider: fakeAuthorizationProvider{name: "fake"},
+	}
+	client := newAuthorizationProviderTestClient(t, NewProviderServer(provider))
+	req := &proto.WriteRelationshipsRequest{
+		ModelId: "authz-model-1",
+		Writes: []*proto.Relationship{{
+			Subject: &proto.Subject{Type: "subject", Id: "user:shared"},
+			Target: &proto.RelationshipTarget{
+				Kind: &proto.RelationshipTarget_Subject{
+					Subject: &proto.Subject{Type: "subject", Id: "user:shared"},
+				},
+			},
+			Relation: "editor",
+			Resource: &proto.Resource{Type: "agent_session", Id: "session-123"},
+		}},
+		Deletes: []*proto.RelationshipKey{{
+			Target: &proto.RelationshipTarget{
+				Kind: &proto.RelationshipTarget_SubjectSet{
+					SubjectSet: &proto.SubjectSet{
+						Resource: &proto.Resource{Type: "slack_channel", Id: "C123"},
+						Relation: "member",
+					},
+				},
+			},
+			Relation: "viewer",
+			Resource: &proto.Resource{Type: "agent_session", Id: "session-old"},
+		}},
+	}
+
+	if _, err := client.WriteRelationships(context.Background(), req); err != nil {
+		t.Fatalf("WriteRelationships: %v", err)
+	}
+	if got := provider.writeRequest(); !gproto.Equal(got, req) {
+		t.Fatalf("forwarded request = %#v, want %#v", got, req)
+	}
+}
+
+func TestProviderServerWriteRelationshipsPreservesStatusCodes(t *testing.T) {
+	t.Parallel()
+
+	provider := &recordingWriteAuthorizationProvider{
+		fakeAuthorizationProvider: fakeAuthorizationProvider{name: "fake"},
+		err:                       status.Error(codes.PermissionDenied, "write denied"),
+	}
+	client := newAuthorizationProviderTestClient(t, NewProviderServer(provider))
+
+	_, err := client.WriteRelationships(context.Background(), &proto.WriteRelationshipsRequest{})
+	if got := status.Code(err); got != codes.PermissionDenied {
+		t.Fatalf("WriteRelationships code = %v, want %v (err=%v)", got, codes.PermissionDenied, err)
+	}
+}
+
+func TestProviderServerWriteRelationshipsRejectsNilRequest(t *testing.T) {
+	t.Parallel()
+
+	server := NewProviderServer(fakeAuthorizationProvider{name: "fake"})
+	_, err := server.WriteRelationships(context.Background(), nil)
+	if got := status.Code(err); got != codes.InvalidArgument {
+		t.Fatalf("WriteRelationships(nil) code = %v, want %v (err=%v)", got, codes.InvalidArgument, err)
+	}
+}
+
+func newAuthorizationProviderTestClient(t *testing.T, server proto.AuthorizationProviderServer) proto.AuthorizationProviderClient {
+	t.Helper()
+
+	lis := bufconn.Listen(1024 * 1024)
+	srv := grpc.NewServer()
+	proto.RegisterAuthorizationProviderServer(srv, server)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return proto.NewAuthorizationProviderClient(conn)
 }
 
 type fakeAuthorizationProvider struct {
@@ -136,4 +235,32 @@ func (p fakeEffectiveAuthorizationProvider) EffectiveSearchSubjects(context.Cont
 
 func (p fakeEffectiveAuthorizationProvider) Expand(context.Context, *core.ExpandRequest) (*core.ExpandResponse, error) {
 	return nil, p.err
+}
+
+type recordingWriteAuthorizationProvider struct {
+	fakeAuthorizationProvider
+
+	mu  sync.Mutex
+	req *proto.WriteRelationshipsRequest
+	err error
+}
+
+func (p *recordingWriteAuthorizationProvider) WriteRelationships(_ context.Context, req *core.WriteRelationshipsRequest) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if req != nil {
+		p.req = gproto.Clone(req).(*proto.WriteRelationshipsRequest)
+	} else {
+		p.req = nil
+	}
+	return p.err
+}
+
+func (p *recordingWriteAuthorizationProvider) writeRequest() *proto.WriteRelationshipsRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.req == nil {
+		return nil
+	}
+	return gproto.Clone(p.req).(*proto.WriteRelationshipsRequest)
 }
