@@ -90,7 +90,7 @@ func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	created, err := client.CreateSchedule(context.Background(), &proto.WorkflowManagerCreateScheduleRequest{
+	created, err := client.CreateSchedule(context.Background(), gestalt.WorkflowManagerCreateScheduleInput{
 		ProviderName:   "managed",
 		Cron:           "*/5 * * * *",
 		IdempotencyKey: "workflow-schedule-key-go",
@@ -149,34 +149,25 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	}
 	defer func() { _ = client.Close() }()
 
-	signalPayload, err := gestalt.StructFromAny(map[string]any{"ok": true})
-	if err != nil {
-		t.Fatalf("StructFromAny: %v", err)
-	}
 	signalExtensions, err := gestalt.ValuesFromMap(map[string]any{"attempt": 1})
 	if err != nil {
 		t.Fatalf("ValuesFromMap: %v", err)
 	}
 	createdAtValue := time.Date(1969, 12, 31, 23, 59, 59, 999_000_000, time.UTC)
-	createdAt := timestamppb.New(createdAtValue)
-	resp, err := client.SignalOrStartRun(context.Background(), &proto.WorkflowManagerSignalOrStartRunRequest{
+	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRunInput{
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
-		Target: &proto.BoundWorkflowTarget{
-			Kind: &proto.BoundWorkflowTarget_Agent{
-				Agent: &proto.BoundWorkflowAgentTarget{
-					ProviderName: "simple",
-					Model:        "gpt-5.5",
-					Prompt:       "Respond in thread.",
-				},
-			},
-		},
+		Target: &gestalt.BoundWorkflowTargetInput{Agent: &gestalt.BoundWorkflowAgentTargetInput{
+			ProviderName: "simple",
+			Model:        "gpt-5.5",
+			Prompt:       "Respond in thread.",
+		}},
 		IdempotencyKey: "slack-event-123",
-		Signal: &proto.WorkflowSignal{
+		Signal: &gestalt.WorkflowSignalInput{
 			Name:           "slack.message",
 			IdempotencyKey: "slack-event-123",
-			Payload:        signalPayload,
-			CreatedAt:      createdAt,
+			Payload:        map[string]any{"ok": true},
+			CreatedAt:      createdAtValue,
 		},
 	})
 	if err != nil {
@@ -238,7 +229,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	}
 }
 
-func TestTransport_WorkflowManagerSignalOrStartRunWithInput(t *testing.T) {
+func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -264,7 +255,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunWithInput(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	createdAt := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
-	resp, err := client.SignalOrStartRunWithInput(context.Background(), gestalt.WorkflowManagerSignalOrStartRunInput{
+	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRunInput{
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
 		Target: &gestalt.BoundWorkflowTargetInput{Agent: &gestalt.BoundWorkflowAgentTargetInput{
@@ -284,7 +275,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunWithInput(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("SignalOrStartRunWithInput: %v", err)
+		t.Fatalf("SignalOrStartRun: %v", err)
 	}
 	if resp.GetProviderName() != "local" || resp.GetRun().GetId() != "run-1" || !resp.GetStartedRun() {
 		t.Fatalf("response = %#v", resp)

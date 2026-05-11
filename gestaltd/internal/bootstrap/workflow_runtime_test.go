@@ -36,10 +36,10 @@ type funcInvoker struct {
 }
 
 func testWorkflowPluginTarget(pluginName, operation string) coreworkflow.Target {
-	return testWorkflowPluginTargetWithInput(pluginName, operation, "", "", nil)
+	return testWorkflowPluginTargetWithPayload(pluginName, operation, "", "", nil)
 }
 
-func testWorkflowPluginTargetWithInput(pluginName, operation, connection, instance string, input map[string]any) coreworkflow.Target {
+func testWorkflowPluginTargetWithPayload(pluginName, operation, connection, instance string, input map[string]any) coreworkflow.Target {
 	return coreworkflow.Target{
 		Plugin: &coreworkflow.PluginTarget{
 			PluginName: pluginName,
@@ -386,7 +386,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	req := coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		RunID:        "run-123",
-		Target: testWorkflowPluginTargetWithInput(
+		Target: testWorkflowPluginTargetWithPayload(
 			"roadmap",
 			"sync",
 			"analytics",
@@ -1356,7 +1356,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	target := testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"})
+	target := testWorkflowPluginTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"})
 	target.Plugin.CredentialMode = core.ConnectionModeNone
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
@@ -1653,7 +1653,7 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	if err != nil {
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
-	target := testWorkflowPluginTargetWithInput("roadmap", "sync", "analytics", "tenant-a", nil)
+	target := testWorkflowPluginTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", nil)
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-denied",
@@ -1736,7 +1736,7 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 	services := testutil.NewStubServices(t)
 	ctx := context.Background()
 
-	target := testWorkflowPluginTargetWithInput("roadmap", "export", "analytics", "tenant-a", nil)
+	target := testWorkflowPluginTargetWithPayload("roadmap", "export", "analytics", "tenant-a", nil)
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{
 		ID:           "exec-ref-123",

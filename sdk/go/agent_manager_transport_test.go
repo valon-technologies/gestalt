@@ -84,7 +84,7 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	session, err := client.CreateSession(context.Background(), &proto.AgentManagerCreateSessionRequest{
+	session, err := client.CreateSession(context.Background(), gestalt.AgentManagerCreateSessionInput{
 		ProviderName: "managed",
 		Model:        "gpt-test",
 		ClientRef:    "cli-session-1",
@@ -99,8 +99,8 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("session id = %q, want %q", session.GetId(), "session-1")
 	}
 
-	turn, err := client.CreateTurn(context.Background(), &proto.AgentManagerCreateTurnRequest{
-		SessionId: "session-1",
+	turn, err := client.CreateTurn(context.Background(), gestalt.AgentManagerCreateTurnInput{
+		SessionID: "session-1",
 		Model:     "gpt-test",
 	})
 	if err != nil {
@@ -141,7 +141,7 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	}
 }
 
-func TestTransport_AgentManagerCreateTurnWithInput(t *testing.T) {
+func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestTransport_AgentManagerCreateTurnWithInput(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	turn, err := client.CreateTurnWithInput(context.Background(), gestalt.AgentManagerCreateTurnInput{
+	turn, err := client.CreateTurn(context.Background(), gestalt.AgentManagerCreateTurnInput{
 		SessionID: "session-1",
 		Model:     "gpt-test",
 		Messages: []gestalt.AgentMessageInput{{
@@ -188,7 +188,7 @@ func TestTransport_AgentManagerCreateTurnWithInput(t *testing.T) {
 		ModelOptions:   map[string]any{"temperature": 0},
 	})
 	if err != nil {
-		t.Fatalf("CreateTurnWithInput: %v", err)
+		t.Fatalf("CreateTurn: %v", err)
 	}
 	if turn.GetId() != "turn-1" {
 		t.Fatalf("turn id = %q, want turn-1", turn.GetId())

@@ -418,7 +418,7 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
         }
         defer agents.Close()
 
-        session, err := agents.CreateSession(ctx, &gestalt.AgentManagerCreateSessionRequest{
+        session, err := agents.CreateSession(ctx, gestalt.AgentManagerCreateSessionInput{
             ProviderName: "simple",
             Model:        "fast",
             ClientRef:    "roadmap-risk",
@@ -427,14 +427,14 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
             return AgentSummary{}, err
         }
 
-        turn, err := agents.CreateTurn(ctx, &gestalt.AgentManagerCreateTurnRequest{
-            SessionId: session.GetId(),
+        turn, err := agents.CreateTurn(ctx, gestalt.AgentManagerCreateTurnInput{
+            SessionID: session.GetId(),
             Model:     "fast",
-            Messages: []*gestalt.AgentMessage{{
+            Messages: []gestalt.AgentMessageInput{{
                 Role: "user",
                 Text: "Summarize the latest roadmap risk.",
             }},
-            ToolRefs: []*gestalt.AgentToolRef{{
+            ToolRefs: []gestalt.AgentToolRefInput{{
                 Plugin:    "roadmap",
                 Operation: "sync",
             }},
@@ -443,8 +443,8 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
             return AgentSummary{}, err
         }
 
-        events, err := agents.ListTurnEvents(ctx, &gestalt.AgentManagerListTurnEventsRequest{
-            TurnId: turn.GetId(),
+        events, err := agents.ListTurnEvents(ctx, gestalt.AgentManagerListTurnEventsInput{
+            TurnID: turn.GetId(),
             Limit:  100,
         })
         if err != nil {
@@ -463,17 +463,17 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
     ```python
     from gestalt import (
         Request,
-        AgentManagerCreateSessionRequest,
-        AgentManagerCreateTurnRequest,
-        AgentMessage,
-        AgentToolRef,
-        AgentManagerListTurnEventsRequest,
+        AgentManagerCreateSessionInput,
+        AgentManagerCreateTurnInput,
+        AgentMessageInput,
+        AgentToolRefInput,
+        AgentManagerListTurnEventsInput,
     )
 
     def summarize_with_agent(request: Request) -> dict[str, object]:
         with request.agent_manager() as agents:
             session = agents.create_session(
-                AgentManagerCreateSessionRequest(
+                AgentManagerCreateSessionInput(
                     provider_name="simple",
                     model="fast",
                     client_ref="roadmap-risk",
@@ -481,23 +481,23 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
             )
 
             turn = agents.create_turn(
-                AgentManagerCreateTurnRequest(
+                AgentManagerCreateTurnInput(
                     session_id=session.id,
                     model="fast",
                     messages=[
-                        AgentMessage(
+                        AgentMessageInput(
                             role="user",
                             text="Summarize the latest roadmap risk.",
                         )
                     ],
                     tool_refs=[
-                        AgentToolRef(plugin="roadmap", operation="sync")
+                        AgentToolRefInput(plugin="roadmap", operation="sync")
                     ],
                 )
             )
 
             events = agents.list_turn_events(
-                AgentManagerListTurnEventsRequest(
+                AgentManagerListTurnEventsInput(
                     turn_id=turn.id,
                     limit=100,
                 )
@@ -513,8 +513,8 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
   <Tabs.Tab>
     ```rust
     use gestalt::{
-        AgentManagerCreateSessionRequest, AgentManagerCreateTurnRequest,
-        AgentManagerListTurnEventsRequest, AgentMessage, AgentToolRef,
+        AgentManagerCreateSessionInput, AgentManagerCreateTurnInput,
+        AgentManagerListTurnEventsInput, AgentMessageInput, AgentToolRefInput,
     };
 
     struct AgentSummary {
@@ -529,7 +529,7 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
         let mut agents = request.agent_manager().await?;
 
         let session = agents
-            .create_session(AgentManagerCreateSessionRequest {
+            .create_session(AgentManagerCreateSessionInput {
                 provider_name: "simple".to_string(),
                 model: "fast".to_string(),
                 client_ref: "roadmap-risk".to_string(),
@@ -538,15 +538,15 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
             .await?;
 
         let turn = agents
-            .create_turn(AgentManagerCreateTurnRequest {
+            .create_turn(AgentManagerCreateTurnInput {
                 session_id: session.id,
                 model: "fast".to_string(),
-                messages: vec![AgentMessage {
+                messages: vec![AgentMessageInput {
                     role: "user".to_string(),
                     text: "Summarize the latest roadmap risk.".to_string(),
                     ..Default::default()
                 }],
-                tool_refs: vec![AgentToolRef {
+                tool_refs: vec![AgentToolRefInput {
                     plugin: "roadmap".to_string(),
                     operation: "sync".to_string(),
                     ..Default::default()
@@ -556,7 +556,7 @@ the `GESTALT_AGENT_MANAGER_SOCKET` injected by `gestaltd`.
             .await?;
 
         let events = agents
-            .list_turn_events(AgentManagerListTurnEventsRequest {
+            .list_turn_events(AgentManagerListTurnEventsInput {
                 turn_id: turn.id.clone(),
                 limit: 100,
                 ..Default::default()
@@ -742,33 +742,24 @@ signals instead of creating duplicate runs.
         }
         defer workflows.Close()
 
-        target, err := gestalt.NewBoundWorkflowTarget(gestalt.BoundWorkflowTargetInput{
-            Agent: &gestalt.BoundWorkflowAgentTargetInput{
-                ProviderName: "simple",
-                Model:        "fast",
-                Prompt:       "Summarize the updated roadmap item.",
-                ToolRefs: []*gestalt.AgentToolRef{{
-                    Plugin:    "roadmap",
-                    Operation: "items.get",
-                }},
-            },
-        })
-        if err != nil {
-            return "", err
-        }
-        signal, err := gestalt.NewWorkflowSignal(gestalt.WorkflowSignalInput{
-            Name:           "roadmap.item.updated",
-            IdempotencyKey: "roadmap-item-updated:" + itemID,
-        })
-        if err != nil {
-            return "", err
-        }
-
-        queued, err := workflows.SignalOrStartRun(ctx, &gestalt.WorkflowManagerSignalOrStartRunRequest{
+        queued, err := workflows.SignalOrStartRun(ctx, gestalt.WorkflowManagerSignalOrStartRunInput{
             ProviderName: "local",
             WorkflowKey:  "roadmap-summary:" + itemID,
-            Target:       target,
-            Signal:       signal,
+            Target: &gestalt.BoundWorkflowTargetInput{
+                Agent: &gestalt.BoundWorkflowAgentTargetInput{
+                    ProviderName: "simple",
+                    Model:        "fast",
+                    Prompt:       "Summarize the updated roadmap item.",
+                    ToolRefInputs: []gestalt.AgentToolRefInput{{
+                        Plugin:    "roadmap",
+                        Operation: "items.get",
+                    }},
+                },
+            },
+            Signal: &gestalt.WorkflowSignalInput{
+                Name:           "roadmap.item.updated",
+                IdempotencyKey: "roadmap-item-updated:" + itemID,
+            },
         })
         if err != nil {
             return "", err
@@ -781,33 +772,33 @@ signals instead of creating duplicate runs.
     ```python
     from gestalt import (
         Request,
-        WorkflowManagerSignalOrStartRunRequest,
-        BoundWorkflowTarget,
-        BoundWorkflowAgentTarget,
-        AgentToolRef,
-        WorkflowSignal,
+        WorkflowManagerSignalOrStartRunInput,
+        BoundWorkflowTargetInput,
+        BoundWorkflowAgentTargetInput,
+        AgentToolRefInput,
+        WorkflowSignalInput,
     )
 
     def enqueue_agent_workflow(request: Request, item_id: str) -> str:
         with request.workflow_manager() as workflows:
             queued = workflows.signal_or_start_run(
-                WorkflowManagerSignalOrStartRunRequest(
+                WorkflowManagerSignalOrStartRunInput(
                     provider_name="local",
                     workflow_key=f"roadmap-summary:{item_id}",
-                    target=BoundWorkflowTarget(
-                        agent=BoundWorkflowAgentTarget(
+                    target=BoundWorkflowTargetInput(
+                        agent=BoundWorkflowAgentTargetInput(
                             provider_name="simple",
                             model="fast",
                             prompt="Summarize the updated roadmap item.",
                             tool_refs=[
-                                AgentToolRef(
+                                AgentToolRefInput(
                                     plugin="roadmap",
                                     operation="items.get",
                                 )
                             ],
                         )
                     ),
-                    signal=WorkflowSignal(
+                    signal=WorkflowSignalInput(
                         name="roadmap.item.updated",
                         idempotency_key=f"roadmap-item-updated:{item_id}",
                     ),
@@ -820,8 +811,8 @@ signals instead of creating duplicate runs.
   <Tabs.Tab>
     ```rust
     use gestalt::{
-        AgentToolRef, BoundWorkflowAgentTargetInput, BoundWorkflowTargetInput,
-        WorkflowManagerSignalOrStartRunRequest, WorkflowSignalInput,
+        AgentToolRefInput, BoundWorkflowAgentTargetInput, BoundWorkflowTargetInput,
+        WorkflowManagerSignalOrStartRunInput, WorkflowSignalInput,
     };
 
     async fn enqueue_agent_workflow(
@@ -829,32 +820,29 @@ signals instead of creating duplicate runs.
         item_id: &str,
     ) -> Result<String, Box<dyn std::error::Error>> {
         let mut workflows = request.workflow_manager().await?;
-        let target = gestalt::new_bound_workflow_target(BoundWorkflowTargetInput {
-            agent: Some(BoundWorkflowAgentTargetInput {
-                provider_name: "simple".to_string(),
-                model: "fast".to_string(),
-                prompt: "Summarize the updated roadmap item.".to_string(),
-                tool_refs: vec![AgentToolRef {
-                    plugin: "roadmap".to_string(),
-                    operation: "items.get".to_string(),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }),
-            ..Default::default()
-        })?;
-        let signal = gestalt::new_workflow_signal(WorkflowSignalInput {
-            name: "roadmap.item.updated".to_string(),
-            idempotency_key: format!("roadmap-item-updated:{item_id}"),
-            ..Default::default()
-        })?;
 
         let queued = workflows
-            .signal_or_start_run(WorkflowManagerSignalOrStartRunRequest {
+            .signal_or_start_run(WorkflowManagerSignalOrStartRunInput {
                 provider_name: "local".to_string(),
                 workflow_key: format!("roadmap-summary:{item_id}"),
-                target: Some(target),
-                signal: Some(signal),
+                target: Some(BoundWorkflowTargetInput::Agent(
+                    BoundWorkflowAgentTargetInput {
+                        provider_name: "simple".to_string(),
+                        model: "fast".to_string(),
+                        prompt: "Summarize the updated roadmap item.".to_string(),
+                        tool_ref_inputs: vec![AgentToolRefInput {
+                            plugin: "roadmap".to_string(),
+                            operation: "items.get".to_string(),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    },
+                )),
+                signal: Some(WorkflowSignalInput {
+                    name: "roadmap.item.updated".to_string(),
+                    idempotency_key: format!("roadmap-item-updated:{item_id}"),
+                    ..Default::default()
+                }),
                 ..Default::default()
             })
             .await?;
@@ -865,7 +853,12 @@ signals instead of creating duplicate runs.
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { WorkflowManager, type Request } from "@valon-technologies/gestalt";
+    import {
+      WorkflowManager,
+      boundWorkflowTarget,
+      workflowSignal,
+      type Request,
+    } from "@valon-technologies/gestalt";
 
     export async function enqueueAgentWorkflow(request: Request, itemId: string) {
       const workflows = new WorkflowManager(request);
@@ -873,26 +866,23 @@ signals instead of creating duplicate runs.
       const queued = await workflows.signalOrStartRun({
         providerName: "local",
         workflowKey: `roadmap-summary:${itemId}`,
-        target: {
-          kind: {
-            case: "agent",
-            value: {
-              providerName: "simple",
-              model: "fast",
-              prompt: "Summarize the updated roadmap item.",
-              toolRefs: [
-                {
-                  plugin: "roadmap",
-                  operation: "items.get",
-                },
-              ],
-            },
+        target: boundWorkflowTarget({
+          agent: {
+            providerName: "simple",
+            model: "fast",
+            prompt: "Summarize the updated roadmap item.",
+            toolRefs: [
+              {
+                plugin: "roadmap",
+                operation: "items.get",
+              },
+            ],
           },
-        },
-        signal: {
+        }),
+        signal: workflowSignal({
           name: "roadmap.item.updated",
           idempotencyKey: `roadmap-item-updated:${itemId}`,
-        },
+        }),
       });
 
       return queued.run?.id ?? "";
