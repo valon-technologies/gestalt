@@ -12,11 +12,10 @@ A plugin package includes a manifest that defines metadata, connections, and
 optional passthrough API surfaces. Some plugins are fully executable, some are
 fully declarative, and some are hybrid packages that combine both models.
 
-From a deployment point of view, `source` chooses the package, `config`
-passes provider-specific settings such as OAuth app credentials,
-`allowedOperations` publishes only part of a large catalog,
-`egress.allowedHosts` declares outbound egress policy, and `runtime` opts an
-executable plugin into hosted execution.
+From a deployment point of view, `source` chooses the package and `config`
+passes provider-specific settings such as OAuth app credentials. Dedicated
+sections below cover invocation authorization, connections, runtime placement,
+operation filtering, egress policy, and local development.
 
 If the manifest enables MCP, the same operations are also exposed through the
 server's `/mcp` endpoint.
@@ -225,33 +224,10 @@ plugins:
     source: ./plugins/support/manifest.yaml
 ```
 
-Hosted HTTP endpoints, such as webhooks and Slack slash-command routes, are
-declared by the plugin package in its manifest. Server config selects the
-package and provides deployment-specific settings; the mounted URL is built
-from the configured plugin key and the binding path. For example, a
-`plugins.slack` entry with a binding path of `/commands/support` is served at
-`/api/v1/slack/commands/support`.
-
-Use `plugins.<name>.securitySchemes` or `plugins.<name>.http` only when the
-deployment needs to override package-provided hosted HTTP metadata or add a
-deployment-local binding. This example overrides fields on package-defined
-metadata:
-
-```yaml
-plugins:
-  slack:
-    source: https://artifacts.example.com/plugin/slack/v1.2.3/provider-release.yaml
-    securitySchemes:
-      slack_signed:
-        secret:
-          env: SLACK_SIGNING_SECRET
-    http:
-      support_command:
-        path: /commands/support
-```
-
-By default, executable plugins run on the same machine as `gestaltd`. A plugin
-only uses a hosted runtime when it sets `runtime`.
+Hosted HTTP route overrides are deployment-specific; see
+[Hosted HTTP endpoints](#hosted-http-endpoints). By default, executable plugins
+run on the same machine as `gestaltd`; see [Choosing a runtime](#choosing-a-runtime)
+when a plugin should run in a hosted runtime.
 
 ## Choosing a runtime
 
@@ -946,13 +922,14 @@ export async function saveItem(item) {
 }
 ```
 
-Run the app locally from the plugin directory. `provider dev` detects the
-sibling UI manifest and mounts it with the same synthesized local config:
+Run the app locally from the plugin directory:
 
 ```sh
 gestaltd provider validate --path ./workspace-review/plugin --config ./dev.yaml
 gestaltd provider dev --path ./workspace-review/plugin --config ./dev.yaml
 ```
+
+For local UI detection and config overlays, see [Testing locally](#testing-locally).
 
 ## Filtering operations and egress
 
@@ -983,10 +960,10 @@ plugins:
 For executable plugins, `egress.allowedHosts` is only a complete security
 boundary when the plugin is running inside a runtime backend that preserves
 Gestalt's hostname-based policy model. Provider-level `allowedHosts` is no
-longer accepted; use `egress.allowedHosts`. The current host-local wrappers are OS-dependent, so
-operators should treat `egress.allowedHosts` as declarative policy plus
-best-effort enforcement unless the selected runtime explicitly supports
-hostname-based egress controls.
+longer accepted; use `egress.allowedHosts`. The current host-local wrappers are
+OS-dependent, so operators should treat `egress.allowedHosts` as declarative
+policy plus best-effort enforcement unless the selected runtime explicitly
+supports hostname-based egress controls.
 
 
 ## Building your own plugin
@@ -2052,8 +2029,9 @@ plugins:
 ```
 
 For non-interactive attach, create or supply an API token with an action
-permission. Provider scopes and operation permissions are intentionally not
-enough, and this action does not grant normal invocation access:
+permission and pass it with `--remote-token` or `GESTALT_API_KEY`. Provider
+scopes and operation permissions are intentionally not enough, and this action
+does not grant normal invocation access:
 
 ```json
 {
@@ -2066,18 +2044,12 @@ enough, and this action does not grant normal invocation access:
   ]
 }
 ```
+
 `attachmentState: indexeddb` stores attachment metadata and queued provider/UI
 calls in the selected host IndexedDB, so attach traffic can move across
 `gestaltd` replicas. Process-local remote attachment state is not exposed as a
 supported server mode because it is unsafe for load-balanced or multi-replica
 servers.
-Remote provider dev uses `--remote-token` first, then `GESTALT_API_KEY` for
-non-interactive direct attach. Stored CLI credentials are intentionally not used
-for direct attach; without an explicit token, the CLI uses browser approval. An
-API token used for direct attach must include
-`permissions[].actions: ["provider_dev.attach"]` for every attached plugin.
-Stored CLI credentials are not sent on the direct attach path. Use
-`--remote-token` or `GESTALT_API_KEY` for non-interactive automation.
 
 Remote attach creates an owner-scoped attachment. The server returns an
 `attachId` and a one-time dispatcher secret; the CLI uses both for local
@@ -2155,25 +2127,11 @@ the same dependency bootstrap for Bun-managed build workdirs before
 plugin uses; for example, remote IndexedDB host-service calls require an SDK
 version with `tls://` host-service transport support.
 
-Hosted HTTP bindings stay layered on top of operations. A plugin defines an
-operation like `handle_command` in code, then attaches `/command` by declaring a
-manifest `spec.http` binding that targets that operation. Local source
-execution and `gestaltd provider release` preserve those manifest
-`spec.securitySchemes` / `spec.http` entries in the effective packaged
-manifest.
-
 Once the local server is running, invoke an operation:
 
 ```sh
 gestalt plugin invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1712161829.000300
 ```
-
-If your plugin makes outbound HTTP requests and you see 403 errors, check
-`allowedHosts`. In deployments with executable-plugin sandboxing enabled,
-requests to hosts not in the allowlist are rejected. That sandboxing story is
-still runtime-dependent today, so unsupported environments may fail differently.
-Add every upstream domain the provider contacts to `allowedHosts` in the config
-or manifest.
 
 ### Hybrid providers
 
