@@ -27,23 +27,26 @@ providers run as child processes and connect back to the host over gRPC on a
 temporary Unix socket. UI providers use the same package model, but they are
 static asset bundles rather than executable processes.
 
-The provider kind determines where the provider appears in configuration and how
-Gestalt routes requests to it.
+Each provider kind has its own documentation page. Those pages describe the
+configuration shape, runtime model, SDK examples, and custom provider contract
+for that kind:
 
-| Kind | Purpose | Config location |
-| --- | --- | --- |
-| `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `plugins.<name>` |
-| `authentication` | Platform authentication backends | `providers.authentication.<name>` |
-| `authorization` | Dynamic subject authorization backends | `providers.authorization.<name>` |
-| `agent` | Global agent run backends that reason over messages and tools | `providers.agent.<name>` |
-| `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
-| `external_credentials` | Subject-scoped third-party credential storage | `providers.externalCredentials.<name>` |
-| `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
-| `runtime` | Hosted execution backends for executable plugins | `runtime.providers.<name>` |
-| `s3` | S3-compatible object stores mounted into plugins | `providers.s3.<name>` |
-| `secrets` | Secret managers that resolve structured secret refs | `providers.secrets.<name>` |
-| `workflow` | Workflow run, schedule, and event-trigger backends | `providers.workflow.<name>` plus top-level `workflows.*` |
-| `ui` | Public UI bundles served under configured path prefixes | `providers.ui` |
+- [Authentication](/providers/authentication): platform login providers
+- [Authorization](/providers/authorization): subject authorization providers
+- [External Credentials](/providers/external-credentials): subject-scoped credential storage
+- [Agent](/providers/agent): global agent-provider pool and selection model
+- [Cache](/providers/cache): plugin-bound cache backends
+- [IndexedDB](/providers/indexeddb): storage backends
+- [Plugin](/providers/plugins): choosing and configuring plugin providers
+- [Runtime](/providers/runtime): hosted execution backends for executable plugins
+- [S3](/providers/s3): S3-compatible object store providers
+- [Secret](/providers/secrets): built-in and external secret managers
+- [UI](/providers/ui): public UI bundles
+- [Workflow](/providers/workflow): workflow run, schedule, and event-trigger backends
+
+For the canonical manifest schema, use
+[Provider Manifests](/reference/plugin-manifests). For the full server and
+provider configuration reference, use [Config File](/reference/config-file).
 
 Two simple secret managers, `env` and `file`, remain built into `gestaltd` for
 small deployments. Telemetry and audit backends are also configured directly by
@@ -150,29 +153,6 @@ plugins:
 
 GitHub release sources use GitHub release asset lookup. Package sources use the
 static provider repository index instead.
-
-## Provider Documentation
-
-Each provider kind has its own documentation page. Those pages describe the
-configuration shape, runtime model, SDK examples, and custom provider contract
-for that kind:
-
-- [Authentication](/providers/authentication): platform login providers
-- [Authorization](/providers/authorization): subject authorization providers
-- [External Credentials](/providers/external-credentials): subject-scoped credential storage
-- [Agent](/providers/agent): global agent-provider pool and selection model
-- [Cache](/providers/cache): plugin-bound cache backends
-- [IndexedDB](/providers/indexeddb): storage backends
-- [Plugin](/providers/plugins): choosing and configuring plugin providers
-- [Runtime](/providers/runtime): hosted execution backends for executable plugins
-- [S3](/providers/s3): S3-compatible object store providers
-- [Secret](/providers/secrets): built-in and external secret managers
-- [UI](/providers/ui): public UI bundles
-- [Workflow](/providers/workflow): workflow run, schedule, and event-trigger backends
-
-For the canonical manifest schema, use
-[Provider Manifests](/reference/plugin-manifests). For the full server and
-provider configuration reference, use [Config File](/reference/config-file).
 
 ## How to Use Providers
 
