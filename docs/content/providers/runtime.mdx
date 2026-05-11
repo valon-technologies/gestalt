@@ -309,103 +309,96 @@ the exported provider for the selected language.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    use tonic::{Request, Response, Status};
-
-    use gestalt::proto::v1 as proto;
-
     #[derive(Default)]
     struct ExampleRuntime;
 
     #[gestalt::async_trait]
-    impl proto::plugin_runtime_provider_server::PluginRuntimeProvider for ExampleRuntime {
+    impl gestalt::PluginRuntimeProvider for ExampleRuntime {
         async fn get_support(
             &self,
-            _request: Request<()>,
-        ) -> Result<Response<proto::PluginRuntimeSupport>, Status> {
-            Ok(Response::new(proto::PluginRuntimeSupport {
+            _request: (),
+        ) -> gestalt::Result<gestalt::PluginRuntimeSupport> {
+            Ok(gestalt::PluginRuntimeSupport {
                 can_host_plugins: true,
-                egress_mode: proto::PluginRuntimeEgressMode::Hostname as i32,
                 supports_prepare_workspace: true,
-            }))
+                ..Default::default()
+            })
         }
 
         async fn start_session(
             &self,
-            _request: Request<proto::StartPluginRuntimeSessionRequest>,
-        ) -> Result<Response<proto::PluginRuntimeSession>, Status> {
-            Ok(Response::new(proto::PluginRuntimeSession {
+            _request: gestalt::StartPluginRuntimeSessionRequest,
+        ) -> gestalt::Result<gestalt::PluginRuntimeSession> {
+            Ok(gestalt::PluginRuntimeSession {
                 id: "session-1".into(),
                 state: "ready".into(),
                 ..Default::default()
-            }))
+            })
         }
 
         async fn get_session(
             &self,
-            request: Request<proto::GetPluginRuntimeSessionRequest>,
-        ) -> Result<Response<proto::PluginRuntimeSession>, Status> {
-            Ok(Response::new(proto::PluginRuntimeSession {
-                id: request.into_inner().session_id,
+            request: gestalt::GetPluginRuntimeSessionRequest,
+        ) -> gestalt::Result<gestalt::PluginRuntimeSession> {
+            Ok(gestalt::PluginRuntimeSession {
+                id: request.session_id,
                 state: "ready".into(),
                 ..Default::default()
-            }))
+            })
         }
 
         async fn list_sessions(
             &self,
-            _request: Request<proto::ListPluginRuntimeSessionsRequest>,
-        ) -> Result<Response<proto::ListPluginRuntimeSessionsResponse>, Status> {
-            Ok(Response::new(proto::ListPluginRuntimeSessionsResponse {
-                sessions: vec![proto::PluginRuntimeSession {
+            _request: gestalt::ListPluginRuntimeSessionsRequest,
+        ) -> gestalt::Result<gestalt::ListPluginRuntimeSessionsResponse> {
+            Ok(gestalt::ListPluginRuntimeSessionsResponse {
+                sessions: vec![gestalt::PluginRuntimeSession {
                     id: "session-1".into(),
                     state: "ready".into(),
                     ..Default::default()
                 }],
-            }))
+            })
         }
 
         async fn stop_session(
             &self,
-            _request: Request<proto::StopPluginRuntimeSessionRequest>,
-        ) -> Result<Response<()>, Status> {
-            Ok(Response::new(()))
+            _request: gestalt::StopPluginRuntimeSessionRequest,
+        ) -> gestalt::Result<()> {
+            Ok(())
         }
 
         async fn prepare_workspace(
             &self,
-            _request: Request<proto::PreparePluginRuntimeWorkspaceRequest>,
-        ) -> Result<Response<proto::PreparePluginRuntimeWorkspaceResponse>, Status> {
-            Ok(Response::new(proto::PreparePluginRuntimeWorkspaceResponse {
-                workspace: Some(proto::PreparedAgentWorkspace {
+            _request: gestalt::PreparePluginRuntimeWorkspaceRequest,
+        ) -> gestalt::Result<gestalt::PreparePluginRuntimeWorkspaceResponse> {
+            Ok(gestalt::PreparePluginRuntimeWorkspaceResponse {
+                workspace: Some(gestalt::AgentPreparedWorkspace {
                     root: "/sandboxes/runtime-session-1/workspaces/agent-session-1".into(),
                     cwd: "/sandboxes/runtime-session-1/workspaces/agent-session-1/repo".into(),
                 }),
-            }))
+            })
         }
 
         async fn remove_workspace(
             &self,
-            _request: Request<proto::RemovePluginRuntimeWorkspaceRequest>,
-        ) -> Result<Response<()>, Status> {
-            Ok(Response::new(()))
+            _request: gestalt::RemovePluginRuntimeWorkspaceRequest,
+        ) -> gestalt::Result<()> {
+            Ok(())
         }
 
         async fn start_plugin(
             &self,
-            request: Request<proto::StartHostedPluginRequest>,
-        ) -> Result<Response<proto::HostedPlugin>, Status> {
-            let req = request.into_inner();
-            Ok(Response::new(proto::HostedPlugin {
+            req: gestalt::StartHostedPluginRequest,
+        ) -> gestalt::Result<gestalt::HostedPlugin> {
+            Ok(gestalt::HostedPlugin {
                 id: "plugin-1".into(),
                 session_id: req.session_id,
                 plugin_name: req.plugin_name,
                 dial_target: "unix:///tmp/example-runtime/plugin.sock".into(),
-            }))
+                ..Default::default()
+            })
         }
     }
-
-    #[gestalt::async_trait]
-    impl gestalt::PluginRuntimeProvider for ExampleRuntime {}
 
     gestalt::export_plugin_runtime_provider!(constructor = ExampleRuntime::default);
     ```

@@ -330,12 +330,6 @@ interface to the underlying gRPC service:
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    use std::pin::Pin;
-
-    use futures_core::Stream;
-    use gestalt::{self, proto::v1 as proto};
-    use tonic::{Request, Response, Status};
-
     #[derive(Default)]
     pub struct MinioS3;
 
@@ -348,62 +342,54 @@ interface to the underlying gRPC service:
         ) -> gestalt::Result<()> {
             Ok(())
         }
-    }
-
-    type ReadObjectStream =
-        Pin<Box<dyn Stream<Item = Result<proto::ReadObjectChunk, Status>> + Send>>;
-
-    #[gestalt::async_trait]
-    impl proto::s3_server::S3 for MinioS3 {
-        type ReadObjectStream = ReadObjectStream;
 
         async fn head_object(
             &self,
-            _request: Request<proto::HeadObjectRequest>,
-        ) -> Result<Response<proto::HeadObjectResponse>, Status> {
-            Err(Status::unimplemented("todo"))
+            _request: gestalt::HeadObjectRequest,
+        ) -> gestalt::Result<gestalt::HeadObjectResponse> {
+            Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn read_object(
             &self,
-            _request: Request<proto::ReadObjectRequest>,
-        ) -> Result<Response<Self::ReadObjectStream>, Status> {
-            Err(Status::unimplemented("todo"))
+            _request: gestalt::ReadObjectRequest,
+        ) -> gestalt::Result<gestalt::S3ReadObjectStream> {
+            Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn write_object(
             &self,
-            _request: Request<tonic::Streaming<proto::WriteObjectRequest>>,
-        ) -> Result<Response<proto::WriteObjectResponse>, Status> {
-            Err(Status::unimplemented("todo"))
+            _request: gestalt::S3WriteObjectStream,
+        ) -> gestalt::Result<gestalt::WriteObjectResponse> {
+            Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn delete_object(
             &self,
-            _request: Request<proto::DeleteObjectRequest>,
-        ) -> Result<Response<()>, Status> {
-            Err(Status::unimplemented("todo"))
+            _request: gestalt::DeleteObjectRequest,
+        ) -> gestalt::Result<()> {
+            Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn list_objects(
             &self,
-            _request: Request<proto::ListObjectsRequest>,
-        ) -> Result<Response<proto::ListObjectsResponse>, Status> {
-            Err(Status::unimplemented("todo"))
+            _request: gestalt::ListObjectsRequest,
+        ) -> gestalt::Result<gestalt::ListObjectsResponse> {
+            Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn copy_object(
             &self,
-            _request: Request<proto::CopyObjectRequest>,
-        ) -> Result<Response<proto::CopyObjectResponse>, Status> {
-            Err(Status::unimplemented("todo"))
+            _request: gestalt::CopyObjectRequest,
+        ) -> gestalt::Result<gestalt::CopyObjectResponse> {
+            Err(gestalt::Error::unimplemented("todo"))
         }
 
         async fn presign_object(
             &self,
-            _request: Request<proto::PresignObjectRequest>,
-        ) -> Result<Response<proto::PresignObjectResponse>, Status> {
-            Err(Status::unimplemented("todo"))
+            _request: gestalt::PresignObjectRequest,
+        ) -> gestalt::Result<gestalt::PresignObjectResponse> {
+            Err(gestalt::Error::unimplemented("todo"))
         }
     }
 
