@@ -2,19 +2,13 @@ import { Callout, Tabs } from 'nextra/components'
 
 # Building an Application
 
-An application in Gestalt is not a separate provider kind. It is a deployment
-pattern built from a plugin provider, an optional mounted UI bundle, and
-host-managed provider bindings for authentication, authorization, state,
-object storage, workflows, and calls to other plugins.
-
-Use [Plugin](/providers/plugins) for the plugin manifest, SDK operations,
-hosted HTTP routes, release flow, and local provider development. Use the
-provider pages as the source of truth for individual service blocks:
-[Authentication](/providers/authentication),
-[Authorization](/providers/authorization),
-[IndexedDB](/providers/indexeddb),
-[S3](/providers/s3),
-[Workflow](/providers/workflow), and [UI](/providers/ui).
+An application in Gestalt is not a separate provider kind. At minimum, it is a
+single [plugin](/providers/plugins), or optionally a composition of
+[plugins](/providers/plugins) and [UIs](/providers/ui), using existing
+primitives for [authentication](/providers/authentication),
+[authorization](/providers/authorization),
+[IndexedDB](/providers/indexeddb)/[Cache](/providers/cache)/[S3](/providers/s3),
+[workflows](/providers/workflow), and [agents](/providers/agent).
 
 <Callout type="info">
   Build a plugin when you need new operations. Build an application when that
