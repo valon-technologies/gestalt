@@ -99,16 +99,20 @@ The SDK also exposes clients such as `Cache`, `IndexedDB`, `S3`,
 `PluginInvoker`, `Authorization`, and `RuntimeLogHost` for provider code that
 needs to call sibling host services.
 
-`AgentHost` includes plain Python helpers such as `list_tools_for_turn`,
-`execute_tool_for_turn`, and `resolve_connection_for_turn`. For protocol-level
-fixtures, import `protocol.v1` or `testing` from `gestalt` instead of importing
-from private generated modules. Helpers such as `struct_from_dict`,
-`value_from_json`, `timestamp_from_datetime`, `message_to_dict`,
-`message_from_dict`, and the public IndexedDB conversion functions cover common
-protobuf well-known type, protobuf JSON, and datastore shapes. Agent providers
-that need the protobuf JSON form of `AgentMessage` can use
-`agent_message_to_proto_dict` and `agent_message_from_proto_dict` without
-importing `google.protobuf.json_format`.
+`AgentProvider` handlers receive and return native Python dataclasses such as
+`CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
+`AgentTurnEvent`. Structured fields accept dictionaries or dataclass instances,
+and timestamp fields use timezone-aware `datetime` values; the SDK runtime owns
+protobuf conversion at the transport boundary. `AgentHost` includes plain
+Python helpers such as `list_tools_for_turn`, `execute_tool_for_turn`, and
+`resolve_connection_for_turn`. For protocol-level fixtures, import
+`protocol.v1` or `testing` from `gestalt` instead of importing from private
+generated modules. Helpers such as `struct_from_dict`, `value_from_json`,
+`timestamp_from_datetime`, `message_to_dict`, `message_from_dict`, and the
+public IndexedDB conversion functions cover common protobuf well-known type,
+protobuf JSON, and datastore shapes. Fixture code that needs the protobuf JSON
+form of `AgentMessage` can use `agent_message_to_proto_dict` and
+`agent_message_from_proto_dict` without importing `google.protobuf.json_format`.
 
 Use `Authorization().grant_agent_session_editor(subject_id, session_id)` when
 trusted provider code needs to share an agent session with another canonical

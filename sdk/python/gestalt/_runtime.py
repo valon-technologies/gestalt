@@ -16,8 +16,9 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Final, cast
 
+from . import _agent as _agent_native
 from . import _telemetry
-from ._api import Access, Credential, ExternalIdentity, Host, Request, Subject
+from ._api import Access, Credential, Error, ExternalIdentity, Host, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
@@ -159,6 +160,10 @@ def _grpc_handler(label: str):
             _ensure_grpc_runtime()
             try:
                 return fn(self, request, context)
+            except Error as error:
+                context.abort(
+                    _grpc_status_from_http_status(error.status), error.message
+                )
             except Exception as error:
                 if context.code() is not None:
                     raise
@@ -168,6 +173,28 @@ def _grpc_handler(label: str):
         return wrapper
 
     return decorator
+
+
+def _grpc_status_from_http_status(status: int) -> Any:
+    if status == HTTPStatus.BAD_REQUEST:
+        return grpc.StatusCode.INVALID_ARGUMENT
+    if status == HTTPStatus.UNAUTHORIZED:
+        return grpc.StatusCode.UNAUTHENTICATED
+    if status == HTTPStatus.FORBIDDEN:
+        return grpc.StatusCode.PERMISSION_DENIED
+    if status == HTTPStatus.NOT_FOUND:
+        return grpc.StatusCode.NOT_FOUND
+    if status == HTTPStatus.CONFLICT:
+        return grpc.StatusCode.ALREADY_EXISTS
+    if status == HTTPStatus.PRECONDITION_FAILED:
+        return grpc.StatusCode.FAILED_PRECONDITION
+    if status == HTTPStatus.NOT_IMPLEMENTED:
+        return grpc.StatusCode.UNIMPLEMENTED
+    if status == HTTPStatus.SERVICE_UNAVAILABLE:
+        return grpc.StatusCode.UNAVAILABLE
+    if status == HTTPStatus.INTERNAL_SERVER_ERROR:
+        return grpc.StatusCode.INTERNAL
+    return grpc.StatusCode.UNKNOWN
 
 
 def _abort_if_protocol_version_mismatch(
@@ -501,25 +528,7 @@ def _register_agent_services(server: Any, provider: PluginProvider) -> None:
         server,
     )
     agent_pb2_grpc.add_AgentProviderServicer_to_server(
-        _service_wrapper(
-            provider,
-            agent_pb2_grpc.AgentProviderServicer,
-            (
-                ("CreateSession", "create_session"),
-                ("GetSession", "get_session"),
-                ("ListSessions", "list_sessions"),
-                ("UpdateSession", "update_session"),
-                ("CreateTurn", "create_turn"),
-                ("GetTurn", "get_turn"),
-                ("ListTurns", "list_turns"),
-                ("CancelTurn", "cancel_turn"),
-                ("ListTurnEvents", "list_turn_events"),
-                ("GetInteraction", "get_interaction"),
-                ("ListInteractions", "list_interactions"),
-                ("ResolveInteraction", "resolve_interaction"),
-                ("GetCapabilities", "get_capabilities"),
-            ),
-        ),
+        _agent_provider_servicer(provider),
         server,
     )
 
@@ -604,6 +613,117 @@ def _register_workflow_services(server: Any, provider: PluginProvider) -> None:
         ),
         server,
     )
+
+
+def _agent_provider_servicer(provider: PluginProvider) -> Any:
+    _ensure_grpc_runtime()
+
+    class AgentProviderServicer(agent_pb2_grpc.AgentProviderServicer):  # type: ignore[misc]
+        def __init__(self, inner: PluginProvider) -> None:
+            self._provider = inner
+
+        @_grpc_handler("CreateSession")
+        def CreateSession(self, request: Any, context: Any) -> Any:
+            result = self._provider.create_session(
+                _agent_native.create_agent_provider_session_request_from_proto(request)
+            )
+            return _agent_native.agent_session_to_proto(result)
+
+        @_grpc_handler("GetSession")
+        def GetSession(self, request: Any, context: Any) -> Any:
+            result = self._provider.get_session(
+                _agent_native.get_agent_provider_session_request_from_proto(request)
+            )
+            return _agent_native.agent_session_to_proto(result)
+
+        @_grpc_handler("ListSessions")
+        def ListSessions(self, request: Any, context: Any) -> Any:
+            result = self._provider.list_sessions(
+                _agent_native.list_agent_provider_sessions_request_from_proto(request)
+            )
+            return _agent_native.list_agent_provider_sessions_response_to_proto(result)
+
+        @_grpc_handler("UpdateSession")
+        def UpdateSession(self, request: Any, context: Any) -> Any:
+            result = self._provider.update_session(
+                _agent_native.update_agent_provider_session_request_from_proto(request)
+            )
+            return _agent_native.agent_session_to_proto(result)
+
+        @_grpc_handler("CreateTurn")
+        def CreateTurn(self, request: Any, context: Any) -> Any:
+            result = self._provider.create_turn(
+                _agent_native.create_agent_provider_turn_request_from_proto(request)
+            )
+            return _agent_native.agent_turn_to_proto(result)
+
+        @_grpc_handler("GetTurn")
+        def GetTurn(self, request: Any, context: Any) -> Any:
+            result = self._provider.get_turn(
+                _agent_native.get_agent_provider_turn_request_from_proto(request)
+            )
+            return _agent_native.agent_turn_to_proto(result)
+
+        @_grpc_handler("ListTurns")
+        def ListTurns(self, request: Any, context: Any) -> Any:
+            result = self._provider.list_turns(
+                _agent_native.list_agent_provider_turns_request_from_proto(request)
+            )
+            return _agent_native.list_agent_provider_turns_response_to_proto(result)
+
+        @_grpc_handler("CancelTurn")
+        def CancelTurn(self, request: Any, context: Any) -> Any:
+            result = self._provider.cancel_turn(
+                _agent_native.cancel_agent_provider_turn_request_from_proto(request)
+            )
+            return _agent_native.agent_turn_to_proto(result)
+
+        @_grpc_handler("ListTurnEvents")
+        def ListTurnEvents(self, request: Any, context: Any) -> Any:
+            result = self._provider.list_turn_events(
+                _agent_native.list_agent_provider_turn_events_request_from_proto(
+                    request
+                )
+            )
+            return _agent_native.list_agent_provider_turn_events_response_to_proto(
+                result
+            )
+
+        @_grpc_handler("GetInteraction")
+        def GetInteraction(self, request: Any, context: Any) -> Any:
+            result = self._provider.get_interaction(
+                _agent_native.get_agent_provider_interaction_request_from_proto(request)
+            )
+            return _agent_native.agent_interaction_to_proto(result)
+
+        @_grpc_handler("ListInteractions")
+        def ListInteractions(self, request: Any, context: Any) -> Any:
+            result = self._provider.list_interactions(
+                _agent_native.list_agent_provider_interactions_request_from_proto(
+                    request
+                )
+            )
+            return _agent_native.list_agent_provider_interactions_response_to_proto(
+                result
+            )
+
+        @_grpc_handler("ResolveInteraction")
+        def ResolveInteraction(self, request: Any, context: Any) -> Any:
+            result = self._provider.resolve_interaction(
+                _agent_native.resolve_agent_provider_interaction_request_from_proto(
+                    request
+                )
+            )
+            return _agent_native.agent_interaction_to_proto(result)
+
+        @_grpc_handler("GetCapabilities")
+        def GetCapabilities(self, request: Any, context: Any) -> Any:
+            result = self._provider.get_capabilities(
+                _agent_native.GetAgentProviderCapabilitiesRequest()
+            )
+            return _agent_native.agent_provider_capabilities_to_proto(result)
+
+    return AgentProviderServicer(provider)
 
 
 def _secrets_runtime_plugin(provider: SecretsProvider) -> PluginProviderAdapter:

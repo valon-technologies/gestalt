@@ -113,11 +113,16 @@ Gestalt-managed sibling host services, including `Cache`, `IndexedDB`, `S3`,
 `WorkflowHost`, `WorkflowManager`, `AgentHost`, `AgentManager`,
 `PluginInvoker`, `Authorization`, and `RuntimeLogHost`.
 
-`AgentHost` includes plain-input helpers named `list_tools_for_turn`,
-`execute_tool_for_turn`, and `resolve_connection_for_turn`. Use
+`AgentProvider` implementations receive and return native structs such as
+`CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
+`AgentTurnEvent`. Structured payload fields use `serde_json::Value` and
+timestamp fields use `SystemTime`; the SDK runtime owns protobuf conversion at
+the transport boundary. `AgentHost` includes plain-input helpers named
+`list_tools_for_turn`, `execute_tool_for_turn`, and
+`resolve_connection_for_turn`. Use
 `gestalt::protocol::{struct_from_json, struct_from_map, json_from_struct,
 value_from_json, json_from_value, timestamp_from_system_time,
-system_time_from_timestamp}` for protobuf well-known type conversions,
+system_time_from_timestamp}` for lower-level protobuf well-known type fixtures,
 `gestalt::proto::v1` for generated protocol bindings in transport fixtures, and
 the JSON-named IndexedDB conversion helpers when asserting lower-level datastore
 wire shapes.

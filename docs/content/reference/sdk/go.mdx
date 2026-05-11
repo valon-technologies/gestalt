@@ -97,13 +97,18 @@ The same module includes host-service clients such as `CacheClient`,
 `AgentHostClient`, `AgentManagerClient`, `AuthorizationClient`,
 `ExternalCredentialClient`, `RuntimeLogHostClient`, and `InvokerClient`.
 
-`AgentHostClient` exposes plain Go helpers named `ListToolsForTurn`,
-`ExecuteToolForTurn`, and `ResolveConnectionForTurn`. Workflow and external
-credential helpers accept native `time.Time` values, pointers, maps, structs,
-and slices; provider code should not need protobuf timestamp or empty-message
-constructors for normal authoring. The `gen/v1` subpackage re-exports selected
-generated bindings for transport fixtures, and the IndexedDB codec helpers
-convert records, keys, and typed values without importing internal packages.
+`AgentProvider` implementations receive and return native Go structs such as
+`CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
+`AgentTurnEvent`. Structured payload fields accept maps and structs, timestamp
+fields use `time.Time`, and the SDK runtime owns protobuf conversion at the
+transport boundary. `AgentHostClient` exposes plain Go helpers named
+`ListToolsForTurn`, `ExecuteToolForTurn`, and `ResolveConnectionForTurn`.
+Workflow and external credential helpers accept native `time.Time` values,
+pointers, maps, structs, and slices; provider code should not need protobuf
+timestamp or empty-message constructors for normal authoring. The `gen/v1`
+subpackage re-exports selected generated bindings for transport fixtures, and
+the IndexedDB codec helpers convert records, keys, and typed values without
+importing internal packages.
 
 Use `AuthorizationClient.GrantAgentSessionEditor` when trusted provider code
 needs to share an agent session with another canonical Gestalt subject id. For

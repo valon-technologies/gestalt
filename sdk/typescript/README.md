@@ -80,9 +80,13 @@ The root package exports provider definition helpers:
 - Host-service clients for cache, IndexedDB, S3, workflows, agents,
   invocations, and telemetry.
 
-`AgentHost` includes plain-object helpers named `listToolsForTurn`,
-`executeToolForTurn`, and `resolveConnectionForTurn`. Advanced transport tests
-can import generated schemas, services, and message types from
+`defineAgentProvider` handlers receive and return plain TypeScript objects such
+as `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
+`AgentTurnEvent`. Structured payload fields accept JSON values and timestamp
+fields use native `Date`; the SDK runtime owns protobuf conversion at the
+transport boundary. `AgentHost` includes plain-object helpers named
+`listToolsForTurn`, `executeToolForTurn`, and `resolveConnectionForTurn`.
+Advanced transport tests can import generated schemas, services, and message types from
 `@valon-technologies/gestalt/protocol/v1` instead of reaching into internal
 paths. Public IndexedDB conversion helpers are exported for lower-level
 datastore fixtures. The root package also exports protocol conversion helpers

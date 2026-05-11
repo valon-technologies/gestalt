@@ -123,11 +123,15 @@ Gestalt-managed sibling host services:
 | `Authorization` / `AuthorizationClient` | Query the selected host authorization provider. |
 | `RuntimeLogHost` | Append hosted-runtime logs back to Gestalt. |
 
-`AgentHost` exposes plain-object helpers named `listToolsForTurn`,
-`executeToolForTurn`, and `resolveConnectionForTurn`. The package also exports
-`@valon-technologies/gestalt/protocol/v1` for generated schemas, services, and
-message types needed by transport fixtures, plus public IndexedDB conversion
-helpers for lower-level datastore tests. Use root exports such as
+`defineAgentProvider` handlers receive and return plain TypeScript objects such
+as `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
+`AgentTurnEvent`. Structured payload fields accept JSON values and timestamp
+fields use native `Date`; the SDK runtime owns protobuf conversion at the
+transport boundary. `AgentHost` exposes plain-object helpers named
+`listToolsForTurn`, `executeToolForTurn`, and `resolveConnectionForTurn`. The
+package also exports `@valon-technologies/gestalt/protocol/v1` for generated
+schemas, services, and message types needed by transport fixtures, plus public
+IndexedDB conversion helpers for lower-level datastore tests. Use root exports such as
 `structFromJsonObject`, `jsonObjectFromStruct`, `valueFromJson`,
 `jsonFromValue`, `timestampFromDate`, and `dateFromTimestamp` for protobuf
 well-known type fields without importing from `@bufbuild/protobuf/wkt`.

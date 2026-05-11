@@ -15,8 +15,13 @@ pub(crate) fn rpc_status(operation: &str, error: Error) -> Status {
     let message = rpc_error_message(operation, &error);
     match error.status() {
         Some(400) => Status::invalid_argument(message),
+        Some(401) => Status::unauthenticated(message),
+        Some(403) => Status::permission_denied(message),
         Some(404) => Status::not_found(message),
+        Some(409) => Status::already_exists(message),
+        Some(412) => Status::failed_precondition(message),
         Some(501) => Status::unimplemented(message),
+        Some(503) => Status::unavailable(message),
         _ => Status::unknown(format!("{operation}: {message}")),
     }
 }

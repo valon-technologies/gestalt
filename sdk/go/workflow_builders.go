@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -155,14 +154,21 @@ func NewBoundWorkflowAgentTarget(input BoundWorkflowAgentTargetInput) (*BoundWor
 	if err != nil {
 		return nil, err
 	}
-	messages := copyAgentMessages(input.Messages)
+	messages, err := agentMessagePtrsToProto(input.Messages)
+	if err != nil {
+		return nil, err
+	}
 	messageInputs, err := agentMessagesFromInputs(input.MessageInputs)
 	if err != nil {
 		return nil, err
 	}
-	messages = append(messages, messageInputs...)
-	toolRefs := copyAgentToolRefs(input.ToolRefs)
-	toolRefs = append(toolRefs, agentToolRefsFromInputs(input.ToolRefInputs)...)
+	messageInputProtos, err := agentMessagePtrsToProto(messageInputs)
+	if err != nil {
+		return nil, err
+	}
+	messages = append(messages, messageInputProtos...)
+	toolRefs := agentToolRefPtrsToProto(input.ToolRefs)
+	toolRefs = append(toolRefs, agentToolRefPtrsToProto(agentToolRefsFromInputs(input.ToolRefInputs))...)
 	return &BoundWorkflowAgentTarget{
 		ProviderName:         input.ProviderName,
 		Model:                input.Model,
@@ -188,8 +194,8 @@ func BoundWorkflowAgentTargetInputFromTarget(value *BoundWorkflowAgentTarget) Bo
 		ProviderName:         value.GetProviderName(),
 		Model:                value.GetModel(),
 		Prompt:               value.GetPrompt(),
-		Messages:             value.GetMessages(),
-		ToolRefs:             value.GetToolRefs(),
+		Messages:             agentMessagePtrsFromProto(value.GetMessages()),
+		ToolRefs:             agentToolRefPtrsFromProto(value.GetToolRefs()),
 		ResponseSchema:       MapFromStruct(value.GetResponseSchema()),
 		Metadata:             MapFromStruct(value.GetMetadata()),
 		TimeoutSeconds:       value.GetTimeoutSeconds(),
@@ -890,34 +896,6 @@ func workflowTargetInputPtrFromTarget(value *BoundWorkflowTarget) *BoundWorkflow
 	}
 	input := BoundWorkflowTargetInputFromTarget(value)
 	return &input
-}
-
-func copyAgentMessages(values []*AgentMessage) []*AgentMessage {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]*AgentMessage, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, gproto.Clone(value).(*AgentMessage))
-	}
-	return out
-}
-
-func copyAgentToolRefs(values []*AgentToolRef) []*AgentToolRef {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]*AgentToolRef, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, gproto.Clone(value).(*AgentToolRef))
-	}
-	return out
 }
 
 func workflowActorFromInput(input *WorkflowActorInput) *WorkflowActor {

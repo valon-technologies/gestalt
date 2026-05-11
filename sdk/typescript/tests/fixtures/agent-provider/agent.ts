@@ -1,30 +1,24 @@
-import { create, type JsonObject } from "@bufbuild/protobuf";
-import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import type { JsonObject } from "@bufbuild/protobuf";
 
 import {
   AgentExecutionStatus,
-  AgentInteractionSchema,
   AgentInteractionState,
   AgentInteractionType,
-  AgentSessionSchema,
   AgentSessionState,
-  AgentTurnSchema,
+  defineAgentProvider,
   type AgentInteraction,
   type AgentSession,
   type AgentTurn,
+  type AgentTurnDisplay,
+  type AgentTurnEvent,
   type CreateAgentProviderTurnRequest,
   type GetAgentProviderInteractionRequest,
   type GetAgentProviderSessionRequest,
-} from "../../../src/internal/gen/v1/agent_pb.ts";
-import {
-  defineAgentProvider,
-  type AgentTurnDisplayInit,
-  type AgentTurnEventInit,
 } from "../../../src/index.ts";
 
 const sessions = new Map<string, AgentSession>();
 const turns = new Map<string, AgentTurn>();
-const turnEvents = new Map<string, AgentTurnEventInit[]>();
+const turnEvents = new Map<string, AgentTurnEvent[]>();
 const interactions = new Map<string, AgentInteraction>();
 let canceledTurns = 0;
 
@@ -51,11 +45,13 @@ export const provider = defineAgentProvider({
     return requireSession(request);
   },
   async listSessions() {
-    return [...sessions.values()].sort((a, b) => a.id.localeCompare(b.id));
+    return [...sessions.values()].sort((a, b) =>
+      (a.id ?? "").localeCompare(b.id ?? ""),
+    );
   },
   async updateSession(request) {
     const session = requireSessionByID(request.sessionId);
-    const updated = create(AgentSessionSchema, {
+    const updated: AgentSession = {
       id: session.id,
       providerName: session.providerName,
       model: session.model,
@@ -74,8 +70,8 @@ export const provider = defineAgentProvider({
       ...(session.createdAt ? { createdAt: session.createdAt } : {}),
       updatedAt: timestampNow(),
       ...(session.lastTurnAt ? { lastTurnAt: session.lastTurnAt } : {}),
-    });
-    sessions.set(updated.id, updated);
+    };
+    sessions.set(updated.id ?? "", updated);
     return updated;
   },
   async createTurn(request) {
@@ -87,7 +83,7 @@ export const provider = defineAgentProvider({
   async listTurns(request) {
     return [...turns.values()]
       .filter((turn) => !request.sessionId || turn.sessionId === request.sessionId)
-      .sort((a, b) => a.id.localeCompare(b.id));
+      .sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
   },
   async cancelTurn(request) {
     return cancelCanonicalTurn({
@@ -106,7 +102,7 @@ export const provider = defineAgentProvider({
   async listInteractions(request) {
     return [...interactions.values()]
       .filter((interaction) => !request.turnId || interaction.turnId === request.turnId)
-      .sort((a, b) => a.id.localeCompare(b.id));
+      .sort((a, b) => (a.id ?? "").localeCompare(b.id ?? ""));
   },
   async resolveInteraction(request) {
     return resolveCanonicalInteraction({
@@ -134,11 +130,11 @@ async function upsertSession(request: {
   sessionId: string;
   model: string;
   clientRef: string | undefined;
-  metadata: JsonObject | undefined;
+  metadata: object | undefined;
   createdBy: AgentSession["createdBy"] | undefined;
 }): Promise<AgentSession> {
   const existing = sessions.get(request.sessionId);
-  const session = create(AgentSessionSchema, {
+  const session: AgentSession = {
     id: request.sessionId || `session-${sessions.size + 1}`,
     providerName: "fixture-agent",
     model: request.model,
@@ -151,8 +147,8 @@ async function upsertSession(request: {
       : { createdAt: timestampNow() }),
     updatedAt: timestampNow(),
     ...(existing?.lastTurnAt ? { lastTurnAt: existing.lastTurnAt } : {}),
-  });
-  sessions.set(session.id, session);
+  };
+  sessions.set(session.id ?? "", session);
   return session;
 }
 
@@ -160,14 +156,15 @@ async function createCanonicalTurn(
   request: CreateAgentProviderTurnRequest,
 ): Promise<AgentTurn> {
   const session = requireSessionByID(request.sessionId);
-  const waitingForInput = Boolean(request.metadata?.requireInteraction);
+  const metadata = request.metadata as { requireInteraction?: unknown } | undefined;
+  const waitingForInput = Boolean(metadata?.requireInteraction);
   const status = waitingForInput
     ? AgentExecutionStatus.WAITING_FOR_INPUT
     : AgentExecutionStatus.SUCCEEDED;
   const outputText = request.messages.at(-1)?.text
     ? `echo:${request.messages.at(-1)!.text}`
     : "";
-  const turn = create(AgentTurnSchema, {
+  const turn: AgentTurn = {
     id: request.turnId || `turn-${turns.size + 1}`,
     sessionId: request.sessionId,
     providerName: session.providerName,
@@ -181,12 +178,12 @@ async function createCanonicalTurn(
     startedAt: timestampNow(),
     ...(waitingForInput ? {} : { completedAt: timestampNow() }),
     executionRef: request.executionRef,
-  });
-  turns.set(turn.id, turn);
+  };
+  turns.set(turn.id ?? "", turn);
 
   sessions.set(
-    session.id,
-    create(AgentSessionSchema, {
+    session.id ?? "",
+    {
       id: session.id,
       providerName: session.providerName,
       model: session.model,
@@ -197,12 +194,12 @@ async function createCanonicalTurn(
       ...(session.createdAt ? { createdAt: session.createdAt } : {}),
       updatedAt: timestampNow(),
       lastTurnAt: timestampNow(),
-    }),
+    },
   );
 
-  appendTurnEvent(turn.id, "turn.started", { sessionId: turn.sessionId });
+  appendTurnEvent(turn.id ?? "", "turn.started", { sessionId: turn.sessionId ?? "" });
   if (waitingForInput) {
-    const interaction = create(AgentInteractionSchema, {
+    const interaction: AgentInteraction = {
       id: `interaction-${interactions.size + 1}`,
       turnId: turn.id,
       sessionId: turn.sessionId,
@@ -212,14 +209,14 @@ async function createCanonicalTurn(
       prompt: "Continue the agent turn?",
       request: { approved: true },
       createdAt: timestampNow(),
-    });
-    interactions.set(interaction.id, interaction);
-    appendTurnEvent(turn.id, "interaction.requested", {
-      interactionId: interaction.id,
+    };
+    interactions.set(interaction.id ?? "", interaction);
+    appendTurnEvent(turn.id ?? "", "interaction.requested", {
+      interactionId: interaction.id ?? "",
     });
   } else {
-    appendTurnEvent(turn.id, "assistant.completed", { sessionId: turn.sessionId });
-    appendTurnEvent(turn.id, "turn.completed", { sessionId: turn.sessionId });
+    appendTurnEvent(turn.id ?? "", "assistant.completed", { sessionId: turn.sessionId ?? "" });
+    appendTurnEvent(turn.id ?? "", "turn.completed", { sessionId: turn.sessionId ?? "" });
   }
 
   return turn;
@@ -230,7 +227,7 @@ async function cancelCanonicalTurn(request: {
   reason: string;
 }): Promise<AgentTurn> {
   const turn = requireTurnByID(request.turnId);
-  const updated = create(AgentTurnSchema, {
+  const updated: AgentTurn = {
     id: turn.id,
     sessionId: turn.sessionId,
     providerName: turn.providerName,
@@ -245,19 +242,19 @@ async function cancelCanonicalTurn(request: {
     ...(turn.startedAt ? { startedAt: turn.startedAt } : {}),
     completedAt: timestampNow(),
     executionRef: turn.executionRef,
-  });
-  turns.set(updated.id, updated);
-  appendTurnEvent(updated.id, "turn.canceled", { reason: request.reason });
+  };
+  turns.set(updated.id ?? "", updated);
+  appendTurnEvent(updated.id ?? "", "turn.canceled", { reason: request.reason });
   canceledTurns += 1;
   return updated;
 }
 
 async function resolveCanonicalInteraction(request: {
   interactionId: string;
-  resolution: JsonObject | undefined;
+  resolution: object | undefined;
 }): Promise<AgentInteraction> {
   const interaction = requireInteractionByID(request.interactionId);
-  const resolved = create(AgentInteractionSchema, {
+  const resolved: AgentInteraction = {
     id: interaction.id,
     turnId: interaction.turnId,
     sessionId: interaction.sessionId,
@@ -269,11 +266,11 @@ async function resolveCanonicalInteraction(request: {
     ...(request.resolution !== undefined ? { resolution: request.resolution } : {}),
     ...(interaction.createdAt ? { createdAt: interaction.createdAt } : {}),
     resolvedAt: timestampNow(),
-  });
-  interactions.set(resolved.id, resolved);
+  };
+  interactions.set(resolved.id ?? "", resolved);
 
-  const turn = requireTurnByID(resolved.turnId);
-  const completedTurn = create(AgentTurnSchema, {
+  const turn = requireTurnByID(resolved.turnId ?? "");
+  const completedTurn: AgentTurn = {
     id: turn.id,
     sessionId: turn.sessionId,
     providerName: turn.providerName,
@@ -288,17 +285,17 @@ async function resolveCanonicalInteraction(request: {
     ...(turn.startedAt ? { startedAt: turn.startedAt } : {}),
     completedAt: timestampNow(),
     executionRef: turn.executionRef,
-  });
-  turns.set(completedTurn.id, completedTurn);
+  };
+  turns.set(completedTurn.id ?? "", completedTurn);
 
-  appendTurnEvent(completedTurn.id, "interaction.resolved", {
-    interactionId: resolved.id,
+  appendTurnEvent(completedTurn.id ?? "", "interaction.resolved", {
+    interactionId: resolved.id ?? "",
   });
-  appendTurnEvent(completedTurn.id, "assistant.completed", {
-    interactionId: resolved.id,
+  appendTurnEvent(completedTurn.id ?? "", "assistant.completed", {
+    interactionId: resolved.id ?? "",
   });
-  appendTurnEvent(completedTurn.id, "turn.completed", {
-    interactionId: resolved.id,
+  appendTurnEvent(completedTurn.id ?? "", "turn.completed", {
+    interactionId: resolved.id ?? "",
   });
   return resolved;
 }
@@ -323,7 +320,7 @@ function appendTurnEvent(turnId: string, type: string, data: JsonObject) {
 function turnEventDisplay(
   type: string,
   data: JsonObject,
-): AgentTurnDisplayInit | undefined {
+): AgentTurnDisplay | undefined {
   switch (type) {
     case "turn.started":
       return {
@@ -414,8 +411,5 @@ function requireInteractionByID(interactionId: string) {
 }
 
 function timestampNow() {
-  return create(TimestampSchema, {
-    seconds: BigInt(Math.trunc(Date.now() / 1000)),
-    nanos: 0,
-  });
+  return new Date();
 }

@@ -250,21 +250,107 @@ provider code importing private ``pb2`` modules.
 
 .. autofunction:: workflow_execution_reference_from_reference
 
-Agent protocol helpers
-----------------------
+Agent provider models
+---------------------
 
-These helpers build common agent protocol messages from native Python values
-and convert them to and from plain lower-snake-case dictionaries while
-preserving protobuf field presence for optional structured payloads. Timestamp
-fields on ``AgentSession``, ``AgentTurn``, and ``AgentTurnEvent`` accept
-timezone-aware ``datetime`` values.
+Agent providers receive and return native dataclasses. Structured payload
+fields accept JSON-compatible mappings or dataclass instances, and timestamp
+fields on sessions, turns, events, interactions, and host connections use
+timezone-aware ``datetime`` values. The runtime converts these objects to the
+generated protobuf transport messages internally.
 
 .. autosummary::
    :nosignatures:
 
+   AgentActor
+   AgentSubjectContext
+   AgentPreparedWorkspace
+   AgentToolRef
+   ResolvedAgentTool
+   AgentProviderCapabilities
    AgentSession
+   AgentInteraction
+   AgentMessage
+   AgentMessagePart
+   AgentMessagePartToolCall
+   AgentMessagePartToolResult
+   AgentMessagePartImageRef
    AgentTurn
+   AgentTurnDisplay
    AgentTurnEvent
+   CreateAgentProviderSessionRequest
+   CreateAgentProviderTurnRequest
+   ListAgentProviderSessionsResponse
+   ListAgentProviderTurnsResponse
+   ListAgentProviderTurnEventsResponse
+   ListAgentProviderInteractionsResponse
+   ExecuteAgentToolResponse
+   ListAgentToolsResponse
+   ListedAgentTool
+   ResolvedAgentConnection
+
+.. autoclass:: AgentActor
+
+.. autoclass:: AgentSubjectContext
+
+.. autoclass:: AgentPreparedWorkspace
+
+.. autoclass:: AgentToolRef
+
+.. autoclass:: ResolvedAgentTool
+
+.. autoclass:: AgentProviderCapabilities
+
+.. autoclass:: AgentSession
+
+.. autoclass:: AgentInteraction
+
+.. autoclass:: AgentMessage
+
+.. autoclass:: AgentMessagePart
+
+.. autoclass:: AgentMessagePartToolCall
+
+.. autoclass:: AgentMessagePartToolResult
+
+.. autoclass:: AgentMessagePartImageRef
+
+.. autoclass:: AgentTurn
+
+.. autoclass:: AgentTurnDisplay
+
+.. autoclass:: AgentTurnEvent
+
+.. autoclass:: CreateAgentProviderSessionRequest
+
+.. autoclass:: CreateAgentProviderTurnRequest
+
+.. autoclass:: ListAgentProviderSessionsResponse
+
+.. autoclass:: ListAgentProviderTurnsResponse
+
+.. autoclass:: ListAgentProviderTurnEventsResponse
+
+.. autoclass:: ListAgentProviderInteractionsResponse
+
+.. autoclass:: ExecuteAgentToolResponse
+
+.. autoclass:: ListAgentToolsResponse
+
+.. autoclass:: ListedAgentTool
+
+.. autoclass:: ResolvedAgentConnection
+
+Agent dictionary helpers
+------------------------
+
+These helpers convert native agent dataclasses to and from plain
+lower-snake-case dictionaries. The ``*_proto_dict`` helpers are only for
+interoperability fixtures that need protobuf JSON field names.
+
+.. autosummary::
+   :nosignatures:
+
    agent_actor_to_dict
    agent_actor_from_dict
    agent_subject_context_to_dict
@@ -283,12 +369,6 @@ timezone-aware ``datetime`` values.
    agent_message_from_proto_dict
    agent_messages_to_proto_dicts
    agent_messages_from_proto_dicts
-
-.. autofunction:: AgentSession
-
-.. autofunction:: AgentTurn
-
-.. autofunction:: AgentTurnEvent
 
 .. autofunction:: agent_actor_to_dict
 

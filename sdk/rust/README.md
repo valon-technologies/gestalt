@@ -78,13 +78,17 @@ The crate also exposes clients for sibling host services, including `Cache`,
 `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`, `AgentManager`, and
 `PluginInvoker`.
 
-`AgentHost` includes plain-input helpers for listing tools, executing tools, and
-resolving connections during one turn. Use `gestalt::protocol` helpers such as
-`struct_from_json`, `struct_from_map`, `json_from_struct`, `value_from_json`,
-and `json_from_value` for well-known type conversions, and use
-`gestalt::proto::v1` when transport fixtures need generated messages or service
-traits. The SDK does not expose generic protobuf marshal/unmarshal or timestamp
-wrapper helpers.
+`AgentProvider` implementations receive and return native structs such as
+`CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
+`AgentTurnEvent`. Structured payload fields use `serde_json::Value` and
+timestamp fields use `SystemTime`; the SDK runtime owns protobuf conversion at
+the transport boundary. `AgentHost` includes plain-input helpers for listing
+tools, executing tools, and resolving connections during one turn. Use
+`gestalt::protocol` helpers such as `struct_from_json`, `struct_from_map`,
+`json_from_struct`, `value_from_json`, and `json_from_value` for lower-level
+well-known type fixtures, and use `gestalt::proto::v1` when transport fixtures
+need generated messages or service traits. The SDK does not expose generic
+protobuf marshal/unmarshal or timestamp wrapper helpers.
 The IndexedDB module also exposes JSON-named conversion helpers for
 asserting datastore wire shapes.
 Workflow builders such as `new_bound_workflow_target`,

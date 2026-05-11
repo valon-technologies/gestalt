@@ -8,10 +8,38 @@ from __future__ import annotations
 
 import datetime as dt
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
+from http import HTTPStatus
+from typing import TYPE_CHECKING, Any, Callable, NoReturn, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from ._agent import (
+        AgentInteraction,
+        AgentProviderCapabilities,
+        AgentSession,
+        AgentTurn,
+        CancelAgentProviderTurnRequest,
+        CreateAgentProviderSessionRequest,
+        CreateAgentProviderTurnRequest,
+        GetAgentProviderCapabilitiesRequest,
+        GetAgentProviderInteractionRequest,
+        GetAgentProviderSessionRequest,
+        GetAgentProviderTurnRequest,
+        ListAgentProviderInteractionsRequest,
+        ListAgentProviderInteractionsResponse,
+        ListAgentProviderSessionsRequest,
+        ListAgentProviderSessionsResponse,
+        ListAgentProviderTurnEventsRequest,
+        ListAgentProviderTurnEventsResponse,
+        ListAgentProviderTurnsRequest,
+        ListAgentProviderTurnsResponse,
+        ResolveAgentProviderInteractionRequest,
+        UpdateAgentProviderSessionRequest,
+    )
+    from ._api import Error
     from ._cache import CacheEntry
+
+else:
+    from ._api import Error
 
 
 class ProviderKind(str, Enum):
@@ -262,9 +290,72 @@ class AgentProvider(PluginProvider):
 
     Subclasses implement snake_case handler methods such as
     ``create_session(request)``, ``create_turn(request)``, and
-    ``get_capabilities(request)``. The runtime also accepts the older
-    PascalCase gRPC method names for compatibility.
+    ``get_capabilities(request)``. Request and response objects are native SDK
+    dataclasses; the runtime owns protobuf transport conversion.
     """
+
+    def _unimplemented(self, method: str) -> NoReturn:
+        raise Error(
+            HTTPStatus.NOT_IMPLEMENTED,
+            f"{type(self).__name__}.{method} is not implemented",
+        )
+
+    def create_session(
+        self, request: CreateAgentProviderSessionRequest
+    ) -> AgentSession:
+        self._unimplemented("create_session")
+
+    def get_session(self, request: GetAgentProviderSessionRequest) -> AgentSession:
+        self._unimplemented("get_session")
+
+    def list_sessions(
+        self, request: ListAgentProviderSessionsRequest
+    ) -> ListAgentProviderSessionsResponse:
+        self._unimplemented("list_sessions")
+
+    def update_session(
+        self, request: UpdateAgentProviderSessionRequest
+    ) -> AgentSession:
+        self._unimplemented("update_session")
+
+    def create_turn(self, request: CreateAgentProviderTurnRequest) -> AgentTurn:
+        self._unimplemented("create_turn")
+
+    def get_turn(self, request: GetAgentProviderTurnRequest) -> AgentTurn:
+        self._unimplemented("get_turn")
+
+    def list_turns(
+        self, request: ListAgentProviderTurnsRequest
+    ) -> ListAgentProviderTurnsResponse:
+        self._unimplemented("list_turns")
+
+    def cancel_turn(self, request: CancelAgentProviderTurnRequest) -> AgentTurn:
+        self._unimplemented("cancel_turn")
+
+    def list_turn_events(
+        self, request: ListAgentProviderTurnEventsRequest
+    ) -> ListAgentProviderTurnEventsResponse:
+        self._unimplemented("list_turn_events")
+
+    def get_interaction(
+        self, request: GetAgentProviderInteractionRequest
+    ) -> AgentInteraction:
+        self._unimplemented("get_interaction")
+
+    def list_interactions(
+        self, request: ListAgentProviderInteractionsRequest
+    ) -> ListAgentProviderInteractionsResponse:
+        self._unimplemented("list_interactions")
+
+    def resolve_interaction(
+        self, request: ResolveAgentProviderInteractionRequest
+    ) -> AgentInteraction:
+        self._unimplemented("resolve_interaction")
+
+    def get_capabilities(
+        self, request: GetAgentProviderCapabilitiesRequest
+    ) -> AgentProviderCapabilities:
+        self._unimplemented("get_capabilities")
 
     def serve(self) -> None:
         """Start the agent runtime."""
