@@ -122,13 +122,13 @@ language.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
+    from gestalt import S3, WriteOptions
 
-    s3 = gestalt.S3()
+    s3 = S3()
     avatar = s3.object("uploads", "avatars/user-123.png")
     avatar.write_bytes(
         png_bytes,
-        gestalt.WriteOptions(content_type="image/png"),
+        WriteOptions(content_type="image/png"),
     )
     body = avatar.bytes()
     s3.close()
@@ -179,8 +179,8 @@ language.
   </Tabs.Tab>
 </Tabs>
 
-Use the named helpers when a plugin binds more than one S3 provider: Go and
-Python use `gestalt.S3("archive")`, Rust uses
+Use the named helpers when a plugin binds more than one S3 provider: Go uses
+`gestalt.S3("archive")`, Python uses `S3("archive")`, Rust uses
 `gestalt::S3::connect_named("archive")`, and TypeScript uses
 `new S3("archive")`.
 

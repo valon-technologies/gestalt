@@ -511,14 +511,13 @@ definition do not silently change existing automation.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
-
+    from gestalt import Request, WorkflowEvent, WorkflowManagerPublishEventRequest
 
     def publish_slack_event(
-        request: gestalt.Request,
+        request: Request,
         slack_event: dict[str, object],
     ) -> str:
-        event = gestalt.WorkflowEvent(
+        event = WorkflowEvent(
             type="slack.event.received",
             source="slack",
             subject="route:knowledge-ingest",
@@ -528,7 +527,7 @@ definition do not silently change existing automation.
 
         with request.workflow_manager() as workflows:
             published = workflows.publish_event(
-                gestalt.WorkflowManagerPublishEventRequest(
+                WorkflowManagerPublishEventRequest(
                     provider_name="local",
                     event=event,
                 )
@@ -919,33 +918,40 @@ signal sequence numbers exactly as stored.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
+    from gestalt import (
+        WorkflowProvider,
+        BoundWorkflowRun,
+        WORKFLOW_RUN_STATUS_PENDING,
+        ListWorkflowProviderRunsResponse,
+        WORKFLOW_RUN_STATUS_CANCELED,
+        BoundWorkflowSchedule,
+    )
 
-    class ExampleWorkflow(gestalt.WorkflowProvider):
+    class ExampleWorkflow(WorkflowProvider):
         def configure(self, name: str, config: dict) -> None:
             pass
 
         def StartRun(self, request, context):
-            return gestalt.BoundWorkflowRun(
+            return BoundWorkflowRun(
                 id=f"{request.target.plugin.plugin_name}:run-1",
-                status=gestalt.WORKFLOW_RUN_STATUS_PENDING,
+                status=WORKFLOW_RUN_STATUS_PENDING,
                 target=request.target,
             )
 
         def GetRun(self, request, context):
-            return gestalt.BoundWorkflowRun(id=request.run_id)
+            return BoundWorkflowRun(id=request.run_id)
 
         def ListRuns(self, request, context):
-            return gestalt.ListWorkflowProviderRunsResponse(runs=[])
+            return ListWorkflowProviderRunsResponse(runs=[])
 
         def CancelRun(self, request, context):
-            return gestalt.BoundWorkflowRun(
+            return BoundWorkflowRun(
                 id=request.run_id,
-                status=gestalt.WORKFLOW_RUN_STATUS_CANCELED,
+                status=WORKFLOW_RUN_STATUS_CANCELED,
             )
 
         def UpsertSchedule(self, request, context):
-            return gestalt.BoundWorkflowSchedule(
+            return BoundWorkflowSchedule(
                 id=request.schedule_id,
                 cron=request.cron,
                 target=request.target,
@@ -1173,11 +1179,18 @@ invoke target plugin operations.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    with gestalt.WorkflowHost() as host:
+    from gestalt import (
+        WorkflowHost,
+        InvokeWorkflowOperationInput,
+        BoundWorkflowTargetInput,
+        BoundWorkflowPluginTargetInput,
+    )
+
+    with WorkflowHost() as host:
         resp = host.invoke_operation(
-            gestalt.InvokeWorkflowOperationInput(
-                target=gestalt.BoundWorkflowTargetInput(
-                    plugin=gestalt.BoundWorkflowPluginTargetInput(
+            InvokeWorkflowOperationInput(
+                target=BoundWorkflowTargetInput(
+                    plugin=BoundWorkflowPluginTargetInput(
                         plugin_name="roadmap",
                         operation="sync_items",
                     ),

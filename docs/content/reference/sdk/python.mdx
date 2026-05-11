@@ -7,10 +7,10 @@ title: Python SDK
 Use the Python SDK to build executable Gestalt providers with normal Python
 classes, functions, and type annotations.
 
-The package is published as `gestalt-sdk` and imported as `gestalt`. Use it
-when you want compact provider code, model classes for operation inputs and
-outputs, and Python runtime helpers for host services such as cache, S3,
-IndexedDB, workflows, agents, and telemetry.
+The package is published as `gestalt-sdk`. Import the SDK objects you use from
+`gestalt` when you want compact provider code, model classes for operation
+inputs and outputs, and Python runtime helpers for host services such as cache,
+S3, IndexedDB, workflows, agents, and telemetry.
 
 ## Install
 
@@ -20,10 +20,10 @@ Install the package in your provider project:
 uv add gestalt-sdk
 ```
 
-Provider code imports the package as `gestalt`:
+Provider code imports concrete SDK objects from `gestalt`:
 
 ```python
-import gestalt
+from gestalt import Plugin
 ```
 
 ## Create a plugin provider
@@ -32,27 +32,28 @@ Operations are the callable units of a plugin. Define input and output models,
 then register a function as an operation.
 
 ```python
-import gestalt
+from gestalt import (
+    Model,
+    field,
+    Plugin,
+    Request,
+)
 
+class SearchInput(Model):
+    query: str = field(description="Search query")
+    limit: int = field(description="Maximum results", default=10)
 
-class SearchInput(gestalt.Model):
-    query: str = gestalt.field(description="Search query")
-    limit: int = gestalt.field(description="Maximum results", default=10)
-
-
-class SearchOutput(gestalt.Model):
+class SearchOutput(Model):
     results: list[str]
 
-
-plugin = gestalt.Plugin("search")
-
+plugin = Plugin("search")
 
 @plugin.operation(method="GET", title="Search")
-def search(input: SearchInput, request: gestalt.Request) -> SearchOutput:
+def search(input: SearchInput, request: Request) -> SearchOutput:
     return SearchOutput(results=[input.query][: input.limit])
 ```
 
-Fields without defaults are required. Use `gestalt.field(...)` to attach
+Fields without defaults are required. Use `field(...)` to attach
 catalog descriptions and defaults.
 
 ## Point Gestalt at the provider
@@ -100,7 +101,7 @@ needs to call sibling host services.
 
 `AgentHost` includes plain Python helpers such as `list_tools_for_turn`,
 `execute_tool_for_turn`, and `resolve_connection_for_turn`. For protocol-level
-fixtures, use `gestalt.protocol.v1` or `gestalt.testing` instead of importing
+fixtures, import `protocol.v1` or `testing` from `gestalt` instead of importing
 from private generated modules. Helpers such as `struct_from_dict`,
 `value_from_json`, `timestamp_from_datetime`, `message_to_dict`,
 `message_from_dict`, and the public IndexedDB conversion functions cover common
@@ -117,8 +118,8 @@ relationship without requiring generated protobuf imports.
 ## Record provider telemetry
 
 `gestaltd` owns OpenTelemetry exporter configuration and passes standard
-`OTEL_*` environment variables into provider processes. Use
-`gestalt.telemetry` around GenAI work that your provider performs.
+`OTEL_*` environment variables into provider processes. Import `telemetry` from
+`gestalt` around GenAI work that your provider performs.
 
 ```python
 from gestalt import telemetry

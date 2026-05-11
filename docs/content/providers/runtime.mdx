@@ -559,11 +559,10 @@ processes before Gestalt has dialed the provider directly.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
-
+    from gestalt import RuntimeLogHost
 
     def record_runtime_startup() -> None:
-        with gestalt.RuntimeLogHost() as logs:
+        with RuntimeLogHost() as logs:
             logs.append(
                 "started hosted provider process",
                 stream="runtime",

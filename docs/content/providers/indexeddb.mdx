@@ -102,9 +102,9 @@ Then inside the plugin:
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
+    from gestalt import IndexedDB
 
-    db = gestalt.IndexedDB()
+    db = IndexedDB()
     tasks = db.object_store("tasks")
 
     tasks.put({"id": "task-1", "title": "Ship docs"})
@@ -331,9 +331,9 @@ You implement the [IndexedDB](https://www.w3.org/TR/IndexedDB/#object-store-inte
     ```python
     from typing import Any
 
-    import gestalt
+    from gestalt import IndexedDBProvider
 
-    class RelationalDB(gestalt.IndexedDBProvider):
+    class RelationalDB(IndexedDBProvider):
         def configure(self, name: str, config: dict) -> None:
             dsn = config.get("dsn", "")
             if not dsn:

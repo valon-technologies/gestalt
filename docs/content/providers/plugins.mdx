@@ -460,24 +460,26 @@ The following example defines a `conversations.getMessage` operation that fetche
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
+    from gestalt import (
+        Model,
+        field,
+        operation,
+        Request,
+    )
 
+    class GetMessageInput(Model):
+        channel: str = field(description="Channel ID")
+        ts: str = field(description="Message timestamp")
 
-    class GetMessageInput(gestalt.Model):
-        channel: str = gestalt.field(description="Channel ID")
-        ts: str = gestalt.field(description="Message timestamp")
-
-
-    class GetMessageOutput(gestalt.Model):
+    class GetMessageOutput(Model):
         message: dict
 
-
-    @gestalt.operation(
+    @operation(
         method="GET",
         description="Get a single message from a Slack channel",
     )
     def conversations_getMessage(
-        input: GetMessageInput, req: gestalt.Request
+        input: GetMessageInput, req: Request
     ) -> GetMessageOutput:
         # Call Slack API using req.token as Bearer token.
         # Fetch conversations.history filtered to the single message at input.ts.
@@ -590,13 +592,15 @@ The router derives catalog parameters from the input type. Fields are required b
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    class ListMessagesInput(gestalt.Model):
-        channel: str = gestalt.field(description="Channel ID")
-        limit: int = gestalt.field(description="Maximum messages", default=100)
-        oldest: str | None = gestalt.field(description="Unix timestamp bound", default=None)
+    from gestalt import Model, field
+
+    class ListMessagesInput(Model):
+        channel: str = field(description="Channel ID")
+        limit: int = field(description="Maximum messages", default=100)
+        oldest: str | None = field(description="Unix timestamp bound", default=None)
     ```
 
-    Fields without a default are required. Use `gestalt.field(description="...")` for descriptions and `default=...` for default values.
+    Fields without a default are required. Use `field(description="...")` for descriptions and `default=...` for default values.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
@@ -758,36 +762,40 @@ Implement the target operation in the plugin SDK:
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
+    from gestalt import (
+        Plugin,
+        Model,
+        field,
+        Request,
+        HTTPSubjectRequest,
+        Subject,
+        http_subject_error,
+    )
 
+    plugin = Plugin("slack")
 
-    plugin = gestalt.Plugin("slack")
-
-
-    class SlackCommandInput(gestalt.Model):
+    class SlackCommandInput(Model):
         team_id: str
         user_id: str
         channel_id: str
-        text: str = gestalt.field(default="")
-
+        text: str = field(default="")
 
     @plugin.operation(id="handle_support_command", method="POST")
     def handle_support_command(
-        input: SlackCommandInput, req: gestalt.Request
+        input: SlackCommandInput, req: Request
     ) -> dict[str, bool]:
         # Run the Slack command workflow. The host already verified the signature.
         return {"ok": True}
 
-
     @plugin.http_subject
     def resolve_http_subject(
-        request: gestalt.HTTPSubjectRequest,
-    ) -> gestalt.Subject | None:
+        request: HTTPSubjectRequest,
+    ) -> Subject | None:
         team_id = str(request.params.get("team_id") or "")
         user_id = str(request.params.get("user_id") or "")
         if not team_id or not user_id:
-            raise gestalt.http_subject_error(400, "missing Slack subject fields")
-        return gestalt.Subject(
+            raise http_subject_error(400, "missing Slack subject fields")
+        return Subject(
             id=f"slack:{team_id}:{user_id}",
             kind="user",
             display_name=user_id,
@@ -1004,16 +1012,23 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Register a dynamic session catalog with `@gestalt.session_catalog`:
+    Register a dynamic session catalog with `@session_catalog`:
 
     ```python
-    @gestalt.session_catalog
-    def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
-        return gestalt.Catalog(
+    from gestalt import (
+        session_catalog,
+        Request,
+        Catalog,
+        CatalogOperation,
+    )
+
+    @session_catalog
+    def dynamic_catalog(request: Request) -> Catalog:
+        return Catalog(
             name="slack-session",
             display_name="Slack",
             operations=[
-                gestalt.CatalogOperation(
+                CatalogOperation(
                     id="conversations.getMessage",
                     method="GET",
                     read_only=True,
@@ -1111,14 +1126,13 @@ metadata; Gestalt already stores access and refresh tokens separately.
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Register a post-connect hook with `@gestalt.post_connect`:
+    Register a post-connect hook with `@post_connect`:
 
     ```python
-    import gestalt
+    from gestalt import post_connect, ConnectedToken
 
-
-    @gestalt.post_connect
-    def capture_workspace(token: gestalt.ConnectedToken) -> dict[str, str]:
+    @post_connect
+    def capture_workspace(token: ConnectedToken) -> dict[str, str]:
         return {
             "slack_team_id": token.metadata.get("team_id", ""),
             "subject_id": token.subject_id,

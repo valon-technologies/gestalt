@@ -195,27 +195,177 @@ In plugin code, open host services from the request context or language SDK.
 The plugin does not know database DSNs, S3 credentials, or workflow storage
 details. Those come from the deployment bindings.
 
-<Tabs items={['Python', 'Rust', 'TypeScript', 'Go']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package provider
+
+    import (
+      "context"
+      "encoding/json"
+      "net/http"
+      "time"
+
+      gestalt "github.com/valon-technologies/gestalt/sdk/go"
+      "google.golang.org/protobuf/types/known/structpb"
+    )
+
+    type Provider struct{}
+
+    type SaveItemInput struct {
+      ID     string `json:"id" required:"true"`
+      Title  string `json:"title" required:"true"`
+      Status string `json:"status" required:"true"`
+    }
+
+    type SaveItemOutput struct {
+      OK bool `json:"ok"`
+    }
+
+    func (p *Provider) saveItem(
+      ctx context.Context,
+      input SaveItemInput,
+      _ gestalt.Request,
+    ) (gestalt.Response[SaveItemOutput], error) {
+      db, err := gestalt.IndexedDB()
+      if err != nil {
+        return gestalt.Response[SaveItemOutput]{}, err
+      }
+      defer db.Close()
+
+      items := db.ObjectStore("items")
+      if err := items.Put(ctx, gestalt.Record{
+        "id":        input.ID,
+        "title":     input.Title,
+        "status":    input.Status,
+        "updatedAt": time.Now().UTC().Format(time.RFC3339),
+      }); err != nil {
+        return gestalt.Response[SaveItemOutput]{}, err
+      }
+      return gestalt.OK(SaveItemOutput{OK: true}), nil
+    }
+
+    type NightlyReportInput struct {
+      Bucket string `json:"bucket" required:"true"`
+    }
+
+    type NightlyReportOutput struct {
+      ReportURL string `json:"reportUrl"`
+    }
+
+    func (p *Provider) generateNightly(
+      ctx context.Context,
+      input NightlyReportInput,
+      req gestalt.Request,
+    ) (gestalt.Response[NightlyReportOutput], error) {
+      db, err := gestalt.IndexedDB()
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      defer db.Close()
+
+      s3, err := gestalt.S3("reports")
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      defer s3.Close()
+
+      body, err := json.Marshal(map[string]string{
+        "generatedAt": time.Now().UTC().Format(time.RFC3339),
+      })
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      obj := s3.Object(input.Bucket, "nightly/"+req.IdempotencyKey+".json")
+      if _, err := obj.WriteBytes(ctx, body, &gestalt.WriteOptions{
+        ContentType: "application/json",
+      }); err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      access, err := obj.CreateAccessUrl(ctx, &gestalt.ObjectAccessURLOptions{
+        Method:  gestalt.PresignMethodGet,
+        Expires: 15 * time.Minute,
+      })
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+
+      if err := db.ObjectStore("reports").Put(ctx, gestalt.Record{
+        "id":        req.IdempotencyKey,
+        "url":       access.URL,
+        "createdAt": time.Now().UTC().Format(time.RFC3339),
+      }); err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+
+      workflows, err := req.WorkflowManager()
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      data, err := structpb.NewStruct(map[string]any{"reportUrl": access.URL})
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+      _, err = workflows.PublishEvent(ctx, &gestalt.WorkflowManagerPublishEventRequest{
+        Event: &gestalt.WorkflowEvent{
+          Type:            "workspace_review.report.generated",
+          Source:          "workspace_review",
+          Subject:         "nightly",
+          Datacontenttype: "application/json",
+          Data:            data,
+        },
+      })
+      if err != nil {
+        return gestalt.Response[NightlyReportOutput]{}, err
+      }
+
+      return gestalt.OK(NightlyReportOutput{ReportURL: access.URL}), nil
+    }
+
+    var Router = gestalt.MustRouter(
+      gestalt.Register(
+        gestalt.Operation[SaveItemInput, SaveItemOutput]{
+          ID: "items.save", Method: http.MethodPost,
+        },
+        (*Provider).saveItem,
+      ),
+      gestalt.Register(
+        gestalt.Operation[NightlyReportInput, NightlyReportOutput]{
+          ID: "reports.generateNightly", Method: http.MethodPost,
+        },
+        (*Provider).generateNightly,
+      ),
+    )
+    ```
+  </Tabs.Tab>
   <Tabs.Tab>
     ```python
     import datetime as dt
     import json
 
-    import gestalt
+    from gestalt import (
+        Plugin,
+        Model,
+        IndexedDB,
+        Request,
+        S3,
+        WriteOptions,
+        PresignOptions,
+        PresignMethod,
+        WorkflowEvent,
+        WorkflowManagerPublishEventRequest,
+    )
 
+    plugin = Plugin("workspace_review")
 
-    plugin = gestalt.Plugin("workspace_review")
-
-
-    class SaveItemInput(gestalt.Model):
+    class SaveItemInput(Model):
         id: str
         title: str
         status: str
 
-
     @plugin.operation(id="items.save", method="POST")
     def save_item(input: SaveItemInput) -> dict[str, bool]:
-        db = gestalt.IndexedDB()
+        db = IndexedDB()
         db.object_store("items").put(
             {
                 "id": input.id,
@@ -227,27 +377,25 @@ details. Those come from the deployment bindings.
         db.close()
         return {"ok": True}
 
-
-    class NightlyReportInput(gestalt.Model):
+    class NightlyReportInput(Model):
         bucket: str
-
 
     @plugin.operation(id="reports.generateNightly", method="POST")
     def generate_nightly(
-        input: NightlyReportInput, request: gestalt.Request
+        input: NightlyReportInput, request: Request
     ) -> dict[str, str]:
-        db = gestalt.IndexedDB()
-        s3 = gestalt.S3("reports")
+        db = IndexedDB()
+        s3 = S3("reports")
 
         object_key = f"nightly/{request.idempotency_key}.json"
         report = s3.object(input.bucket, object_key)
         report.write_bytes(
             json.dumps({"generatedAt": dt.datetime.now(dt.timezone.utc).isoformat()}).encode(),
-            gestalt.WriteOptions(content_type="application/json"),
+            WriteOptions(content_type="application/json"),
         )
         access = report.create_access_url(
-            gestalt.PresignOptions(
-                method=gestalt.PresignMethod.GET,
+            PresignOptions(
+                method=PresignMethod.GET,
                 expires=dt.timedelta(seconds=900),
             )
         )
@@ -260,7 +408,7 @@ details. Those come from the deployment bindings.
             }
         )
 
-        event = gestalt.WorkflowEvent(
+        event = WorkflowEvent(
             type="workspace_review.report.generated",
             source="workspace_review",
             subject="nightly",
@@ -269,7 +417,7 @@ details. Those come from the deployment bindings.
         event.data.update({"reportUrl": access.url})
         with request.workflow_manager() as workflows:
             workflows.publish_event(
-                gestalt.WorkflowManagerPublishEventRequest(event=event)
+                WorkflowManagerPublishEventRequest(event=event)
             )
 
         db.close()
@@ -475,148 +623,6 @@ details. Those come from the deployment bindings.
     });
     ```
   </Tabs.Tab>
-  <Tabs.Tab>
-    ```go
-    package provider
-
-    import (
-      "context"
-      "encoding/json"
-      "net/http"
-      "time"
-
-      gestalt "github.com/valon-technologies/gestalt/sdk/go"
-      "google.golang.org/protobuf/types/known/structpb"
-    )
-
-    type Provider struct{}
-
-    type SaveItemInput struct {
-      ID     string `json:"id" required:"true"`
-      Title  string `json:"title" required:"true"`
-      Status string `json:"status" required:"true"`
-    }
-
-    type SaveItemOutput struct {
-      OK bool `json:"ok"`
-    }
-
-    func (p *Provider) saveItem(
-      ctx context.Context,
-      input SaveItemInput,
-      _ gestalt.Request,
-    ) (gestalt.Response[SaveItemOutput], error) {
-      db, err := gestalt.IndexedDB()
-      if err != nil {
-        return gestalt.Response[SaveItemOutput]{}, err
-      }
-      defer db.Close()
-
-      items := db.ObjectStore("items")
-      if err := items.Put(ctx, gestalt.Record{
-        "id":        input.ID,
-        "title":     input.Title,
-        "status":    input.Status,
-        "updatedAt": time.Now().UTC().Format(time.RFC3339),
-      }); err != nil {
-        return gestalt.Response[SaveItemOutput]{}, err
-      }
-      return gestalt.OK(SaveItemOutput{OK: true}), nil
-    }
-
-    type NightlyReportInput struct {
-      Bucket string `json:"bucket" required:"true"`
-    }
-
-    type NightlyReportOutput struct {
-      ReportURL string `json:"reportUrl"`
-    }
-
-    func (p *Provider) generateNightly(
-      ctx context.Context,
-      input NightlyReportInput,
-      req gestalt.Request,
-    ) (gestalt.Response[NightlyReportOutput], error) {
-      db, err := gestalt.IndexedDB()
-      if err != nil {
-        return gestalt.Response[NightlyReportOutput]{}, err
-      }
-      defer db.Close()
-
-      s3, err := gestalt.S3("reports")
-      if err != nil {
-        return gestalt.Response[NightlyReportOutput]{}, err
-      }
-      defer s3.Close()
-
-      body, err := json.Marshal(map[string]string{
-        "generatedAt": time.Now().UTC().Format(time.RFC3339),
-      })
-      if err != nil {
-        return gestalt.Response[NightlyReportOutput]{}, err
-      }
-      obj := s3.Object(input.Bucket, "nightly/"+req.IdempotencyKey+".json")
-      if _, err := obj.WriteBytes(ctx, body, &gestalt.WriteOptions{
-        ContentType: "application/json",
-      }); err != nil {
-        return gestalt.Response[NightlyReportOutput]{}, err
-      }
-      access, err := obj.CreateAccessUrl(ctx, &gestalt.ObjectAccessURLOptions{
-        Method:  gestalt.PresignMethodGet,
-        Expires: 15 * time.Minute,
-      })
-      if err != nil {
-        return gestalt.Response[NightlyReportOutput]{}, err
-      }
-
-      if err := db.ObjectStore("reports").Put(ctx, gestalt.Record{
-        "id":        req.IdempotencyKey,
-        "url":       access.URL,
-        "createdAt": time.Now().UTC().Format(time.RFC3339),
-      }); err != nil {
-        return gestalt.Response[NightlyReportOutput]{}, err
-      }
-
-      workflows, err := req.WorkflowManager()
-      if err != nil {
-        return gestalt.Response[NightlyReportOutput]{}, err
-      }
-      data, err := structpb.NewStruct(map[string]any{"reportUrl": access.URL})
-      if err != nil {
-        return gestalt.Response[NightlyReportOutput]{}, err
-      }
-      _, err = workflows.PublishEvent(ctx, &gestalt.WorkflowManagerPublishEventRequest{
-        Event: &gestalt.WorkflowEvent{
-          Type:            "workspace_review.report.generated",
-          Source:          "workspace_review",
-          Subject:         "nightly",
-          Datacontenttype: "application/json",
-          Data:            data,
-        },
-      })
-      if err != nil {
-        return gestalt.Response[NightlyReportOutput]{}, err
-      }
-
-      return gestalt.OK(NightlyReportOutput{ReportURL: access.URL}), nil
-    }
-
-    var Router = gestalt.MustRouter(
-      gestalt.Register(
-        gestalt.Operation[SaveItemInput, SaveItemOutput]{
-          ID: "items.save", Method: http.MethodPost,
-        },
-        (*Provider).saveItem,
-      ),
-      gestalt.Register(
-        gestalt.Operation[NightlyReportInput, NightlyReportOutput]{
-          ID: "reports.generateNightly", Method: http.MethodPost,
-        },
-        (*Provider).generateNightly,
-      ),
-    )
-    ```
-  </Tabs.Tab>
 </Tabs>
 
 ## Calling Another Plugin From Your Application
@@ -640,16 +646,51 @@ plugins:
     source: ./plugins/github/manifest.yaml
 ```
 
-<Tabs items={['Python', 'Rust', 'TypeScript', 'Go']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+        "encoding/json"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    func loadLinkedIssue(ctx context.Context, request gestalt.Request, issueNumber int) (map[string]any, error) {
+        invoker, err := request.Invoker()
+        if err != nil {
+            return nil, err
+        }
+        defer invoker.Close()
+
+        result, err := invoker.Invoke(ctx, "github", "issues.get", map[string]any{
+            "owner":  "acme",
+            "repo":   "roadmap",
+            "number": issueNumber,
+        }, &gestalt.InvokeOptions{
+            Connection:     "default",
+            IdempotencyKey: request.IdempotencyKey,
+        })
+        if err != nil {
+            return nil, err
+        }
+
+        var issue map[string]any
+        if err := json.Unmarshal([]byte(result.Body), &issue); err != nil {
+            return nil, err
+        }
+        return issue, nil
+    }
+    ```
+  </Tabs.Tab>
   <Tabs.Tab>
     ```python
     import json
 
-    import gestalt
-
+    from gestalt import Request
 
     def load_linked_issue(
-        request: gestalt.Request,
+        request: Request,
         issue_number: int,
     ) -> dict[str, object]:
         with request.invoker() as invoker:
@@ -722,42 +763,6 @@ plugins:
       );
 
       return JSON.parse(result.body);
-    }
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```go
-    import (
-        "context"
-        "encoding/json"
-
-        gestalt "github.com/valon-technologies/gestalt/sdk/go"
-    )
-
-    func loadLinkedIssue(ctx context.Context, request gestalt.Request, issueNumber int) (map[string]any, error) {
-        invoker, err := request.Invoker()
-        if err != nil {
-            return nil, err
-        }
-        defer invoker.Close()
-
-        result, err := invoker.Invoke(ctx, "github", "issues.get", map[string]any{
-            "owner":  "acme",
-            "repo":   "roadmap",
-            "number": issueNumber,
-        }, &gestalt.InvokeOptions{
-            Connection:     "default",
-            IdempotencyKey: request.IdempotencyKey,
-        })
-        if err != nil {
-            return nil, err
-        }
-
-        var issue map[string]any
-        if err := json.Unmarshal([]byte(result.Body), &issue); err != nil {
-            return nil, err
-        }
-        return issue, nil
     }
     ```
   </Tabs.Tab>

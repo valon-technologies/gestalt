@@ -429,22 +429,26 @@ state.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    import gestalt
-
+    from gestalt import (
+        Request,
+        SubjectSearchRequest,
+        AuthorizationResource,
+        AuthorizationAction,
+    )
 
     def users_for_slack_identity(
-        request: gestalt.Request,
+        request: Request,
         team_id: str,
         slack_user_id: str,
     ) -> list[str]:
         with request.authorization() as authz:
             subjects = authz.search_subjects(
-                gestalt.SubjectSearchRequest(
-                    resource=gestalt.AuthorizationResource(
+                SubjectSearchRequest(
+                    resource=AuthorizationResource(
                         type="slack_identity",
                         id=f"team:{team_id}:user:{slack_user_id}",
                     ),
-                    action=gestalt.AuthorizationAction(name="assume"),
+                    action=AuthorizationAction(name="assume"),
                     subject_type="user",
                     page_size=10,
                 )
