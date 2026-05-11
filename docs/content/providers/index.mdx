@@ -86,31 +86,6 @@ without replacing the provider entry with a one-off URL.
 Use exact sources only when you need to pin something outside an index, such as
 a local release file, a one-off metadata URL, or a private GitHub Release asset.
 
-### First-party providers
-
-First-party provider packages live in
-[`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers).
-The repository is organized by provider type, and the published packages are
-listed in the official registry.
-
-| Type | Repository path | Typical config key |
-| --- | --- | --- |
-| Plugin | [`plugins/`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins) | `plugins.<name>` |
-| Authentication | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.authentication.<name>` |
-| Authorization | [`authorization/`](https://github.com/valon-technologies/gestalt-providers/tree/main/authorization) | `providers.authorization.<name>` |
-| Cache | [`cache/`](https://github.com/valon-technologies/gestalt-providers/tree/main/cache) | `providers.cache.<name>` |
-| IndexedDB | [`indexeddb/`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb) | `providers.indexeddb.<name>` |
-| Runtime | [`runtime/`](https://github.com/valon-technologies/gestalt-providers/tree/main/runtime) | `runtime.providers.<name>` |
-| S3 | [`s3/`](https://github.com/valon-technologies/gestalt-providers/tree/main/s3) | `providers.s3.<name>` |
-| Secret | [`secrets/`](https://github.com/valon-technologies/gestalt-providers/tree/main/secrets) | `providers.secrets.<name>` |
-| Workflow | [`workflow/`](https://github.com/valon-technologies/gestalt-providers/tree/main/workflow) | `providers.workflow.<name>` |
-| UI | [`web/`](https://github.com/valon-technologies/gestalt-providers/tree/main/web) | `providers.ui` |
-
-There is not yet a first-party agent provider published from
-`valon-technologies/gestalt-providers`. If you need one today, implement it as
-a custom provider with the neutral agent protocol described in
-[Agent](/providers/agent#building-your-own-agent-provider).
-
 ### Provider repositories
 
 A provider repository is a static YAML index. Gestalt fetches the index, picks a
