@@ -915,38 +915,39 @@ signal sequence numbers exactly as stored.
     ```python
     from gestalt import (
         WorkflowProvider,
-        BoundWorkflowRun,
+        BoundWorkflowRunInput,
         WORKFLOW_RUN_STATUS_PENDING,
         ListWorkflowProviderRunsResponse,
         WORKFLOW_RUN_STATUS_CANCELED,
-        BoundWorkflowSchedule,
+        BoundWorkflowScheduleInput,
     )
 
     class ExampleWorkflow(WorkflowProvider):
         def configure(self, name: str, config: dict) -> None:
             pass
 
-        def StartRun(self, request, context):
-            return BoundWorkflowRun(
-                id=f"{request.target.plugin.plugin_name}:run-1",
+        def start_run(self, request):
+            plugin = request.target.plugin if request.target else None
+            return BoundWorkflowRunInput(
+                id=f"{plugin.plugin_name if plugin else 'workflow'}:run-1",
                 status=WORKFLOW_RUN_STATUS_PENDING,
                 target=request.target,
             )
 
-        def GetRun(self, request, context):
-            return BoundWorkflowRun(id=request.run_id)
+        def get_run(self, request):
+            return BoundWorkflowRunInput(id=request.run_id)
 
-        def ListRuns(self, request, context):
+        def list_runs(self, request):
             return ListWorkflowProviderRunsResponse(runs=[])
 
-        def CancelRun(self, request, context):
-            return BoundWorkflowRun(
+        def cancel_run(self, request):
+            return BoundWorkflowRunInput(
                 id=request.run_id,
                 status=WORKFLOW_RUN_STATUS_CANCELED,
             )
 
-        def UpsertSchedule(self, request, context):
-            return BoundWorkflowSchedule(
+        def upsert_schedule(self, request):
+            return BoundWorkflowScheduleInput(
                 id=request.schedule_id,
                 cron=request.cron,
                 target=request.target,

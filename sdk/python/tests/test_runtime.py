@@ -20,22 +20,34 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from gestalt import (
     AgentProvider,
     AuthenticationProvider,
+    BeginLoginRequest,
+    BoundWorkflowEventTriggerInput,
+    BoundWorkflowRunInput,
+    BoundWorkflowScheduleInput,
     CacheEntry,
     CacheProvider,
     Catalog,
     CatalogOperation,
+    CompleteLoginRequest,
     ConnectedToken,
     ExternalTokenValidator,
+    GetPluginRuntimeSupportRequest,
     HealthChecker,
     MetadataProvider,
+    PauseWorkflowProviderEventTriggerRequest,
+    PauseWorkflowProviderScheduleRequest,
     Plugin,
     PluginProviderAdapter,
     PluginRuntimeProvider,
+    PluginRuntimeSupport,
     ProviderKind,
     ProviderMetadata,
     Request,
+    ResumeWorkflowProviderEventTriggerRequest,
+    ResumeWorkflowProviderScheduleRequest,
     S3Provider,
     SessionTTLProvider,
+    StartWorkflowProviderRunRequest,
     WarningsProvider,
     WorkflowProvider,
     _bootstrap,
@@ -47,9 +59,11 @@ from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt._gen.v1 import cache_pb2 as _cache_pb2
 from gestalt._gen.v1 import plugin_pb2 as _plugin_pb2
 from gestalt._gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
+from gestalt._gen.v1 import pluginruntime_pb2 as _pluginruntime_pb2
 from gestalt._gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
 from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
+from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
 from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
 agent_pb2_grpc: Any = _agent_pb2_grpc
@@ -59,11 +73,13 @@ duration_pb2: Any = _duration_pb2
 empty_pb2: Any = _empty_pb2
 plugin_pb2: Any = _plugin_pb2
 plugin_pb2_grpc: Any = _plugin_pb2_grpc
+pluginruntime_pb2: Any = _pluginruntime_pb2
 pluginruntime_pb2_grpc: Any = _pluginruntime_pb2_grpc
 runtime_pb2: Any = _runtime_pb2
 s3_pb2_grpc: Any = _s3_pb2_grpc
 struct_pb2: Any = _struct_pb2
 timestamp_pb2: Any = _timestamp_pb2
+workflow_pb2: Any = _workflow_pb2
 workflow_pb2_grpc: Any = _workflow_pb2_grpc
 
 UTC = dt.timezone.utc
@@ -796,12 +812,14 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             return None
 
         def begin_login(self, request: Any) -> Any:
+            self.begin_login_request = request
             return authentication_pb2.BeginLoginResponse(
                 authorization_url=f"https://auth.example.test/login?state={request.host_state}",
                 provider_state=b"provider-state",
             )
 
         def complete_login(self, request: Any) -> Any:
+            self.complete_login_request = request
             return authentication_pb2.AuthenticatedUser(
                 email=request.query.get("email", ""),
                 display_name="Runtime User",
@@ -899,6 +917,9 @@ class AuthenticationRuntimeTests(unittest.TestCase):
             login.authorization_url, "https://auth.example.test/login?state=host-state"
         )
         self.assertEqual(bytes(login.provider_state), b"provider-state")
+        self.assertIsInstance(provider.begin_login_request, BeginLoginRequest)
+        self.assertEqual(provider.begin_login_request.scopes, ["profile"])
+        self.assertEqual(provider.begin_login_request.options, {"prompt": "consent"})
 
         user = auth_servicer.CompleteLogin(
             authentication_pb2.CompleteLoginRequest(
@@ -910,6 +931,11 @@ class AuthenticationRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(user.email, "user@example.com")
         self.assertEqual(user.display_name, "Runtime User")
+        self.assertIsInstance(provider.complete_login_request, CompleteLoginRequest)
+        self.assertEqual(
+            bytes(provider.complete_login_request.provider_state),
+            b"provider-state",
+        )
 
         validated = auth_servicer.ValidateExternalToken(
             authentication_pb2.ValidateExternalTokenRequest(token="known-token"),
@@ -1335,7 +1361,11 @@ class PluginRuntimeRuntimeTests(unittest.TestCase):
     def test_plugin_runtime_registration_accepts_snake_case_handlers(self) -> None:
         class Provider(PluginRuntimeProvider):
             def get_support(self, request: Any) -> Any:
-                return {"request": request}
+                self.request = request
+                return PluginRuntimeSupport(
+                    can_host_plugins=True,
+                    supports_prepare_workspace=True,
+                )
 
         provider = Provider()
         server = mock.Mock()
@@ -1346,8 +1376,14 @@ class PluginRuntimeRuntimeTests(unittest.TestCase):
             _runtime._register_plugin_runtime_services(server, provider)
 
         wrapped, _registered_server = add_runtime.call_args.args
+        response = wrapped.GetSupport(empty_pb2.Empty(), object())
+        self.assertIsInstance(provider.request, GetPluginRuntimeSupportRequest)
         self.assertEqual(
-            wrapped.GetSupport("request", object()), {"request": "request"}
+            response,
+            pluginruntime_pb2.PluginRuntimeSupport(
+                can_host_plugins=True,
+                supports_prepare_workspace=True,
+            ),
         )
 
     def test_servable_target_wraps_plugin_runtime_provider(self) -> None:
@@ -1441,30 +1477,98 @@ class WorkflowRuntimeTests(unittest.TestCase):
     def test_workflow_wrapper_accepts_snake_case_one_arg_handler(self) -> None:
         class Provider(WorkflowProvider):
             def start_run(self, request: Any) -> Any:
-                return {"request": request}
+                self.request = request
+                return BoundWorkflowRunInput(id="run-native")
 
-        wrapped = _runtime._service_wrapper(
-            Provider(),
-            workflow_pb2_grpc.WorkflowProviderServicer,
-            (("StartRun", "start_run"),),
+        provider = Provider()
+        wrapped = _runtime._workflow_provider_servicer(provider)
+
+        response = wrapped.StartRun(
+            workflow_pb2.StartWorkflowProviderRunRequest(workflow_key="sync"),
+            object(),
+        )
+        self.assertIsInstance(provider.request, StartWorkflowProviderRunRequest)
+        self.assertEqual(provider.request.workflow_key, "sync")
+        self.assertEqual(response.id, "run-native")
+
+    def test_workflow_wrapper_returns_pause_resume_schedule_and_trigger(self) -> None:
+        class Provider(WorkflowProvider):
+            def pause_schedule(self, request: Any) -> Any:
+                self.pause_schedule_request = request
+                return BoundWorkflowScheduleInput(id=request.schedule_id, paused=True)
+
+            def resume_schedule(self, request: Any) -> Any:
+                self.resume_schedule_request = request
+                return BoundWorkflowScheduleInput(id=request.schedule_id, paused=False)
+
+            def pause_event_trigger(self, request: Any) -> Any:
+                self.pause_trigger_request = request
+                return BoundWorkflowEventTriggerInput(id=request.trigger_id, paused=True)
+
+            def resume_event_trigger(self, request: Any) -> Any:
+                self.resume_trigger_request = request
+                return BoundWorkflowEventTriggerInput(id=request.trigger_id, paused=False)
+
+        provider = Provider()
+        wrapped = _runtime._workflow_provider_servicer(provider)
+
+        paused_schedule = wrapped.PauseSchedule(
+            workflow_pb2.PauseWorkflowProviderScheduleRequest(schedule_id="schedule-1"),
+            object(),
+        )
+        resumed_schedule = wrapped.ResumeSchedule(
+            workflow_pb2.ResumeWorkflowProviderScheduleRequest(schedule_id="schedule-1"),
+            object(),
+        )
+        paused_trigger = wrapped.PauseEventTrigger(
+            workflow_pb2.PauseWorkflowProviderEventTriggerRequest(trigger_id="trigger-1"),
+            object(),
+        )
+        resumed_trigger = wrapped.ResumeEventTrigger(
+            workflow_pb2.ResumeWorkflowProviderEventTriggerRequest(trigger_id="trigger-1"),
+            object(),
         )
 
-        self.assertEqual(wrapped.StartRun("request", object()), {"request": "request"})
+        self.assertIsInstance(
+            provider.pause_schedule_request,
+            PauseWorkflowProviderScheduleRequest,
+        )
+        self.assertIsInstance(
+            provider.resume_schedule_request,
+            ResumeWorkflowProviderScheduleRequest,
+        )
+        self.assertIsInstance(
+            provider.pause_trigger_request,
+            PauseWorkflowProviderEventTriggerRequest,
+        )
+        self.assertIsInstance(
+            provider.resume_trigger_request,
+            ResumeWorkflowProviderEventTriggerRequest,
+        )
+        self.assertEqual(paused_schedule.id, "schedule-1")
+        self.assertTrue(paused_schedule.paused)
+        self.assertEqual(resumed_schedule.id, "schedule-1")
+        self.assertFalse(resumed_schedule.paused)
+        self.assertEqual(paused_trigger.id, "trigger-1")
+        self.assertTrue(paused_trigger.paused)
+        self.assertEqual(resumed_trigger.id, "trigger-1")
+        self.assertFalse(resumed_trigger.paused)
 
     def test_workflow_wrapper_keeps_pascal_case_rpc_handlers(self) -> None:
         context = object()
 
         class Provider(WorkflowProvider):
             def StartRun(self, request: Any, rpc_context: Any) -> Any:
-                return (request, rpc_context)
+                self.called = (request, rpc_context)
+                return workflow_pb2.BoundWorkflowRun(id="run-raw")
 
-        wrapped = _runtime._service_wrapper(
-            Provider(),
-            workflow_pb2_grpc.WorkflowProviderServicer,
-            (("StartRun", "start_run"),),
-        )
+        provider = Provider()
+        wrapped = _runtime._workflow_provider_servicer(provider)
+        raw_request = workflow_pb2.StartWorkflowProviderRunRequest(workflow_key="sync")
 
-        self.assertEqual(wrapped.StartRun("request", context), ("request", context))
+        response = wrapped.StartRun(raw_request, context)
+        self.assertEqual(provider.called, (raw_request, context))
+        self.assertEqual(response.id, "run-raw")
 
     def test_servable_target_wraps_workflow_provider(self) -> None:
         provider = self.StubWorkflowProvider()

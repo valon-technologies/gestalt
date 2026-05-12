@@ -60,13 +60,12 @@ from gestalt import (
     WarningsProvider,
     _runtime,
     agent_message_from_dict,
-    agent_message_from_proto_dict,
     agent_message_part_from_dict,
     agent_message_to_dict,
-    agent_message_to_proto_dict,
     protocol,
 )
 from gestalt.protocol import v1 as protocol_v1
+from gestalt.testing import agent_message_from_proto_dict, agent_message_to_proto_dict
 from gestalt.testing import agent_pb2 as _agent_pb2
 from gestalt.testing import agent_pb2_grpc as _agent_pb2_grpc
 from gestalt.testing import runtime_pb2 as _runtime_pb2

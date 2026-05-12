@@ -36,7 +36,14 @@ if TYPE_CHECKING:
         UpdateAgentProviderSessionRequest,
     )
     from ._api import Error
-    from ._authorization import (
+    from ._authentication import (
+        AuthenticatedUser,
+        BeginLoginRequest,
+        BeginLoginResponse,
+        CompleteLoginRequest,
+    )
+    from ._cache import CacheEntry
+    from ._gen.v1.authorization_pb2 import (
         AccessDecision,
         AccessEvaluationRequest,
         AccessEvaluationsRequest,
@@ -61,7 +68,54 @@ if TYPE_CHECKING:
         WriteModelRequest,
         WriteRelationshipsRequest,
     )
-    from ._cache import CacheEntry
+    from ._pluginruntime import (
+        GetPluginRuntimeSessionRequest,
+        GetPluginRuntimeSupportRequest,
+        HostedPlugin,
+        ListPluginRuntimeSessionsRequest,
+        ListPluginRuntimeSessionsResponse,
+        PluginRuntimeSession,
+        PluginRuntimeSupport,
+        PreparePluginRuntimeWorkspaceRequest,
+        PreparePluginRuntimeWorkspaceResponse,
+        RemovePluginRuntimeWorkspaceRequest,
+        StartHostedPluginRequest,
+        StartPluginRuntimeSessionRequest,
+        StopPluginRuntimeSessionRequest,
+    )
+    from ._workflow import (
+        BoundWorkflowEventTriggerInput,
+        BoundWorkflowRunInput,
+        BoundWorkflowScheduleInput,
+        CancelWorkflowProviderRunRequest,
+        DeleteWorkflowProviderEventTriggerRequest,
+        DeleteWorkflowProviderScheduleRequest,
+        GetWorkflowExecutionReferenceRequest,
+        GetWorkflowProviderEventTriggerRequest,
+        GetWorkflowProviderRunRequest,
+        GetWorkflowProviderScheduleRequest,
+        ListWorkflowExecutionReferencesRequest,
+        ListWorkflowExecutionReferencesResponse,
+        ListWorkflowProviderEventTriggersRequest,
+        ListWorkflowProviderEventTriggersResponse,
+        ListWorkflowProviderRunsRequest,
+        ListWorkflowProviderRunsResponse,
+        ListWorkflowProviderSchedulesRequest,
+        ListWorkflowProviderSchedulesResponse,
+        PauseWorkflowProviderEventTriggerRequest,
+        PauseWorkflowProviderScheduleRequest,
+        PublishWorkflowProviderEventRequest,
+        PutWorkflowExecutionReferenceRequest,
+        ResumeWorkflowProviderEventTriggerRequest,
+        ResumeWorkflowProviderScheduleRequest,
+        SignalOrStartWorkflowProviderRunRequest,
+        SignalWorkflowProviderRunRequest,
+        SignalWorkflowRunResponse,
+        StartWorkflowProviderRunRequest,
+        UpsertWorkflowProviderEventTriggerRequest,
+        UpsertWorkflowProviderScheduleRequest,
+        WorkflowExecutionReferenceInput,
+    )
 
 else:
     from ._api import Error
@@ -109,6 +163,12 @@ class PluginProvider:
         """Apply the host-provided provider name and parsed configuration."""
 
         pass
+
+    def _unimplemented(self, method: str) -> NoReturn:
+        raise Error(
+            HTTPStatus.NOT_IMPLEMENTED,
+            f"{type(self).__name__}.{method} is not implemented",
+        )
 
 
 class MetadataProvider:
@@ -186,12 +246,12 @@ class PluginProviderAdapter:
 class AuthenticationProvider(PluginProvider):
     """Base class for authentication providers."""
 
-    def begin_login(self, request: Any) -> Any:
+    def begin_login(self, request: BeginLoginRequest) -> BeginLoginResponse:
         """Begin an interactive login flow."""
 
         raise NotImplementedError
 
-    def complete_login(self, request: Any) -> Any:
+    def complete_login(self, request: CompleteLoginRequest) -> AuthenticatedUser:
         """Complete an interactive login flow."""
 
         raise NotImplementedError
@@ -206,12 +266,6 @@ class AuthenticationProvider(PluginProvider):
 
 class AuthorizationProvider(PluginProvider):
     """Base class for authorization-provider runtimes."""
-
-    def _unimplemented(self, method: str) -> NoReturn:
-        raise Error(
-            HTTPStatus.NOT_IMPLEMENTED,
-            f"{type(self).__name__}.{method} is not implemented",
-        )
 
     def evaluate(self, request: AccessEvaluationRequest) -> AccessDecision:
         self._unimplemented("evaluate")
@@ -276,7 +330,7 @@ class AuthorizationProvider(PluginProvider):
 class ExternalTokenValidator:
     """Optional mixin for providers that validate external bearer tokens."""
 
-    def validate_external_token(self, token: str) -> Any:
+    def validate_external_token(self, token: str) -> AuthenticatedUser | None:
         """Validate a bearer token and return the authenticated subject."""
 
         raise NotImplementedError
@@ -389,12 +443,6 @@ class AgentProvider(PluginProvider):
     dataclasses; the runtime owns transport conversion.
     """
 
-    def _unimplemented(self, method: str) -> NoReturn:
-        raise Error(
-            HTTPStatus.NOT_IMPLEMENTED,
-            f"{type(self).__name__}.{method} is not implemented",
-        )
-
     def create_session(
         self, request: CreateAgentProviderSessionRequest
     ) -> AgentSession:
@@ -468,6 +516,48 @@ class PluginRuntimeProvider(PluginProvider):
     ``start_plugin(request)``.
     """
 
+    def get_support(
+        self,
+        request: GetPluginRuntimeSupportRequest,
+    ) -> PluginRuntimeSupport:
+        self._unimplemented("get_support")
+
+    def start_session(
+        self,
+        request: StartPluginRuntimeSessionRequest,
+    ) -> PluginRuntimeSession:
+        self._unimplemented("start_session")
+
+    def get_session(
+        self,
+        request: GetPluginRuntimeSessionRequest,
+    ) -> PluginRuntimeSession:
+        self._unimplemented("get_session")
+
+    def list_sessions(
+        self,
+        request: ListPluginRuntimeSessionsRequest,
+    ) -> ListPluginRuntimeSessionsResponse:
+        self._unimplemented("list_sessions")
+
+    def stop_session(self, request: StopPluginRuntimeSessionRequest) -> None:
+        self._unimplemented("stop_session")
+
+    def prepare_workspace(
+        self,
+        request: PreparePluginRuntimeWorkspaceRequest,
+    ) -> PreparePluginRuntimeWorkspaceResponse:
+        self._unimplemented("prepare_workspace")
+
+    def remove_workspace(
+        self,
+        request: RemovePluginRuntimeWorkspaceRequest,
+    ) -> None:
+        self._unimplemented("remove_workspace")
+
+    def start_plugin(self, request: StartHostedPluginRequest) -> HostedPlugin:
+        self._unimplemented("start_plugin")
+
     def serve(self) -> None:
         """Start the plugin-runtime provider."""
 
@@ -485,6 +575,129 @@ class WorkflowProvider(PluginProvider):
     ``put_execution_reference(request)``, ``get_execution_reference(request)``,
     and ``list_execution_references(request)``.
     """
+
+    def start_run(
+        self,
+        request: StartWorkflowProviderRunRequest,
+    ) -> BoundWorkflowRunInput:
+        self._unimplemented("start_run")
+
+    def get_run(self, request: GetWorkflowProviderRunRequest) -> BoundWorkflowRunInput:
+        self._unimplemented("get_run")
+
+    def list_runs(
+        self,
+        request: ListWorkflowProviderRunsRequest,
+    ) -> ListWorkflowProviderRunsResponse:
+        self._unimplemented("list_runs")
+
+    def cancel_run(
+        self,
+        request: CancelWorkflowProviderRunRequest,
+    ) -> BoundWorkflowRunInput:
+        self._unimplemented("cancel_run")
+
+    def signal_run(
+        self,
+        request: SignalWorkflowProviderRunRequest,
+    ) -> SignalWorkflowRunResponse:
+        self._unimplemented("signal_run")
+
+    def signal_or_start_run(
+        self,
+        request: SignalOrStartWorkflowProviderRunRequest,
+    ) -> SignalWorkflowRunResponse:
+        self._unimplemented("signal_or_start_run")
+
+    def upsert_schedule(
+        self,
+        request: UpsertWorkflowProviderScheduleRequest,
+    ) -> BoundWorkflowScheduleInput:
+        self._unimplemented("upsert_schedule")
+
+    def get_schedule(
+        self,
+        request: GetWorkflowProviderScheduleRequest,
+    ) -> BoundWorkflowScheduleInput:
+        self._unimplemented("get_schedule")
+
+    def list_schedules(
+        self,
+        request: ListWorkflowProviderSchedulesRequest,
+    ) -> ListWorkflowProviderSchedulesResponse:
+        self._unimplemented("list_schedules")
+
+    def delete_schedule(self, request: DeleteWorkflowProviderScheduleRequest) -> None:
+        self._unimplemented("delete_schedule")
+
+    def pause_schedule(
+        self,
+        request: PauseWorkflowProviderScheduleRequest,
+    ) -> BoundWorkflowScheduleInput:
+        self._unimplemented("pause_schedule")
+
+    def resume_schedule(
+        self,
+        request: ResumeWorkflowProviderScheduleRequest,
+    ) -> BoundWorkflowScheduleInput:
+        self._unimplemented("resume_schedule")
+
+    def upsert_event_trigger(
+        self,
+        request: UpsertWorkflowProviderEventTriggerRequest,
+    ) -> BoundWorkflowEventTriggerInput:
+        self._unimplemented("upsert_event_trigger")
+
+    def get_event_trigger(
+        self,
+        request: GetWorkflowProviderEventTriggerRequest,
+    ) -> BoundWorkflowEventTriggerInput:
+        self._unimplemented("get_event_trigger")
+
+    def list_event_triggers(
+        self,
+        request: ListWorkflowProviderEventTriggersRequest,
+    ) -> ListWorkflowProviderEventTriggersResponse:
+        self._unimplemented("list_event_triggers")
+
+    def delete_event_trigger(
+        self,
+        request: DeleteWorkflowProviderEventTriggerRequest,
+    ) -> None:
+        self._unimplemented("delete_event_trigger")
+
+    def pause_event_trigger(
+        self,
+        request: PauseWorkflowProviderEventTriggerRequest,
+    ) -> BoundWorkflowEventTriggerInput:
+        self._unimplemented("pause_event_trigger")
+
+    def resume_event_trigger(
+        self,
+        request: ResumeWorkflowProviderEventTriggerRequest,
+    ) -> BoundWorkflowEventTriggerInput:
+        self._unimplemented("resume_event_trigger")
+
+    def put_execution_reference(
+        self,
+        request: PutWorkflowExecutionReferenceRequest,
+    ) -> WorkflowExecutionReferenceInput:
+        self._unimplemented("put_execution_reference")
+
+    def get_execution_reference(
+        self,
+        request: GetWorkflowExecutionReferenceRequest,
+    ) -> WorkflowExecutionReferenceInput:
+        self._unimplemented("get_execution_reference")
+
+    def list_execution_references(
+        self,
+        request: ListWorkflowExecutionReferencesRequest,
+    ) -> ListWorkflowExecutionReferencesResponse:
+        self._unimplemented("list_execution_references")
+
+    def publish_event(self, request: PublishWorkflowProviderEventRequest) -> None:
+        self._unimplemented("publish_event")
 
     def serve(self) -> None:
         """Start the workflow runtime."""
