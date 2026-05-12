@@ -1,4 +1,4 @@
-import { Callout } from 'nextra/components'
+import { Callout, Tabs } from 'nextra/components'
 
 # Agent
 
@@ -209,6 +209,121 @@ cat <<'JSON' | gestalt --format json agent turns create <session-id> --input -
 }
 JSON
 ```
+
+Provider code can invoke agents through the SDK agent manager:
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    func summarize(ctx context.Context, req gestalt.Request) (string, error) {
+        agents, err := req.AgentManager()
+        if err != nil {
+            return "", err
+        }
+        defer agents.Close()
+
+        session, err := agents.CreateSession(ctx, gestalt.AgentManagerCreateSessionInput{
+            ClientRef: "roadmap-risk",
+        })
+        if err != nil {
+            return "", err
+        }
+
+        turn, err := agents.CreateTurn(ctx, gestalt.AgentManagerCreateTurnInput{
+            SessionID: session.GetId(),
+            Messages: []gestalt.AgentMessageInput{{
+                Role: "user",
+                Text: "Summarize the latest roadmap risk.",
+            }},
+        })
+        if err != nil {
+            return "", err
+        }
+        return turn.GetId(), nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import AgentManagerCreateSessionInput, AgentManagerCreateTurnInput
+    from gestalt import AgentMessageInput, Request
+
+    def summarize(request: Request) -> str:
+        with request.agent_manager() as agents:
+            session = agents.create_session(
+                AgentManagerCreateSessionInput(client_ref="roadmap-risk")
+            )
+            turn = agents.create_turn(
+                AgentManagerCreateTurnInput(
+                    session_id=session.id,
+                    messages=[
+                        AgentMessageInput(
+                            role="user",
+                            text="Summarize the latest roadmap risk.",
+                        )
+                    ],
+                )
+            )
+            return turn.id
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt::{
+        AgentManagerCreateSessionInput, AgentManagerCreateTurnInput,
+        AgentMessageInput, Request,
+    };
+
+    async fn summarize(req: &Request) -> Result<String, Box<dyn std::error::Error>> {
+        let mut agents = req.agent_manager().await?;
+        let session = agents.create_session(AgentManagerCreateSessionInput {
+            client_ref: "roadmap-risk".into(),
+            ..Default::default()
+        }).await?;
+
+        let turn = agents.create_turn(AgentManagerCreateTurnInput {
+            session_id: session.id,
+            messages: vec![AgentMessageInput {
+                role: "user".into(),
+                text: "Summarize the latest roadmap risk.".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }).await?;
+
+        Ok(turn.id)
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { AgentManager, type Request } from "@valon-technologies/gestalt";
+
+    export async function summarize(request: Request) {
+      const agents = new AgentManager(request);
+      const session = await agents.createSession({
+        clientRef: "roadmap-risk",
+      });
+      const turn = await agents.createTurn({
+        sessionId: session.id,
+        messages: [
+          {
+            role: "user",
+            text: "Summarize the latest roadmap risk.",
+          },
+        ],
+      });
+      return turn.id;
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 ## Agent workflow targets
 
