@@ -123,8 +123,8 @@ intentional.
 
 Structured secret refs are resolved through the named secret manager during
 bootstrap, not during YAML parsing. This lets you reference secrets from files,
-Vault, AWS Secrets Manager, Google Secret Manager, or Azure Key Vault without
-embedding them in the config file.
+cloud secret managers, Vault, Keeper Secrets Manager, or 1Password Connect
+without embedding them in the config file.
 
 ```yaml
 server:

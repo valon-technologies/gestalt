@@ -7,7 +7,7 @@ powers plugins. The first-party implementations are published from
 [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers)
 and maintained alongside the server.
 
-Two simple secrets providers (`env` and `file`), telemetry, and audit remain built into the binary. Cloud secret backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are available as external providers from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). See [Secrets Providers](/providers/secrets) for the full list and configuration.
+Two simple secrets providers (`env` and `file`), telemetry, and audit remain built into the binary. Cloud, vault, and password-manager secret backends are available as external providers from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). See [Secrets Providers](/providers/secrets) for the full list and configuration.
 
 ## Authentication Providers
 
@@ -218,14 +218,14 @@ non-AWS S3-compatible backends.
 
 ## Secret Managers
 
-Two secret managers are compiled into the `gestaltd` binary and resolve structured secret refs during bootstrap. Cloud secret backends are available as external providers published from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers).
+Two secret managers are compiled into the `gestaltd` binary and resolve structured secret refs during bootstrap. External secret backends are available as providers published from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers).
 
 | Name | Purpose |
 | --- | --- |
 | `env` | Resolves secrets from environment variables. Default when `providers.secrets` is omitted. |
 | `file` | Resolves secrets from files in a configured directory. Works with Kubernetes volume-mounted secrets. |
 
-For cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), see [Secrets Providers](/providers/secrets#available-providers). These use a `source:` config key under `providers.secrets.<name>`.
+For external backends such as Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault, Keeper Secrets Manager, and 1Password Connect, see [Secrets Providers](/providers/secrets#first-party-external-secret-providers). These use a `source:` config key under `providers.secrets.<name>`.
 
 ## Telemetry Providers (built-in)
 

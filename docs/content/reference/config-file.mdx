@@ -893,9 +893,9 @@ providers:
 | `env` | `prefix` | Reads secrets from environment variables. Default when `providers.secrets` is omitted. |
 | `file` | `dir` | Reads one secret per file from a base directory. Works with Kubernetes volume-mounted secrets. |
 
-### Cloud secret backends
+### External secret backends
 
-Cloud secret managers are external providers configured with package sources:
+External secret managers are providers configured with package sources:
 
 ```yaml
 providers:
@@ -911,9 +911,11 @@ providers:
 | Provider | Package path | Config fields |
 | --- | --- | --- |
 | Google Secret Manager | `github.com/valon-technologies/gestalt-providers/secrets/google` | `project` (required), `version` |
-| AWS Secrets Manager | `github.com/valon-technologies/gestalt-providers/secrets/aws` | `region` (required), `versionStage`, `endpoint` |
-| HashiCorp Vault | `github.com/valon-technologies/gestalt-providers/secrets/vault` | `address` (required), `token` (required), `mountPath`, `namespace` |
+| AWS Secrets Manager | `github.com/valon-technologies/gestalt-providers/secrets/aws` | `region` (required), `versionStage`, `endpoint`, `allowInsecureHttp` |
+| HashiCorp Vault KV v2 | `github.com/valon-technologies/gestalt-providers/secrets/vault` | `address` (required), `token` (required), `mountPath`, `namespace`, `allowInsecureHttp` |
 | Azure Key Vault | `github.com/valon-technologies/gestalt-providers/secrets/azure` | `vaultUrl` (required), `version` |
+| Keeper Secrets Manager | `github.com/valon-technologies/gestalt-providers/secrets/keeper` | `config` (required), `field` |
+| 1Password Connect | `github.com/valon-technologies/gestalt-providers/secrets/onepassword` | `host` (required), `token` (required), `vault` (required), `field`, `allowInsecureHttp` |
 
 See [Secrets Providers](/providers/secrets) for the complete reference and SDK interface.
 
@@ -931,8 +933,10 @@ Each provider authenticates to its backing service differently. The `env` and `f
 | AWS Secrets Manager | Uses the [AWS SDK default credential chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html). In production, use an instance profile, ECS task role, or IRSA. Locally, run `aws configure` or set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. |
 | HashiCorp Vault | Requires explicit `address` and `token` in config. Inject the token via `${VAULT_TOKEN}` or `${VAULT_TOKEN_FILE}`. |
 | Azure Key Vault | Uses [`DefaultAzureCredential`](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication). In production, use managed identity. Locally, run `az login`. |
+| Keeper Secrets Manager | Requires a pre-generated Keeper Secrets Manager `config` value. Inject it via `${KEEPER_CONFIG}` or `${KEEPER_CONFIG_FILE}`. |
+| 1Password Connect | Requires a Connect `host`, `token`, and `vault`. Inject the token via `${OP_CONNECT_TOKEN}` or `${OP_CONNECT_TOKEN_FILE}`. |
 
-For local development, `env` or `file` avoids external dependencies entirely. Switch to a cloud secret manager when deploying to a managed environment where ambient identity is available.
+For local development, `env` or `file` avoids external dependencies entirely. Switch to an external secret manager when deploying to a managed environment where ambient identity or a dedicated secrets service is available.
 
 ## `providers.telemetry`
 
