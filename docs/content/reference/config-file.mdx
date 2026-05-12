@@ -210,7 +210,7 @@ authorization:
 
 Dynamic grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, operators can manage additional dynamic members for that plugin from the built-in admin UI at `/admin/?tab=members` or through `/admin/api/v1/authorization/...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for subjects that already have static authorization on that plugin. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `service_account:<id>`, or another deployment-defined subject kind.
 
-Non-human callers are modeled as canonical subjects, typically `service_account:<id>`, and authenticate with Gestalt API tokens whose stored owner is that subject. Grant plugin access with `authorization.policies` or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
+Non-human callers are modeled as [service account subjects](/service-accounts), typically `service_account:<id>`. Grant plugin access with `authorization.policies` or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
 
 Plugins without `authorizationPolicy` are open to any authenticated subject. Bind a plugin to a policy when non-human access should be explicit.
 
@@ -757,7 +757,7 @@ workflows:
 | `target.plugin.instance` | Optional target instance name. |
 | `target.plugin.input` | Optional static input merged into the invocation payload. |
 | `target.agent` | Optional agent target using the same shape as workflow agent requests: `provider`, `model`, `prompt`, `messages`, `tools`, `responseSchema`, `metadata`, `modelOptions`, and `timeout`. |
-| `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal and credential subject. Without `runAs`, config-managed workflows run as `system:config` and cannot target subject-scoped credentials. |
+| `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal and credential subject. Without [`runAs`](/service-accounts#runas), config-managed workflows run as `system:config` and cannot target subject-scoped credentials. |
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
 | `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
 | `invokes` | Optional additional plugin-operation grants as `{ plugin, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `plugins.<target>.invokes` for nested plugin calls. |
@@ -776,7 +776,7 @@ workflows:
 | `target.plugin.connection` | Optional target connection name. |
 | `target.plugin.instance` | Optional target instance name. |
 | `target.plugin.input` | Optional static input merged into the invocation payload. |
-| `runAs.subject.id` | Optional service-account subject ID used as the runtime principal and credential subject. |
+| `runAs.subject.id` | Optional service-account subject ID used as the runtime principal and credential subject. See [`runAs`](/service-accounts#runas). |
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
 | `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
 | `invokes` | Optional additional plugin-operation grants as `{ plugin, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `plugins.<target>.invokes` for nested plugin calls. |
@@ -1489,11 +1489,10 @@ providers:
             connection: model
 ```
 
-For automation, provision the credential onto a managed subject such as a
-service account, then execute the workflow or agent turn with `runAs`. Gestalt
-does not support deployer-owned `mode: platform` connections or connection-level
-`exposure`; named slots such as Slack's `bot` connection remain normal
-subject-owned connections.
+For automation, provision the credential onto a
+[service account](/service-accounts), then execute the workflow or agent turn
+with [`runAs`](/service-accounts#runas). Named slots such as Slack's `bot`
+connection remain normal subject-owned connections.
 
 ```yaml
 connections:

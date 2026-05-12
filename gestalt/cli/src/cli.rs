@@ -58,6 +58,12 @@ pub enum Commands {
         command: TokenCommands,
     },
 
+    /// Manage authorization resources
+    Authorization {
+        #[command(subcommand)]
+        command: AuthorizationCommands,
+    },
+
     /// Manage workflow resources
     #[command(alias = "workflows")]
     Workflow {
@@ -190,6 +196,441 @@ pub enum TokenCommands {
         /// Token ID to revoke
         id: String,
     },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationCommands {
+    /// Manage service-account subjects
+    Subjects {
+        #[command(subcommand)]
+        command: AuthorizationSubjectCommands,
+    },
+    /// Manage plugin authorization memberships
+    Plugins {
+        #[command(subcommand)]
+        command: AuthorizationPluginCommands,
+    },
+    /// Manage built-in admin authorization memberships
+    Admins {
+        #[command(subcommand)]
+        command: AuthorizationAdminCommands,
+    },
+    /// Inspect the configured authorization provider
+    Provider {
+        #[command(subcommand)]
+        command: AuthorizationProviderCommands,
+    },
+    /// Inspect authorization models
+    Models {
+        #[command(subcommand)]
+        command: AuthorizationModelCommands,
+    },
+    /// Inspect authorization relationships
+    Relationships {
+        #[command(subcommand)]
+        command: AuthorizationRelationshipCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationSubjectCommands {
+    /// List service-account subjects
+    List,
+    /// Create a service-account subject
+    Create(AuthorizationSubjectCreateArgs),
+    /// Show a service-account subject
+    Get {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+    },
+    /// Update a service-account subject
+    Update(AuthorizationSubjectUpdateArgs),
+    /// Delete a service-account subject
+    Delete {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+    },
+    /// Manage subject administrators and editors
+    Members {
+        #[command(subcommand)]
+        command: AuthorizationSubjectMemberCommands,
+    },
+    /// Manage subject plugin grants
+    Grants {
+        #[command(subcommand)]
+        command: AuthorizationSubjectGrantCommands,
+    },
+    /// Manage external identity assumptions
+    ExternalIdentities {
+        #[command(subcommand)]
+        command: AuthorizationSubjectExternalIdentityCommands,
+    },
+    /// Manage subject-owned plugin credentials
+    Integrations {
+        #[command(subcommand)]
+        command: AuthorizationSubjectIntegrationCommands,
+    },
+    /// Manage subject-owned API tokens
+    Tokens {
+        #[command(subcommand)]
+        command: AuthorizationSubjectTokenCommands,
+    },
+}
+
+#[derive(Args)]
+pub struct AuthorizationSubjectCreateArgs {
+    /// Service-account slug or canonical service_account:<id>
+    pub subject: String,
+
+    /// Display name
+    #[arg(long = "display-name")]
+    pub display_name: Option<String>,
+
+    /// Description
+    #[arg(long)]
+    pub description: Option<String>,
+}
+
+#[derive(Args)]
+pub struct AuthorizationSubjectUpdateArgs {
+    /// Service-account slug or canonical service_account:<id>
+    pub subject: String,
+
+    /// Display name
+    #[arg(long = "display-name")]
+    pub display_name: Option<String>,
+
+    /// Description
+    #[arg(long)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+pub enum AuthorizationManagedSubjectRole {
+    Viewer,
+    Editor,
+    Admin,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationSubjectMemberCommands {
+    /// List members that can manage a subject
+    List {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+    },
+    /// Add or update a subject member
+    Set(AuthorizationSubjectMemberSetArgs),
+    /// Remove a subject member
+    Remove {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+        /// Canonical member subject ID
+        member_subject_id: String,
+    },
+}
+
+#[derive(Args)]
+pub struct AuthorizationSubjectMemberSetArgs {
+    /// Service-account slug or canonical service_account:<id>
+    pub subject: String,
+
+    /// Canonical member subject ID
+    #[arg(long = "subject-id", conflicts_with = "email")]
+    pub subject_id: Option<String>,
+
+    /// User email alias
+    #[arg(long, conflicts_with = "subject_id")]
+    pub email: Option<String>,
+
+    /// Member role
+    #[arg(long, value_enum)]
+    pub role: AuthorizationManagedSubjectRole,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationSubjectGrantCommands {
+    /// List plugin grants for a subject
+    List {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+    },
+    /// Grant a plugin role to a subject
+    Set {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+        /// Plugin name
+        plugin: String,
+        /// Plugin role
+        #[arg(long)]
+        role: String,
+    },
+    /// Remove a plugin grant from a subject
+    Remove {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+        /// Plugin name
+        plugin: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationSubjectExternalIdentityCommands {
+    /// List external identities assumed by a subject
+    List {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+    },
+    /// Allow a subject to assume an external identity
+    Add(AuthorizationSubjectExternalIdentityArgs),
+    /// Remove an external identity assumption
+    Remove(AuthorizationSubjectExternalIdentityArgs),
+}
+
+#[derive(Args)]
+pub struct AuthorizationSubjectExternalIdentityArgs {
+    /// Service-account slug or canonical service_account:<id>
+    pub subject: String,
+
+    /// External identity type
+    #[arg(long = "type")]
+    pub identity_type: String,
+
+    /// External identity ID
+    #[arg(long)]
+    pub id: String,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationSubjectIntegrationCommands {
+    /// List plugin credential state for a subject
+    List {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+    },
+    /// Connect a plugin credential for a subject
+    Connect {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+        /// Plugin name
+        name: String,
+        /// Named connection to connect
+        #[arg(long)]
+        connection: Option<String>,
+        /// Instance name to create or refresh
+        #[arg(long)]
+        instance: Option<String>,
+    },
+    /// Disconnect a plugin credential from a subject
+    Disconnect {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+        /// Plugin name
+        name: String,
+        /// Target a specific named connection
+        #[arg(long)]
+        connection: Option<String>,
+        /// Target a specific stored instance
+        #[arg(long)]
+        instance: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationSubjectTokenCommands {
+    /// List API tokens owned by a subject
+    List {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+    },
+    /// Create a subject-owned API token
+    Create(AuthorizationSubjectTokenCreateArgs),
+    /// Revoke one subject-owned API token
+    Revoke {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+        /// Token ID
+        id: String,
+    },
+    /// Revoke all subject-owned API tokens
+    RevokeAll {
+        /// Service-account slug or canonical service_account:<id>
+        subject: String,
+    },
+}
+
+#[derive(Args)]
+pub struct AuthorizationSubjectTokenCreateArgs {
+    /// Service-account slug or canonical service_account:<id>
+    pub subject: String,
+
+    /// Token name
+    #[arg(long)]
+    pub name: String,
+
+    /// Legacy token scopes
+    #[arg(long, conflicts_with_all = ["permission", "action", "permissions_file"])]
+    pub scopes: Option<String>,
+
+    /// Operation permission in plugin:operation form
+    #[arg(long = "permission", conflicts_with = "permissions_file")]
+    pub permission: Vec<String>,
+
+    /// Action permission in plugin:action form
+    #[arg(long = "action", conflicts_with = "permissions_file")]
+    pub action: Vec<String>,
+
+    /// JSON file containing a raw permissions array
+    #[arg(long = "permissions-file", conflicts_with_all = ["permission", "action", "scopes"])]
+    pub permissions_file: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationPluginCommands {
+    /// List plugins that declare authorization policies
+    List,
+    /// Manage plugin members
+    Members {
+        #[command(subcommand)]
+        command: AuthorizationPluginMemberCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationPluginMemberCommands {
+    /// List plugin members
+    List {
+        /// Plugin name
+        plugin: String,
+    },
+    /// Add or update a plugin member
+    Set(AuthorizationPluginMemberSetArgs),
+    /// Remove a plugin member
+    Remove {
+        /// Plugin name
+        plugin: String,
+        /// Canonical subject ID
+        subject_id: String,
+    },
+}
+
+#[derive(Args)]
+pub struct AuthorizationPluginMemberSetArgs {
+    /// Plugin name
+    pub plugin: String,
+
+    /// Canonical subject ID
+    #[arg(long = "subject-id", conflicts_with = "email")]
+    pub subject_id: Option<String>,
+
+    /// User email alias
+    #[arg(long, conflicts_with = "subject_id")]
+    pub email: Option<String>,
+
+    /// Plugin role
+    #[arg(long)]
+    pub role: String,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationAdminCommands {
+    /// Manage built-in admin members
+    Members {
+        #[command(subcommand)]
+        command: AuthorizationAdminMemberCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationAdminMemberCommands {
+    /// List admin members
+    List,
+    /// Add or update an admin member
+    Set(AuthorizationAdminMemberSetArgs),
+    /// Remove an admin member
+    Remove {
+        /// Canonical subject ID
+        subject_id: String,
+    },
+}
+
+#[derive(Args)]
+pub struct AuthorizationAdminMemberSetArgs {
+    /// Canonical subject ID
+    #[arg(long = "subject-id", conflicts_with = "email")]
+    pub subject_id: Option<String>,
+
+    /// User email alias
+    #[arg(long, conflicts_with = "subject_id")]
+    pub email: Option<String>,
+
+    /// Admin role
+    #[arg(long)]
+    pub role: String,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationProviderCommands {
+    /// Show authorization provider metadata
+    Get,
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationModelCommands {
+    /// List authorization models
+    List(AuthorizationPageArgs),
+}
+
+#[derive(Subcommand)]
+pub enum AuthorizationRelationshipCommands {
+    /// List authorization relationships
+    List(AuthorizationRelationshipListArgs),
+}
+
+#[derive(Args, Default)]
+pub struct AuthorizationPageArgs {
+    /// Page size
+    #[arg(long = "page-size")]
+    pub page_size: Option<u32>,
+
+    /// Page token
+    #[arg(long = "page-token")]
+    pub page_token: Option<String>,
+}
+
+#[derive(Args, Default)]
+pub struct AuthorizationRelationshipListArgs {
+    /// Subject type filter
+    #[arg(long = "subject-type")]
+    pub subject_type: Option<String>,
+
+    /// Subject ID filter
+    #[arg(long = "subject-id")]
+    pub subject_id: Option<String>,
+
+    /// Relation filter
+    #[arg(long)]
+    pub relation: Option<String>,
+
+    /// Resource type filter
+    #[arg(long = "resource-type")]
+    pub resource_type: Option<String>,
+
+    /// Resource ID filter
+    #[arg(long = "resource-id")]
+    pub resource_id: Option<String>,
+
+    /// Model ID filter
+    #[arg(long = "model-id")]
+    pub model_id: Option<String>,
+
+    /// Page size
+    #[arg(long = "page-size")]
+    pub page_size: Option<u32>,
+
+    /// Page token
+    #[arg(long = "page-token")]
+    pub page_token: Option<String>,
 }
 
 #[derive(Subcommand)]

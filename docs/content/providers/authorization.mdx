@@ -20,6 +20,8 @@ A subject is the caller being checked. Gestalt resolves each request to a
 canonical subject, such as `user:<id>`, `service_account:<id>`, or a system
 subject, then evaluates access for that subject.
 
+For non-human automation subjects, see [Service Accounts](/service-accounts).
+
 ### Resources
 
 A resource is what the subject wants to access, e.g.:
@@ -77,7 +79,7 @@ Gestalt checks authorization before serving protected surfaces:
 - Plugin and operation invocation
 - Admin APIs and UI routes
 - External identity assumption
-- Managed subjects and service accounts
+- Managed subjects and [service accounts](/service-accounts)
 - Workflow and agent execution grants
 
 Authentication, operation scope, authorization, and credential selection are
