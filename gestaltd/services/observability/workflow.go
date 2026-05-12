@@ -91,6 +91,7 @@ type workflowMatchedTriggersMetricSet struct {
 var (
 	workflowProviderOperationMetrics metricutil.MeterCache[metricSet]
 	workflowHostOperationMetrics     metricutil.MeterCache[metricSet]
+	workflowManagerOperationMetrics  metricutil.MeterCache[metricSet]
 	workflowRunStartedMetrics        metricutil.MeterCache[countMetricSet]
 	workflowRunCompletedMetrics      metricutil.MeterCache[workflowRunCompletedMetricSet]
 	workflowEventPublishedMetrics    metricutil.MeterCache[countMetricSet]
@@ -104,6 +105,10 @@ func RecordWorkflowProviderOperation(ctx context.Context, startedAt time.Time, e
 
 func RecordWorkflowHostOperation(ctx context.Context, startedAt time.Time, err error, dims WorkflowMetricDims) {
 	record(ctx, &workflowHostOperationMetrics, "gestaltd.workflows.host.operation", "gestaltd workflow host operations", startedAt, err != nil, workflowMetricAttrs(dims, err)...)
+}
+
+func RecordWorkflowManagerOperation(ctx context.Context, startedAt time.Time, err error, dims WorkflowMetricDims) {
+	record(ctx, &workflowManagerOperationMetrics, "gestaltd.workflows.manager.operation", "gestaltd workflow manager operations", startedAt, err != nil, workflowMetricAttrs(dims, err)...)
 }
 
 func RecordWorkflowRunStarted(ctx context.Context, dims WorkflowMetricDims) {
@@ -209,12 +214,13 @@ func workflowErrorType(err error) string {
 		return "context.deadline_exceeded"
 	}
 	if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
-		return "grpc." + workflowGRPCCodeName(st.Code())
+		return "grpc." + WorkflowGRPCCodeName(st.Code())
 	}
 	return "unknown"
 }
 
-func workflowGRPCCodeName(code codes.Code) string {
+// WorkflowGRPCCodeName returns the normalized gRPC status code name used by workflow telemetry.
+func WorkflowGRPCCodeName(code codes.Code) string {
 	switch code {
 	case codes.Canceled:
 		return "canceled"
