@@ -35,6 +35,7 @@ asIndexPage: true
 | `gestalt agent sessions ...` | Create, list, inspect, and update agent sessions. |
 | `gestalt agent turns ...` | Create, list, inspect, cancel, and stream agent turns. |
 | `gestalt tokens create\|list\|revoke` | Manage Gestalt API tokens. |
+| `gestalt authorization ...` | Manage service account subjects, subject grants and tokens, dynamic authorization members, and authorization provider debug views. |
 
 ## URL resolution
 
@@ -283,6 +284,78 @@ server-sent event stream to stdout.
 Interactive sessions use `GET /api/v1/agent/turns/{turnID}/events/stream`
 with `until=blocked_or_terminal`, which lets the CLI switch immediately from
 streaming output to interaction prompts when a provider requests input.
+
+## Authorization
+
+`gestalt authorization` covers service account subjects and the dynamic
+authorization admin surface. Admin subcommands may require `--url` pointing at
+the management base URL when public and management listeners are split.
+
+```sh
+gestalt authorization subjects list
+gestalt authorization subjects create release-bot \
+  --display-name "Release Bot"
+gestalt authorization subjects get service_account:release-bot
+gestalt authorization subjects update service_account:release-bot \
+  --description "Release automation"
+gestalt authorization subjects delete service_account:release-bot
+
+gestalt authorization subjects members list service_account:release-bot
+gestalt authorization subjects members set service_account:release-bot \
+  --email operator@example.com \
+  --role editor
+gestalt authorization subjects members remove service_account:release-bot \
+  user:user_123
+
+gestalt authorization subjects grants list service_account:release-bot
+gestalt authorization subjects grants set service_account:release-bot github \
+  --role viewer
+gestalt authorization subjects grants remove service_account:release-bot github
+
+gestalt authorization subjects external-identities list service_account:release-bot
+gestalt authorization subjects external-identities add service_account:release-bot \
+  --type google \
+  --id google-123
+gestalt authorization subjects external-identities remove service_account:release-bot \
+  --type google \
+  --id google-123
+
+gestalt authorization subjects integrations list service_account:release-bot
+gestalt authorization subjects integrations connect service_account:release-bot github
+gestalt authorization subjects integrations disconnect service_account:release-bot github
+
+gestalt authorization subjects tokens list service_account:release-bot
+gestalt authorization subjects tokens create service_account:release-bot \
+  --name release-bot \
+  --permission github:issues.list
+gestalt authorization subjects tokens revoke service_account:release-bot <token-id>
+gestalt authorization subjects tokens revoke-all service_account:release-bot
+
+gestalt authorization plugins list
+gestalt authorization plugins members list github
+gestalt authorization plugins members set github \
+  --subject-id service_account:release-bot \
+  --role viewer
+gestalt authorization plugins members remove github service_account:release-bot
+
+gestalt authorization admins members list
+gestalt authorization admins members set \
+  --email admin@example.com \
+  --role admin
+gestalt authorization admins members remove user:user_123
+
+gestalt authorization provider get
+gestalt authorization models list
+gestalt authorization relationships list \
+  --resource-type plugin_dynamic \
+  --resource-id github
+```
+
+Subject token creation accepts `--permission plugin:operation`,
+`--action plugin:action`, `--scopes`, or `--permissions-file` with a raw JSON
+permissions array. These inputs are mutually exclusive except
+`--permission` and `--action`, which can be combined. Provider-dev attach uses
+`--action plugin:provider_dev.attach`.
 
 ### Local Quickstart
 

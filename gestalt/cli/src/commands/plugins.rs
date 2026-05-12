@@ -5,7 +5,10 @@ use anyhow::{Context, Result};
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
-pub use connect::{connect, connect_with_browser_opener};
+pub use connect::{
+    connect, connect_managed_subject, connect_managed_subject_with_browser_opener,
+    connect_with_browser_opener,
+};
 
 const PLUGIN_CONNECTION_NAME: &str = "_plugin";
 const PLUGIN_CONNECTION_ALIAS: &str = "plugin";
@@ -43,6 +46,10 @@ impl<'a> ConnectionName<'a> {
     fn matches(self, other: &str) -> bool {
         self.canonical() == Self::canonical_of(other)
     }
+}
+
+pub fn canonical_connection_name(name: &str) -> &str {
+    ConnectionName::canonical_of(name)
 }
 
 pub fn list(client: &ApiClient, format: Format) -> Result<()> {

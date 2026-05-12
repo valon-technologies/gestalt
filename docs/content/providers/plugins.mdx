@@ -35,9 +35,9 @@ answer how that subject proves itself to the upstream system.
 When executable plugins call other configured plugin operations, use the SDK
 plugin invoker for request-scoped nested calls. For application examples, see
 [Applications > Calling another plugin from your application](/applications#calling-another-plugin-from-your-application).
-Use a managed subject and scoped API token when the plugin should call the
-Gestalt HTTP API as a stable service account instead. See
-[Authorization > Service accounts for direct API calls](/providers/authorization#service-accounts-for-direct-api-calls).
+Use a [service account](/service-accounts) and subject-owned API token when the
+plugin should call the Gestalt HTTP API as a stable automation subject. See
+[Service Accounts > Direct API Calls](/service-accounts#direct-api-calls).
 
 ## First-party plugin packages
 
@@ -148,7 +148,7 @@ stores credentials per subject.
 | Mode | Behavior |
 | --- | --- |
 | `none` | No upstream credential is required |
-| `user` | The calling subject stores its own credential (`user:<id>`, `service_account:<id>`, or another canonical subject ID) |
+| `subject` | The calling subject stores its own credential (`user:<id>`, `service_account:<id>`, or another canonical subject ID) |
 
 Common auth types are `oauth2`, `mcp_oauth`, `bearer`, `manual`, and `none`.
 Operator-supplied app credentials such as `clientId` and `clientSecret` go in
