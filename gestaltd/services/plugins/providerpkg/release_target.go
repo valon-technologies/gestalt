@@ -75,7 +75,7 @@ func MissingSourceReleaseTargetError(kind string) error {
 	case providermanifestv1.KindPlugin:
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript provider package found")
 	case providermanifestv1.KindAuthorization:
-		return fmt.Errorf("no Go authorization source package found")
+		return fmt.Errorf("no Go, Rust, Python, or TypeScript authorization source package found")
 	case providermanifestv1.KindExternalCredentials:
 		return fmt.Errorf("no Go external_credentials source package found")
 	case providermanifestv1.KindAuthentication, providermanifestv1.KindCache, providermanifestv1.KindIndexedDB, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets:

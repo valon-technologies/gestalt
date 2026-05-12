@@ -133,7 +133,7 @@ provider = "provider"
 	}
 }
 
-func TestDetectPythonComponentTarget_RejectsAuthorization(t *testing.T) {
+func TestDetectPythonComponentTarget_AcceptsAuthorization(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -143,12 +143,12 @@ authorization = "provider:authorization_provider"
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}
 
-	_, err := DetectPythonComponentTarget(root, providermanifestv1.KindAuthorization)
-	if err == nil {
-		t.Fatal("expected authorization rejection")
+	target, err := DetectPythonComponentTarget(root, providermanifestv1.KindAuthorization)
+	if err != nil {
+		t.Fatalf("DetectPythonComponentTarget(authorization): %v", err)
 	}
-	if !strings.Contains(err.Error(), `unsupported Python runtime kind "authorization"`) {
-		t.Fatalf("error = %q, want unsupported Python runtime kind", err)
+	if target != "provider:authorization_provider" {
+		t.Fatalf("target = %q, want %q", target, "provider:authorization_provider")
 	}
 }
 

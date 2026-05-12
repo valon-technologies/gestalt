@@ -20,6 +20,12 @@ const PROVIDER_KIND_DEFINITIONS = {
     defaultExportNames: ["authentication", "provider"],
     label: "authentication provider",
   },
+  authorization: {
+    tokens: ["authorization", "authz"],
+    formatToken: "authorization",
+    defaultExportNames: ["authorization", "provider"],
+    label: "authorization provider",
+  },
   cache: {
     tokens: ["cache"],
     formatToken: "cache",
@@ -72,9 +78,7 @@ const EXTERNAL_PROVIDER_KIND_TOKEN_SET = new Set<string>(
 
 const EXTERNAL_PROVIDER_KIND_MAP = new Map<string, ProviderKind>(
   Object.entries(PROVIDER_KIND_DEFINITIONS).flatMap(([kind, definition]) =>
-    definition.tokens.map(
-      (token) => [token, kind as ProviderKind] as const,
-    ),
+    definition.tokens.map((token) => [token, kind as ProviderKind] as const),
   ),
 );
 

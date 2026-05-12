@@ -175,6 +175,8 @@ func typeScriptComponentKind(kind string) (string, error) {
 	switch kind {
 	case providermanifestv1.KindAuthentication:
 		return "authentication", nil
+	case providermanifestv1.KindAuthorization:
+		return "authorization", nil
 	case providermanifestv1.KindCache:
 		return "cache", nil
 	case providermanifestv1.KindIndexedDB:
@@ -369,6 +371,8 @@ func normalizeTypeScriptProviderKind(value string) string {
 		return "integration"
 	case "authentication", "auth":
 		return "authentication"
+	case "authorization", "authz":
+		return "authorization"
 	case "cache":
 		return "cache"
 	case "indexeddb":

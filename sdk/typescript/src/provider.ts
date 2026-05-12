@@ -6,6 +6,7 @@ import type { MaybePromise } from "./api.ts";
 export type ProviderKind =
   | "integration"
   | "authentication"
+  | "authorization"
   | "cache"
   | "secrets"
   | "s3"
@@ -125,7 +126,10 @@ export abstract class ProviderBase {
     return metadata;
   }
 
-  async configureProvider(name: string, config: Record<string, unknown>): Promise<void> {
+  async configureProvider(
+    name: string,
+    config: Record<string, unknown>,
+  ): Promise<void> {
     await this.configureHandler?.(name, config);
   }
 
@@ -168,17 +172,21 @@ export function isProviderBase(value: unknown): value is ProviderBase {
       "resolveName" in value &&
       typeof (value as { resolveName?: unknown }).resolveName === "function" &&
       "configureProvider" in value &&
-      typeof (value as { configureProvider?: unknown }).configureProvider === "function" &&
+      typeof (value as { configureProvider?: unknown }).configureProvider ===
+        "function" &&
       "supportsHealthCheck" in value &&
-      typeof (value as { supportsHealthCheck?: unknown }).supportsHealthCheck === "function" &&
+      typeof (value as { supportsHealthCheck?: unknown })
+        .supportsHealthCheck === "function" &&
       "healthCheck" in value &&
       typeof (value as { healthCheck?: unknown }).healthCheck === "function" &&
       "startProvider" in value &&
-      typeof (value as { startProvider?: unknown }).startProvider === "function" &&
+      typeof (value as { startProvider?: unknown }).startProvider ===
+        "function" &&
       "warnings" in value &&
       typeof (value as { warnings?: unknown }).warnings === "function" &&
       "closeProvider" in value &&
-      typeof (value as { closeProvider?: unknown }).closeProvider === "function")
+      typeof (value as { closeProvider?: unknown }).closeProvider ===
+        "function")
   );
 }
 

@@ -11,20 +11,39 @@ import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 
 from gestalt import (
+    AccessDecision,
+    AccessEvaluationRequest,
+    AccessEvaluationsResponse,
+    ActionSearchResponse,
     AuthorizationAction,
     AuthorizationClient,
+    AuthorizationMetadata,
+    AuthorizationModel,
+    AuthorizationModelRef,
+    AuthorizationProvider,
     AuthorizationRelationshipTarget,
     AuthorizationResource,
     AuthorizationSubject,
     AuthorizationSubjectSet,
     EffectiveSubjectSearchRequest,
     ExpandRequest,
+    GetActiveModelResponse,
+    ListModelsResponse,
+    ReadRelationshipsResponse,
     Relationship,
     ResourceSearchRequest,
+    ResourceSearchResponse,
+    SubjectSearchResponse,
     WriteRelationshipsRequest,
+    _runtime,
     agent_session_editor_relationship,
 )
-from gestalt.testing import authorization_pb2, authorization_pb2_grpc
+from gestalt.testing import (
+    authorization_pb2,
+    authorization_pb2_grpc,
+    runtime_pb2,
+    runtime_pb2_grpc,
+)
 
 empty_pb2: Any = _empty_pb2
 
@@ -79,6 +98,78 @@ class _AuthorizationProvider(authorization_pb2_grpc.AuthorizationProviderService
     def WriteRelationships(self, request: Any, context: grpc.ServicerContext) -> Any:
         self.writes.append(request)
         return empty_pb2.Empty()
+
+
+class _SDKAuthorizationProvider(AuthorizationProvider):
+    def __init__(self) -> None:
+        self.writes: list[Any] = []
+
+    def evaluate(self, request: Any) -> Any:
+        return AccessDecision(
+            allowed=request.subject.id == "user:1",
+            model_id="model-1",
+        )
+
+    def evaluate_many(self, request: Any) -> Any:
+        return AccessEvaluationsResponse(
+            decisions=[self.evaluate(item) for item in request.requests],
+        )
+
+    def search_resources(self, request: Any) -> Any:
+        return ResourceSearchResponse(
+            resources=[
+                AuthorizationResource(
+                    type=request.resource_type,
+                    id="doc-1",
+                )
+            ],
+            model_id="model-1",
+        )
+
+    def search_subjects(self, request: Any) -> Any:
+        return SubjectSearchResponse(
+            subjects=[
+                AuthorizationSubject(
+                    type=request.subject_type,
+                    id="user:1",
+                )
+            ],
+            model_id="model-1",
+        )
+
+    def search_actions(self, request: Any) -> Any:
+        return ActionSearchResponse(
+            actions=[AuthorizationAction(name="view")],
+            model_id="model-1",
+        )
+
+    def get_metadata(self) -> Any:
+        return AuthorizationMetadata(
+            capabilities=["evaluate"],
+            active_model_id="model-1",
+        )
+
+    def read_relationships(self, request: Any) -> Any:
+        return ReadRelationshipsResponse(model_id="model-1")
+
+    def write_relationships(self, request: Any) -> None:
+        self.writes.append(request)
+
+    def get_active_model(self) -> Any:
+        return GetActiveModelResponse(
+            model=AuthorizationModelRef(id="model-1", version="1"),
+        )
+
+    def list_models(self, request: Any) -> Any:
+        return ListModelsResponse(
+            models=[AuthorizationModelRef(id="model-1", version="1")],
+        )
+
+    def write_model(self, request: Any) -> Any:
+        return AuthorizationModelRef(
+            id="model-2",
+            version=str(request.model.version),
+        )
 
 
 class AuthorizationTransportTest(unittest.TestCase):
@@ -207,6 +298,98 @@ class AuthorizationTransportTest(unittest.TestCase):
                 ),
             ),
         )
+
+    def test_sdk_authorization_provider_serves_required_rpcs(self) -> None:
+        provider = _SDKAuthorizationProvider()
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+        _runtime._register_authorization_services(server, provider)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            socket_path = f"{tmpdir}/authorization.sock"
+            server.add_insecure_port(f"unix:{socket_path}")
+            server.start()
+            try:
+                channel = grpc.insecure_channel(f"unix:{socket_path}")
+                lifecycle = runtime_pb2_grpc.ProviderLifecycleStub(channel)
+                identity = lifecycle.GetProviderIdentity(empty_pb2.Empty(), timeout=5)
+                self.assertEqual(
+                    identity.kind,
+                    runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHORIZATION,
+                )
+
+                stub = authorization_pb2_grpc.AuthorizationProviderStub(channel)
+                decision = stub.Evaluate(
+                    AccessEvaluationRequest(
+                        subject=AuthorizationSubject(type="subject", id="user:1"),
+                        action=AuthorizationAction(name="view"),
+                        resource=AuthorizationResource(type="doc", id="doc-1"),
+                    ),
+                    timeout=5,
+                )
+                self.assertTrue(decision.allowed)
+
+                batch = stub.EvaluateMany(
+                    authorization_pb2.AccessEvaluationsRequest(
+                        requests=[
+                            AccessEvaluationRequest(
+                                subject=AuthorizationSubject(
+                                    type="subject",
+                                    id="user:1",
+                                ),
+                                action=AuthorizationAction(name="view"),
+                                resource=AuthorizationResource(
+                                    type="doc",
+                                    id="doc-1",
+                                ),
+                            )
+                        ]
+                    ),
+                    timeout=5,
+                )
+                self.assertTrue(batch.decisions[0].allowed)
+
+                metadata = stub.GetMetadata(empty_pb2.Empty(), timeout=5)
+                self.assertEqual(list(metadata.capabilities), ["evaluate"])
+
+                model_ref = stub.WriteModel(
+                    authorization_pb2.WriteModelRequest(
+                        model=AuthorizationModel(version=2),
+                    ),
+                    timeout=5,
+                )
+                self.assertEqual(model_ref.version, "2")
+
+                with self.assertRaises(grpc.RpcError) as failure:
+                    stub.Expand(ExpandRequest(), timeout=5)
+                rpc_error: Any = failure.exception
+                self.assertEqual(
+                    rpc_error.code(),
+                    grpc.StatusCode.UNIMPLEMENTED,
+                )
+            finally:
+                server.stop(grace=0)
+
+    def test_sdk_authorization_provider_write_relationships_unimplemented(self) -> None:
+        provider = AuthorizationProvider()
+        server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+        _runtime._register_authorization_services(server, provider)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            socket_path = f"{tmpdir}/authorization.sock"
+            server.add_insecure_port(f"unix:{socket_path}")
+            server.start()
+            try:
+                channel = grpc.insecure_channel(f"unix:{socket_path}")
+                stub = authorization_pb2_grpc.AuthorizationProviderStub(channel)
+
+                with self.assertRaises(grpc.RpcError) as failure:
+                    stub.WriteRelationships(WriteRelationshipsRequest(), timeout=5)
+                rpc_error: Any = failure.exception
+                self.assertEqual(
+                    rpc_error.code(),
+                    grpc.StatusCode.UNIMPLEMENTED,
+                )
+                self.assertIn("write_relationships", rpc_error.details())
+            finally:
+                server.stop(grace=0)
 
 
 if __name__ == "__main__":

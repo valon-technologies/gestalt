@@ -13,14 +13,16 @@ import (
 )
 
 const (
-	typeScriptTestPluginModuleTarget    = "./provider.ts#plugin"
-	typeScriptTestPluginTarget          = "plugin:./provider.ts#plugin"
-	typeScriptTestAuthModuleTarget      = "./auth.ts#auth"
-	typeScriptTestAuthTarget            = "authentication:./auth.ts#auth"
-	typeScriptTestCacheModuleTarget     = "./cache.ts#cache"
-	typeScriptTestCacheTarget           = "cache:./cache.ts#cache"
-	typeScriptTestDatastoreModuleTarget = "./datastore.ts#datastore"
-	typeScriptTestDatastoreTarget       = "indexeddb:./datastore.ts#datastore"
+	typeScriptTestPluginModuleTarget        = "./provider.ts#plugin"
+	typeScriptTestPluginTarget              = "plugin:./provider.ts#plugin"
+	typeScriptTestAuthModuleTarget          = "./auth.ts#auth"
+	typeScriptTestAuthTarget                = "authentication:./auth.ts#auth"
+	typeScriptTestAuthorizationModuleTarget = "./authorization.ts#authorization"
+	typeScriptTestAuthorizationTarget       = "authorization:./authorization.ts#authorization"
+	typeScriptTestCacheModuleTarget         = "./cache.ts#cache"
+	typeScriptTestCacheTarget               = "cache:./cache.ts#cache"
+	typeScriptTestDatastoreModuleTarget     = "./datastore.ts#datastore"
+	typeScriptTestDatastoreTarget           = "indexeddb:./datastore.ts#datastore"
 )
 
 func TestSplitTypeScriptProviderTarget(t *testing.T) {
@@ -230,6 +232,11 @@ func TestDetectTypeScriptComponentTarget(t *testing.T) {
 			target: typeScriptTestAuthTarget,
 		},
 		{
+			name:   "authorization",
+			kind:   providermanifestv1.KindAuthorization,
+			target: typeScriptTestAuthorizationTarget,
+		},
+		{
 			name:   "cache",
 			kind:   providermanifestv1.KindCache,
 			target: typeScriptTestCacheTarget,
@@ -305,6 +312,16 @@ func TestHasSourceComponentPackage_TypeScript(t *testing.T) {
 	}
 	if ok {
 		t.Fatal("HasSourceComponentPackage(datastore) = true, want false")
+	}
+
+	root = t.TempDir()
+	mustWriteTypeScriptComponentPackage(t, root, providermanifestv1.KindAuthorization, typeScriptTestAuthorizationTarget)
+	ok, err = HasSourceComponentPackage(root, providermanifestv1.KindAuthorization)
+	if err != nil {
+		t.Fatalf("HasSourceComponentPackage(authorization): %v", err)
+	}
+	if !ok {
+		t.Fatal("HasSourceComponentPackage(authorization) = false, want true")
 	}
 }
 
@@ -446,6 +463,11 @@ func TestSourceComponentExecutionCommand_TypeScript(t *testing.T) {
 			target: typeScriptTestAuthTarget,
 		},
 		{
+			name:   "authorization",
+			kind:   providermanifestv1.KindAuthorization,
+			target: typeScriptTestAuthorizationTarget,
+		},
+		{
 			name:   "cache",
 			kind:   providermanifestv1.KindCache,
 			target: typeScriptTestCacheTarget,
@@ -541,6 +563,11 @@ func TestValidateSourceComponentRelease_TypeScript(t *testing.T) {
 			name:   "auth",
 			kind:   providermanifestv1.KindAuthentication,
 			target: typeScriptTestAuthTarget,
+		},
+		{
+			name:   "authorization",
+			kind:   providermanifestv1.KindAuthorization,
+			target: typeScriptTestAuthorizationTarget,
 		},
 		{
 			name:   "cache",
@@ -678,6 +705,12 @@ func TestBuildSourceComponentReleaseBinary_TypeScript(t *testing.T) {
 			pluginName: "ts-auth-release",
 		},
 		{
+			name:       "authorization",
+			kind:       providermanifestv1.KindAuthorization,
+			target:     typeScriptTestAuthorizationTarget,
+			pluginName: "ts-authorization-release",
+		},
+		{
 			name:       "cache",
 			kind:       providermanifestv1.KindCache,
 			target:     typeScriptTestCacheTarget,
@@ -785,7 +818,7 @@ func mustWriteTypeScriptTargetModule(t *testing.T, root, target string) {
 
 func runtimeTargetModulePath(t *testing.T, target string) string {
 	t.Helper()
-	for _, prefix := range []string{"plugin:", "authentication:", "auth:", "cache:", "indexeddb:", "secrets:", "telemetry:"} {
+	for _, prefix := range []string{"plugin:", "authentication:", "auth:", "authorization:", "authz:", "cache:", "indexeddb:", "secrets:", "telemetry:"} {
 		if strings.HasPrefix(target, prefix) {
 			return strings.TrimPrefix(target, prefix)
 		}

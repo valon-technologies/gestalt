@@ -112,6 +112,7 @@ func TestBuildRustComponentBinary_UsesKindSpecificWrapper(t *testing.T) {
 		expectedServeExport string
 	}{
 		{name: "authentication", kind: providermanifestv1.KindAuthentication, expectedServeExport: "__gestalt_serve_authentication"},
+		{name: "authorization", kind: providermanifestv1.KindAuthorization, expectedServeExport: "__gestalt_serve_authorization"},
 		{name: "cache", kind: "cache", expectedServeExport: "__gestalt_serve_cache"},
 		{name: "indexeddb", kind: "indexeddb", expectedServeExport: "__gestalt_serve_indexeddb"},
 		{name: "runtime", kind: providermanifestv1.KindRuntime, expectedServeExport: "__gestalt_serve_runtime"},
@@ -148,22 +149,6 @@ func TestBuildRustComponentBinary_UsesKindSpecificWrapper(t *testing.T) {
 	}
 }
 
-func TestBuildRustComponentBinary_RejectsAuthorization(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	writeRustProviderCargoToml(t, root)
-
-	outputPath := filepath.Join(t.TempDir(), "authorization")
-	_, err := BuildRustComponentBinary(root, outputPath, "authorization", runtime.GOOS, runtime.GOARCH)
-	if err == nil {
-		t.Fatal("expected authorization rejection")
-	}
-	if !strings.Contains(err.Error(), `unsupported Rust provider kind "authorization"`) {
-		t.Fatalf("error = %q, want unsupported Rust provider kind", err)
-	}
-}
-
 func TestHasSourceComponentPackage_DetectsRustPackage(t *testing.T) {
 	t.Parallel()
 
@@ -182,8 +167,8 @@ func TestHasSourceComponentPackage_DetectsRustPackage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HasSourceComponentPackage(authorization): %v", err)
 	}
-	if ok {
-		t.Fatal("HasSourceComponentPackage(authorization) = true, want false")
+	if !ok {
+		t.Fatal("HasSourceComponentPackage(authorization) = false, want true")
 	}
 }
 
