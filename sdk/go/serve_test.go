@@ -494,7 +494,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "success",
 			router:     stubRouter,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","subject_email":"ada@example.com","agent_subject_id":"user:user-456","agent_external_type":"github_identity","agent_external_id":"user:12345678","credential_mode":"subject","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","idempotency_key":"tool-call-123"}`,
+			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","subject_email":"ada@example.com","agent_subject_id":"user:user-456","agent_subject_email":"grace@example.com","agent_external_type":"github_identity","agent_external_id":"user:12345678","credential_mode":"subject","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","idempotency_key":"tool-call-123"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "test_op",
 				Params: func() *structpb.Struct {
@@ -509,8 +509,9 @@ func TestProviderServerExecute(t *testing.T) {
 						Email: "ada@example.com",
 					},
 					AgentSubject: &proto.SubjectContext{
-						Id:   "user:user-456",
-						Kind: "user",
+						Id:    "user:user-456",
+						Kind:  "user",
+						Email: "grace@example.com",
 					},
 					AgentExternalIdentity: &proto.ExternalIdentityContext{
 						Type: "github_identity",

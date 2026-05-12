@@ -679,6 +679,12 @@ test("integration provider service exposes metadata, configure, execute, and ses
           authSource: "api_token",
           email: "ada@example.com",
         }),
+        agentSubject: create(SubjectContextSchema, {
+          id: "user:agent-456",
+          kind: "user",
+          authSource: "delegated",
+          email: "grace@example.com",
+        }),
         credential: create(CredentialContextSchema, {
           mode: "subject",
           subjectId: "user:user-123",
@@ -699,6 +705,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
     configuredRegion: "use1",
     subjectId: "user:user-123",
     subjectEmail: "ada@example.com",
+    agentSubjectEmail: "grace@example.com",
     credentialMode: "subject",
     accessPolicy: "sample_policy",
     accessRole: "admin",
@@ -809,7 +816,6 @@ test("integration provider service resolves hosted HTTP subjects through the plu
         kind: "user",
         displayName: "Slack User",
         authSource: "slack",
-        email: "",
       };
     },
     operations: [
@@ -880,6 +886,7 @@ test("integration provider service resolves hosted HTTP subjects through the plu
     kind: "user",
     displayName: "Slack User",
     authSource: "slack",
+    email: "",
   });
   expect(seenRequest).toEqual({
     binding: "command",

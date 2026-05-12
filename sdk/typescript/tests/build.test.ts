@@ -323,6 +323,13 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
               id: "user:user-123",
               kind: "user",
               authSource: "api_token",
+              email: "ada@example.com",
+            }),
+            agentSubject: create(SubjectContextSchema, {
+              id: "user:agent-456",
+              kind: "user",
+              authSource: "delegated",
+              email: "grace@example.com",
             }),
             credential: create(CredentialContextSchema, {
               mode: "subject",
@@ -341,7 +348,8 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
         region: "iad",
         configuredRegion: "use1",
         subjectId: "user:user-123",
-        subjectEmail: "",
+        subjectEmail: "ada@example.com",
+        agentSubjectEmail: "grace@example.com",
         credentialMode: "subject",
         accessPolicy: "sample_policy",
         accessRole: "admin",

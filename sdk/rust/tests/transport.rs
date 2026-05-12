@@ -92,6 +92,7 @@ struct Output {
     message: String,
     subject_id: String,
     subject_email: String,
+    agent_subject_email: String,
     credential_mode: String,
     access_role: String,
     host_base_url: String,
@@ -117,6 +118,7 @@ async fn serves_provider_requests_over_unix_socket() {
                 let greeting = provider.greeting.lock().expect("lock greeting").clone();
                 let subject_id = request.subject.id.clone();
                 let subject_email = request.subject.email.clone();
+                let agent_subject_email = request.agent_subject.email.clone();
                 let credential_mode = request.credential.mode.clone();
                 let access_role = request.access.role.clone();
                 let host_base_url = request.host.public_base_url.clone();
@@ -125,6 +127,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     message: format!("{greeting}, {}!", input.name),
                     subject_id,
                     subject_email,
+                    agent_subject_email,
                     credential_mode,
                     access_role,
                     host_base_url,
@@ -264,6 +267,12 @@ async fn serves_provider_requests_over_unix_socket() {
                     email: "ada@example.com".to_string(),
                     ..Default::default()
                 }),
+                agent_subject: Some(SubjectContext {
+                    id: "user:user-456".to_string(),
+                    kind: "user".to_string(),
+                    email: "grace@example.com".to_string(),
+                    ..Default::default()
+                }),
                 credential: Some(CredentialContext {
                     mode: "user".to_string(),
                     ..Default::default()
@@ -305,7 +314,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","credential_mode":"user","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"user","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
     );
 
     let session_catalog = client

@@ -14,7 +14,7 @@ import {
   type Request,
   responseBrand,
   type Response,
-  type Subject,
+  type SubjectInput,
 } from "./api.ts";
 import {
   cloneHTTPSubjectRequest,
@@ -243,7 +243,7 @@ export class PluginProvider extends ProviderBase {
   async resolveHTTPSubject(
     request: HTTPSubjectRequest,
     context: HTTPSubjectResolutionContext,
-  ): Promise<Subject | null | undefined> {
+  ): Promise<SubjectInput | null | undefined> {
     return await this.httpSubjectResolver?.(
       cloneHTTPSubjectRequest(request),
       cloneHTTPSubjectResolutionContext(context),
