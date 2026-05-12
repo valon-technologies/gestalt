@@ -22,15 +22,19 @@ jobs:
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_DESCRIPTION_USERNAME: ${{ secrets.DOCKERHUB_DESCRIPTION_USERNAME }}
+          DOCKERHUB_DESCRIPTION_PASSWORD: ${{ secrets.DOCKERHUB_DESCRIPTION_PASSWORD }}
         run: |
           set -euo pipefail
           namespace="valontechnologies"
           repository="gestaltd"
+          dockerhub_identifier="${DOCKERHUB_DESCRIPTION_USERNAME:-$DOCKERHUB_USERNAME}"
+          dockerhub_secret="${DOCKERHUB_DESCRIPTION_PASSWORD:-$DOCKERHUB_TOKEN}"
 
           token="$(
             jq -n \
-              --arg identifier "$DOCKERHUB_USERNAME" \
-              --arg secret "$DOCKERHUB_TOKEN" \
+              --arg identifier "$dockerhub_identifier" \
+              --arg secret "$dockerhub_secret" \
               '{identifier: $identifier, secret: $secret}' \
               | curl -fsSL \
                   -H 'Content-Type: application/json' \
