@@ -8,8 +8,8 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use gestalt::s3::{
-    ByteRange, ENV_S3_SOCKET, ENV_S3_SOCKET_TOKEN, ListOptions, PresignMethod, PresignOptions,
-    ReadOptions, S3, S3Error, WriteOptions, s3_socket_env, s3_socket_token_env,
+    ByteRange, ENV_S3_SOCKET, ListOptions, PresignMethod, PresignOptions, ReadOptions, S3, S3Error,
+    WriteOptions, s3_socket_env, s3_socket_token_env,
 };
 
 struct Harness {
@@ -243,7 +243,7 @@ async fn tcp_target_round_trip() {
 async fn tcp_target_with_token_round_trip() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_tcp_harness(Some("relay-token-rust"), ENV_S3_SOCKET).await;
-    let _token_env = helpers::EnvGuard::set(ENV_S3_SOCKET_TOKEN, "relay-token-rust");
+    let _token_env = helpers::EnvGuard::set(s3_socket_token_env(""), "relay-token-rust");
 
     let s3 = S3::connect().await.expect("connect");
     let mut object = s3.object("bucket", "docs/tcp-token.txt");

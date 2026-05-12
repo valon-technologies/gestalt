@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use hyper_util::rt::TokioIo;
 use serde::de::DeserializeOwned;
@@ -21,15 +21,45 @@ use crate::generated::v1::{
     self as pb, s3_client::S3Client as ProtoS3Client,
     s3_object_access_client::S3ObjectAccessClient as ProtoS3ObjectAccessClient,
 };
+use crate::protocol;
 use crate::rpc_status::rpc_status;
 
 type ClientResult<T> = std::result::Result<T, S3Error>;
 type S3Transport = InterceptedService<Channel, RelayTokenInterceptor>;
 /// Server-streamed object read chunks returned by [`S3Provider::read_object`].
 pub type S3ReadObjectStream =
-    Pin<Box<dyn Stream<Item = ProviderResult<pb::ReadObjectChunk>> + Send + 'static>>;
+    Pin<Box<dyn Stream<Item = ProviderResult<S3ReadObjectFrame>> + Send + 'static>>;
 type S3RpcReadObjectStream =
     Pin<Box<dyn Stream<Item = std::result::Result<pb::ReadObjectChunk, Status>> + Send + 'static>>;
+
+#[derive(Clone, Debug, PartialEq)]
+/// One frame in a provider-authored object read stream.
+pub enum S3ReadObjectFrame {
+    Meta(ObjectMeta),
+    Data(Vec<u8>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+/// One frame in a host-provided object write stream.
+pub enum S3WriteObjectFrame {
+    Open(Box<S3WriteObjectOpen>),
+    Data(Vec<u8>),
+    Empty,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Metadata frame that starts an object write stream.
+pub struct S3WriteObjectOpen {
+    pub reference: Option<ObjectRef>,
+    pub content_type: String,
+    pub cache_control: String,
+    pub content_disposition: String,
+    pub content_encoding: String,
+    pub content_language: String,
+    pub metadata: BTreeMap<String, String>,
+    pub if_match: String,
+    pub if_none_match: String,
+}
 
 /// Client-streamed object write chunks passed to [`S3Provider::write_object`].
 pub struct S3WriteObjectStream {
@@ -42,20 +72,22 @@ impl S3WriteObjectStream {
     }
 
     /// Reads the next write request frame from the upload stream.
-    pub async fn message(&mut self) -> ProviderResult<Option<pb::WriteObjectRequest>> {
+    pub async fn message(&mut self) -> ProviderResult<Option<S3WriteObjectFrame>> {
         self.inner
             .message()
             .await
-            .map_err(|error| crate::Error::new(error.to_string()))
+            .map_err(|error| crate::Error::new(error.to_string()))?
+            .map(write_object_frame_from_proto)
+            .transpose()
     }
 }
 
 /// Default Unix-socket environment variable used by [`S3::connect`].
 pub const ENV_S3_SOCKET: &str = "GESTALT_S3_SOCKET";
 /// Suffix added to named S3 socket variables for relay-token variables.
-pub const ENV_S3_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
+const ENV_S3_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
 /// Default relay-token environment variable used by [`S3::connect`].
-pub const ENV_S3_SOCKET_TOKEN: &str = "GESTALT_S3_SOCKET_TOKEN";
+const ENV_S3_SOCKET_TOKEN: &str = "GESTALT_S3_SOCKET_TOKEN";
 const S3_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 const WRITE_CHUNK_SIZE: usize = 64 * 1024;
 
@@ -114,7 +146,7 @@ pub struct ObjectMeta {
     /// MIME content type.
     pub content_type: String,
     /// Last-modified timestamp, when known.
-    pub last_modified: Option<prost_types::Timestamp>,
+    pub last_modified: Option<SystemTime>,
     /// User metadata associated with the object.
     pub metadata: BTreeMap<String, String>,
     /// Storage class reported by the provider.
@@ -140,9 +172,9 @@ pub struct ReadOptions {
     /// Read only if the current ETag does not match this value.
     pub if_none_match: String,
     /// Read only if the object has changed since this timestamp.
-    pub if_modified_since: Option<prost_types::Timestamp>,
+    pub if_modified_since: Option<SystemTime>,
     /// Read only if the object has not changed since this timestamp.
-    pub if_unmodified_since: Option<prost_types::Timestamp>,
+    pub if_unmodified_since: Option<SystemTime>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -244,8 +276,98 @@ pub struct PresignResult {
     /// HTTP method clients should use.
     pub method: PresignMethod,
     /// Expiration timestamp, when known.
-    pub expires_at: Option<prost_types::Timestamp>,
+    pub expires_at: Option<SystemTime>,
     /// Headers clients must send with the URL.
+    pub headers: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// Fetches metadata for one object.
+pub struct HeadObjectRequest {
+    pub reference: Option<ObjectRef>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+/// Returns object metadata.
+pub struct HeadObjectResponse {
+    pub meta: Option<ObjectMeta>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+/// Opens a streaming object read.
+pub struct ReadObjectRequest {
+    pub reference: Option<ObjectRef>,
+    pub range: Option<ByteRange>,
+    pub if_match: String,
+    pub if_none_match: String,
+    pub if_modified_since: Option<SystemTime>,
+    pub if_unmodified_since: Option<SystemTime>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+/// Returns metadata for a committed object write.
+pub struct WriteObjectResponse {
+    pub meta: Option<ObjectMeta>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// Deletes one object.
+pub struct DeleteObjectRequest {
+    pub reference: Option<ObjectRef>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// Lists objects in a bucket.
+pub struct ListObjectsRequest {
+    pub bucket: String,
+    pub prefix: String,
+    pub delimiter: String,
+    pub continuation_token: String,
+    pub start_after: String,
+    pub max_keys: i32,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+/// One page of list-objects results.
+pub struct ListObjectsResponse {
+    pub objects: Vec<ObjectMeta>,
+    pub common_prefixes: Vec<String>,
+    pub next_continuation_token: String,
+    pub has_more: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// Copies one object to another location.
+pub struct CopyObjectRequest {
+    pub source: Option<ObjectRef>,
+    pub destination: Option<ObjectRef>,
+    pub if_match: String,
+    pub if_none_match: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+/// Returns metadata for a copied object.
+pub struct CopyObjectResponse {
+    pub meta: Option<ObjectMeta>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// Asks the provider to mint a presigned URL.
+pub struct PresignObjectRequest {
+    pub reference: Option<ObjectRef>,
+    pub method: PresignMethod,
+    pub expires: Duration,
+    pub content_type: String,
+    pub content_disposition: String,
+    pub headers: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+/// Returns a presigned URL plus required headers.
+pub struct PresignObjectResponse {
+    pub url: String,
+    pub method: PresignMethod,
+    pub expires_at: Option<SystemTime>,
     pub headers: BTreeMap<String, String>,
 }
 
@@ -292,20 +414,14 @@ pub trait S3Provider: Send + Sync + 'static {
     }
 
     /// Returns object metadata without reading the object body.
-    async fn head_object(
-        &self,
-        _request: pb::HeadObjectRequest,
-    ) -> ProviderResult<pb::HeadObjectResponse> {
+    async fn head_object(&self, _request: HeadObjectRequest) -> ProviderResult<HeadObjectResponse> {
         Err(crate::Error::unimplemented(
             "s3 head object is not implemented",
         ))
     }
 
     /// Streams object metadata followed by object data chunks.
-    async fn read_object(
-        &self,
-        _request: pb::ReadObjectRequest,
-    ) -> ProviderResult<S3ReadObjectStream> {
+    async fn read_object(&self, _request: ReadObjectRequest) -> ProviderResult<S3ReadObjectStream> {
         Err(crate::Error::unimplemented(
             "s3 read object is not implemented",
         ))
@@ -315,14 +431,14 @@ pub trait S3Provider: Send + Sync + 'static {
     async fn write_object(
         &self,
         _request: S3WriteObjectStream,
-    ) -> ProviderResult<pb::WriteObjectResponse> {
+    ) -> ProviderResult<WriteObjectResponse> {
         Err(crate::Error::unimplemented(
             "s3 write object is not implemented",
         ))
     }
 
     /// Deletes one object or object version.
-    async fn delete_object(&self, _request: pb::DeleteObjectRequest) -> ProviderResult<()> {
+    async fn delete_object(&self, _request: DeleteObjectRequest) -> ProviderResult<()> {
         Err(crate::Error::unimplemented(
             "s3 delete object is not implemented",
         ))
@@ -331,18 +447,15 @@ pub trait S3Provider: Send + Sync + 'static {
     /// Lists objects in a bucket using S3-style pagination and delimiters.
     async fn list_objects(
         &self,
-        _request: pb::ListObjectsRequest,
-    ) -> ProviderResult<pb::ListObjectsResponse> {
+        _request: ListObjectsRequest,
+    ) -> ProviderResult<ListObjectsResponse> {
         Err(crate::Error::unimplemented(
             "s3 list objects is not implemented",
         ))
     }
 
     /// Copies one object to another object reference.
-    async fn copy_object(
-        &self,
-        _request: pb::CopyObjectRequest,
-    ) -> ProviderResult<pb::CopyObjectResponse> {
+    async fn copy_object(&self, _request: CopyObjectRequest) -> ProviderResult<CopyObjectResponse> {
         Err(crate::Error::unimplemented(
             "s3 copy object is not implemented",
         ))
@@ -351,8 +464,8 @@ pub trait S3Provider: Send + Sync + 'static {
     /// Creates a presigned URL for direct object access.
     async fn presign_object(
         &self,
-        _request: pb::PresignObjectRequest,
-    ) -> ProviderResult<pb::PresignObjectResponse> {
+        _request: PresignObjectRequest,
+    ) -> ProviderResult<PresignObjectResponse> {
         Err(crate::Error::unimplemented(
             "s3 presign object is not implemented",
         ))
@@ -383,10 +496,13 @@ where
     ) -> std::result::Result<GrpcResponse<pb::HeadObjectResponse>, Status> {
         let response = self
             .provider
-            .head_object(request.into_inner())
+            .head_object(head_object_request_from_proto(request.into_inner()))
             .await
             .map_err(|error| rpc_status("s3 head object", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(
+            head_object_response_to_proto(response)
+                .map_err(|error| rpc_status("s3 head object", error))?,
+        ))
     }
 
     async fn read_object(
@@ -395,10 +511,17 @@ where
     ) -> std::result::Result<GrpcResponse<Self::ReadObjectStream>, Status> {
         let stream = self
             .provider
-            .read_object(request.into_inner())
+            .read_object(
+                read_object_request_from_proto(request.into_inner())
+                    .map_err(|error| rpc_status("s3 read object", error))?,
+            )
             .await
             .map_err(|error| rpc_status("s3 read object", error))?
-            .map(|chunk| chunk.map_err(|error| rpc_status("s3 read object stream", error)));
+            .map(|chunk| {
+                chunk
+                    .and_then(read_object_frame_to_proto)
+                    .map_err(|error| rpc_status("s3 read object stream", error))
+            });
         Ok(GrpcResponse::new(Box::pin(stream)))
     }
 
@@ -411,7 +534,10 @@ where
             .write_object(S3WriteObjectStream::new(request.into_inner()))
             .await
             .map_err(|error| rpc_status("s3 write object", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(
+            write_object_response_to_proto(response)
+                .map_err(|error| rpc_status("s3 write object", error))?,
+        ))
     }
 
     async fn delete_object(
@@ -419,7 +545,7 @@ where
         request: GrpcRequest<pb::DeleteObjectRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         self.provider
-            .delete_object(request.into_inner())
+            .delete_object(delete_object_request_from_proto(request.into_inner()))
             .await
             .map_err(|error| rpc_status("s3 delete object", error))?;
         Ok(GrpcResponse::new(()))
@@ -431,10 +557,13 @@ where
     ) -> std::result::Result<GrpcResponse<pb::ListObjectsResponse>, Status> {
         let response = self
             .provider
-            .list_objects(request.into_inner())
+            .list_objects(list_objects_request_from_proto(request.into_inner()))
             .await
             .map_err(|error| rpc_status("s3 list objects", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(
+            list_objects_response_to_proto(response)
+                .map_err(|error| rpc_status("s3 list objects", error))?,
+        ))
     }
 
     async fn copy_object(
@@ -443,10 +572,13 @@ where
     ) -> std::result::Result<GrpcResponse<pb::CopyObjectResponse>, Status> {
         let response = self
             .provider
-            .copy_object(request.into_inner())
+            .copy_object(copy_object_request_from_proto(request.into_inner()))
             .await
             .map_err(|error| rpc_status("s3 copy object", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(
+            copy_object_response_to_proto(response)
+                .map_err(|error| rpc_status("s3 copy object", error))?,
+        ))
     }
 
     async fn presign_object(
@@ -455,10 +587,12 @@ where
     ) -> std::result::Result<GrpcResponse<pb::PresignObjectResponse>, Status> {
         let response = self
             .provider
-            .presign_object(request.into_inner())
+            .presign_object(presign_object_request_from_proto(request.into_inner()))
             .await
             .map_err(|error| rpc_status("s3 presign object", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(presign_object_response_to_proto(
+            response,
+        )))
     }
 }
 
@@ -569,8 +703,12 @@ impl S3 {
                 range: options.range.map(byte_range_to_proto),
                 if_match: options.if_match,
                 if_none_match: options.if_none_match,
-                if_modified_since: options.if_modified_since,
-                if_unmodified_since: options.if_unmodified_since,
+                if_modified_since: options
+                    .if_modified_since
+                    .map(protocol::timestamp_from_system_time),
+                if_unmodified_since: options
+                    .if_unmodified_since
+                    .map(protocol::timestamp_from_system_time),
             })
             .await
             .map_err(map_status)?
@@ -582,7 +720,7 @@ impl S3 {
             })?;
 
         let meta = match first.result {
-            Some(pb::read_object_chunk::Result::Meta(meta)) => object_meta_from_proto(meta),
+            Some(pb::read_object_chunk::Result::Meta(meta)) => object_meta_from_proto(meta)?,
             Some(pb::read_object_chunk::Result::Data(_)) => {
                 return Err(S3Error::Protocol(
                     "read stream started with data instead of metadata".to_string(),
@@ -716,7 +854,7 @@ impl S3 {
             })
             .await
             .map_err(map_status)?;
-        Ok(list_page_from_proto(response.into_inner()))
+        list_page_from_proto(response.into_inner())
     }
 
     /// Copies one object to another location.
@@ -763,10 +901,7 @@ impl S3 {
             })
             .await
             .map_err(map_status)?;
-        Ok(presign_result_from_proto(
-            response.into_inner(),
-            options.method,
-        ))
+        presign_result_from_proto(response.into_inner(), options.method)
     }
 
     /// Creates a host-mediated object-access URL.
@@ -789,10 +924,7 @@ impl S3 {
             })
             .await
             .map_err(map_status)?;
-        Ok(object_access_url_from_proto(
-            response.into_inner(),
-            options.method,
-        ))
+        object_access_url_from_proto(response.into_inner(), options.method)
     }
 
     /// Alias for [`S3::create_object_access_url`].
@@ -1158,28 +1290,46 @@ fn object_ref_to_proto(reference: ObjectRef) -> pb::S3ObjectRef {
     }
 }
 
-fn object_meta_from_proto(meta: pb::S3ObjectMeta) -> ObjectMeta {
-    ObjectMeta {
-        reference: meta
-            .r#ref
-            .map(|reference| ObjectRef {
-                bucket: reference.bucket,
-                key: reference.key,
-                version_id: reference.version_id,
-            })
-            .unwrap_or_default(),
+fn object_ref_from_proto(reference: pb::S3ObjectRef) -> ObjectRef {
+    ObjectRef {
+        bucket: reference.bucket,
+        key: reference.key,
+        version_id: reference.version_id,
+    }
+}
+
+fn object_meta_to_proto(meta: ObjectMeta) -> ProviderResult<pb::S3ObjectMeta> {
+    Ok(pb::S3ObjectMeta {
+        r#ref: Some(object_ref_to_proto(meta.reference)),
         etag: meta.etag,
         size: meta.size,
         content_type: meta.content_type,
-        last_modified: meta.last_modified,
+        last_modified: meta.last_modified.map(protocol::timestamp_from_system_time),
         metadata: meta.metadata,
         storage_class: meta.storage_class,
-    }
+    })
+}
+
+fn object_meta_from_proto(meta: pb::S3ObjectMeta) -> ClientResult<ObjectMeta> {
+    Ok(ObjectMeta {
+        reference: meta.r#ref.map(object_ref_from_proto).unwrap_or_default(),
+        etag: meta.etag,
+        size: meta.size,
+        content_type: meta.content_type,
+        last_modified: meta
+            .last_modified
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()
+            .map_err(|error| S3Error::Protocol(error.to_string()))?,
+        metadata: meta.metadata,
+        storage_class: meta.storage_class,
+    })
 }
 
 fn required_object_meta(meta: Option<pb::S3ObjectMeta>, context: &str) -> ClientResult<ObjectMeta> {
     let meta = meta.ok_or_else(|| S3Error::Protocol(context.to_string()))?;
-    Ok(object_meta_from_proto(meta))
+    object_meta_from_proto(meta)
 }
 
 fn byte_range_to_proto(range: ByteRange) -> pb::ByteRange {
@@ -1189,16 +1339,167 @@ fn byte_range_to_proto(range: ByteRange) -> pb::ByteRange {
     }
 }
 
-fn list_page_from_proto(page: pb::ListObjectsResponse) -> ListPage {
-    ListPage {
+fn list_page_from_proto(page: pb::ListObjectsResponse) -> ClientResult<ListPage> {
+    Ok(ListPage {
         objects: page
             .objects
             .into_iter()
             .map(object_meta_from_proto)
-            .collect(),
+            .collect::<ClientResult<Vec<_>>>()?,
         common_prefixes: page.common_prefixes,
         next_continuation_token: page.next_continuation_token,
         has_more: page.has_more,
+    })
+}
+
+fn head_object_request_from_proto(request: pb::HeadObjectRequest) -> HeadObjectRequest {
+    HeadObjectRequest {
+        reference: request.r#ref.map(object_ref_from_proto),
+    }
+}
+
+fn head_object_response_to_proto(
+    response: HeadObjectResponse,
+) -> ProviderResult<pb::HeadObjectResponse> {
+    Ok(pb::HeadObjectResponse {
+        meta: response.meta.map(object_meta_to_proto).transpose()?,
+    })
+}
+
+fn read_object_request_from_proto(
+    request: pb::ReadObjectRequest,
+) -> ProviderResult<ReadObjectRequest> {
+    Ok(ReadObjectRequest {
+        reference: request.r#ref.map(object_ref_from_proto),
+        range: request.range.map(|range| ByteRange {
+            start: range.start,
+            end: range.end,
+        }),
+        if_match: request.if_match,
+        if_none_match: request.if_none_match,
+        if_modified_since: request
+            .if_modified_since
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()?,
+        if_unmodified_since: request
+            .if_unmodified_since
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()?,
+    })
+}
+
+fn read_object_frame_to_proto(frame: S3ReadObjectFrame) -> ProviderResult<pb::ReadObjectChunk> {
+    let result = match frame {
+        S3ReadObjectFrame::Meta(meta) => {
+            pb::read_object_chunk::Result::Meta(object_meta_to_proto(meta)?)
+        }
+        S3ReadObjectFrame::Data(data) => pb::read_object_chunk::Result::Data(data),
+    };
+    Ok(pb::ReadObjectChunk {
+        result: Some(result),
+    })
+}
+
+fn write_object_frame_from_proto(
+    frame: pb::WriteObjectRequest,
+) -> ProviderResult<S3WriteObjectFrame> {
+    Ok(match frame.msg {
+        Some(pb::write_object_request::Msg::Open(open)) => {
+            S3WriteObjectFrame::Open(Box::new(S3WriteObjectOpen {
+                reference: open.r#ref.map(object_ref_from_proto),
+                content_type: open.content_type,
+                cache_control: open.cache_control,
+                content_disposition: open.content_disposition,
+                content_encoding: open.content_encoding,
+                content_language: open.content_language,
+                metadata: open.metadata,
+                if_match: open.if_match,
+                if_none_match: open.if_none_match,
+            }))
+        }
+        Some(pb::write_object_request::Msg::Data(data)) => S3WriteObjectFrame::Data(data),
+        None => S3WriteObjectFrame::Empty,
+    })
+}
+
+fn write_object_response_to_proto(
+    response: WriteObjectResponse,
+) -> ProviderResult<pb::WriteObjectResponse> {
+    Ok(pb::WriteObjectResponse {
+        meta: response.meta.map(object_meta_to_proto).transpose()?,
+    })
+}
+
+fn delete_object_request_from_proto(request: pb::DeleteObjectRequest) -> DeleteObjectRequest {
+    DeleteObjectRequest {
+        reference: request.r#ref.map(object_ref_from_proto),
+    }
+}
+
+fn list_objects_request_from_proto(request: pb::ListObjectsRequest) -> ListObjectsRequest {
+    ListObjectsRequest {
+        bucket: request.bucket,
+        prefix: request.prefix,
+        delimiter: request.delimiter,
+        continuation_token: request.continuation_token,
+        start_after: request.start_after,
+        max_keys: request.max_keys,
+    }
+}
+
+fn list_objects_response_to_proto(
+    response: ListObjectsResponse,
+) -> ProviderResult<pb::ListObjectsResponse> {
+    Ok(pb::ListObjectsResponse {
+        objects: response
+            .objects
+            .into_iter()
+            .map(object_meta_to_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
+        common_prefixes: response.common_prefixes,
+        next_continuation_token: response.next_continuation_token,
+        has_more: response.has_more,
+    })
+}
+
+fn copy_object_request_from_proto(request: pb::CopyObjectRequest) -> CopyObjectRequest {
+    CopyObjectRequest {
+        source: request.source.map(object_ref_from_proto),
+        destination: request.destination.map(object_ref_from_proto),
+        if_match: request.if_match,
+        if_none_match: request.if_none_match,
+    }
+}
+
+fn copy_object_response_to_proto(
+    response: CopyObjectResponse,
+) -> ProviderResult<pb::CopyObjectResponse> {
+    Ok(pb::CopyObjectResponse {
+        meta: response.meta.map(object_meta_to_proto).transpose()?,
+    })
+}
+
+fn presign_object_request_from_proto(request: pb::PresignObjectRequest) -> PresignObjectRequest {
+    PresignObjectRequest {
+        reference: request.r#ref.map(object_ref_from_proto),
+        method: presign_method_from_proto(request.method),
+        expires: Duration::from_secs(u64::try_from(request.expires_seconds).unwrap_or_default()),
+        content_type: request.content_type,
+        content_disposition: request.content_disposition,
+        headers: request.headers,
+    }
+}
+
+fn presign_object_response_to_proto(response: PresignObjectResponse) -> pb::PresignObjectResponse {
+    pb::PresignObjectResponse {
+        url: response.url,
+        method: presign_method_to_proto(response.method) as i32,
+        expires_at: response
+            .expires_at
+            .map(protocol::timestamp_from_system_time),
+        headers: response.headers,
     }
 }
 
@@ -1225,35 +1526,45 @@ fn presign_method_from_proto(method: i32) -> PresignMethod {
 fn presign_result_from_proto(
     result: pb::PresignObjectResponse,
     requested_method: PresignMethod,
-) -> PresignResult {
+) -> ClientResult<PresignResult> {
     let method = presign_method_from_proto(result.method);
-    PresignResult {
+    Ok(PresignResult {
         url: result.url,
         method: if method == PresignMethod::Unspecified {
             requested_method
         } else {
             method
         },
-        expires_at: result.expires_at,
+        expires_at: result
+            .expires_at
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()
+            .map_err(|error| S3Error::Protocol(error.to_string()))?,
         headers: result.headers,
-    }
+    })
 }
 
 fn object_access_url_from_proto(
     result: pb::CreateObjectAccessUrlResponse,
     requested_method: PresignMethod,
-) -> ObjectAccessURL {
+) -> ClientResult<ObjectAccessURL> {
     let method = presign_method_from_proto(result.method);
-    ObjectAccessURL {
+    Ok(ObjectAccessURL {
         url: result.url,
         method: if method == PresignMethod::Unspecified {
             requested_method
         } else {
             method
         },
-        expires_at: result.expires_at,
+        expires_at: result
+            .expires_at
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()
+            .map_err(|error| S3Error::Protocol(error.to_string()))?,
         headers: result.headers,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -1273,8 +1584,8 @@ mod tests {
     impl S3Provider for HiddenErrorS3Provider {
         async fn head_object(
             &self,
-            _request: pb::HeadObjectRequest,
-        ) -> ProviderResult<pb::HeadObjectResponse> {
+            _request: HeadObjectRequest,
+        ) -> ProviderResult<HeadObjectResponse> {
             Err(crate::Error::hidden_internal("backend detail"))
         }
     }

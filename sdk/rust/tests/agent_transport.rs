@@ -17,14 +17,14 @@ use gestalt::{
     AgentMessagePartType, AgentProvider, AgentProviderCapabilities, AgentSession,
     AgentSessionState, AgentToolSourceMode, AgentTurn, AgentTurnEvent,
     CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
-    CreateAgentProviderTurnRequest, ENV_AGENT_HOST_SOCKET_TOKEN,
-    GetAgentProviderCapabilitiesRequest, GetAgentProviderInteractionRequest,
-    GetAgentProviderSessionRequest, GetAgentProviderTurnRequest,
-    ListAgentProviderInteractionsRequest, ListAgentProviderInteractionsResponse,
-    ListAgentProviderSessionsRequest, ListAgentProviderSessionsResponse,
-    ListAgentProviderTurnEventsRequest, ListAgentProviderTurnEventsResponse,
-    ListAgentProviderTurnsRequest, ListAgentProviderTurnsResponse,
-    ResolveAgentProviderInteractionRequest, RuntimeMetadata, UpdateAgentProviderSessionRequest,
+    CreateAgentProviderTurnRequest, GetAgentProviderCapabilitiesRequest,
+    GetAgentProviderInteractionRequest, GetAgentProviderSessionRequest,
+    GetAgentProviderTurnRequest, ListAgentProviderInteractionsRequest,
+    ListAgentProviderInteractionsResponse, ListAgentProviderSessionsRequest,
+    ListAgentProviderSessionsResponse, ListAgentProviderTurnEventsRequest,
+    ListAgentProviderTurnEventsResponse, ListAgentProviderTurnsRequest,
+    ListAgentProviderTurnsResponse, ResolveAgentProviderInteractionRequest, RuntimeMetadata,
+    UpdateAgentProviderSessionRequest,
 };
 use hyper_util::rt::tokio::TokioIo;
 use serde::Serialize;
@@ -32,6 +32,8 @@ use tokio::net::{TcpListener, UnixListener, UnixStream};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
+
+const ENV_AGENT_HOST_SOCKET_TOKEN: &str = "GESTALT_AGENT_HOST_SOCKET_TOKEN";
 
 #[derive(Serialize)]
 struct LookupArguments {

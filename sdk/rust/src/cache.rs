@@ -21,8 +21,7 @@ type CacheTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 pub const ENV_CACHE_SOCKET: &str = "GESTALT_CACHE_SOCKET";
 /// Default relay-token environment variable used by [`Cache::connect`].
 pub const ENV_CACHE_SOCKET_TOKEN: &str = "GESTALT_CACHE_SOCKET_TOKEN";
-/// Suffix added to named cache socket variables for relay-token variables.
-pub const ENV_CACHE_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
+const ENV_CACHE_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
 const CACHE_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -332,6 +331,9 @@ pub fn cache_socket_env(name: &str) -> String {
 
 /// Returns the environment variable used for a named cache relay token.
 pub fn cache_socket_token_env(name: &str) -> String {
+    if name.trim().is_empty() {
+        return ENV_CACHE_SOCKET_TOKEN.to_string();
+    }
     format!(
         "{env}{}",
         ENV_CACHE_SOCKET_TOKEN_SUFFIX,

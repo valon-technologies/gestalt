@@ -16,24 +16,25 @@ use gestalt::proto::v1::{
     AgentManagerListTurnEventsRequest, AgentManagerListTurnEventsResponse,
     AgentManagerListTurnsRequest, AgentManagerListTurnsResponse,
     AgentManagerResolveInteractionRequest, AgentManagerUpdateSessionRequest, AgentMessagePartType,
-    AgentSession, AgentSessionState as ProtoAgentSessionState, AgentTurn, AgentTurnEvent,
+    AgentSession, AgentSessionState as ProtoAgentSessionState,
+    AgentToolSourceMode as ProtoAgentToolSourceMode, AgentTurn, AgentTurnEvent,
 };
 use gestalt::{
-    AgentInteractionState as NativeAgentInteractionState, AgentManager,
-    AgentManagerCancelTurnInput, AgentManagerCreateSessionInput, AgentManagerCreateTurnInput,
-    AgentManagerGetSessionInput, AgentManagerGetTurnInput, AgentManagerListInteractionsInput,
-    AgentManagerListSessionsInput, AgentManagerListTurnEventsInput, AgentManagerListTurnsInput,
+    AgentInteractionState, AgentManager, AgentManagerCancelTurnInput,
+    AgentManagerCreateSessionInput, AgentManagerCreateTurnInput, AgentManagerGetSessionInput,
+    AgentManagerGetTurnInput, AgentManagerListInteractionsInput, AgentManagerListSessionsInput,
+    AgentManagerListTurnEventsInput, AgentManagerListTurnsInput,
     AgentManagerResolveInteractionInput, AgentManagerUpdateSessionInput, AgentMessageInput,
-    AgentMessagePartInput, AgentMessagePartType as NativeAgentMessagePartType,
-    AgentSessionState as NativeAgentSessionState, AgentToolRefInput,
-    AgentToolSourceMode as NativeAgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET,
-    ENV_AGENT_MANAGER_SOCKET_TOKEN, Request,
+    AgentMessagePartInput, AgentMessagePartType as NativeAgentMessagePartType, AgentSessionState,
+    AgentToolRefInput, AgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET, Request,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
+
+const ENV_AGENT_MANAGER_SOCKET_TOKEN: &str = "GESTALT_AGENT_MANAGER_SOCKET_TOKEN";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
@@ -463,7 +464,7 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .update_session(AgentManagerUpdateSessionInput {
             session_id: "session-managed-1".to_string(),
             client_ref: "cli-session-2".to_string(),
-            state: NativeAgentSessionState::Archived,
+            state: AgentSessionState::Archived,
             ..Default::default()
         })
         .await
@@ -482,7 +483,7 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
                 }],
                 ..Default::default()
             }],
-            tool_source: NativeAgentToolSourceMode::McpCatalog,
+            tool_source: AgentToolSourceMode::McpCatalog,
             ..Default::default()
         })
         .await
@@ -544,7 +545,7 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
     assert_eq!(turn_events.events.len(), 1);
     assert_eq!(interactions.interactions.len(), 1);
     assert_eq!(resolved.id, "interaction-1");
-    assert_eq!(resolved.state, NativeAgentInteractionState::Resolved);
+    assert_eq!(resolved.state, AgentInteractionState::Resolved);
 
     let seen = server.seen.lock().expect("lock seen").clone();
     assert_eq!(
@@ -695,7 +696,7 @@ async fn agent_manager_create_turn_accepts_native_values() {
                 connection: "default".to_string(),
                 ..Default::default()
             }],
-            tool_source: NativeAgentToolSourceMode::McpCatalog,
+            tool_source: AgentToolSourceMode::McpCatalog,
             response_schema: Some(serde_json::json!({ "type": "object" })),
             metadata: Some(serde_json::json!({ "request": "native" })),
             model_options: Some(serde_json::json!({ "temperature": 0 })),
@@ -718,7 +719,7 @@ async fn agent_manager_create_turn_accepts_native_values() {
     assert_eq!(request.model, "gpt-5.1");
     assert_eq!(
         request.tool_source,
-        NativeAgentToolSourceMode::McpCatalog as i32
+        ProtoAgentToolSourceMode::McpCatalog as i32
     );
     assert_eq!(request.messages.len(), 1);
     assert_eq!(request.messages[0].role, "user");

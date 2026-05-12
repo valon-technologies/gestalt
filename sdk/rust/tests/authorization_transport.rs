@@ -38,10 +38,10 @@ use gestalt::{
     ActionSearchResponse, Authorization, AuthorizationAction, AuthorizationMetadata,
     AuthorizationModelRef, AuthorizationProvider as SdkAuthorizationProvider,
     AuthorizationRelationshipTarget, AuthorizationResource, AuthorizationSubject,
-    AuthorizationSubjectSet, ENV_AUTHORIZATION_SOCKET, ENV_AUTHORIZATION_SOCKET_TOKEN,
-    EffectiveSubjectSearchRequest, ExpandRequest, GetActiveModelResponse, ListModelsResponse,
-    ReadRelationshipsResponse, Relationship, ResourceSearchRequest, ResourceSearchResponse,
-    SubjectSearchRequest, SubjectSearchResponse, WriteRelationshipsRequest,
+    AuthorizationSubjectSet, ENV_AUTHORIZATION_SOCKET, EffectiveSubjectSearchRequest,
+    ExpandRequest, GetActiveModelResponse, ListModelsResponse, ReadRelationshipsResponse,
+    Relationship, ResourceSearchRequest, ResourceSearchResponse, SubjectSearchRequest,
+    SubjectSearchResponse, WriteRelationshipsRequest,
 };
 use hyper_util::rt::TokioIo;
 use tokio::net::{UnixListener, UnixStream};
@@ -49,6 +49,8 @@ use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
+
+const ENV_AUTHORIZATION_SOCKET_TOKEN: &str = "GESTALT_AUTHORIZATION_SOCKET_TOKEN";
 
 #[derive(Clone, Default)]
 struct TestAuthorizationServer {

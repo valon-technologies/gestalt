@@ -10,13 +10,19 @@ use gestalt::proto::v1::authentication_provider_client::AuthenticationProviderCl
 use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use gestalt::proto::v1::s3_client::S3Client;
 use gestalt::proto::v1::{
-    BeginLoginRequest, CompleteLoginRequest, ConfigureProviderRequest, CopyObjectRequest,
-    CopyObjectResponse, DeleteObjectRequest, HeadObjectRequest, HeadObjectResponse,
-    ListObjectsRequest, ListObjectsResponse, PresignObjectRequest, PresignObjectResponse,
-    ProviderKind, ReadObjectChunk, ReadObjectRequest, S3ObjectMeta, S3ObjectRef,
-    ValidateExternalTokenRequest, WriteObjectRequest, WriteObjectResponse,
+    BeginLoginRequest as ProtoBeginLoginRequest, CompleteLoginRequest as ProtoCompleteLoginRequest,
+    ConfigureProviderRequest, HeadObjectRequest as ProtoHeadObjectRequest,
+    ListObjectsRequest as ProtoListObjectsRequest, ProviderKind,
+    ReadObjectRequest as ProtoReadObjectRequest, S3ObjectRef, ValidateExternalTokenRequest,
+    WriteObjectRequest as ProtoWriteObjectRequest,
 };
-use gestalt::{AuthenticationProvider, RuntimeMetadata};
+use gestalt::s3::{
+    CopyObjectRequest, CopyObjectResponse, DeleteObjectRequest, HeadObjectRequest,
+    HeadObjectResponse, ListObjectsRequest, ListObjectsResponse, ObjectMeta, ObjectRef,
+    PresignObjectRequest, PresignObjectResponse, ReadObjectRequest, S3ReadObjectFrame,
+    S3WriteObjectFrame, WriteObjectResponse,
+};
+use gestalt::{AuthenticationProvider, BeginLoginRequest, CompleteLoginRequest, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
 use tokio_stream::iter as stream_iter;
@@ -143,7 +149,7 @@ impl gestalt::S3Provider for TestS3Provider {
 
     async fn head_object(&self, request: HeadObjectRequest) -> gestalt::Result<HeadObjectResponse> {
         let reference = request
-            .r#ref
+            .reference
             .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         let key = object_key(&reference.bucket, &reference.key);
         let objects = self.objects.lock().expect("lock objects");
@@ -164,7 +170,7 @@ impl gestalt::S3Provider for TestS3Provider {
         request: ReadObjectRequest,
     ) -> gestalt::Result<gestalt::S3ReadObjectStream> {
         let reference = request
-            .r#ref
+            .reference
             .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         let key = object_key(&reference.bucket, &reference.key);
         let objects = self.objects.lock().expect("lock objects");
@@ -174,15 +180,13 @@ impl gestalt::S3Provider for TestS3Provider {
             .ok_or_else(|| gestalt::Error::not_found("object not found"))?;
         drop(objects);
 
-        let mut messages = vec![Ok(ReadObjectChunk {
-            result: Some(gestalt::proto::v1::read_object_chunk::Result::Meta(
-                object_meta(reference, body.len() as i64, "application/octet-stream"),
-            )),
-        })];
+        let mut messages = vec![Ok(S3ReadObjectFrame::Meta(object_meta(
+            reference,
+            body.len() as i64,
+            "application/octet-stream",
+        )))];
         if !body.is_empty() {
-            messages.push(Ok(ReadObjectChunk {
-                result: Some(gestalt::proto::v1::read_object_chunk::Result::Data(body)),
-            }));
+            messages.push(Ok(S3ReadObjectFrame::Data(body)));
         }
 
         Ok(Box::pin(stream_iter(messages)))
@@ -197,15 +201,15 @@ impl gestalt::S3Provider for TestS3Provider {
         let mut body = Vec::new();
 
         while let Some(message) = stream.message().await? {
-            match message.msg {
-                Some(gestalt::proto::v1::write_object_request::Msg::Open(open)) => {
-                    reference = open.r#ref;
+            match message {
+                S3WriteObjectFrame::Open(open) => {
+                    reference = open.reference;
                     content_type = open.content_type;
                 }
-                Some(gestalt::proto::v1::write_object_request::Msg::Data(chunk)) => {
+                S3WriteObjectFrame::Data(chunk) => {
                     body.extend_from_slice(&chunk);
                 }
-                None => {}
+                S3WriteObjectFrame::Empty => {}
             }
         }
 
@@ -223,7 +227,7 @@ impl gestalt::S3Provider for TestS3Provider {
 
     async fn delete_object(&self, request: DeleteObjectRequest) -> gestalt::Result<()> {
         let reference = request
-            .r#ref
+            .reference
             .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         self.objects
             .lock()
@@ -249,7 +253,7 @@ impl gestalt::S3Provider for TestS3Provider {
                 continue;
             }
             metas.push(object_meta(
-                S3ObjectRef {
+                ObjectRef {
                     bucket: bucket.to_string(),
                     key: object_key.to_string(),
                     version_id: String::new(),
@@ -294,7 +298,7 @@ impl gestalt::S3Provider for TestS3Provider {
         request: PresignObjectRequest,
     ) -> gestalt::Result<PresignObjectResponse> {
         let reference = request
-            .r#ref
+            .reference
             .ok_or_else(|| gestalt::Error::bad_request("missing ref"))?;
         Ok(PresignObjectResponse {
             url: format!(
@@ -359,7 +363,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     );
 
     let begin = auth
-        .begin_login(BeginLoginRequest {
+        .begin_login(ProtoBeginLoginRequest {
             callback_url: "https://host/callback".to_string(),
             host_state: "host-state".to_string(),
             scopes: vec!["openid".to_string()],
@@ -372,7 +376,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     assert_eq!(begin.provider_state, b"provider-state");
 
     let completed = auth
-        .complete_login(CompleteLoginRequest {
+        .complete_login(ProtoCompleteLoginRequest {
             query: BTreeMap::from([("email".to_string(), "complete@example.com".to_string())]),
             provider_state: b"provider-state".to_vec(),
             callback_url: "https://host/callback".to_string(),
@@ -468,7 +472,7 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
         version_id: String::new(),
     };
     s3.write_object(stream_iter(vec![
-        WriteObjectRequest {
+        ProtoWriteObjectRequest {
             msg: Some(gestalt::proto::v1::write_object_request::Msg::Open(
                 gestalt::proto::v1::WriteObjectOpen {
                     r#ref: Some(reference.clone()),
@@ -476,7 +480,7 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
                 },
             )),
         },
-        WriteObjectRequest {
+        ProtoWriteObjectRequest {
             msg: Some(gestalt::proto::v1::write_object_request::Msg::Data(
                 b"hello".to_vec(),
             )),
@@ -486,7 +490,7 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
     .expect("write object");
 
     let head = s3
-        .head_object(HeadObjectRequest {
+        .head_object(ProtoHeadObjectRequest {
             r#ref: Some(reference.clone()),
         })
         .await
@@ -495,10 +499,10 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
     assert_eq!(head.meta.expect("meta").size, 5);
 
     let listed = s3
-        .list_objects(ListObjectsRequest {
+        .list_objects(ProtoListObjectsRequest {
             bucket: "bucket".to_string(),
             prefix: "docs/".to_string(),
-            ..ListObjectsRequest::default()
+            ..ProtoListObjectsRequest::default()
         })
         .await
         .expect("list objects")
@@ -510,9 +514,9 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
     );
 
     let mut stream = s3
-        .read_object(ReadObjectRequest {
+        .read_object(ProtoReadObjectRequest {
             r#ref: Some(reference),
-            ..ReadObjectRequest::default()
+            ..ProtoReadObjectRequest::default()
         })
         .await
         .expect("read object")
@@ -550,9 +554,9 @@ fn object_key(bucket: &str, key: &str) -> String {
     format!("{bucket}/{key}")
 }
 
-fn object_meta(reference: S3ObjectRef, size: i64, content_type: &str) -> S3ObjectMeta {
-    S3ObjectMeta {
-        r#ref: Some(reference),
+fn object_meta(reference: ObjectRef, size: i64, content_type: &str) -> ObjectMeta {
+    ObjectMeta {
+        reference,
         etag: String::new(),
         size,
         content_type: content_type.to_string(),

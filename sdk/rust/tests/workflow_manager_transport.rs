@@ -25,9 +25,9 @@ use gestalt::proto::v1::{
 };
 use gestalt::{
     AgentMessageInput, AgentMessagePartInput, BoundWorkflowAgentTargetInput,
-    BoundWorkflowPluginTargetInput, BoundWorkflowTargetInput, ENV_WORKFLOW_MANAGER_SOCKET,
-    ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, Request, WorkflowEventInput, WorkflowEventMatchInput,
-    WorkflowManager, WorkflowManagerCreateDefinitionInput, WorkflowManagerCreateEventTriggerInput,
+    BoundWorkflowPluginTargetInput, BoundWorkflowTargetInput, ENV_WORKFLOW_MANAGER_SOCKET, Request,
+    WorkflowEventInput, WorkflowEventMatchInput, WorkflowManager,
+    WorkflowManagerCreateDefinitionInput, WorkflowManagerCreateEventTriggerInput,
     WorkflowManagerCreateScheduleInput, WorkflowManagerDeleteDefinitionInput,
     WorkflowManagerDeleteEventTriggerInput, WorkflowManagerDeleteScheduleInput,
     WorkflowManagerGetDefinitionInput, WorkflowManagerGetEventTriggerInput,
@@ -44,6 +44,8 @@ use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
+
+const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_MANAGER_SOCKET_TOKEN";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
@@ -851,7 +853,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     assert_eq!(created_trigger.id, "trg-1");
     assert_eq!(
         created_trigger
-            .r#match
+            .event_match
             .as_ref()
             .expect("created trigger match")
             .event_type,
@@ -866,7 +868,7 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     assert!(updated_trigger.paused);
     assert_eq!(
         updated_trigger
-            .r#match
+            .event_match
             .as_ref()
             .expect("updated trigger match")
             .event_type,

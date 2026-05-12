@@ -411,10 +411,11 @@ pub struct AuthorizationModelSubjectSetTarget {
     pub relation: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Authorization model rewrite expression.
 pub enum AuthorizationModelRewrite {
     /// Directly related targets.
+    #[default]
     This,
     /// Computed userset on the same resource.
     ComputedUserset(AuthorizationModelComputedUserset),
@@ -422,12 +423,6 @@ pub enum AuthorizationModelRewrite {
     TupleToUserset(AuthorizationModelTupleToUserset),
     /// Union of rewrite branches.
     Union(AuthorizationModelRewriteUnion),
-}
-
-impl Default for AuthorizationModelRewrite {
-    fn default() -> Self {
-        Self::This
-    }
 }
 
 /// Authorization model `this` rewrite leaf.

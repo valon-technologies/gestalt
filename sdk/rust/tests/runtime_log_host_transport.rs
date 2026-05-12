@@ -3,6 +3,7 @@ mod helpers;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
 use gestalt::proto::v1::plugin_runtime_log_host_server::{
     PluginRuntimeLogHost as ProtoPluginRuntimeLogHost, PluginRuntimeLogHostServer,
@@ -11,14 +12,15 @@ use gestalt::proto::v1::{
     AppendPluginRuntimeLogsRequest, AppendPluginRuntimeLogsResponse, PluginRuntimeLogStream,
 };
 use gestalt::{
-    ENV_RUNTIME_LOG_HOST_SOCKET, ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN, ENV_RUNTIME_SESSION_ID,
-    RuntimeLogHost, RuntimeLogStream,
+    ENV_RUNTIME_LOG_HOST_SOCKET, ENV_RUNTIME_SESSION_ID, RuntimeLogHost, RuntimeLogStream,
 };
 use tokio::net::UnixListener;
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
+
+const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN: &str = "GESTALT_RUNTIME_LOG_SOCKET_TOKEN";
 
 #[derive(Clone, Default)]
 struct TestRuntimeLogHostServer {
@@ -72,7 +74,7 @@ async fn runtime_log_host_appends_logs_and_forwards_relay_token() {
         .append_current_entry(
             RuntimeLogStream::Runtime,
             "runtime boot\n",
-            Some(helpers::timestamp_now()),
+            Some(SystemTime::now()),
             7,
         )
         .await

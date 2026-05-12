@@ -555,7 +555,7 @@ func TestContextCancellationStopsRetries(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from context cancellation")
 	}
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 	if got := attempts.Load(); got > 2 {
