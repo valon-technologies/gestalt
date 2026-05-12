@@ -18,6 +18,12 @@ The supported import surface is the top-level :mod:`gestalt` package:
 This reference focuses on provider-facing classes, helpers, clients, and native
 input models. Transport serialization details are intentionally omitted.
 
+.. contents:: API sections
+   :local:
+   :depth: 1
+
+.. _python-core-authoring-types:
+
 Core authoring types
 --------------------
 
@@ -53,6 +59,8 @@ Core authoring types
 .. autofunction:: OK
 
 .. autoexception:: Error
+
+.. _python-plugin-authoring:
 
 Plugin authoring
 ----------------
@@ -106,6 +114,8 @@ Plugin authoring
 .. autoclass:: CatalogParameter
 
 .. autoclass:: OperationAnnotations
+
+.. _python-workflow-helpers:
 
 Workflow helpers
 ----------------
@@ -193,6 +203,8 @@ non-aliased message copies.
 .. autofunction:: workflow_execution_reference
 
 .. autofunction:: workflow_execution_reference_from_reference
+
+.. _python-agent-provider-models:
 
 Agent provider models
 ---------------------
@@ -284,6 +296,8 @@ timezone-aware ``datetime`` values. The runtime owns transport serialization.
 
 .. autoclass:: ResolvedAgentConnection
 
+.. _python-agent-dictionary-helpers:
+
 Agent dictionary helpers
 ------------------------
 
@@ -335,6 +349,8 @@ lower-snake-case dictionaries.
 .. autofunction:: agent_messages_to_dicts
 
 .. autofunction:: agent_messages_from_dicts
+
+.. _python-provider-interfaces:
 
 Provider interfaces
 -------------------
@@ -433,6 +449,8 @@ Provider interfaces
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
+.. _python-authentication-payload-models:
+
 Authentication payload models
 -----------------------------
 
@@ -454,6 +472,8 @@ runtime owns transport conversion.
 .. autoclass:: BeginLoginResponse
 
 .. autoclass:: CompleteLoginRequest
+
+.. _python-provider-telemetry:
 
 Provider telemetry
 ------------------
@@ -514,6 +534,10 @@ provider-authored GenAI spans and metrics.
 
 .. currentmodule:: gestalt
 
+.. _python-storage-and-host-service-clients:
+
+.. _python-cache-client:
+
 Cache client
 ------------
 
@@ -529,6 +553,8 @@ Cache client
    :members:
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
+
+.. _python-indexeddb-client:
 
 IndexedDB client
 ----------------
@@ -605,6 +631,8 @@ IndexedDB client
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
+.. _python-s3-client:
+
 S3 client
 ---------
 
@@ -678,6 +706,8 @@ S3 client
 .. autoclass:: S3Object
    :members:
    :exclude-members: __dict__, __module__, __weakref__
+
+.. _python-host-service-clients:
 
 Host service clients
 --------------------

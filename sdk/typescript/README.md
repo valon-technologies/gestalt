@@ -9,6 +9,21 @@ The package is published as `@valon-technologies/gestalt`.
 bun add @valon-technologies/gestalt@0.0.1-alpha.16
 ```
 
+## API sections
+
+The TypeDoc reference is organized around the provider-authoring workflow. All
+symbols are imported from `@valon-technologies/gestalt` unless the section
+explicitly names a submodule.
+
+| Section | Start with | Use it for |
+| --- | --- | --- |
+| Provider authoring | `definePlugin`, `operation`, `ok` | Executable plugin providers, typed request handlers, and operation results. |
+| Runtime schemas | `s`, `object`, `string` | Runtime validation and generated catalog metadata for operation inputs and outputs. |
+| Provider runtimes | `defineAuthenticationProvider`, `defineCacheProvider`, `defineS3Provider`, `defineWorkflowProvider`, `defineAgentProvider` | Host-service backends implemented as TypeScript providers. |
+| Workflow and agent models | `WorkflowProvider`, `WorkflowManager`, `AgentProvider`, `AgentManager` | Native workflow values, agent sessions, turns, messages, tools, and manager clients. |
+| Host-service clients | `Cache`, `IndexedDB`, `S3`, `PluginInvoker`, `AuthorizationClient` | Calling sibling services exposed to a provider process by `gestaltd`. |
+| Telemetry | `withModelOperation`, `withToolExecution`, `withAgentInvocation` | Provider-authored GenAI spans and metrics inside a running provider process. |
+
 ```ts
 import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
 

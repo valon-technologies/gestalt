@@ -12,6 +12,21 @@ cargo add serde --features derive
 cargo add schemars --features derive
 ```
 
+## API sections
+
+The docs.rs reference is organized around the provider-authoring workflow. Most
+provider code imports from the crate root after renaming `gestalt-sdk` to
+`gestalt`.
+
+| Section | Start with | Use it for |
+| --- | --- | --- |
+| Provider authoring | [`Provider`], [`Operation`], [`Router`], [`Request`], [`Response`], [`ok`] | Executable plugin providers, typed request handlers, and operation results. |
+| Catalog metadata | [`Catalog`], [`CatalogOperation`], [`Router::register`] | Schema-derived operation catalogs from `serde` and `schemars` types. |
+| Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`PluginRuntimeProvider`] | Host-service backends implemented as Rust providers. |
+| Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_signal`], [`new_bound_workflow_run`], [`new_workflow_execution_reference`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
+| Host-service clients | [`Cache`], [`S3`], [`WorkflowHost`], [`WorkflowManager`], [`AgentHost`], [`AgentManager`], [`PluginInvoker`] | Calling sibling services exposed to a provider process by `gestaltd`. |
+| Runtime and telemetry | [`runtime`], [`telemetry`], [`RuntimeMetadata`] | Provider process entrypoints and provider-authored GenAI spans and metrics. |
+
 ## Quick start
 
 Register typed operations on a router. The router dispatches requests and emits
