@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -250,7 +252,17 @@ func (s *ManagerServer) SignalRun(ctx context.Context, req *proto.WorkflowManage
 	return resp, nil
 }
 
-func (s *ManagerServer) SignalOrStartRun(ctx context.Context, req *proto.WorkflowManagerSignalOrStartRunRequest) (*proto.ManagedWorkflowRunSignal, error) {
+func (s *ManagerServer) SignalOrStartRun(ctx context.Context, req *proto.WorkflowManagerSignalOrStartRunRequest) (out *proto.ManagedWorkflowRunSignal, err error) {
+	startedAt := time.Now()
+	var managed *workflowmanager.ManagedRunSignal
+	dims := workflowManagerSignalOrStartMetricDims(req, nil)
+	ctx, span := observability.StartSpan(ctx, "workflow.manager.operation", observability.WorkflowMetricAttributes(dims)...)
+	defer func() {
+		finalDims := workflowManagerSignalOrStartMetricDims(req, managed)
+		observability.SetSpanAttributes(ctx, observability.WorkflowMetricAttributes(finalDims)...)
+		observability.EndSpan(span, err)
+		observability.RecordWorkflowManagerOperation(ctx, startedAt, err, finalDims)
+	}()
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -265,7 +277,7 @@ func (s *ManagerServer) SignalOrStartRun(ctx context.Context, req *proto.Workflo
 	if err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.SignalOrStartRun(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.RunSignalOrStart{
+	managed, err = s.manager.SignalOrStartRun(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.RunSignalOrStart{
 		ProviderName:     strings.TrimSpace(req.GetProviderName()),
 		WorkflowKey:      strings.TrimSpace(req.GetWorkflowKey()),
 		Target:           target,
@@ -633,6 +645,36 @@ func (s *ManagerServer) requireWorkflowGrant(tokenCtx plugininvokerservice.Token
 		return nil
 	}
 	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for plugin %q", operation, strings.TrimSpace(s.pluginName))
+}
+
+func workflowManagerSignalOrStartMetricDims(req *proto.WorkflowManagerSignalOrStartRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {
+	providerName := ""
+	targetKind := observability.WorkflowTargetKindUnknown
+	runStatus := observability.WorkflowRunStatusUnknown
+	if req != nil {
+		providerName = strings.TrimSpace(req.GetProviderName())
+		targetKind = workflowProtoTargetKind(req.GetTarget())
+	}
+	if managed != nil {
+		if resolved := strings.TrimSpace(managed.ProviderName); resolved != "" {
+			providerName = resolved
+		}
+		if managed.Run != nil {
+			targetKind = workflowTargetKind(managed.Run.Target)
+			runStatus = workflowRunStatusFromCore(managed.Run)
+		}
+		if targetKind == observability.WorkflowTargetKindUnknown && managed.ExecutionRef != nil {
+			targetKind = workflowTargetKind(managed.ExecutionRef.Target)
+		}
+	}
+	return observability.WorkflowMetricDims{
+		ProviderName:    providerName,
+		OperationName:   observability.WorkflowOperationSignalOrStartRun,
+		TriggerKind:     observability.WorkflowTriggerKindSignal,
+		TargetKind:      targetKind,
+		RunStatus:       runStatus,
+		TelemetrySource: observability.WorkflowTelemetrySourceCore,
+	}
 }
 
 func workflowManagerScheduleUpsert(

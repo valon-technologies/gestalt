@@ -91,6 +91,7 @@ type workflowMatchedTriggersMetricSet struct {
 var (
 	workflowProviderOperationMetrics metricutil.MeterCache[metricSet]
 	workflowHostOperationMetrics     metricutil.MeterCache[metricSet]
+	workflowManagerOperationMetrics  metricutil.MeterCache[metricSet]
 	workflowRunStartedMetrics        metricutil.MeterCache[countMetricSet]
 	workflowRunCompletedMetrics      metricutil.MeterCache[workflowRunCompletedMetricSet]
 	workflowEventPublishedMetrics    metricutil.MeterCache[countMetricSet]
@@ -104,6 +105,10 @@ func RecordWorkflowProviderOperation(ctx context.Context, startedAt time.Time, e
 
 func RecordWorkflowHostOperation(ctx context.Context, startedAt time.Time, err error, dims WorkflowMetricDims) {
 	record(ctx, &workflowHostOperationMetrics, "gestaltd.workflows.host.operation", "gestaltd workflow host operations", startedAt, err != nil, workflowMetricAttrs(dims, err)...)
+}
+
+func RecordWorkflowManagerOperation(ctx context.Context, startedAt time.Time, err error, dims WorkflowMetricDims) {
+	record(ctx, &workflowManagerOperationMetrics, "gestaltd.workflows.manager.operation", "gestaltd workflow manager operations", startedAt, err != nil, workflowMetricAttrs(dims, err)...)
 }
 
 func RecordWorkflowRunStarted(ctx context.Context, dims WorkflowMetricDims) {

@@ -1,15 +1,27 @@
 package workflows
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"log/slog"
 	"net"
+	"strings"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
+	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"go.opentelemetry.io/otel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -367,6 +379,118 @@ func TestWorkflowHostRecordsOperationMetricsAcrossTransport(t *testing.T) {
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.host.operation.duration", successAttrs, "gestaltd.workflow.plugin.operation")
 }
 
+func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testing.T) { //nolint:paralleltest // mutates global slog and OTel providers.
+	metrics := metrictest.NewManualMeterProvider(t)
+	prevMeter := otel.GetMeterProvider()
+	otel.SetMeterProvider(metrics.Provider)
+	t.Cleanup(func() { otel.SetMeterProvider(prevMeter) })
+
+	var logBuf bytes.Buffer
+	prevLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prevLogger) })
+
+	provider := newWorkflowManagerTelemetryProvider()
+	manager := workflowmanager.New(workflowmanager.Config{
+		Workflow:     workflowManagerTelemetryControl{provider: provider},
+		Agent:        workflowManagerTelemetryAgentControl{},
+		AgentManager: workflowManagerTelemetryAgentManager{},
+	})
+	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-telemetry-test-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	token, err := tokens.MintRootTokenWithWorkflowGrants(
+		principal.WithPrincipal(context.Background(), &principal.Principal{
+			SubjectID: "user:user-123",
+			UserID:    "user-123",
+			Kind:      principal.KindUser,
+			Source:    principal.SourceSession,
+		}),
+		"slack",
+		nil,
+		workflowgrants.Grants{workflowgrants.OperationRunsSignalOrStart: {}},
+	)
+	if err != nil {
+		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	srv := grpc.NewServer()
+	proto.RegisterWorkflowManagerHostServer(srv, NewManagerServer("slack", manager, tokens))
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+	conn, err := grpc.NewClient("passthrough:///workflow-manager",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	client := proto.NewWorkflowManagerHostClient(conn)
+
+	successKey := "slack:T123:C123:1712161829.000300"
+	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(token, successKey, "idem-success"))
+	if err != nil {
+		t.Fatalf("SignalOrStartRun success: %v", err)
+	}
+	failureKey := "slack:T123:C123:1712161830.000400"
+	provider.signalOrStartErr = status.Error(codes.FailedPrecondition, "provider rejected signal")
+	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(token, failureKey, "idem-failure"))
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("SignalOrStartRun failure = %v, want FailedPrecondition", err)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	successAttrs := map[string]string{
+		"gestaltd.workflow.provider.name":    "local",
+		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
+		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindAgent,
+		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusRunning,
+		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
+	}
+	failureAttrs := map[string]string{
+		"gestaltd.workflow.provider.name":    "local",
+		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
+		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindAgent,
+		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusUnknown,
+		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
+		"error.type":                         "grpc.failed_precondition",
+	}
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.count", 1, successAttrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.workflows.manager.operation.duration", successAttrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 1, failureAttrs)
+	for _, forbidden := range []string{
+		"subject_id",
+		"caller_plugin",
+		"workflow_key_sha256",
+		"gestaltd.workflow.run.id",
+		"gestaltd.workflow.execution_ref",
+		"gestaltd.workflow.plugin.operation",
+	} {
+		metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.manager.operation.duration", successAttrs, forbidden)
+	}
+
+	logOutput := logBuf.String()
+	if strings.Contains(logOutput, failureKey) {
+		t.Fatalf("manager log contains raw workflow key %q", failureKey)
+	}
+	if strings.Contains(logOutput, "idem-failure") {
+		t.Fatal("manager log contains raw idempotency key")
+	}
+	assertWorkflowManagerFailureLog(t, logOutput, failureKey)
+}
+
 func newTelemetryRemoteWorkflow(t *testing.T) coreworkflow.Provider {
 	t.Helper()
 
@@ -404,6 +528,160 @@ func newTelemetryRemoteWorkflow(t *testing.T) coreworkflow.Provider {
 		t.Fatalf("NewRemote: %v", err)
 	}
 	return workflow
+}
+
+func workflowManagerTelemetrySignalOrStartRequest(token, workflowKey, idempotencyKey string) *proto.WorkflowManagerSignalOrStartRunRequest {
+	return &proto.WorkflowManagerSignalOrStartRunRequest{
+		ProviderName:    "local",
+		WorkflowKey:     workflowKey,
+		IdempotencyKey:  idempotencyKey,
+		InvocationToken: token,
+		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
+		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Agent{
+			Agent: &proto.BoundWorkflowAgentTarget{
+				ProviderName: "simple",
+				Prompt:       "handle the Slack message",
+			},
+		}},
+	}
+}
+
+func assertWorkflowManagerFailureLog(t *testing.T, output, workflowKey string) {
+	t.Helper()
+
+	expectedHash := workflowManagerTelemetrySHA256(workflowKey)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("log line is not valid JSON: %q: %v", line, err)
+		}
+		if record["msg"] != "workflow manager signal-or-start failed" {
+			continue
+		}
+		for key, want := range map[string]string{
+			"level":               "WARN",
+			"phase":               "provider_signal_or_start",
+			"provider_selection":  "local",
+			"workflow_provider":   "local",
+			"target_kind":         "agent",
+			"caller_plugin":       "slack",
+			"subject_id":          "user:user-123",
+			"subject_kind":        "user",
+			"workflow_key_sha256": expectedHash,
+			"error_code":          "failed_precondition",
+		} {
+			if got := record[key]; got != want {
+				t.Fatalf("log field %s = %#v, want %q in record %#v", key, got, want, record)
+			}
+		}
+		if record["execution_ref_id"] == "" {
+			t.Fatalf("execution_ref_id missing from record %#v", record)
+		}
+		return
+	}
+	t.Fatalf("workflow manager failure log not found in %q", output)
+}
+
+func workflowManagerTelemetrySHA256(value string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(value)))
+	return hex.EncodeToString(sum[:])
+}
+
+type workflowManagerTelemetryControl struct {
+	provider coreworkflow.Provider
+}
+
+func (c workflowManagerTelemetryControl) ResolveProvider(string) (coreworkflow.Provider, error) {
+	return c.provider, nil
+}
+
+func (c workflowManagerTelemetryControl) ResolveProviderSelection(name string) (string, coreworkflow.Provider, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "local"
+	}
+	return name, c.provider, nil
+}
+
+func (workflowManagerTelemetryControl) ProviderNames() []string {
+	return []string{"local"}
+}
+
+type workflowManagerTelemetryAgentControl struct{}
+
+func (workflowManagerTelemetryAgentControl) ResolveProviderSelection(name string) (string, coreagent.Provider, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "simple"
+	}
+	return name, nil, nil
+}
+
+type workflowManagerTelemetryAgentManager struct {
+	agentmanager.Service
+}
+
+type workflowManagerTelemetryProvider struct {
+	coreworkflow.Provider
+	refs             map[string]*coreworkflow.ExecutionReference
+	signalOrStartErr error
+}
+
+func newWorkflowManagerTelemetryProvider() *workflowManagerTelemetryProvider {
+	return &workflowManagerTelemetryProvider{refs: map[string]*coreworkflow.ExecutionReference{}}
+}
+
+func (p *workflowManagerTelemetryProvider) SignalOrStartRun(_ context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	if p.signalOrStartErr != nil {
+		return nil, p.signalOrStartErr
+	}
+	signal := req.Signal
+	if signal.ID == "" {
+		signal.ID = "signal-1"
+	}
+	return &coreworkflow.SignalRunResponse{
+		Run: &coreworkflow.Run{
+			ID:           "run-signal-started",
+			Status:       coreworkflow.RunStatusRunning,
+			WorkflowKey:  req.WorkflowKey,
+			Target:       req.Target,
+			ExecutionRef: req.ExecutionRef,
+			CreatedBy:    req.CreatedBy,
+		},
+		Signal:      signal,
+		StartedRun:  true,
+		WorkflowKey: req.WorkflowKey,
+	}, nil
+}
+
+func (p *workflowManagerTelemetryProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	copied := *ref
+	p.refs[copied.ID] = &copied
+	return &copied, nil
+}
+
+func (p *workflowManagerTelemetryProvider) GetExecutionReference(_ context.Context, id string) (*coreworkflow.ExecutionReference, error) {
+	ref := p.refs[strings.TrimSpace(id)]
+	if ref == nil {
+		return nil, core.ErrNotFound
+	}
+	copied := *ref
+	return &copied, nil
+}
+
+func (p *workflowManagerTelemetryProvider) ListExecutionReferences(_ context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
+	var out []*coreworkflow.ExecutionReference
+	for _, ref := range p.refs {
+		if strings.TrimSpace(ref.SubjectID) != strings.TrimSpace(subjectID) {
+			continue
+		}
+		copied := *ref
+		out = append(out, &copied)
+	}
+	return out, nil
 }
 
 func telemetryRun(id string, status proto.WorkflowRunStatus) *proto.BoundWorkflowRun {

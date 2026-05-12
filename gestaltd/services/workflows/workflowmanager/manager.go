@@ -2,8 +2,11 @@ package workflowmanager
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"sort"
 	"strings"
@@ -506,36 +509,53 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 	return m.managedSignalResponse(ctx, p, value.ProviderName, existingRunProvider(value), resp, value.ExecutionRef, signalTargetPrincipalCaller)
 }
 
-func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (*ManagedRunSignal, error) {
+func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (out *ManagedRunSignal, err error) {
+	phase := "validate_subject"
+	providerName := ""
+	var target coreworkflow.Target
+	executionRefID := ""
 	p = principal.Canonicalized(p)
+	defer func() {
+		if err != nil {
+			logWorkflowSignalOrStartFailure(ctx, p, req, phase, providerName, target, executionRefID, err)
+		}
+	}()
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
+	phase = "validate_workflow_key"
 	workflowKey := strings.TrimSpace(req.WorkflowKey)
 	if workflowKey == "" {
 		return nil, ErrWorkflowKeyRequired
 	}
-	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
+	phase = "resolve_provider_target"
+	var provider coreworkflow.Provider
+	providerName, provider, target, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
+	phase = "normalize_signal"
 	signal, err := m.normalizeSignal(req.Signal, p)
 	if err != nil {
 		return nil, err
 	}
 
+	phase = "authorize_target"
 	executionRefPermissions := m.executionRefPermissions(p, target, req.CallerPluginName)
 	if !m.allowTarget(ctx, executionRefPrincipal(p, executionRefPermissions), target) {
 		return nil, core.ErrNotFound
 	}
-	executionRefID, err := signalOrStartExecutionRefID(providerName, workflowKey, target, p, req.CallerPluginName, executionRefPermissions)
+	phase = "derive_execution_ref"
+	executionRefID, err = signalOrStartExecutionRefID(providerName, workflowKey, target, p, req.CallerPluginName, executionRefPermissions)
 	if err != nil {
 		return nil, err
 	}
+	phase = "put_execution_ref"
 	ref, err := m.putSignalOrStartExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID, executionRefPermissions)
 	if err != nil {
 		return nil, err
 	}
+	phase = "provider_signal_or_start"
 	resp, err := provider.SignalOrStartRun(ctx, coreworkflow.SignalOrStartRunRequest{
 		WorkflowKey:    workflowKey,
 		Target:         target,
@@ -547,7 +567,87 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
+	phase = "bind_response"
 	return m.managedSignalResponse(ctx, p, providerName, provider, resp, ref, signalTargetPrincipalExecutionRef)
+}
+
+func logWorkflowSignalOrStartFailure(ctx context.Context, p *principal.Principal, req RunSignalOrStart, phase, providerName string, target coreworkflow.Target, executionRefID string, err error) {
+	if err == nil {
+		return
+	}
+	attrs := []any{
+		"phase", strings.TrimSpace(phase),
+		"provider_selection", strings.TrimSpace(req.ProviderName),
+		"target_kind", workflowSignalOrStartTargetKind(target),
+		"caller_plugin", strings.TrimSpace(req.CallerPluginName),
+		"subject_id", principalSubjectID(p),
+		"subject_kind", workflowManagerSubjectKind(p),
+		"workflow_key_sha256", workflowManagerSHA256(req.WorkflowKey),
+		"error", err.Error(),
+	}
+	if providerName = strings.TrimSpace(providerName); providerName != "" {
+		attrs = append(attrs, "workflow_provider", providerName)
+	}
+	if executionRefID = strings.TrimSpace(executionRefID); executionRefID != "" {
+		attrs = append(attrs, "execution_ref_id", executionRefID)
+	}
+	if errorCode := workflowManagerErrorCode(err); errorCode != "" {
+		attrs = append(attrs, "error_code", errorCode)
+	}
+	slog.WarnContext(ctx, "workflow manager signal-or-start failed", attrs...)
+}
+
+func workflowManagerSubjectKind(p *principal.Principal) string {
+	if p == nil {
+		return ""
+	}
+	return string(p.Kind)
+}
+
+func workflowSignalOrStartTargetKind(target coreworkflow.Target) string {
+	switch {
+	case target.Plugin != nil:
+		return "plugin"
+	case target.Agent != nil:
+		return "agent"
+	default:
+		return "unknown"
+	}
+}
+
+func workflowManagerSHA256(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func workflowManagerErrorCode(err error) string {
+	if err == nil {
+		return ""
+	}
+	if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
+		return workflowManagerGRPCCodeName(st.Code())
+	}
+	return ""
+}
+
+func workflowManagerGRPCCodeName(code codes.Code) string {
+	value := code.String()
+	var b strings.Builder
+	for i := 0; i < len(value); i++ {
+		ch := value[i]
+		if ch >= 'A' && ch <= 'Z' {
+			if i > 0 {
+				b.WriteByte('_')
+			}
+			ch += 'a' - 'A'
+		}
+		b.WriteByte(ch)
+	}
+	return b.String()
 }
 
 func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, providerSelection string, event coreworkflow.Event) (coreworkflow.Event, error) {
