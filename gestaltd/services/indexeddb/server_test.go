@@ -5,10 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
-	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"google.golang.org/grpc"
@@ -20,7 +19,7 @@ func TestIndexedDBServerUsesStoreNamesAsProvided(t *testing.T) {
 	db := &coretesting.StubIndexedDB{}
 	srv := NewServer(db, "roadmap", ServerOptions{})
 	ctx := context.Background()
-	record, err := indexeddbcodec.RecordToProto(map[string]any{"id": "snap-1"})
+	record, err := recordToProto(map[string]any{"id": "snap-1"})
 	if err != nil {
 		t.Fatalf("RecordToProto: %v", err)
 	}
@@ -54,7 +53,7 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 	if _, err := srv.(*indexedDBServer).Put(ctx, &proto.RecordRequest{
 		Store: "snapshots",
 		Record: func() *proto.Record {
-			rec, err := indexeddbcodec.RecordToProto(map[string]any{"id": "snap-1", "type": "daily"})
+			rec, err := recordToProto(map[string]any{"id": "snap-1", "type": "daily"})
 			if err != nil {
 				t.Fatalf("RecordToProto with type: %v", err)
 			}
@@ -63,7 +62,7 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
-	value, err := indexeddbcodec.TypedValueFromAny("daily")
+	value, err := typedValueFromAny("daily")
 	if err != nil {
 		t.Fatalf("TypedValueFromAny: %v", err)
 	}
@@ -121,11 +120,11 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 	srv := NewServer(db, "roadmap", ServerOptions{
 		AllowedStores: []string{"tasks"},
 	})
-	record, err := indexeddbcodec.RecordToProto(map[string]any{"id": "evt-1"})
+	record, err := recordToProto(map[string]any{"id": "evt-1"})
 	if err != nil {
 		t.Fatalf("RecordToProto: %v", err)
 	}
-	indexValue, err := indexeddbcodec.TypedValueFromAny("daily")
+	indexValue, err := typedValueFromAny("daily")
 	if err != nil {
 		t.Fatalf("TypedValueFromAny: %v", err)
 	}

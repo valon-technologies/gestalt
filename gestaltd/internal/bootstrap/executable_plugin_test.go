@@ -28,8 +28,6 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
-	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
@@ -40,7 +38,9 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/indexeddbproto"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -749,7 +749,7 @@ func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[stri
 	if _, err := client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{Name: store}); err != nil {
 		return nil, fmt.Errorf("create object store: %w", err)
 	}
-	recordValue, err := indexeddbcodec.RecordToProto(indexeddbcodec.Record{"id": id, "value": value})
+	recordValue, err := indexeddbproto.RecordToProto(map[string]any{"id": id, "value": value})
 	if err != nil {
 		return nil, fmt.Errorf("encode record: %w", err)
 	}
@@ -760,7 +760,7 @@ func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[stri
 	if err != nil {
 		return nil, fmt.Errorf("get record: %w", err)
 	}
-	record, err := indexeddbcodec.RecordFromProto(resp.GetRecord())
+	record, err := indexeddbproto.RecordFromProto(resp.GetRecord())
 	if err != nil {
 		return nil, fmt.Errorf("decode record: %w", err)
 	}

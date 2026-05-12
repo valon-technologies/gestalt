@@ -32,8 +32,6 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
-	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -44,8 +42,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/indexeddbproto"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
@@ -1543,7 +1543,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
-	recordValue, err := indexeddbcodec.RecordToProto(indexeddbcodec.Record{"id": "task-1", "value": "ship-it"})
+	recordValue, err := indexeddbproto.RecordToProto(map[string]any{"id": "task-1", "value": "ship-it"})
 	if err != nil {
 		t.Fatalf("RecordToProto: %v", err)
 	}
@@ -1560,7 +1560,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	record, err := indexeddbcodec.RecordFromProto(resp.GetRecord())
+	record, err := indexeddbproto.RecordFromProto(resp.GetRecord())
 	if err != nil {
 		t.Fatalf("RecordFromProto: %v", err)
 	}

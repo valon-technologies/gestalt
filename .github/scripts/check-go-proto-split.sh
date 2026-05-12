@@ -6,6 +6,7 @@ module_dir=${1:-"$repo_root/gestaltd"}
 
 server_proto="github.com/valon-technologies/gestalt/server/internal/gen/v1"
 sdk_proto="github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+sdk_public_proto="github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 deleted_root_proto="github.com/valon-technologies/gestalt/internal"
 deleted_root_proto="$deleted_root_proto/gen/v1"
 
@@ -16,6 +17,30 @@ Tracked files must not reference the deleted root Go module path:
   $deleted_root_proto
 
 Use Buf managed go_package overrides in sdk/proto/buf.go.*.gen.yaml instead.
+EOF
+	exit 1
+fi
+
+for codec_dir in sdk/go/internal/indexeddbcodec gestaltd/internal/indexeddbcodec; do
+	for generated_proto in "$server_proto" "$sdk_proto" "$sdk_public_proto"; do
+		if git -C "$repo_root" grep --line-number --fixed-strings "$generated_proto" -- "$codec_dir"; then
+			cat >&2 <<EOF
+IndexedDB codec packages must not import generated Gestalt protobuf packages:
+  $codec_dir
+
+Keep generated protobuf adapters at the SDK/server transport boundary instead.
+EOF
+			exit 1
+		fi
+	done
+done
+
+if git -C "$repo_root" grep --line-number --fixed-strings "proto." -- sdk/go/indexeddb_codec.go; then
+	cat >&2 <<EOF
+sdk/go/indexeddb_codec.go is the public native/byte IndexedDB codec surface and
+must not expose generated protobuf types.
+
+Move generated protobuf helpers to private transport adapter files instead.
 EOF
 	exit 1
 fi

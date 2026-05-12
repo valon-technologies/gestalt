@@ -23,8 +23,6 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
-	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -34,6 +32,8 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/indexeddbproto"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
@@ -4313,7 +4313,7 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("CreateObjectStore(runs): %v", err)
 		}
-		record, err := indexeddbcodec.RecordToProto(indexeddbcodec.Record{"id": "run-1", "status": "running"})
+		record, err := indexeddbproto.RecordToProto(map[string]any{"id": "run-1", "status": "running"})
 		if err != nil {
 			t.Fatalf("RecordToProto: %v", err)
 		}
@@ -4330,7 +4330,7 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Get(runs): %v", err)
 		}
-		got, err := indexeddbcodec.RecordFromProto(resp.GetRecord())
+		got, err := indexeddbproto.RecordFromProto(resp.GetRecord())
 		if err != nil {
 			t.Fatalf("RecordFromProto: %v", err)
 		}
@@ -4649,7 +4649,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("CreateObjectStore(workflow_runs): %v", err)
 		}
-		record, err := indexeddbcodec.RecordToProto(indexeddbcodec.Record{"id": "run-1", "status": "pending"})
+		record, err := indexeddbproto.RecordToProto(map[string]any{"id": "run-1", "status": "pending"})
 		if err != nil {
 			t.Fatalf("RecordToProto: %v", err)
 		}
@@ -4666,7 +4666,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Get(workflow_runs): %v", err)
 		}
-		got, err := indexeddbcodec.RecordFromProto(resp.GetRecord())
+		got, err := indexeddbproto.RecordFromProto(resp.GetRecord())
 		if err != nil {
 			t.Fatalf("RecordFromProto: %v", err)
 		}

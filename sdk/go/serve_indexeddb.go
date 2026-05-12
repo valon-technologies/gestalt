@@ -74,12 +74,20 @@ func (s indexedDBProviderServer) Clear(ctx context.Context, req *proto.ObjectSto
 }
 
 func (s indexedDBProviderServer) GetAll(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.RecordsResponse, error) {
-	records, err := s.provider.GetAll(ctx, objectStoreRangeRequestFromProto(req))
+	rangeReq, err := objectStoreRangeRequestFromProto(req)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	records, err := s.provider.GetAll(ctx, rangeReq)
 	return recordsResponseToProto("indexeddb get all", records, err)
 }
 
 func (s indexedDBProviderServer) GetAllKeys(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.KeysResponse, error) {
-	keys, err := s.provider.GetAllKeys(ctx, objectStoreRangeRequestFromProto(req))
+	rangeReq, err := objectStoreRangeRequestFromProto(req)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	keys, err := s.provider.GetAllKeys(ctx, rangeReq)
 	if err != nil {
 		return nil, providerRPCError("indexeddb get all keys", err)
 	}
@@ -87,7 +95,11 @@ func (s indexedDBProviderServer) GetAllKeys(ctx context.Context, req *proto.Obje
 }
 
 func (s indexedDBProviderServer) Count(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.CountResponse, error) {
-	count, err := s.provider.Count(ctx, objectStoreRangeRequestFromProto(req))
+	rangeReq, err := objectStoreRangeRequestFromProto(req)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	count, err := s.provider.Count(ctx, rangeReq)
 	if err != nil {
 		return nil, providerRPCError("indexeddb count", err)
 	}
@@ -95,7 +107,11 @@ func (s indexedDBProviderServer) Count(ctx context.Context, req *proto.ObjectSto
 }
 
 func (s indexedDBProviderServer) DeleteRange(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.DeleteResponse, error) {
-	deleted, err := s.provider.DeleteRange(ctx, objectStoreRangeRequestFromProto(req))
+	rangeReq, err := objectStoreRangeRequestFromProto(req)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	deleted, err := s.provider.DeleteRange(ctx, rangeReq)
 	if err != nil {
 		return nil, providerRPCError("indexeddb delete range", err)
 	}
@@ -369,8 +385,12 @@ func objectStoreRequestFromProto(req *proto.ObjectStoreRequest) IndexedDBObjectS
 	return IndexedDBObjectStoreRequest{Store: req.GetStore(), ID: req.GetId()}
 }
 
-func objectStoreRangeRequestFromProto(req *proto.ObjectStoreRangeRequest) IndexedDBObjectStoreRangeRequest {
-	return IndexedDBObjectStoreRangeRequest{Store: req.GetStore(), Range: keyRangeFromProto(req.GetRange())}
+func objectStoreRangeRequestFromProto(req *proto.ObjectStoreRangeRequest) (IndexedDBObjectStoreRangeRequest, error) {
+	r, err := keyRangeFromProto(req.GetRange())
+	if err != nil {
+		return IndexedDBObjectStoreRangeRequest{}, err
+	}
+	return IndexedDBObjectStoreRangeRequest{Store: req.GetStore(), Range: r}, nil
 }
 
 func indexQueryRequestFromProto(req *proto.IndexQueryRequest) (IndexedDBIndexQueryRequest, error) {
@@ -378,7 +398,11 @@ func indexQueryRequestFromProto(req *proto.IndexQueryRequest) (IndexedDBIndexQue
 	if err != nil {
 		return IndexedDBIndexQueryRequest{}, fmt.Errorf("unmarshal index values: %w", err)
 	}
-	return IndexedDBIndexQueryRequest{Store: req.GetStore(), Index: req.GetIndex(), Values: values, Range: keyRangeFromProto(req.GetRange())}, nil
+	r, err := keyRangeFromProto(req.GetRange())
+	if err != nil {
+		return IndexedDBIndexQueryRequest{}, err
+	}
+	return IndexedDBIndexQueryRequest{Store: req.GetStore(), Index: req.GetIndex(), Values: values, Range: r}, nil
 }
 
 func openCursorRequestFromProto(req *proto.OpenCursorRequest) (IndexedDBOpenCursorRequest, error) {
@@ -386,9 +410,13 @@ func openCursorRequestFromProto(req *proto.OpenCursorRequest) (IndexedDBOpenCurs
 	if err != nil {
 		return IndexedDBOpenCursorRequest{}, fmt.Errorf("unmarshal cursor values: %w", err)
 	}
+	r, err := keyRangeFromProto(req.GetRange())
+	if err != nil {
+		return IndexedDBOpenCursorRequest{}, err
+	}
 	return IndexedDBOpenCursorRequest{
 		Store:     req.GetStore(),
-		Range:     keyRangeFromProto(req.GetRange()),
+		Range:     r,
 		Direction: cursorDirectionFromProto(req.GetDirection()),
 		KeysOnly:  req.GetKeysOnly(),
 		Index:     req.GetIndex(),
@@ -396,18 +424,43 @@ func openCursorRequestFromProto(req *proto.OpenCursorRequest) (IndexedDBOpenCurs
 	}, nil
 }
 
-func keyRangeFromProto(r *proto.KeyRange) *KeyRange {
+func keyRangeFromProto(r *proto.KeyRange) (*KeyRange, error) {
 	if r == nil {
-		return nil
+		return nil, nil
 	}
 	out := &KeyRange{LowerOpen: r.GetLowerOpen(), UpperOpen: r.GetUpperOpen()}
 	if r.GetLower() != nil {
-		out.Lower, _ = anyFromTypedValue(r.GetLower())
+		lower, err := keyRangeBoundFromProto("lower", r.GetLower())
+		if err != nil {
+			return nil, err
+		}
+		out.Lower = lower
 	}
 	if r.GetUpper() != nil {
-		out.Upper, _ = anyFromTypedValue(r.GetUpper())
+		upper, err := keyRangeBoundFromProto("upper", r.GetUpper())
+		if err != nil {
+			return nil, err
+		}
+		out.Upper = upper
 	}
-	return out
+	return out, nil
+}
+
+func keyRangeBoundFromProto(label string, value *proto.TypedValue) (any, error) {
+	if value == nil {
+		return nil, nil
+	}
+	if value.GetKind() == nil {
+		return nil, fmt.Errorf("unmarshal key range %s bound: missing typed value kind", label)
+	}
+	if _, ok := value.GetKind().(*proto.TypedValue_NullValue); ok {
+		return nil, fmt.Errorf("unmarshal key range %s bound: null is not a valid key", label)
+	}
+	out, err := anyFromTypedValue(value)
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal key range %s bound: %w", label, err)
+	}
+	return out, nil
 }
 
 func recordResponseToProto(operation string, record Record, err error) (*proto.RecordResponse, error) {
@@ -539,7 +592,7 @@ func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op 
 	case *proto.TransactionOperation_Add:
 		req, err := recordRequestFromProto(body.Add)
 		if err != nil {
-			return nil, err
+			return nil, invalidArgumentError(err)
 		}
 		if err := tx.Add(ctx, req); err != nil {
 			return nil, err
@@ -548,7 +601,7 @@ func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op 
 	case *proto.TransactionOperation_Put:
 		req, err := recordRequestFromProto(body.Put)
 		if err != nil {
-			return nil, err
+			return nil, invalidArgumentError(err)
 		}
 		if err := tx.Put(ctx, req); err != nil {
 			return nil, err
@@ -565,7 +618,11 @@ func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op 
 		}
 		resp.Result = &proto.TransactionOperationResponse_Empty{Empty: &emptypb.Empty{}}
 	case *proto.TransactionOperation_GetAll:
-		records, err := tx.GetAll(ctx, objectStoreRangeRequestFromProto(body.GetAll))
+		req, err := objectStoreRangeRequestFromProto(body.GetAll)
+		if err != nil {
+			return nil, invalidArgumentError(err)
+		}
+		records, err := tx.GetAll(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -575,19 +632,31 @@ func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op 
 		}
 		resp.Result = &proto.TransactionOperationResponse_Records{Records: &proto.RecordsResponse{Records: pbRecords}}
 	case *proto.TransactionOperation_GetAllKeys:
-		keys, err := tx.GetAllKeys(ctx, objectStoreRangeRequestFromProto(body.GetAllKeys))
+		req, err := objectStoreRangeRequestFromProto(body.GetAllKeys)
+		if err != nil {
+			return nil, invalidArgumentError(err)
+		}
+		keys, err := tx.GetAllKeys(ctx, req)
 		if err != nil {
 			return nil, err
 		}
 		resp.Result = &proto.TransactionOperationResponse_Keys{Keys: &proto.KeysResponse{Keys: keys}}
 	case *proto.TransactionOperation_Count:
-		count, err := tx.Count(ctx, objectStoreRangeRequestFromProto(body.Count))
+		req, err := objectStoreRangeRequestFromProto(body.Count)
+		if err != nil {
+			return nil, invalidArgumentError(err)
+		}
+		count, err := tx.Count(ctx, req)
 		if err != nil {
 			return nil, err
 		}
 		resp.Result = &proto.TransactionOperationResponse_Count{Count: &proto.CountResponse{Count: count}}
 	case *proto.TransactionOperation_DeleteRange:
-		deleted, err := tx.DeleteRange(ctx, objectStoreRangeRequestFromProto(body.DeleteRange))
+		req, err := objectStoreRangeRequestFromProto(body.DeleteRange)
+		if err != nil {
+			return nil, invalidArgumentError(err)
+		}
+		deleted, err := tx.DeleteRange(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -595,7 +664,7 @@ func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op 
 	case *proto.TransactionOperation_IndexGet:
 		query, err := indexQueryRequestFromProto(body.IndexGet)
 		if err != nil {
-			return nil, err
+			return nil, invalidArgumentError(err)
 		}
 		record, err := tx.IndexGet(ctx, query)
 		if err != nil {
@@ -609,7 +678,7 @@ func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op 
 	case *proto.TransactionOperation_IndexGetKey:
 		query, err := indexQueryRequestFromProto(body.IndexGetKey)
 		if err != nil {
-			return nil, err
+			return nil, invalidArgumentError(err)
 		}
 		key, err := tx.IndexGetKey(ctx, query)
 		if err != nil {
@@ -619,7 +688,7 @@ func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op 
 	case *proto.TransactionOperation_IndexGetAll:
 		query, err := indexQueryRequestFromProto(body.IndexGetAll)
 		if err != nil {
-			return nil, err
+			return nil, invalidArgumentError(err)
 		}
 		records, err := tx.IndexGetAll(ctx, query)
 		if err != nil {
@@ -633,7 +702,7 @@ func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op 
 	case *proto.TransactionOperation_IndexGetAllKeys:
 		query, err := indexQueryRequestFromProto(body.IndexGetAllKeys)
 		if err != nil {
-			return nil, err
+			return nil, invalidArgumentError(err)
 		}
 		keys, err := tx.IndexGetAllKeys(ctx, query)
 		if err != nil {
@@ -643,7 +712,7 @@ func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op 
 	case *proto.TransactionOperation_IndexCount:
 		query, err := indexQueryRequestFromProto(body.IndexCount)
 		if err != nil {
-			return nil, err
+			return nil, invalidArgumentError(err)
 		}
 		count, err := tx.IndexCount(ctx, query)
 		if err != nil {
@@ -653,7 +722,7 @@ func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op 
 	case *proto.TransactionOperation_IndexDelete:
 		query, err := indexQueryRequestFromProto(body.IndexDelete)
 		if err != nil {
-			return nil, err
+			return nil, invalidArgumentError(err)
 		}
 		deleted, err := tx.IndexDelete(ctx, query)
 		if err != nil {
@@ -676,6 +745,13 @@ func recordRequestFromProto(req *proto.RecordRequest) (IndexedDBRecordRequest, e
 
 func transactionOperationError(requestID uint64, err error) *proto.TransactionOperationResponse {
 	return &proto.TransactionOperationResponse{RequestId: requestID, Error: rpcStatusFromError(err)}
+}
+
+func invalidArgumentError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return status.Error(codes.InvalidArgument, err.Error())
 }
 
 func rpcStatusFromError(err error) *rpcstatus.Status {
