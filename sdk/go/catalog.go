@@ -1,6 +1,6 @@
 package gestalt
 
-import proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+import proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 
 // Catalog describes the operations a plugin exposes to Gestalt.
 type Catalog = proto.Catalog

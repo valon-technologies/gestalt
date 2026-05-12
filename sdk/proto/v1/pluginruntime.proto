@@ -6,8 +6,6 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "v1/agent.proto";
 
-option go_package = "github.com/valon-technologies/gestalt/internal/gen/v1;proto";
-
 enum PluginRuntimeEgressMode {
   PLUGIN_RUNTIME_EGRESS_MODE_UNSPECIFIED = 0;
   PLUGIN_RUNTIME_EGRESS_MODE_NONE = 1;

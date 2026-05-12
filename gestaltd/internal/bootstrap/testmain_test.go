@@ -40,18 +40,19 @@ func TestMain(m *testing.M) {
 	}
 
 	type buildSpec struct {
-		name   string
-		dir    string
-		target string
-		output string
+		name      string
+		dir       string
+		target    string
+		output    string
+		sdkModule bool
 	}
 
 	specs := []buildSpec{
 		{
-			name:   "echo plugin",
-			dir:    filepath.Join(root, "gestaltd"),
-			target: "./internal/testutil/testdata/testproviders/echo",
-			output: sharedEchoPluginBin,
+			name:      "echo plugin",
+			dir:       testutil.MustSDKTestProviderPath("echo"),
+			output:    sharedEchoPluginBin,
+			sdkModule: true,
 		},
 		{
 			name:   "example provider",
@@ -60,10 +61,10 @@ func TestMain(m *testing.M) {
 			output: sharedExampleProviderBin,
 		},
 		{
-			name:   "agent provider",
-			dir:    filepath.Join(root, "gestaltd"),
-			target: "./internal/testutil/testdata/testproviders/agent",
-			output: sharedAgentProviderBin,
+			name:      "agent provider",
+			dir:       testutil.MustSDKTestProviderPath("agent"),
+			output:    sharedAgentProviderBin,
+			sdkModule: true,
 		},
 		{
 			name:   "gestaltd",
@@ -80,7 +81,7 @@ func TestMain(m *testing.M) {
 		i := i
 		go func() {
 			defer wg.Done()
-			errs[i] = buildBootstrapTestBinary(specs[i].dir, specs[i].target, specs[i].output)
+			errs[i] = buildBootstrapTestBinary(specs[i].dir, specs[i].target, specs[i].output, specs[i].sdkModule)
 		}()
 	}
 	wg.Wait()
@@ -98,7 +99,10 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func buildBootstrapTestBinary(dir, target, output string) error {
+func buildBootstrapTestBinary(dir, target, output string, sdkModule bool) error {
+	if sdkModule {
+		return testutil.BuildSDKTestMainBinary(dir, output)
+	}
 	if target == "" {
 		return providerpkg.BuildGoProviderBinary(dir, output, filepath.Base(dir), runtime.GOOS, runtime.GOARCH)
 	}

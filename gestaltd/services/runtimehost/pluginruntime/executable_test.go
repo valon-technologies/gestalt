@@ -131,7 +131,7 @@ func buildRuntimeLogProviderBinary(t *testing.T) string {
 
 	repoRoot := repoRootForPluginRuntimeTests(t)
 	moduleDir := t.TempDir()
-	goMod := "module runtimehostlogs\n\ngo 1.26\n\nrequire (\n\tgithub.com/valon-technologies/gestalt v0.0.0\n\tgithub.com/valon-technologies/gestalt/sdk/go v0.0.0\n)\n\nreplace github.com/valon-technologies/gestalt/sdk/go => " + filepath.ToSlash(filepath.Join(repoRoot, "sdk/go")) + "\n\nreplace github.com/valon-technologies/gestalt => " + filepath.ToSlash(repoRoot) + "\n"
+	goMod := "module runtimehostlogs\n\ngo 1.26\n\nrequire github.com/valon-technologies/gestalt/sdk/go v0.0.0\n\nreplace github.com/valon-technologies/gestalt/sdk/go => " + filepath.ToSlash(filepath.Join(repoRoot, "sdk/go")) + "\n"
 	if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), []byte(goMod), 0o644); err != nil {
 		t.Fatalf("write go.mod: %v", err)
 	}

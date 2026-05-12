@@ -1548,7 +1548,7 @@ func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string
 			t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
 		}
 	case providermanifestv1.KindAgent:
-		if err := buildTarget(gestaltdRootForE2E(t), "./internal/testutil/testdata/testproviders/agent", binDest); err != nil {
+		if err := testutil.BuildSDKTestMainBinary(testutil.MustSDKTestProviderPath("agent"), binDest); err != nil {
 			t.Fatalf("build agent provider fixture: %v", err)
 		}
 	default:

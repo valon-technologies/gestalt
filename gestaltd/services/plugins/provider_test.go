@@ -9,10 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
-	sdkgestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"google.golang.org/grpc"
@@ -123,16 +122,6 @@ func (p *roundTripProvider) ResolveHTTPSubject(ctx context.Context, req *core.HT
 		DisplayName: invocation.HostContextFromContext(ctx).PublicBaseURL,
 		AuthSource:  req.VerifiedSubject,
 	}, nil
-}
-
-type manualOnlySDKProvider struct{}
-
-func (p *manualOnlySDKProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
-	return nil
-}
-
-func (p *manualOnlySDKProvider) Execute(_ context.Context, _ string, _ map[string]any, _ string) (*sdkgestalt.OperationResult, error) {
-	return &sdkgestalt.OperationResult{Status: 200, Body: `{}`}, nil
 }
 
 func roundTripStaticSpec() StaticProviderSpec {
@@ -681,7 +670,7 @@ func TestPrincipalFromProto_PreservesCustomAuthSource(t *testing.T) {
 func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	t.Parallel()
 
-	client := newIntegrationProviderClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}, (*sdkgestalt.Router[manualOnlySDKProvider])(nil)))
+	client := newIntegrationProviderClient(t, &unsupportedCapabilityProviderServer{})
 	prov, err := NewRemoteProvider(context.Background(), client, manualOnlyStaticSpec(), nil)
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)

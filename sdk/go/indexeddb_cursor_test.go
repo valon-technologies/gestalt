@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
 
 func TestCursor_ContinueToKeyRejectsUnsupportedKey(t *testing.T) {

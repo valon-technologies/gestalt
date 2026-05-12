@@ -5,8 +5,6 @@ package gestalt.provider.v1;
 import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 
-option go_package = "github.com/valon-technologies/gestalt/internal/gen/v1;proto";
-
 // CacheSetEntry is one key/value pair written by SetMany.
 message CacheSetEntry {
   string key = 1;

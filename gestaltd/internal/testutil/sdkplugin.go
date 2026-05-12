@@ -1,9 +1,11 @@
 package testutil
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -37,14 +39,67 @@ func MustExampleProviderPluginPath() string {
 	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-go")
 }
 
+func MustSDKTestProviderPath(name string) string {
+	root, ok := repoRoot()
+	if !ok {
+		panic("runtime.Caller failed")
+	}
+	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "testproviders", name)
+}
+
+func BuildSDKTestMainBinary(srcDir, output string) error {
+	root, ok := repoRoot()
+	if !ok {
+		return errors.New("runtime.Caller failed")
+	}
+	moduleDir, err := os.MkdirTemp("", "gestalt-sdk-test-provider-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(moduleDir) }()
+
+	if err := copyDir(srcDir, moduleDir); err != nil {
+		return err
+	}
+	goMod := "module github.com/valon-technologies/gestalt/testdata/" + filepath.Base(srcDir) + "\n\n" +
+		"go 1.26\n\n" +
+		"require github.com/valon-technologies/gestalt/sdk/go v0.0.0\n\n" +
+		"replace github.com/valon-technologies/gestalt/sdk/go => " + filepath.ToSlash(filepath.Join(root, "sdk", "go")) + "\n"
+	if err := os.WriteFile(filepath.Join(moduleDir, "go.mod"), []byte(goMod), 0o644); err != nil {
+		return err
+	}
+	if err := runGo(moduleDir, "mod", "tidy"); err != nil {
+		return err
+	}
+	return runGo(moduleDir, "build", "-o", output, ".")
+}
+
 func CopyExampleProviderPlugin(t *testing.T, dst string) {
 	t.Helper()
 
 	src := ExampleProviderPluginPath(t)
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", dst, err)
+	if err := copyDir(src, dst); err != nil {
+		t.Fatalf("copy example provider plugin: %v", err)
 	}
-	if err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+
+	goModPath := filepath.Join(dst, "go.mod")
+	goMod, err := os.ReadFile(goModPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goModPath, err)
+	}
+	updated := rewriteModuleLine(
+		t,
+		string(goMod),
+		"replace github.com/valon-technologies/gestalt/sdk/go => ",
+		"replace github.com/valon-technologies/gestalt/sdk/go => "+SDKGoModulePath(t),
+	)
+	if err := os.WriteFile(goModPath, []byte(updated), 0o644); err != nil {
+		t.Fatalf("write %s: %v", goModPath, err)
+	}
+}
+
+func copyDir(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -55,6 +110,9 @@ func CopyExampleProviderPlugin(t *testing.T, dst string) {
 		target := filepath.Join(dst, rel)
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return &os.PathError{Op: "copy", Path: path, Err: fs.ErrInvalid}
 		}
 		info, err := d.Info()
 		if err != nil {
@@ -74,30 +132,15 @@ func CopyExampleProviderPlugin(t *testing.T, dst string) {
 			return err
 		}
 		return out.Close()
-	}); err != nil {
-		t.Fatalf("copy example provider plugin: %v", err)
-	}
+	})
+}
 
-	goModPath := filepath.Join(dst, "go.mod")
-	goMod, err := os.ReadFile(goModPath)
-	if err != nil {
-		t.Fatalf("read %s: %v", goModPath, err)
-	}
-	updated := rewriteModuleLine(
-		t,
-		string(goMod),
-		"replace github.com/valon-technologies/gestalt/sdk/go => ",
-		"replace github.com/valon-technologies/gestalt/sdk/go => "+SDKGoModulePath(t),
-	)
-	updated = rewriteModuleLine(
-		t,
-		updated,
-		"replace github.com/valon-technologies/gestalt => ",
-		"replace github.com/valon-technologies/gestalt => "+RepoRootPath(t),
-	)
-	if err := os.WriteFile(goModPath, []byte(updated), 0o644); err != nil {
-		t.Fatalf("write %s: %v", goModPath, err)
-	}
+func runGo(dir string, args ...string) error {
+	cmd := exec.Command("go", args...)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func repoRoot() (string, bool) {
@@ -808,12 +851,7 @@ func GeneratedProviderModuleSource(t *testing.T, module string) string {
 		"replace github.com/valon-technologies/gestalt/sdk/go => ",
 		"replace github.com/valon-technologies/gestalt/sdk/go => "+SDKGoModulePath(t),
 	)
-	return rewriteModuleLine(
-		t,
-		source,
-		"replace github.com/valon-technologies/gestalt => ",
-		"replace github.com/valon-technologies/gestalt => "+RepoRootPath(t),
-	)
+	return source
 }
 
 func GeneratedProviderModuleSum(t *testing.T) []byte {

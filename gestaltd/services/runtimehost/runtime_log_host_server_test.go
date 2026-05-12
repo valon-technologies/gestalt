@@ -2,18 +2,43 @@ package runtimehost
 
 import (
 	"context"
+	"net"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+const envRuntimeLogHostSocket = "GESTALT_RUNTIME_LOG_SOCKET"
+
+func newRuntimeLogHostTestClient(t *testing.T, socket string) proto.PluginRuntimeLogHostClient {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, "passthrough:///localhost",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "unix", socket)
+		}),
+		grpc.WithAuthority("localhost"),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		t.Fatalf("dial runtime log host: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	return proto.NewPluginRuntimeLogHostClient(conn)
+}
 
 func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
 	type appendCall struct {
@@ -29,7 +54,7 @@ func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
 
 	hostServices, err := StartHostServices([]HostService{{
 		Name:   "runtime_logs",
-		EnvVar: gestalt.EnvRuntimeLogHostSocket,
+		EnvVar: envRuntimeLogHostSocket,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", func(_ context.Context, runtimeProviderName, sessionID string, entries []runtimelogs.AppendEntry) (int64, error) {
 				mu.Lock()
@@ -54,27 +79,22 @@ func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
 	if len(bindings) != 1 {
 		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
 	}
-	t.Setenv(gestalt.EnvRuntimeLogHostSocket, bindings[0].SocketPath)
-
-	client, err := gestalt.RuntimeLogHost()
-	if err != nil {
-		t.Fatalf("RuntimeLogHost: %v", err)
-	}
+	client := newRuntimeLogHostTestClient(t, bindings[0].SocketPath)
 
 	observedAt := time.Date(2026, time.April, 23, 12, 34, 56, 0, time.UTC)
-	err = client.AppendLogs(context.Background(), "session-1", []gestalt.RuntimeLogEntry{
-		{
-			Stream:     gestalt.RuntimeLogStreamRuntime,
+	_, err = client.AppendLogs(context.Background(), &proto.AppendPluginRuntimeLogsRequest{
+		SessionId: "session-1",
+		Logs: []*proto.PluginRuntimeLogEntry{{
+			Stream:     proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
 			Message:    "runtime boot",
-			ObservedAt: observedAt,
+			ObservedAt: timestamppb.New(observedAt),
 			SourceSeq:  7,
-		},
-		{
-			Stream:     gestalt.RuntimeLogStreamStderr,
+		}, {
+			Stream:     proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR,
 			Message:    "stderr line\n",
-			ObservedAt: observedAt.Add(time.Second),
+			ObservedAt: timestamppb.New(observedAt.Add(time.Second)),
 			SourceSeq:  8,
-		},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("AppendLogs: %v", err)
@@ -124,7 +144,7 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 
 	hostServices, err := StartHostServices([]HostService{{
 		Name:   "runtime_logs",
-		EnvVar: gestalt.EnvRuntimeLogHostSocket,
+		EnvVar: envRuntimeLogHostSocket,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
 		},
@@ -138,18 +158,13 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 	if len(bindings) != 1 {
 		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
 	}
-	t.Setenv(gestalt.EnvRuntimeLogHostSocket, bindings[0].SocketPath)
+	client := newRuntimeLogHostTestClient(t, bindings[0].SocketPath)
 
-	client, err := gestalt.RuntimeLogHost()
-	if err != nil {
-		t.Fatalf("RuntimeLogHost: %v", err)
-	}
-
-	err = client.AppendLogs(ctx, "session-1", []gestalt.RuntimeLogEntry{{
-		Stream:    gestalt.RuntimeLogStreamStderr,
+	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{SessionId: "session-1", Logs: []*proto.PluginRuntimeLogEntry{{
+		Stream:    proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_STDERR,
 		Message:   "after stop\n",
 		SourceSeq: 2,
-	}})
+	}}})
 	if err != nil {
 		t.Fatalf("AppendLogs(after stop): %v", err)
 	}
@@ -171,10 +186,10 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 	}); err != nil {
 		t.Fatalf("RegisterSession(second): %v", err)
 	}
-	err = client.AppendLogs(ctx, "session-1", []gestalt.RuntimeLogEntry{{
-		Stream:  gestalt.RuntimeLogStreamRuntime,
+	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{SessionId: "session-1", Logs: []*proto.PluginRuntimeLogEntry{{
+		Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
 		Message: "fresh session",
-	}})
+	}}})
 	if err != nil {
 		t.Fatalf("AppendLogs(fresh session): %v", err)
 	}
@@ -196,7 +211,7 @@ func TestRuntimeLogHostServerMapsUnknownSessionToNotFound(t *testing.T) {
 
 	hostServices, err := StartHostServices([]HostService{{
 		Name:   "runtime_logs",
-		EnvVar: gestalt.EnvRuntimeLogHostSocket,
+		EnvVar: envRuntimeLogHostSocket,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
 		},
@@ -210,16 +225,11 @@ func TestRuntimeLogHostServerMapsUnknownSessionToNotFound(t *testing.T) {
 	if len(bindings) != 1 {
 		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
 	}
-	t.Setenv(gestalt.EnvRuntimeLogHostSocket, bindings[0].SocketPath)
-
-	client, err := gestalt.RuntimeLogHost()
-	if err != nil {
-		t.Fatalf("RuntimeLogHost: %v", err)
-	}
-	err = client.AppendLogs(ctx, "never-registered", []gestalt.RuntimeLogEntry{{
-		Stream:  gestalt.RuntimeLogStreamRuntime,
+	client := newRuntimeLogHostTestClient(t, bindings[0].SocketPath)
+	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{SessionId: "never-registered", Logs: []*proto.PluginRuntimeLogEntry{{
+		Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
 		Message: "should fail",
-	}})
+	}}})
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("AppendLogs(unknown) code = %v, want %v: %v", status.Code(err), codes.NotFound, err)
 	}
@@ -255,7 +265,7 @@ func TestRuntimeLogHostServerKeepsStoppedSessionThroughEvictionPressure(t *testi
 
 	hostServices, err := StartHostServices([]HostService{{
 		Name:   "runtime_logs",
-		EnvVar: gestalt.EnvRuntimeLogHostSocket,
+		EnvVar: envRuntimeLogHostSocket,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
 		},
@@ -269,23 +279,18 @@ func TestRuntimeLogHostServerKeepsStoppedSessionThroughEvictionPressure(t *testi
 	if len(bindings) != 1 {
 		t.Fatalf("host service bindings len = %d, want 1", len(bindings))
 	}
-	t.Setenv(gestalt.EnvRuntimeLogHostSocket, bindings[0].SocketPath)
-
-	client, err := gestalt.RuntimeLogHost()
-	if err != nil {
-		t.Fatalf("RuntimeLogHost: %v", err)
-	}
-	err = client.AppendLogs(ctx, "stopping-session", []gestalt.RuntimeLogEntry{{
-		Stream:  gestalt.RuntimeLogStreamRuntime,
+	client := newRuntimeLogHostTestClient(t, bindings[0].SocketPath)
+	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{SessionId: "stopping-session", Logs: []*proto.PluginRuntimeLogEntry{{
+		Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
 		Message: "late shutdown log",
-	}})
+	}}})
 	if err != nil {
 		t.Fatalf("AppendLogs(stopping session): %v", err)
 	}
-	err = client.AppendLogs(ctx, "quiet-live-session", []gestalt.RuntimeLogEntry{{
-		Stream:  gestalt.RuntimeLogStreamRuntime,
+	_, err = client.AppendLogs(ctx, &proto.AppendPluginRuntimeLogsRequest{SessionId: "quiet-live-session", Logs: []*proto.PluginRuntimeLogEntry{{
+		Stream:  proto.PluginRuntimeLogStream_PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
 		Message: "quiet live should have been evicted first",
-	}})
+	}}})
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("AppendLogs(quiet live) code = %v, want %v: %v", status.Code(err), codes.NotFound, err)
 	}

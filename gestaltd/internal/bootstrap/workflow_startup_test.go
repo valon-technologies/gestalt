@@ -11,12 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
@@ -248,7 +248,7 @@ func buildModifiedExampleProviderBinary(t *testing.T, mutate func(string) string
 	}
 
 	bin := filepath.Join(root, filepath.Base(root))
-	if err := buildBootstrapTestBinary(root, "", bin); err != nil {
+	if err := buildBootstrapTestBinary(root, "", bin, false); err != nil {
 		t.Fatalf("build custom provider binary: %v", err)
 	}
 	return bin, root

@@ -51,6 +51,7 @@ thoughts/shared/plans/
 # Build artifacts
 build/
 dist/
+sdk/proto/gen/
 gestaltd/ui/out/
 gestaltd/internal/ui/out/
 !gestaltd/internal/ui/out/.gitkeep
