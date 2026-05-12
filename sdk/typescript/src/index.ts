@@ -118,6 +118,7 @@ export {
   type Request,
   type Response,
   type Subject,
+  type SubjectInput,
 } from "./api.ts";
 export {
   type HTTPSubjectRequest,

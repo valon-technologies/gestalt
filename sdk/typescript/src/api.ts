@@ -10,6 +10,17 @@ export interface Subject {
 }
 
 /**
+ * Subject payload authored by provider-side hooks.
+ */
+export interface SubjectInput {
+  id: string;
+  kind: string;
+  displayName: string;
+  authSource: string;
+  email?: string | undefined;
+}
+
+/**
  * Provider-owned external identity attached to an incoming provider request.
  */
 export interface ExternalIdentity {

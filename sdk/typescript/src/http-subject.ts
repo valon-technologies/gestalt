@@ -1,4 +1,11 @@
-import type { Access, Credential, Host, MaybePromise, Subject } from "./api.ts";
+import type {
+  Access,
+  Credential,
+  Host,
+  MaybePromise,
+  Subject,
+  SubjectInput,
+} from "./api.ts";
 
 /**
  * Verified hosted HTTP request metadata passed into optional plugin-local
@@ -60,7 +67,7 @@ export function httpSubjectError(
 export type HTTPSubjectResolver = (
   request: HTTPSubjectRequest,
   context: HTTPSubjectResolutionContext,
-) => MaybePromise<Subject | null | undefined>;
+) => MaybePromise<SubjectInput | null | undefined>;
 
 export function cloneHTTPSubjectRequest(
   input: HTTPSubjectRequest,

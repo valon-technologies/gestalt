@@ -559,6 +559,7 @@ class MainEntrypointTests(unittest.TestCase):
                         kind="user",
                         display_name="Grace Hopper",
                         auth_source="slack",
+                        email="grace@example.com",
                     ),
                     agent_external_identity=plugin_pb2.ExternalIdentityContext(
                         type="github_identity",
@@ -654,7 +655,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "subject_kind": "user",
                 "subject_email": "ada@example.com",
                 "agent_subject_id": "user:user-456",
-                "agent_subject_email": "",
+                "agent_subject_email": "grace@example.com",
                 "external_type": "github_app_installation",
                 "external_id": "repo:acme/widgets",
                 "agent_external_type": "github_identity",
