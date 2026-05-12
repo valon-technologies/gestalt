@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"google.golang.org/grpc/codes"

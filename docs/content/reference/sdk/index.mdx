@@ -29,6 +29,6 @@ TypeScript workflow examples use root helper functions such as
 `workflowEvent`, `workflowSignal`, and `boundWorkflowTarget` when a manager
 field would otherwise expose a transport-specific shape.
 
-Manager responses still mirror host response objects. Examples may therefore
-read response fields with language-specific accessors. Native response objects
-are a remaining SDK gap.
+Manager responses now return native SDK objects as well. Examples should read
+plain fields such as `session.ID`, `turn.id`, `run.id`, or `event.type` rather
+than generated protocol accessors.

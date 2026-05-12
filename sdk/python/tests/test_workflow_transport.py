@@ -209,6 +209,7 @@ class WorkflowTransportTests(unittest.TestCase):
                 )
             )
 
+        assert published is not None
         self.assertEqual(published.id, "delivery-123")
         self.assertEqual(published.type, "github.app.webhook")
         self.assertEqual(_manager_relay_tokens, ["relay-token-py"])
@@ -263,8 +264,13 @@ class WorkflowTransportTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual(created_definition.definition.id, "def-1")
-        self.assertEqual(created.schedule.id, "sched-1")
+        definition = created_definition.definition
+        schedule = created.schedule
+        assert definition is not None
+        assert schedule is not None
+        assert published is not None
+        self.assertEqual(definition.id, "def-1")
+        self.assertEqual(schedule.id, "sched-1")
         self.assertEqual(published.id, "published-event-1")
         self.assertEqual(
             _manager_relay_tokens,

@@ -8,24 +8,26 @@ use gestalt::proto::v1::agent_manager_host_server::{
     AgentManagerHost as ProtoAgentManagerHost, AgentManagerHostServer,
 };
 use gestalt::proto::v1::{
-    AgentExecutionStatus, AgentInteraction, AgentInteractionState, AgentInteractionType,
-    AgentManagerCancelTurnRequest, AgentManagerCreateSessionRequest, AgentManagerCreateTurnRequest,
-    AgentManagerGetSessionRequest, AgentManagerGetTurnRequest, AgentManagerListInteractionsRequest,
-    AgentManagerListInteractionsResponse, AgentManagerListSessionsRequest,
-    AgentManagerListSessionsResponse, AgentManagerListTurnEventsRequest,
-    AgentManagerListTurnEventsResponse, AgentManagerListTurnsRequest,
-    AgentManagerListTurnsResponse, AgentManagerResolveInteractionRequest,
-    AgentManagerUpdateSessionRequest, AgentMessagePartType, AgentSession, AgentSessionState,
-    AgentToolSourceMode, AgentTurn, AgentTurnEvent,
+    AgentExecutionStatus, AgentInteraction, AgentInteractionState as ProtoAgentInteractionState,
+    AgentInteractionType, AgentManagerCancelTurnRequest, AgentManagerCreateSessionRequest,
+    AgentManagerCreateTurnRequest, AgentManagerGetSessionRequest, AgentManagerGetTurnRequest,
+    AgentManagerListInteractionsRequest, AgentManagerListInteractionsResponse,
+    AgentManagerListSessionsRequest, AgentManagerListSessionsResponse,
+    AgentManagerListTurnEventsRequest, AgentManagerListTurnEventsResponse,
+    AgentManagerListTurnsRequest, AgentManagerListTurnsResponse,
+    AgentManagerResolveInteractionRequest, AgentManagerUpdateSessionRequest, AgentMessagePartType,
+    AgentSession, AgentSessionState as ProtoAgentSessionState, AgentTurn, AgentTurnEvent,
 };
 use gestalt::{
-    AgentManager, AgentManagerCancelTurnInput, AgentManagerCreateSessionInput,
-    AgentManagerCreateTurnInput, AgentManagerGetSessionInput, AgentManagerGetTurnInput,
-    AgentManagerListInteractionsInput, AgentManagerListSessionsInput,
-    AgentManagerListTurnEventsInput, AgentManagerListTurnsInput,
+    AgentInteractionState as NativeAgentInteractionState, AgentManager,
+    AgentManagerCancelTurnInput, AgentManagerCreateSessionInput, AgentManagerCreateTurnInput,
+    AgentManagerGetSessionInput, AgentManagerGetTurnInput, AgentManagerListInteractionsInput,
+    AgentManagerListSessionsInput, AgentManagerListTurnEventsInput, AgentManagerListTurnsInput,
     AgentManagerResolveInteractionInput, AgentManagerUpdateSessionInput, AgentMessageInput,
-    AgentMessagePartInput, AgentMessagePartType as NativeAgentMessagePartType, AgentToolRefInput,
-    ENV_AGENT_MANAGER_SOCKET, ENV_AGENT_MANAGER_SOCKET_TOKEN, Request,
+    AgentMessagePartInput, AgentMessagePartType as NativeAgentMessagePartType,
+    AgentSessionState as NativeAgentSessionState, AgentToolRefInput,
+    AgentToolSourceMode as NativeAgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET,
+    ENV_AGENT_MANAGER_SOCKET_TOKEN, Request,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -73,7 +75,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
             provider_name: request.provider_name,
             model: request.model,
             client_ref: request.client_ref,
-            state: AgentSessionState::Active as i32,
+            state: ProtoAgentSessionState::Active as i32,
             metadata: request.metadata,
             created_at: Some(helpers::timestamp_now()),
             updated_at: Some(helpers::timestamp_now()),
@@ -100,7 +102,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
             provider_name: "openai".to_string(),
             model: "gpt-5.1".to_string(),
             client_ref: "cli-session-1".to_string(),
-            state: AgentSessionState::Archived as i32,
+            state: ProtoAgentSessionState::Archived as i32,
             created_at: Some(helpers::timestamp_now()),
             updated_at: Some(helpers::timestamp_now()),
             ..Default::default()
@@ -127,7 +129,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
                 provider_name: "openai".to_string(),
                 model: "gpt-5.1".to_string(),
                 client_ref: "cli-session-1".to_string(),
-                state: AgentSessionState::Active as i32,
+                state: ProtoAgentSessionState::Active as i32,
                 created_at: Some(helpers::timestamp_now()),
                 updated_at: Some(helpers::timestamp_now()),
                 ..Default::default()
@@ -329,7 +331,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
                 turn_id: request.turn_id,
                 session_id: "session-managed-1".to_string(),
                 r#type: AgentInteractionType::Approval as i32,
-                state: AgentInteractionState::Pending as i32,
+                state: ProtoAgentInteractionState::Pending as i32,
                 title: "Approve command".to_string(),
                 prompt: "Run git status?".to_string(),
                 created_at: Some(helpers::timestamp_now()),
@@ -357,7 +359,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
             turn_id: request.turn_id,
             session_id: "session-managed-1".to_string(),
             r#type: AgentInteractionType::Approval as i32,
-            state: AgentInteractionState::Resolved as i32,
+            state: ProtoAgentInteractionState::Resolved as i32,
             title: "Approve command".to_string(),
             prompt: "Run git status?".to_string(),
             resolution: request.resolution,
@@ -461,7 +463,7 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .update_session(AgentManagerUpdateSessionInput {
             session_id: "session-managed-1".to_string(),
             client_ref: "cli-session-2".to_string(),
-            state: AgentSessionState::Archived,
+            state: NativeAgentSessionState::Archived,
             ..Default::default()
         })
         .await
@@ -480,7 +482,7 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
                 }],
                 ..Default::default()
             }],
-            tool_source: AgentToolSourceMode::McpCatalog,
+            tool_source: NativeAgentToolSourceMode::McpCatalog,
             ..Default::default()
         })
         .await
@@ -542,10 +544,7 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
     assert_eq!(turn_events.events.len(), 1);
     assert_eq!(interactions.interactions.len(), 1);
     assert_eq!(resolved.id, "interaction-1");
-    assert_eq!(
-        AgentInteractionState::try_from(resolved.state).expect("valid interaction state"),
-        AgentInteractionState::Resolved
-    );
+    assert_eq!(resolved.state, NativeAgentInteractionState::Resolved);
 
     let seen = server.seen.lock().expect("lock seen").clone();
     assert_eq!(
@@ -696,7 +695,7 @@ async fn agent_manager_create_turn_accepts_native_values() {
                 connection: "default".to_string(),
                 ..Default::default()
             }],
-            tool_source: AgentToolSourceMode::McpCatalog,
+            tool_source: NativeAgentToolSourceMode::McpCatalog,
             response_schema: Some(serde_json::json!({ "type": "object" })),
             metadata: Some(serde_json::json!({ "request": "native" })),
             model_options: Some(serde_json::json!({ "temperature": 0 })),
@@ -717,7 +716,10 @@ async fn agent_manager_create_turn_accepts_native_values() {
     assert_eq!(request.invocation_token, "token-123");
     assert_eq!(request.session_id, "session-managed-1");
     assert_eq!(request.model, "gpt-5.1");
-    assert_eq!(request.tool_source, AgentToolSourceMode::McpCatalog as i32);
+    assert_eq!(
+        request.tool_source,
+        NativeAgentToolSourceMode::McpCatalog as i32
+    );
     assert_eq!(request.messages.len(), 1);
     assert_eq!(request.messages[0].role, "user");
     assert_eq!(request.messages[0].text, "Summarize this");

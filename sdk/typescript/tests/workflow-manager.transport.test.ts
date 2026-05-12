@@ -33,19 +33,13 @@ import { removeTempDir } from "./helpers.ts";
 
 function workflowPluginTarget(pluginName: string, operation: string) {
   return {
-    kind: {
-      case: "plugin" as const,
-      value: { pluginName, operation },
-    },
+    plugin: { pluginName, operation },
   };
 }
 
 function workflowAgentTarget(providerName: string, prompt: string) {
   return {
-    kind: {
-      case: "agent" as const,
-      value: { providerName, prompt },
-    },
+    agent: { providerName, prompt },
   };
 }
 

@@ -3,8 +3,8 @@ package agentwire
 import (
 	"fmt"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 )
 

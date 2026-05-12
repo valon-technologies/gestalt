@@ -21,6 +21,7 @@ from ._protocol import (
     struct_to_dict,
     timestamp_from_datetime,
     value_from_json,
+    value_to_json,
 )
 from ._protocol import (
     copy_message as _copy,
@@ -219,6 +220,26 @@ class AgentManagerResolveInteractionInput:
     turn_id: str = ""
     interaction_id: str = ""
     resolution: Any | None = None
+
+
+@dataclass(slots=True)
+class ListAgentManagerSessionsResponse:
+    sessions: Iterable["AgentSession"] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ListAgentManagerTurnsResponse:
+    turns: Iterable["AgentTurn"] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ListAgentManagerTurnEventsResponse:
+    events: Iterable["AgentTurnEvent"] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ListAgentManagerInteractionsResponse:
+    interactions: Iterable["AgentInteraction"] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -1271,6 +1292,152 @@ def agent_turn_display_to_proto(
     return out
 
 
+def agent_session_from_proto(value: Any) -> AgentSession:
+    return AgentSession(
+        id=value.id,
+        provider_name=value.provider_name,
+        model=value.model,
+        client_ref=value.client_ref,
+        state=_int_field(value.state),
+        metadata=struct_to_dict(value.metadata)
+        if has_field(value, "metadata")
+        else None,
+        created_by=agent_actor_from_proto(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        created_at=datetime_from_timestamp(value.created_at)
+        if has_field(value, "created_at")
+        else None,
+        updated_at=datetime_from_timestamp(value.updated_at)
+        if has_field(value, "updated_at")
+        else None,
+        last_turn_at=datetime_from_timestamp(value.last_turn_at)
+        if has_field(value, "last_turn_at")
+        else None,
+    )
+
+
+def list_agent_manager_sessions_response_from_proto(
+    value: Any,
+) -> ListAgentManagerSessionsResponse:
+    return ListAgentManagerSessionsResponse(
+        sessions=[agent_session_from_proto(session) for session in value.sessions]
+    )
+
+
+def agent_turn_from_proto(value: Any) -> AgentTurn:
+    return AgentTurn(
+        id=value.id,
+        session_id=value.session_id,
+        provider_name=value.provider_name,
+        model=value.model,
+        status=_int_field(value.status),
+        messages=[agent_message_from_proto(message) for message in value.messages],
+        output_text=value.output_text,
+        structured_output=struct_to_dict(value.structured_output)
+        if has_field(value, "structured_output")
+        else None,
+        status_message=value.status_message,
+        created_by=agent_actor_from_proto(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        created_at=datetime_from_timestamp(value.created_at)
+        if has_field(value, "created_at")
+        else None,
+        started_at=datetime_from_timestamp(value.started_at)
+        if has_field(value, "started_at")
+        else None,
+        completed_at=datetime_from_timestamp(value.completed_at)
+        if has_field(value, "completed_at")
+        else None,
+        execution_ref=value.execution_ref,
+    )
+
+
+def list_agent_manager_turns_response_from_proto(
+    value: Any,
+) -> ListAgentManagerTurnsResponse:
+    return ListAgentManagerTurnsResponse(
+        turns=[agent_turn_from_proto(turn) for turn in value.turns]
+    )
+
+
+def agent_turn_display_from_proto(value: Any) -> AgentTurnDisplay:
+    return AgentTurnDisplay(
+        kind=value.kind,
+        phase=value.phase,
+        text=value.text,
+        label=value.label,
+        ref=value.ref,
+        parent_ref=value.parent_ref,
+        input=value_to_json(value.input) if has_field(value, "input") else None,
+        output=value_to_json(value.output) if has_field(value, "output") else None,
+        error=value_to_json(value.error) if has_field(value, "error") else None,
+        action=value.action,
+        format=value.format,
+        language=value.language,
+    )
+
+
+def agent_turn_event_from_proto(value: Any) -> AgentTurnEvent:
+    return AgentTurnEvent(
+        id=value.id,
+        turn_id=value.turn_id,
+        seq=value.seq,
+        type=value.type,
+        source=value.source,
+        visibility=value.visibility,
+        data=struct_to_dict(value.data) if has_field(value, "data") else None,
+        created_at=datetime_from_timestamp(value.created_at)
+        if has_field(value, "created_at")
+        else None,
+        display=agent_turn_display_from_proto(value.display)
+        if has_field(value, "display")
+        else None,
+    )
+
+
+def list_agent_manager_turn_events_response_from_proto(
+    value: Any,
+) -> ListAgentManagerTurnEventsResponse:
+    return ListAgentManagerTurnEventsResponse(
+        events=[agent_turn_event_from_proto(event) for event in value.events]
+    )
+
+
+def agent_interaction_from_proto(value: Any) -> AgentInteraction:
+    return AgentInteraction(
+        id=value.id,
+        type=_int_field(value.type),
+        state=_int_field(value.state),
+        title=value.title,
+        prompt=value.prompt,
+        request=struct_to_dict(value.request) if has_field(value, "request") else None,
+        resolution=struct_to_dict(value.resolution)
+        if has_field(value, "resolution")
+        else None,
+        created_at=datetime_from_timestamp(value.created_at)
+        if has_field(value, "created_at")
+        else None,
+        resolved_at=datetime_from_timestamp(value.resolved_at)
+        if has_field(value, "resolved_at")
+        else None,
+        turn_id=value.turn_id,
+        session_id=value.session_id,
+    )
+
+
+def list_agent_manager_interactions_response_from_proto(
+    value: Any,
+) -> ListAgentManagerInteractionsResponse:
+    return ListAgentManagerInteractionsResponse(
+        interactions=[
+            agent_interaction_from_proto(interaction)
+            for interaction in value.interactions
+        ]
+    )
+
+
 def execute_agent_tool_response_from_proto(value: Any) -> ExecuteAgentToolResponse:
     return ExecuteAgentToolResponse(status=_int_field(value.status), body=value.body)
 
@@ -1994,82 +2161,106 @@ class AgentManager:
 
         self._channel.close()
 
-    def create_session(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def create_session(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> AgentSession:
         """Create an agent session."""
 
         request = _agent_manager_create_session_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.CreateSession, request)
+        return agent_session_from_proto(_grpc_call(self._stub.CreateSession, request))
 
-    def get_session(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def get_session(self, request: Any | None = None, **kwargs: Any) -> AgentSession:
         """Fetch one agent session."""
 
         request = _agent_manager_get_session_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.GetSession, request)
+        return agent_session_from_proto(_grpc_call(self._stub.GetSession, request))
 
-    def list_sessions(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def list_sessions(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> ListAgentManagerSessionsResponse:
         """List agent sessions visible to the invocation token."""
 
         request = _agent_manager_list_sessions_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.ListSessions, request)
+        return list_agent_manager_sessions_response_from_proto(
+            _grpc_call(self._stub.ListSessions, request)
+        )
 
-    def update_session(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def update_session(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> AgentSession:
         """Update mutable fields on an agent session."""
 
         request = _agent_manager_update_session_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.UpdateSession, request)
+        return agent_session_from_proto(_grpc_call(self._stub.UpdateSession, request))
 
-    def create_turn(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def create_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
         """Create an agent turn."""
 
         request = _agent_manager_create_turn_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.CreateTurn, request)
+        return agent_turn_from_proto(_grpc_call(self._stub.CreateTurn, request))
 
-    def get_turn(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def get_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
         """Fetch one agent turn."""
 
         request = _agent_manager_get_turn_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.GetTurn, request)
+        return agent_turn_from_proto(_grpc_call(self._stub.GetTurn, request))
 
-    def list_turns(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def list_turns(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> ListAgentManagerTurnsResponse:
         """List turns for an agent session."""
 
         request = _agent_manager_list_turns_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.ListTurns, request)
+        return list_agent_manager_turns_response_from_proto(
+            _grpc_call(self._stub.ListTurns, request)
+        )
 
-    def cancel_turn(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def cancel_turn(self, request: Any | None = None, **kwargs: Any) -> AgentTurn:
         """Cancel an in-progress agent turn."""
 
         request = _agent_manager_cancel_turn_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.CancelTurn, request)
+        return agent_turn_from_proto(_grpc_call(self._stub.CancelTurn, request))
 
-    def list_turn_events(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def list_turn_events(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> ListAgentManagerTurnEventsResponse:
         """List events emitted for an agent turn."""
 
         request = _agent_manager_list_turn_events_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.ListTurnEvents, request)
+        return list_agent_manager_turn_events_response_from_proto(
+            _grpc_call(self._stub.ListTurnEvents, request)
+        )
 
-    def list_interactions(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def list_interactions(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> ListAgentManagerInteractionsResponse:
         """List pending or completed agent interactions."""
 
         request = _agent_manager_list_interactions_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.ListInteractions, request)
+        return list_agent_manager_interactions_response_from_proto(
+            _grpc_call(self._stub.ListInteractions, request)
+        )
 
-    def resolve_interaction(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def resolve_interaction(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> AgentInteraction:
         """Resolve an agent interaction with a host response."""
 
         request = _agent_manager_resolve_interaction_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.ResolveInteraction, request)
+        return agent_interaction_from_proto(
+            _grpc_call(self._stub.ResolveInteraction, request)
+        )
 
     def __enter__(self) -> AgentManager:
         """Return the client for ``with`` statements."""

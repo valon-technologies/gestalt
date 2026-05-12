@@ -149,6 +149,9 @@ class WorkflowEventInput:
     extensions: Mapping[str, Any] | None = None
 
 
+WorkflowManagerPublishedEvent = WorkflowEventInput
+
+
 @_dataclasses.dataclass(slots=True)
 class WorkflowEventMatchInput:
     """Input for workflow event matching fields."""
@@ -213,6 +216,16 @@ class BoundWorkflowRunInput:
     created_by: Any | None = None
     execution_ref: str = ""
     workflow_key: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class BoundWorkflowDefinitionInput:
+    """Input copied from a workflow-provider definition."""
+
+    id: str = ""
+    target: Any | None = None
+    created_by: Any | None = None
+    created_at: _dt.datetime | Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -418,6 +431,89 @@ class WorkflowManagerResumeEventTriggerInput:
 class WorkflowManagerPublishEventInput:
     provider_name: str = ""
     event: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowManagerBoundRun:
+    id: str = ""
+    status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
+    target: Any | None = None
+    trigger: Any | None = None
+    created_at: _dt.datetime | Any | None = None
+    started_at: _dt.datetime | Any | None = None
+    completed_at: _dt.datetime | Any | None = None
+    status_message: str = ""
+    result_body: str = ""
+    created_by: Any | None = None
+    execution_ref: str = ""
+    workflow_key: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowManagerBoundDefinition:
+    id: str = ""
+    target: Any | None = None
+    created_by: Any | None = None
+    created_at: _dt.datetime | Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowManagerBoundSchedule:
+    id: str = ""
+    cron: str = ""
+    timezone: str = ""
+    target: Any | None = None
+    paused: bool = False
+    created_at: _dt.datetime | Any | None = None
+    updated_at: _dt.datetime | Any | None = None
+    next_run_at: _dt.datetime | Any | None = None
+    created_by: Any | None = None
+    execution_ref: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowManagerBoundEventTrigger:
+    id: str = ""
+    match: Any | None = None
+    target: Any | None = None
+    paused: bool = False
+    created_at: _dt.datetime | Any | None = None
+    updated_at: _dt.datetime | Any | None = None
+    created_by: Any | None = None
+    execution_ref: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowManagerRun:
+    provider_name: str = ""
+    run: WorkflowManagerBoundRun | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowManagerRunSignal:
+    provider_name: str = ""
+    run: WorkflowManagerBoundRun | None = None
+    signal: WorkflowSignalInput | None = None
+    started_run: bool = False
+    workflow_key: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowManagerDefinition:
+    provider_name: str = ""
+    definition: WorkflowManagerBoundDefinition | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowManagerSchedule:
+    provider_name: str = ""
+    schedule: WorkflowManagerBoundSchedule | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowManagerEventTrigger:
+    provider_name: str = ""
+    trigger: WorkflowManagerBoundEventTrigger | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -1316,6 +1412,69 @@ def bound_workflow_run_from_run(value: Any | None) -> Any | None:
     return bound_workflow_run(data) if data is not None else None
 
 
+def bound_workflow_definition_input_from_definition(
+    value: Any | None,
+) -> BoundWorkflowDefinitionInput | None:
+    """Return input copied from a workflow-provider definition."""
+
+    if value is None:
+        return None
+    return BoundWorkflowDefinitionInput(
+        id=value.id,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        created_at=_timestamp_to_datetime(value, "created_at"),
+    )
+
+
+def workflow_manager_bound_run_from_run(
+    value: Any | None,
+) -> WorkflowManagerBoundRun | None:
+    if value is None:
+        return None
+    return WorkflowManagerBoundRun(
+        id=value.id,
+        status=value.status,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        trigger=workflow_run_trigger_input_from_trigger(value.trigger)
+        if has_field(value, "trigger")
+        else None,
+        created_at=_timestamp_to_datetime(value, "created_at"),
+        started_at=_timestamp_to_datetime(value, "started_at"),
+        completed_at=_timestamp_to_datetime(value, "completed_at"),
+        status_message=value.status_message,
+        result_body=value.result_body,
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        execution_ref=value.execution_ref,
+        workflow_key=value.workflow_key,
+    )
+
+
+def workflow_manager_bound_definition_from_definition(
+    value: Any | None,
+) -> WorkflowManagerBoundDefinition | None:
+    if value is None:
+        return None
+    return WorkflowManagerBoundDefinition(
+        id=value.id,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        created_at=_timestamp_to_datetime(value, "created_at"),
+    )
+
+
 def bound_workflow_schedule(value: Any | None = None, **kwargs: Any) -> Any:
     """Create a workflow-provider schedule ."""
 
@@ -1370,6 +1529,29 @@ def bound_workflow_schedule_from_schedule(value: Any | None) -> Any | None:
     return bound_workflow_schedule(data) if data is not None else None
 
 
+def workflow_manager_bound_schedule_from_schedule(
+    value: Any | None,
+) -> WorkflowManagerBoundSchedule | None:
+    if value is None:
+        return None
+    return WorkflowManagerBoundSchedule(
+        id=value.id,
+        cron=value.cron,
+        timezone=value.timezone,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        paused=value.paused,
+        created_at=_timestamp_to_datetime(value, "created_at"),
+        updated_at=_timestamp_to_datetime(value, "updated_at"),
+        next_run_at=_timestamp_to_datetime(value, "next_run_at"),
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        execution_ref=value.execution_ref,
+    )
+
+
 def bound_workflow_event_trigger(value: Any | None = None, **kwargs: Any) -> Any:
     """Create a workflow-provider event trigger ."""
 
@@ -1421,6 +1603,83 @@ def bound_workflow_event_trigger_from_trigger(value: Any | None) -> Any | None:
 
     data = bound_workflow_event_trigger_input_from_trigger(value)
     return bound_workflow_event_trigger(data) if data is not None else None
+
+
+def workflow_manager_bound_event_trigger_from_trigger(
+    value: Any | None,
+) -> WorkflowManagerBoundEventTrigger | None:
+    if value is None:
+        return None
+    return WorkflowManagerBoundEventTrigger(
+        id=value.id,
+        match=workflow_event_match_input_from_match(value.match)
+        if has_field(value, "match")
+        else None,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        paused=value.paused,
+        created_at=_timestamp_to_datetime(value, "created_at"),
+        updated_at=_timestamp_to_datetime(value, "updated_at"),
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        execution_ref=value.execution_ref,
+    )
+
+
+def workflow_manager_run_from_proto(value: Any) -> WorkflowManagerRun:
+    return WorkflowManagerRun(
+        provider_name=value.provider_name,
+        run=workflow_manager_bound_run_from_run(value.run)
+        if has_field(value, "run")
+        else None,
+    )
+
+
+def workflow_manager_run_signal_from_proto(value: Any) -> WorkflowManagerRunSignal:
+    return WorkflowManagerRunSignal(
+        provider_name=value.provider_name,
+        run=workflow_manager_bound_run_from_run(value.run)
+        if has_field(value, "run")
+        else None,
+        signal=workflow_signal_input_from_signal(value.signal)
+        if has_field(value, "signal")
+        else None,
+        started_run=value.started_run,
+        workflow_key=value.workflow_key,
+    )
+
+
+def workflow_manager_definition_from_proto(value: Any) -> WorkflowManagerDefinition:
+    return WorkflowManagerDefinition(
+        provider_name=value.provider_name,
+        definition=workflow_manager_bound_definition_from_definition(
+            value.definition
+        )
+        if has_field(value, "definition")
+        else None,
+    )
+
+
+def workflow_manager_schedule_from_proto(value: Any) -> WorkflowManagerSchedule:
+    return WorkflowManagerSchedule(
+        provider_name=value.provider_name,
+        schedule=workflow_manager_bound_schedule_from_schedule(value.schedule)
+        if has_field(value, "schedule")
+        else None,
+    )
+
+
+def workflow_manager_event_trigger_from_proto(
+    value: Any,
+) -> WorkflowManagerEventTrigger:
+    return WorkflowManagerEventTrigger(
+        provider_name=value.provider_name,
+        trigger=workflow_manager_bound_event_trigger_from_trigger(value.trigger)
+        if has_field(value, "trigger")
+        else None,
+    )
 
 
 def workflow_execution_reference(value: Any | None = None, **kwargs: Any) -> Any:
@@ -1964,165 +2223,238 @@ class WorkflowManager:
 
         self._channel.close()
 
-    def start_run(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def start_run(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerRun:
         """Start a workflow run."""
 
         request = _workflow_manager_start_run_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.StartRun, request)
+        if not getattr(request, "idempotency_key", "").strip():
+            request.idempotency_key = self._idempotency_key
+        return workflow_manager_run_from_proto(_grpc_call(self._stub.StartRun, request))
 
-    def signal_run(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def signal_run(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerRunSignal:
         """Signal an existing workflow run."""
 
         request = _workflow_manager_signal_run_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.SignalRun, request)
+        return workflow_manager_run_signal_from_proto(
+            _grpc_call(self._stub.SignalRun, request)
+        )
 
-    def signal_or_start_run(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def signal_or_start_run(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerRunSignal:
         """Signal a run, or start it when no matching run exists."""
 
         request = _workflow_manager_signal_or_start_run_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.SignalOrStartRun, request)
+        if not getattr(request, "idempotency_key", "").strip():
+            request.idempotency_key = self._idempotency_key
+        return workflow_manager_run_signal_from_proto(
+            _grpc_call(self._stub.SignalOrStartRun, request)
+        )
 
-    def create_definition(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def create_definition(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerDefinition:
         """Create a reusable workflow definition."""
 
         request = _workflow_manager_create_definition_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         if not getattr(request, "idempotency_key", "").strip():
             request.idempotency_key = self._idempotency_key
-        return _grpc_call(self._stub.CreateDefinition, request)
+        return workflow_manager_definition_from_proto(
+            _grpc_call(self._stub.CreateDefinition, request)
+        )
 
-    def get_definition(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def get_definition(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerDefinition:
         """Fetch one workflow definition."""
 
         request = _workflow_manager_get_definition_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.GetDefinition, request)
+        return workflow_manager_definition_from_proto(
+            _grpc_call(self._stub.GetDefinition, request)
+        )
 
-    def update_definition(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def update_definition(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerDefinition:
         """Update a workflow definition."""
 
         request = _workflow_manager_update_definition_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.UpdateDefinition, request)
+        return workflow_manager_definition_from_proto(
+            _grpc_call(self._stub.UpdateDefinition, request)
+        )
 
-    def delete_definition(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def delete_definition(self, request: Any | None = None, **kwargs: Any) -> None:
         """Delete a workflow definition."""
 
         request = _workflow_manager_delete_definition_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.DeleteDefinition, request)
+        _grpc_call(self._stub.DeleteDefinition, request)
+        return None
 
-    def create_schedule(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def create_schedule(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerSchedule:
         """Create a workflow schedule."""
 
         request = _workflow_manager_create_schedule_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         if not getattr(request, "idempotency_key", "").strip():
             request.idempotency_key = self._idempotency_key
-        return _grpc_call(self._stub.CreateSchedule, request)
+        return workflow_manager_schedule_from_proto(
+            _grpc_call(self._stub.CreateSchedule, request)
+        )
 
-    def get_schedule(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def get_schedule(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerSchedule:
         """Fetch one workflow schedule."""
 
         request = _workflow_manager_get_schedule_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.GetSchedule, request)
+        return workflow_manager_schedule_from_proto(
+            _grpc_call(self._stub.GetSchedule, request)
+        )
 
-    def update_schedule(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def update_schedule(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerSchedule:
         """Update a workflow schedule."""
 
         request = _workflow_manager_update_schedule_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.UpdateSchedule, request)
+        return workflow_manager_schedule_from_proto(
+            _grpc_call(self._stub.UpdateSchedule, request)
+        )
 
-    def delete_schedule(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def delete_schedule(self, request: Any | None = None, **kwargs: Any) -> None:
         """Delete a workflow schedule."""
 
         request = _workflow_manager_id_request(
             pb.WorkflowManagerDeleteScheduleRequest, "schedule_id", request, **kwargs
         )
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.DeleteSchedule, request)
+        _grpc_call(self._stub.DeleteSchedule, request)
+        return None
 
-    def pause_schedule(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def pause_schedule(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerSchedule:
         """Pause a workflow schedule."""
 
         request = _workflow_manager_id_request(
             pb.WorkflowManagerPauseScheduleRequest, "schedule_id", request, **kwargs
         )
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.PauseSchedule, request)
+        return workflow_manager_schedule_from_proto(
+            _grpc_call(self._stub.PauseSchedule, request)
+        )
 
-    def resume_schedule(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def resume_schedule(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerSchedule:
         """Resume a workflow schedule."""
 
         request = _workflow_manager_id_request(
             pb.WorkflowManagerResumeScheduleRequest, "schedule_id", request, **kwargs
         )
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.ResumeSchedule, request)
+        return workflow_manager_schedule_from_proto(
+            _grpc_call(self._stub.ResumeSchedule, request)
+        )
 
-    def create_trigger(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def create_trigger(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerEventTrigger:
         """Create an event trigger."""
 
         request = _workflow_manager_create_event_trigger_request(request, **kwargs)
         request.invocation_token = self._invocation_token
         if not getattr(request, "idempotency_key", "").strip():
             request.idempotency_key = self._idempotency_key
-        return _grpc_call(self._stub.CreateEventTrigger, request)
+        return workflow_manager_event_trigger_from_proto(
+            _grpc_call(self._stub.CreateEventTrigger, request)
+        )
 
-    def get_trigger(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def get_trigger(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerEventTrigger:
         """Fetch one event trigger."""
 
         request = _workflow_manager_id_request(
             pb.WorkflowManagerGetEventTriggerRequest, "trigger_id", request, **kwargs
         )
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.GetEventTrigger, request)
+        return workflow_manager_event_trigger_from_proto(
+            _grpc_call(self._stub.GetEventTrigger, request)
+        )
 
-    def update_trigger(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def update_trigger(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerEventTrigger:
         """Update an event trigger."""
 
         request = _workflow_manager_update_event_trigger_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.UpdateEventTrigger, request)
+        return workflow_manager_event_trigger_from_proto(
+            _grpc_call(self._stub.UpdateEventTrigger, request)
+        )
 
-    def delete_trigger(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def delete_trigger(self, request: Any | None = None, **kwargs: Any) -> None:
         """Delete an event trigger."""
 
         request = _workflow_manager_id_request(
             pb.WorkflowManagerDeleteEventTriggerRequest, "trigger_id", request, **kwargs
         )
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.DeleteEventTrigger, request)
+        _grpc_call(self._stub.DeleteEventTrigger, request)
+        return None
 
-    def pause_trigger(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def pause_trigger(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerEventTrigger:
         """Pause an event trigger."""
 
         request = _workflow_manager_id_request(
             pb.WorkflowManagerPauseEventTriggerRequest, "trigger_id", request, **kwargs
         )
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.PauseEventTrigger, request)
+        return workflow_manager_event_trigger_from_proto(
+            _grpc_call(self._stub.PauseEventTrigger, request)
+        )
 
-    def resume_trigger(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def resume_trigger(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerEventTrigger:
         """Resume an event trigger."""
 
         request = _workflow_manager_id_request(
             pb.WorkflowManagerResumeEventTriggerRequest, "trigger_id", request, **kwargs
         )
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.ResumeEventTrigger, request)
+        return workflow_manager_event_trigger_from_proto(
+            _grpc_call(self._stub.ResumeEventTrigger, request)
+        )
 
-    def publish_event(self, request: Any | None = None, **kwargs: Any) -> Any:
+    def publish_event(
+        self, request: Any | None = None, **kwargs: Any
+    ) -> WorkflowManagerPublishedEvent | None:
         """Publish an event into the workflow host."""
 
         request = _workflow_manager_publish_event_request(request, **kwargs)
         request.invocation_token = self._invocation_token
-        return _grpc_call(self._stub.PublishEvent, request)
+        return workflow_event_input_from_event(
+            _grpc_call(self._stub.PublishEvent, request)
+        )
 
     def __enter__(self) -> WorkflowManager:
         """Return the client for ``with`` statements."""

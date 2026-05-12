@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

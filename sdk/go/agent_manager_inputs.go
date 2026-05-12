@@ -73,6 +73,22 @@ type AgentManagerResolveInteractionInput struct {
 	Resolution    any
 }
 
+type ListAgentManagerSessionsResponse struct {
+	Sessions []AgentSession
+}
+
+type ListAgentManagerTurnsResponse struct {
+	Turns []AgentTurn
+}
+
+type ListAgentManagerTurnEventsResponse struct {
+	Events []AgentTurnEvent
+}
+
+type ListAgentManagerInteractionsResponse struct {
+	Interactions []AgentInteraction
+}
+
 func NewAgentManagerCreateSessionRequest(input AgentManagerCreateSessionInput) (*proto.AgentManagerCreateSessionRequest, error) {
 	metadata, err := StructFromAny(input.Metadata)
 	if err != nil {

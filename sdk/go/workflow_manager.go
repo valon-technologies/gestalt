@@ -65,7 +65,7 @@ func (c *WorkflowManagerClient) Close() error {
 }
 
 // StartRun starts a workflow run.
-func (c *WorkflowManagerClient) StartRun(ctx context.Context, input WorkflowManagerStartRunInput) (*proto.ManagedWorkflowRun, error) {
+func (c *WorkflowManagerClient) StartRun(ctx context.Context, input WorkflowManagerStartRunInput) (*WorkflowManagerRun, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -74,11 +74,18 @@ func (c *WorkflowManagerClient) StartRun(ctx context.Context, input WorkflowMana
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
-	return c.client.StartRun(ctx, req)
+	if req.IdempotencyKey == "" {
+		req.IdempotencyKey = c.idempotencyKey
+	}
+	resp, err := c.client.StartRun(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerRunFromProto(resp)
 }
 
 // SignalRun signals an existing workflow run.
-func (c *WorkflowManagerClient) SignalRun(ctx context.Context, input WorkflowManagerSignalRunInput) (*proto.ManagedWorkflowRunSignal, error) {
+func (c *WorkflowManagerClient) SignalRun(ctx context.Context, input WorkflowManagerSignalRunInput) (*WorkflowManagerRunSignal, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -87,11 +94,15 @@ func (c *WorkflowManagerClient) SignalRun(ctx context.Context, input WorkflowMan
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
-	return c.client.SignalRun(ctx, req)
+	resp, err := c.client.SignalRun(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerRunSignalFromProto(resp)
 }
 
 // SignalOrStartRun signals a run or starts it when no matching run exists.
-func (c *WorkflowManagerClient) SignalOrStartRun(ctx context.Context, input WorkflowManagerSignalOrStartRunInput) (*proto.ManagedWorkflowRunSignal, error) {
+func (c *WorkflowManagerClient) SignalOrStartRun(ctx context.Context, input WorkflowManagerSignalOrStartRunInput) (*WorkflowManagerRunSignal, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -100,11 +111,18 @@ func (c *WorkflowManagerClient) SignalOrStartRun(ctx context.Context, input Work
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
-	return c.client.SignalOrStartRun(ctx, req)
+	if req.IdempotencyKey == "" {
+		req.IdempotencyKey = c.idempotencyKey
+	}
+	resp, err := c.client.SignalOrStartRun(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerRunSignalFromProto(resp)
 }
 
 // CreateDefinition creates a reusable workflow definition.
-func (c *WorkflowManagerClient) CreateDefinition(ctx context.Context, input WorkflowManagerCreateDefinitionInput) (*proto.ManagedWorkflowDefinition, error) {
+func (c *WorkflowManagerClient) CreateDefinition(ctx context.Context, input WorkflowManagerCreateDefinitionInput) (*WorkflowManagerDefinition, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -116,21 +134,29 @@ func (c *WorkflowManagerClient) CreateDefinition(ctx context.Context, input Work
 	if req.IdempotencyKey == "" {
 		req.IdempotencyKey = c.idempotencyKey
 	}
-	return c.client.CreateDefinition(ctx, req)
+	resp, err := c.client.CreateDefinition(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerDefinitionFromProto(resp), nil
 }
 
 // GetDefinition fetches one workflow definition.
-func (c *WorkflowManagerClient) GetDefinition(ctx context.Context, input WorkflowManagerGetDefinitionInput) (*proto.ManagedWorkflowDefinition, error) {
+func (c *WorkflowManagerClient) GetDefinition(ctx context.Context, input WorkflowManagerGetDefinitionInput) (*WorkflowManagerDefinition, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
 	req := NewWorkflowManagerGetDefinitionRequest(input)
 	req.InvocationToken = c.invocationToken
-	return c.client.GetDefinition(ctx, req)
+	resp, err := c.client.GetDefinition(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerDefinitionFromProto(resp), nil
 }
 
 // UpdateDefinition updates a workflow definition.
-func (c *WorkflowManagerClient) UpdateDefinition(ctx context.Context, input WorkflowManagerUpdateDefinitionInput) (*proto.ManagedWorkflowDefinition, error) {
+func (c *WorkflowManagerClient) UpdateDefinition(ctx context.Context, input WorkflowManagerUpdateDefinitionInput) (*WorkflowManagerDefinition, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -139,7 +165,11 @@ func (c *WorkflowManagerClient) UpdateDefinition(ctx context.Context, input Work
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
-	return c.client.UpdateDefinition(ctx, req)
+	resp, err := c.client.UpdateDefinition(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerDefinitionFromProto(resp), nil
 }
 
 // DeleteDefinition deletes a workflow definition.
@@ -154,7 +184,7 @@ func (c *WorkflowManagerClient) DeleteDefinition(ctx context.Context, input Work
 }
 
 // CreateSchedule creates a workflow schedule.
-func (c *WorkflowManagerClient) CreateSchedule(ctx context.Context, input WorkflowManagerCreateScheduleInput) (*proto.ManagedWorkflowSchedule, error) {
+func (c *WorkflowManagerClient) CreateSchedule(ctx context.Context, input WorkflowManagerCreateScheduleInput) (*WorkflowManagerSchedule, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -166,21 +196,29 @@ func (c *WorkflowManagerClient) CreateSchedule(ctx context.Context, input Workfl
 	if req.IdempotencyKey == "" {
 		req.IdempotencyKey = c.idempotencyKey
 	}
-	return c.client.CreateSchedule(ctx, req)
+	resp, err := c.client.CreateSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerScheduleFromProto(resp)
 }
 
 // GetSchedule fetches one workflow schedule.
-func (c *WorkflowManagerClient) GetSchedule(ctx context.Context, input WorkflowManagerGetScheduleInput) (*proto.ManagedWorkflowSchedule, error) {
+func (c *WorkflowManagerClient) GetSchedule(ctx context.Context, input WorkflowManagerGetScheduleInput) (*WorkflowManagerSchedule, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
 	req := NewWorkflowManagerGetScheduleRequest(input)
 	req.InvocationToken = c.invocationToken
-	return c.client.GetSchedule(ctx, req)
+	resp, err := c.client.GetSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerScheduleFromProto(resp)
 }
 
 // UpdateSchedule updates a workflow schedule.
-func (c *WorkflowManagerClient) UpdateSchedule(ctx context.Context, input WorkflowManagerUpdateScheduleInput) (*proto.ManagedWorkflowSchedule, error) {
+func (c *WorkflowManagerClient) UpdateSchedule(ctx context.Context, input WorkflowManagerUpdateScheduleInput) (*WorkflowManagerSchedule, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -189,7 +227,11 @@ func (c *WorkflowManagerClient) UpdateSchedule(ctx context.Context, input Workfl
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
-	return c.client.UpdateSchedule(ctx, req)
+	resp, err := c.client.UpdateSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerScheduleFromProto(resp)
 }
 
 // DeleteSchedule deletes a workflow schedule.
@@ -204,27 +246,35 @@ func (c *WorkflowManagerClient) DeleteSchedule(ctx context.Context, input Workfl
 }
 
 // PauseSchedule pauses a workflow schedule.
-func (c *WorkflowManagerClient) PauseSchedule(ctx context.Context, input WorkflowManagerPauseScheduleInput) (*proto.ManagedWorkflowSchedule, error) {
+func (c *WorkflowManagerClient) PauseSchedule(ctx context.Context, input WorkflowManagerPauseScheduleInput) (*WorkflowManagerSchedule, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
 	req := NewWorkflowManagerPauseScheduleRequest(input)
 	req.InvocationToken = c.invocationToken
-	return c.client.PauseSchedule(ctx, req)
+	resp, err := c.client.PauseSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerScheduleFromProto(resp)
 }
 
 // ResumeSchedule resumes a workflow schedule.
-func (c *WorkflowManagerClient) ResumeSchedule(ctx context.Context, input WorkflowManagerResumeScheduleInput) (*proto.ManagedWorkflowSchedule, error) {
+func (c *WorkflowManagerClient) ResumeSchedule(ctx context.Context, input WorkflowManagerResumeScheduleInput) (*WorkflowManagerSchedule, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
 	req := NewWorkflowManagerResumeScheduleRequest(input)
 	req.InvocationToken = c.invocationToken
-	return c.client.ResumeSchedule(ctx, req)
+	resp, err := c.client.ResumeSchedule(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerScheduleFromProto(resp)
 }
 
 // CreateTrigger creates an event trigger.
-func (c *WorkflowManagerClient) CreateTrigger(ctx context.Context, input WorkflowManagerCreateEventTriggerInput) (*proto.ManagedWorkflowEventTrigger, error) {
+func (c *WorkflowManagerClient) CreateTrigger(ctx context.Context, input WorkflowManagerCreateEventTriggerInput) (*WorkflowManagerEventTrigger, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -236,21 +286,29 @@ func (c *WorkflowManagerClient) CreateTrigger(ctx context.Context, input Workflo
 	if req.IdempotencyKey == "" {
 		req.IdempotencyKey = c.idempotencyKey
 	}
-	return c.client.CreateEventTrigger(ctx, req)
+	resp, err := c.client.CreateEventTrigger(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerEventTriggerFromProto(resp), nil
 }
 
 // GetTrigger fetches one event trigger.
-func (c *WorkflowManagerClient) GetTrigger(ctx context.Context, input WorkflowManagerGetEventTriggerInput) (*proto.ManagedWorkflowEventTrigger, error) {
+func (c *WorkflowManagerClient) GetTrigger(ctx context.Context, input WorkflowManagerGetEventTriggerInput) (*WorkflowManagerEventTrigger, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
 	req := NewWorkflowManagerGetEventTriggerRequest(input)
 	req.InvocationToken = c.invocationToken
-	return c.client.GetEventTrigger(ctx, req)
+	resp, err := c.client.GetEventTrigger(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerEventTriggerFromProto(resp), nil
 }
 
 // UpdateTrigger updates an event trigger.
-func (c *WorkflowManagerClient) UpdateTrigger(ctx context.Context, input WorkflowManagerUpdateEventTriggerInput) (*proto.ManagedWorkflowEventTrigger, error) {
+func (c *WorkflowManagerClient) UpdateTrigger(ctx context.Context, input WorkflowManagerUpdateEventTriggerInput) (*WorkflowManagerEventTrigger, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -259,7 +317,11 @@ func (c *WorkflowManagerClient) UpdateTrigger(ctx context.Context, input Workflo
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
-	return c.client.UpdateEventTrigger(ctx, req)
+	resp, err := c.client.UpdateEventTrigger(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerEventTriggerFromProto(resp), nil
 }
 
 // DeleteTrigger deletes an event trigger.
@@ -274,27 +336,35 @@ func (c *WorkflowManagerClient) DeleteTrigger(ctx context.Context, input Workflo
 }
 
 // PauseTrigger pauses an event trigger.
-func (c *WorkflowManagerClient) PauseTrigger(ctx context.Context, input WorkflowManagerPauseEventTriggerInput) (*proto.ManagedWorkflowEventTrigger, error) {
+func (c *WorkflowManagerClient) PauseTrigger(ctx context.Context, input WorkflowManagerPauseEventTriggerInput) (*WorkflowManagerEventTrigger, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
 	req := NewWorkflowManagerPauseEventTriggerRequest(input)
 	req.InvocationToken = c.invocationToken
-	return c.client.PauseEventTrigger(ctx, req)
+	resp, err := c.client.PauseEventTrigger(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerEventTriggerFromProto(resp), nil
 }
 
 // ResumeTrigger resumes an event trigger.
-func (c *WorkflowManagerClient) ResumeTrigger(ctx context.Context, input WorkflowManagerResumeEventTriggerInput) (*proto.ManagedWorkflowEventTrigger, error) {
+func (c *WorkflowManagerClient) ResumeTrigger(ctx context.Context, input WorkflowManagerResumeEventTriggerInput) (*WorkflowManagerEventTrigger, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
 	req := NewWorkflowManagerResumeEventTriggerRequest(input)
 	req.InvocationToken = c.invocationToken
-	return c.client.ResumeEventTrigger(ctx, req)
+	resp, err := c.client.ResumeEventTrigger(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return workflowManagerEventTriggerFromProto(resp), nil
 }
 
 // PublishEvent publishes an event into the workflow manager.
-func (c *WorkflowManagerClient) PublishEvent(ctx context.Context, input WorkflowManagerPublishEventInput) (*proto.WorkflowEvent, error) {
+func (c *WorkflowManagerClient) PublishEvent(ctx context.Context, input WorkflowManagerPublishEventInput) (*WorkflowManagerPublishedEvent, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -303,5 +373,10 @@ func (c *WorkflowManagerClient) PublishEvent(ctx context.Context, input Workflow
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
-	return c.client.PublishEvent(ctx, req)
+	resp, err := c.client.PublishEvent(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	event := WorkflowEventInputFromEvent(resp)
+	return &event, nil
 }

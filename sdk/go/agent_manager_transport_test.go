@@ -92,11 +92,11 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	if session.GetProviderName() != "managed" {
-		t.Fatalf("provider_name = %q, want %q", session.GetProviderName(), "managed")
+	if session.ProviderName != "managed" {
+		t.Fatalf("provider_name = %q, want %q", session.ProviderName, "managed")
 	}
-	if session.GetId() != "session-1" {
-		t.Fatalf("session id = %q, want %q", session.GetId(), "session-1")
+	if session.ID != "session-1" {
+		t.Fatalf("session id = %q, want %q", session.ID, "session-1")
 	}
 
 	turn, err := client.CreateTurn(context.Background(), gestalt.AgentManagerCreateTurnInput{
@@ -106,8 +106,8 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if turn.GetId() != "turn-1" {
-		t.Fatalf("turn id = %q, want %q", turn.GetId(), "turn-1")
+	if turn.ID != "turn-1" {
+		t.Fatalf("turn id = %q, want %q", turn.ID, "turn-1")
 	}
 
 	harness.mu.Lock()
@@ -190,8 +190,8 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if turn.GetId() != "turn-1" {
-		t.Fatalf("turn id = %q, want turn-1", turn.GetId())
+	if turn.ID != "turn-1" {
+		t.Fatalf("turn id = %q, want turn-1", turn.ID)
 	}
 
 	harness.mu.Lock()

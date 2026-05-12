@@ -1003,6 +1003,70 @@ function agentInteractionToProto(
   };
 }
 
+export function agentSessionFromProto(session: ProtoAgentSession): AgentSession {
+  return {
+    id: session.id,
+    providerName: session.providerName,
+    model: session.model,
+    clientRef: session.clientRef,
+    state: session.state as AgentSessionState,
+    metadata: optionalObjectFromStruct(session.metadata),
+    createdBy: agentActorFromProto(session.createdBy),
+    createdAt: session.createdAt === undefined ? undefined : dateFromTimestamp(session.createdAt),
+    updatedAt: session.updatedAt === undefined ? undefined : dateFromTimestamp(session.updatedAt),
+    lastTurnAt: session.lastTurnAt === undefined ? undefined : dateFromTimestamp(session.lastTurnAt),
+  };
+}
+
+export function agentTurnFromProto(turn: ProtoAgentTurn): AgentTurn {
+  return {
+    id: turn.id,
+    sessionId: turn.sessionId,
+    providerName: turn.providerName,
+    model: turn.model,
+    status: turn.status as AgentExecutionStatus,
+    messages: turn.messages.map(agentMessageFromProto),
+    outputText: turn.outputText,
+    structuredOutput: optionalObjectFromStruct(turn.structuredOutput),
+    statusMessage: turn.statusMessage,
+    createdBy: agentActorFromProto(turn.createdBy),
+    createdAt: turn.createdAt === undefined ? undefined : dateFromTimestamp(turn.createdAt),
+    startedAt: turn.startedAt === undefined ? undefined : dateFromTimestamp(turn.startedAt),
+    completedAt: turn.completedAt === undefined ? undefined : dateFromTimestamp(turn.completedAt),
+    executionRef: turn.executionRef,
+  };
+}
+
+export function agentTurnEventFromProto(event: ProtoAgentTurnEvent): AgentTurnEvent {
+  return {
+    id: event.id,
+    turnId: event.turnId,
+    seq: event.seq,
+    type: event.type,
+    source: event.source,
+    visibility: event.visibility,
+    data: optionalObjectFromStruct(event.data),
+    createdAt: event.createdAt === undefined ? undefined : dateFromTimestamp(event.createdAt),
+    display: agentTurnDisplayFromProto(event.display),
+  };
+}
+
+export function agentInteractionFromProto(interaction: ProtoAgentInteraction): AgentInteraction {
+  return {
+    id: interaction.id,
+    type: interaction.type as AgentInteractionType,
+    state: interaction.state as AgentInteractionState,
+    title: interaction.title,
+    prompt: interaction.prompt,
+    request: optionalObjectFromStruct(interaction.request),
+    resolution: optionalObjectFromStruct(interaction.resolution),
+    createdAt: interaction.createdAt === undefined ? undefined : dateFromTimestamp(interaction.createdAt),
+    resolvedAt: interaction.resolvedAt === undefined ? undefined : dateFromTimestamp(interaction.resolvedAt),
+    turnId: interaction.turnId,
+    sessionId: interaction.sessionId,
+  };
+}
+
 function capabilitiesToProto(
   capabilities: AgentProviderCapabilities,
 ): MessageInitShape<typeof AgentProviderCapabilitiesSchema> {
@@ -1030,7 +1094,7 @@ function agentMessageFromProto(message: ProtoAgentMessage): AgentMessage {
   };
 }
 
-function agentMessageToProto(
+export function agentMessageToProto(
   message: AgentMessage,
 ): MessageInitShape<typeof AgentMessageSchema> {
   return {
@@ -1038,6 +1102,26 @@ function agentMessageToProto(
     text: message.text ?? "",
     parts: message.parts?.map(agentMessagePartToProto) ?? [],
     metadata: optionalStruct(message.metadata),
+  };
+}
+
+function agentTurnDisplayFromProto(display?: ProtoAgentTurnDisplay): AgentTurnDisplay | undefined {
+  if (display === undefined) {
+    return undefined;
+  }
+  return {
+    kind: display.kind,
+    phase: display.phase,
+    text: display.text,
+    label: display.label,
+    ref: display.ref,
+    parentRef: display.parentRef,
+    input: display.input === undefined ? undefined : jsonFromValue(display.input) as JsonInput,
+    output: display.output === undefined ? undefined : jsonFromValue(display.output) as JsonInput,
+    error: display.error === undefined ? undefined : jsonFromValue(display.error) as JsonInput,
+    action: display.action,
+    format: display.format,
+    language: display.language,
   };
 }
 
@@ -1149,7 +1233,7 @@ function agentToolRefFromProto(ref: ProtoAgentToolRef): AgentToolRef {
   };
 }
 
-function agentToolRefToProto(ref?: AgentToolRef | undefined): ProtoAgentToolRef | undefined {
+export function agentToolRefToProto(ref?: AgentToolRef | undefined): ProtoAgentToolRef | undefined {
   if (ref === undefined) {
     return undefined;
   }
