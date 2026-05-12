@@ -104,7 +104,7 @@ pub use cache::{
     Cache, CacheEntry, CacheError, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET,
     cache_socket_env, cache_socket_token_env,
 };
-pub use catalog::{Catalog, CatalogOperation};
+pub use catalog::{Catalog, CatalogOperation, CatalogParameter, OperationAnnotations};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
 pub use indexeddb::{

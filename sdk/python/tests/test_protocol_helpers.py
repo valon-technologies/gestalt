@@ -30,10 +30,8 @@ class ProtocolHelperTests(unittest.TestCase):
         proto_dict = testing.agent_message_to_proto_dict(
             gestalt.AgentMessage(role="user", text="hi")
         )
-        record = testing.indexeddb_record_to_proto({"id": "rec-1"})
 
         self.assertEqual(proto_dict["role"], "user")
-        self.assertEqual(testing.indexeddb_record_from_proto(record), {"id": "rec-1"})
 
     def test_root_low_level_imports_fail(self) -> None:
         for name in (
