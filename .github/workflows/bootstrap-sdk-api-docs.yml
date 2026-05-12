@@ -1,0 +1,202 @@
+name: Bootstrap SDK API Docs
+
+on:
+  workflow_dispatch:
+    inputs:
+      python-ref:
+        description: Git ref containing the Python SDK source to publish
+        required: false
+        type: string
+      python-version:
+        description: Python SDK tag version without the sdk/python/v prefix, such as 0.0.1-alpha.19
+        required: false
+        type: string
+      typescript-ref:
+        description: Git ref containing the TypeScript SDK source to publish
+        required: false
+        type: string
+      typescript-version:
+        description: TypeScript SDK tag version without the sdk/typescript/v prefix, such as 0.0.1-alpha.18
+        required: false
+        type: string
+      latest-policy:
+        description: Latest alias update policy
+        required: true
+        default: force
+        type: choice
+        options:
+          - force
+          - auto
+          - never
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  DOCS_SDK_API_BUCKET: ${{ vars.DOCS_SDK_API_BUCKET || format('{0}-sdk-api-docs', vars.DOCS_RESOURCE_PREFIX) }}
+
+jobs:
+  bootstrap-python:
+    if: ${{ inputs.python-ref != '' && inputs.python-version != '' }}
+    name: Bootstrap Python SDK API Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: sdk-python-docs-release
+      cancel-in-progress: false
+    env:
+      UV_PYTHON: "3.14"
+    steps:
+      - name: Checkout helpers
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          path: helpers
+
+      - name: Checkout Python SDK source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.python-ref }}
+          path: source
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+
+      - name: Install Python
+        working-directory: source/sdk/python
+        run: uv python install 3.14
+
+      - name: Normalize package version
+        id: version
+        working-directory: source/sdk/python
+        env:
+          VERSION: ${{ inputs.python-version }}
+        run: |
+          python3 ../../../helpers/.github/scripts/normalize-python-sdk-version.py pyproject.toml "${VERSION}"
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import tomllib
+
+          with open("pyproject.toml", "rb") as pyproject:
+              data = tomllib.load(pyproject)
+          print(f"pep440={data['project']['version']}")
+          PY
+
+      - name: Build Python SDK API docs
+        working-directory: source/sdk/python
+        run: |
+          docs_out="${RUNNER_TEMP}/python-sdk-api-docs"
+          rm -rf "${docs_out}"
+          uv build
+          wheel="$(ls dist/*.whl)"
+          GESTALT_SDK_DOCS_VERSION="${{ steps.version.outputs.pep440 }}" \
+            uv run --with "$wheel" --with sphinx==8.1.3 --no-project \
+              sphinx-build -W -b html -d docs/_build/bootstrap-doctrees docs "${docs_out}"
+          bash ../../../helpers/docs/scripts/check-sdk-doc-leaks.sh python "${docs_out}"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ vars.GCP_WIF_POOL_ID }}/providers/${{ vars.GCP_WIF_PROVIDER_ID }}
+          service_account: github-actions@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          token_format: access_token
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+
+      - name: Upload Python SDK API docs
+        working-directory: helpers
+        run: |
+          if [ -z "${DOCS_SDK_API_BUCKET}" ]; then
+            echo "DOCS_SDK_API_BUCKET repository variable must be configured" >&2
+            exit 1
+          fi
+          python3 docs/scripts/publish-sdk-api-docs.py \
+            --mode upload \
+            --language python \
+            --version "${{ steps.version.outputs.pep440 }}" \
+            --source-tag "${{ inputs.python-ref }}" \
+            --source-dir "${RUNNER_TEMP}/python-sdk-api-docs" \
+            --bucket "${DOCS_SDK_API_BUCKET}" \
+            --latest-policy "${{ inputs.latest-policy }}"
+
+  bootstrap-typescript:
+    if: ${{ inputs.typescript-ref != '' && inputs.typescript-version != '' }}
+    name: Bootstrap TypeScript SDK API Docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: sdk-typescript-docs-release
+      cancel-in-progress: false
+    steps:
+      - name: Checkout helpers
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          path: helpers
+
+      - name: Checkout TypeScript SDK source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.typescript-ref }}
+          path: source
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.11
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+
+      - name: Normalize package version
+        working-directory: source/sdk/typescript
+        env:
+          VERSION: ${{ inputs.typescript-version }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("package.json")
+          data = json.loads(path.read_text())
+          data["version"] = os.environ["VERSION"]
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+      - name: Install dependencies
+        working-directory: source/sdk/typescript
+        run: bun install --frozen-lockfile
+
+      - name: Build TypeScript SDK API docs
+        working-directory: source/sdk/typescript
+        run: |
+          docs_out="${RUNNER_TEMP}/typescript-sdk-api-docs"
+          rm -rf "${docs_out}"
+          bun run docs:lint
+          ./node_modules/.bin/typedoc --options typedoc.json --out "${docs_out}"
+          bash ../../../helpers/docs/scripts/check-sdk-doc-leaks.sh typescript "${docs_out}"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ vars.GCP_WIF_POOL_ID }}/providers/${{ vars.GCP_WIF_PROVIDER_ID }}
+          service_account: github-actions@${{ secrets.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          token_format: access_token
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+
+      - name: Upload TypeScript SDK API docs
+        working-directory: helpers
+        run: |
+          if [ -z "${DOCS_SDK_API_BUCKET}" ]; then
+            echo "DOCS_SDK_API_BUCKET repository variable must be configured" >&2
+            exit 1
+          fi
+          python3 docs/scripts/publish-sdk-api-docs.py \
+            --mode upload \
+            --language typescript \
+            --version "${{ inputs.typescript-version }}" \
+            --source-tag "${{ inputs.typescript-ref }}" \
+            --source-dir "${RUNNER_TEMP}/typescript-sdk-api-docs" \
+            --bucket "${DOCS_SDK_API_BUCKET}" \
+            --latest-policy "${{ inputs.latest-policy }}"

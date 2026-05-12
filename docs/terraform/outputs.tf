@@ -18,6 +18,11 @@ output "cloud_run_url" {
   value       = google_cloud_run_v2_service.docs.uri
 }
 
+output "sdk_api_docs_bucket_name" {
+  description = "GCS bucket for versioned SDK API docs"
+  value       = google_storage_bucket.sdk_api_docs.name
+}
+
 output "dns_zone_nameservers" {
   description = "Nameservers for the DNS zone - set these in your domain registrar"
   value       = google_dns_managed_zone.docs.name_servers

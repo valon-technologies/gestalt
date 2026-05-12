@@ -157,6 +157,9 @@ jobs:
       - name: Check SDK docs
         run: npm run test:sdk-docs
 
+      - name: Check SDK API docs publish contract
+        run: npm run test:sdk-api-docs
+
       - name: Build versioned docs smoke site
         run: npm run build:versioned:test
 
