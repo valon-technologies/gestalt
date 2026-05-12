@@ -145,7 +145,10 @@ function normalizeJsonValue(
   path: string,
   seen: WeakSet<object>,
 ): JsonValue {
-  if (value === null || typeof value === "string" || typeof value === "boolean") {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
     return value;
   }
   if (typeof value === "number") {
