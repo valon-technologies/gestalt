@@ -433,10 +433,11 @@ Provider interfaces
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
-Authentication payload helpers
-------------------------------
+Authentication payload models
+-----------------------------
 
-These helpers construct authentication payloads used by provider handlers.
+These native dataclasses are used by authentication provider handlers. The
+runtime owns transport conversion.
 
 .. autosummary::
    :nosignatures:
@@ -446,13 +447,13 @@ These helpers construct authentication payloads used by provider handlers.
    BeginLoginResponse
    CompleteLoginRequest
 
-.. autofunction:: AuthenticatedUser
+.. autoclass:: AuthenticatedUser
 
-.. autofunction:: BeginLoginRequest
+.. autoclass:: BeginLoginRequest
 
-.. autofunction:: BeginLoginResponse
+.. autoclass:: BeginLoginResponse
 
-.. autofunction:: CompleteLoginRequest
+.. autoclass:: CompleteLoginRequest
 
 Provider telemetry
 ------------------

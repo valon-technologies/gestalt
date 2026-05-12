@@ -17,8 +17,10 @@ from http import HTTPStatus
 from typing import Any, Final, cast
 
 from . import _agent as _agent_native
-from . import _authorization as _authorization_native
+from . import _authentication as _auth_native
+from . import _pluginruntime as _pluginruntime_native
 from . import _telemetry
+from . import _workflow as _workflow_native
 from ._api import Access, Credential, Error, ExternalIdentity, Host, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
@@ -56,6 +58,7 @@ empty_pb2: Any = cast(Any, None)
 duration_pb2: Any = cast(Any, None)
 plugin_pb2: Any = cast(Any, None)
 plugin_pb2_grpc: Any = cast(Any, None)
+pluginruntime_pb2: Any = cast(Any, None)
 pluginruntime_pb2_grpc: Any = cast(Any, None)
 runtime_pb2: Any = cast(Any, None)
 runtime_pb2_grpc: Any = cast(Any, None)
@@ -96,6 +99,7 @@ def _ensure_grpc_runtime() -> None:
     global grpc
     global plugin_pb2
     global plugin_pb2_grpc
+    global pluginruntime_pb2
     global pluginruntime_pb2_grpc
     global runtime_pb2
     global runtime_pb2_grpc
@@ -123,6 +127,7 @@ def _ensure_grpc_runtime() -> None:
     from ._gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
     from ._gen.v1 import plugin_pb2 as _plugin_pb2
     from ._gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
+    from ._gen.v1 import pluginruntime_pb2 as _pluginruntime_pb2
     from ._gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
     from ._gen.v1 import runtime_pb2 as _runtime_pb2
     from ._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
@@ -138,6 +143,7 @@ def _ensure_grpc_runtime() -> None:
     empty_pb2 = _empty_pb2
     plugin_pb2 = _plugin_pb2
     plugin_pb2_grpc = _plugin_pb2_grpc
+    pluginruntime_pb2 = _pluginruntime_pb2
     pluginruntime_pb2_grpc = _pluginruntime_pb2_grpc
     runtime_pb2 = _runtime_pb2
     runtime_pb2_grpc = _runtime_pb2_grpc
@@ -588,20 +594,7 @@ def _register_plugin_runtime_services(server: Any, provider: PluginProvider) -> 
         server,
     )
     pluginruntime_pb2_grpc.add_PluginRuntimeProviderServicer_to_server(
-        _service_wrapper(
-            provider,
-            pluginruntime_pb2_grpc.PluginRuntimeProviderServicer,
-            (
-                ("GetSupport", "get_support"),
-                ("StartSession", "start_session"),
-                ("GetSession", "get_session"),
-                ("ListSessions", "list_sessions"),
-                ("StopSession", "stop_session"),
-                ("PrepareWorkspace", "prepare_workspace"),
-                ("RemoveWorkspace", "remove_workspace"),
-                ("StartPlugin", "start_plugin"),
-            ),
-        ),
+        _plugin_runtime_provider_servicer(provider),
         server,
     )
 
@@ -621,34 +614,7 @@ def _register_workflow_services(server: Any, provider: PluginProvider) -> None:
         server,
     )
     workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(
-        _service_wrapper(
-            provider,
-            workflow_pb2_grpc.WorkflowProviderServicer,
-            (
-                ("StartRun", "start_run"),
-                ("GetRun", "get_run"),
-                ("ListRuns", "list_runs"),
-                ("CancelRun", "cancel_run"),
-                ("SignalRun", "signal_run"),
-                ("SignalOrStartRun", "signal_or_start_run"),
-                ("UpsertSchedule", "upsert_schedule"),
-                ("GetSchedule", "get_schedule"),
-                ("ListSchedules", "list_schedules"),
-                ("DeleteSchedule", "delete_schedule"),
-                ("PauseSchedule", "pause_schedule"),
-                ("ResumeSchedule", "resume_schedule"),
-                ("UpsertEventTrigger", "upsert_event_trigger"),
-                ("GetEventTrigger", "get_event_trigger"),
-                ("ListEventTriggers", "list_event_triggers"),
-                ("DeleteEventTrigger", "delete_event_trigger"),
-                ("PauseEventTrigger", "pause_event_trigger"),
-                ("ResumeEventTrigger", "resume_event_trigger"),
-                ("PutExecutionReference", "put_execution_reference"),
-                ("GetExecutionReference", "get_execution_reference"),
-                ("ListExecutionReferences", "list_execution_references"),
-                ("PublishEvent", "publish_event"),
-            ),
-        ),
+        _workflow_provider_servicer(provider),
         server,
     )
 
@@ -764,6 +730,486 @@ def _agent_provider_servicer(provider: PluginProvider) -> Any:
     return AgentProviderServicer(provider)
 
 
+def _plugin_runtime_provider_servicer(provider: PluginProvider) -> Any:
+    _ensure_grpc_runtime()
+
+    class PluginRuntimeProviderServicer(
+        pluginruntime_pb2_grpc.PluginRuntimeProviderServicer
+    ):
+        def __init__(self, inner: PluginProvider) -> None:
+            self._provider = inner
+
+        @_grpc_handler("plugin runtime get support")
+        def GetSupport(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                PluginRuntimeProvider,
+                "get_support",
+                "GetSupport",
+                _pluginruntime_native.get_plugin_runtime_support_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _pluginruntime_native.plugin_runtime_support_to_proto(result)
+
+        @_grpc_handler("plugin runtime start session")
+        def StartSession(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                PluginRuntimeProvider,
+                "start_session",
+                "StartSession",
+                _pluginruntime_native.start_plugin_runtime_session_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _pluginruntime_native.plugin_runtime_session_to_proto(result)
+
+        @_grpc_handler("plugin runtime get session")
+        def GetSession(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                PluginRuntimeProvider,
+                "get_session",
+                "GetSession",
+                _pluginruntime_native.get_plugin_runtime_session_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _pluginruntime_native.plugin_runtime_session_to_proto(result)
+
+        @_grpc_handler("plugin runtime list sessions")
+        def ListSessions(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                PluginRuntimeProvider,
+                "list_sessions",
+                "ListSessions",
+                _pluginruntime_native.list_plugin_runtime_sessions_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _pluginruntime_native.list_plugin_runtime_sessions_response_to_proto(
+                result
+            )
+
+        @_grpc_handler("plugin runtime stop session")
+        def StopSession(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                PluginRuntimeProvider,
+                "stop_session",
+                "StopSession",
+                _pluginruntime_native.stop_plugin_runtime_session_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _empty_response(result)
+
+        @_grpc_handler("plugin runtime prepare workspace")
+        def PrepareWorkspace(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                PluginRuntimeProvider,
+                "prepare_workspace",
+                "PrepareWorkspace",
+                _pluginruntime_native.prepare_plugin_runtime_workspace_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _pluginruntime_native.prepare_plugin_runtime_workspace_response_to_proto(
+                result
+            )
+
+        @_grpc_handler("plugin runtime remove workspace")
+        def RemoveWorkspace(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                PluginRuntimeProvider,
+                "remove_workspace",
+                "RemoveWorkspace",
+                _pluginruntime_native.remove_plugin_runtime_workspace_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _empty_response(result)
+
+        @_grpc_handler("plugin runtime start plugin")
+        def StartPlugin(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                PluginRuntimeProvider,
+                "start_plugin",
+                "StartPlugin",
+                _pluginruntime_native.start_hosted_plugin_request_from_proto(request),
+                request,
+                context,
+            )
+            return _pluginruntime_native.hosted_plugin_to_proto(result)
+
+    return PluginRuntimeProviderServicer(provider)
+
+
+def _workflow_provider_servicer(provider: PluginProvider) -> Any:
+    _ensure_grpc_runtime()
+
+    class WorkflowProviderServicer(workflow_pb2_grpc.WorkflowProviderServicer):
+        def __init__(self, inner: PluginProvider) -> None:
+            self._provider = inner
+
+        @_grpc_handler("workflow start run")
+        def StartRun(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "start_run",
+                "StartRun",
+                _workflow_native.start_workflow_provider_run_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_run(result)
+
+        @_grpc_handler("workflow get run")
+        def GetRun(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "get_run",
+                "GetRun",
+                _workflow_native.get_workflow_provider_run_request_from_proto(request),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_run(result)
+
+        @_grpc_handler("workflow list runs")
+        def ListRuns(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "list_runs",
+                "ListRuns",
+                _workflow_native.list_workflow_provider_runs_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.list_workflow_provider_runs_response_to_proto(
+                result
+            )
+
+        @_grpc_handler("workflow cancel run")
+        def CancelRun(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "cancel_run",
+                "CancelRun",
+                _workflow_native.cancel_workflow_provider_run_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_run(result)
+
+        @_grpc_handler("workflow signal run")
+        def SignalRun(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "signal_run",
+                "SignalRun",
+                _workflow_native.signal_workflow_provider_run_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.signal_workflow_run_response_to_proto(result)
+
+        @_grpc_handler("workflow signal or start run")
+        def SignalOrStartRun(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "signal_or_start_run",
+                "SignalOrStartRun",
+                _workflow_native.signal_or_start_workflow_provider_run_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.signal_workflow_run_response_to_proto(result)
+
+        @_grpc_handler("workflow upsert schedule")
+        def UpsertSchedule(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "upsert_schedule",
+                "UpsertSchedule",
+                _workflow_native.upsert_workflow_provider_schedule_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_schedule(result)
+
+        @_grpc_handler("workflow get schedule")
+        def GetSchedule(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "get_schedule",
+                "GetSchedule",
+                _workflow_native.get_workflow_provider_schedule_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_schedule(result)
+
+        @_grpc_handler("workflow list schedules")
+        def ListSchedules(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "list_schedules",
+                "ListSchedules",
+                _workflow_native.list_workflow_provider_schedules_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.list_workflow_provider_schedules_response_to_proto(
+                result
+            )
+
+        @_grpc_handler("workflow delete schedule")
+        def DeleteSchedule(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "delete_schedule",
+                "DeleteSchedule",
+                _workflow_native.delete_workflow_provider_schedule_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _empty_response(result)
+
+        @_grpc_handler("workflow pause schedule")
+        def PauseSchedule(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "pause_schedule",
+                "PauseSchedule",
+                _workflow_native.pause_workflow_provider_schedule_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_schedule(result)
+
+        @_grpc_handler("workflow resume schedule")
+        def ResumeSchedule(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "resume_schedule",
+                "ResumeSchedule",
+                _workflow_native.resume_workflow_provider_schedule_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_schedule(result)
+
+        @_grpc_handler("workflow upsert event trigger")
+        def UpsertEventTrigger(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "upsert_event_trigger",
+                "UpsertEventTrigger",
+                _workflow_native.upsert_workflow_provider_event_trigger_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_event_trigger(result)
+
+        @_grpc_handler("workflow get event trigger")
+        def GetEventTrigger(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "get_event_trigger",
+                "GetEventTrigger",
+                _workflow_native.get_workflow_provider_event_trigger_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_event_trigger(result)
+
+        @_grpc_handler("workflow list event triggers")
+        def ListEventTriggers(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "list_event_triggers",
+                "ListEventTriggers",
+                _workflow_native.list_workflow_provider_event_triggers_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.list_workflow_provider_event_triggers_response_to_proto(
+                result
+            )
+
+        @_grpc_handler("workflow delete event trigger")
+        def DeleteEventTrigger(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "delete_event_trigger",
+                "DeleteEventTrigger",
+                _workflow_native.delete_workflow_provider_event_trigger_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _empty_response(result)
+
+        @_grpc_handler("workflow pause event trigger")
+        def PauseEventTrigger(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "pause_event_trigger",
+                "PauseEventTrigger",
+                _workflow_native.pause_workflow_provider_event_trigger_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_event_trigger(result)
+
+        @_grpc_handler("workflow resume event trigger")
+        def ResumeEventTrigger(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "resume_event_trigger",
+                "ResumeEventTrigger",
+                _workflow_native.resume_workflow_provider_event_trigger_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_event_trigger(result)
+
+        @_grpc_handler("workflow put execution reference")
+        def PutExecutionReference(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "put_execution_reference",
+                "PutExecutionReference",
+                _workflow_native.put_workflow_execution_reference_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.workflow_execution_reference(result)
+
+        @_grpc_handler("workflow get execution reference")
+        def GetExecutionReference(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "get_execution_reference",
+                "GetExecutionReference",
+                _workflow_native.get_workflow_execution_reference_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.workflow_execution_reference(result)
+
+        @_grpc_handler("workflow list execution references")
+        def ListExecutionReferences(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "list_execution_references",
+                "ListExecutionReferences",
+                _workflow_native.list_workflow_execution_references_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.list_workflow_execution_references_response_to_proto(
+                result
+            )
+
+        @_grpc_handler("workflow publish event")
+        def PublishEvent(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "publish_event",
+                "PublishEvent",
+                _workflow_native.publish_workflow_provider_event_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _empty_response(result)
+
+    return WorkflowProviderServicer(provider)
+
+
 def _secrets_runtime_plugin(provider: SecretsProvider) -> PluginProviderAdapter:
     return PluginProviderAdapter(
         kind=ProviderKind.SECRETS,
@@ -870,6 +1316,33 @@ def _call_provider_handler(handler: Any, *args: Any) -> Any:
     if len(positional) == 1 and args:
         return handler(args[0])
     return handler(*args)
+
+
+def _call_native_provider_handler(
+    provider: PluginProvider,
+    base_cls: type[Any],
+    sdk_method_name: str,
+    protocol_method_name: str,
+    native_request: Any,
+    raw_request: Any,
+    context: Any,
+) -> Any:
+    if _provider_overrides(provider, sdk_method_name, base_cls):
+        return _call_provider_handler(
+            getattr(provider, sdk_method_name),
+            native_request,
+        )
+    protocol_handler = getattr(provider, protocol_method_name, None)
+    if protocol_handler is not None:
+        return _call_provider_handler(protocol_handler, raw_request, context)
+    return _call_provider_handler(getattr(provider, sdk_method_name), native_request)
+
+
+def _empty_response(value: Any) -> Any:
+    _ensure_grpc_runtime()
+    if isinstance(value, empty_pb2.Empty):
+        return value
+    return empty_pb2.Empty()
 
 
 def _provider_servicer(*, plugin: Plugin) -> Any:
@@ -1061,23 +1534,27 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
     ):
         @_grpc_handler("begin login")
         def BeginLogin(self, request: Any, context: Any) -> Any:
-            response = auth_provider.begin_login(request)
+            response = auth_provider.begin_login(
+                _auth_native.begin_login_request_from_proto(request)
+            )
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil response",
                 )
-            return response
+            return _auth_native.begin_login_response_to_proto(response)
 
         @_grpc_handler("complete login")
         def CompleteLogin(self, request: Any, context: Any) -> Any:
-            user = auth_provider.complete_login(request)
+            user = auth_provider.complete_login(
+                _auth_native.complete_login_request_from_proto(request)
+            )
             if user is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "authentication provider returned nil user",
                 )
-            return user
+            return _auth_native.authenticated_user_to_proto(user)
 
         def ValidateExternalToken(self, request: Any, context: Any) -> Any:
             if not isinstance(auth_provider, ExternalTokenValidator):
@@ -1098,7 +1575,7 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
                     grpc.StatusCode.NOT_FOUND,
                     "token not recognized",
                 )
-            return user
+            return _auth_native.authenticated_user_to_proto(user)
 
         def GetSessionSettings(self, request: Any, context: Any) -> Any:
             if not isinstance(auth_provider, SessionTTLProvider):
@@ -1129,11 +1606,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization evaluate")
         def Evaluate(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.evaluate(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.AccessEvaluationRequest
-                    )
-                ),
+                authz_provider.evaluate(request),
                 authorization_pb2.AccessDecision,
                 context,
                 "evaluate",
@@ -1142,11 +1615,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization evaluate many")
         def EvaluateMany(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.evaluate_many(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.AccessEvaluationsRequest
-                    )
-                ),
+                authz_provider.evaluate_many(request),
                 authorization_pb2.AccessEvaluationsResponse,
                 context,
                 "evaluate many",
@@ -1155,11 +1624,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization search resources")
         def SearchResources(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.search_resources(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.ResourceSearchRequest
-                    )
-                ),
+                authz_provider.search_resources(request),
                 authorization_pb2.ResourceSearchResponse,
                 context,
                 "search resources",
@@ -1168,11 +1633,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization search subjects")
         def SearchSubjects(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.search_subjects(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.SubjectSearchRequest
-                    )
-                ),
+                authz_provider.search_subjects(request),
                 authorization_pb2.SubjectSearchResponse,
                 context,
                 "search subjects",
@@ -1186,11 +1647,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
                     "authorization provider does not support effective search",
                 )
             return _authorization_response(
-                authz_provider.effective_search_resources(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.ResourceSearchRequest
-                    )
-                ),
+                authz_provider.effective_search_resources(request),
                 authorization_pb2.ResourceSearchResponse,
                 context,
                 "effective search resources",
@@ -1204,11 +1661,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
                     "authorization provider does not support effective search",
                 )
             return _authorization_response(
-                authz_provider.effective_search_subjects(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.EffectiveSubjectSearchRequest
-                    )
-                ),
+                authz_provider.effective_search_subjects(request),
                 authorization_pb2.EffectiveSubjectSearchResponse,
                 context,
                 "effective search subjects",
@@ -1217,11 +1670,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization search actions")
         def SearchActions(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.search_actions(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.ActionSearchRequest
-                    )
-                ),
+                authz_provider.search_actions(request),
                 authorization_pb2.ActionSearchResponse,
                 context,
                 "search actions",
@@ -1235,11 +1684,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
                     "authorization provider does not support expansion",
                 )
             return _authorization_response(
-                authz_provider.expand(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.ExpandRequest
-                    )
-                ),
+                authz_provider.expand(request),
                 authorization_pb2.ExpandResponse,
                 context,
                 "expand",
@@ -1268,11 +1713,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization read relationships")
         def ReadRelationships(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.read_relationships(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.ReadRelationshipsRequest
-                    )
-                ),
+                authz_provider.read_relationships(request),
                 authorization_pb2.ReadRelationshipsResponse,
                 context,
                 "read relationships",
@@ -1280,11 +1721,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
 
         @_grpc_handler("authorization write relationships")
         def WriteRelationships(self, request: Any, _context: Any) -> Any:
-            authz_provider.write_relationships(
-                _authorization_native._authorization_from_message(
-                    request, _authorization_native.WriteRelationshipsRequest
-                )
-            )
+            authz_provider.write_relationships(request)
             return empty_pb2.Empty()
 
         @_grpc_handler("authorization get active model")
@@ -1299,11 +1736,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization list models")
         def ListModels(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.list_models(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.ListModelsRequest
-                    )
-                ),
+                authz_provider.list_models(request),
                 authorization_pb2.ListModelsResponse,
                 context,
                 "list models",
@@ -1312,11 +1745,7 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization write model")
         def WriteModel(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.write_model(
-                    _authorization_native._authorization_from_message(
-                        request, _authorization_native.WriteModelRequest
-                    )
-                ),
+                authz_provider.write_model(request),
                 authorization_pb2.AuthorizationModelRef,
                 context,
                 "write model",
@@ -1338,13 +1767,13 @@ def _authorization_response(
         )
     if isinstance(value, message_type):
         return value
-    try:
-        return _authorization_native._authorization_message(value, message_type)
-    except TypeError:
-        pass
+    if isinstance(value, dict):
+        message = message_type()
+        json_format.ParseDict(value, message)
+        return message
     raise TypeError(
         f"authorization provider returned {type(value).__name__} for {label}, "
-        f"want {message_type.__name__}, native authorization value, or dict"
+        f"want {message_type.__name__} or dict"
     )
 
 

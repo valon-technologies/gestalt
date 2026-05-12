@@ -2,6 +2,22 @@
 
 from __future__ import annotations
 
+from .._agent import (
+    agent_message_from_proto_dict,
+    agent_message_to_proto_dict,
+    agent_messages_from_proto_dicts,
+    agent_messages_to_proto_dicts,
+)
+from .._indexeddb import (
+    indexeddb_cursor_key_to_proto,
+    indexeddb_key_range_to_proto,
+    indexeddb_key_value_from_python,
+    indexeddb_key_value_to_python,
+    indexeddb_record_from_proto,
+    indexeddb_record_to_proto,
+    indexeddb_typed_value_from_python,
+    indexeddb_typed_value_to_python,
+)
 from ..protocol import v1
 from ..protocol.v1 import (
     agent_pb2,
@@ -32,6 +48,10 @@ __all__ = [
     "v1",
     "agent_pb2",
     "agent_pb2_grpc",
+    "agent_message_from_proto_dict",
+    "agent_message_to_proto_dict",
+    "agent_messages_from_proto_dicts",
+    "agent_messages_to_proto_dicts",
     "authentication_pb2",
     "authentication_pb2_grpc",
     "authorization_pb2",
@@ -40,6 +60,14 @@ __all__ = [
     "cache_pb2_grpc",
     "datastore_pb2",
     "datastore_pb2_grpc",
+    "indexeddb_cursor_key_to_proto",
+    "indexeddb_key_range_to_proto",
+    "indexeddb_key_value_from_python",
+    "indexeddb_key_value_to_python",
+    "indexeddb_record_from_proto",
+    "indexeddb_record_to_proto",
+    "indexeddb_typed_value_from_python",
+    "indexeddb_typed_value_to_python",
     "plugin_pb2",
     "plugin_pb2_grpc",
     "pluginruntime_pb2",

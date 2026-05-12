@@ -117,6 +117,19 @@ def input_data(value: Any | None, kwargs: dict[str, Any]) -> dict[str, Any]:
     return mapping
 
 
+def coerce_model(value: Any, cls: type[Any], field_name: str) -> Any:
+    """Coerce a dataclass instance or mapping into ``cls``."""
+
+    if isinstance(value, cls):
+        return value
+    mapping = dataclass_mapping(value)
+    if mapping is not None:
+        return cls(**dict(mapping))
+    if isinstance(value, Mapping):
+        return cls(**dict(value))
+    raise TypeError(f"{field_name} must be {cls.__name__} or a mapping")
+
+
 def copy_message(value: Any) -> Any:
     """Return a protobuf message copy preserving the concrete message type."""
 

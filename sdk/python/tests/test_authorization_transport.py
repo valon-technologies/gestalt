@@ -11,40 +11,8 @@ import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 
 from gestalt import (
-    AccessDecision,
-    AccessEvaluationsResponse,
-    ActionSearchResponse,
-    AuthorizationAction,
     AuthorizationClient,
-    AuthorizationMetadata,
-    AuthorizationModel,
-    AuthorizationModelAction,
-    AuthorizationModelAllowedTarget,
-    AuthorizationModelComputedUserset,
-    AuthorizationModelRef,
-    AuthorizationModelRelation,
-    AuthorizationModelResourceType,
-    AuthorizationModelRewrite,
-    AuthorizationModelRewriteThis,
-    AuthorizationModelRewriteUnion,
-    AuthorizationModelSubjectSetTarget,
-    AuthorizationModelTupleToUserset,
     AuthorizationProvider,
-    AuthorizationRelationshipTarget,
-    AuthorizationResource,
-    AuthorizationSubject,
-    AuthorizationSubjectSet,
-    EffectiveSubjectSearchRequest,
-    ExpandRequest,
-    GetActiveModelResponse,
-    ListModelsResponse,
-    ReadRelationshipsResponse,
-    Relationship,
-    ResourceSearchRequest,
-    ResourceSearchResponse,
-    SubjectSearchResponse,
-    WriteModelRequest,
-    WriteRelationshipsRequest,
     _runtime,
 )
 from gestalt.testing import (
@@ -55,12 +23,33 @@ from gestalt.testing import (
 )
 
 empty_pb2: Any = _empty_pb2
+AccessDecision = authorization_pb2.AccessDecision
+AccessEvaluationRequest = authorization_pb2.AccessEvaluationRequest
+AccessEvaluationsResponse = authorization_pb2.AccessEvaluationsResponse
+ActionSearchResponse = authorization_pb2.ActionSearchResponse
+AuthorizationAction = authorization_pb2.Action
+AuthorizationMetadata = authorization_pb2.AuthorizationMetadata
+AuthorizationModel = authorization_pb2.AuthorizationModel
+AuthorizationModelRef = authorization_pb2.AuthorizationModelRef
+AuthorizationRelationshipTarget = authorization_pb2.RelationshipTarget
+AuthorizationResource = authorization_pb2.Resource
+AuthorizationSubject = authorization_pb2.Subject
+AuthorizationSubjectSet = authorization_pb2.SubjectSet
+EffectiveSubjectSearchRequest = authorization_pb2.EffectiveSubjectSearchRequest
+ExpandRequest = authorization_pb2.ExpandRequest
+GetActiveModelResponse = authorization_pb2.GetActiveModelResponse
+ListModelsResponse = authorization_pb2.ListModelsResponse
+ReadRelationshipsResponse = authorization_pb2.ReadRelationshipsResponse
+Relationship = authorization_pb2.Relationship
+ResourceSearchRequest = authorization_pb2.ResourceSearchRequest
+ResourceSearchResponse = authorization_pb2.ResourceSearchResponse
+SubjectSearchResponse = authorization_pb2.SubjectSearchResponse
+WriteRelationshipsRequest = authorization_pb2.WriteRelationshipsRequest
 
 
 class _AuthorizationProvider(authorization_pb2_grpc.AuthorizationProviderServicer):
     def __init__(self) -> None:
         self.writes: list[Any] = []
-        self.models: list[Any] = []
 
     def EffectiveSearchResources(
         self,
@@ -108,10 +97,6 @@ class _AuthorizationProvider(authorization_pb2_grpc.AuthorizationProviderService
     def WriteRelationships(self, request: Any, context: grpc.ServicerContext) -> Any:
         self.writes.append(request)
         return empty_pb2.Empty()
-
-    def WriteModel(self, request: Any, context: grpc.ServicerContext) -> Any:
-        self.models.append(request.model)
-        return authorization_pb2.AuthorizationModelRef(id="model-2", version="2")
 
 
 class _SDKAuthorizationProvider(AuthorizationProvider):
@@ -288,176 +273,24 @@ class AuthorizationTransportTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(
-            provider.writes[1].writes[0],
-            authorization_pb2.Relationship(
+        expected_editor_relationship = authorization_pb2.Relationship(
+            subject=authorization_pb2.Subject(
+                type="subject",
+                id="user:shared",
+            ),
+            target=authorization_pb2.RelationshipTarget(
                 subject=authorization_pb2.Subject(
                     type="subject",
                     id="user:shared",
                 ),
-                target=authorization_pb2.RelationshipTarget(
-                    subject=authorization_pb2.Subject(
-                        type="subject",
-                        id="user:shared",
-                    ),
-                ),
-                relation="editor",
-                resource=authorization_pb2.Resource(
-                    type="agent_session",
-                    id="session-1",
-                ),
+            ),
+            relation="editor",
+            resource=authorization_pb2.Resource(
+                type="agent_session",
+                id="session-1",
             ),
         )
-
-    def test_write_model_sends_oneof_model_fields_over_transport(self) -> None:
-        provider = _AuthorizationProvider()
-        server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
-        authorization_pb2_grpc.add_AuthorizationProviderServicer_to_server(
-            provider,
-            server,
-        )
-        with tempfile.TemporaryDirectory() as tmpdir:
-            socket_path = f"{tmpdir}/authorization.sock"
-            server.add_insecure_port(f"unix:{socket_path}")
-            server.start()
-            try:
-                client = AuthorizationClient(f"unix://{socket_path}")
-                model_ref = client.write_model(
-                    WriteModelRequest(
-                        model=AuthorizationModel(
-                            version=3,
-                            resource_types=[
-                                AuthorizationModelResourceType(
-                                    name="document",
-                                    relations=[
-                                        AuthorizationModelRelation(
-                                            name="viewer",
-                                            allowed_targets=[
-                                                AuthorizationModelAllowedTarget(
-                                                    subject_type="user",
-                                                ),
-                                                AuthorizationModelAllowedTarget(
-                                                    resource_type="team",
-                                                ),
-                                                AuthorizationModelAllowedTarget(
-                                                    subject_set=AuthorizationModelSubjectSetTarget(
-                                                        resource_type="team",
-                                                        relation="member",
-                                                    ),
-                                                ),
-                                            ],
-                                            rewrite=AuthorizationModelRewrite(
-                                                this=AuthorizationModelRewriteThis(),
-                                            ),
-                                        ),
-                                    ],
-                                    actions=[
-                                        AuthorizationModelAction(
-                                            name="view",
-                                            rewrite=AuthorizationModelRewrite(
-                                                computed_userset=AuthorizationModelComputedUserset(
-                                                    relation="viewer",
-                                                ),
-                                            ),
-                                        ),
-                                        AuthorizationModelAction(
-                                            name="share",
-                                            rewrite=AuthorizationModelRewrite(
-                                                tuple_to_userset=AuthorizationModelTupleToUserset(
-                                                    tupleset_relation="parent",
-                                                    computed_relation="owner",
-                                                ),
-                                            ),
-                                        ),
-                                        AuthorizationModelAction(
-                                            name="admin",
-                                            rewrite=AuthorizationModelRewrite(
-                                                union=AuthorizationModelRewriteUnion(
-                                                    children=[
-                                                        AuthorizationModelRewrite(
-                                                            this=AuthorizationModelRewriteThis(),
-                                                        ),
-                                                    ],
-                                                ),
-                                            ),
-                                        ),
-                                    ],
-                                ),
-                            ],
-                        )
-                    )
-                )
-                self.assertEqual(model_ref.version, "2")
-                client.close()
-            finally:
-                server.stop(grace=0)
-
-        self.assertEqual(
-            provider.models,
-            [
-                authorization_pb2.AuthorizationModel(
-                    version=3,
-                    resource_types=[
-                        authorization_pb2.AuthorizationModelResourceType(
-                            name="document",
-                            relations=[
-                                authorization_pb2.AuthorizationModelRelation(
-                                    name="viewer",
-                                    allowed_targets=[
-                                        authorization_pb2.AuthorizationModelAllowedTarget(
-                                            subject_type="user",
-                                        ),
-                                        authorization_pb2.AuthorizationModelAllowedTarget(
-                                            resource_type="team",
-                                        ),
-                                        authorization_pb2.AuthorizationModelAllowedTarget(
-                                            subject_set=authorization_pb2.AuthorizationModelSubjectSetTarget(
-                                                resource_type="team",
-                                                relation="member",
-                                            ),
-                                        ),
-                                    ],
-                                    rewrite=authorization_pb2.AuthorizationModelRewrite(
-                                        this=authorization_pb2.AuthorizationModelRewriteThis(),
-                                    ),
-                                ),
-                            ],
-                            actions=[
-                                authorization_pb2.AuthorizationModelAction(
-                                    name="view",
-                                    rewrite=authorization_pb2.AuthorizationModelRewrite(
-                                        computed_userset=authorization_pb2.AuthorizationModelComputedUserset(
-                                            relation="viewer",
-                                        ),
-                                    ),
-                                ),
-                                authorization_pb2.AuthorizationModelAction(
-                                    name="share",
-                                    rewrite=authorization_pb2.AuthorizationModelRewrite(
-                                        tuple_to_userset=authorization_pb2.AuthorizationModelTupleToUserset(
-                                            tupleset_relation="parent",
-                                            computed_relation="owner",
-                                        ),
-                                    ),
-                                ),
-                                authorization_pb2.AuthorizationModelAction(
-                                    name="admin",
-                                    rewrite=authorization_pb2.AuthorizationModelRewrite(
-                                        union=authorization_pb2.AuthorizationModelRewriteUnion(
-                                            children=[
-                                                authorization_pb2.AuthorizationModelRewrite(
-                                                    this=authorization_pb2.AuthorizationModelRewriteThis(),
-                                                ),
-                                            ],
-                                        ),
-                                    ),
-                                ),
-                            ],
-                        ),
-                    ],
-                ),
-            ],
-        )
+        self.assertEqual(provider.writes[1].writes[0], expected_editor_relationship)
 
     def test_sdk_authorization_provider_serves_required_rpcs(self) -> None:
         provider = _SDKAuthorizationProvider()
@@ -478,13 +311,10 @@ class AuthorizationTransportTest(unittest.TestCase):
 
                 stub = authorization_pb2_grpc.AuthorizationProviderStub(channel)
                 decision = stub.Evaluate(
-                    authorization_pb2.AccessEvaluationRequest(
-                        subject=authorization_pb2.Subject(
-                            type="subject",
-                            id="user:1",
-                        ),
-                        action=authorization_pb2.Action(name="view"),
-                        resource=authorization_pb2.Resource(type="doc", id="doc-1"),
+                    AccessEvaluationRequest(
+                        subject=AuthorizationSubject(type="subject", id="user:1"),
+                        action=AuthorizationAction(name="view"),
+                        resource=AuthorizationResource(type="doc", id="doc-1"),
                     ),
                     timeout=5,
                 )
@@ -493,13 +323,13 @@ class AuthorizationTransportTest(unittest.TestCase):
                 batch = stub.EvaluateMany(
                     authorization_pb2.AccessEvaluationsRequest(
                         requests=[
-                            authorization_pb2.AccessEvaluationRequest(
-                                subject=authorization_pb2.Subject(
+                            AccessEvaluationRequest(
+                                subject=AuthorizationSubject(
                                     type="subject",
                                     id="user:1",
                                 ),
-                                action=authorization_pb2.Action(name="view"),
-                                resource=authorization_pb2.Resource(
+                                action=AuthorizationAction(name="view"),
+                                resource=AuthorizationResource(
                                     type="doc",
                                     id="doc-1",
                                 ),
@@ -515,14 +345,14 @@ class AuthorizationTransportTest(unittest.TestCase):
 
                 model_ref = stub.WriteModel(
                     authorization_pb2.WriteModelRequest(
-                        model=authorization_pb2.AuthorizationModel(version=2),
+                        model=AuthorizationModel(version=2),
                     ),
                     timeout=5,
                 )
                 self.assertEqual(model_ref.version, "2")
 
                 with self.assertRaises(grpc.RpcError) as failure:
-                    stub.Expand(authorization_pb2.ExpandRequest(), timeout=5)
+                    stub.Expand(ExpandRequest(), timeout=5)
                 rpc_error: Any = failure.exception
                 self.assertEqual(
                     rpc_error.code(),
@@ -544,10 +374,7 @@ class AuthorizationTransportTest(unittest.TestCase):
                 stub = authorization_pb2_grpc.AuthorizationProviderStub(channel)
 
                 with self.assertRaises(grpc.RpcError) as failure:
-                    stub.WriteRelationships(
-                        authorization_pb2.WriteRelationshipsRequest(),
-                        timeout=5,
-                    )
+                    stub.WriteRelationships(WriteRelationshipsRequest(), timeout=5)
                 rpc_error: Any = failure.exception
                 self.assertEqual(
                     rpc_error.code(),

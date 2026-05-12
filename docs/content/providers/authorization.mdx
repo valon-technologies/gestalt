@@ -128,15 +128,18 @@ client.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import Authorization, AccessEvaluationRequest
-    from gestalt import AuthorizationAction, AuthorizationResource, AuthorizationSubject
+    from gestalt import Authorization
+    from gestalt.protocol.v1 import authorization_pb2
 
     def can_view(user_id: str) -> bool:
         decision = Authorization().evaluate(
-            AccessEvaluationRequest(
-                subject=AuthorizationSubject(type="subject", id=user_id),
-                action=AuthorizationAction(name="view"),
-                resource=AuthorizationResource(type="agent_session", id="session-1"),
+            authorization_pb2.AccessEvaluationRequest(
+                subject=authorization_pb2.Subject(type="subject", id=user_id),
+                action=authorization_pb2.Action(name="view"),
+                resource=authorization_pb2.Resource(
+                    type="agent_session",
+                    id="session-1",
+                ),
             )
         )
         return decision.allowed
@@ -219,24 +222,20 @@ Authoring support is available in Go, Python, Rust, and TypeScript.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import (
-        AccessDecision,
-        AccessEvaluationsResponse,
-        AuthorizationMetadata,
-        AuthorizationProvider,
-    )
+    from gestalt import AuthorizationProvider
+    from gestalt.protocol.v1 import authorization_pb2
 
     class Provider(AuthorizationProvider):
         def evaluate(self, request):
-            return AccessDecision(allowed=True, model_id="model-1")
+            return authorization_pb2.AccessDecision(allowed=True, model_id="model-1")
 
         def evaluate_many(self, request):
-            return AccessEvaluationsResponse(
+            return authorization_pb2.AccessEvaluationsResponse(
                 decisions=[self.evaluate(item) for item in request.requests]
             )
 
         def get_metadata(self):
-            return AuthorizationMetadata(
+            return authorization_pb2.AuthorizationMetadata(
                 capabilities=["evaluate"],
                 active_model_id="model-1",
             )

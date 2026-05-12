@@ -15,6 +15,9 @@ from ._gen.v1 import workflow_pb2 as _pb
 from ._gen.v1 import workflow_pb2_grpc as _pb_grpc
 from ._grpc_transport import host_service_channel
 from ._protocol import (
+    coerce_model as _coerce,
+)
+from ._protocol import (
     copy_message as _copy,
 )
 from ._protocol import (
@@ -1851,166 +1854,485 @@ def WorkflowExecutionReference(*args: Any, **kwargs: Any) -> Any:
     return pb.WorkflowExecutionReference(*args, **kwargs)
 
 
-def StartWorkflowProviderRunRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider start-run request."""
+@_dataclasses.dataclass(slots=True)
+class StartWorkflowProviderRunRequest:
+    """Start-run request passed to workflow providers."""
 
-    return pb.StartWorkflowProviderRunRequest(*args, **kwargs)
+    target: Any | None = None
+    idempotency_key: str = ""
+    created_by: Any | None = None
+    execution_ref: str = ""
+    workflow_key: str = ""
 
 
-def GetWorkflowProviderRunRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider get-run request."""
+@_dataclasses.dataclass(slots=True)
+class GetWorkflowProviderRunRequest:
+    """Get-run request passed to workflow providers."""
 
-    return pb.GetWorkflowProviderRunRequest(*args, **kwargs)
+    run_id: str = ""
 
 
-def ListWorkflowProviderRunsRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider list-runs request."""
+@_dataclasses.dataclass(slots=True)
+class ListWorkflowProviderRunsRequest:
+    """List-runs request passed to workflow providers."""
 
-    return pb.ListWorkflowProviderRunsRequest(*args, **kwargs)
 
+@_dataclasses.dataclass(slots=True)
+class ListWorkflowProviderRunsResponse:
+    """Runs returned by workflow providers."""
 
-def ListWorkflowProviderRunsResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider list-runs response."""
+    runs: Sequence[Any] | None = None
 
-    return pb.ListWorkflowProviderRunsResponse(*args, **kwargs)
 
+@_dataclasses.dataclass(slots=True)
+class CancelWorkflowProviderRunRequest:
+    """Cancel-run request passed to workflow providers."""
 
-def CancelWorkflowProviderRunRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider cancel-run request."""
+    run_id: str = ""
+    reason: str = ""
 
-    return pb.CancelWorkflowProviderRunRequest(*args, **kwargs)
 
+@_dataclasses.dataclass(slots=True)
+class SignalWorkflowProviderRunRequest:
+    """Signal-run request passed to workflow providers."""
 
-def SignalWorkflowProviderRunRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider signal-run request."""
+    run_id: str = ""
+    signal: Any | None = None
 
-    return pb.SignalWorkflowProviderRunRequest(*args, **kwargs)
 
+@_dataclasses.dataclass(slots=True)
+class SignalOrStartWorkflowProviderRunRequest:
+    """Signal-or-start request passed to workflow providers."""
 
-def SignalOrStartWorkflowProviderRunRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider signal-or-start-run request."""
+    workflow_key: str = ""
+    target: Any | None = None
+    idempotency_key: str = ""
+    created_by: Any | None = None
+    execution_ref: str = ""
+    signal: Any | None = None
 
-    return pb.SignalOrStartWorkflowProviderRunRequest(*args, **kwargs)
 
+@_dataclasses.dataclass(slots=True)
+class SignalWorkflowRunResponse:
+    """Signal-run response returned by workflow providers."""
 
-def SignalWorkflowRunResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider signal-run response."""
+    run: Any | None = None
+    signal: Any | None = None
+    started_run: bool = False
+    workflow_key: str = ""
 
-    return pb.SignalWorkflowRunResponse(*args, **kwargs)
 
+@_dataclasses.dataclass(slots=True)
+class UpsertWorkflowProviderScheduleRequest:
+    """Upsert-schedule request passed to workflow providers."""
 
-def UpsertWorkflowProviderScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider upsert-schedule request."""
+    schedule_id: str = ""
+    cron: str = ""
+    timezone: str = ""
+    target: Any | None = None
+    paused: bool = False
+    requested_by: Any | None = None
+    execution_ref: str = ""
 
-    return pb.UpsertWorkflowProviderScheduleRequest(*args, **kwargs)
 
+@_dataclasses.dataclass(slots=True)
+class GetWorkflowProviderScheduleRequest:
+    """Get-schedule request passed to workflow providers."""
 
-def GetWorkflowProviderScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider get-schedule request."""
+    schedule_id: str = ""
 
-    return pb.GetWorkflowProviderScheduleRequest(*args, **kwargs)
 
+@_dataclasses.dataclass(slots=True)
+class ListWorkflowProviderSchedulesRequest:
+    """List-schedules request passed to workflow providers."""
 
-def ListWorkflowProviderSchedulesRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider list-schedules request."""
 
-    return pb.ListWorkflowProviderSchedulesRequest(*args, **kwargs)
+@_dataclasses.dataclass(slots=True)
+class ListWorkflowProviderSchedulesResponse:
+    """Schedules returned by workflow providers."""
 
+    schedules: Sequence[Any] | None = None
 
-def ListWorkflowProviderSchedulesResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider list-schedules response."""
 
-    return pb.ListWorkflowProviderSchedulesResponse(*args, **kwargs)
+@_dataclasses.dataclass(slots=True)
+class DeleteWorkflowProviderScheduleRequest:
+    """Delete-schedule request passed to workflow providers."""
 
+    schedule_id: str = ""
 
-def DeleteWorkflowProviderScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider delete-schedule request."""
 
-    return pb.DeleteWorkflowProviderScheduleRequest(*args, **kwargs)
+@_dataclasses.dataclass(slots=True)
+class PauseWorkflowProviderScheduleRequest:
+    """Pause-schedule request passed to workflow providers."""
 
+    schedule_id: str = ""
 
-def PauseWorkflowProviderScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider pause-schedule request."""
 
-    return pb.PauseWorkflowProviderScheduleRequest(*args, **kwargs)
+@_dataclasses.dataclass(slots=True)
+class ResumeWorkflowProviderScheduleRequest:
+    """Resume-schedule request passed to workflow providers."""
 
+    schedule_id: str = ""
 
-def ResumeWorkflowProviderScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider resume-schedule request."""
 
-    return pb.ResumeWorkflowProviderScheduleRequest(*args, **kwargs)
+@_dataclasses.dataclass(slots=True)
+class UpsertWorkflowProviderEventTriggerRequest:
+    """Upsert-event-trigger request passed to workflow providers."""
 
+    trigger_id: str = ""
+    match: Any | None = None
+    target: Any | None = None
+    paused: bool = False
+    requested_by: Any | None = None
+    execution_ref: str = ""
 
-def UpsertWorkflowProviderEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider upsert-event-trigger request."""
 
-    return pb.UpsertWorkflowProviderEventTriggerRequest(*args, **kwargs)
+@_dataclasses.dataclass(slots=True)
+class GetWorkflowProviderEventTriggerRequest:
+    """Get-event-trigger request passed to workflow providers."""
 
+    trigger_id: str = ""
 
-def GetWorkflowProviderEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider get-event-trigger request."""
 
-    return pb.GetWorkflowProviderEventTriggerRequest(*args, **kwargs)
+@_dataclasses.dataclass(slots=True)
+class ListWorkflowProviderEventTriggersRequest:
+    """List-event-triggers request passed to workflow providers."""
 
 
-def ListWorkflowProviderEventTriggersRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider list-event-triggers request."""
+@_dataclasses.dataclass(slots=True)
+class ListWorkflowProviderEventTriggersResponse:
+    """Event triggers returned by workflow providers."""
 
-    return pb.ListWorkflowProviderEventTriggersRequest(*args, **kwargs)
+    triggers: Sequence[Any] | None = None
 
 
-def ListWorkflowProviderEventTriggersResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider list-event-triggers response."""
+@_dataclasses.dataclass(slots=True)
+class DeleteWorkflowProviderEventTriggerRequest:
+    """Delete-event-trigger request passed to workflow providers."""
 
-    return pb.ListWorkflowProviderEventTriggersResponse(*args, **kwargs)
+    trigger_id: str = ""
 
 
-def DeleteWorkflowProviderEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider delete-event-trigger request."""
+@_dataclasses.dataclass(slots=True)
+class PauseWorkflowProviderEventTriggerRequest:
+    """Pause-event-trigger request passed to workflow providers."""
 
-    return pb.DeleteWorkflowProviderEventTriggerRequest(*args, **kwargs)
+    trigger_id: str = ""
 
 
-def PauseWorkflowProviderEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider pause-event-trigger request."""
+@_dataclasses.dataclass(slots=True)
+class ResumeWorkflowProviderEventTriggerRequest:
+    """Resume-event-trigger request passed to workflow providers."""
 
-    return pb.PauseWorkflowProviderEventTriggerRequest(*args, **kwargs)
+    trigger_id: str = ""
 
 
-def ResumeWorkflowProviderEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider resume-event-trigger request."""
+@_dataclasses.dataclass(slots=True)
+class PutWorkflowExecutionReferenceRequest:
+    """Put-execution-reference request passed to workflow providers."""
 
-    return pb.ResumeWorkflowProviderEventTriggerRequest(*args, **kwargs)
+    reference: Any | None = None
 
 
-def PutWorkflowExecutionReferenceRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider put-execution-reference request."""
+@_dataclasses.dataclass(slots=True)
+class GetWorkflowExecutionReferenceRequest:
+    """Get-execution-reference request passed to workflow providers."""
 
-    return pb.PutWorkflowExecutionReferenceRequest(*args, **kwargs)
+    id: str = ""
 
 
-def GetWorkflowExecutionReferenceRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider get-execution-reference request."""
+@_dataclasses.dataclass(slots=True)
+class ListWorkflowExecutionReferencesRequest:
+    """List-execution-references request passed to workflow providers."""
 
-    return pb.GetWorkflowExecutionReferenceRequest(*args, **kwargs)
+    subject_id: str = ""
 
 
-def ListWorkflowExecutionReferencesRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider list-execution-references request."""
+@_dataclasses.dataclass(slots=True)
+class ListWorkflowExecutionReferencesResponse:
+    """Execution references returned by workflow providers."""
 
-    return pb.ListWorkflowExecutionReferencesRequest(*args, **kwargs)
+    references: Sequence[Any] | None = None
 
 
-def ListWorkflowExecutionReferencesResponse(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider list-execution-references response."""
+@_dataclasses.dataclass(slots=True)
+class PublishWorkflowProviderEventRequest:
+    """Publish-event request passed to workflow providers."""
 
-    return pb.ListWorkflowExecutionReferencesResponse(*args, **kwargs)
+    plugin_name: str = ""
+    event: Any | None = None
+    published_by: Any | None = None
 
 
-def PublishWorkflowProviderEventRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider publish-event request."""
+def start_workflow_provider_run_request_from_proto(
+    value: Any,
+) -> StartWorkflowProviderRunRequest:
+    return StartWorkflowProviderRunRequest(
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        idempotency_key=value.idempotency_key,
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        execution_ref=value.execution_ref,
+        workflow_key=value.workflow_key,
+    )
 
-    return pb.PublishWorkflowProviderEventRequest(*args, **kwargs)
+
+def get_workflow_provider_run_request_from_proto(
+    value: Any,
+) -> GetWorkflowProviderRunRequest:
+    return GetWorkflowProviderRunRequest(run_id=value.run_id)
+
+
+def list_workflow_provider_runs_request_from_proto(
+    _value: Any,
+) -> ListWorkflowProviderRunsRequest:
+    return ListWorkflowProviderRunsRequest()
+
+
+def list_workflow_provider_runs_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.ListWorkflowProviderRunsResponse):
+        return _copy(value)
+    response = _coerce(
+        value,
+        ListWorkflowProviderRunsResponse,
+        "ListWorkflowProviderRunsResponse",
+    )
+    return pb.ListWorkflowProviderRunsResponse(
+        runs=[bound_workflow_run(item) for item in (response.runs or [])]
+    )
+
+
+def cancel_workflow_provider_run_request_from_proto(
+    value: Any,
+) -> CancelWorkflowProviderRunRequest:
+    return CancelWorkflowProviderRunRequest(run_id=value.run_id, reason=value.reason)
+
+
+def signal_workflow_provider_run_request_from_proto(
+    value: Any,
+) -> SignalWorkflowProviderRunRequest:
+    return SignalWorkflowProviderRunRequest(
+        run_id=value.run_id,
+        signal=workflow_signal_input_from_signal(value.signal)
+        if has_field(value, "signal")
+        else None,
+    )
+
+
+def signal_or_start_workflow_provider_run_request_from_proto(
+    value: Any,
+) -> SignalOrStartWorkflowProviderRunRequest:
+    return SignalOrStartWorkflowProviderRunRequest(
+        workflow_key=value.workflow_key,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        idempotency_key=value.idempotency_key,
+        created_by=workflow_actor_input_from_actor(value.created_by)
+        if has_field(value, "created_by")
+        else None,
+        execution_ref=value.execution_ref,
+        signal=workflow_signal_input_from_signal(value.signal)
+        if has_field(value, "signal")
+        else None,
+    )
+
+
+def signal_workflow_run_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.SignalWorkflowRunResponse):
+        return _copy(value)
+    response = _coerce(value, SignalWorkflowRunResponse, "SignalWorkflowRunResponse")
+    out = pb.SignalWorkflowRunResponse(
+        started_run=response.started_run,
+        workflow_key=response.workflow_key,
+    )
+    if response.run is not None:
+        out.run.CopyFrom(bound_workflow_run(response.run))
+    if response.signal is not None:
+        out.signal.CopyFrom(workflow_signal(response.signal))
+    return out
+
+
+def upsert_workflow_provider_schedule_request_from_proto(
+    value: Any,
+) -> UpsertWorkflowProviderScheduleRequest:
+    return UpsertWorkflowProviderScheduleRequest(
+        schedule_id=value.schedule_id,
+        cron=value.cron,
+        timezone=value.timezone,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        paused=value.paused,
+        requested_by=workflow_actor_input_from_actor(value.requested_by)
+        if has_field(value, "requested_by")
+        else None,
+        execution_ref=value.execution_ref,
+    )
+
+
+def get_workflow_provider_schedule_request_from_proto(
+    value: Any,
+) -> GetWorkflowProviderScheduleRequest:
+    return GetWorkflowProviderScheduleRequest(schedule_id=value.schedule_id)
+
+
+def list_workflow_provider_schedules_request_from_proto(
+    _value: Any,
+) -> ListWorkflowProviderSchedulesRequest:
+    return ListWorkflowProviderSchedulesRequest()
+
+
+def list_workflow_provider_schedules_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.ListWorkflowProviderSchedulesResponse):
+        return _copy(value)
+    response = _coerce(
+        value,
+        ListWorkflowProviderSchedulesResponse,
+        "ListWorkflowProviderSchedulesResponse",
+    )
+    return pb.ListWorkflowProviderSchedulesResponse(
+        schedules=[
+            bound_workflow_schedule(item) for item in (response.schedules or [])
+        ]
+    )
+
+
+def delete_workflow_provider_schedule_request_from_proto(
+    value: Any,
+) -> DeleteWorkflowProviderScheduleRequest:
+    return DeleteWorkflowProviderScheduleRequest(schedule_id=value.schedule_id)
+
+
+def pause_workflow_provider_schedule_request_from_proto(
+    value: Any,
+) -> PauseWorkflowProviderScheduleRequest:
+    return PauseWorkflowProviderScheduleRequest(schedule_id=value.schedule_id)
+
+
+def resume_workflow_provider_schedule_request_from_proto(
+    value: Any,
+) -> ResumeWorkflowProviderScheduleRequest:
+    return ResumeWorkflowProviderScheduleRequest(schedule_id=value.schedule_id)
+
+
+def upsert_workflow_provider_event_trigger_request_from_proto(
+    value: Any,
+) -> UpsertWorkflowProviderEventTriggerRequest:
+    return UpsertWorkflowProviderEventTriggerRequest(
+        trigger_id=value.trigger_id,
+        match=workflow_event_match_input_from_match(value.match)
+        if has_field(value, "match")
+        else None,
+        target=bound_workflow_target_input_from_target(value.target)
+        if has_field(value, "target")
+        else None,
+        paused=value.paused,
+        requested_by=workflow_actor_input_from_actor(value.requested_by)
+        if has_field(value, "requested_by")
+        else None,
+        execution_ref=value.execution_ref,
+    )
+
+
+def get_workflow_provider_event_trigger_request_from_proto(
+    value: Any,
+) -> GetWorkflowProviderEventTriggerRequest:
+    return GetWorkflowProviderEventTriggerRequest(trigger_id=value.trigger_id)
+
+
+def list_workflow_provider_event_triggers_request_from_proto(
+    _value: Any,
+) -> ListWorkflowProviderEventTriggersRequest:
+    return ListWorkflowProviderEventTriggersRequest()
+
+
+def list_workflow_provider_event_triggers_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.ListWorkflowProviderEventTriggersResponse):
+        return _copy(value)
+    response = _coerce(
+        value,
+        ListWorkflowProviderEventTriggersResponse,
+        "ListWorkflowProviderEventTriggersResponse",
+    )
+    return pb.ListWorkflowProviderEventTriggersResponse(
+        triggers=[
+            bound_workflow_event_trigger(item) for item in (response.triggers or [])
+        ]
+    )
+
+
+def delete_workflow_provider_event_trigger_request_from_proto(
+    value: Any,
+) -> DeleteWorkflowProviderEventTriggerRequest:
+    return DeleteWorkflowProviderEventTriggerRequest(trigger_id=value.trigger_id)
+
+
+def pause_workflow_provider_event_trigger_request_from_proto(
+    value: Any,
+) -> PauseWorkflowProviderEventTriggerRequest:
+    return PauseWorkflowProviderEventTriggerRequest(trigger_id=value.trigger_id)
+
+
+def resume_workflow_provider_event_trigger_request_from_proto(
+    value: Any,
+) -> ResumeWorkflowProviderEventTriggerRequest:
+    return ResumeWorkflowProviderEventTriggerRequest(trigger_id=value.trigger_id)
+
+
+def put_workflow_execution_reference_request_from_proto(
+    value: Any,
+) -> PutWorkflowExecutionReferenceRequest:
+    return PutWorkflowExecutionReferenceRequest(
+        reference=workflow_execution_reference_input_from_reference(value.reference)
+        if has_field(value, "reference")
+        else None,
+    )
+
+
+def get_workflow_execution_reference_request_from_proto(
+    value: Any,
+) -> GetWorkflowExecutionReferenceRequest:
+    return GetWorkflowExecutionReferenceRequest(id=value.id)
+
+
+def list_workflow_execution_references_request_from_proto(
+    value: Any,
+) -> ListWorkflowExecutionReferencesRequest:
+    return ListWorkflowExecutionReferencesRequest(subject_id=value.subject_id)
+
+
+def list_workflow_execution_references_response_to_proto(value: Any) -> Any:
+    if isinstance(value, pb.ListWorkflowExecutionReferencesResponse):
+        return _copy(value)
+    response = _coerce(
+        value,
+        ListWorkflowExecutionReferencesResponse,
+        "ListWorkflowExecutionReferencesResponse",
+    )
+    return pb.ListWorkflowExecutionReferencesResponse(
+        references=[
+            workflow_execution_reference(item)
+            for item in (response.references or [])
+        ]
+    )
+
+
+def publish_workflow_provider_event_request_from_proto(
+    value: Any,
+) -> PublishWorkflowProviderEventRequest:
+    return PublishWorkflowProviderEventRequest(
+        plugin_name=value.plugin_name,
+        event=workflow_event_input_from_event(value.event)
+        if has_field(value, "event")
+        else None,
+        published_by=workflow_actor_input_from_actor(value.published_by)
+        if has_field(value, "published_by")
+        else None,
+    )
 
 
 def WorkflowManagerStartRunRequest(*args: Any, **kwargs: Any) -> Any:
