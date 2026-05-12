@@ -44,6 +44,33 @@
 // Use Router.WithName only when you need an explicit catalog name outside that
 // manifest-backed flow.
 //
+// # API sections
+//
+// Provider authoring starts with [Provider], [Operation], [Register], [Router],
+// [Request], [Response], and [OK]. These types model executable plugin
+// providers, typed operation handlers, and operation results.
+//
+// Catalog metadata is built from [Catalog], [CatalogOperation], struct tags,
+// and typed [Operation] definitions.
+//
+// Provider runtimes are modeled by [AuthenticationProvider],
+// [AuthorizationProvider], [CacheProvider], [IndexedDBProvider], [S3Provider],
+// [SecretsProvider], [WorkflowProvider], [AgentProvider], and
+// [PluginRuntimeProvider].
+//
+// Workflow and agent helpers include [NewBoundWorkflowTarget],
+// [NewWorkflowSignal], [NewBoundWorkflowRun], [NewWorkflowExecutionReference],
+// [NewAgentMessage], and [NewAgentToolRef]. These constructors keep native Go
+// values at provider boundaries.
+//
+// Host-service clients include [CacheClient], [IndexedDBClient], [S3Client],
+// [WorkflowHostClient], [WorkflowManagerClient], [AgentHostClient],
+// [AgentManagerClient], [AuthorizationClient], and [InvokerClient].
+//
+// Runtime and telemetry helpers include [ServeProvider], [ProviderMetadata],
+// [StructFromAny], [TelemetryInstrumentationName], and the provider telemetry
+// helpers.
+//
 // # Catalog metadata
 //
 // The router derives catalog parameters from Go struct tags. The json tag sets

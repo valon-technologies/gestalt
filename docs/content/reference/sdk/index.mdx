@@ -20,6 +20,20 @@ Read the language-specific SDK page for examples and runtime details:
   <Cards.Card title="Rust SDK" href="https://docs.rs/gestalt-sdk/latest/gestalt/" />
 </Cards>
 
+## API reference layout
+
+Each language reference starts with a sectioned index so provider authors can
+jump to the same SDK concepts across generators:
+
+- Provider authoring: operations, requests, responses, routers, and catalogs.
+- Provider runtimes: authentication, cache, S3, secrets, workflow, agent, and
+  hosted-runtime providers where supported by the language.
+- Workflow and agent models: native request, response, event, signal, target,
+  session, turn, message, and tool values.
+- Host-service clients: cache, storage, workflow, agent, invocation,
+  authorization, and runtime-log clients.
+- Telemetry: provider-authored GenAI spans and metrics.
+
 ## Native input coverage
 
 The SDK examples use native input helpers for manager requests where those
