@@ -23,6 +23,7 @@ import {
   ListWorkflowProviderEventTriggersResponseSchema,
   ListWorkflowProviderRunsResponseSchema,
   ListWorkflowProviderSchedulesResponseSchema,
+  SignalWorkflowRunResponseSchema,
   WorkflowAccessPermissionSchema,
   WorkflowActorSchema,
   WorkflowEventMatchSchema,
@@ -64,6 +65,9 @@ import {
   type PutWorkflowExecutionReferenceRequest as ProtoPutWorkflowExecutionReferenceRequest,
   type ResumeWorkflowProviderEventTriggerRequest as ProtoResumeWorkflowProviderEventTriggerRequest,
   type ResumeWorkflowProviderScheduleRequest as ProtoResumeWorkflowProviderScheduleRequest,
+  type SignalOrStartWorkflowProviderRunRequest as ProtoSignalOrStartWorkflowProviderRunRequest,
+  type SignalWorkflowProviderRunRequest as ProtoSignalWorkflowProviderRunRequest,
+  type SignalWorkflowRunResponse as ProtoSignalWorkflowRunResponse,
   type StartWorkflowProviderRunRequest as ProtoStartWorkflowProviderRunRequest,
   type UpsertWorkflowProviderEventTriggerRequest as ProtoUpsertWorkflowProviderEventTriggerRequest,
   type UpsertWorkflowProviderScheduleRequest as ProtoUpsertWorkflowProviderScheduleRequest,
@@ -425,6 +429,27 @@ export interface ListWorkflowProviderRunsRequest {}
 export interface CancelWorkflowProviderRunRequest {
   runId: string;
   reason: string;
+}
+
+export interface SignalWorkflowProviderRunRequest {
+  runId: string;
+  signal?: WorkflowSignal | undefined;
+}
+
+export interface SignalOrStartWorkflowProviderRunRequest {
+  workflowKey: string;
+  target?: BoundWorkflowTarget | undefined;
+  idempotencyKey: string;
+  createdBy?: WorkflowActor | undefined;
+  executionRef: string;
+  signal?: WorkflowSignal | undefined;
+}
+
+export interface SignalWorkflowRunResponse {
+  run?: BoundWorkflowRun | undefined;
+  signal?: WorkflowSignal | undefined;
+  startedRun: boolean;
+  workflowKey: string;
 }
 
 export interface UpsertWorkflowProviderScheduleRequest {
@@ -1166,6 +1191,12 @@ export interface WorkflowProviderOptions extends ProviderBaseOptions {
   cancelRun: (
     request: CancelWorkflowProviderRunRequest,
   ) => MaybePromise<BoundWorkflowRun>;
+  signalRun: (
+    request: SignalWorkflowProviderRunRequest,
+  ) => MaybePromise<SignalWorkflowRunResponse>;
+  signalOrStartRun: (
+    request: SignalOrStartWorkflowProviderRunRequest,
+  ) => MaybePromise<SignalWorkflowRunResponse>;
   upsertSchedule: (
     request: UpsertWorkflowProviderScheduleRequest,
   ) => MaybePromise<BoundWorkflowSchedule>;
@@ -1227,6 +1258,8 @@ export class WorkflowProvider extends ProviderBase {
   private readonly getRunHandler: WorkflowProviderOptions["getRun"];
   private readonly listRunsHandler: WorkflowProviderOptions["listRuns"];
   private readonly cancelRunHandler: WorkflowProviderOptions["cancelRun"];
+  private readonly signalRunHandler: WorkflowProviderOptions["signalRun"];
+  private readonly signalOrStartRunHandler: WorkflowProviderOptions["signalOrStartRun"];
   private readonly upsertScheduleHandler: WorkflowProviderOptions["upsertSchedule"];
   private readonly getScheduleHandler: WorkflowProviderOptions["getSchedule"];
   private readonly listSchedulesHandler: WorkflowProviderOptions["listSchedules"];
@@ -1250,6 +1283,8 @@ export class WorkflowProvider extends ProviderBase {
     this.getRunHandler = options.getRun;
     this.listRunsHandler = options.listRuns;
     this.cancelRunHandler = options.cancelRun;
+    this.signalRunHandler = options.signalRun;
+    this.signalOrStartRunHandler = options.signalOrStartRun;
     this.upsertScheduleHandler = options.upsertSchedule;
     this.getScheduleHandler = options.getSchedule;
     this.listSchedulesHandler = options.listSchedules;
@@ -1282,6 +1317,16 @@ export class WorkflowProvider extends ProviderBase {
 
   async cancelRun(request: CancelWorkflowProviderRunRequest): Promise<BoundWorkflowRun> {
     return await this.cancelRunHandler(request);
+  }
+
+  async signalRun(request: SignalWorkflowProviderRunRequest): Promise<SignalWorkflowRunResponse> {
+    return await this.signalRunHandler(request);
+  }
+
+  async signalOrStartRun(
+    request: SignalOrStartWorkflowProviderRunRequest,
+  ): Promise<SignalWorkflowRunResponse> {
+    return await this.signalOrStartRunHandler(request);
   }
 
   async upsertSchedule(request: UpsertWorkflowProviderScheduleRequest): Promise<BoundWorkflowSchedule> {
@@ -1401,6 +1446,8 @@ export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
       "getRun" in value &&
       "listRuns" in value &&
       "cancelRun" in value &&
+      "signalRun" in value &&
+      "signalOrStartRun" in value &&
       "upsertSchedule" in value &&
       "getSchedule" in value &&
       "listSchedules" in value &&
@@ -1485,6 +1532,26 @@ export function createWorkflowProviderService(
         boundWorkflowRunToProto(
           await invokeWorkflowProvider("cancel run", () =>
             provider.cancelRun(cancelWorkflowProviderRunRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async signalRun(request) {
+      return create(
+        SignalWorkflowRunResponseSchema,
+        signalWorkflowRunResponseToProto(
+          await invokeWorkflowProvider("signal run", () =>
+            provider.signalRun(signalWorkflowProviderRunRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async signalOrStartRun(request) {
+      return create(
+        SignalWorkflowRunResponseSchema,
+        signalWorkflowRunResponseToProto(
+          await invokeWorkflowProvider("signal or start run", () =>
+            provider.signalOrStartRun(signalOrStartWorkflowProviderRunRequestFromProto(request)),
           ),
         ),
       );
@@ -2137,6 +2204,17 @@ export function boundWorkflowRunFromProto(input?: ProtoBoundWorkflowRun | undefi
   };
 }
 
+export function signalWorkflowRunResponseToProto(
+  input: SignalWorkflowRunResponse,
+): ProtoSignalWorkflowRunResponse {
+  return create(SignalWorkflowRunResponseSchema, {
+    run: input.run === undefined ? undefined : boundWorkflowRunToProto(input.run),
+    signal: input.signal === undefined ? undefined : workflowSignalToProto(input.signal),
+    startedRun: input.startedRun ?? false,
+    workflowKey: input.workflowKey ?? "",
+  });
+}
+
 export function boundWorkflowScheduleToProto(input: BoundWorkflowSchedule): ProtoBoundWorkflowSchedule {
   return create(BoundWorkflowScheduleSchema, {
     id: input.id ?? "",
@@ -2314,6 +2392,28 @@ function cancelWorkflowProviderRunRequestFromProto(
   input: ProtoCancelWorkflowProviderRunRequest,
 ): CancelWorkflowProviderRunRequest {
   return { runId: input.runId, reason: input.reason };
+}
+
+function signalWorkflowProviderRunRequestFromProto(
+  input: ProtoSignalWorkflowProviderRunRequest,
+): SignalWorkflowProviderRunRequest {
+  return {
+    runId: input.runId,
+    signal: workflowSignalFromProto(input.signal),
+  };
+}
+
+function signalOrStartWorkflowProviderRunRequestFromProto(
+  input: ProtoSignalOrStartWorkflowProviderRunRequest,
+): SignalOrStartWorkflowProviderRunRequest {
+  return {
+    workflowKey: input.workflowKey,
+    target: boundWorkflowTargetFromProto(input.target),
+    idempotencyKey: input.idempotencyKey,
+    createdBy: workflowActorFromProto(input.createdBy),
+    executionRef: input.executionRef,
+    signal: workflowSignalFromProto(input.signal),
+  };
 }
 
 function upsertWorkflowProviderScheduleRequestFromProto(

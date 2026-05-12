@@ -6,8 +6,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 )
 
-// StartWorkflowProviderRunRequest contains native Go values for starting a
-// workflow run.
+// StartWorkflowProviderRunRequest requests a new or idempotent workflow run.
 type StartWorkflowProviderRunRequest struct {
 	Target         *BoundWorkflowTargetInput
 	IdempotencyKey string
@@ -24,7 +23,7 @@ type GetWorkflowProviderRunRequest struct {
 // ListWorkflowProviderRunsRequest requests workflow runs visible to the caller.
 type ListWorkflowProviderRunsRequest struct{}
 
-// ListWorkflowProviderRunsResponse contains native workflow runs.
+// ListWorkflowProviderRunsResponse contains workflow runs.
 type ListWorkflowProviderRunsResponse struct {
 	Runs []BoundWorkflowRunInput
 }
@@ -43,14 +42,14 @@ type CancelWorkflowProviderRunRequest struct {
 	Reason string
 }
 
-// SignalWorkflowProviderRunRequest contains native values for signaling a run.
+// SignalWorkflowProviderRunRequest requests signaling a run.
 type SignalWorkflowProviderRunRequest struct {
 	RunID  string
 	Signal *WorkflowSignalInput
 }
 
-// SignalOrStartWorkflowProviderRunRequest contains native values for signaling
-// an existing workflow run or starting one when needed.
+// SignalOrStartWorkflowProviderRunRequest requests signaling an existing
+// workflow run or starting one when needed.
 type SignalOrStartWorkflowProviderRunRequest struct {
 	WorkflowKey    string
 	Target         *BoundWorkflowTargetInput
@@ -72,7 +71,7 @@ type SignalWorkflowRunResponse struct {
 // GetStatus-compatible helpers are intentionally not provided here; provider
 // code should read native fields directly.
 
-// UpsertWorkflowProviderScheduleRequest contains native values for upserting a
+// UpsertWorkflowProviderScheduleRequest requests creating or updating a
 // workflow schedule.
 type UpsertWorkflowProviderScheduleRequest struct {
 	ScheduleID   string
@@ -93,7 +92,7 @@ type GetWorkflowProviderScheduleRequest struct {
 // the caller.
 type ListWorkflowProviderSchedulesRequest struct{}
 
-// ListWorkflowProviderSchedulesResponse contains native workflow schedules.
+// ListWorkflowProviderSchedulesResponse contains workflow schedules.
 type ListWorkflowProviderSchedulesResponse struct {
 	Schedules []BoundWorkflowScheduleInput
 }
@@ -123,8 +122,8 @@ type ResumeWorkflowProviderScheduleRequest struct {
 	ScheduleID string
 }
 
-// UpsertWorkflowProviderEventTriggerRequest contains native values for
-// upserting a workflow event trigger.
+// UpsertWorkflowProviderEventTriggerRequest requests creating or updating a
+// workflow event trigger.
 type UpsertWorkflowProviderEventTriggerRequest struct {
 	TriggerID    string
 	Match        *WorkflowEventMatchInput
@@ -143,7 +142,7 @@ type GetWorkflowProviderEventTriggerRequest struct {
 // the caller.
 type ListWorkflowProviderEventTriggersRequest struct{}
 
-// ListWorkflowProviderEventTriggersResponse contains native event triggers.
+// ListWorkflowProviderEventTriggersResponse contains workflow event triggers.
 type ListWorkflowProviderEventTriggersResponse struct {
 	Triggers []BoundWorkflowEventTriggerInput
 }
@@ -191,7 +190,7 @@ type ListWorkflowExecutionReferencesRequest struct {
 	SubjectID string
 }
 
-// ListWorkflowExecutionReferencesResponse contains native execution references.
+// ListWorkflowExecutionReferencesResponse contains workflow execution references.
 type ListWorkflowExecutionReferencesResponse struct {
 	References []WorkflowExecutionReferenceInput
 }
@@ -204,8 +203,7 @@ func (r *ListWorkflowExecutionReferencesResponse) GetReferences() []WorkflowExec
 	return r.References
 }
 
-// PublishWorkflowProviderEventRequest contains native values for publishing a
-// workflow event.
+// PublishWorkflowProviderEventRequest requests publishing a workflow event.
 type PublishWorkflowProviderEventRequest struct {
 	PluginName  string
 	Event       *WorkflowEventInput
@@ -213,9 +211,8 @@ type PublishWorkflowProviderEventRequest struct {
 }
 
 // WorkflowProvider is implemented by providers that serve the workflow base
-// primitive. The SDK owns the gRPC/protobuf transport adapter; provider code
-// implements this typed interface instead of importing generated protobuf
-// service bindings.
+// primitive. The SDK owns the transport adapter; provider code implements this
+// typed interface instead of generated service bindings.
 type WorkflowProvider interface {
 	Provider
 	// StartRun starts or idempotently returns a workflow run.
