@@ -36,8 +36,7 @@ if TYPE_CHECKING:
         UpdateAgentProviderSessionRequest,
     )
     from ._api import Error
-    from ._cache import CacheEntry
-    from ._gen.v1.authorization_pb2 import (
+    from ._authorization import (
         AccessDecision,
         AccessEvaluationRequest,
         AccessEvaluationsRequest,
@@ -62,6 +61,7 @@ if TYPE_CHECKING:
         WriteModelRequest,
         WriteRelationshipsRequest,
     )
+    from ._cache import CacheEntry
 
 else:
     from ._api import Error

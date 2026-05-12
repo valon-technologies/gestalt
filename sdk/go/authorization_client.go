@@ -202,7 +202,15 @@ func (c *AuthorizationClient) Evaluate(ctx context.Context, req *AccessEvaluatio
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	return c.client.Evaluate(ctx, req)
+	pbReq, err := protoAccessEvaluationRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.Evaluate(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+	return accessDecisionFromProto(resp), nil
 }
 
 // EvaluateMany evaluates multiple authorization requests in one RPC.
@@ -213,7 +221,15 @@ func (c *AuthorizationClient) EvaluateMany(ctx context.Context, req *AccessEvalu
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	return c.client.EvaluateMany(ctx, req)
+	pbReq, err := protoAccessEvaluationsRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.EvaluateMany(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+	return accessEvaluationsResponseFromProto(resp), nil
 }
 
 // SearchResources searches resources visible to a subject for an action.
@@ -224,7 +240,15 @@ func (c *AuthorizationClient) SearchResources(ctx context.Context, req *Resource
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	return c.client.SearchResources(ctx, req)
+	pbReq, err := protoResourceSearchRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.SearchResources(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+	return resourceSearchResponseFromProto(resp), nil
 }
 
 // SearchSubjects searches subjects related to a resource and action.
@@ -235,7 +259,15 @@ func (c *AuthorizationClient) SearchSubjects(ctx context.Context, req *SubjectSe
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	return c.client.SearchSubjects(ctx, req)
+	pbReq, err := protoSubjectSearchRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.SearchSubjects(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+	return subjectSearchResponseFromProto(resp), nil
 }
 
 // EffectiveSearchResources searches resources visible to a subject through
@@ -247,7 +279,15 @@ func (c *AuthorizationClient) EffectiveSearchResources(ctx context.Context, req 
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	return c.client.EffectiveSearchResources(ctx, req)
+	pbReq, err := protoResourceSearchRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.EffectiveSearchResources(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+	return resourceSearchResponseFromProto(resp), nil
 }
 
 // EffectiveSearchSubjects searches effective subjects or subject sets related
@@ -259,7 +299,15 @@ func (c *AuthorizationClient) EffectiveSearchSubjects(ctx context.Context, req *
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	return c.client.EffectiveSearchSubjects(ctx, req)
+	pbReq, err := protoEffectiveSubjectSearchRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.EffectiveSearchSubjects(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+	return effectiveSubjectSearchResponseFromProto(resp), nil
 }
 
 // SearchActions searches actions available between a subject and resource.
@@ -270,7 +318,15 @@ func (c *AuthorizationClient) SearchActions(ctx context.Context, req *ActionSear
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	return c.client.SearchActions(ctx, req)
+	pbReq, err := protoActionSearchRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.SearchActions(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+	return actionSearchResponseFromProto(resp), nil
 }
 
 // Expand explains the relationship targets contributing to one resource relation.
@@ -281,7 +337,15 @@ func (c *AuthorizationClient) Expand(ctx context.Context, req *ExpandRequest) (*
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	return c.client.Expand(ctx, req)
+	pbReq, err := protoExpandRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.Expand(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+	return expandResponseFromProto(resp), nil
 }
 
 // ReadRelationships reads authorization relationships matching a request.
@@ -292,7 +356,15 @@ func (c *AuthorizationClient) ReadRelationships(ctx context.Context, req *ReadRe
 	if req == nil {
 		return nil, fmt.Errorf("authorization: request is required")
 	}
-	return c.client.ReadRelationships(ctx, req)
+	pbReq, err := protoReadRelationshipsRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.ReadRelationships(ctx, pbReq)
+	if err != nil {
+		return nil, err
+	}
+	return readRelationshipsResponseFromProto(resp), nil
 }
 
 // WriteRelationships writes and deletes authorization relationships.
@@ -303,7 +375,11 @@ func (c *AuthorizationClient) WriteRelationships(ctx context.Context, req *Write
 	if req == nil {
 		return fmt.Errorf("authorization: request is required")
 	}
-	_, err := c.client.WriteRelationships(ctx, req)
+	pbReq, err := protoWriteRelationshipsRequest(req)
+	if err != nil {
+		return err
+	}
+	_, err = c.client.WriteRelationships(ctx, pbReq)
 	return err
 }
 
@@ -321,5 +397,9 @@ func (c *AuthorizationClient) GetMetadata(ctx context.Context) (*AuthorizationMe
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("authorization: client is not initialized")
 	}
-	return c.client.GetMetadata(ctx, &emptypb.Empty{})
+	resp, err := c.client.GetMetadata(ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, err
+	}
+	return authorizationMetadataFromProto(resp), nil
 }

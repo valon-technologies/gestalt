@@ -1,5 +1,6 @@
 use hyper_util::rt::TokioIo;
 use std::sync::Arc;
+use std::time::SystemTime;
 use tokio::net::UnixStream;
 
 use tonic::codegen::async_trait;
@@ -340,40 +341,163 @@ pub struct AuthorizationMetadata {
     pub active_model_id: String,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Authorization model definition.
-pub type AuthorizationModel = crate::generated::v1::AuthorizationModel;
+pub struct AuthorizationModel {
+    /// Authorization model schema version.
+    pub version: i32,
+    /// Resource types described by the model.
+    pub resource_types: Vec<AuthorizationModelResourceType>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Authorization model resource type.
-pub type AuthorizationModelResourceType = crate::generated::v1::AuthorizationModelResourceType;
+pub struct AuthorizationModelResourceType {
+    /// Resource type name.
+    pub name: String,
+    /// Relations defined for the resource type.
+    pub relations: Vec<AuthorizationModelRelation>,
+    /// Actions defined for the resource type.
+    pub actions: Vec<AuthorizationModelAction>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Authorization model relation.
-pub type AuthorizationModelRelation = crate::generated::v1::AuthorizationModelRelation;
+pub struct AuthorizationModelRelation {
+    /// Relation name.
+    pub name: String,
+    /// Legacy subject type names allowed by the relation.
+    pub subject_types: Vec<String>,
+    /// Structured allowed target definitions.
+    pub allowed_targets: Vec<AuthorizationModelAllowedTarget>,
+    /// Optional rewrite used to compute the relation.
+    pub rewrite: Option<AuthorizationModelRewrite>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Authorization model action.
-pub type AuthorizationModelAction = crate::generated::v1::AuthorizationModelAction;
+pub struct AuthorizationModelAction {
+    /// Action name.
+    pub name: String,
+    /// Relations that imply this action.
+    pub relations: Vec<String>,
+    /// Optional rewrite used to compute the action.
+    pub rewrite: Option<AuthorizationModelRewrite>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 /// Authorization model allowed target.
-pub type AuthorizationModelAllowedTarget = crate::generated::v1::AuthorizationModelAllowedTarget;
+pub enum AuthorizationModelAllowedTarget {
+    /// Concrete subject type target.
+    SubjectType(String),
+    /// Concrete resource type target.
+    ResourceType(String),
+    /// Subject-set target.
+    SubjectSet(AuthorizationModelSubjectSetTarget),
+}
+
+impl Default for AuthorizationModelAllowedTarget {
+    fn default() -> Self {
+        Self::SubjectType(String::new())
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Authorization model subject-set target.
-pub type AuthorizationModelSubjectSetTarget =
-    crate::generated::v1::AuthorizationModelSubjectSetTarget;
+pub struct AuthorizationModelSubjectSetTarget {
+    /// Target resource type.
+    pub resource_type: String,
+    /// Target relation.
+    pub relation: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 /// Authorization model rewrite expression.
-pub type AuthorizationModelRewrite = crate::generated::v1::AuthorizationModelRewrite;
+pub enum AuthorizationModelRewrite {
+    /// Directly related targets.
+    This,
+    /// Computed userset on the same resource.
+    ComputedUserset(AuthorizationModelComputedUserset),
+    /// Tuple-to-userset rewrite.
+    TupleToUserset(AuthorizationModelTupleToUserset),
+    /// Union of rewrite branches.
+    Union(AuthorizationModelRewriteUnion),
+}
+
+impl Default for AuthorizationModelRewrite {
+    fn default() -> Self {
+        Self::This
+    }
+}
+
 /// Authorization model `this` rewrite leaf.
-pub type AuthorizationModelRewriteThis = crate::generated::v1::AuthorizationModelRewriteThis;
+pub type AuthorizationModelRewriteThis = ();
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Authorization model computed-userset rewrite.
-pub type AuthorizationModelComputedUserset =
-    crate::generated::v1::AuthorizationModelComputedUserset;
+pub struct AuthorizationModelComputedUserset {
+    /// Relation to compute on the same resource.
+    pub relation: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Authorization model tuple-to-userset rewrite.
-pub type AuthorizationModelTupleToUserset = crate::generated::v1::AuthorizationModelTupleToUserset;
+pub struct AuthorizationModelTupleToUserset {
+    /// Relation used to select intermediate tuples.
+    pub tupleset_relation: String,
+    /// Relation computed on each intermediate resource.
+    pub computed_relation: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Authorization model union rewrite.
-pub type AuthorizationModelRewriteUnion = crate::generated::v1::AuthorizationModelRewriteUnion;
+pub struct AuthorizationModelRewriteUnion {
+    /// Child rewrite branches.
+    pub children: Vec<AuthorizationModelRewrite>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Stored authorization model reference.
-pub type AuthorizationModelRef = crate::generated::v1::AuthorizationModelRef;
+pub struct AuthorizationModelRef {
+    /// Model id.
+    pub id: String,
+    /// Model version.
+    pub version: String,
+    /// Creation time.
+    pub created_at: Option<SystemTime>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Active authorization model response.
-pub type GetActiveModelResponse = crate::generated::v1::GetActiveModelResponse;
+pub struct GetActiveModelResponse {
+    /// Active model reference.
+    pub model: Option<AuthorizationModelRef>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// List authorization models request.
-pub type ListModelsRequest = crate::generated::v1::ListModelsRequest;
+pub struct ListModelsRequest {
+    /// Maximum number of models to return.
+    pub page_size: i32,
+    /// Opaque page token from a previous list request.
+    pub page_token: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// List authorization models response.
-pub type ListModelsResponse = crate::generated::v1::ListModelsResponse;
+pub struct ListModelsResponse {
+    /// Matching model references.
+    pub models: Vec<AuthorizationModelRef>,
+    /// Opaque token for the next page.
+    pub next_page_token: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Write authorization model request.
-pub type WriteModelRequest = crate::generated::v1::WriteModelRequest;
+pub struct WriteModelRequest {
+    /// Model to store.
+    pub model: Option<AuthorizationModel>,
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Relationship tuple stored in the authorization graph.
@@ -804,7 +928,7 @@ impl Authorization {
     pub async fn get_active_model(
         &mut self,
     ) -> std::result::Result<GetActiveModelResponse, AuthorizationError> {
-        Ok(self.client.get_active_model(()).await?.into_inner())
+        Ok(self.client.get_active_model(()).await?.into_inner().into())
     }
 
     /// Lists authorization models.
@@ -812,7 +936,12 @@ impl Authorization {
         &mut self,
         request: ListModelsRequest,
     ) -> std::result::Result<ListModelsResponse, AuthorizationError> {
-        Ok(self.client.list_models(request).await?.into_inner())
+        Ok(self
+            .client
+            .list_models(pb::ListModelsRequest::from(request))
+            .await?
+            .into_inner()
+            .into())
     }
 
     /// Writes an authorization model and returns its reference.
@@ -820,7 +949,12 @@ impl Authorization {
         &mut self,
         request: WriteModelRequest,
     ) -> std::result::Result<AuthorizationModelRef, AuthorizationError> {
-        Ok(self.client.write_model(request).await?.into_inner())
+        Ok(self
+            .client
+            .write_model(pb::WriteModelRequest::from(request))
+            .await?
+            .into_inner()
+            .into())
     }
 }
 
@@ -1202,6 +1336,314 @@ impl From<pb::AuthorizationMetadata> for AuthorizationMetadata {
         Self {
             capabilities: value.capabilities,
             active_model_id: value.active_model_id,
+        }
+    }
+}
+
+impl From<AuthorizationModel> for pb::AuthorizationModel {
+    fn from(value: AuthorizationModel) -> Self {
+        Self {
+            version: value.version,
+            resource_types: value.resource_types.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<pb::AuthorizationModel> for AuthorizationModel {
+    fn from(value: pb::AuthorizationModel) -> Self {
+        Self {
+            version: value.version,
+            resource_types: value.resource_types.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<AuthorizationModelResourceType> for pb::AuthorizationModelResourceType {
+    fn from(value: AuthorizationModelResourceType) -> Self {
+        Self {
+            name: value.name,
+            relations: value.relations.into_iter().map(Into::into).collect(),
+            actions: value.actions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<pb::AuthorizationModelResourceType> for AuthorizationModelResourceType {
+    fn from(value: pb::AuthorizationModelResourceType) -> Self {
+        Self {
+            name: value.name,
+            relations: value.relations.into_iter().map(Into::into).collect(),
+            actions: value.actions.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<AuthorizationModelRelation> for pb::AuthorizationModelRelation {
+    fn from(value: AuthorizationModelRelation) -> Self {
+        Self {
+            name: value.name,
+            subject_types: value.subject_types,
+            allowed_targets: value.allowed_targets.into_iter().map(Into::into).collect(),
+            rewrite: value.rewrite.map(Into::into),
+        }
+    }
+}
+
+impl From<pb::AuthorizationModelRelation> for AuthorizationModelRelation {
+    fn from(value: pb::AuthorizationModelRelation) -> Self {
+        Self {
+            name: value.name,
+            subject_types: value.subject_types,
+            allowed_targets: value.allowed_targets.into_iter().map(Into::into).collect(),
+            rewrite: value.rewrite.map(Into::into),
+        }
+    }
+}
+
+impl From<AuthorizationModelAction> for pb::AuthorizationModelAction {
+    fn from(value: AuthorizationModelAction) -> Self {
+        Self {
+            name: value.name,
+            relations: value.relations,
+            rewrite: value.rewrite.map(Into::into),
+        }
+    }
+}
+
+impl From<pb::AuthorizationModelAction> for AuthorizationModelAction {
+    fn from(value: pb::AuthorizationModelAction) -> Self {
+        Self {
+            name: value.name,
+            relations: value.relations,
+            rewrite: value.rewrite.map(Into::into),
+        }
+    }
+}
+
+impl From<AuthorizationModelAllowedTarget> for pb::AuthorizationModelAllowedTarget {
+    fn from(value: AuthorizationModelAllowedTarget) -> Self {
+        let kind = match value {
+            AuthorizationModelAllowedTarget::SubjectType(subject_type) => {
+                pb::authorization_model_allowed_target::Kind::SubjectType(subject_type)
+            }
+            AuthorizationModelAllowedTarget::ResourceType(resource_type) => {
+                pb::authorization_model_allowed_target::Kind::ResourceType(resource_type)
+            }
+            AuthorizationModelAllowedTarget::SubjectSet(subject_set) => {
+                pb::authorization_model_allowed_target::Kind::SubjectSet(subject_set.into())
+            }
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl From<pb::AuthorizationModelAllowedTarget> for AuthorizationModelAllowedTarget {
+    fn from(value: pb::AuthorizationModelAllowedTarget) -> Self {
+        match value.kind {
+            Some(pb::authorization_model_allowed_target::Kind::SubjectType(subject_type)) => {
+                Self::SubjectType(subject_type)
+            }
+            Some(pb::authorization_model_allowed_target::Kind::ResourceType(resource_type)) => {
+                Self::ResourceType(resource_type)
+            }
+            Some(pb::authorization_model_allowed_target::Kind::SubjectSet(subject_set)) => {
+                Self::SubjectSet(subject_set.into())
+            }
+            None => Self::default(),
+        }
+    }
+}
+
+impl From<AuthorizationModelSubjectSetTarget> for pb::AuthorizationModelSubjectSetTarget {
+    fn from(value: AuthorizationModelSubjectSetTarget) -> Self {
+        Self {
+            resource_type: value.resource_type,
+            relation: value.relation,
+        }
+    }
+}
+
+impl From<pb::AuthorizationModelSubjectSetTarget> for AuthorizationModelSubjectSetTarget {
+    fn from(value: pb::AuthorizationModelSubjectSetTarget) -> Self {
+        Self {
+            resource_type: value.resource_type,
+            relation: value.relation,
+        }
+    }
+}
+
+impl From<AuthorizationModelRewrite> for pb::AuthorizationModelRewrite {
+    fn from(value: AuthorizationModelRewrite) -> Self {
+        let kind = match value {
+            AuthorizationModelRewrite::This => {
+                pb::authorization_model_rewrite::Kind::This(pb::AuthorizationModelRewriteThis {})
+            }
+            AuthorizationModelRewrite::ComputedUserset(computed_userset) => {
+                pb::authorization_model_rewrite::Kind::ComputedUserset(computed_userset.into())
+            }
+            AuthorizationModelRewrite::TupleToUserset(tuple_to_userset) => {
+                pb::authorization_model_rewrite::Kind::TupleToUserset(tuple_to_userset.into())
+            }
+            AuthorizationModelRewrite::Union(union) => {
+                pb::authorization_model_rewrite::Kind::Union(union.into())
+            }
+        };
+        Self { kind: Some(kind) }
+    }
+}
+
+impl From<pb::AuthorizationModelRewrite> for AuthorizationModelRewrite {
+    fn from(value: pb::AuthorizationModelRewrite) -> Self {
+        match value.kind {
+            Some(pb::authorization_model_rewrite::Kind::This(_)) => Self::This,
+            Some(pb::authorization_model_rewrite::Kind::ComputedUserset(computed_userset)) => {
+                Self::ComputedUserset(computed_userset.into())
+            }
+            Some(pb::authorization_model_rewrite::Kind::TupleToUserset(tuple_to_userset)) => {
+                Self::TupleToUserset(tuple_to_userset.into())
+            }
+            Some(pb::authorization_model_rewrite::Kind::Union(union)) => Self::Union(union.into()),
+            None => Self::default(),
+        }
+    }
+}
+
+impl From<AuthorizationModelComputedUserset> for pb::AuthorizationModelComputedUserset {
+    fn from(value: AuthorizationModelComputedUserset) -> Self {
+        Self {
+            relation: value.relation,
+        }
+    }
+}
+
+impl From<pb::AuthorizationModelComputedUserset> for AuthorizationModelComputedUserset {
+    fn from(value: pb::AuthorizationModelComputedUserset) -> Self {
+        Self {
+            relation: value.relation,
+        }
+    }
+}
+
+impl From<AuthorizationModelTupleToUserset> for pb::AuthorizationModelTupleToUserset {
+    fn from(value: AuthorizationModelTupleToUserset) -> Self {
+        Self {
+            tupleset_relation: value.tupleset_relation,
+            computed_relation: value.computed_relation,
+        }
+    }
+}
+
+impl From<pb::AuthorizationModelTupleToUserset> for AuthorizationModelTupleToUserset {
+    fn from(value: pb::AuthorizationModelTupleToUserset) -> Self {
+        Self {
+            tupleset_relation: value.tupleset_relation,
+            computed_relation: value.computed_relation,
+        }
+    }
+}
+
+impl From<AuthorizationModelRewriteUnion> for pb::AuthorizationModelRewriteUnion {
+    fn from(value: AuthorizationModelRewriteUnion) -> Self {
+        Self {
+            children: value.children.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<pb::AuthorizationModelRewriteUnion> for AuthorizationModelRewriteUnion {
+    fn from(value: pb::AuthorizationModelRewriteUnion) -> Self {
+        Self {
+            children: value.children.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<AuthorizationModelRef> for pb::AuthorizationModelRef {
+    fn from(value: AuthorizationModelRef) -> Self {
+        Self {
+            id: value.id,
+            version: value.version,
+            created_at: value.created_at.map(protocol::timestamp_from_system_time),
+        }
+    }
+}
+
+impl From<pb::AuthorizationModelRef> for AuthorizationModelRef {
+    fn from(value: pb::AuthorizationModelRef) -> Self {
+        Self {
+            id: value.id,
+            version: value.version,
+            created_at: value
+                .created_at
+                .and_then(|created_at| protocol::system_time_from_timestamp(&created_at).ok()),
+        }
+    }
+}
+
+impl From<GetActiveModelResponse> for pb::GetActiveModelResponse {
+    fn from(value: GetActiveModelResponse) -> Self {
+        Self {
+            model: value.model.map(Into::into),
+        }
+    }
+}
+
+impl From<pb::GetActiveModelResponse> for GetActiveModelResponse {
+    fn from(value: pb::GetActiveModelResponse) -> Self {
+        Self {
+            model: value.model.map(Into::into),
+        }
+    }
+}
+
+impl From<ListModelsRequest> for pb::ListModelsRequest {
+    fn from(value: ListModelsRequest) -> Self {
+        Self {
+            page_size: value.page_size,
+            page_token: value.page_token,
+        }
+    }
+}
+
+impl From<pb::ListModelsRequest> for ListModelsRequest {
+    fn from(value: pb::ListModelsRequest) -> Self {
+        Self {
+            page_size: value.page_size,
+            page_token: value.page_token,
+        }
+    }
+}
+
+impl From<ListModelsResponse> for pb::ListModelsResponse {
+    fn from(value: ListModelsResponse) -> Self {
+        Self {
+            models: value.models.into_iter().map(Into::into).collect(),
+            next_page_token: value.next_page_token,
+        }
+    }
+}
+
+impl From<pb::ListModelsResponse> for ListModelsResponse {
+    fn from(value: pb::ListModelsResponse) -> Self {
+        Self {
+            models: value.models.into_iter().map(Into::into).collect(),
+            next_page_token: value.next_page_token,
+        }
+    }
+}
+
+impl From<WriteModelRequest> for pb::WriteModelRequest {
+    fn from(value: WriteModelRequest) -> Self {
+        Self {
+            model: value.model.map(Into::into),
+        }
+    }
+}
+
+impl From<pb::WriteModelRequest> for WriteModelRequest {
+    fn from(value: pb::WriteModelRequest) -> Self {
+        Self {
+            model: value.model.map(Into::into),
         }
     }
 }
@@ -1748,7 +2190,7 @@ where
             .get_active_model()
             .await
             .map_err(|error| rpc_status("authorization get active model", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(response.into()))
     }
 
     async fn list_models(
@@ -1757,10 +2199,10 @@ where
     ) -> std::result::Result<GrpcResponse<pb::ListModelsResponse>, Status> {
         let response = self
             .provider
-            .list_models(request.into_inner())
+            .list_models(request.into_inner().into())
             .await
             .map_err(|error| rpc_status("authorization list models", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(response.into()))
     }
 
     async fn write_model(
@@ -1769,10 +2211,10 @@ where
     ) -> std::result::Result<GrpcResponse<pb::AuthorizationModelRef>, Status> {
         let response = self
             .provider
-            .write_model(request.into_inner())
+            .write_model(request.into_inner().into())
             .await
             .map_err(|error| rpc_status("authorization write model", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(response.into()))
     }
 }
 

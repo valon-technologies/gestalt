@@ -17,6 +17,7 @@ from http import HTTPStatus
 from typing import Any, Final, cast
 
 from . import _agent as _agent_native
+from . import _authorization as _authorization_native
 from . import _telemetry
 from ._api import Access, Credential, Error, ExternalIdentity, Host, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
@@ -1128,7 +1129,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization evaluate")
         def Evaluate(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.evaluate(request),
+                authz_provider.evaluate(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.AccessEvaluationRequest
+                    )
+                ),
                 authorization_pb2.AccessDecision,
                 context,
                 "evaluate",
@@ -1137,7 +1142,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization evaluate many")
         def EvaluateMany(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.evaluate_many(request),
+                authz_provider.evaluate_many(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.AccessEvaluationsRequest
+                    )
+                ),
                 authorization_pb2.AccessEvaluationsResponse,
                 context,
                 "evaluate many",
@@ -1146,7 +1155,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization search resources")
         def SearchResources(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.search_resources(request),
+                authz_provider.search_resources(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.ResourceSearchRequest
+                    )
+                ),
                 authorization_pb2.ResourceSearchResponse,
                 context,
                 "search resources",
@@ -1155,7 +1168,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization search subjects")
         def SearchSubjects(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.search_subjects(request),
+                authz_provider.search_subjects(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.SubjectSearchRequest
+                    )
+                ),
                 authorization_pb2.SubjectSearchResponse,
                 context,
                 "search subjects",
@@ -1169,7 +1186,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
                     "authorization provider does not support effective search",
                 )
             return _authorization_response(
-                authz_provider.effective_search_resources(request),
+                authz_provider.effective_search_resources(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.ResourceSearchRequest
+                    )
+                ),
                 authorization_pb2.ResourceSearchResponse,
                 context,
                 "effective search resources",
@@ -1183,7 +1204,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
                     "authorization provider does not support effective search",
                 )
             return _authorization_response(
-                authz_provider.effective_search_subjects(request),
+                authz_provider.effective_search_subjects(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.EffectiveSubjectSearchRequest
+                    )
+                ),
                 authorization_pb2.EffectiveSubjectSearchResponse,
                 context,
                 "effective search subjects",
@@ -1192,7 +1217,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization search actions")
         def SearchActions(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.search_actions(request),
+                authz_provider.search_actions(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.ActionSearchRequest
+                    )
+                ),
                 authorization_pb2.ActionSearchResponse,
                 context,
                 "search actions",
@@ -1206,7 +1235,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
                     "authorization provider does not support expansion",
                 )
             return _authorization_response(
-                authz_provider.expand(request),
+                authz_provider.expand(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.ExpandRequest
+                    )
+                ),
                 authorization_pb2.ExpandResponse,
                 context,
                 "expand",
@@ -1235,7 +1268,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization read relationships")
         def ReadRelationships(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.read_relationships(request),
+                authz_provider.read_relationships(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.ReadRelationshipsRequest
+                    )
+                ),
                 authorization_pb2.ReadRelationshipsResponse,
                 context,
                 "read relationships",
@@ -1243,7 +1280,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
 
         @_grpc_handler("authorization write relationships")
         def WriteRelationships(self, request: Any, _context: Any) -> Any:
-            authz_provider.write_relationships(request)
+            authz_provider.write_relationships(
+                _authorization_native._authorization_from_message(
+                    request, _authorization_native.WriteRelationshipsRequest
+                )
+            )
             return empty_pb2.Empty()
 
         @_grpc_handler("authorization get active model")
@@ -1258,7 +1299,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization list models")
         def ListModels(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.list_models(request),
+                authz_provider.list_models(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.ListModelsRequest
+                    )
+                ),
                 authorization_pb2.ListModelsResponse,
                 context,
                 "list models",
@@ -1267,7 +1312,11 @@ def _authorization_servicer(*, provider: PluginProvider) -> Any:
         @_grpc_handler("authorization write model")
         def WriteModel(self, request: Any, context: Any) -> Any:
             return _authorization_response(
-                authz_provider.write_model(request),
+                authz_provider.write_model(
+                    _authorization_native._authorization_from_message(
+                        request, _authorization_native.WriteModelRequest
+                    )
+                ),
                 authorization_pb2.AuthorizationModelRef,
                 context,
                 "write model",
@@ -1289,13 +1338,13 @@ def _authorization_response(
         )
     if isinstance(value, message_type):
         return value
-    if isinstance(value, dict):
-        message = message_type()
-        json_format.ParseDict(value, message)
-        return message
+    try:
+        return _authorization_native._authorization_message(value, message_type)
+    except TypeError:
+        pass
     raise TypeError(
         f"authorization provider returned {type(value).__name__} for {label}, "
-        f"want {message_type.__name__} or dict"
+        f"want {message_type.__name__}, native authorization value, or dict"
     )
 
 

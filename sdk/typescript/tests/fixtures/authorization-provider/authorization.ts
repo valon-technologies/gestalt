@@ -16,7 +16,7 @@ export const provider = defineAuthorizationProvider({
   },
   evaluateMany(request) {
     return {
-      decisions: request.requests.map((entry) => ({
+      decisions: (request.requests ?? []).map((entry) => ({
         allowed: entry.subject?.id === "user:1",
         modelId: "authz-model-1",
       })),
@@ -26,7 +26,7 @@ export const provider = defineAuthorizationProvider({
     return {
       resources: [
         {
-          type: request.resourceType,
+          type: request.resourceType ?? "",
           id: `${resourcePrefix}-doc-1`,
         },
       ],
@@ -37,7 +37,7 @@ export const provider = defineAuthorizationProvider({
     return {
       subjects: [
         {
-          type: request.subjectType,
+          type: request.subjectType ?? "",
           id: "user:1",
         },
       ],
