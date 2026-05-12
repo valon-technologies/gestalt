@@ -231,7 +231,7 @@ jobs:
         run: npm run test:sdk-api-docs
 
       - name: Fetch main docs source
-        run: git fetch origin main --tags
+        run: git fetch origin main
 
       - name: Build versioned docs smoke site
         run: npm run build:versioned:test
