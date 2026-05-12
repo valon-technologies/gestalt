@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"google.golang.org/protobuf/types/known/structpb"

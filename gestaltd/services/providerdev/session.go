@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"

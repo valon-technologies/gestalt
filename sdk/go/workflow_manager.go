@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
 
 // EnvWorkflowManagerSocket names the environment variable containing the

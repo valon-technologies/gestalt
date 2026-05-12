@@ -7,8 +7,6 @@ import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
 
-option go_package = "github.com/valon-technologies/gestalt/internal/gen/v1;proto";
-
 // TypedValue stores one scalar or structured value in an IndexedDB record.
 message TypedValue {
   oneof kind {

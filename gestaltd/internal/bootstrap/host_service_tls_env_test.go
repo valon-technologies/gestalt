@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -27,8 +26,8 @@ func TestPrepareCoreLoadsHostServiceTLSCAFileForHostedRuntimeEnv(t *testing.T) {
 	if err := os.WriteFile(caFile, []byte(caPEM), 0o644); err != nil {
 		t.Fatalf("WriteFile(caFile): %v", err)
 	}
-	t.Setenv(gestalt.EnvHostServiceTLSCAFile, caFile)
-	t.Setenv(gestalt.EnvHostServiceTLSCAPEM, "")
+	t.Setenv(hostServiceTLSCAFileEnv, caFile)
+	t.Setenv(hostServiceTLSCAPEMEnv, "")
 
 	factories := NewFactoryRegistry()
 	factories.ExternalCredentials = func(context.Context, string, yaml.Node, []runtimehost.HostService, Deps) (core.ExternalCredentialProvider, error) {
@@ -78,10 +77,10 @@ func TestPrepareCoreLoadsHostServiceTLSCAFileForHostedRuntimeEnv(t *testing.T) {
 	}
 
 	env := withHostServiceTLSCAEnv(nil, prepared.Deps)
-	if got := env[gestalt.EnvHostServiceTLSCAPEM]; got != want {
+	if got := env[hostServiceTLSCAPEMEnv]; got != want {
 		t.Fatalf("host service CA PEM env = %q, want file contents", got)
 	}
-	if got := env[gestalt.EnvHostServiceTLSCAFile]; got != "" {
+	if got := env[hostServiceTLSCAFileEnv]; got != "" {
 		t.Fatalf("host service CA file env = %q, want omitted", got)
 	}
 }

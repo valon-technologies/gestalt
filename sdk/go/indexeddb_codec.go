@@ -3,8 +3,8 @@ package gestalt
 import (
 	"fmt"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
-	"github.com/valon-technologies/gestalt/internal/indexeddbcodec"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"github.com/valon-technologies/gestalt/sdk/go/internal/indexeddbcodec"
 )
 
 func typedValueFromAny(v any) (*proto.TypedValue, error) {

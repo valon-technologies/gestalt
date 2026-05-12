@@ -10,9 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/catalog"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 )
 
 func main() {
@@ -32,44 +31,41 @@ func run() error {
 
 	switch os.Args[1] {
 	case "provider":
-		return pluginservice.ServeProvider(ctx, newProxyProvider(&echoProvider{}))
+		return serveProxyProvider(ctx, newProxyProvider(&echoProvider{}))
 	default:
 		return fmt.Errorf("unknown mode %q", os.Args[1])
 	}
 }
 
-var _ core.Provider = (*echoProvider)(nil)
+var _ executableProvider = (*echoProvider)(nil)
 
 type echoProvider struct{}
 
-func (p *echoProvider) Name() string                        { return "echo" }
-func (p *echoProvider) DisplayName() string                 { return "Echo" }
-func (p *echoProvider) Description() string                 { return "Echoes back the input parameters" }
-func (p *echoProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeNone }
-func (p *echoProvider) AuthTypes() []string                 { return nil }
-func (p *echoProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	return nil
+func (p *echoProvider) Configure(context.Context, string, map[string]any) error { return nil }
+func (p *echoProvider) Name() string                                            { return "echo" }
+func (p *echoProvider) DisplayName() string                                     { return "Echo" }
+func (p *echoProvider) Description() string                                     { return "Echoes back the input parameters" }
+func (p *echoProvider) ConnectionMode() proto.ConnectionMode {
+	return proto.ConnectionMode_CONNECTION_MODE_NONE
 }
-func (p *echoProvider) CredentialFields() []core.CredentialFieldDef { return nil }
-func (p *echoProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
-func (p *echoProvider) ConnectionForOperation(string) string        { return "" }
-func (p *echoProvider) Catalog() *catalog.Catalog {
-	return &catalog.Catalog{
+func (p *echoProvider) AuthTypes() []string { return nil }
+func (p *echoProvider) Catalog() *proto.Catalog {
+	return &proto.Catalog{
 		Name:        p.Name(),
 		DisplayName: p.DisplayName(),
 		Description: p.Description(),
-		Operations: []catalog.CatalogOperation{
+		Operations: []*proto.CatalogOperation{
 			{
-				ID:          "echo",
+				Id:          "echo",
 				Description: "Echo back input params as JSON",
 				Method:      http.MethodPost,
-				Transport:   catalog.TransportPlugin,
+				Transport:   transportPlugin,
 			},
 		},
 	}
 }
 
-func (p *echoProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*core.OperationResult, error) {
+func (p *echoProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*gestalt.OperationResult, error) {
 	if operation != "echo" {
 		return nil, fmt.Errorf("unknown operation: %s", operation)
 	}
@@ -77,5 +73,5 @@ func (p *echoProvider) Execute(_ context.Context, operation string, params map[s
 	if err != nil {
 		return nil, fmt.Errorf("marshaling params: %w", err)
 	}
-	return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+	return &gestalt.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 }

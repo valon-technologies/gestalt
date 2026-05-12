@@ -10,13 +10,17 @@ Thanks for contributing. Before opening a PR, run the checks that match the part
 | `gestaltd/internal/daemon` | Server command handling, runtime composition, and built-in registration. |
 | `gestaltd/core` | Public Go interfaces for auth, datastore, secrets, cache, telemetry, and providers. |
 | `gestaltd/internal` | Bootstrap, config loading, invocation, HTTP and MCP serving, operator lifecycle, and other server internals. |
+| `gestaltd/internal/gen/v1` | Server-local generated Go protobuf bindings. Regenerated from `sdk/proto`. |
 | `gestaltd/internal/ui` | Embedded admin UI asset serving and related tests. |
 | `gestaltd/deploy` | Docker and Helm deployment assets for the server. |
 | `gestalt` | Rust CLI client. |
 | `sdk/go` | Go SDK. |
+| `sdk/go/internal/gen/v1` | SDK-local generated Go protobuf bindings used by SDK internals. |
+| `sdk/go/gen/v1` | Public Go compatibility aliases for low-level protocol users. |
 | `sdk/python` | Python SDK. |
 | `sdk/rust` | Rust SDK. |
 | `sdk/typescript` | TypeScript SDK. |
+| `sdk/proto` | Shared protobuf source for all language bindings. |
 | `docs` | Documentation site source for `https://gestaltd.ai`. |
 
 ## Working Principles
@@ -58,6 +62,16 @@ Run the checks that match the code you touched.
 ```sh
 cd gestaltd
 go test ./...
+../.github/scripts/check-go-proto-split.sh .
+```
+
+After changing `sdk/proto`, regenerate and check the server Go bindings:
+
+```sh
+cd sdk/proto
+buf generate --template buf.go.server.gen.yaml
+cd ../..
+git diff --exit-code -- gestaltd/internal/gen/v1/*.pb.go gestaltd/internal/gen/v1/*_grpc.pb.go
 ```
 
 ### CLI
@@ -72,6 +86,16 @@ cargo test --workspace
 ```sh
 cd sdk/go
 go test ./...
+```
+
+After changing `sdk/proto`, regenerate and check the Go SDK bindings and public alias layer:
+
+```sh
+cd sdk/proto
+buf generate --template buf.go.sdk.gen.yaml
+cd ../..
+go run ./sdk/go/gen/v1/generate_aliases.go ./sdk/go/internal/gen/v1 ./sdk/go/gen/v1/aliases.go
+git diff --exit-code -- sdk/go/internal/gen/v1/*.pb.go sdk/go/internal/gen/v1/*_grpc.pb.go sdk/go/gen/v1/aliases.go
 ```
 
 ### Python SDK

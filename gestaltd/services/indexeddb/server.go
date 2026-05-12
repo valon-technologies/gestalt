@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"

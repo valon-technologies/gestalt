@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/internal/gen/v1"
-	"github.com/valon-technologies/gestalt/internal/indexeddbcodec"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"

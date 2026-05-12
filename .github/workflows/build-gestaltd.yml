@@ -29,10 +29,26 @@ jobs:
           go-version-file: gestaltd/go.mod
           cache-dependency-path: gestaltd/go.sum
 
+      - name: Install Buf
+        run: go install github.com/bufbuild/buf/cmd/buf@v1.66.1
+
       - name: Check go mod tidy
         run: |
           go mod tidy
           git diff --exit-code go.mod go.sum
+
+      - name: Verify checked-in generated bindings
+        run: |
+          repo_root="$(git rev-parse --show-toplevel)"
+          cd "$repo_root/sdk/proto"
+          "$(go env GOPATH)/bin/buf" generate --template buf.go.server.gen.yaml
+          cd "$repo_root"
+          git diff --exit-code -- gestaltd/internal/gen/v1/*.pb.go gestaltd/internal/gen/v1/*_grpc.pb.go
+
+      - name: Check generated proto package split
+        run: |
+          repo_root="$(git rev-parse --show-toplevel)"
+          bash "$repo_root/.github/scripts/check-go-proto-split.sh" "$repo_root/gestaltd"
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
