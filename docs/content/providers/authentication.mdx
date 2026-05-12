@@ -14,22 +14,13 @@ authentication provider to begin login, redirects the user to the identity provi
 then calls the provider again to complete the callback. After that, Gestalt
 issues and stores its own session.
 
-Some authentication providers also support:
-
-- validating externally issued bearer tokens for API clients
-- customizing session TTL
-- restricting login to allowed email domains or tenant settings
-
 ## First-Party Authentication Providers
 
-Gestalt includes one built-in authentication provider, `local`, for
-single-user development. Published first-party authentication providers live
-under
+Published first-party authentication providers live under
 [`valon-technologies/gestalt-providers/auth`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth).
 
 | Provider | Use case |
 | --- | --- |
-| `local` | Single-user development on a trusted machine |
 | [`github.com/valon-technologies/gestalt-providers/auth/oidc`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/oidc) | Generic OpenID Connect providers such as Google, Okta, Auth0, Azure AD, or Keycloak |
 
 ## Configuring `providers.authentication`
@@ -43,13 +34,8 @@ providers:
         version: 0.0.1-alpha.1
       config:
         issuerUrl: https://login.example.com
-        clientId: ${OIDC_CLIENT_ID}
-        clientSecret:
-          secret:
-            provider: default
-            name: oidc-client-secret
-        allowedDomains:
-          - example.com
+        clientId: ...
+        clientSecret: ...
 ```
 
 Structured secret refs such as `clientSecret.secret.provider: default` are
@@ -70,11 +56,8 @@ providers:
       source: ./oidc-auth/manifest.yaml
       config:
         issuerUrl: https://login.example.com
-        clientId: ${OIDC_CLIENT_ID}
-        clientSecret:
-          secret:
-            provider: default
-            name: oidc-client-secret
+        clientId: ...
+        clientSecret: ...
 ```
 
 
@@ -96,7 +79,7 @@ spec:
 
 ### Interface
 
-You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `BeginLogin` returns an authorization URL that Gestalt redirects the user to. `CompleteLogin` exchanges the callback parameters for an authenticated identity.
+The authentication surface has two required methods: `BeginLogin` and `CompleteLogin`. `BeginLogin` returns an authorization URL that Gestalt redirects the user to. `CompleteLogin` exchanges callback parameters for an authenticated identity.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -307,6 +290,12 @@ External token validation lets API clients present a bearer token directly inste
     Implement `ExternalTokenValidator` on the same provider type:
 
     ```go
+    import (
+        "context"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
     func (g *GoogleAuth) ValidateExternalToken(ctx context.Context, token string) (*gestalt.AuthenticatedUser, error) {
         if token == "" {
             return nil, nil
@@ -354,6 +343,9 @@ External token validation lets API clients present a bearer token directly inste
     Override `validate_external_token` on the `AuthenticationProvider` implementation:
 
     ```rust
+    use std::collections::BTreeMap;
+    use gestalt::AuthenticatedUser;
+
     async fn validate_external_token(
         &self,
         token: &str,
@@ -369,7 +361,7 @@ External token validation lets API clients present a bearer token directly inste
             email: "user@example.com".into(),
             email_verified: true,
             display_name: "Example User".into(),
-            claims: std::collections::BTreeMap::from([(
+            claims: BTreeMap::from([(
                 "issuer".into(),
                 "https://accounts.google.com".into(),
             )]),
@@ -382,6 +374,8 @@ External token validation lets API clients present a bearer token directly inste
     Add `validateExternalToken` to `defineAuthenticationProvider`:
 
     ```ts
+    import { defineAuthenticationProvider } from "@valon-technologies/gestalt";
+
     export const provider = defineAuthenticationProvider({
       // configure, beginLogin, and completeLogin omitted for brevity
 
@@ -448,6 +442,8 @@ Session TTL controls how long Gestalt persists a successful browser login. If yo
     Add `sessionSettings` to `defineAuthenticationProvider`:
 
     ```ts
+    import { defineAuthenticationProvider } from "@valon-technologies/gestalt";
+
     export const provider = defineAuthenticationProvider({
       // configure, beginLogin, and completeLogin omitted for brevity
 

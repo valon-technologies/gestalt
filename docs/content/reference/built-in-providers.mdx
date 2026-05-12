@@ -11,12 +11,13 @@ Two simple secrets providers (`env` and `file`), telemetry, and audit remain bui
 
 ## Authentication Providers
 
-Authentication providers handle platform login. They are configured under `providers.authentication.<name>` in your config file.
+Authentication providers handle platform login. They are configured under
+`providers.authentication.<name>` in your config file. Omit
+`providers.authentication` for local or unauthenticated deployments.
 
-| Name | Purpose |
+| Package | Purpose |
 | --- | --- |
-| `local` | Single-user authentication for local development. No external identity provider required. |
-| `oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
+| `github.com/valon-technologies/gestalt-providers/auth/oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
 
 ```yaml
 providers:

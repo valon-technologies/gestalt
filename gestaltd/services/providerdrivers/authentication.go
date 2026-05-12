@@ -24,7 +24,7 @@ func AuthenticationFactory(node yaml.Node, deps AuthenticationDeps) (core.Authen
 	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindAuthentication,
 		Subject:              "authentication provider",
-		SourceMissingMessage: "no Go, Rust, or Python authentication provider source package found",
+		SourceMissingMessage: "no Go, Rust, Python, or TypeScript authentication provider source package found",
 		Config:               cfg.YAMLConfig,
 	})
 	if err != nil {
