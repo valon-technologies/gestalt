@@ -757,7 +757,7 @@ workflows:
 | `target.plugin.instance` | Optional target instance name. |
 | `target.plugin.input` | Optional static input merged into the invocation payload. |
 | `target.agent` | Optional agent target using the same shape as workflow agent requests: `provider`, `model`, `prompt`, `messages`, `tools`, `responseSchema`, `metadata`, `modelOptions`, and `timeout`. |
-| `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal and credential subject. Without `runAs`, config-managed workflows run as `system:config` and cannot target user-mode credentials. |
+| `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal and credential subject. Without `runAs`, config-managed workflows run as `system:config` and cannot target subject-scoped credentials. |
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
 | `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
 | `invokes` | Optional additional plugin-operation grants as `{ plugin, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `plugins.<target>.invokes` for nested plugin calls. |
@@ -1166,7 +1166,7 @@ plugins:
         - snapshots
     connections:
       default:
-        mode: user
+        mode: subject
         auth:
           type: oauth2
     allowedOperations:
@@ -1442,7 +1442,7 @@ provider refers to the connection at runtime.
 ```yaml
 connections:
   slack-workspace:
-    mode: user
+    mode: subject
     auth:
       type: oauth2
       authorizationUrl: https://accounts.example.com/oauth/authorize
@@ -1469,7 +1469,7 @@ receiving secrets in static config:
 ```yaml
 connections:
   vertex-kimi:
-    mode: user
+    mode: subject
     auth:
       type: bearer
     params:
@@ -1498,7 +1498,7 @@ subject-owned connections.
 ```yaml
 connections:
   gmail-service-mailbox:
-    mode: user
+    mode: subject
     auth:
       type: oauth2
       tokenUrl: https://oauth2.googleapis.com/token
@@ -1527,7 +1527,7 @@ connection literally named `default`, then the only named connection when there
 is exactly one.
 
 Connection `mode` determines how credentials are managed: `none` requires no
-credentials, and `user` stores credentials for the caller's effective subject.
+credentials, and `subject` stores credentials for the caller's effective subject.
 For humans that is typically `user:<id>`; for non-human API token callers it can
 be `service_account:<id>` or another canonical non-system subject ID. Runtime
 surfaces can also supply system subjects such as
@@ -1536,7 +1536,7 @@ surfaces can also supply system subjects such as
 Binding entries that use `ref` may set only binding metadata such as
 `displayName` and `credentialRefresh`; they cannot override `mode`, `auth`, or
 `params`. Top-level connections cannot set `ref`. Inline connection bindings are
-available for simple single-use `none` cases; user-owned connections that
+available for simple single-use `none` cases; subject-scoped connections that
 collect or exchange credentials must be declared at the top level and referenced
 by `ref`.
 
@@ -1549,7 +1549,7 @@ on-demand refresh path.
 ```yaml
 connections:
   google-workspace:
-    mode: user
+    mode: subject
     auth:
       type: oauth2
       tokenUrl: https://oauth2.googleapis.com/token
@@ -1676,7 +1676,7 @@ Post-connect discovery lets a connection fetch a list of resources after the use
 ```yaml
 connections:
   default:
-    mode: user
+    mode: subject
     auth:
       type: oauth2
       authorizationUrl: https://accounts.example.com/oauth/authorize
@@ -1787,7 +1787,7 @@ must be present.
 allowed when their corresponding source is set.
 
 Top-level connections cannot set `ref` or `exposure`. Connection bindings that
-set `ref` cannot also set `mode`, `auth`, or `params`. User-owned inline
+set `ref` cannot also set `mode`, `auth`, or `params`. Subject-scoped inline
 connections that collect or exchange credentials are not supported; declare a
 top-level connection and reference it with `ref`. All connections in a plugin
 must share the same mode.

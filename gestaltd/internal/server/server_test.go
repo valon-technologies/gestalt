@@ -13295,11 +13295,11 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 	if slackStatus != "ready" || slackCredentialState != "connected" {
 		t.Fatalf("slack status = {%q, %q}, want ready/connected", slackStatus, slackCredentialState)
 	}
-	if defaultConnection.Mode != "user" || defaultConnection.Status != "ready" || defaultConnection.CredentialState != "connected" || !reflect.DeepEqual(defaultConnection.Actions, []string{"disconnect", "add_instance"}) {
-		t.Fatalf("default connection metadata = %+v, want connected user connection", *defaultConnection)
+	if defaultConnection.Mode != "subject" || defaultConnection.Status != "ready" || defaultConnection.CredentialState != "connected" || !reflect.DeepEqual(defaultConnection.Actions, []string{"disconnect", "add_instance"}) {
+		t.Fatalf("default connection metadata = %+v, want connected subject-scoped connection", *defaultConnection)
 	}
-	if botConnection.Mode != "user" || botConnection.Status != "ready" || botConnection.CredentialState != "connected" {
-		t.Fatalf("bot connection metadata = %+v, want connected user-owned bot connection", *botConnection)
+	if botConnection.Mode != "subject" || botConnection.Status != "ready" || botConnection.CredentialState != "connected" {
+		t.Fatalf("bot connection metadata = %+v, want connected subject-scoped bot connection", *botConnection)
 	}
 
 	opsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/slack/operations", nil)
@@ -13412,9 +13412,9 @@ func TestExecuteOperation_DeclarativeRESTConnectionSelectorRoutesCredentialAndOm
 		"gestaltd.operation.name":     "chat.postMessage",
 		"gestaltd.invocation.surface": "http",
 	}
-	userAttrs := maps.Clone(httpOperationAttrs)
-	userAttrs["gestaltd.connection.mode"] = "user"
-	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", userAttrs)
+	subjectAttrs := maps.Clone(httpOperationAttrs)
+	subjectAttrs["gestaltd.connection.mode"] = "subject"
+	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", subjectAttrs)
 
 	mu.Lock()
 	defer mu.Unlock()

@@ -427,8 +427,8 @@ func TestAuditMetadata_ServiceAccountSubjectAndCredentialPath(t *testing.T) {
 	if record["subject_kind"] != "service_account" {
 		t.Fatalf("expected subject_kind=service_account, got %v", record["subject_kind"])
 	}
-	if record["credential_mode"] != "user" {
-		t.Fatalf("expected credential_mode=user, got %v", record["credential_mode"])
+	if record["credential_mode"] != "subject" {
+		t.Fatalf("expected credential_mode=subject, got %v", record["credential_mode"])
 	}
 	if record["credential_subject_id"] != "service_account:triage-bot" {
 		t.Fatalf("expected credential_subject_id service account principal, got %v", record["credential_subject_id"])

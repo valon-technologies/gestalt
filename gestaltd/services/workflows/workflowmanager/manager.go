@@ -1290,7 +1290,7 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 }
 
 func (m *Manager) normalizeWorkflowPluginTargetCredentialMode(mode core.ConnectionMode, callerPluginName, pluginName, operation string) (core.ConnectionMode, error) {
-	mode = core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(mode))))
+	mode = core.NormalizeOptionalConnectionMode(mode)
 	switch mode {
 	case "":
 		return "", nil
@@ -1938,8 +1938,8 @@ func (m *Manager) normalizeWorkflowAgentDelivery(delivery *coreworkflow.OutputDe
 	delivery.Target.Operation = strings.TrimSpace(delivery.Target.Operation)
 	delivery.Target.Connection = strings.TrimSpace(delivery.Target.Connection)
 	delivery.Target.Instance = strings.TrimSpace(delivery.Target.Instance)
-	delivery.Target.CredentialMode = core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.Target.CredentialMode))))
-	delivery.CredentialMode = core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.CredentialMode))))
+	delivery.Target.CredentialMode = core.NormalizeOptionalConnectionMode(delivery.Target.CredentialMode)
+	delivery.CredentialMode = core.NormalizeOptionalConnectionMode(delivery.CredentialMode)
 	if delivery.Target.PluginName == "" {
 		return fmt.Errorf("%w: workflow agent %s.target.plugin_name is required", invocation.ErrProviderNotFound, fieldName)
 	}
@@ -2002,7 +2002,7 @@ func (m *Manager) callerPluginInvokeCredentialMode(callerPluginName, pluginName,
 		if strings.TrimSpace(invoke.Plugin) != pluginName || strings.TrimSpace(invoke.Operation) != operation {
 			continue
 		}
-		mode := core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(invoke.CredentialMode))))
+		mode := core.NormalizeOptionalConnectionMode(invoke.CredentialMode)
 		switch mode {
 		case "":
 			return "", false, nil

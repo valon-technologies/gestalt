@@ -1031,7 +1031,7 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 			Operation:      strings.TrimSpace(ref.Operation),
 			Connection:     strings.TrimSpace(ref.Connection),
 			Instance:       strings.TrimSpace(ref.Instance),
-			CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(ref.CredentialMode))),
+			CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(ref.CredentialMode)),
 			Title:          strings.TrimSpace(ref.Title),
 			Description:    strings.TrimSpace(ref.Description),
 		})

@@ -250,7 +250,7 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		return nil, fmt.Errorf("workflow target plugin is required")
 	}
 	pluginTarget := target.Plugin
-	credentialMode := core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(pluginTarget.CredentialMode))))
+	credentialMode := core.NormalizeOptionalConnectionMode(pluginTarget.CredentialMode)
 	switch credentialMode {
 	case "":
 	case core.ConnectionModeNone, core.ConnectionModeUser:

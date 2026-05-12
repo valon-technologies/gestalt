@@ -2,10 +2,11 @@ import { Tabs } from 'nextra/components'
 
 # Authentication
 
-Authentication providers handle platform login for the Gestalt server. They are separate
-from plugin connections: `providers.authentication.<name>` decides how users sign in to the
-deployment itself, while plugin connections decide how Gestalt authenticates to
-upstream APIs on behalf of callers.
+Authentication providers handle platform login for the Gestalt server.
+Authentication is separate from [Authorization](/providers/authorization), which
+decides what the caller may access, and
+[External Credentials](/providers/external-credentials), which provide upstream
+credentials for configured connections.
 
 ## How authentication providers work
 

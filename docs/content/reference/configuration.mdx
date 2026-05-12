@@ -204,7 +204,7 @@ Gestalt. Do not use a shared placeholder value in a real deployment.
 ## Full Example
 
 A production deployment with OIDC auth, external credential storage, a GitHub
-plugin with per-user connections, and MCP enabled:
+plugin with subject-scoped connections, and MCP enabled:
 
 ```yaml
 server:
@@ -266,14 +266,14 @@ plugins:
         baseUrl: https://api.github.com
     connections:
       api:
-        mode: user
+        mode: subject
         auth:
           type: bearer
           credentials:
             - name: token
               label: Personal Access Token
       mcp:
-        mode: user
+        mode: subject
         auth:
           type: mcp_oauth
 ```

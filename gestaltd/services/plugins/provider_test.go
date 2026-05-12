@@ -225,8 +225,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Identity:    &core.UserIdentity{DisplayName: "Ada"},
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|user|user:user-123|roadmap|admin|tool-call-123|https://gestalt.example.test",
-			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|user|roadmap|admin|https://gestalt.example.test",
+			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|subject|user:user-123|roadmap|admin|tool-call-123|https://gestalt.example.test",
+			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|subject|roadmap|admin|https://gestalt.example.test",
 		},
 		{
 			name: "service account subject",
@@ -236,8 +236,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Kind:        principal.Kind("service_account"),
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|service_account:triage-bot|roadmap|admin|tool-call-123|https://gestalt.example.test",
-			wantSessionCatalog: "token-123|service_account:triage-bot|service_account|Triage Bot|false|api_token|user|roadmap|admin|https://gestalt.example.test",
+			wantExecuteBody:    "echo|secret-token|hi|acme|service_account:triage-bot|service_account|Triage Bot|false|api_token|subject|service_account:triage-bot|roadmap|admin|tool-call-123|https://gestalt.example.test",
+			wantSessionCatalog: "token-123|service_account:triage-bot|service_account|Triage Bot|false|api_token|subject|roadmap|admin|https://gestalt.example.test",
 		},
 	}
 

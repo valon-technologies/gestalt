@@ -172,7 +172,7 @@ func (m *InvocationTokenManager) resolveToken(token, pluginName string) (invocat
 			UserAgent:  claims.RequestMeta.UserAgent,
 		},
 		credential: invocation.CredentialContext{
-			Mode:       core.ConnectionMode(strings.TrimSpace(claims.Credential.Mode)),
+			Mode:       core.NormalizeOptionalConnectionMode(core.ConnectionMode(claims.Credential.Mode)),
 			SubjectID:  claims.Credential.SubjectID,
 			Connection: claims.Credential.Connection,
 			Instance:   claims.Credential.Instance,

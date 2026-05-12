@@ -291,12 +291,12 @@ func cloneOperationConnectionSelectors(src map[string]core.OperationConnectionSe
 
 func declarativeConnectionMode(override core.ConnectionMode, auth *providermanifestv1.ProviderAuth) core.ConnectionMode {
 	if override != "" {
-		return override
+		return core.NormalizeConnectionMode(override)
 	}
 	if auth == nil || auth.Type == "" || auth.Type == providermanifestv1.AuthTypeNone {
 		return core.ConnectionModeNone
 	}
-	return core.ConnectionModeUser
+	return core.ConnectionModeSubject
 }
 
 func declarativeCredentialFields(auth *providermanifestv1.ProviderAuth) []core.CredentialFieldDef {

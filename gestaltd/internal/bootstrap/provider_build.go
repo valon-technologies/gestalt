@@ -836,8 +836,9 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved conf
 	case config.SpecSurfaceMCP:
 		connMode := core.ConnectionMode(resolved.Connection.Mode)
 		if connMode == "" {
-			connMode = core.ConnectionModeUser
+			connMode = core.ConnectionModeSubject
 		}
+		connMode = core.NormalizeConnectionMode(connMode)
 		up, err := mcpupstream.New(
 			ctx,
 			name,

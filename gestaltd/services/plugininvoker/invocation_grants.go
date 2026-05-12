@@ -186,7 +186,7 @@ func decodeInvocationGrantClaims(src map[string]invocationGrantClaims) Invocatio
 			if _, ok := decoded.Operations[operation]; !ok {
 				continue
 			}
-			decoded.Operations[operation] = core.ConnectionMode(strings.TrimSpace(mode))
+			decoded.Operations[operation] = core.NormalizeOptionalConnectionMode(core.ConnectionMode(mode))
 		}
 		for _, surface := range grant.Surfaces {
 			surface = strings.ToLower(strings.TrimSpace(surface))

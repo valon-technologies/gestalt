@@ -3,8 +3,10 @@ import { Tabs } from 'nextra/components'
 # Authorization
 
 Authorization providers store relationship data and answer access checks for
-Gestalt. They are separate from [Authentication](/providers/authentication),
-which identifies the caller.
+Gestalt. Authorization is separate from
+[Authentication](/providers/authentication), which identifies the caller, and
+[External Credentials](/providers/external-credentials), which provide upstream
+credentials for configured connections.
 
 Gestalt's model follows the core ideas from
 [Google Zanzibar](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/):

@@ -38,7 +38,7 @@ func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 		Operation:             strings.TrimSpace(target.Operation),
 		Connection:            strings.TrimSpace(target.Connection),
 		Instance:              strings.TrimSpace(target.Instance),
-		CredentialMode:        core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode))),
+		CredentialMode:        core.NormalizeOptionalConnectionMode(target.CredentialMode),
 		Unavailable:           normalizeUnavailableToolTarget(target.Unavailable),
 		RunAs:                 core.NormalizeRunAsSubject(target.RunAs),
 		RunAsExternalIdentity: core.NormalizeExternalIdentityRef(target.RunAsExternalIdentity),
@@ -78,7 +78,7 @@ func (m *Manager) ResolveToolID(id string) (coreagent.ToolTarget, error) {
 	target.Operation = strings.TrimSpace(target.Operation)
 	target.Connection = strings.TrimSpace(target.Connection)
 	target.Instance = strings.TrimSpace(target.Instance)
-	target.CredentialMode = core.ConnectionMode(strings.TrimSpace(string(target.CredentialMode)))
+	target.CredentialMode = core.NormalizeOptionalConnectionMode(target.CredentialMode)
 	target.Unavailable = normalizeUnavailableToolTarget(target.Unavailable)
 	target.RunAs = core.NormalizeRunAsSubject(target.RunAs)
 	target.RunAsExternalIdentity = core.NormalizeExternalIdentityRef(target.RunAsExternalIdentity)

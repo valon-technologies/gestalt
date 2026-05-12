@@ -2277,8 +2277,8 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 	if manifest.Spec == nil || manifest.Spec.Connections["default"] == nil || len(manifest.Spec.Connections["default"].Params) != 1 || !manifest.Spec.Connections["default"].Params["tenant"].Required {
 		t.Fatalf("provider connection_params = %+v", manifest.Spec)
 	}
-	if manifest.Spec.Connections["default"].Mode != "user" {
-		t.Fatalf("provider default connection mode = %q, want %q", manifest.Spec.Connections["default"].Mode, "user")
+	if manifest.Spec.Connections["default"].Mode != providermanifestv1.ConnectionModeSubject {
+		t.Fatalf("provider default connection mode = %q, want %q", manifest.Spec.Connections["default"].Mode, providermanifestv1.ConnectionModeSubject)
 	}
 
 	manifestData, err := os.ReadFile(manifestPath)
@@ -2289,7 +2289,7 @@ func TestRun_ProviderReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *
 		"spec:",
 		"connections:",
 		"default:",
-		"mode: user",
+		"mode: subject",
 		"params:",
 		"mcp: true",
 		"entrypoint:",

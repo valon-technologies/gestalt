@@ -471,9 +471,38 @@ const (
 type ConnectionMode string
 
 const (
-	ConnectionModeNone ConnectionMode = "none"
-	ConnectionModeUser ConnectionMode = "user"
+	ConnectionModeNone    ConnectionMode = "none"
+	ConnectionModeSubject ConnectionMode = "subject"
+
+	// ConnectionModeUser is the legacy name for subject-scoped credentials.
+	ConnectionModeUser = ConnectionModeSubject
+
+	connectionModeLegacyUser ConnectionMode = "user"
 )
+
+func NormalizeConnectionMode(mode ConnectionMode) ConnectionMode {
+	normalized := normalizeConnectionModeValue(mode)
+	switch normalized {
+	case "", ConnectionModeSubject, connectionModeLegacyUser:
+		return ConnectionModeSubject
+	case ConnectionModeNone:
+		return ConnectionModeNone
+	default:
+		return normalized
+	}
+}
+
+func NormalizeOptionalConnectionMode(mode ConnectionMode) ConnectionMode {
+	normalized := normalizeConnectionModeValue(mode)
+	if normalized == "" {
+		return ""
+	}
+	return NormalizeConnectionMode(normalized)
+}
+
+func normalizeConnectionModeValue(mode ConnectionMode) ConnectionMode {
+	return ConnectionMode(strings.ToLower(strings.TrimSpace(string(mode))))
+}
 
 type PaginationStyle string
 

@@ -4220,7 +4220,7 @@ func summarizeAgentTurn(turn *coreagent.Turn) *coreagent.Turn {
 }
 
 func normalizeAgentToolCredentialMode(mode core.ConnectionMode) (core.ConnectionMode, error) {
-	switch core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(mode)))) {
+	switch core.NormalizeOptionalConnectionMode(mode) {
 	case "":
 		return "", nil
 	case core.ConnectionModeNone:

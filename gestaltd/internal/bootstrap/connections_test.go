@@ -200,7 +200,7 @@ func TestBuildExternalCredentialsRuntimeConfigNodeResolvedConnectionsContract(t 
 	if conn == nil {
 		t.Fatalf("gmail default resolved connection missing from %#v", connections)
 	}
-	if conn["provider"] != "gmail" || conn["connection"] != "default" || conn["connectionId"] != "google-workspace" || conn["mode"] != "user" {
+	if conn["provider"] != "gmail" || conn["connection"] != "default" || conn["connectionId"] != "google-workspace" || conn["mode"] != "subject" {
 		t.Fatalf("resolved connection identity = %#v", conn)
 	}
 	auth, ok := conn["auth"].(map[string]any)

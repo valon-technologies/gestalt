@@ -5588,7 +5588,7 @@ plugins:
         path: ./plugins/dummy/manifest.yaml
       connections:
         named:
-          mode: user
+          mode: subject
           auth:
             type: none
           params:

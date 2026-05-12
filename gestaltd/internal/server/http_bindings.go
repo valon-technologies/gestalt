@@ -187,7 +187,7 @@ func validateMountedHTTPBinding(pluginName, bindingName string, binding *config.
 		return fmt.Errorf("%s.method %q is not a valid HTTP method", path, binding.Method)
 	}
 	binding.Method = method
-	binding.CredentialMode = providermanifestv1.ConnectionMode(strings.TrimSpace(string(binding.CredentialMode)))
+	binding.CredentialMode = providermanifestv1.NormalizeOptionalConnectionMode(binding.CredentialMode)
 	switch binding.CredentialMode {
 	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
 	default:
