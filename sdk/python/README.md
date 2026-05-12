@@ -69,28 +69,8 @@ and `AgentTurn`; structured fields accept dictionaries or dataclass instances,
 and timestamp fields use timezone-aware `datetime` values. Workflow helpers such as
 `bound_workflow_target`, `workflow_signal`, and `bound_workflow_run` accept
 plain dictionaries, dataclass instances, and native `datetime` values for
-structured payloads and timestamp fields, then build the protocol messages used
-on the wire. The generated protobuf stubs are private runtime internals and are
-not part of the provider authoring API. The SDK does not expose generic
-protobuf marshal/unmarshal helpers; provider-facing APIs should accept native
-Python values and keep protocol serialization inside transport adapters.
-
-## Regenerating protobuf stubs
-
-This is an SDK maintainer workflow. Provider authors consume the checked-in
-stubs through the `gestalt` package and do not need to regenerate them in
-provider repositories.
-
-Regenerate them from the repo root with:
-
-```sh
-uv run python sdk/python/scripts/generate_stubs.py
-```
-
-The script uses pinned Buf remote Python plugins so the generated stubs stay
-reproducible while `plugin_pb2.py` tracks the protobuf `6.33.1` runtime floor
-used by this SDK package and remains compatible with protobuf 7 runtimes.
-`buf` must be available on `PATH`.
+structured payloads and timestamp fields. Provider-facing APIs should accept
+native Python values and keep transport serialization inside SDK adapters.
 
 ## API reference
 
@@ -103,7 +83,7 @@ uv run sphinx-build -W -b html -d docs/_build/doctrees docs docs/_build/html
 ```
 
 The generated docs intentionally focus on the handwritten SDK surface. The
-checked-in protobuf stubs live under the private `gestalt/_gen` package and are
+checked-in transport stubs live under the private `gestalt/_gen` package and are
 not expanded as authored reference pages.
 
 ## Publishing
@@ -140,6 +120,6 @@ uv run python -m unittest discover -s tests
 uv run sphinx-build -W -b html -d docs/_build/doctrees docs docs/_build/html
 ```
 
-The generated protobuf stubs under `gestalt/_gen` are excluded from the static
-analysis tools because they are vendored output rather than hand-maintained SDK
+The vendored transport stubs under `gestalt/_gen` are excluded from the static
+analysis tools because they are generated output rather than hand-maintained SDK
 code.

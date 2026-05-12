@@ -136,6 +136,9 @@ jobs:
       - name: Build docs
         run: npm run build
 
+      - name: Check SDK docs
+        run: npm run test:sdk-docs
+
       - name: Test installer
         run: npm run test:installer
 

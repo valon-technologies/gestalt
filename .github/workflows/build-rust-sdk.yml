@@ -78,3 +78,6 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --no-deps
+
+      - name: Check published Rust docs surface
+        run: bash ../../docs/scripts/check-sdk-doc-leaks.sh rust target/doc/gestalt

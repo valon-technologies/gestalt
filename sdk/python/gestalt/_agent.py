@@ -1410,7 +1410,7 @@ def _copy_value(target: Any, field: str, value: Any) -> None:
 
 
 def agent_actor_to_dict(actor: Any) -> dict[str, Any]:
-    """Convert an ``AgentActor`` protocol value to a plain dictionary."""
+    """Convert an ``AgentActor`` value to a plain dictionary."""
 
     return _message_fields(
         actor,
@@ -1431,7 +1431,7 @@ def agent_actor_from_dict(value: Mapping[str, Any] | None) -> Any:
 
 
 def agent_subject_context_to_dict(subject: Any) -> dict[str, Any]:
-    """Convert an ``AgentSubjectContext`` protocol value to a dictionary."""
+    """Convert an ``AgentSubjectContext`` value to a dictionary."""
 
     return _message_fields(
         subject,
@@ -1477,7 +1477,7 @@ def prepared_workspace_from_dict(value: Mapping[str, Any] | None) -> Any:
 
 
 def agent_tool_ref_to_dict(tool_ref: Any) -> dict[str, Any]:
-    """Convert an ``AgentToolRef`` protocol value to a dictionary."""
+    """Convert an ``AgentToolRef`` value to a dictionary."""
 
     return _message_fields(
         tool_ref,
@@ -1571,7 +1571,7 @@ def _infer_agent_message_part_type(part: AgentMessagePart) -> int:
 
 
 def agent_message_to_dict(message: Any) -> dict[str, Any]:
-    """Convert an ``AgentMessage`` protocol value to a dictionary."""
+    """Convert an ``AgentMessage`` value to a dictionary."""
 
     value = _message_fields(message, ("role", "text"))
     if message.parts:
@@ -1584,13 +1584,13 @@ def agent_message_to_dict(message: Any) -> dict[str, Any]:
 
 
 def agent_messages_to_dicts(messages: Iterable[Any]) -> list[dict[str, Any]]:
-    """Convert agent protocol messages to dictionaries."""
+    """Convert agent messages to dictionaries."""
 
     return [agent_message_to_dict(message) for message in messages]
 
 
 def agent_message_from_dict(value: Any) -> Any:
-    """Create an ``AgentMessage`` protocol value from a dictionary."""
+    """Create an ``AgentMessage`` value from a dictionary."""
 
     data = dict(_mapping_value(value, "AgentMessage"))
     return AgentMessage(
@@ -1605,7 +1605,7 @@ def agent_message_from_dict(value: Any) -> Any:
 
 
 def agent_messages_from_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any]:
-    """Create agent protocol messages from dictionaries."""
+    """Create agent messages from dictionaries."""
 
     return [agent_message_from_dict(message) for message in messages]
 

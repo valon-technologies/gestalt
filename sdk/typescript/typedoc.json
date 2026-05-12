@@ -2,12 +2,8 @@
   "$schema": "https://typedoc.org/schema.json",
   "entryPoints": [
     "docs/entrypoints/@valon-technologies/gestalt",
-    "docs/entrypoints/build",
-    "docs/entrypoints/runtime",
     "docs/entrypoints/schema",
-    "docs/entrypoints/protocol/v1",
-    "docs/entrypoints/telemetry",
-    "docs/entrypoints/target"
+    "docs/entrypoints/telemetry"
   ],
   "displayBasePath": "docs/entrypoints",
   "tsconfig": "tsconfig.json",
@@ -15,6 +11,11 @@
   "excludePrivate": true,
   "excludeProtected": true,
   "excludeInternal": true,
+  "excludeExternals": true,
+  "externalPattern": [
+    "**/src/internal/**"
+  ],
+  "disableSources": true,
   "sort": [
     "source-order"
   ],

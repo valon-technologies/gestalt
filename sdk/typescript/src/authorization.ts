@@ -125,9 +125,8 @@ const sharedAuthorizationTransport: {
 /**
  * Client for the host-configured authorization provider.
  *
- * The client accepts plain SDK request objects and performs protobuf message
- * construction inside the transport layer, so callers do not need to import
- * generated protocol modules.
+ * The client accepts plain SDK request objects and keeps transport message
+ * construction inside the SDK.
  */
 export class AuthorizationClient {
   private readonly client: Client<typeof AuthorizationProviderService>;
@@ -213,8 +212,7 @@ export class AuthorizationClient {
   /**
    * Grants a canonical Gestalt subject id editor access to an agent session.
    *
-   * This writes the host-managed `agent_session` relationship without requiring
-   * callers to import generated protobuf modules.
+   * This writes the host-managed `agent_session` relationship through the SDK.
    */
   async grantAgentSessionEditor(
     subjectId: string,

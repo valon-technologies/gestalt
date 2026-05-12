@@ -41,31 +41,31 @@ _shared_authorization_lock = threading.Lock()
 
 
 def AuthorizationSubject(*args: Any, **kwargs: Any) -> Any:
-    """Create an authorization subject protocol value."""
+    """Create an authorization subject value."""
 
     return authorization_pb2.Subject(*args, **kwargs)
 
 
 def AuthorizationResource(*args: Any, **kwargs: Any) -> Any:
-    """Create an authorization resource protocol value."""
+    """Create an authorization resource value."""
 
     return authorization_pb2.Resource(*args, **kwargs)
 
 
 def AuthorizationSubjectSet(*args: Any, **kwargs: Any) -> Any:
-    """Create an authorization subject-set protocol value."""
+    """Create an authorization subject-set value."""
 
     return authorization_pb2.SubjectSet(*args, **kwargs)
 
 
 def AuthorizationRelationshipTarget(*args: Any, **kwargs: Any) -> Any:
-    """Create an authorization relationship-target protocol value."""
+    """Create an authorization relationship-target value."""
 
     return authorization_pb2.RelationshipTarget(*args, **kwargs)
 
 
 def AuthorizationAction(*args: Any, **kwargs: Any) -> Any:
-    """Create an authorization action protocol value."""
+    """Create an authorization action value."""
 
     return authorization_pb2.Action(*args, **kwargs)
 
@@ -302,7 +302,7 @@ class AuthorizationClient:
 
         This convenience method writes the same managed authorization tuple as
         ``agent_session_editor_write_request`` and does not require callers to
-        import generated protobuf modules.
+        import transport modules.
         """
 
         self.write_relationships(

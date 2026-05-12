@@ -536,9 +536,9 @@ pub struct ExpandResponse {
 
 /// Client for the host-configured authorization provider.
 ///
-/// The client exposes typed SDK values and performs all protobuf conversion
-/// internally. Providers can use it to evaluate access, search relationships,
-/// and write relationship grants without importing generated protocol modules.
+/// The client exposes typed SDK values and keeps transport conversion inside
+/// the SDK. Providers can use it to evaluate access, search relationships, and
+/// write relationship grants.
 pub struct Authorization {
     client: AuthorizationProviderClient<AuthorizationTransport>,
 }

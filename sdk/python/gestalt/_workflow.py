@@ -1491,91 +1491,91 @@ def workflow_execution_reference_from_reference(value: Any | None) -> Any | None
 
 
 def BoundWorkflowTarget(*args: Any, **kwargs: Any) -> Any:
-    """Create a bound workflow target protocol value."""
+    """Create a bound workflow target value."""
 
     return pb.BoundWorkflowTarget(*args, **kwargs)
 
 
 def BoundWorkflowPluginTarget(*args: Any, **kwargs: Any) -> Any:
-    """Create a bound plugin workflow target protocol value."""
+    """Create a bound plugin workflow target value."""
 
     return pb.BoundWorkflowPluginTarget(*args, **kwargs)
 
 
 def BoundWorkflowAgentTarget(*args: Any, **kwargs: Any) -> Any:
-    """Create a bound agent workflow target protocol value."""
+    """Create a bound agent workflow target value."""
 
     return pb.BoundWorkflowAgentTarget(*args, **kwargs)
 
 
 def WorkflowOutputDelivery(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow output delivery protocol value."""
+    """Create a workflow output delivery value."""
 
     return pb.WorkflowOutputDelivery(*args, **kwargs)
 
 
 def WorkflowOutputBinding(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow output binding protocol value."""
+    """Create a workflow output binding value."""
 
     return pb.WorkflowOutputBinding(*args, **kwargs)
 
 
 def WorkflowOutputValueSource(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow output value source protocol value."""
+    """Create a workflow output value source."""
 
     return pb.WorkflowOutputValueSource(*args, **kwargs)
 
 
 def WorkflowActor(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow actor protocol value."""
+    """Create a workflow actor value."""
 
     return pb.WorkflowActor(*args, **kwargs)
 
 
 def WorkflowSignal(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow signal protocol value."""
+    """Create a workflow signal value."""
 
     return pb.WorkflowSignal(*args, **kwargs)
 
 
 def WorkflowEvent(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow event protocol value."""
+    """Create a workflow event value."""
 
     return pb.WorkflowEvent(*args, **kwargs)
 
 
 def WorkflowEventMatch(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow event-match protocol value."""
+    """Create a workflow event-match value."""
 
     return pb.WorkflowEventMatch(*args, **kwargs)
 
 
 def WorkflowRunTrigger(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow run-trigger protocol value."""
+    """Create a workflow run-trigger value."""
 
     return pb.WorkflowRunTrigger(*args, **kwargs)
 
 
 def BoundWorkflowRun(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider run protocol value."""
+    """Create a workflow-provider run value."""
 
     return pb.BoundWorkflowRun(*args, **kwargs)
 
 
 def BoundWorkflowSchedule(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider schedule protocol value."""
+    """Create a workflow-provider schedule value."""
 
     return pb.BoundWorkflowSchedule(*args, **kwargs)
 
 
 def BoundWorkflowEventTrigger(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider event trigger protocol value."""
+    """Create a workflow-provider event trigger value."""
 
     return pb.BoundWorkflowEventTrigger(*args, **kwargs)
 
 
 def BoundWorkflowDefinition(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow definition protocol value."""
+    """Create a workflow definition value."""
 
     return pb.BoundWorkflowDefinition(*args, **kwargs)
 
@@ -1875,7 +1875,7 @@ def WorkflowManagerPublishEventRequest(*args: Any, **kwargs: Any) -> Any:
 
 
 def workflow_run_status_name(status: int) -> str:
-    """Return the protocol enum name for a workflow run status value."""
+    """Return the enum name for a workflow run status value."""
 
     if not status:
         return ""

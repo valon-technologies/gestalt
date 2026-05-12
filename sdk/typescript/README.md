@@ -83,26 +83,15 @@ The root package exports provider definition helpers:
 `defineAgentProvider` handlers receive and return plain TypeScript objects such
 as `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
 `AgentTurnEvent`. Structured payload fields accept JSON values and timestamp
-fields use native `Date`; the SDK runtime owns protobuf conversion at the
+fields use native `Date`; the SDK runtime owns transport serialization at the
 transport boundary. `AgentHost` includes plain-object helpers named
 `listToolsForTurn`, `executeToolForTurn`, and `resolveConnectionForTurn`.
-Advanced transport tests can import generated schemas, services, and message types from
-`@valon-technologies/gestalt/protocol/v1` instead of reaching into internal
-paths. Public IndexedDB conversion helpers are exported for lower-level
-datastore fixtures. The root package also exports protocol conversion helpers
-such as `structFromObject`, `structFromJsonObject`, and `valueFromJson` for
-protobuf well-known type fields used by workflow and agent payloads. Struct
-helpers accept plain JSON objects and reject unsupported
-values like `Date`, `Map`, class instances, `undefined`, `bigint`, and
-non-finite numbers instead of silently dropping or stringifying them.
 Workflow helpers such as `boundWorkflowTarget`, `workflowSignal`,
 `boundWorkflowRun`, and `workflowExecutionReference` accept plain JSON objects
-and native `Date` values, then produce the generated protocol messages used by
-workflow providers. Copy helpers such as `boundWorkflowTargetFromTarget`
-preserve wire shape without requiring provider code to import generated schemas
-or hand-build protobuf oneofs. The SDK does not expose generic protobuf
-marshal/unmarshal helpers; provider-facing APIs should accept native TypeScript
-values and keep protocol serialization inside transport adapters.
+and native `Date` values. Copy helpers such as `boundWorkflowTargetFromTarget`
+preserve request shape without requiring provider code to assemble transport
+objects. Provider-facing APIs should accept native TypeScript values and keep
+transport serialization inside SDK adapters.
 
 The TypeScript SDK does not currently expose an authored authorization-provider
 helper. Use the Go SDK when you need to build a custom authorization provider.
@@ -127,14 +116,6 @@ gestalt-ts-build ROOT plugin:./provider.ts#plugin OUTPUT PROVIDER_NAME GOOS GOAR
 
 The build entrypoint compiles a standalone executable with Bun and bundles the
 provider source into the result.
-
-## Regenerating protobuf code
-
-From the repo root:
-
-```sh
-buf generate --template sdk/proto/buf.typescript.gen.yaml sdk/proto
-```
 
 ## API reference
 

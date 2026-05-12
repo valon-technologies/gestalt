@@ -49,6 +49,7 @@ jobs:
         run: |
           rm -rf ../../docs/public/api/python
           uv run sphinx-build -W -b html -d docs/_build/deploy-doctrees docs ../../docs/public/api/python
+          bash ../../docs/scripts/check-sdk-doc-leaks.sh python ../../docs/public/api/python
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -63,6 +64,7 @@ jobs:
         run: |
           rm -rf ../../docs/public/api/typescript
           bun run docs:build:deploy
+          bash ../../docs/scripts/check-sdk-doc-leaks.sh typescript ../../docs/public/api/typescript
 
       - name: Authenticate to Google Cloud
         id: gcp-auth

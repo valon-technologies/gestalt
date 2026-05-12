@@ -1,8 +1,4 @@
-"""Catalog helpers for integration plugins.
-
-The handwritten helpers in this module build and serialize catalog documents
-around the generated ``Catalog`` protobuf messages exported by :mod:`gestalt`.
-"""
+"""Catalog helpers for integration plugins."""
 
 from __future__ import annotations
 
@@ -72,7 +68,7 @@ def build_catalog(
     plugin_name: str,
     operations: Iterable[OperationDefinition],
 ) -> Catalog:
-    """Build a catalog protobuf from authored operation definitions."""
+    """Build a catalog value from authored operation definitions."""
 
     if plugin_pb2 is None:
         return {
@@ -86,7 +82,7 @@ def build_catalog(
 
 
 def catalog_to_proto(catalog: Catalog | Mapping[str, Any] | None) -> Catalog | None:
-    """Normalize catalog input to a protobuf message."""
+    """Normalize catalog input to the SDK catalog shape."""
 
     if catalog is None:
         return None
@@ -100,7 +96,7 @@ def catalog_to_proto(catalog: Catalog | Mapping[str, Any] | None) -> Catalog | N
 def catalog_to_dict(
     catalog: Catalog | Mapping[str, Any], *, field_style: str = "yaml"
 ) -> dict[str, Any]:
-    """Convert a catalog protobuf or mapping into plain Python data."""
+    """Convert a catalog value or mapping into plain Python data."""
 
     if plugin_pb2 is not None and isinstance(catalog, Catalog):
         raw = json_format.MessageToDict(

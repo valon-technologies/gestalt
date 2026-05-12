@@ -81,46 +81,19 @@ The crate also exposes clients for sibling host services, including `Cache`,
 `AgentProvider` implementations receive and return native structs such as
 `CreateAgentProviderTurnRequest`, `AgentSession`, `AgentTurn`, and
 `AgentTurnEvent`. Structured payload fields use `serde_json::Value` and
-timestamp fields use `SystemTime`; the SDK runtime owns protobuf conversion at
+timestamp fields use `SystemTime`; the SDK runtime owns transport serialization at
 the transport boundary. `AgentHost` includes plain-input helpers for listing
-tools, executing tools, and resolving connections during one turn. Use
-`gestalt::protocol` helpers such as `struct_from_json`, `struct_from_map`,
-`json_from_struct`, `value_from_json`, and `json_from_value` for lower-level
-well-known type fixtures, and use `gestalt::proto::v1` when transport fixtures
-need generated messages or service traits. The SDK does not expose generic
-protobuf marshal/unmarshal or timestamp wrapper helpers.
-The IndexedDB module also exposes JSON-named conversion helpers for
-asserting datastore wire shapes.
+tools, executing tools, and resolving connections during one turn.
 Workflow builders such as `new_bound_workflow_target`,
 `new_workflow_signal`, `new_bound_workflow_run`, and
 `new_workflow_execution_reference` accept SDK-owned input structs with
-`serde::Serialize` payload setters and native `SystemTime` fields, then produce
-the generated workflow protocol messages. Copy helpers such as
-`new_bound_workflow_target_from_target` preserve the wire shape without asking
-provider code to hand-build protobuf oneofs, `Struct`s, or `Timestamp`s.
-
-## Codegen strategy
-
-Bindings are checked into
-[`src/generated`](https://github.com/valon-technologies/gestalt/tree/main/sdk/rust/src/generated)
-so crate consumers do not need a protobuf toolchain when building
-`gestalt-sdk`.
-
-Maintainers regenerate them from the shared proto definitions in
-[`sdk/proto`](https://github.com/valon-technologies/gestalt/tree/main/sdk/proto)
-with the Buf template in
-[`sdk/proto/buf.rust.gen.yaml`](https://github.com/valon-technologies/gestalt/tree/main/sdk/proto/buf.rust.gen.yaml).
-Use the same Buf CLI version as CI for deterministic remote-plugin output.
-
-To regenerate the bindings:
-
-```bash
-sdk/rust/scripts/generate_stubs.sh
-```
+`serde::Serialize` payload setters and native `SystemTime` fields. Copy helpers
+such as `new_bound_workflow_target_from_target` preserve request shape without
+asking provider code to assemble transport objects.
 
 ## Public surface
 
-The crate keeps generated bindings behind a higher-level authoring API:
+The crate exposes higher-level authoring APIs:
 
 - `Provider`, `Request`, `Response`, and `ok(...)` model integration
   providers.
@@ -133,20 +106,9 @@ The crate keeps generated bindings behind a higher-level authoring API:
   `AgentManager`, and `PluginInvoker` call sibling host services.
 - `RuntimeMetadata` lets provider runtimes describe their display metadata and
   version.
-- `runtime` contains entrypoints for serving provider surfaces over the Unix
-  socket exposed by `gestaltd`.
-- `proto::v1` exposes generated protocol bindings for low-level integration
-  work.
-- `protocol` converts JSON and `Serialize` values, `Struct`, and `Value`
-  without depending on private generated modules. SDK clients that own request
-  construction use these conversions so typed structs can become protobuf
-  `Struct` payloads without hand-building protos.
-  Generic JSON payloads reject non-finite numbers, bytes, and non-string map
-  keys instead of coercing them through `serde_json`.
 - Workflow builder inputs such as `BoundWorkflowPluginTargetInput`,
   `BoundWorkflowAgentTargetInput`, `WorkflowSignalInput`, and
-  `BoundWorkflowRunInput` use the same protocol conversions for provider-owned
-  workflow state.
+  `BoundWorkflowRunInput` model provider-owned workflow state.
 
 ## Package layout
 

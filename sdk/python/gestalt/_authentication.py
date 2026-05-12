@@ -8,7 +8,7 @@ pb: Any = _pb
 
 
 def AuthenticatedUser(*args: Any, **kwargs: Any) -> Any:
-    """Create an authenticated-user protocol value."""
+    """Create an authenticated-user value."""
 
     return pb.AuthenticatedUser(*args, **kwargs)
 
