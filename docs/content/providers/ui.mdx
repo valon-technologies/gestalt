@@ -19,6 +19,14 @@ for simple prebuilt bundles, but source-built UI packages are the recommended
 authoring model. The built-in admin UI at `/admin` remains available regardless
 of whether public UI bundles are configured.
 
+<Callout type="info">
+  Source-built UI packages are still part of the alpha UI surface. They are the
+  recommended path for new custom UIs, but the ergonomics are not final: today
+  you must declare the build command, output directory, and preparation
+  environment build tools explicitly. Smoother build-tool detection and
+  packaging workflows are on the radar for future releases.
+</Callout>
+
 ## How UI providers work
 
 Unlike executable providers, a UI provider is served from a static asset root.

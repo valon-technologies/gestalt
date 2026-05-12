@@ -71,6 +71,13 @@ the static assets during preparation and serves the prepared output at runtime.
 Route rules are required when the mounted plugin binds an `authorizationPolicy`.
 For UI package details, see [Providers > UI](/providers/ui).
 
+<Callout type="info">
+  Source-built UI packages are the recommended shape for new applications, but
+  the workflow is still alpha. Current manifests need explicit build commands,
+  output paths, and build tools in the preparation environment; improving those
+  ergonomics is on the radar.
+</Callout>
+
 ```yaml
 kind: ui
 source: github.com/acme/ui/workspace-review
