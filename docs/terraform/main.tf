@@ -20,7 +20,10 @@ provider "google" {
 }
 
 locals {
-  docs_cert_name = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
+  docs_cert_name            = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}-${replace(var.registry_domain, ".", "-")}"
+  github_actions_email      = "github-actions@${var.project_id}.iam.gserviceaccount.com"
+  sdk_api_docs_bucket_name  = var.sdk_api_docs_bucket_name != "" ? var.sdk_api_docs_bucket_name : "${var.resource_prefix}-sdk-api-docs"
+  sdk_api_docs_backend_name = "${var.resource_prefix}-sdk-api-docs-backend"
 }
 
 # ---------- Cloud Run ----------
@@ -77,6 +80,34 @@ resource "google_compute_backend_service" "docs" {
   backend {
     group = google_compute_region_network_endpoint_group.docs.id
   }
+}
+
+resource "google_storage_bucket" "sdk_api_docs" {
+  name                        = local.sdk_api_docs_bucket_name
+  location                    = var.sdk_api_docs_bucket_location
+  uniform_bucket_level_access = true
+
+  # Public objects are required for the external HTTPS load-balancer backend
+  # bucket serving model used by gestaltd.ai/api/* in the follow-up PR.
+  public_access_prevention = "inherited"
+}
+
+resource "google_storage_bucket_iam_member" "sdk_api_docs_public_read" {
+  bucket = google_storage_bucket.sdk_api_docs.name
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
+}
+
+resource "google_storage_bucket_iam_member" "sdk_api_docs_github_actions_upload" {
+  bucket = google_storage_bucket.sdk_api_docs.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${local.github_actions_email}"
+}
+
+resource "google_compute_backend_bucket" "sdk_api_docs" {
+  name        = local.sdk_api_docs_backend_name
+  bucket_name = google_storage_bucket.sdk_api_docs.name
+  enable_cdn  = false
 }
 
 resource "google_compute_url_map" "docs" {
@@ -173,7 +204,7 @@ resource "google_dns_record_set" "registry" {
 # ---------- Workload Identity Federation ----------
 
 resource "google_service_account_iam_member" "github_actions_wif" {
-  service_account_id = "projects/${var.project_id}/serviceAccounts/github-actions@${var.project_id}.iam.gserviceaccount.com"
+  service_account_id = "projects/${var.project_id}/serviceAccounts/${local.github_actions_email}"
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/${var.wif_pool_id}/attribute.repository/${var.github_repository}"
 }

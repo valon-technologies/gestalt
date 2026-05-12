@@ -40,6 +40,18 @@ variable "resource_prefix" {
   type        = string
 }
 
+variable "sdk_api_docs_bucket_name" {
+  description = "Optional explicit GCS bucket name for versioned SDK API docs"
+  type        = string
+  default     = ""
+}
+
+variable "sdk_api_docs_bucket_location" {
+  description = "Location for the versioned SDK API docs GCS bucket"
+  type        = string
+  default     = "US"
+}
+
 variable "wif_pool_id" {
   description = "Workload Identity Pool ID for GitHub Actions OIDC"
   type        = string

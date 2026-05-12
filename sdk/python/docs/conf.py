@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import os
 import pathlib
 import sys
 
@@ -13,10 +14,12 @@ if str(ROOT) not in sys.path:
 project = "Gestalt Python SDK"
 author = "Valon Technologies"
 
-try:
-    release = importlib.metadata.version("gestalt-sdk")
-except importlib.metadata.PackageNotFoundError:
-    release = "development"
+release = os.environ.get("GESTALT_SDK_DOCS_VERSION")
+if release is None:
+    try:
+        release = importlib.metadata.version("gestalt-sdk")
+    except importlib.metadata.PackageNotFoundError:
+        release = "development"
 version = release
 
 extensions = [
