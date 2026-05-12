@@ -128,13 +128,13 @@ non-aliased message copies.
 .. autosummary::
    :nosignatures:
 
-   BoundWorkflowPluginTargetInput
-   BoundWorkflowAgentTargetInput
-   BoundWorkflowTargetInput
-   BoundWorkflowRunInput
-   BoundWorkflowScheduleInput
-   BoundWorkflowEventTriggerInput
-   WorkflowExecutionReferenceInput
+   BoundWorkflowPluginTarget
+   BoundWorkflowAgentTarget
+   BoundWorkflowTarget
+   BoundWorkflowRun
+   BoundWorkflowSchedule
+   BoundWorkflowEventTrigger
+   WorkflowExecutionReference
    bound_workflow_plugin_target
    bound_workflow_agent_target
    bound_workflow_target
@@ -154,19 +154,19 @@ non-aliased message copies.
    workflow_execution_reference
    workflow_execution_reference_from_reference
 
-.. autoclass:: BoundWorkflowPluginTargetInput
+.. autoclass:: BoundWorkflowPluginTarget
 
-.. autoclass:: BoundWorkflowAgentTargetInput
+.. autoclass:: BoundWorkflowAgentTarget
 
-.. autoclass:: BoundWorkflowTargetInput
+.. autoclass:: BoundWorkflowTarget
 
-.. autoclass:: BoundWorkflowRunInput
+.. autoclass:: BoundWorkflowRun
 
-.. autoclass:: BoundWorkflowScheduleInput
+.. autoclass:: BoundWorkflowSchedule
 
-.. autoclass:: BoundWorkflowEventTriggerInput
+.. autoclass:: BoundWorkflowEventTrigger
 
-.. autoclass:: WorkflowExecutionReferenceInput
+.. autoclass:: WorkflowExecutionReference
 
 .. autofunction:: bound_workflow_plugin_target
 

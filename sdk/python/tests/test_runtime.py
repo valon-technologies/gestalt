@@ -21,9 +21,9 @@ from gestalt import (
     AgentProvider,
     AuthenticationProvider,
     BeginLoginRequest,
-    BoundWorkflowEventTriggerInput,
-    BoundWorkflowRunInput,
-    BoundWorkflowScheduleInput,
+    BoundWorkflowEventTrigger,
+    BoundWorkflowRun,
+    BoundWorkflowSchedule,
     CacheEntry,
     CacheProvider,
     Catalog,
@@ -1478,7 +1478,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
         class Provider(WorkflowProvider):
             def start_run(self, request: Any) -> Any:
                 self.request = request
-                return BoundWorkflowRunInput(id="run-native")
+                return BoundWorkflowRun(id="run-native")
 
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)
@@ -1495,19 +1495,19 @@ class WorkflowRuntimeTests(unittest.TestCase):
         class Provider(WorkflowProvider):
             def pause_schedule(self, request: Any) -> Any:
                 self.pause_schedule_request = request
-                return BoundWorkflowScheduleInput(id=request.schedule_id, paused=True)
+                return BoundWorkflowSchedule(id=request.schedule_id, paused=True)
 
             def resume_schedule(self, request: Any) -> Any:
                 self.resume_schedule_request = request
-                return BoundWorkflowScheduleInput(id=request.schedule_id, paused=False)
+                return BoundWorkflowSchedule(id=request.schedule_id, paused=False)
 
             def pause_event_trigger(self, request: Any) -> Any:
                 self.pause_trigger_request = request
-                return BoundWorkflowEventTriggerInput(id=request.trigger_id, paused=True)
+                return BoundWorkflowEventTrigger(id=request.trigger_id, paused=True)
 
             def resume_event_trigger(self, request: Any) -> Any:
                 self.resume_trigger_request = request
-                return BoundWorkflowEventTriggerInput(id=request.trigger_id, paused=False)
+                return BoundWorkflowEventTrigger(id=request.trigger_id, paused=False)
 
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)

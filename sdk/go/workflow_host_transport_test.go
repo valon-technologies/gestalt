@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
@@ -64,8 +64,8 @@ func TestTransport_WorkflowHostTCPTargetTokenEnv(t *testing.T) {
 
 	resp, err := client.InvokeOperation(context.Background(), gestalt.InvokeWorkflowOperationInput{
 		RunID: "run-1",
-		Target: &gestalt.BoundWorkflowTargetInput{
-			Plugin: &gestalt.BoundWorkflowPluginTargetInput{
+		Target: &gestalt.BoundWorkflowTarget{
+			Plugin: &gestalt.BoundWorkflowPluginTarget{
 				PluginName: "roadmap",
 				Operation:  "sync_items",
 			},

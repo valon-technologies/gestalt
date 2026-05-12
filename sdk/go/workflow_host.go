@@ -26,14 +26,14 @@ var sharedWorkflowHostTransport sharedManagerTransport[proto.WorkflowHostClient]
 // InvokeWorkflowOperationInput requests invoking a workflow operation through
 // the host service.
 type InvokeWorkflowOperationInput struct {
-	Target       *BoundWorkflowTargetInput
+	Target       *BoundWorkflowTarget
 	RunID        string
-	Trigger      *WorkflowRunTriggerInput
+	Trigger      *WorkflowRunTrigger
 	Input        any
 	Metadata     any
-	CreatedBy    *WorkflowActorInput
+	CreatedBy    *WorkflowActor
 	ExecutionRef string
-	Signals      []WorkflowSignalInput
+	Signals      []WorkflowSignal
 }
 
 // InvokeWorkflowOperationResponse is returned by WorkflowHostClient.InvokeOperation.

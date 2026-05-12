@@ -52,7 +52,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     displayName: "Workflow transport fixture",
     async startRun(request) {
       const detail =
-        request.target?.kind.case === "plugin"
+        request.target?.kind?.case === "plugin"
           ? request.target.kind.value.operation ?? ""
           : "";
       calls.push({ method: "start-run", detail });

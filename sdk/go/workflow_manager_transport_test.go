@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
@@ -90,7 +90,7 @@ func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	created, err := client.CreateSchedule(context.Background(), gestalt.WorkflowManagerCreateScheduleInput{
+	created, err := client.CreateSchedule(context.Background(), gestalt.WorkflowManagerCreateSchedule{
 		ProviderName:   "managed",
 		Cron:           "*/5 * * * *",
 		IdempotencyKey: "workflow-schedule-key-go",
@@ -154,16 +154,16 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 		t.Fatalf("ValuesFromMap: %v", err)
 	}
 	createdAtValue := time.Date(1969, 12, 31, 23, 59, 59, 999_000_000, time.UTC)
-	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRunInput{
+	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRun{
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
-		Target: &gestalt.BoundWorkflowTargetInput{Agent: &gestalt.BoundWorkflowAgentTargetInput{
+		Target: &gestalt.BoundWorkflowTarget{Agent: &gestalt.BoundWorkflowAgentTarget{
 			ProviderName: "simple",
 			Model:        "gpt-5.5",
 			Prompt:       "Respond in thread.",
 		}},
 		IdempotencyKey: "slack-event-123",
-		Signal: &gestalt.WorkflowSignalInput{
+		Signal: &gestalt.WorkflowSignal{
 			Name:           "slack.message",
 			IdempotencyKey: "slack-event-123",
 			Payload:        map[string]any{"ok": true},
@@ -255,19 +255,19 @@ func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
 	defer func() { _ = client.Close() }()
 
 	createdAt := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
-	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRunInput{
+	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRun{
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
-		Target: &gestalt.BoundWorkflowTargetInput{Agent: &gestalt.BoundWorkflowAgentTargetInput{
+		Target: &gestalt.BoundWorkflowTarget{Agent: &gestalt.BoundWorkflowAgentTarget{
 			ProviderName: "simple",
 			Model:        "gpt-5.5",
-			MessageInputs: []gestalt.AgentMessageInput{{
+			Messages: []gestalt.AgentMessage{{
 				Role: "user",
 				Text: "Respond in thread.",
 			}},
 		}},
 		IdempotencyKey: "slack-event-123",
-		Signal: &gestalt.WorkflowSignalInput{
+		Signal: &gestalt.WorkflowSignal{
 			Name:           "slack.message",
 			IdempotencyKey: "slack-event-123",
 			Payload:        map[string]any{"ok": true},

@@ -31,7 +31,7 @@ test("workflow builders accept native JSON objects and Dates", () => {
     createdAt,
   });
 
-  if (target.kind.case !== "plugin") {
+  if (target.kind?.case !== "plugin") {
     throw new Error("expected plugin target");
   }
   expect(target.kind.value.input).toEqual({ ok: false, count: 0 });
@@ -50,7 +50,7 @@ test("workflow copy helpers do not alias nested payloads", () => {
   });
   const copied = boundWorkflowTargetFromTarget(target);
 
-  if (target.kind.case !== "plugin" || copied.kind.case !== "plugin") {
+  if (target.kind?.case !== "plugin" || copied.kind?.case !== "plugin") {
     throw new Error("expected plugin targets");
   }
   const input = target.kind.value.input as { nested: { value: string } };

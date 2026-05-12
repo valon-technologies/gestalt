@@ -447,16 +447,7 @@ pub struct AgentToolRef {
     pub system: String,
 }
 
-/// Input for an agent message.
-#[derive(Clone, Debug, Default)]
-pub struct AgentMessageInput {
-    pub role: String,
-    pub text: String,
-    pub parts: Vec<AgentMessagePartInput>,
-    pub metadata: Option<serde_json::Value>,
-}
-
-impl AgentMessageInput {
+impl AgentMessage {
     /// Sets message metadata from any JSON-object-like serializable value.
     pub fn with_metadata<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
         self.metadata = Some(protocol::json_from_serializable(value)?);
@@ -473,37 +464,18 @@ impl AgentMessageInput {
     }
 }
 
-/// Input for an agent message part.
-#[derive(Clone, Debug, Default)]
-pub struct AgentMessagePartInput {
-    pub part_type: AgentMessagePartType,
-    pub text: String,
-    pub json: Option<serde_json::Value>,
-    pub tool_call: Option<AgentMessagePartToolCallInput>,
-    pub tool_result: Option<AgentMessagePartToolResultInput>,
-    pub image_ref: Option<AgentMessagePartImageRefInput>,
-}
-
-impl AgentMessagePartInput {
+impl AgentMessagePart {
     /// Creates a JSON message part from any JSON-object-like serializable value.
     pub fn json<T: Serialize>(value: T) -> ProviderResult<Self> {
         Ok(Self {
-            part_type: AgentMessagePartType::Json,
+            r#type: AgentMessagePartType::Json,
             json: Some(protocol::json_from_serializable(value)?),
             ..Default::default()
         })
     }
 }
 
-/// Input for an agent tool-call message part payload.
-#[derive(Clone, Debug, Default)]
-pub struct AgentMessagePartToolCallInput {
-    pub id: String,
-    pub tool_id: String,
-    pub arguments: Option<serde_json::Value>,
-}
-
-impl AgentMessagePartToolCallInput {
+impl AgentMessagePartToolCall {
     /// Sets tool-call arguments from any JSON-object-like serializable value.
     pub fn with_arguments<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
         self.arguments = Some(protocol::json_from_serializable(value)?);
@@ -511,16 +483,7 @@ impl AgentMessagePartToolCallInput {
     }
 }
 
-/// Input for an agent tool-result message part payload.
-#[derive(Clone, Debug, Default)]
-pub struct AgentMessagePartToolResultInput {
-    pub tool_call_id: String,
-    pub status: i32,
-    pub content: String,
-    pub output: Option<serde_json::Value>,
-}
-
-impl AgentMessagePartToolResultInput {
+impl AgentMessagePartToolResult {
     /// Sets tool-result output from any JSON-object-like serializable value.
     pub fn with_output<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
         self.output = Some(protocol::json_from_serializable(value)?);
@@ -528,35 +491,16 @@ impl AgentMessagePartToolResultInput {
     }
 }
 
-/// Input for an agent image-reference message part payload.
-#[derive(Clone, Debug, Default)]
-pub struct AgentMessagePartImageRefInput {
-    pub uri: String,
-    pub mime_type: String,
-}
-
-/// Input for an agent tool reference.
-#[derive(Clone, Debug, Default)]
-pub struct AgentToolRefInput {
-    pub plugin: String,
-    pub operation: String,
-    pub connection: String,
-    pub instance: String,
-    pub title: String,
-    pub description: String,
-    pub system: String,
-}
-
-/// Input for an agent workspace.
+/// Native agent workspace request data.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AgentWorkspaceInput {
-    pub checkouts: Vec<AgentWorkspaceGitCheckoutInput>,
+pub struct AgentWorkspace {
+    pub checkouts: Vec<AgentWorkspaceGitCheckout>,
     pub cwd: String,
 }
 
-/// Input for an agent workspace git checkout.
+/// Native agent workspace git checkout data.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AgentWorkspaceGitCheckoutInput {
+pub struct AgentWorkspaceGitCheckout {
     pub url: String,
     pub reference: String,
     pub path: String,
@@ -850,7 +794,7 @@ pub struct ResolvedAgentConnection {
 }
 
 /// Creates a native agent message.
-pub fn new_agent_message(input: AgentMessageInput) -> ProviderResult<AgentMessage> {
+pub fn new_agent_message(input: AgentMessage) -> ProviderResult<AgentMessage> {
     Ok(AgentMessage {
         role: input.role,
         text: input.text,
@@ -864,8 +808,8 @@ pub fn new_agent_message(input: AgentMessageInput) -> ProviderResult<AgentMessag
 }
 
 /// Creates a native agent message part.
-pub fn new_agent_message_part(input: AgentMessagePartInput) -> ProviderResult<AgentMessagePart> {
-    let mut part_type = input.part_type;
+pub fn new_agent_message_part(input: AgentMessagePart) -> ProviderResult<AgentMessagePart> {
+    let mut part_type = input.r#type;
     if part_type == AgentMessagePartType::Unspecified {
         part_type = infer_agent_message_part_type(&input);
     }
@@ -881,7 +825,7 @@ pub fn new_agent_message_part(input: AgentMessagePartInput) -> ProviderResult<Ag
 
 /// Creates a native agent tool-call payload.
 pub fn new_agent_tool_call(
-    input: AgentMessagePartToolCallInput,
+    input: AgentMessagePartToolCall,
 ) -> ProviderResult<AgentMessagePartToolCall> {
     Ok(AgentMessagePartToolCall {
         id: input.id,
@@ -892,7 +836,7 @@ pub fn new_agent_tool_call(
 
 /// Creates a native agent tool-result payload.
 pub fn new_agent_tool_result(
-    input: AgentMessagePartToolResultInput,
+    input: AgentMessagePartToolResult,
 ) -> ProviderResult<AgentMessagePartToolResult> {
     Ok(AgentMessagePartToolResult {
         tool_call_id: input.tool_call_id,
@@ -903,7 +847,7 @@ pub fn new_agent_tool_result(
 }
 
 /// Creates a native agent image-reference payload.
-pub fn new_agent_image_ref(input: AgentMessagePartImageRefInput) -> AgentMessagePartImageRef {
+pub fn new_agent_image_ref(input: AgentMessagePartImageRef) -> AgentMessagePartImageRef {
     AgentMessagePartImageRef {
         uri: input.uri,
         mime_type: input.mime_type,
@@ -911,7 +855,7 @@ pub fn new_agent_image_ref(input: AgentMessagePartImageRefInput) -> AgentMessage
 }
 
 /// Creates a native agent tool reference.
-pub fn new_agent_tool_ref(input: AgentToolRefInput) -> AgentToolRef {
+pub fn new_agent_tool_ref(input: AgentToolRef) -> AgentToolRef {
     AgentToolRef {
         plugin: input.plugin,
         operation: input.operation,
@@ -924,7 +868,7 @@ pub fn new_agent_tool_ref(input: AgentToolRefInput) -> AgentToolRef {
 }
 
 /// Creates an agent workspace request payload for the manager host service.
-pub(crate) fn new_agent_workspace(input: AgentWorkspaceInput) -> pb::AgentWorkspace {
+pub(crate) fn new_agent_workspace(input: AgentWorkspace) -> pb::AgentWorkspace {
     pb::AgentWorkspace {
         checkouts: input
             .checkouts
@@ -940,7 +884,7 @@ pub(crate) fn new_agent_workspace(input: AgentWorkspaceInput) -> pb::AgentWorksp
 }
 
 pub(crate) fn new_agent_messages(
-    values: Vec<AgentMessageInput>,
+    values: Vec<AgentMessage>,
 ) -> ProviderResult<Vec<pb::AgentMessage>> {
     values
         .into_iter()
@@ -949,7 +893,7 @@ pub(crate) fn new_agent_messages(
         .collect()
 }
 
-pub(crate) fn new_agent_tool_refs(values: Vec<AgentToolRefInput>) -> Vec<pb::AgentToolRef> {
+pub(crate) fn new_agent_tool_refs(values: Vec<AgentToolRef>) -> Vec<pb::AgentToolRef> {
     values
         .into_iter()
         .map(new_agent_tool_ref)
@@ -957,7 +901,7 @@ pub(crate) fn new_agent_tool_refs(values: Vec<AgentToolRefInput>) -> Vec<pb::Age
         .collect()
 }
 
-fn infer_agent_message_part_type(input: &AgentMessagePartInput) -> AgentMessagePartType {
+fn infer_agent_message_part_type(input: &AgentMessagePart) -> AgentMessagePartType {
     if input.tool_call.is_some() {
         AgentMessagePartType::ToolCall
     } else if input.tool_result.is_some() {

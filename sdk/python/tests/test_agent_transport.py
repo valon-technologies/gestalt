@@ -32,19 +32,19 @@ from gestalt import (
     AgentHost,
     AgentInteraction,
     AgentManager,
-    AgentManagerCreateTurnInput,
-    AgentManagerResolveInteractionInput,
+    AgentManagerCreateTurn,
+    AgentManagerResolveInteraction,
     AgentMessage,
-    AgentMessageInput,
+    AgentMessage,
     AgentMessagePart,
-    AgentMessagePartImageRefInput,
-    AgentMessagePartInput,
-    AgentMessagePartToolCallInput,
-    AgentMessagePartToolResultInput,
+    AgentMessagePartImageRef,
+    AgentMessagePart,
+    AgentMessagePartToolCall,
+    AgentMessagePartToolResult,
     AgentProvider,
     AgentProviderCapabilities,
     AgentSession,
-    AgentToolRefInput,
+    AgentToolRef,
     AgentTurn,
     AgentTurnEvent,
     Error,
@@ -808,25 +808,25 @@ class AgentTransportTests(unittest.TestCase):
 
     def test_agent_message_dict_helpers_accept_nested_dataclass_inputs(self) -> None:
         message = agent_message_from_dict(
-            AgentMessageInput(
+            AgentMessage(
                 role="assistant",
                 parts=[
-                    AgentMessagePartInput(
-                        tool_call=AgentMessagePartToolCallInput(
+                    AgentMessagePart(
+                        tool_call=AgentMessagePartToolCall(
                             id="call-1",
                             tool_id="tool-1",
                             arguments={"ok": True},
                         )
                     ),
-                    AgentMessagePartInput(
-                        tool_result=AgentMessagePartToolResultInput(
+                    AgentMessagePart(
+                        tool_result=AgentMessagePartToolResult(
                             tool_call_id="call-1",
                             status=0,
                             output={"accepted": True},
                         )
                     ),
-                    AgentMessagePartInput(
-                        image_ref=AgentMessagePartImageRefInput(
+                    AgentMessagePart(
+                        image_ref=AgentMessagePartImageRef(
                             uri="s3://bucket/image.png",
                             mime_type="image/png",
                         )
@@ -854,8 +854,8 @@ class AgentTransportTests(unittest.TestCase):
         self.assertEqual(message.parts[2].image_ref.mime_type, "image/png")
 
         direct_part = agent_message_part_from_dict(
-            AgentMessagePartInput(
-                tool_call=AgentMessagePartToolCallInput(
+            AgentMessagePart(
+                tool_call=AgentMessagePartToolCall(
                     id="call-2",
                     tool_id="tool-2",
                 )
@@ -1381,19 +1381,19 @@ class AgentTransportTests(unittest.TestCase):
     def test_agent_manager_accepts_native_inputs(self) -> None:
         with AgentManager("token-123") as manager:
             created_turn = manager.create_turn(
-                AgentManagerCreateTurnInput(
+                AgentManagerCreateTurn(
                     session_id="session-managed-1",
                     model="gpt-5.1",
                     messages=[
-                        AgentMessageInput(
+                        AgentMessage(
                             role="user",
                             text="Summarize this",
-                            parts=[AgentMessagePartInput(text="Summarize this")],
+                            parts=[AgentMessagePart(text="Summarize this")],
                             metadata={"source": "native"},
                         )
                     ],
                     tool_refs=[
-                        AgentToolRefInput(
+                        AgentToolRef(
                             plugin="github",
                             operation="issues.get",
                             connection="default",
@@ -1406,7 +1406,7 @@ class AgentTransportTests(unittest.TestCase):
                 )
             )
             resolved = manager.resolve_interaction(
-                AgentManagerResolveInteractionInput(
+                AgentManagerResolveInteraction(
                     turn_id="turn-managed-1",
                     interaction_id="interaction-1",
                     resolution={"approved": True},

@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
@@ -84,7 +84,7 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	session, err := client.CreateSession(context.Background(), gestalt.AgentManagerCreateSessionInput{
+	session, err := client.CreateSession(context.Background(), gestalt.AgentManagerCreateSession{
 		ProviderName: "managed",
 		Model:        "gpt-test",
 		ClientRef:    "cli-session-1",
@@ -99,7 +99,7 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("session id = %q, want %q", session.ID, "session-1")
 	}
 
-	turn, err := client.CreateTurn(context.Background(), gestalt.AgentManagerCreateTurnInput{
+	turn, err := client.CreateTurn(context.Background(), gestalt.AgentManagerCreateTurn{
 		SessionID: "session-1",
 		Model:     "gpt-test",
 	})
@@ -166,18 +166,18 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	turn, err := client.CreateTurn(context.Background(), gestalt.AgentManagerCreateTurnInput{
+	turn, err := client.CreateTurn(context.Background(), gestalt.AgentManagerCreateTurn{
 		SessionID: "session-1",
 		Model:     "gpt-test",
-		Messages: []gestalt.AgentMessageInput{{
+		Messages: []gestalt.AgentMessage{{
 			Role: "user",
 			Text: "Summarize",
-			Parts: []gestalt.AgentMessagePartInput{{
+			Parts: []gestalt.AgentMessagePart{{
 				Text: "Summarize",
 			}},
 			Metadata: map[string]any{"source": "native"},
 		}},
-		ToolRefs: []gestalt.AgentToolRefInput{{
+		ToolRefs: []gestalt.AgentToolRef{{
 			Plugin:     "github",
 			Operation:  "issues.get",
 			Connection: "default",
