@@ -15,9 +15,8 @@ The supported import surface is the top-level :mod:`gestalt` package:
 
    from gestalt import Model, Plugin, Cache, IndexedDB, S3
 
-Provider code should prefer the authored SDK helpers documented here. For
-low-level fixtures and interoperability tests, :mod:`gestalt.protocol.v1` and
-:mod:`gestalt.testing` re-export the checked-in generated protobuf bindings.
+This reference focuses on provider-facing classes, helpers, clients, and native
+input models. Transport serialization details are intentionally omitted.
 
 Core authoring types
 --------------------
@@ -100,20 +99,6 @@ Plugin authoring
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
-Catalog protocol types
-----------------------
-
-These top-level exports are generated protocol message types that the SDK
-re-exports for lower-level catalog integration work.
-
-.. autosummary::
-   :nosignatures:
-
-   Catalog
-   CatalogOperation
-   CatalogParameter
-   OperationAnnotations
-
 .. autoclass:: Catalog
 
 .. autoclass:: CatalogOperation
@@ -122,54 +107,13 @@ re-exports for lower-level catalog integration work.
 
 .. autoclass:: OperationAnnotations
 
-Protocol helpers
+Workflow helpers
 ----------------
 
-These helpers convert between Python values and protobuf well-known types
-without importing generated runtime internals. Struct and Value helpers accept
-JSON-compatible mappings and dataclass instances; datetime-like values are
-rejected in generic JSON payloads and should be passed through typed SDK APIs
-that accept native ``datetime`` fields.
-
-.. autosummary::
-   :nosignatures:
-
-   struct_from_dict
-   struct_to_dict
-   json_from_native
-   value_from_json
-   value_to_json
-   message_to_dict
-   message_from_dict
-   has_field
-   which_oneof
-
-.. autofunction:: struct_from_dict
-
-.. autofunction:: struct_to_dict
-
-.. autofunction:: json_from_native
-
-.. autofunction:: value_from_json
-
-.. autofunction:: value_to_json
-
-.. autofunction:: message_to_dict
-
-.. autofunction:: message_from_dict
-
-.. autofunction:: has_field
-
-.. autofunction:: which_oneof
-
-Workflow protocol helpers
--------------------------
-
-These helpers build workflow protocol messages from native Python inputs.
-Structured payload fields accept JSON-compatible mappings or dataclass
-instances through the protocol helpers above. Timestamp fields accept
-``datetime`` values, and copy helpers return non-aliased message copies without
-provider code importing private ``pb2`` modules.
+These helpers build workflow values from native Python inputs. Structured
+payload fields accept JSON-compatible mappings or dataclass instances.
+Timestamp fields accept ``datetime`` values, and copy helpers return
+non-aliased message copies.
 
 .. autosummary::
    :nosignatures:
@@ -256,8 +200,7 @@ Agent provider models
 Agent providers receive and return native dataclasses. Structured payload
 fields accept JSON-compatible mappings or dataclass instances, and timestamp
 fields on sessions, turns, events, interactions, and host connections use
-timezone-aware ``datetime`` values. The runtime converts these objects to the
-generated protobuf transport messages internally.
+timezone-aware ``datetime`` values. The runtime owns transport serialization.
 
 .. autosummary::
    :nosignatures:
@@ -345,8 +288,7 @@ Agent dictionary helpers
 ------------------------
 
 These helpers convert native agent dataclasses to and from plain
-lower-snake-case dictionaries. The ``*_proto_dict`` helpers are only for
-interoperability fixtures that need protobuf JSON field names.
+lower-snake-case dictionaries.
 
 .. autosummary::
    :nosignatures:
@@ -365,10 +307,6 @@ interoperability fixtures that need protobuf JSON field names.
    agent_message_from_dict
    agent_messages_to_dicts
    agent_messages_from_dicts
-   agent_message_to_proto_dict
-   agent_message_from_proto_dict
-   agent_messages_to_proto_dicts
-   agent_messages_from_proto_dicts
 
 .. autofunction:: agent_actor_to_dict
 
@@ -397,14 +335,6 @@ interoperability fixtures that need protobuf JSON field names.
 .. autofunction:: agent_messages_to_dicts
 
 .. autofunction:: agent_messages_from_dicts
-
-.. autofunction:: agent_message_to_proto_dict
-
-.. autofunction:: agent_message_from_proto_dict
-
-.. autofunction:: agent_messages_to_proto_dicts
-
-.. autofunction:: agent_messages_from_proto_dicts
 
 Provider interfaces
 -------------------
@@ -503,11 +433,10 @@ Provider interfaces
    :members:
    :exclude-members: __dict__, __module__, __weakref__
 
-Auth protocol helpers
----------------------
+Authentication payload helpers
+------------------------------
 
-These helpers construct wire-compatible authentication protocol payloads without
-requiring provider code to import generated modules.
+These helpers construct authentication payloads used by provider handlers.
 
 .. autosummary::
    :nosignatures:
@@ -590,13 +519,8 @@ Cache client
 .. autosummary::
    :nosignatures:
 
-   ENV_CACHE_SOCKET_TOKEN
    CacheEntry
    Cache
-   cache_socket_env
-   cache_socket_token_env
-
-.. autodata:: ENV_CACHE_SOCKET_TOKEN
 
 .. autoclass:: CacheEntry
 
@@ -604,10 +528,6 @@ Cache client
    :members:
    :special-members: __enter__, __exit__
    :exclude-members: __dict__, __module__, __weakref__
-
-.. autofunction:: cache_socket_env
-
-.. autofunction:: cache_socket_token_env
 
 IndexedDB client
 ----------------
@@ -619,22 +539,12 @@ IndexedDB client
    CURSOR_NEXT_UNIQUE
    CURSOR_PREV
    CURSOR_PREV_UNIQUE
-   indexeddb_socket_env
-   indexeddb_socket_token_env
    NotFoundError
    AlreadyExistsError
    TransactionError
    KeyRange
    IndexSchema
    ObjectStoreSchema
-   indexeddb_record_to_proto
-   indexeddb_record_from_proto
-   indexeddb_typed_value_from_python
-   indexeddb_typed_value_to_python
-   indexeddb_key_value_from_python
-   indexeddb_key_value_to_python
-   indexeddb_cursor_key_to_proto
-   indexeddb_key_range_to_proto
    IndexedDB
    ObjectStore
    Index
@@ -650,26 +560,6 @@ IndexedDB client
 .. autodata:: CURSOR_PREV
 
 .. autodata:: CURSOR_PREV_UNIQUE
-
-.. autofunction:: indexeddb_socket_env
-
-.. autofunction:: indexeddb_socket_token_env
-
-.. autofunction:: indexeddb_record_to_proto
-
-.. autofunction:: indexeddb_record_from_proto
-
-.. autofunction:: indexeddb_typed_value_from_python
-
-.. autofunction:: indexeddb_typed_value_to_python
-
-.. autofunction:: indexeddb_key_value_from_python
-
-.. autofunction:: indexeddb_key_value_to_python
-
-.. autofunction:: indexeddb_cursor_key_to_proto
-
-.. autofunction:: indexeddb_key_range_to_proto
 
 .. autoexception:: NotFoundError
 
@@ -720,10 +610,6 @@ S3 client
 .. autosummary::
    :nosignatures:
 
-   ENV_S3_SOCKET
-   ENV_S3_SOCKET_TOKEN
-   s3_socket_env
-   s3_socket_token_env
    S3NotFoundError
    S3PreconditionFailedError
    S3InvalidRangeError
@@ -743,14 +629,6 @@ S3 client
    S3ReadStream
    S3
    S3Object
-
-.. autodata:: ENV_S3_SOCKET
-
-.. autodata:: ENV_S3_SOCKET_TOKEN
-
-.. autofunction:: s3_socket_env
-
-.. autofunction:: s3_socket_token_env
 
 .. autoexception:: S3NotFoundError
 
@@ -804,27 +682,12 @@ Host service clients
 --------------------
 
 These clients connect to host services made available to a provider process by
-``gestaltd``. They read socket and relay-token locations from environment
-variables and add invocation tokens to manager requests when required.
+``gestaltd``.
 
 .. autosummary::
    :nosignatures:
 
-   ENV_AGENT_HOST_SOCKET
-   ENV_AGENT_HOST_SOCKET_TOKEN
-   ENV_AGENT_MANAGER_SOCKET
-   ENV_AGENT_MANAGER_SOCKET_TOKEN
-   ENV_AUTHORIZATION_SOCKET
-   ENV_AUTHORIZATION_SOCKET_TOKEN
-   ENV_PLUGIN_INVOKER_SOCKET
-   ENV_PLUGIN_INVOKER_SOCKET_TOKEN
-   ENV_RUNTIME_LOG_HOST_SOCKET
-   ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN
    ENV_RUNTIME_SESSION_ID
-   ENV_WORKFLOW_HOST_SOCKET
-   ENV_WORKFLOW_HOST_SOCKET_TOKEN
-   ENV_WORKFLOW_MANAGER_SOCKET
-   ENV_WORKFLOW_MANAGER_SOCKET_TOKEN
    AgentHost
    AgentManager
    Authorization
@@ -836,35 +699,7 @@ variables and add invocation tokens to manager requests when required.
    WorkflowHost
    WorkflowManager
 
-.. autodata:: ENV_AGENT_HOST_SOCKET
-
-.. autodata:: ENV_AGENT_HOST_SOCKET_TOKEN
-
-.. autodata:: ENV_AGENT_MANAGER_SOCKET
-
-.. autodata:: ENV_AGENT_MANAGER_SOCKET_TOKEN
-
-.. autodata:: ENV_AUTHORIZATION_SOCKET
-
-.. autodata:: ENV_AUTHORIZATION_SOCKET_TOKEN
-
-.. autodata:: ENV_PLUGIN_INVOKER_SOCKET
-
-.. autodata:: ENV_PLUGIN_INVOKER_SOCKET_TOKEN
-
-.. autodata:: ENV_RUNTIME_LOG_HOST_SOCKET
-
-.. autodata:: ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN
-
 .. autodata:: ENV_RUNTIME_SESSION_ID
-
-.. autodata:: ENV_WORKFLOW_HOST_SOCKET
-
-.. autodata:: ENV_WORKFLOW_HOST_SOCKET_TOKEN
-
-.. autodata:: ENV_WORKFLOW_MANAGER_SOCKET
-
-.. autodata:: ENV_WORKFLOW_MANAGER_SOCKET_TOKEN
 
 .. autoclass:: AgentHost
    :members:

@@ -17,9 +17,8 @@ providers, host-service clients, and provider-owned telemetry.
     def search(params: SearchInput):
         return {"query": params.query}
 
-Private protobuf stubs are used internally for transport. Provider code should
-use the authored SDK helpers exported here instead of importing generated
-modules.
+Transport internals are owned by the SDK. Provider code should use the authored
+helpers exported here.
 """
 
 from importlib import import_module

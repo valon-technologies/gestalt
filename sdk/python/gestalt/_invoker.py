@@ -72,7 +72,7 @@ class PluginInvoker:
     ) -> Response[str]:
         """Invoke one operation on another plugin.
 
-        ``params`` is encoded as a protobuf ``Struct``. ``connection`` and
+        ``params`` accepts a JSON-compatible object. ``connection`` and
         ``instance`` select the connected account or provider instance that the
         target plugin should invoke against.
         """

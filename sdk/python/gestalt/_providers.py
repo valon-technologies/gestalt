@@ -1,7 +1,7 @@
 """Provider base classes for non-integration Gestalt runtimes.
 
-Handwritten helpers in :mod:`gestalt` construct protocol payloads for providers
-without requiring provider code to import generated protobuf modules.
+Handwritten helpers in :mod:`gestalt` construct transport payloads for providers
+without requiring provider code to import transport modules.
 """
 
 from __future__ import annotations
@@ -291,7 +291,7 @@ class AgentProvider(PluginProvider):
     Subclasses implement snake_case handler methods such as
     ``create_session(request)``, ``create_turn(request)``, and
     ``get_capabilities(request)``. Request and response objects are native SDK
-    dataclasses; the runtime owns protobuf transport conversion.
+    dataclasses; the runtime owns transport conversion.
     """
 
     def _unimplemented(self, method: str) -> NoReturn:

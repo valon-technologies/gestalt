@@ -37,7 +37,7 @@ include = ["gestalt*"]
 gestalt = ["py.typed", "_gen/v1/*.pyi"]
 
 [project.urls]
-Documentation = "https://gestaltd.ai/reference/python-sdk"
+Documentation = "https://gestaltd.ai/api/python/index.html"
 Repository = "https://github.com/valon-technologies/gestalt"
 
 [tool.ruff]

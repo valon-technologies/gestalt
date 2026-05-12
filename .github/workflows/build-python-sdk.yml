@@ -55,3 +55,6 @@ jobs:
 
       - name: Build Sphinx docs
         run: uv run sphinx-build -W -b html -d docs/_build/doctrees docs docs/_build/html
+
+      - name: Check published Python docs surface
+        run: bash ../../docs/scripts/check-sdk-doc-leaks.sh python docs/_build/html

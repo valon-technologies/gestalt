@@ -1,28 +1,24 @@
 ---
+asIndexPage: true
 title: SDKs
 ---
 
+import { Cards } from 'nextra/components'
+
 # SDKs
 
-Use a Gestalt SDK when you want to write an executable provider in a normal
-programming language instead of describing every operation in a manifest.
+Gestalt provides SDKs to allow expressing [plugin](/providers/plugins)
+providers programmatically instead of declaratively, or to build custom
+[providers](/providers) that do not yet exist.
 
-The manifest still owns static provider metadata, connections, hosted HTTP
-routes, passthrough API surfaces, and release identity. The SDK owns runtime
-code: operation handlers, typed input and output models, provider lifecycle
-hooks, host-service clients, telemetry helpers, and provider-specific runtime
-servers.
+Read the language-specific SDK page for examples and runtime details:
 
-## Recommended path
-
-1. Read [Providers](/providers#building-providers) to understand the provider
-   packaging model.
-2. Read the SDK page for your language:
-   [Python](/reference/sdk/python), [TypeScript](/reference/sdk/typescript),
-   [Go](/reference/sdk/go), or [Rust](/reference/sdk/rust).
-3. Build the smallest plugin provider first.
-4. Add provider-specific surfaces such as authentication, cache, S3, workflow,
-   runtime, or agent support only after the basic provider runs locally.
+<Cards num={4} className="provider-kind-cards">
+  <Cards.Card title="Python SDK" href="/api/python/index.html" />
+  <Cards.Card title="TypeScript SDK" href="/api/typescript/index.html" />
+  <Cards.Card title="Go SDK" href="https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go" />
+  <Cards.Card title="Rust SDK" href="https://docs.rs/gestalt-sdk/latest/gestalt/" />
+</Cards>
 
 ## Native input coverage
 
@@ -31,9 +27,8 @@ helpers exist. That includes agent-manager messages and tool refs, workflow
 events, workflow signals, and bound workflow targets in Go, Python, and Rust.
 TypeScript workflow examples use root helper functions such as
 `workflowEvent`, `workflowSignal`, and `boundWorkflowTarget` when a manager
-field would otherwise expose a generated oneof or protobuf well-known type.
+field would otherwise expose a transport-specific shape.
 
-Manager responses still return protocol-backed objects. Examples may therefore
-read response fields with language-specific protocol accessors such as Go
-`GetId`-style methods or generated response fields in Python, Rust, and
-TypeScript. Native response objects are a remaining SDK gap.
+Manager responses still mirror host response objects. Examples may therefore
+read response fields with language-specific accessors. Native response objects
+are a remaining SDK gap.

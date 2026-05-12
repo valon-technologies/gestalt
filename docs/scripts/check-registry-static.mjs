@@ -21,6 +21,13 @@ const contentTypes = new Map([
   [".woff2", "font/woff2"],
 ]);
 
+const sdkReferenceTargets = {
+  python: "/api/python/index.html",
+  typescript: "/api/typescript/index.html",
+  go: "https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go",
+  rust: "https://docs.rs/gestalt-sdk/latest/gestalt/",
+};
+
 const server = createServer(async (request, response) => {
   try {
     const host =
@@ -105,6 +112,17 @@ try {
     status: 404,
     excludes: "registry-module",
   });
+  for (const [language, location] of Object.entries(sdkReferenceTargets)) {
+    for (const prefix of [`/reference/${language}-sdk`, `/reference/sdk/${language}`]) {
+      for (const suffix of ["", ".html", "/"]) {
+        await assertRedirect({
+          url: `${baseUrl}${prefix}${suffix}`,
+          host: "gestaltd.ai",
+          location,
+        });
+      }
+    }
+  }
 } finally {
   server.close();
 }
@@ -127,13 +145,22 @@ async function serveDocsHost(pathname, response) {
   if (pathname === "/registry" || pathname.startsWith("/registry/")) {
     return serveFile("/registry.html", response, false);
   }
-  if (pathname.match(/^\/reference\/(python|typescript|go|rust)-sdk(?:\.html)?$/)) {
-    const target = pathname.replace(/-sdk(?:\.html)?$/, "");
-    response.writeHead(301, { location: `/reference/sdk${target.replace("/reference", "")}` });
+  const sdkReferenceTarget = getSdkReferenceTarget(pathname);
+  if (sdkReferenceTarget) {
+    response.writeHead(301, { location: sdkReferenceTarget });
     response.end();
     return;
   }
   return serveFile(pathname, response, true, null);
+}
+
+function getSdkReferenceTarget(pathname) {
+  const normalized = pathname.replace(/\/$/, "").replace(/\.html$/, "");
+  const match = normalized.match(
+    /^\/reference\/(?:(python|typescript|go|rust)-sdk|sdk\/(python|typescript|go|rust))$/,
+  );
+  const language = match?.[1] ?? match?.[2];
+  return sdkReferenceTargets[language] ?? null;
 }
 
 async function serveFile(pathname, response, htmlFallback, fallbackFile = null) {
@@ -182,5 +209,19 @@ async function assertResponse({ url, host, status, includes, excludes }) {
   }
   if (excludes && body.includes(excludes)) {
     throw new Error(`${host} ${url} unexpectedly included ${excludes}`);
+  }
+}
+
+async function assertRedirect({ url, host, location }) {
+  const response = await fetch(url, {
+    headers: { "x-test-host": host },
+    redirect: "manual",
+  });
+  if (response.status !== 301) {
+    throw new Error(`${host} ${url} returned ${response.status}, want 301`);
+  }
+  const actualLocation = response.headers.get("location");
+  if (actualLocation !== location) {
+    throw new Error(`${host} ${url} redirected to ${actualLocation}, want ${location}`);
   }
 }

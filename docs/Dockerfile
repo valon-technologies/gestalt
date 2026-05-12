@@ -63,8 +63,20 @@ server {
         try_files /registry.html =404;
     }
 
-    location ~ ^/reference/(python|typescript|go|rust)-sdk(\.html)?$ {
-        return 301 /reference/sdk/$1;
+    location ~ ^/reference/(python-sdk|sdk/python)(\.html)?/?$ {
+        return 301 /api/python/index.html;
+    }
+
+    location ~ ^/reference/(typescript-sdk|sdk/typescript)(\.html)?/?$ {
+        return 301 /api/typescript/index.html;
+    }
+
+    location ~ ^/reference/(go-sdk|sdk/go)(\.html)?/?$ {
+        return 301 https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go;
+    }
+
+    location ~ ^/reference/(rust-sdk|sdk/rust)(\.html)?/?$ {
+        return 301 https://docs.rs/gestalt-sdk/latest/gestalt/;
     }
 
     error_page 404 /404.html;

@@ -7,9 +7,8 @@ decorators, runtime providers, host-service clients, and telemetry helpers.
 The package is published as ``gestalt-sdk`` and imported as ``gestalt`` in
 provider projects.
 
-This reference focuses on the handwritten Python SDK surface. Generated
-protobuf bindings are private runtime internals and are intentionally excluded
-from these authored pages.
+This reference focuses on the handwritten Python SDK surface. Runtime transport
+internals are intentionally excluded from these authored pages.
 
 .. toctree::
    :maxdepth: 2
