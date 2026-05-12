@@ -8,8 +8,10 @@ server {
     port_in_redirect off;
     root /usr/share/nginx/html;
     index index.html;
+    add_header Cache-Control "no-cache, max-age=0, must-revalidate" always;
 
     location /_next/ {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
         try_files $uri =404;
     }
 
@@ -47,6 +49,7 @@ server {
     port_in_redirect off;
     root /usr/share/nginx/html;
     index index.html;
+    add_header Cache-Control "no-cache, max-age=0, must-revalidate" always;
 
     location = / {
         return 301 /latest/;
@@ -66,6 +69,11 @@ server {
 
     location ~ ^(/versions/v[^/]+/.+)/$ {
         return 301 $1;
+    }
+
+    location ~ ^/(latest|versions/v[^/]+)/_next/ {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
     }
 
     location /latest/ {
@@ -109,6 +117,7 @@ server {
     }
 
     location /_next/ {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
         try_files $uri =404;
     }
 

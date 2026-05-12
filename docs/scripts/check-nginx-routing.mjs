@@ -1,7 +1,11 @@
 import { spawnSync } from "node:child_process";
+import { readdirSync, statSync } from "node:fs";
 import { request } from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const image = `gestalt-docs-nginx-routing:${process.pid}`;
+const docsRoot = fileURLToPath(new URL("..", import.meta.url));
 let container = "";
 
 try {
@@ -21,6 +25,7 @@ try {
     throw new Error(`could not determine mapped port for ${container}`);
   }
   const baseUrl = `http://127.0.0.1:${port}`;
+  const latestAssetPath = findStaticAssetPath("latest/_next/static");
   await waitForNginx(baseUrl);
 
   await assertResponse({
@@ -50,8 +55,31 @@ try {
     url: `${baseUrl}/latest/`,
     host: "gestaltd.ai",
     status: 200,
+    cacheControlIncludes: "no-cache",
     includes: "Gestalt",
     excludes: "registry_shell__",
+  });
+  await assertResponse({
+    url: `${baseUrl}/latest/providers`,
+    host: "gestaltd.ai",
+    status: 200,
+    cacheControlIncludes: "no-cache",
+    includes: "Providers",
+    excludes: "registry_shell__",
+  });
+  await assertResponse({
+    url: `${baseUrl}/latest/providers.txt`,
+    host: "gestaltd.ai",
+    status: 200,
+    cacheControlIncludes: "no-cache",
+    includes: "What Providers Do",
+    excludes: "registry_shell__",
+  });
+  await assertResponse({
+    url: `${baseUrl}${latestAssetPath}`,
+    host: "gestaltd.ai",
+    status: 200,
+    cacheControlIncludes: "immutable",
   });
   await assertResponse({
     url: `${baseUrl}/latest/getting-started/`,
@@ -100,6 +128,7 @@ try {
     url: `${baseUrl}/providers/plugin/slack/`,
     host: "registry.gestaltd.ai",
     status: 200,
+    cacheControlIncludes: "no-cache",
     includes: "registry_shell__",
   });
 } finally {
@@ -136,6 +165,7 @@ async function assertResponse({
   excludes,
   location,
   json,
+  cacheControlIncludes,
 }) {
   const response = await httpGet(url, host);
   const body = response.body;
@@ -146,6 +176,14 @@ async function assertResponse({
     const actualLocation = response.headers.location;
     if (actualLocation !== location) {
       throw new Error(`${host} ${url} redirected to ${actualLocation}, want ${location}`);
+    }
+  }
+  if (cacheControlIncludes) {
+    const cacheControl = response.headers["cache-control"] ?? "";
+    if (!cacheControl.includes(cacheControlIncludes)) {
+      throw new Error(
+        `${host} ${url} returned Cache-Control ${cacheControl}, want ${cacheControlIncludes}`,
+      );
     }
   }
   if (includes && !body.includes(includes)) {
@@ -207,4 +245,28 @@ function output(command, args) {
     throw new Error(result.stderr || `${command} ${args.join(" ")} failed`);
   }
   return result.stdout.trim();
+}
+
+function findStaticAssetPath(relativeRoot) {
+  const root = path.join(docsRoot, "out", relativeRoot);
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    for (const entry of readdirSync(current)) {
+      const fullPath = path.join(current, entry);
+      const stat = statSync(fullPath);
+      if (stat.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (/\.(?:css|js)$/.test(entry)) {
+        const relative = path
+          .relative(path.join(docsRoot, "out"), fullPath)
+          .split(path.sep)
+          .join("/");
+        return `/${relative}`;
+      }
+    }
+  }
+  throw new Error(`could not find a CSS or JS asset under out/${relativeRoot}`);
 }
