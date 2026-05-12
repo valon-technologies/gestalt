@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "nextra-theme-docs/style.css";
 import "../globals.css";
+import "../versioning.css";
 
 export const metadata: Metadata = {
   title: {

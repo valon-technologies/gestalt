@@ -3,6 +3,8 @@ name: Deploy Gestalt Docs
 on:
   push:
     branches: [main]
+    tags:
+      - 'gestaltd/v*'
     paths:
       - 'docs/**'
       - 'sdk/python/**'
@@ -25,7 +27,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     env:
       UV_PYTHON: "3.10"
     permissions:
@@ -34,6 +36,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
 
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
 
@@ -65,6 +69,41 @@ jobs:
           rm -rf ../../docs/public/api/typescript
           bun run docs:build:deploy
           bash ../../docs/scripts/check-sdk-doc-leaks.sh typescript ../../docs/public/api/typescript
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install docs dependencies
+        working-directory: docs
+        run: npm ci
+
+      - name: Build current docs
+        working-directory: docs
+        run: npm run build
+
+      - name: Check docs SDK links
+        working-directory: docs
+        run: npm run test:sdk-docs
+
+      - name: Build versioned docs
+        working-directory: docs
+        run: npm run build:versioned
+
+      - name: Test static docs routing
+        working-directory: docs
+        run: npm run test:registry
+
+      - name: Test nginx docs routing
+        working-directory: docs
+        run: npm run test:nginx-routing
+
+      - name: Test registry docs rendering
+        working-directory: docs
+        run: npm run test:registry-docs
 
       - name: Authenticate to Google Cloud
         id: gcp-auth

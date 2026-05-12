@@ -138,6 +138,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -149,11 +151,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build docs
+      - name: Build current docs
         run: npm run build
 
       - name: Check SDK docs
         run: npm run test:sdk-docs
+
+      - name: Build versioned docs smoke site
+        run: npm run build:versioned:test
+
+      - name: Test static docs routing
+        run: npm run test:registry
+
+      - name: Test nginx docs routing
+        run: npm run test:nginx-routing
 
       - name: Test installer
         run: npm run test:installer

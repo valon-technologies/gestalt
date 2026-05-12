@@ -27,6 +27,7 @@ const sdkReferenceTargets = {
   go: "https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go",
   rust: "https://docs.rs/gestalt-sdk/latest/gestalt/",
 };
+const registryMarker = "registry_shell__";
 
 const server = createServer(async (request, response) => {
   try {
@@ -56,61 +57,150 @@ try {
     url: `${baseUrl}/`,
     host: "registry.gestaltd.ai",
     status: 200,
-    includes: "registry-module",
+    includes: registryMarker,
   });
   await assertResponse({
     url: `${baseUrl}/providers`,
     host: "registry.gestaltd.ai",
     status: 200,
-    includes: "registry-module",
+    includes: registryMarker,
   });
   await assertResponse({
     url: `${baseUrl}/providers/plugin/slack/`,
     host: "registry.gestaltd.ai",
     status: 200,
-    includes: "registry-module",
+    includes: registryMarker,
   });
   await assertResponse({
     url: `${baseUrl}/providers/plugin/slack/events/`,
     host: "registry.gestaltd.ai",
     status: 200,
-    includes: "registry-module",
+    includes: registryMarker,
   });
   await assertResponse({
     url: `${baseUrl}/_next/static/chunks/does-not-exist.js`,
     host: "registry.gestaltd.ai",
     status: 404,
-    excludes: "registry-module",
+    excludes: registryMarker,
   });
   await assertResponse({
     url: `${baseUrl}/providers`,
     host: "gestaltd.ai",
+    status: 301,
+    location: "/latest/providers",
+  });
+  await assertRedirect({
+    url: `${baseUrl}/`,
+    host: "gestaltd.ai",
+    location: "/latest/",
+  });
+  await assertRedirect({
+    url: `${baseUrl}/getting-started`,
+    host: "gestaltd.ai",
+    location: "/latest/getting-started",
+  });
+  await assertRedirect({
+    url: `${baseUrl}/latest`,
+    host: "gestaltd.ai",
+    location: "/latest/",
+  });
+  await assertResponse({
+    url: `${baseUrl}/latest/`,
+    host: "gestaltd.ai",
     status: 200,
-    excludes: "registry-module",
+    includes: "Gestalt",
+    excludes: registryMarker,
+  });
+  await assertResponse({
+    url: `${baseUrl}/latest/getting-started`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "Getting Started",
+    excludes: registryMarker,
+  });
+  await assertRedirect({
+    url: `${baseUrl}/latest/getting-started/`,
+    host: "gestaltd.ai",
+    location: "/latest/getting-started",
+  });
+  await assertRedirect({
+    url: `${baseUrl}/versions/v0.0.1-alpha.24`,
+    host: "gestaltd.ai",
+    location: "/versions/v0.0.1-alpha.24/",
+  });
+  await assertResponse({
+    url: `${baseUrl}/versions/v0.0.1-alpha.24/`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "Gestalt",
+    excludes: registryMarker,
+  });
+  await assertResponse({
+    url: `${baseUrl}/versions/v0.0.1-alpha.24/reference/cli`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "Server CLI",
+    excludes: registryMarker,
+  });
+  await assertRedirect({
+    url: `${baseUrl}/versions/v0.0.1-alpha.24/reference/cli/`,
+    host: "gestaltd.ai",
+    location: "/versions/v0.0.1-alpha.24/reference/cli",
+  });
+  await assertResponse({
+    url: `${baseUrl}/versions/v0.0.1-alpha.24/reference/sdk/python`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "Python SDK",
+    excludes: registryMarker,
+  });
+  await assertResponse({
+    url: `${baseUrl}/versions/v9.9.9/`,
+    host: "gestaltd.ai",
+    status: 404,
+    excludes: registryMarker,
+  });
+  await assertResponse({
+    url: `${baseUrl}/versions.json`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "\"versions\"",
+  });
+  await assertResponse({
+    url: `${baseUrl}/api/does-not-exist`,
+    host: "gestaltd.ai",
+    status: 404,
+    excludes: registryMarker,
+  });
+  await assertResponse({
+    url: `${baseUrl}/install.sh`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "Install Gestalt",
   });
   await assertResponse({
     url: `${baseUrl}/registry/providers/plugin/slack/`,
     host: "gestaltd.ai",
     status: 200,
-    includes: "registry-module",
+    includes: registryMarker,
   });
   await assertResponse({
     url: `${baseUrl}/registry/providers/plugin/slack/events/`,
     host: "gestaltd.ai",
     status: 200,
-    includes: "registry-module",
+    includes: registryMarker,
   });
   await assertResponse({
     url: `${baseUrl}/providers/plugin/slack/`,
     host: "gestaltd.ai",
     status: 404,
-    excludes: "registry-module",
+    excludes: registryMarker,
   });
   await assertResponse({
     url: `${baseUrl}/providers/plugin/slack/events/`,
     host: "gestaltd.ai",
     status: 404,
-    excludes: "registry-module",
+    excludes: registryMarker,
   });
   for (const [language, location] of Object.entries(sdkReferenceTargets)) {
     for (const prefix of [`/reference/${language}-sdk`, `/reference/sdk/${language}`]) {
@@ -142,16 +232,55 @@ async function serveRegistryHost(pathname, response) {
 }
 
 async function serveDocsHost(pathname, response) {
+  if (pathname === "/") {
+    return redirect(response, "/latest/");
+  }
+  if (pathname === "/latest") {
+    return redirect(response, "/latest/");
+  }
+  const versionWithoutSlash = pathname.match(/^\/versions\/v[^/]+$/);
+  if (versionWithoutSlash) {
+    return redirect(response, `${pathname}/`);
+  }
+  const latestPageWithSlash = pathname.match(/^(\/latest\/.+)\/$/);
+  if (latestPageWithSlash) {
+    return redirect(response, latestPageWithSlash[1]);
+  }
+  const versionPageWithSlash = pathname.match(/^(\/versions\/v[^/]+\/.+)\/$/);
+  if (versionPageWithSlash) {
+    return redirect(response, versionPageWithSlash[1]);
+  }
+  if (pathname.startsWith("/latest/") || pathname.startsWith("/versions/")) {
+    return serveFile(pathname, response, true, null);
+  }
   if (pathname === "/registry" || pathname.startsWith("/registry/")) {
     return serveFile("/registry.html", response, false);
   }
+  if (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/_pagefind/") ||
+    pathname === "/favicon.svg" ||
+    pathname.startsWith("/images/") ||
+    pathname.startsWith("/fonts/") ||
+    pathname === "/versions.json" ||
+    pathname === "/404.html" ||
+    pathname === "/install.sh" ||
+    pathname === "/install-gestaltd.sh" ||
+    pathname === "/install-gestalt.sh"
+  ) {
+    return serveFile(pathname, response, true, null);
+  }
   const sdkReferenceTarget = getSdkReferenceTarget(pathname);
   if (sdkReferenceTarget) {
-    response.writeHead(301, { location: sdkReferenceTarget });
-    response.end();
+    return redirect(response, sdkReferenceTarget);
+  }
+  if (/^\/providers\/[^/]+\/.+/.test(pathname)) {
+    response.writeHead(404, { "content-type": "text/plain" });
+    response.end("not found");
     return;
   }
-  return serveFile(pathname, response, true, null);
+  return redirect(response, `/latest${pathname}`);
 }
 
 function getSdkReferenceTarget(pathname) {
@@ -198,11 +327,20 @@ function candidateFiles(pathname) {
   ];
 }
 
-async function assertResponse({ url, host, status, includes, excludes }) {
-  const response = await fetch(url, { headers: { "x-test-host": host } });
+async function assertResponse({ url, host, status, includes, excludes, location }) {
+  const response = await fetch(url, {
+    headers: { "x-test-host": host },
+    redirect: "manual",
+  });
   const body = await response.text();
   if (response.status !== status) {
     throw new Error(`${host} ${url} returned ${response.status}, want ${status}`);
+  }
+  if (status >= 300 && status < 400 && location) {
+    const actualLocation = response.headers.get("location");
+    if (actualLocation !== location) {
+      throw new Error(`${host} ${url} redirected to ${actualLocation}, want ${location}`);
+    }
   }
   if (includes && !body.includes(includes)) {
     throw new Error(`${host} ${url} did not include ${includes}`);
@@ -210,6 +348,11 @@ async function assertResponse({ url, host, status, includes, excludes }) {
   if (excludes && body.includes(excludes)) {
     throw new Error(`${host} ${url} unexpectedly included ${excludes}`);
   }
+}
+
+function redirect(response, location) {
+  response.writeHead(301, { location });
+  response.end();
 }
 
 async function assertRedirect({ url, host, location }) {
