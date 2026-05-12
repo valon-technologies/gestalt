@@ -19,6 +19,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const docsRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(docsRoot, "..");
 const defaultOut = path.join(docsRoot, "out");
+const developmentPathPrefix = "/dev";
 
 const options = parseArgs(process.argv.slice(2));
 const outDir = path.resolve(docsRoot, options.out ?? defaultOut);
@@ -47,6 +48,7 @@ async function main() {
   if (!tags.includes(latestTag)) {
     tags.push(latestTag);
   }
+  await assertDocsTree(options.developmentRef, "development docs ref");
   await assertDocsTrees(tags);
   tags.sort((left, right) => compareTagVersions(right, left));
 
@@ -54,6 +56,7 @@ async function main() {
   await mkdir(outDir, { recursive: true });
 
   const manifest = {
+    development: developmentManifestEntry(),
     latest: manifestEntry(latestTag, "/latest", isStableTag(latestTag), true),
     versions: tags.map((tag) =>
       manifestEntry(tag, `/versions/${versionWithV(tag)}`, isStableTag(tag)),
@@ -64,7 +67,7 @@ async function main() {
     path.join(os.tmpdir(), `gestalt-docs-versioned-${process.pid}-`),
   );
   try {
-    const rootBuild = await createBuildTree(tempRoot, "root", null);
+    const rootBuild = await createBuildTree(tempRoot, "root");
     await runNextBuild(rootBuild, {
       basePath: "",
       label: "Unversioned",
@@ -76,25 +79,38 @@ async function main() {
 
     const targets = [
       {
-        tag: latestTag,
+        basePath: developmentPathPrefix,
+        currentTag: "",
+        label: "Dev (main)",
+        overlayRef: options.developmentRef,
+        repositoryRef: "main",
+      },
+      {
         basePath: "/latest",
+        currentTag: latestTag,
         label: `Latest (${versionWithV(latestTag)})`,
+        overlayRef: latestTag,
+        repositoryRef: latestTag,
       },
       ...tags.map((tag) => ({
-        tag,
         basePath: `/versions/${versionWithV(tag)}`,
+        currentTag: tag,
         label: versionWithV(tag),
+        overlayRef: tag,
+        repositoryRef: tag,
       })),
     ];
 
     for (const target of targets) {
       const name = target.basePath.replace(/\//g, "_").replace(/^_/, "");
-      const buildDir = await createBuildTree(tempRoot, name, target.tag);
+      const buildDir = await createBuildTree(tempRoot, name, {
+        overlayRef: target.overlayRef,
+      });
       await runNextBuild(buildDir, {
         basePath: target.basePath,
         label: target.label,
-        repositoryRef: target.tag,
-        tag: target.tag,
+        repositoryRef: target.repositoryRef,
+        tag: target.currentTag,
       });
       const nestedPrefixOut = path.join(buildDir, "out", target.basePath.slice(1));
       const prefixOut = existsSync(nestedPrefixOut)
@@ -122,7 +138,9 @@ async function main() {
 
 function parseArgs(args) {
   const parsed = {
+    developmentRef: "origin/main",
     includeAll: false,
+    latestOnly: false,
     latestPolicy: "supported",
     latestTag: "",
     out: "",
@@ -134,8 +152,14 @@ function parseArgs(args) {
       case "--include-all-gestaltd-tags":
         parsed.includeAll = true;
         break;
+      case "--development-ref":
+        parsed.developmentRef = needValue(args, ++index, arg);
+        break;
       case "--latest-policy":
         parsed.latestPolicy = needValue(args, ++index, arg);
+        break;
+      case "--latest-only":
+        parsed.latestOnly = true;
         break;
       case "--latest-tag":
         parsed.latestTag = normalizeTag(needValue(args, ++index, arg));
@@ -150,8 +174,10 @@ function parseArgs(args) {
         throw new Error(`unknown option: ${arg}`);
     }
   }
-  if (!parsed.includeAll && parsed.tags.length === 0) {
-    throw new Error("pass --include-all-gestaltd-tags or at least one --tag");
+  if (!parsed.includeAll && !parsed.latestOnly && parsed.tags.length === 0) {
+    throw new Error(
+      "pass --include-all-gestaltd-tags, --latest-only, or at least one --tag",
+    );
   }
   if (!["stable", "supported"].includes(parsed.latestPolicy)) {
     throw new Error("--latest-policy must be stable or supported");
@@ -168,28 +194,32 @@ function needValue(args, index, flag) {
 }
 
 async function selectedTags() {
-  const tags = options.includeAll
-    ? gitOutput(["tag", "--list", "gestaltd/v*"])
-        .split("\n")
-        .filter(Boolean)
-    : [...options.tags];
+  const tags =
+    options.includeAll || options.latestOnly
+      ? gitOutput(["tag", "--list", "gestaltd/v*"])
+          .split("\n")
+          .filter(Boolean)
+      : [...options.tags];
   const normalized = [...new Set(tags.map(normalizeTag))];
   normalized.forEach((tag) => {
     if (!parseTag(tag)) {
       throw new Error(`unsupported gestaltd tag format: ${tag}`);
     }
   });
+  if (options.latestOnly) {
+    const latest =
+      options.latestPolicy === "stable"
+        ? chooseLatestStable(normalized)
+        : chooseLatestSupported(normalized);
+    return latest ? [latest] : [];
+  }
   return normalized;
 }
 
 async function assertDocsTrees(tags) {
   const missing = [];
   for (const tag of tags) {
-    const result = spawnSync("git", ["cat-file", "-e", `${tag}:docs/content`], {
-      cwd: repoRoot,
-      encoding: "utf8",
-    });
-    if (result.status !== 0) {
+    if (!hasDocsContentTree(tag)) {
       missing.push(tag);
     }
   }
@@ -198,6 +228,22 @@ async function assertDocsTrees(tags) {
       `cannot build exact docs snapshots because these tags have no docs/content tree: ${missing.join(", ")}`,
     );
   }
+}
+
+async function assertDocsTree(ref, description) {
+  if (!hasDocsContentTree(ref)) {
+    throw new Error(
+      `cannot build ${description} because ${ref}:docs/content does not exist; fetch the ref or pass --development-ref`,
+    );
+  }
+}
+
+function hasDocsContentTree(ref) {
+  const result = spawnSync("git", ["cat-file", "-e", `${ref}:docs/content`], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  return result.status === 0;
 }
 
 function chooseLatestStable(tags) {
@@ -220,6 +266,17 @@ function manifestEntry(tag, pathPrefix, stable, latest = false) {
     stable,
     tag,
     version,
+  };
+}
+
+function developmentManifestEntry() {
+  return {
+    development: true,
+    label: "Dev",
+    pathPrefix: developmentPathPrefix,
+    stable: false,
+    tag: "",
+    version: "main",
   };
 }
 
@@ -299,7 +356,7 @@ function compareTagVersions(left, right) {
   return 0;
 }
 
-async function createBuildTree(tempRoot, name, tag) {
+async function createBuildTree(tempRoot, name, { overlayRef = "" } = {}) {
   const buildDir = path.join(tempRoot, name);
   await rm(buildDir, { force: true, recursive: true });
   await cp(docsRoot, buildDir, {
@@ -318,20 +375,20 @@ async function createBuildTree(tempRoot, name, tag) {
     path.join(buildDir, "node_modules"),
     "dir",
   );
-  if (tag) {
-    await overlayTaggedDocs(buildDir, tag);
+  if (overlayRef) {
+    await overlayDocsFromRef(buildDir, overlayRef);
   }
   return buildDir;
 }
 
-async function overlayTaggedDocs(buildDir, tag) {
+async function overlayDocsFromRef(buildDir, ref) {
   const archiveRoot = path.join(buildDir, ".tagged-docs");
   const archivePath = path.join(buildDir, ".tagged-docs.tar");
   run("git", [
     "archive",
     "--format=tar",
     `--output=${archivePath}`,
-    tag,
+    ref,
     "docs/content",
     "docs/components",
     "docs/public",
@@ -448,6 +505,8 @@ function shouldPrefixPath(value, prefix) {
   if (
     pathname === prefix ||
     pathname.startsWith(`${prefix}/`) ||
+    pathname === developmentPathPrefix ||
+    pathname.startsWith(`${developmentPathPrefix}/`) ||
     pathname === "/latest" ||
     pathname.startsWith("/latest/") ||
     pathname.startsWith("/versions/")
@@ -475,6 +534,7 @@ function shouldPrefixPath(value, prefix) {
 
 async function assertNoUnversionedDocLinks(finalOut) {
   const versionRoots = [
+    path.join(finalOut, developmentPathPrefix.slice(1)),
     path.join(finalOut, "latest"),
     path.join(finalOut, "versions"),
   ];
@@ -486,7 +546,7 @@ async function assertNoUnversionedDocLinks(finalOut) {
   }
   const bad = [];
   const patterns = [
-    /\b(?:href|src|action)=["']\/(?!latest(?:\/|["'])|versions(?:\/|["'])|api\/|admin(?:\/|["'])|favicon\.svg|fonts\/|install(?:-|\.sh)|mcp(?:\/|["'])|registry(?:\/|["'])|versions\.json|_pagefind\/)/g,
+    /\b(?:href|src|action)=["']\/(?!dev(?:\/|["'])|latest(?:\/|["'])|versions(?:\/|["'])|api\/|admin(?:\/|["'])|favicon\.svg|fonts\/|install(?:-|\.sh)|mcp(?:\/|["'])|registry(?:\/|["'])|versions\.json|_pagefind\/)/g,
   ];
   for (const file of files.filter((candidate) => candidate.endsWith(".html"))) {
     const body = await readFile(file, "utf8");
@@ -549,6 +609,10 @@ function flightHrefValues(text) {
 
 async function versionedOutputRoots(finalOut) {
   const roots = [];
+  const development = path.join(finalOut, developmentPathPrefix.slice(1));
+  if (existsSync(development)) {
+    roots.push({ prefix: developmentPathPrefix, root: development });
+  }
   const latest = path.join(finalOut, "latest");
   if (existsSync(latest)) {
     roots.push({ prefix: "/latest", root: latest });

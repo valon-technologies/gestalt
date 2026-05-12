@@ -25,8 +25,17 @@ try {
     throw new Error(`could not determine mapped port for ${container}`);
   }
   const baseUrl = `http://127.0.0.1:${port}`;
+  const devAssetPath = findStaticAssetPath("dev/_next/static");
   const latestAssetPath = findStaticAssetPath("latest/_next/static");
   await waitForNginx(baseUrl);
+  const versionsManifest = await readVersionsManifest(
+    `${baseUrl}/versions.json`,
+    "gestaltd.ai",
+  );
+  const exactVersionPrefix = versionsManifest.versions[0]?.pathPrefix;
+  if (!exactVersionPrefix) {
+    throw new Error("/versions.json did not contain any exact versions");
+  }
 
   await assertResponse({
     url: `${baseUrl}/`,
@@ -40,16 +49,54 @@ try {
     status: 301,
     location: "/latest/getting-started",
   });
+  await readVersionsManifest(`${baseUrl}/versions.json`, "gestaltd.ai");
   await assertResponse({
-    url: `${baseUrl}/versions.json`,
+    url: `${baseUrl}/dev`,
+    host: "gestaltd.ai",
+    status: 301,
+    location: "/dev/",
+  });
+  await assertResponse({
+    url: `${baseUrl}/dev/`,
     host: "gestaltd.ai",
     status: 200,
-    json: (body) => {
-      const manifest = JSON.parse(body);
-      if (!manifest.latest?.pathPrefix || !Array.isArray(manifest.versions)) {
-        throw new Error("/versions.json did not contain a versions manifest");
-      }
-    },
+    cacheControlIncludes: "no-cache",
+    includes: "Gestalt",
+    excludes: "registry_shell__",
+  });
+  await assertResponse({
+    url: `${baseUrl}/dev/providers`,
+    host: "gestaltd.ai",
+    status: 200,
+    cacheControlIncludes: "no-cache",
+    includes: "Providers",
+    excludes: "registry_shell__",
+  });
+  await assertResponse({
+    url: `${baseUrl}/dev/providers.txt`,
+    host: "gestaltd.ai",
+    status: 200,
+    cacheControlIncludes: "no-cache",
+    includes: "What Providers Do",
+    excludes: "registry_shell__",
+  });
+  await assertResponse({
+    url: `${baseUrl}${devAssetPath}`,
+    host: "gestaltd.ai",
+    status: 200,
+    cacheControlIncludes: "immutable",
+  });
+  await assertResponse({
+    url: `${baseUrl}/dev/providers/`,
+    host: "gestaltd.ai",
+    status: 301,
+    location: "/dev/providers",
+  });
+  await assertResponse({
+    url: `${baseUrl}/dev/does-not-exist`,
+    host: "gestaltd.ai",
+    status: 404,
+    excludes: "registry_shell__",
   });
   await assertResponse({
     url: `${baseUrl}/latest/`,
@@ -88,17 +135,17 @@ try {
     location: "/latest/getting-started",
   });
   await assertResponse({
-    url: `${baseUrl}/versions/v0.0.1-alpha.24/reference/cli`,
+    url: `${baseUrl}${exactVersionPrefix}/reference/cli`,
     host: "gestaltd.ai",
     status: 200,
     includes: "Server CLI",
     excludes: "registry_shell__",
   });
   await assertResponse({
-    url: `${baseUrl}/versions/v0.0.1-alpha.24/reference/cli/`,
+    url: `${baseUrl}${exactVersionPrefix}/reference/cli/`,
     host: "gestaltd.ai",
     status: 301,
-    location: "/versions/v0.0.1-alpha.24/reference/cli",
+    location: `${exactVersionPrefix}/reference/cli`,
   });
   await assertResponse({
     url: `${baseUrl}/versions/v9.9.9/`,
@@ -164,7 +211,6 @@ async function assertResponse({
   includes,
   excludes,
   location,
-  json,
   cacheControlIncludes,
 }) {
   const response = await httpGet(url, host);
@@ -192,9 +238,25 @@ async function assertResponse({
   if (excludes && body.includes(excludes)) {
     throw new Error(`${host} ${url} unexpectedly included ${excludes}`);
   }
-  if (json) {
-    json(body);
+}
+
+async function readVersionsManifest(url, host) {
+  const response = await httpGet(url, host);
+  if (response.status !== 200) {
+    throw new Error(`${host} ${url} returned ${response.status}, want 200`);
   }
+  const manifest = JSON.parse(response.body);
+  if (!manifest.latest?.pathPrefix || !Array.isArray(manifest.versions)) {
+    throw new Error("/versions.json did not contain a versions manifest");
+  }
+  if (
+    manifest.development?.pathPrefix !== "/dev" ||
+    manifest.development?.version !== "main" ||
+    manifest.development?.development !== true
+  ) {
+    throw new Error("/versions.json did not contain the /dev development channel");
+  }
+  return manifest;
 }
 
 function httpGet(url, host) {

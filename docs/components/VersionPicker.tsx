@@ -3,15 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 
 type DocsVersion = {
+  development?: boolean;
   label: string;
   pathPrefix: string;
   stable?: boolean;
   tag: string;
+  version?: string;
 };
 
 type VersionsManifest = {
+  development?: DocsVersion & { development: true; version: string };
   latest: DocsVersion & { version: string };
-  versions: DocsVersion[];
+  versions: Array<DocsVersion & { version: string }>;
 };
 
 const currentPrefix = process.env.NEXT_PUBLIC_GESTALT_DOCS_BASE_PATH || "";
@@ -64,6 +67,14 @@ export default function VersionPicker() {
         ...manifest.latest,
         label: `${manifest.latest.label} (${manifest.latest.version})`,
       },
+      ...(manifest.development
+        ? [
+            {
+              ...manifest.development,
+              label: `${manifest.development.label} (${manifest.development.version})`,
+            },
+          ]
+        : []),
       ...manifest.versions,
     ];
   }, [manifest]);
