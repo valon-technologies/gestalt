@@ -11,7 +11,9 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::api::{IntoResponse, Request};
-use crate::catalog::{Catalog, CatalogOperation, schema_json, schema_parameters};
+use crate::catalog::{
+    Catalog, CatalogOperation, OperationAnnotations, schema_json, schema_parameters,
+};
 use crate::error::{Error, INTERNAL_ERROR_MESSAGE, Result};
 use crate::provider_server::OperationResult;
 
@@ -207,7 +209,7 @@ where
         let parameters = schema_parameters(&input_schema);
         let input_schema_str = serde_json::to_string(&input_schema).unwrap_or_default();
         let output_schema_str = serde_json::to_string(&output_schema).unwrap_or_default();
-        let annotations = Some(crate::generated::v1::OperationAnnotations {
+        let annotations = Some(OperationAnnotations {
             read_only_hint: operation.read_only.then_some(true),
             ..Default::default()
         });

@@ -207,7 +207,11 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "session catalog: %v", err)
 	}
-	return &proto.GetSessionCatalogResponse{Catalog: cat}, nil
+	pbCat, err := catalogToProto(cat)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "session catalog: %v", err)
+	}
+	return &proto.GetSessionCatalogResponse{Catalog: pbCat}, nil
 }
 
 func (s *ProviderServer) PostConnect(ctx context.Context, req *proto.PostConnectRequest) (*proto.PostConnectResponse, error) {

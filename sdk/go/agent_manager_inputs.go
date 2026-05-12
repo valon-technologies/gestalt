@@ -89,7 +89,7 @@ type ListAgentManagerInteractionsResponse struct {
 	Interactions []AgentInteraction
 }
 
-func NewAgentManagerCreateSessionRequest(input AgentManagerCreateSessionInput) (*proto.AgentManagerCreateSessionRequest, error) {
+func newAgentManagerCreateSessionRequest(input AgentManagerCreateSessionInput) (*proto.AgentManagerCreateSessionRequest, error) {
 	metadata, err := StructFromAny(input.Metadata)
 	if err != nil {
 		return nil, err
@@ -108,11 +108,11 @@ func NewAgentManagerCreateSessionRequest(input AgentManagerCreateSessionInput) (
 	}, nil
 }
 
-func NewAgentManagerGetSessionRequest(input AgentManagerGetSessionInput) *proto.AgentManagerGetSessionRequest {
+func newAgentManagerGetSessionRequest(input AgentManagerGetSessionInput) *proto.AgentManagerGetSessionRequest {
 	return &proto.AgentManagerGetSessionRequest{SessionId: input.SessionID}
 }
 
-func NewAgentManagerListSessionsRequest(input AgentManagerListSessionsInput) *proto.AgentManagerListSessionsRequest {
+func newAgentManagerListSessionsRequest(input AgentManagerListSessionsInput) *proto.AgentManagerListSessionsRequest {
 	return &proto.AgentManagerListSessionsRequest{
 		ProviderName: input.ProviderName,
 		State:        proto.AgentSessionState(input.State),
@@ -121,7 +121,7 @@ func NewAgentManagerListSessionsRequest(input AgentManagerListSessionsInput) *pr
 	}
 }
 
-func NewAgentManagerUpdateSessionRequest(input AgentManagerUpdateSessionInput) (*proto.AgentManagerUpdateSessionRequest, error) {
+func newAgentManagerUpdateSessionRequest(input AgentManagerUpdateSessionInput) (*proto.AgentManagerUpdateSessionRequest, error) {
 	metadata, err := StructFromAny(input.Metadata)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func NewAgentManagerUpdateSessionRequest(input AgentManagerUpdateSessionInput) (
 	}, nil
 }
 
-func NewAgentManagerCreateTurnRequest(input AgentManagerCreateTurnInput) (*proto.AgentManagerCreateTurnRequest, error) {
+func newAgentManagerCreateTurnRequest(input AgentManagerCreateTurnInput) (*proto.AgentManagerCreateTurnRequest, error) {
 	nativeMessages, err := agentMessagesFromInputs(input.Messages)
 	if err != nil {
 		return nil, err
@@ -168,11 +168,11 @@ func NewAgentManagerCreateTurnRequest(input AgentManagerCreateTurnInput) (*proto
 	}, nil
 }
 
-func NewAgentManagerGetTurnRequest(input AgentManagerGetTurnInput) *proto.AgentManagerGetTurnRequest {
+func newAgentManagerGetTurnRequest(input AgentManagerGetTurnInput) *proto.AgentManagerGetTurnRequest {
 	return &proto.AgentManagerGetTurnRequest{TurnId: input.TurnID}
 }
 
-func NewAgentManagerListTurnsRequest(input AgentManagerListTurnsInput) *proto.AgentManagerListTurnsRequest {
+func newAgentManagerListTurnsRequest(input AgentManagerListTurnsInput) *proto.AgentManagerListTurnsRequest {
 	return &proto.AgentManagerListTurnsRequest{
 		SessionId:   input.SessionID,
 		Status:      proto.AgentExecutionStatus(input.Status),
@@ -181,14 +181,14 @@ func NewAgentManagerListTurnsRequest(input AgentManagerListTurnsInput) *proto.Ag
 	}
 }
 
-func NewAgentManagerCancelTurnRequest(input AgentManagerCancelTurnInput) *proto.AgentManagerCancelTurnRequest {
+func newAgentManagerCancelTurnRequest(input AgentManagerCancelTurnInput) *proto.AgentManagerCancelTurnRequest {
 	return &proto.AgentManagerCancelTurnRequest{
 		TurnId: input.TurnID,
 		Reason: input.Reason,
 	}
 }
 
-func NewAgentManagerListTurnEventsRequest(input AgentManagerListTurnEventsInput) *proto.AgentManagerListTurnEventsRequest {
+func newAgentManagerListTurnEventsRequest(input AgentManagerListTurnEventsInput) *proto.AgentManagerListTurnEventsRequest {
 	return &proto.AgentManagerListTurnEventsRequest{
 		TurnId:   input.TurnID,
 		AfterSeq: input.AfterSeq,
@@ -196,11 +196,11 @@ func NewAgentManagerListTurnEventsRequest(input AgentManagerListTurnEventsInput)
 	}
 }
 
-func NewAgentManagerListInteractionsRequest(input AgentManagerListInteractionsInput) *proto.AgentManagerListInteractionsRequest {
+func newAgentManagerListInteractionsRequest(input AgentManagerListInteractionsInput) *proto.AgentManagerListInteractionsRequest {
 	return &proto.AgentManagerListInteractionsRequest{TurnId: input.TurnID}
 }
 
-func NewAgentManagerResolveInteractionRequest(input AgentManagerResolveInteractionInput) (*proto.AgentManagerResolveInteractionRequest, error) {
+func newAgentManagerResolveInteractionRequest(input AgentManagerResolveInteractionInput) (*proto.AgentManagerResolveInteractionRequest, error) {
 	resolution, err := StructFromAny(input.Resolution)
 	if err != nil {
 		return nil, err

@@ -141,13 +141,13 @@ workflows:
 ```
 
 This creates a durable schedule named `nightly_sync` that invokes
-`roadmap.sync` every day at 3:00 AM New York time. `runAs` makes the runtime
-principal `service_account:roadmap-sync`; the schedule itself remains owned by
-config for reconciliation. `invokes` grants additional plugin operations the
-target may invoke while it runs; Gestalt always includes the direct target
-operation. These grants do not create credentials. User-mode connections use
-credentials stored for the `runAs.subject.id`, and platform or `none`
-connections keep their normal behavior.
+`roadmap.sync` every day at 3:00 AM New York time. [`runAs`](/service-accounts#runas)
+makes the runtime principal `service_account:roadmap-sync`; the schedule itself
+remains owned by config for reconciliation. `invokes` grants additional plugin
+operations the target may invoke while it runs; Gestalt always includes the
+direct target operation. These grants do not create credentials.
+Subject-scoped connections use credentials stored for the `runAs.subject.id`;
+`none` connections require no upstream credential.
 
 `permissions` is still accepted as a deprecated alias for `invokes` with the
 older `{ plugin, operations }` shape. Do not set both on the same workflow.
@@ -751,9 +751,9 @@ then the run is updated to `succeeded`, `failed`, or `canceled`.
 
 The execution identity depends on how the workflow was created. Config-managed
 schedules and triggers are reconciled as `system:config`. At runtime they
-execute as `runAs.subject.id` when `runAs` is declared, otherwise as
-`system:config`. User-owned schedules and triggers execute as the creating
-subject.
+execute as `runAs.subject.id` when [`runAs`](/service-accounts#runas) is
+declared, otherwise as `system:config`. User-owned schedules and triggers
+execute as the creating subject.
 
 ## Building your own workflow provider
 

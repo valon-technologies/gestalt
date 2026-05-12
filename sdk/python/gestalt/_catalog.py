@@ -5,21 +5,19 @@ from __future__ import annotations
 import dataclasses
 import pathlib
 from collections.abc import Mapping
-from dataclasses import MISSING
 from typing import (
     Any,
     Iterable,
     Protocol,
     cast,
-    get_origin,
-    get_type_hints,
     runtime_checkable,
 )
 
 import yaml
 
-from ._api import FIELD_DESCRIPTION_KEY, FIELD_REQUIRED_KEY, Request
-from ._operations import OperationDefinition, is_optional_type, strip_optional
+from ._api import Request
+from ._catalog_helpers import catalog_parameters
+from ._operations import OperationDefinition
 
 json_format: Any = cast(Any, None)
 _struct_pb2: Any = cast(Any, None)
@@ -42,16 +40,51 @@ else:
 
 struct_pb2: Any = cast(Any, _struct_pb2)
 
-Catalog: Any = plugin_pb2.Catalog if plugin_pb2 is not None else dict[str, Any]
-CatalogOperation: Any = (
-    plugin_pb2.CatalogOperation if plugin_pb2 is not None else dict[str, Any]
-)
-CatalogParameter: Any = (
-    plugin_pb2.CatalogParameter if plugin_pb2 is not None else dict[str, Any]
-)
-OperationAnnotations: Any = (
-    plugin_pb2.OperationAnnotations if plugin_pb2 is not None else dict[str, Any]
-)
+_DEFAULT_UNSET = object()
+
+
+@dataclasses.dataclass(slots=True)
+class CatalogParameter:
+    name: str = ""
+    type: str = ""
+    description: str = ""
+    required: bool = False
+    default: Any = dataclasses.field(default=_DEFAULT_UNSET, repr=False)
+
+
+@dataclasses.dataclass(slots=True)
+class OperationAnnotations:
+    read_only_hint: bool | None = None
+    idempotent_hint: bool | None = None
+    destructive_hint: bool | None = None
+    open_world_hint: bool | None = None
+
+
+@dataclasses.dataclass(slots=True)
+class CatalogOperation:
+    id: str = ""
+    method: str = ""
+    title: str = ""
+    description: str = ""
+    input_schema: str = ""
+    output_schema: str = ""
+    annotations: OperationAnnotations | None = None
+    parameters: list[CatalogParameter] = dataclasses.field(default_factory=list)
+    required_scopes: list[str] = dataclasses.field(default_factory=list)
+    tags: list[str] = dataclasses.field(default_factory=list)
+    read_only: bool = False
+    visible: bool | None = None
+    transport: str = ""
+    allowed_roles: list[str] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(slots=True)
+class Catalog:
+    name: str = ""
+    display_name: str = ""
+    description: str = ""
+    icon_svg: str = ""
+    operations: list[CatalogOperation] = dataclasses.field(default_factory=list)
 
 
 @runtime_checkable
@@ -70,26 +103,29 @@ def build_catalog(
 ) -> Catalog:
     """Build a catalog value from authored operation definitions."""
 
-    if plugin_pb2 is None:
-        return {
-            "name": plugin_name,
-            "operations": [_catalog_operation(op) for op in operations],
-        }
     return Catalog(
         name=plugin_name,
         operations=[_catalog_operation(op) for op in operations],
     )
 
 
-def catalog_to_proto(catalog: Catalog | Mapping[str, Any] | None) -> Catalog | None:
-    """Normalize catalog input to the SDK catalog shape."""
+def catalog_to_proto(catalog: Catalog | Mapping[str, Any] | None) -> Any | None:
+    """Normalize catalog input to the wire catalog shape."""
 
     if catalog is None:
         return None
-    if plugin_pb2 is not None and isinstance(catalog, Catalog):
+    if _is_proto_catalog(catalog):
         return catalog
+    if plugin_pb2 is None:
+        if isinstance(catalog, Catalog):
+            return _catalog_to_mapping(catalog)
+        if isinstance(catalog, Mapping):
+            return dict(catalog)
+        raise TypeError("catalog must be a gestalt.Catalog or mapping")
+    if isinstance(catalog, Catalog):
+        return _catalog_to_proto(catalog)
     if isinstance(catalog, Mapping):
-        return _catalog_from_mapping(catalog)
+        return _catalog_to_proto(_catalog_from_mapping(catalog))
     raise TypeError("catalog must be a gestalt.Catalog or mapping")
 
 
@@ -98,15 +134,20 @@ def catalog_to_dict(
 ) -> dict[str, Any]:
     """Convert a catalog value or mapping into plain Python data."""
 
-    if plugin_pb2 is not None and isinstance(catalog, Catalog):
+    if _is_proto_catalog(catalog):
         raw = json_format.MessageToDict(
             catalog, preserving_proto_field_name=(field_style == "yaml")
         )
         if "operations" not in raw:
             raw["operations"] = []
         return raw
+    if isinstance(catalog, Catalog):
+        return _catalog_to_mapping(catalog, field_style=field_style)
     if isinstance(catalog, Mapping):
-        return dict(catalog)
+        raw = dict(catalog)
+        if "operations" not in raw:
+            raw["operations"] = []
+        return raw
     raise TypeError("catalog must be a gestalt.Catalog or mapping")
 
 
@@ -117,31 +158,12 @@ def write_catalog(
 
     catalog_path = pathlib.Path(path)
     catalog_path.parent.mkdir(parents=True, exist_ok=True)
-    if isinstance(catalog, Mapping):
-        as_dict = dict(catalog)
-    else:
-        as_dict = json_format.MessageToDict(catalog, preserving_proto_field_name=True)
-    if "operations" not in as_dict:
-        as_dict["operations"] = []
+    as_dict = catalog_to_dict(catalog, field_style="yaml")
     data = yaml.dump(as_dict, default_flow_style=False, sort_keys=False)
     catalog_path.write_text(data, encoding="utf-8")
 
 
 def _catalog_operation(operation: OperationDefinition) -> CatalogOperation:
-    if plugin_pb2 is None:
-        raw: dict[str, Any] = {
-            "id": operation.id,
-            "method": operation.method,
-            "title": operation.title,
-            "description": operation.description,
-            "read_only": operation.read_only,
-            "parameters": _catalog_parameters(operation.input_type),
-            "allowed_roles": list(operation.allowed_roles),
-            "tags": list(operation.tags),
-        }
-        if operation.visible is not None:
-            raw["visible"] = operation.visible
-        return raw
     op = CatalogOperation(
         id=operation.id,
         method=operation.method,
@@ -158,98 +180,214 @@ def _catalog_operation(operation: OperationDefinition) -> CatalogOperation:
 
 
 def _catalog_parameters(input_type: Any) -> list[CatalogParameter]:
-    if input_type is None:
-        return []
-
-    input_type = strip_optional(input_type)
-    origin = get_origin(input_type)
-    if origin is not None:
-        input_type = origin
-
-    if not dataclasses.is_dataclass(input_type):
-        return []
-
-    type_hints = get_type_hints(input_type)
     parameters: list[CatalogParameter] = []
-    for field_definition in dataclasses.fields(input_type):
-        annotation = type_hints.get(field_definition.name, field_definition.type)
-        description = str(
-            field_definition.metadata.get(FIELD_DESCRIPTION_KEY, "")
-        ).strip()
-        required = field_definition.metadata.get(FIELD_REQUIRED_KEY)
-        if required is None:
-            required = (
-                field_definition.default is MISSING
-                and field_definition.default_factory is MISSING
-                and not is_optional_type(annotation)
-            )
-        if plugin_pb2 is None:
-            param: dict[str, Any] = {
-                "name": field_definition.name,
-                "type": _catalog_type(annotation),
-                "description": description,
-                "required": bool(required),
-            }
-            if field_definition.default is not MISSING:
-                param["default"] = field_definition.default
-            parameters.append(param)
-            continue
+    for spec in catalog_parameters(input_type):
         param = CatalogParameter(
-            name=field_definition.name,
-            type=_catalog_type(annotation),
+            name=spec.name,
+            type=spec.type,
+            description=spec.description,
+            required=spec.required,
         )
-
-        param.description = description
-        param.required = bool(required)
-        if field_definition.default is not MISSING:
-            param.default.CopyFrom(
-                struct_pb2.Value(string_value=str(field_definition.default))
-                if isinstance(field_definition.default, str)
-                else _to_proto_value(field_definition.default)
-            )
+        if spec.has_default:
+            param.default = spec.default
         parameters.append(param)
 
     return parameters
 
 
 def _to_proto_value(value: Any) -> Any:
-    if value is None:
-        return struct_pb2.Value(null_value=0)
-    if isinstance(value, bool):
-        return struct_pb2.Value(bool_value=value)
-    if isinstance(value, (int, float)):
-        return struct_pb2.Value(number_value=float(value))
-    if isinstance(value, str):
-        return struct_pb2.Value(string_value=value)
-    return struct_pb2.Value(string_value=str(value))
+    if struct_pb2 is not None and isinstance(value, struct_pb2.Value):
+        return value
+    return json_format.ParseDict(value, struct_pb2.Value())
 
 
-def _catalog_type(annotation: Any) -> str:
-    actual_type = strip_optional(annotation)
-    origin = get_origin(actual_type)
-    if origin in (list, tuple, set):
-        return "array"
-    if origin is dict:
-        return "object"
+def _is_proto_catalog(value: Any) -> bool:
+    return plugin_pb2 is not None and isinstance(value, plugin_pb2.Catalog)
 
-    if actual_type is str:
-        return "string"
-    if actual_type is bool:
-        return "boolean"
-    if actual_type is int:
-        return "integer"
-    if actual_type is float:
-        return "number"
-    if dataclasses.is_dataclass(actual_type):
-        return "object"
-    if actual_type in (dict, list, tuple, set):
-        return "object" if actual_type is dict else "array"
-    return "object"
+
+def _catalog_to_proto(catalog: Catalog) -> Any:
+    proto_catalog = plugin_pb2.Catalog(
+        name=catalog.name,
+        display_name=catalog.display_name,
+        description=catalog.description,
+        icon_svg=catalog.icon_svg,
+    )
+    proto_catalog.operations.extend(
+        _catalog_operation_to_proto(operation) for operation in catalog.operations
+    )
+    return proto_catalog
+
+
+def _catalog_operation_to_proto(operation: CatalogOperation) -> Any:
+    proto_operation = plugin_pb2.CatalogOperation(
+        id=operation.id,
+        method=operation.method,
+        title=operation.title,
+        description=operation.description,
+        input_schema=operation.input_schema,
+        output_schema=operation.output_schema,
+        read_only=operation.read_only,
+        transport=operation.transport,
+    )
+    if operation.annotations is not None and _has_annotations(operation.annotations):
+        proto_operation.annotations.CopyFrom(
+            _operation_annotations_to_proto(operation.annotations)
+        )
+    proto_operation.parameters.extend(
+        _catalog_parameter_to_proto(parameter) for parameter in operation.parameters
+    )
+    proto_operation.required_scopes.extend(operation.required_scopes)
+    proto_operation.tags.extend(operation.tags)
+    if operation.visible is not None:
+        proto_operation.visible = operation.visible
+    proto_operation.allowed_roles.extend(operation.allowed_roles)
+    return proto_operation
+
+
+def _operation_annotations_to_proto(annotations: OperationAnnotations) -> Any:
+    proto_annotations = plugin_pb2.OperationAnnotations()
+    if annotations.read_only_hint is not None:
+        proto_annotations.read_only_hint = annotations.read_only_hint
+    if annotations.idempotent_hint is not None:
+        proto_annotations.idempotent_hint = annotations.idempotent_hint
+    if annotations.destructive_hint is not None:
+        proto_annotations.destructive_hint = annotations.destructive_hint
+    if annotations.open_world_hint is not None:
+        proto_annotations.open_world_hint = annotations.open_world_hint
+    return proto_annotations
+
+
+def _catalog_parameter_to_proto(parameter: CatalogParameter) -> Any:
+    proto_parameter = plugin_pb2.CatalogParameter(
+        name=parameter.name,
+        type=parameter.type,
+        description=parameter.description,
+        required=parameter.required,
+    )
+    if parameter.default is not _DEFAULT_UNSET:
+        proto_parameter.default.CopyFrom(_to_proto_value(parameter.default))
+    return proto_parameter
+
+
+def _catalog_to_mapping(
+    catalog: Catalog, *, field_style: str = "yaml"
+) -> dict[str, Any]:
+    raw: dict[str, Any] = {}
+    if catalog.name:
+        raw["name"] = catalog.name
+    if catalog.display_name:
+        raw[_field("display_name", "displayName", field_style)] = catalog.display_name
+    if catalog.description:
+        raw["description"] = catalog.description
+    if catalog.icon_svg:
+        raw[_field("icon_svg", "iconSvg", field_style)] = catalog.icon_svg
+    raw["operations"] = [
+        _catalog_operation_to_mapping(operation, field_style=field_style)
+        for operation in catalog.operations
+    ]
+    return raw
+
+
+def _catalog_operation_to_mapping(
+    operation: CatalogOperation, *, field_style: str
+) -> dict[str, Any]:
+    raw: dict[str, Any] = {}
+    if operation.id:
+        raw["id"] = operation.id
+    if operation.method:
+        raw["method"] = operation.method
+    if operation.title:
+        raw["title"] = operation.title
+    if operation.description:
+        raw["description"] = operation.description
+    if operation.input_schema:
+        raw[_field("input_schema", "inputSchema", field_style)] = operation.input_schema
+    if operation.output_schema:
+        raw[_field("output_schema", "outputSchema", field_style)] = (
+            operation.output_schema
+        )
+    if operation.annotations is not None and _has_annotations(operation.annotations):
+        raw["annotations"] = _operation_annotations_to_mapping(
+            operation.annotations, field_style=field_style
+        )
+    if operation.parameters:
+        raw["parameters"] = [
+            _catalog_parameter_to_mapping(parameter, field_style=field_style)
+            for parameter in operation.parameters
+        ]
+    if operation.required_scopes:
+        raw[_field("required_scopes", "requiredScopes", field_style)] = list(
+            operation.required_scopes
+        )
+    if operation.tags:
+        raw["tags"] = list(operation.tags)
+    if operation.read_only:
+        raw[_field("read_only", "readOnly", field_style)] = True
+    if operation.visible is not None:
+        raw["visible"] = operation.visible
+    if operation.transport:
+        raw["transport"] = operation.transport
+    if operation.allowed_roles:
+        raw[_field("allowed_roles", "allowedRoles", field_style)] = list(
+            operation.allowed_roles
+        )
+    return raw
+
+
+def _operation_annotations_to_mapping(
+    annotations: OperationAnnotations, *, field_style: str
+) -> dict[str, Any]:
+    raw: dict[str, Any] = {}
+    if annotations.read_only_hint is not None:
+        raw[_field("read_only_hint", "readOnlyHint", field_style)] = (
+            annotations.read_only_hint
+        )
+    if annotations.idempotent_hint is not None:
+        raw[_field("idempotent_hint", "idempotentHint", field_style)] = (
+            annotations.idempotent_hint
+        )
+    if annotations.destructive_hint is not None:
+        raw[_field("destructive_hint", "destructiveHint", field_style)] = (
+            annotations.destructive_hint
+        )
+    if annotations.open_world_hint is not None:
+        raw[_field("open_world_hint", "openWorldHint", field_style)] = (
+            annotations.open_world_hint
+        )
+    return raw
+
+
+def _catalog_parameter_to_mapping(
+    parameter: CatalogParameter, *, field_style: str
+) -> dict[str, Any]:
+    raw: dict[str, Any] = {}
+    if parameter.name:
+        raw["name"] = parameter.name
+    if parameter.type:
+        raw["type"] = parameter.type
+    if parameter.description:
+        raw["description"] = parameter.description
+    if parameter.required:
+        raw["required"] = True
+    if parameter.default is not _DEFAULT_UNSET:
+        raw["default"] = parameter.default
+    return raw
+
+
+def _field(snake_case: str, lower_camel: str, field_style: str) -> str:
+    return snake_case if field_style == "yaml" else lower_camel
+
+
+def _has_annotations(annotations: OperationAnnotations) -> bool:
+    return (
+        annotations.read_only_hint is not None
+        or annotations.idempotent_hint is not None
+        or annotations.destructive_hint is not None
+        or annotations.open_world_hint is not None
+    )
 
 
 def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:
-    if plugin_pb2 is None:
-        return dict(data)
     catalog = Catalog(
         name=data.get("name", ""),
         display_name=data.get("display_name", data.get("displayName", "")),
@@ -275,21 +413,17 @@ def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:
         )
         raw_ann = raw_op.get("annotations") or {}
         if raw_ann:
-            op.annotations.CopyFrom(
-                OperationAnnotations(
-                    read_only_hint=raw_ann.get(
-                        "read_only_hint", raw_ann.get("readOnlyHint")
-                    ),
-                    idempotent_hint=raw_ann.get(
-                        "idempotent_hint", raw_ann.get("idempotentHint")
-                    ),
-                    destructive_hint=raw_ann.get(
-                        "destructive_hint", raw_ann.get("destructiveHint")
-                    ),
-                    open_world_hint=raw_ann.get(
-                        "open_world_hint", raw_ann.get("openWorldHint")
-                    ),
-                )
+            op.annotations = OperationAnnotations(
+                read_only_hint=raw_ann.get("read_only_hint", raw_ann.get("readOnlyHint")),
+                idempotent_hint=raw_ann.get(
+                    "idempotent_hint", raw_ann.get("idempotentHint")
+                ),
+                destructive_hint=raw_ann.get(
+                    "destructive_hint", raw_ann.get("destructiveHint")
+                ),
+                open_world_hint=raw_ann.get(
+                    "open_world_hint", raw_ann.get("openWorldHint")
+                ),
             )
         for raw_param in raw_op.get("parameters", []):
             param = CatalogParameter(
@@ -298,6 +432,8 @@ def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:
                 description=raw_param.get("description", ""),
                 required=raw_param.get("required", False),
             )
+            if "default" in raw_param:
+                param.default = raw_param["default"]
             op.parameters.append(param)
         op.tags.extend(raw_op.get("tags", []))
         op.required_scopes.extend(

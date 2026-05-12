@@ -31,7 +31,7 @@ func ServeProvider[P any, PP interface {
 	if catalogPath != "" {
 		cat := router.Catalog()
 		if cat == nil {
-			cat = &proto.Catalog{}
+			cat = &Catalog{}
 		}
 		if err := ensureOutputDir("catalog", catalogPath); err != nil {
 			return err

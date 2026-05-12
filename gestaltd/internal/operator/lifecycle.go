@@ -104,9 +104,10 @@ type StaticValidationOptions struct {
 }
 
 type Lifecycle struct {
-	configSecretResolver func(context.Context, *config.Config) error
-	httpClient           *http.Client
-	providerResolver     *providerregistry.Resolver
+	configSecretResolver     func(context.Context, *config.Config) error
+	sourceAuthSecretResolver func(context.Context, *config.Config) error
+	httpClient               *http.Client
+	providerResolver         *providerregistry.Resolver
 }
 
 type StatePaths struct {
@@ -122,6 +123,13 @@ const (
 	artifactModeReadOnly
 )
 
+type configSecretResolutionMode int
+
+const (
+	configSecretResolutionAll configSecretResolutionMode = iota
+	configSecretResolutionSourceAuth
+)
+
 func (m artifactMode) canMaterialize() bool {
 	return m == artifactModeMaterialize
 }
@@ -134,6 +142,14 @@ func NewLifecycle() *Lifecycle {
 // must leave it in canonicalized form for subsequent structural validation.
 func (l *Lifecycle) WithConfigSecretResolver(resolve func(context.Context, *config.Config) error) *Lifecycle {
 	l.configSecretResolver = resolve
+	return l
+}
+
+// WithSourceAuthSecretResolver installs a resolver for provider source.auth.token
+// secret refs. Artifact preparation uses this narrower resolver so runtime-only
+// secrets are not required during lock/sync.
+func (l *Lifecycle) WithSourceAuthSecretResolver(resolve func(context.Context, *config.Config) error) *Lifecycle {
+	l.sourceAuthSecretResolver = resolve
 	return l
 }
 
@@ -308,7 +324,7 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, d
 	if len(displayState) > 0 {
 		paths.configFlags = formatConfigStateFlags(configPaths, displayState[0])
 	}
-	lock, err := l.prepareRuntimeLockFromLoadedConfig(context.Background(), paths, cfg)
+	lock, err := l.prepareRuntimeLockFromLoadedConfigWithSecretMode(context.Background(), paths, cfg, configSecretResolutionSourceAuth)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
@@ -329,15 +345,36 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, d
 }
 
 func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, paths lifecyclePaths, cfg *config.Config) (*Lockfile, error) {
-	if err := l.resolvePackageSources(ctx, cfg); err != nil {
-		return nil, err
-	}
-	secretsEntries, err := l.primeSecretsProviderForConfigResolution(ctx, paths, cfg, nil, artifactModeMaterialize)
+	return l.prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx, paths, cfg, configSecretResolutionAll)
+}
+
+func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context.Context, paths lifecyclePaths, cfg *config.Config, secretMode configSecretResolutionMode) (*Lockfile, error) {
+	var secretsEntries map[string]LockEntry
+	var err error
+	secretsEntries, err = l.primeSecretsProviderForConfigResolution(ctx, paths, cfg, nil, artifactModeMaterialize, configSecretResolutionSourceAuth)
 	if err != nil {
 		return nil, err
 	}
-	if err := l.resolveConfigSecrets(ctx, cfg); err != nil {
+	if err := l.resolveConfigSecretsForMode(ctx, cfg, configSecretResolutionSourceAuth); err != nil {
 		return nil, err
+	}
+	if err := l.resolvePackageSources(ctx, cfg); err != nil {
+		return nil, err
+	}
+	if secretMode == configSecretResolutionAll {
+		allSecretsEntries, err := l.primeSecretsProviderForConfigResolution(ctx, paths, cfg, nil, artifactModeMaterialize, secretMode)
+		if err != nil {
+			return nil, err
+		}
+		for name := range allSecretsEntries {
+			if secretsEntries == nil {
+				secretsEntries = make(map[string]LockEntry, len(allSecretsEntries))
+			}
+			secretsEntries[name] = allSecretsEntries[name]
+		}
+		if err := l.resolveConfigSecretsForMode(ctx, cfg, secretMode); err != nil {
+			return nil, err
+		}
 	}
 	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating providers dir: %w", err)
@@ -439,66 +476,67 @@ func (l *Lifecycle) resolvePackageSources(ctx context.Context, cfg *config.Confi
 	if err != nil {
 		return err
 	}
-	resolveEntry := func(subject string, entry *config.ProviderEntry) error {
-		if entry == nil || !entry.Source.IsPackage() || entry.Source.ResolvedPackageMetadataURL() != "" {
-			return nil
-		}
-		reqRepos := cloneProviderRepositories(repos)
-		if token := sourceAuthToken(entry); token != "" {
-			for i := range reqRepos {
-				if entry.Source.PackageRepo() == "" || reqRepos[i].Name == entry.Source.PackageRepo() {
-					reqRepos[i].Token = token
-				}
-			}
-		}
-		resolved, err := l.providerPackageResolver().Resolve(ctx, providerregistry.ResolveRequest{
-			Package:           entry.Source.PackageAddress(),
-			VersionConstraint: entry.Source.PackageVersionConstraint(),
-			RepositoryName:    entry.Source.PackageRepo(),
-			Repositories:      reqRepos,
-		})
-		if err != nil {
-			return fmt.Errorf("%s resolve provider package: %w", subject, err)
-		}
-		entry.Source.SetResolvedPackage(resolved.MetadataURL, resolved.Version)
-		return nil
-	}
 	for name, entry := range cfg.Plugins {
-		if err := resolveEntry("plugin "+strconv.Quote(name), entry); err != nil {
+		if err := l.resolvePackageSourceEntry(ctx, "plugin "+strconv.Quote(name), entry, repos); err != nil {
 			return err
 		}
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		for name, entry := range collection.entries {
-			if err := resolveEntry(string(collection.kind)+" "+strconv.Quote(name), entry); err != nil {
+			if err := l.resolvePackageSourceEntry(ctx, string(collection.kind)+" "+strconv.Quote(name), entry, repos); err != nil {
 				return err
 			}
 		}
 	}
 	for name, entry := range cfg.Providers.IndexedDB {
-		if err := resolveEntry(string(config.HostProviderKindIndexedDB)+" "+strconv.Quote(name), entry); err != nil {
+		if err := l.resolvePackageSourceEntry(ctx, string(config.HostProviderKindIndexedDB)+" "+strconv.Quote(name), entry, repos); err != nil {
 			return err
 		}
 	}
 	for name, entry := range cfg.Providers.S3 {
-		if err := resolveEntry(providermanifestv1.KindS3+" "+strconv.Quote(name), entry); err != nil {
+		if err := l.resolvePackageSourceEntry(ctx, providermanifestv1.KindS3+" "+strconv.Quote(name), entry, repos); err != nil {
 			return err
 		}
 	}
 	for name, entry := range cfg.Runtime.Providers {
 		if entry != nil {
-			if err := resolveEntry("runtime "+strconv.Quote(name), &entry.ProviderEntry); err != nil {
+			if err := l.resolvePackageSourceEntry(ctx, "runtime "+strconv.Quote(name), &entry.ProviderEntry, repos); err != nil {
 				return err
 			}
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry != nil {
-			if err := resolveEntry("ui "+strconv.Quote(name), &entry.ProviderEntry); err != nil {
+			if err := l.resolvePackageSourceEntry(ctx, "ui "+strconv.Quote(name), &entry.ProviderEntry, repos); err != nil {
 				return err
 			}
 		}
 	}
+	return nil
+}
+
+func (l *Lifecycle) resolvePackageSourceEntry(ctx context.Context, subject string, entry *config.ProviderEntry, repos []providerregistry.NamedRepository) error {
+	if entry == nil || !entry.Source.IsPackage() || entry.Source.ResolvedPackageMetadataURL() != "" {
+		return nil
+	}
+	reqRepos := cloneProviderRepositories(repos)
+	if token := sourceAuthToken(entry); token != "" {
+		for i := range reqRepos {
+			if entry.Source.PackageRepo() == "" || reqRepos[i].Name == entry.Source.PackageRepo() {
+				reqRepos[i].Token = token
+			}
+		}
+	}
+	resolved, err := l.providerPackageResolver().Resolve(ctx, providerregistry.ResolveRequest{
+		Package:           entry.Source.PackageAddress(),
+		VersionConstraint: entry.Source.PackageVersionConstraint(),
+		RepositoryName:    entry.Source.PackageRepo(),
+		Repositories:      reqRepos,
+	})
+	if err != nil {
+		return fmt.Errorf("%s resolve provider package: %w", subject, err)
+	}
+	entry.Source.SetResolvedPackage(resolved.MetadataURL, resolved.Version)
 	return nil
 }
 
@@ -666,10 +704,10 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 	if err != nil {
 		return nil, nil, err
 	}
-	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, secretsLock, mode); err != nil {
+	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, secretsLock, mode, configSecretResolutionAll); err != nil {
 		return nil, nil, err
 	}
-	if err := l.resolveConfigSecrets(context.Background(), cfg); err != nil {
+	if err := l.resolveConfigSecretsForMode(context.Background(), cfg, configSecretResolutionAll); err != nil {
 		return nil, nil, err
 	}
 	if err := config.ValidateRuntime(cfg); err != nil {
@@ -748,6 +786,12 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 			return scratchCfg, nil
 		}
 	}
+	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, lock, artifactModeMaterialize, configSecretResolutionSourceAuth); err != nil {
+		return nil, err
+	}
+	if err := l.resolveConfigSecretsForMode(context.Background(), cfg, configSecretResolutionSourceAuth); err != nil {
+		return nil, err
+	}
 	if err := l.applyStaticValidationProviders(context.Background(), paths, lock, cfg, platform); err != nil {
 		return nil, err
 	}
@@ -776,10 +820,10 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if !lockMetadataMatchesConfig(cfg, paths, lock) {
 		return fmt.Errorf("lockfile is out of date; run `%s`", formatLockCommand(paths))
 	}
-	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, lock, mode); err != nil {
+	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, lock, mode, configSecretResolutionSourceAuth); err != nil {
 		return err
 	}
-	if err := l.resolveConfigSecrets(context.Background(), cfg); err != nil {
+	if err := l.resolveConfigSecretsForMode(context.Background(), cfg, configSecretResolutionSourceAuth); err != nil {
 		return err
 	}
 	if err := config.ValidateRuntime(cfg); err != nil {
@@ -807,8 +851,60 @@ func (l *Lifecycle) resolveConfigSecrets(ctx context.Context, cfg *config.Config
 	return config.ValidateCanonicalStructure(cfg)
 }
 
+func (l *Lifecycle) resolveSourceAuthSecrets(ctx context.Context, cfg *config.Config) error {
+	if l.sourceAuthSecretResolver == nil {
+		return requireSourceAuthSecretResolver(cfg)
+	}
+	if err := l.sourceAuthSecretResolver(ctx, cfg); err != nil {
+		return fmt.Errorf("resolving source auth secrets: %w", err)
+	}
+	return config.ValidateCanonicalStructure(cfg)
+}
+
+func (l *Lifecycle) resolveConfigSecretsForMode(ctx context.Context, cfg *config.Config, mode configSecretResolutionMode) error {
+	if mode == configSecretResolutionSourceAuth {
+		return l.resolveSourceAuthSecrets(ctx, cfg)
+	}
+	return l.resolveConfigSecrets(ctx, cfg)
+}
+
+func (l *Lifecycle) resolveConfigSecretsForModePartial(ctx context.Context, cfg *config.Config, mode configSecretResolutionMode) error {
+	if mode == configSecretResolutionSourceAuth {
+		if l.sourceAuthSecretResolver == nil {
+			return requireSourceAuthSecretResolver(cfg)
+		}
+		if err := l.sourceAuthSecretResolver(ctx, cfg); err != nil {
+			return fmt.Errorf("resolving source auth secrets: %w", err)
+		}
+		return nil
+	}
+	if l.configSecretResolver == nil {
+		return nil
+	}
+	if err := l.configSecretResolver(ctx, cfg); err != nil {
+		return fmt.Errorf("resolving config secrets: %w", err)
+	}
+	return nil
+}
+
+func requireSourceAuthSecretResolver(cfg *config.Config) error {
+	referenced, err := config.ReferencedSourceAuthSecretProviders(cfg)
+	if err != nil {
+		return err
+	}
+	if len(referenced) == 0 {
+		return nil
+	}
+	names := slices.Sorted(maps.Keys(referenced))
+	return fmt.Errorf("source auth secret resolver is required for source auth secret refs: %s", strings.Join(names, ", "))
+}
+
 func referencedConfigSecretsProviders(cfg *config.Config) (map[string]*config.ProviderEntry, error) {
-	referenced, err := config.ReferencedConfigSecretProviders(cfg)
+	return referencedSecretsProvidersFromCollector(cfg, config.ReferencedConfigSecretProviders)
+}
+
+func referencedSecretsProvidersFromCollector(cfg *config.Config, collect func(*config.Config) (map[string]struct{}, error)) (map[string]*config.ProviderEntry, error) {
+	referenced, err := collect(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -822,7 +918,14 @@ func referencedConfigSecretsProviders(cfg *config.Config) (map[string]*config.Pr
 	return entries, nil
 }
 
-func secretsProviderMetadataDependencies(name string, provider *config.ProviderEntry) (map[string]struct{}, error) {
+func referencedSecretProvidersForMode(cfg *config.Config, mode configSecretResolutionMode) (map[string]*config.ProviderEntry, error) {
+	if mode == configSecretResolutionSourceAuth {
+		return referencedSecretsProvidersFromCollector(cfg, config.ReferencedSourceAuthSecretProviders)
+	}
+	return referencedConfigSecretsProviders(cfg)
+}
+
+func secretsProviderMetadataDependencies(name string, provider *config.ProviderEntry, mode configSecretResolutionMode) (map[string]struct{}, error) {
 	if provider == nil {
 		return nil, nil
 	}
@@ -833,7 +936,15 @@ func secretsProviderMetadataDependencies(name string, provider *config.ProviderE
 			},
 		},
 	}
-	deps, err := config.ReferencedConfigSecretProviders(tmp)
+	var (
+		deps map[string]struct{}
+		err  error
+	)
+	if mode == configSecretResolutionSourceAuth {
+		deps, err = config.ReferencedSourceAuthSecretProviders(tmp)
+	} else {
+		deps, err = config.ReferencedConfigSecretProviders(tmp)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -844,11 +955,11 @@ func secretsProviderMetadataDependencies(name string, provider *config.ProviderE
 	return deps, nil
 }
 
-func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name string, provider *config.ProviderEntry, available map[string]*config.ProviderEntry) error {
-	if l.configSecretResolver == nil || provider == nil {
+func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name string, provider *config.ProviderEntry, available map[string]*config.ProviderEntry, mode configSecretResolutionMode) error {
+	if provider == nil {
 		return nil
 	}
-	deps, err := secretsProviderMetadataDependencies(name, provider)
+	deps, err := secretsProviderMetadataDependencies(name, provider, mode)
 	if err != nil {
 		return err
 	}
@@ -865,7 +976,7 @@ func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name str
 			Secrets: secrets,
 		},
 	}
-	if err := l.configSecretResolver(ctx, tmp); err != nil {
+	if err := l.resolveConfigSecretsForModePartial(ctx, tmp, mode); err != nil {
 		return fmt.Errorf("resolve metadata for %s %q: %w", providermanifestv1.KindSecrets, name, err)
 	}
 	return nil
@@ -905,13 +1016,16 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePat
 	return lock, validatedDuringPrepare, nil
 }
 
-func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context, paths lifecyclePaths, cfg *config.Config, lock *Lockfile, mode artifactMode) (map[string]LockEntry, error) {
+func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context, paths lifecyclePaths, cfg *config.Config, lock *Lockfile, mode artifactMode, secretMode configSecretResolutionMode) (map[string]LockEntry, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	referenced, err := referencedConfigSecretsProviders(cfg)
+	referenced, err := referencedSecretProvidersForMode(cfg, secretMode)
 	if err != nil {
 		return nil, err
+	}
+	if secretMode == configSecretResolutionSourceAuth && l.sourceAuthSecretResolver == nil {
+		return nil, requireSourceAuthSecretResolver(cfg)
 	}
 	available := make(map[string]*config.ProviderEntry, len(referenced))
 	pending := make(map[string]*config.ProviderEntry, len(referenced))
@@ -920,7 +1034,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 		if provider == nil {
 			continue
 		}
-		deps, err := secretsProviderMetadataDependencies(name, provider)
+		deps, err := secretsProviderMetadataDependencies(name, provider, secretMode)
 		if err != nil {
 			return nil, err
 		}
@@ -932,6 +1046,24 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 		pending[name] = provider
 	}
 	prepared := make(map[string]LockEntry)
+	var (
+		packageRepos       []providerregistry.NamedRepository
+		packageReposLoaded bool
+	)
+	resolvePackageSourceForProvider := func(name string, provider *config.ProviderEntry) error {
+		if lock != nil || provider == nil || !provider.Source.IsPackage() || provider.Source.ResolvedPackageMetadataURL() != "" {
+			return nil
+		}
+		if !packageReposLoaded {
+			var err error
+			packageRepos, err = providerRepositoriesForConfig(cfg)
+			if err != nil {
+				return err
+			}
+			packageReposLoaded = true
+		}
+		return l.resolvePackageSourceEntry(ctx, providermanifestv1.KindSecrets+" "+strconv.Quote(name), provider, packageRepos)
+	}
 	for len(pending) > 0 {
 		progress := false
 		names := make([]string, 0, len(pending))
@@ -955,7 +1087,10 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 			if !ready {
 				continue
 			}
-			if err := l.resolveSecretsProviderMetadata(ctx, name, provider, available); err != nil {
+			if err := l.resolveSecretsProviderMetadata(ctx, name, provider, available, secretMode); err != nil {
+				return nil, err
+			}
+			if err := resolvePackageSourceForProvider(name, provider); err != nil {
 				return nil, err
 			}
 			configMap, err := config.NodeToMap(provider.Config)

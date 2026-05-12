@@ -5,7 +5,7 @@ use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::api::{Access, Credential, ExternalIdentity, Request, Response, Subject};
-use crate::catalog::object_map;
+use crate::catalog::{catalog_to_proto, object_map};
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
 use crate::generated::v1::integration_provider_server::IntegrationProvider;
@@ -183,7 +183,9 @@ where
             .await
             .map_err(|error| rpc_status("session catalog", error))?;
 
-        Ok(GrpcResponse::new(GetSessionCatalogResponse { catalog }))
+        Ok(GrpcResponse::new(GetSessionCatalogResponse {
+            catalog: catalog.as_ref().map(catalog_to_proto),
+        }))
     }
 
     async fn resolve_http_subject(

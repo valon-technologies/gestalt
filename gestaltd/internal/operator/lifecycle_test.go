@@ -3265,7 +3265,7 @@ func TestResolveSecretsProviderMetadataSkipsResolverWithoutMetadataDependencies(
 		Source: config.NewMetadataSource("https://example.invalid/github-com-testowner-providers-secrets/v0.0.1-alpha.1/provider-release.yaml"),
 	}
 
-	if err := lc.resolveSecretsProviderMetadata(context.Background(), "secrets", provider, nil); err != nil {
+	if err := lc.resolveSecretsProviderMetadata(context.Background(), "secrets", provider, nil, configSecretResolutionAll); err != nil {
 		t.Fatalf("resolveSecretsProviderMetadata: %v", err)
 	}
 	if called {

@@ -8,10 +8,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
-	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Request carries execution-scoped metadata into typed handlers.
@@ -90,7 +86,7 @@ type Operation[In any, Out any] struct {
 }
 
 type Registration[P any] struct {
-	catalogOp *proto.CatalogOperation
+	catalogOp *CatalogOperation
 	execute   func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
 	err       error
 }
@@ -139,7 +135,7 @@ func Register[P any, In any, Out any](
 // Router dispatches provider Execute calls against typed handlers and derives
 // the corresponding static executable catalog.
 type Router[P any] struct {
-	catalog  *proto.Catalog
+	catalog  *Catalog
 	handlers map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
 }
 
@@ -151,9 +147,9 @@ func NewRouter[P any](registrations ...Registration[P]) (*Router[P], error) {
 
 func newRouter[P any](name string, registrations ...Registration[P]) (*Router[P], error) {
 	router := &Router[P]{
-		catalog: &proto.Catalog{
+		catalog: &Catalog{
 			Name:       name,
-			Operations: make([]*proto.CatalogOperation, 0, len(registrations)),
+			Operations: make([]*CatalogOperation, 0, len(registrations)),
 		},
 		handlers: make(map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error), len(registrations)),
 	}
@@ -182,7 +178,7 @@ func MustRouter[P any](registrations ...Registration[P]) *Router[P] {
 }
 
 // Catalog returns a defensive copy of the router's derived static catalog.
-func (r *Router[P]) Catalog() *proto.Catalog {
+func (r *Router[P]) Catalog() *Catalog {
 	if r == nil {
 		return nil
 	}
@@ -206,13 +202,6 @@ func (r *Router[P]) WithName(name string) *Router[P] {
 		catalog:  cat,
 		handlers: handlers,
 	}
-}
-
-func cloneCatalog(src *proto.Catalog) *proto.Catalog {
-	if src == nil {
-		return &proto.Catalog{}
-	}
-	return gproto.Clone(src).(*proto.Catalog)
 }
 
 // Execute decodes params into the typed input struct and dispatches the named
@@ -246,7 +235,7 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 	return result, nil
 }
 
-func catalogOperationFor[In any, Out any](op Operation[In, Out]) (*proto.CatalogOperation, error) {
+func catalogOperationFor[In any, Out any](op Operation[In, Out]) (*CatalogOperation, error) {
 	id := strings.TrimSpace(op.ID)
 	if id == "" {
 		return nil, fmt.Errorf("operation id is required")
@@ -255,7 +244,7 @@ func catalogOperationFor[In any, Out any](op Operation[In, Out]) (*proto.Catalog
 	if err != nil {
 		return nil, fmt.Errorf("operation %q: %w", id, err)
 	}
-	catOp := &proto.CatalogOperation{
+	catOp := &CatalogOperation{
 		Id:           id,
 		Method:       normalizeMethod(op.Method),
 		Title:        strings.TrimSpace(op.Title),
@@ -271,7 +260,7 @@ func catalogOperationFor[In any, Out any](op Operation[In, Out]) (*proto.Catalog
 	return catOp, nil
 }
 
-func catalogParametersFor[In any]() ([]*proto.CatalogParameter, error) {
+func catalogParametersFor[In any]() ([]*CatalogParameter, error) {
 	t := underlyingType(reflect.TypeFor[In]())
 	if t.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("input type %s must be a struct", t)
@@ -280,7 +269,7 @@ func catalogParametersFor[In any]() ([]*proto.CatalogParameter, error) {
 		return nil, nil
 	}
 
-	params := make([]*proto.CatalogParameter, 0, t.NumField())
+	params := make([]*CatalogParameter, 0, t.NumField())
 	for i := range t.NumField() {
 		field := t.Field(i)
 		if field.Anonymous {
@@ -301,7 +290,7 @@ func catalogParametersFor[In any]() ([]*proto.CatalogParameter, error) {
 		if err != nil {
 			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		}
-		param := &proto.CatalogParameter{
+		param := &CatalogParameter{
 			Name:        name,
 			Type:        paramType,
 			Description: fieldDescription(field),
@@ -310,11 +299,8 @@ func catalogParametersFor[In any]() ([]*proto.CatalogParameter, error) {
 		if def, ok, err := fieldDefault(field); err != nil {
 			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		} else if ok {
-			v, vErr := structpb.NewValue(def)
-			if vErr != nil {
-				return nil, fmt.Errorf("field %s: %w", field.Name, vErr)
-			}
-			param.Default = v
+			param.Default = def
+			param.HasDefault = true
 		}
 		params = append(params, param)
 	}

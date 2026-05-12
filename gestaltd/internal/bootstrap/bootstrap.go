@@ -752,20 +752,16 @@ type configSecretManagers struct {
 	managers  map[string]core.SecretManager
 }
 
-func newConfigSecretManagers(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*configSecretManagers, error) {
-	referenced, err := config.ReferencedConfigSecretProviders(cfg)
-	if err != nil {
-		return nil, err
-	}
+func newConfigSecretManagersForReferences(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, referenced map[string]struct{}) *configSecretManagers {
 	if len(referenced) == 0 {
-		return nil, nil
+		return nil
 	}
 	return &configSecretManagers{
 		ctx:       ctx,
 		cfg:       cfg,
 		factories: factories,
 		managers:  make(map[string]core.SecretManager, len(referenced)),
-	}, nil
+	}
 }
 
 func (r *configSecretManagers) resolve(ref config.SecretRef) (string, error) {
@@ -810,13 +806,32 @@ func (r *configSecretManagers) Close() error {
 // ResolveConfigSecrets resolves structured config secret refs using their
 // referenced secrets providers, then closes the temporary secret managers.
 func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
+	return resolveConfigSecrets(ctx, cfg, factories, config.ReferencedConfigSecretProviders, config.TransformConfigStringFields)
+}
+
+// ResolveSourceAuthSecrets resolves only provider source.auth.token structured
+// secret refs. It is used by build-time artifact preparation, where source
+// credentials may be needed to fetch provider packages but runtime secrets are
+// intentionally left unresolved.
+func ResolveSourceAuthSecrets(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
+	return resolveConfigSecrets(ctx, cfg, factories, config.ReferencedSourceAuthSecretProviders, config.TransformSourceAuthTokens)
+}
+
+func resolveConfigSecrets(
+	ctx context.Context,
+	cfg *config.Config,
+	factories *FactoryRegistry,
+	collectReferences func(*config.Config) (map[string]struct{}, error),
+	transformFields func(*config.Config, config.ConfigStringTransformer) error,
+) error {
 	if err := config.CanonicalizeStructure(cfg); err != nil {
 		return err
 	}
-	resolver, err := newConfigSecretManagers(ctx, cfg, factories)
+	referenced, err := collectReferences(cfg)
 	if err != nil {
 		return err
 	}
+	resolver := newConfigSecretManagersForReferences(ctx, cfg, factories, referenced)
 	if resolver == nil {
 		return nil
 	}
@@ -845,7 +860,7 @@ func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *Fa
 		}
 		return resolved, nil
 	}
-	if err := config.TransformConfigStringFields(cfg, resolveValue); err != nil {
+	if err := transformFields(cfg, resolveValue); err != nil {
 		return err
 	}
 	return config.CanonicalizeStructure(cfg)
