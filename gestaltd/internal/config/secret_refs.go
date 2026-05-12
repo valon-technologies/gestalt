@@ -211,6 +211,84 @@ func ReferencedConfigSecretProviders(cfg *Config) (map[string]struct{}, error) {
 	return providers, nil
 }
 
+func ReferencedSourceAuthSecretProviders(cfg *Config) (map[string]struct{}, error) {
+	providers := map[string]struct{}{}
+	if cfg == nil {
+		return providers, nil
+	}
+	if err := TransformSourceAuthTokens(cfg, func(value string) (string, error) {
+		ref, ok, err := ParseSecretRefTransport(value)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			providers[ref.Provider] = struct{}{}
+		}
+		return value, nil
+	}); err != nil {
+		return nil, err
+	}
+	return providers, nil
+}
+
+func TransformSourceAuthTokens(cfg *Config, transform ConfigStringTransformer) error {
+	if cfg == nil {
+		return nil
+	}
+	transformEntry := func(entry *ProviderEntry) error {
+		if entry == nil || entry.Source.Auth == nil {
+			return nil
+		}
+		next, err := transform(entry.Source.Auth.Token)
+		if err != nil {
+			return err
+		}
+		entry.Source.Auth.Token = next
+		return nil
+	}
+	for _, entry := range cfg.Plugins {
+		if err := transformEntry(entry); err != nil {
+			return err
+		}
+	}
+	for _, entry := range cfg.Runtime.Providers {
+		if entry == nil {
+			continue
+		}
+		if err := transformEntry(&entry.ProviderEntry); err != nil {
+			return err
+		}
+	}
+	for _, entries := range []map[string]*ProviderEntry{
+		cfg.Providers.Authentication,
+		cfg.Providers.Authorization,
+		cfg.Providers.ExternalCredentials,
+		cfg.Providers.Secrets,
+		cfg.Providers.Telemetry,
+		cfg.Providers.Audit,
+		cfg.Providers.IndexedDB,
+		cfg.Providers.Cache,
+		cfg.Providers.S3,
+		cfg.Providers.Workflow,
+		cfg.Providers.Agent,
+	} {
+		for _, entry := range entries {
+			if err := transformEntry(entry); err != nil {
+				return err
+			}
+		}
+	}
+	for _, entry := range cfg.Providers.UI {
+		if entry == nil {
+			continue
+		}
+		if err := transformEntry(&entry.ProviderEntry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func TransformConfigStringFields(cfg *Config, transform ConfigStringTransformer) error {
 	if cfg == nil {
 		return nil

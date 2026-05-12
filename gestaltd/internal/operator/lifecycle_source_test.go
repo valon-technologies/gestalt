@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -511,6 +513,58 @@ func buildExecutableArchive(t *testing.T, dir, srcDirName, source, version, kind
 	t.Helper()
 
 	return buildExecutableArchiveData(t, dir, srcDirName, source, version, kind, binaryName, []byte(binaryContent))
+}
+
+func buildExecutableArchiveWithConfigSchema(t *testing.T, dir, srcDirName, source, version, kind, binaryName, binaryContent string) string {
+	t.Helper()
+
+	artPath := artifactRelPath(binaryName)
+	srcDir := filepath.Join(dir, srcDirName)
+	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artPath))), 0o755); err != nil {
+		t.Fatalf("create plugin src dir: %v", err)
+	}
+	binaryData := []byte(binaryContent)
+	manifest := &providermanifestv1.Manifest{
+		Source:  source,
+		Version: version,
+		Kind:    kind,
+		Spec:    &providermanifestv1.Spec{ConfigSchemaPath: "config.schema.json"},
+		Artifacts: []providermanifestv1.Artifact{
+			{
+				OS:   runtime.GOOS,
+				Arch: runtime.GOARCH,
+				Path: artPath,
+				SHA256: func() string {
+					sum := sha256.Sum256(binaryData)
+					return hex.EncodeToString(sum[:])
+				}(),
+			},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artPath},
+	}
+
+	manifestBytes, err := providerpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("encode manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "manifest.json"), manifestBytes, 0o644); err != nil {
+		t.Fatalf("write provider manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "config.schema.json"), []byte(`{"type":"object"}`), 0o644); err != nil {
+		t.Fatalf("write config schema: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0o644); err != nil {
+		t.Fatalf("write provider catalog: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artPath)), binaryData, 0o755); err != nil {
+		t.Fatalf("write provider artifact: %v", err)
+	}
+
+	archivePath := filepath.Join(dir, srcDirName+".tar.gz")
+	if err := providerpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir plugin: %v", err)
+	}
+	return archivePath
 }
 
 func buildExecutableArchiveFromBinaryPath(t *testing.T, dir, srcDirName, source, version, kind, binaryName, binaryPath string) string {
@@ -3170,6 +3224,9 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
+	lc = lc.WithSourceAuthSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
+	})
 	lc = lc.WithHTTPClient(srv.Client())
 	lock, err := lc.PrepareAtPath(configPath)
 	if err != nil {
@@ -3347,6 +3404,9 @@ func TestSourceAuthPluginPrepareAllowsMissingEnvPlaceholderInNonStringField(t *t
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
+	lc = lc.WithSourceAuthSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
+	})
 	lc = lc.WithHTTPClient(srv.Client())
 	lock, err := lc.PrepareAtPath(configPath)
 	if err != nil {
@@ -3362,6 +3422,577 @@ func TestSourceAuthPluginPrepareAllowsMissingEnvPlaceholderInNonStringField(t *t
 	}
 	if got := metadataCount.Load(); got != 1 {
 		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+}
+
+func TestLockAndSyncSkipRuntimeOnlySecretRefs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginSource := "github.com/acme/tools/runtime-secret-free-lock"
+	pluginManifestPath := writeExecutableSourceManifest(t, dir, "plugin-src", pluginSource, "1.0.0", providermanifestv1.KindPlugin, []localExecutableManifestArtifact{{
+		goos:       runtime.GOOS,
+		goarch:     runtime.GOARCH,
+		binaryName: "plugin",
+		data:       []byte("plugin-binary"),
+	}})
+	runtimeSecretsManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/runtime-secrets", "0.1.0")
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		"apiVersion: " + config.ConfigAPIVersion,
+		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"  secrets:",
+		"    runtime_only:",
+		"      source:",
+		"        path: " + runtimeSecretsManifestPath,
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey:",
+		"    secret:",
+		"      provider: runtime_only",
+		"      name: encryption-key",
+		"plugins:",
+		"  alpha:",
+		"    source:",
+		"      path: " + pluginManifestPath,
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	fullResolverCalled := atomic.Bool{}
+	lc := NewLifecycle().
+		WithConfigSecretResolver(func(context.Context, *config.Config) error {
+			fullResolverCalled.Store(true)
+			return fmt.Errorf("full config secret resolver should not run during lock/sync")
+		}).
+		WithSourceAuthSecretResolver(func(context.Context, *config.Config) error {
+			return nil
+		})
+
+	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, nil); err != nil {
+		t.Fatalf("CheckLockAtPathsWithStatePaths: %v", err)
+	}
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	}
+	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("CheckSyncAtPathsWithStatePaths: %v", err)
+	}
+	if fullResolverCalled.Load() {
+		t.Fatal("full config secret resolver ran during lock/sync")
+	}
+
+	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil {
+		t.Fatal("LoadForExecutionAtPath unexpectedly succeeded without runtime secret resolution")
+	}
+}
+
+func TestLockAndSyncResolveSourceAuthSecretRefs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const (
+		source    = "github.com/acme/tools/private-plugin"
+		version   = "1.0.0"
+		authToken = "ghp_inline_auth_source_token"
+	)
+	bootstrapManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/bootstrap-secrets", "0.1.0")
+	archivePath := buildExecutableArchiveWithConfigSchema(t, dir, "private-src", source, version, providermanifestv1.KindPlugin, "private-plugin", "private-plugin-binary")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSum := sha256.Sum256(archiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 8)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	metadataPath := "/providers/private/provider-release.yaml"
+	archivePathURL := "/providers/private/private.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer "+authToken {
+			handlerErrs <- fmt.Errorf("%s authorization = %q, want %q", r.URL.Path, got, "Bearer "+authToken)
+			http.Error(w, "bad authorization", http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       source,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(archivePathURL),
+						SHA256: hex.EncodeToString(archiveSum[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case archivePathURL:
+			archiveCount.Add(1)
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		"apiVersion: " + config.ConfigAPIVersion,
+		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"  secrets:",
+		"    bootstrap:",
+		"      source:",
+		"        path: " + bootstrapManifestPath,
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"    secrets: bootstrap",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"plugins:",
+		"  private:",
+		"    source:",
+		"      url: " + srv.URL + metadataPath,
+		"      auth:",
+		"        token:",
+		"          secret:",
+		"            provider: bootstrap",
+		"            name: source-token",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory
+	lc := NewLifecycle().
+		WithConfigSecretResolver(func(context.Context, *config.Config) error {
+			return fmt.Errorf("full config secret resolver should not run during lock/sync")
+		}).
+		WithSourceAuthSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+			return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
+		}).
+		WithHTTPClient(srv.Client())
+
+	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, nil); err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("CheckLockAtPathsWithStatePaths: %v", err)
+	}
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	}
+	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("CheckSyncAtPathsWithStatePaths: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got == 0 {
+		t.Fatal("metadata server was not called")
+	}
+	if got := archiveCount.Load(); got == 0 {
+		t.Fatal("archive server was not called")
+	}
+	lockData, err := os.ReadFile(filepath.Join(dir, LockfileName))
+	if err != nil {
+		t.Fatalf("ReadFile lockfile: %v", err)
+	}
+	if strings.Contains(string(lockData), authToken) {
+		t.Fatal("lockfile contains resolved source auth token")
+	}
+
+	staticArchiveBefore := archiveCount.Load()
+	if _, err := lc.LoadForStaticValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{}, StaticValidationOptions{}); err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("LoadForStaticValidationAtPathsWithStatePaths: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := archiveCount.Load() - staticArchiveBefore; got != 1 {
+		t.Fatalf("archive requests during static validation = %d, want 1", got)
+	}
+}
+
+func TestLockAndSyncResolveSourceAuthSecretRefsFromPackageSecretsProvider(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const (
+		secretsSource  = "github.com/acme/tools/package-secrets"
+		secretsVersion = "0.1.0"
+		pluginSource   = "github.com/acme/tools/private-plugin"
+		pluginVersion  = "1.0.0"
+		authToken      = "ghp_inline_auth_source_token"
+	)
+	secretsArchivePath := buildExecutableArchive(
+		t,
+		dir,
+		"package-secrets-src",
+		secretsSource,
+		secretsVersion,
+		providermanifestv1.KindSecrets,
+		"secrets-plugin",
+		"fake-secrets-binary",
+	)
+	secretsArchiveData, err := os.ReadFile(secretsArchivePath)
+	if err != nil {
+		t.Fatalf("read secrets archive: %v", err)
+	}
+	secretsArchiveSum := sha256.Sum256(secretsArchiveData)
+
+	pluginArchivePath := buildExecutableArchive(t, dir, "private-package-auth-src", pluginSource, pluginVersion, providermanifestv1.KindPlugin, "private-plugin", "private-plugin-binary")
+	pluginArchiveData, err := os.ReadFile(pluginArchivePath)
+	if err != nil {
+		t.Fatalf("read plugin archive: %v", err)
+	}
+	pluginArchiveSum := sha256.Sum256(pluginArchiveData)
+
+	var indexCount atomic.Int64
+	var secretsMetadataCount atomic.Int64
+	var secretsArchiveCount atomic.Int64
+	var pluginMetadataCount atomic.Int64
+	var pluginArchiveCount atomic.Int64
+	handlerErrs := make(chan error, 8)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+	requirePluginAuth := func(w http.ResponseWriter, r *http.Request) bool {
+		t.Helper()
+		if got := r.Header.Get("Authorization"); got != "Bearer "+authToken {
+			handlerErrs <- fmt.Errorf("%s authorization = %q, want %q", r.URL.Path, got, "Bearer "+authToken)
+			http.Error(w, "bad authorization", http.StatusUnauthorized)
+			return false
+		}
+		return true
+	}
+
+	indexPath := "/provider-index.yaml"
+	secretsMetadataPath := "/providers/secrets/v0.1.0/provider-release.yaml"
+	secretsArchivePathURL := "/providers/secrets/v0.1.0/secrets.tar.gz"
+	pluginMetadataPath := "/providers/private/v1.0.0/provider-release.yaml"
+	pluginArchivePathURL := "/providers/private/v1.0.0/private.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case indexPath:
+			indexCount.Add(1)
+			index := fmt.Sprintf(`
+schema: gestaltd-provider-index
+schemaVersion: 1
+packages:
+  %s:
+    displayName: Package Secrets
+    versions:
+      %s:
+        metadata: %s
+        kind: secrets
+        runtime: executable
+        platforms:
+          - %s
+`, secretsSource, secretsVersion, strings.TrimPrefix(secretsMetadataPath, "/"), providerpkg.CurrentPlatformString())
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write([]byte(index))
+		case secretsMetadataPath:
+			secretsMetadataCount.Add(1)
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       secretsSource,
+				Kind:          providermanifestv1.KindSecrets,
+				Version:       secretsVersion,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(secretsArchivePathURL),
+						SHA256: hex.EncodeToString(secretsArchiveSum[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal secrets metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case secretsArchivePathURL:
+			secretsArchiveCount.Add(1)
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(secretsArchiveData)
+		case pluginMetadataPath:
+			pluginMetadataCount.Add(1)
+			if !requirePluginAuth(w, r) {
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       pluginSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       pluginVersion,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(pluginArchivePathURL),
+						SHA256: hex.EncodeToString(pluginArchiveSum[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal plugin metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case pluginArchivePathURL:
+			pluginArchiveCount.Add(1)
+			if !requirePluginAuth(w, r) {
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(pluginArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		"apiVersion: " + config.ConfigAPIVersion,
+		"providerRepositories:",
+		"  local:",
+		"    url: " + srv.URL + indexPath,
+		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"  secrets:",
+		"    bootstrap:",
+		"      source:",
+		"        repo: local",
+		"        package: " + secretsSource,
+		"        version: " + secretsVersion,
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"    secrets: bootstrap",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"plugins:",
+		"  private:",
+		"    source:",
+		"      url: " + srv.URL + pluginMetadataPath,
+		"      auth:",
+		"        token:",
+		"          secret:",
+		"            provider: bootstrap",
+		"            name: source-token",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Secrets["provider"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{Secrets: map[string]string{"source-token": authToken}}, nil
+	}
+	lc := NewLifecycle().
+		WithConfigSecretResolver(func(context.Context, *config.Config) error {
+			return fmt.Errorf("full config secret resolver should not run during lock/sync")
+		}).
+		WithSourceAuthSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+			return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
+		}).
+		WithHTTPClient(srv.Client())
+
+	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := indexCount.Load(); got != 1 {
+		t.Fatalf("index request count = %d, want 1", got)
+	}
+	if got := secretsMetadataCount.Load(); got != 1 {
+		t.Fatalf("secrets metadata request count = %d, want 1", got)
+	}
+	if got := secretsArchiveCount.Load(); got != 1 {
+		t.Fatalf("secrets archive request count = %d, want 1", got)
+	}
+	if got := pluginMetadataCount.Load(); got != 1 {
+		t.Fatalf("plugin metadata request count = %d, want 1", got)
+	}
+	if got := pluginArchiveCount.Load(); got != 1 {
+		t.Fatalf("plugin archive request count = %d, want 1", got)
+	}
+
+	if err := os.RemoveAll(filepath.Join(artifactsDir, ".gestaltd", "secrets", "bootstrap")); err != nil {
+		t.Fatalf("RemoveAll secrets root: %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(artifactsDir, ".gestaltd", "providers", "private")); err != nil {
+		t.Fatalf("RemoveAll plugin root: %v", err)
+	}
+	indexBefore := indexCount.Load()
+	secretsMetadataBefore := secretsMetadataCount.Load()
+	pluginMetadataBefore := pluginMetadataCount.Load()
+	secretsArchivesBefore := secretsArchiveCount.Load()
+	pluginArchivesBefore := pluginArchiveCount.Load()
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := indexCount.Load(); got != indexBefore {
+		t.Fatalf("index request count after sync = %d, want %d", got, indexBefore)
+	}
+	if got := secretsMetadataCount.Load(); got != secretsMetadataBefore {
+		t.Fatalf("secrets metadata request count after sync = %d, want %d", got, secretsMetadataBefore)
+	}
+	if got := pluginMetadataCount.Load(); got != pluginMetadataBefore {
+		t.Fatalf("plugin metadata request count after sync = %d, want %d", got, pluginMetadataBefore)
+	}
+	if got := secretsArchiveCount.Load() - secretsArchivesBefore; got != 1 {
+		t.Fatalf("secrets archive requests during sync = %d, want 1", got)
+	}
+	if got := pluginArchiveCount.Load() - pluginArchivesBefore; got != 1 {
+		t.Fatalf("plugin archive requests during sync = %d, want 1", got)
+	}
+
+	validationLC := NewLifecycle().
+		WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+			return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
+		}).
+		WithSourceAuthSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+			return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
+		}).
+		WithHTTPClient(srv.Client())
+	pluginMetadataBeforeValidation := pluginMetadataCount.Load()
+	secretsArchivesBeforeValidation := secretsArchiveCount.Load()
+	if _, err := validationLC.LoadForValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("LoadForValidationAtPathsWithStatePaths: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := pluginMetadataCount.Load(); got == pluginMetadataBeforeValidation {
+		t.Fatal("runtime validation did not fetch plugin metadata")
+	}
+	if got := secretsArchiveCount.Load() - secretsArchivesBeforeValidation; got != 1 {
+		t.Fatalf("secrets archive requests during runtime validation = %d, want 1", got)
+	}
+}
+
+func TestLockSourceAuthSecretRefsRequireSourceAuthResolver(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bootstrapManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/bootstrap-secrets", "0.1.0")
+
+	configYAML := strings.Join([]string{
+		"apiVersion: " + config.ConfigAPIVersion,
+		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"  secrets:",
+		"    bootstrap:",
+		"      source:",
+		"        path: " + bootstrapManifestPath,
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"    secrets: bootstrap",
+		"  artifactsDir: " + filepath.Join(dir, "prepared-artifacts"),
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"plugins:",
+		"  private:",
+		"    source:",
+		"      url: https://example.invalid/provider-release.yaml",
+		"      auth:",
+		"        token:",
+		"          secret:",
+		"            provider: bootstrap",
+		"            name: source-token",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Secrets["provider"] = providerdrivers.SecretsProviderFactory
+	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
+	})
+	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "source auth secret resolver is required") {
+		t.Fatalf("LockAtPathsWithStatePaths error = %v, want missing source auth resolver", err)
 	}
 }
 
@@ -3977,6 +4608,9 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
+	lc = lc.WithSourceAuthSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
+	})
 	lc = lc.WithHTTPClient(srv.Client())
 
 	lock, err := lc.PrepareAtPath(configPath)
@@ -4209,6 +4843,9 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataPreparesOnce(t *testing
 
 	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
+	})
+	lc = lc.WithSourceAuthSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
 	})
 
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, false)
