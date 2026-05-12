@@ -170,9 +170,10 @@ gestalt workflow triggers resume <trigger-id>
 gestalt workflow triggers delete <trigger-id>
 ```
 
-The create and update commands use the same target input conventions as
-schedules. `--type` is required. `--source` and `--subject` are optional exact
-match fields.
+Trigger creation uses the same plugin target input conventions as schedules.
+`--type` is required. `--source` and `--subject` are optional exact match
+fields. Use `--target-file file.json` when you want to pass the full workflow
+target object directly, for example an agent target.
 
 ### Event publishing
 

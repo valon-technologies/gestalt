@@ -2,6 +2,14 @@ import { Callout } from 'nextra/components'
 
 # Server CLI
 
+<Callout type="warning">
+  For production deployments, strongly prefer `gestaltd lock`, then
+  `gestaltd sync --locked` during image build or release preparation, then
+  `gestaltd serve --locked` at runtime. The lockfile pins resolved provider
+  artifacts and verified hashes, and locked serve refuses to mutate deployment
+  state.
+</Callout>
+
 `gestaltd` manages server lifecycle and provider releases.
 
 ## Server commands
@@ -20,14 +28,6 @@ import { Callout } from 'nextra/components'
 | `gestaltd validate --config PATH` | Validate config without serving. Repeat `--config` to layer overrides. |
 | `gestaltd validate --lockfile PATH` | Accept the same explicit lockfile path used by `lock`, `sync`, and `serve` without mutating it. |
 | `gestaltd --version` | Print the server version. |
-
-<Callout type="warning">
-  For production deployments, strongly prefer `gestaltd lock`, then
-  `gestaltd sync --locked` during image build or release preparation, then
-  `gestaltd serve --locked` at runtime. The lockfile pins resolved provider
-  artifacts and verified hashes, and locked serve refuses to mutate deployment
-  state.
-</Callout>
 
 ## Provider commands
 

@@ -2,18 +2,10 @@ import { Callout, Tabs } from 'nextra/components'
 
 # Applications
 
-Gestalt can be used to build applications. At a minimum, an application is a
-single [plugin](/providers/plugins), or optionally a composition of
-[plugins](/providers/plugins) and [UIs](/providers/ui), using existing
-primitives for [authentication](/providers/authentication),
-[authorization](/providers/authorization),
-[IndexedDB](/providers/indexeddb)/[Cache](/providers/cache)/[S3](/providers/s3),
-[workflows](/providers/workflow), and [agents](/providers/agent).
-
 <Callout type="warning">
-  **Alpha.** Gestalt is under active development. APIs and configuration may
-  change between releases. Feedback and bug reports are welcome via [GitHub
-  Issues](https://github.com/valon-technologies/gestalt/issues).
+  Alpha. Applications are under active development and not yet stable. Breaking
+  changes may happen between releases without warning. Feedback and bug reports
+  are welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
 </Callout>
 
 <Callout type="info">
@@ -21,6 +13,14 @@ primitives for [authentication](/providers/authentication),
   plugin becomes the backend for a user-facing workflow with UI, policy,
   storage, schedules, or other provider bindings.
 </Callout>
+
+Gestalt can be used to build applications. At a minimum, an application is a
+single [plugin](/providers/plugins), or optionally a composition of
+[plugins](/providers/plugins) and [UIs](/providers/ui), using existing
+primitives for [authentication](/providers/authentication),
+[authorization](/providers/authorization),
+[IndexedDB](/providers/indexeddb)/[Cache](/providers/cache)/[S3](/providers/s3),
+[workflows](/providers/workflow), and [agents](/providers/agent).
 
 ## Application Shape
 

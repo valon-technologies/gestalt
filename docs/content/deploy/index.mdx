@@ -6,6 +6,14 @@ import { Callout } from 'nextra/components'
 
 # Deploy
 
+<Callout type="warning">
+  For production, strongly prefer `gestaltd lock`, `gestaltd sync --locked`,
+  and then `gestaltd serve --locked`. Without a lockfile, startup can resolve
+  newly published provider artifacts or changed registry metadata, which weakens
+  reproducibility and integrity checks. Locked serve is read-only and will not
+  repair missing artifacts at runtime.
+</Callout>
+
 The server image `valontechnologies/gestaltd:latest` is published for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`. An Alpine variant is available as `:latest-alpine`. For the CLI client image, see [Client Docker Image](/client/cli/docker).
 
 ## Production considerations
@@ -23,14 +31,6 @@ The server image `valontechnologies/gestaltd:latest` is published for `linux/amd
 3. **Serve** -- run `gestaltd serve --locked` in production. The server reads the lock file and prepared artifacts and refuses to start if either is missing or stale.
 
 This guarantees that the image you test is byte-for-byte the image you deploy.
-
-<Callout type="warning">
-  For production, strongly prefer `gestaltd lock`, `gestaltd sync --locked`,
-  and then `gestaltd serve --locked`. Without a lockfile, startup can resolve
-  newly published provider artifacts or changed registry metadata, which weakens
-  reproducibility and integrity checks. Locked serve is read-only and will not
-  repair missing artifacts at runtime.
-</Callout>
 
 **Prepared state and lockfiles.** `gestaltd lock` writes `gestalt.lock.json`; `gestaltd sync --locked` writes prepared artifacts under `.gestaltd/`:
 

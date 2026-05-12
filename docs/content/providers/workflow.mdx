@@ -2,22 +2,22 @@ import { Callout, Tabs } from 'nextra/components'
 
 # Workflow
 
-Gestalt workflows let you invoke a plugin operation or agent target later
-instead of right now.
-Today that primarily means cron-based schedules, triggers, workflow run
-history, event publishing, and run cancelation. The workflow model is global.
-A workflow target is always explicit: `target.plugin` or `target.agent`.
-
 <Callout type="warning">
-  **Alpha.** Gestalt is under active development. APIs and configuration may
-  change between releases. Feedback and bug reports are welcome via [GitHub
-  Issues](https://github.com/valon-technologies/gestalt/issues).
+  Alpha. Workflows are under active development and not yet stable. Breaking
+  changes may happen between releases without warning. Feedback and bug reports
+  are welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
 </Callout>
 
 <Callout type="info">
   The public workflow surface now covers schedules, triggers, event publishing,
   and runs.
 </Callout>
+
+Gestalt workflows let you invoke a plugin operation or agent target later
+instead of right now.
+Today that primarily means cron-based schedules, triggers, workflow run
+history, event publishing, and run cancelation. The workflow model is global.
+A workflow target is always explicit: `target.plugin` or `target.agent`.
 
 ## Mental model
 
@@ -305,6 +305,8 @@ subject, not as a plugin-local or synthetic workflow subject.
       -p text='Roadmap item updated'
     ```
 
+    Use `--target-file file.json` to pass the full target object directly.
+
     List triggers:
 
     ```sh
@@ -372,9 +374,8 @@ subject, not as a plugin-local or synthetic workflow subject.
   </Tabs.Tab>
 </Tabs>
 
-The `provider` field is available on the HTTP API here too. Omit it when you
-have a sole/default workflow provider; include it when you need to select a
-specific workflow backend.
+Use `--provider` in the CLI or the `provider` field in the HTTP API when you
+need to select a specific workflow backend.
 
 ## Publishing workflow events
 

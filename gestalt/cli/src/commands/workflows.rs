@@ -118,17 +118,13 @@ pub fn create_trigger(
     args: &WorkflowTriggerCreateArgs,
     format: Format,
 ) -> Result<()> {
-    let input = build_optional_map(&args.params, args.input_file.as_deref())?;
+    let target = build_trigger_target(args)?;
     let body = build_trigger_upsert_body(
-        None,
+        args.provider.as_deref(),
         &args.event_type,
         args.source.as_deref(),
         args.subject.as_deref(),
-        &args.plugin,
-        &args.operation,
-        args.connection.as_deref(),
-        args.instance.as_deref(),
-        input.as_ref(),
+        target,
         args.paused,
     );
 
@@ -385,11 +381,7 @@ fn build_trigger_upsert_body(
     event_type: &str,
     source: Option<&str>,
     subject: Option<&str>,
-    plugin: &str,
-    operation: &str,
-    connection: Option<&str>,
-    instance: Option<&str>,
-    input: Option<&Map<String, Value>>,
+    target: Value,
     paused: bool,
 ) -> Value {
     let mut body = Map::new();
@@ -403,12 +395,47 @@ fn build_trigger_upsert_body(
         "match".to_string(),
         build_event_match(event_type, source, subject),
     );
-    body.insert(
-        "target".to_string(),
-        build_target_object(plugin, operation, connection, instance, input),
-    );
+    body.insert("target".to_string(), target);
     body.insert("paused".to_string(), Value::Bool(paused));
     Value::Object(body)
+}
+
+fn build_trigger_target(args: &WorkflowTriggerCreateArgs) -> Result<Value> {
+    if let Some(path) = args.target_file.as_deref() {
+        if args.plugin.is_some()
+            || args.operation.is_some()
+            || args.connection.is_some()
+            || args.instance.is_some()
+            || !args.params.is_empty()
+            || args.input_file.is_some()
+        {
+            return Err(anyhow!(
+                "--target-file cannot be combined with plugin target flags or input options"
+            ));
+        }
+        let target = params::load_input_file(path)?;
+        if target.is_empty() {
+            return Err(anyhow!("workflow trigger target file must not be empty"));
+        }
+        return Ok(Value::Object(target));
+    }
+
+    let plugin = args
+        .plugin
+        .as_deref()
+        .ok_or_else(|| anyhow!("workflow trigger target requires --plugin or --target-file"))?;
+    let operation = args
+        .operation
+        .as_deref()
+        .ok_or_else(|| anyhow!("workflow trigger plugin target requires --operation"))?;
+    let input = build_optional_map(&args.params, args.input_file.as_deref())?;
+    Ok(build_target_object(
+        plugin,
+        operation,
+        args.connection.as_deref(),
+        args.instance.as_deref(),
+        input.as_ref(),
+    ))
 }
 
 fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<Value> {
@@ -520,16 +547,20 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
         existing["paused"].as_bool().unwrap_or(false)
     };
 
-    Ok(build_trigger_upsert_body(
-        existing["provider"].as_str(),
-        &event_type,
-        source.as_deref(),
-        subject.as_deref(),
+    let target = build_target_object(
         &plugin,
         &operation,
         connection.as_deref(),
         instance.as_deref(),
         input.as_ref(),
+    );
+
+    Ok(build_trigger_upsert_body(
+        existing["provider"].as_str(),
+        &event_type,
+        source.as_deref(),
+        subject.as_deref(),
+        target,
         paused,
     ))
 }

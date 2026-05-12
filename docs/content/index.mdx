@@ -23,7 +23,8 @@ When you need production controls, add them through the [provider](/providers) e
 - A unified tool surface for agents over MCP, HTTP, and CLI, usable by cloud agents, local coding assistants, and human operators. See [Plugin](/providers/plugins).
 - [Authentication](/providers/authentication) flows, [credential storage](/providers/external-credentials), encryption at rest, token refresh, and [RBAC](/providers/authorization) on infrastructure you control.
 - [OpenTelemetry](https://opentelemetry.io/) compatible [observability](/observability) and [audit logging](/audit-logging).
-- [Workflows](/providers/workflow) and [agents](/providers/agent) with durable state, retries, and delegated invocations.<sup className="gestalt-footnote-ref">*</sup>
+- [Runtimes](/providers/runtime) for agent and code sandboxing.<sup className="gestalt-footnote-ref">*</sup>
+- [Workflows](/providers/workflow) and [agents](/providers/agent) with durable state, retries, and delegated invocations.<sup className="gestalt-footnote-ref">†</sup>
 
 ## What Gestalt is not
 
@@ -54,4 +55,7 @@ Gestalt is not a mono-repo with hundreds or thousands of integrations built out-
   </Cards.Card>
 </Cards>
 
-<div className="gestalt-footnote"><sup>*</sup> Workflows and agents are both alpha features, and not yet stable.</div>
+<div className="gestalt-footnote">
+  <div><sup>*</sup> Runtimes are an alpha feature, and not yet stable.</div>
+  <div><sup>†</sup> Workflows and agents are both alpha features, and not yet stable.</div>
+</div>
