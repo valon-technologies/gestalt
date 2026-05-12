@@ -31,6 +31,8 @@ variable "gestaltd_chart_reader_service_accounts" {
   description = "Service account emails allowed to read gestaltd Helm charts from Artifact Registry."
   type        = set(string)
   default = [
+    "github-deploy-dev@valon-tools-dev.iam.gserviceaccount.com",
+    "github-deploy-stage@valon-tools-stage.iam.gserviceaccount.com",
     "terraform-dev@valon-tools-dev.iam.gserviceaccount.com",
     "terraform-stage@valon-tools-stage.iam.gserviceaccount.com",
   ]
