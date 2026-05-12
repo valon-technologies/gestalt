@@ -63,7 +63,7 @@ func (c *AgentManagerClient) CreateSession(ctx context.Context, input AgentManag
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req, err := NewAgentManagerCreateSessionRequest(input)
+	req, err := newAgentManagerCreateSessionRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (c *AgentManagerClient) GetSession(ctx context.Context, input AgentManagerG
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req := NewAgentManagerGetSessionRequest(input)
+	req := newAgentManagerGetSessionRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.GetSession(ctx, req)
 	if err != nil {
@@ -94,7 +94,7 @@ func (c *AgentManagerClient) ListSessions(ctx context.Context, input AgentManage
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req := NewAgentManagerListSessionsRequest(input)
+	req := newAgentManagerListSessionsRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.ListSessions(ctx, req)
 	if err != nil {
@@ -108,7 +108,7 @@ func (c *AgentManagerClient) UpdateSession(ctx context.Context, input AgentManag
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req, err := NewAgentManagerUpdateSessionRequest(input)
+	req, err := newAgentManagerUpdateSessionRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func (c *AgentManagerClient) CreateTurn(ctx context.Context, input AgentManagerC
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req, err := NewAgentManagerCreateTurnRequest(input)
+	req, err := newAgentManagerCreateTurnRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (c *AgentManagerClient) GetTurn(ctx context.Context, input AgentManagerGetT
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req := NewAgentManagerGetTurnRequest(input)
+	req := newAgentManagerGetTurnRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.GetTurn(ctx, req)
 	if err != nil {
@@ -156,7 +156,7 @@ func (c *AgentManagerClient) ListTurns(ctx context.Context, input AgentManagerLi
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req := NewAgentManagerListTurnsRequest(input)
+	req := newAgentManagerListTurnsRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.ListTurns(ctx, req)
 	if err != nil {
@@ -170,7 +170,7 @@ func (c *AgentManagerClient) CancelTurn(ctx context.Context, input AgentManagerC
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req := NewAgentManagerCancelTurnRequest(input)
+	req := newAgentManagerCancelTurnRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.CancelTurn(ctx, req)
 	if err != nil {
@@ -184,7 +184,7 @@ func (c *AgentManagerClient) ListTurnEvents(ctx context.Context, input AgentMana
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req := NewAgentManagerListTurnEventsRequest(input)
+	req := newAgentManagerListTurnEventsRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.ListTurnEvents(ctx, req)
 	if err != nil {
@@ -198,7 +198,7 @@ func (c *AgentManagerClient) ListInteractions(ctx context.Context, input AgentMa
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req := NewAgentManagerListInteractionsRequest(input)
+	req := newAgentManagerListInteractionsRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.ListInteractions(ctx, req)
 	if err != nil {
@@ -212,7 +212,7 @@ func (c *AgentManagerClient) ResolveInteraction(ctx context.Context, input Agent
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
-	req, err := NewAgentManagerResolveInteractionRequest(input)
+	req, err := newAgentManagerResolveInteractionRequest(input)
 	if err != nil {
 		return nil, err
 	}

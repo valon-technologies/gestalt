@@ -1230,47 +1230,27 @@ export class Index {
   }
 }
 
-/**
- * Converts a generated IndexedDB key value into the authored JavaScript form.
- *
- * @deprecated Use the native IndexedDB SDK methods instead of wire helpers.
- */
-export function fromProtoKeyValue(kv: any): unknown {
+function fromProtoKeyValue(kv: any): unknown {
   if (kv.kind?.case === "scalar") return fromProtoTypedValue(kv.kind.value);
   if (kv.kind?.case === "array") return kv.kind.value.elements.map(fromProtoKeyValue);
   return undefined;
 }
 
-/**
- * Converts an authored JavaScript key value into the generated protocol shape.
- *
- * @deprecated Use the native IndexedDB SDK methods instead of wire helpers.
- */
-export function toProtoKeyValue(v: unknown): any {
+function toProtoKeyValue(v: unknown): any {
   if (Array.isArray(v)) {
     return { kind: { case: "array" as const, value: { elements: v.map(toProtoKeyValue) } } };
   }
   return { kind: { case: "scalar" as const, value: toProtoTypedValue(v) } };
 }
 
-/**
- * Converts a cursor key into the generated protocol key tuple shape.
- *
- * @deprecated Use the native IndexedDB SDK methods instead of wire helpers.
- */
-export function toProtoCursorKey(key: unknown, indexCursor: boolean): any[] {
+function toProtoCursorKey(key: unknown, indexCursor: boolean): any[] {
   if (indexCursor && Array.isArray(key)) {
     return key.map(toProtoKeyValue);
   }
   return [toProtoKeyValue(key)];
 }
 
-/**
- * Converts an authored IndexedDB record into the generated protocol shape.
- *
- * @deprecated Use the native IndexedDB SDK methods instead of wire helpers.
- */
-export function toProtoRecord(record: Record): any {
+function toProtoRecord(record: Record): any {
   const fields: { [key: string]: unknown } = {};
   for (const [key, value] of Object.entries(record)) {
     fields[key] = toProtoTypedValue(value);
@@ -1278,12 +1258,7 @@ export function toProtoRecord(record: Record): any {
   return { fields };
 }
 
-/**
- * Converts a generated IndexedDB record into the authored JavaScript shape.
- *
- * @deprecated Use the native IndexedDB SDK methods instead of wire helpers.
- */
-export function fromProtoRecord(record: any): Record {
+function fromProtoRecord(record: any): Record {
   const fields = record?.fields ?? {};
   const out: Record = {};
   for (const [key, value] of Object.entries(fields)) {
@@ -1292,12 +1267,7 @@ export function fromProtoRecord(record: any): Record {
   return out;
 }
 
-/**
- * Converts an authored IndexedDB field value into the generated protocol shape.
- *
- * @deprecated Use the native IndexedDB SDK methods instead of wire helpers.
- */
-export function toProtoTypedValue(v: unknown): any {
+function toProtoTypedValue(v: unknown): any {
   if (v === null || v === undefined) return { kind: { case: "nullValue", value: 0 } };
   if (typeof v === "boolean") return { kind: { case: "boolValue", value: v } };
   if (typeof v === "bigint") return { kind: { case: "intValue", value: v } };
@@ -1314,12 +1284,7 @@ export function toProtoTypedValue(v: unknown): any {
   return { kind: { case: "jsonValue", value: toProtoJsonValue(v) } };
 }
 
-/**
- * Converts a generated IndexedDB field value into the authored JavaScript shape.
- *
- * @deprecated Use the native IndexedDB SDK methods instead of wire helpers.
- */
-export function fromProtoTypedValue(v: any): unknown {
+function fromProtoTypedValue(v: any): unknown {
   switch (v?.kind?.case) {
     case undefined:
     case "nullValue":
@@ -1343,12 +1308,7 @@ export function fromProtoTypedValue(v: any): unknown {
   }
 }
 
-/**
- * Converts an authored key range into the generated protocol shape.
- *
- * @deprecated Use the native IndexedDB SDK methods instead of wire helpers.
- */
-export function toProtoKeyRange(kr: KeyRange): any {
+function toProtoKeyRange(kr: KeyRange): any {
   return {
     lower: kr.lower !== undefined ? toProtoTypedValue(kr.lower) : undefined,
     upper: kr.upper !== undefined ? toProtoTypedValue(kr.upper) : undefined,

@@ -11,153 +11,48 @@ func typedValueFromAny(v any) (*proto.TypedValue, error) {
 	return indexeddbcodec.TypedValueFromAny(v)
 }
 
-// TypedValueFromAny converts a Go IndexedDB value into the provider wire
-// representation used by cursor and record APIs.
-//
-// Deprecated: use the native IndexedDB client/provider APIs or stable
-// EncodeIndexedDB* helpers instead of generated wire values.
-func TypedValueFromAny(v any) (*proto.TypedValue, error) {
-	return typedValueFromAny(v)
-}
-
 func anyFromTypedValue(v *proto.TypedValue) (any, error) {
 	return indexeddbcodec.AnyFromTypedValue(v)
-}
-
-// AnyFromTypedValue converts a provider wire value into the corresponding Go
-// IndexedDB value.
-//
-// Deprecated: use the native IndexedDB client/provider APIs or stable
-// DecodeIndexedDB* helpers instead of generated wire values.
-func AnyFromTypedValue(v *proto.TypedValue) (any, error) {
-	return anyFromTypedValue(v)
 }
 
 func typedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
 	return indexeddbcodec.TypedValuesFromAny(values)
 }
 
-// TypedValuesFromAny converts ordered Go IndexedDB values into provider wire
-// values.
-//
-// Deprecated: use the native IndexedDB client/provider APIs instead of
-// generated wire values.
-func TypedValuesFromAny(values []any) ([]*proto.TypedValue, error) {
-	return typedValuesFromAny(values)
-}
-
 func anyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
 	return indexeddbcodec.AnyFromTypedValues(values)
-}
-
-// AnyFromTypedValues converts ordered provider wire values into Go IndexedDB
-// values.
-//
-// Deprecated: use the native IndexedDB client/provider APIs instead of
-// generated wire values.
-func AnyFromTypedValues(values []*proto.TypedValue) ([]any, error) {
-	return anyFromTypedValues(values)
 }
 
 func recordToProto(record Record) (*proto.Record, error) {
 	return indexeddbcodec.RecordToProto(record)
 }
 
-// RecordToProto converts a Go IndexedDB record into the provider wire
-// representation used by lower-level datastore APIs.
-//
-// Deprecated: use native IndexedDB provider requests or EncodeIndexedDBRecord
-// for stable storage encoding.
-func RecordToProto(record Record) (*proto.Record, error) {
-	return recordToProto(record)
-}
-
 func recordFromProto(record *proto.Record) (Record, error) {
 	return indexeddbcodec.RecordFromProto(record)
-}
-
-// RecordFromProto converts a provider wire record into a Go IndexedDB record.
-//
-// Deprecated: use native IndexedDB provider requests or DecodeIndexedDBRecord
-// for stable storage encoding.
-func RecordFromProto(record *proto.Record) (Record, error) {
-	return recordFromProto(record)
 }
 
 func recordsFromProto(records []*proto.Record) ([]Record, error) {
 	return indexeddbcodec.RecordsFromProto(records)
 }
 
-// RecordsFromProto converts provider wire records into Go IndexedDB records.
-//
-// Deprecated: use native IndexedDB provider requests instead of generated wire
-// records.
-func RecordsFromProto(records []*proto.Record) ([]Record, error) {
-	return recordsFromProto(records)
-}
-
 func recordsToProto(records []Record) ([]*proto.Record, error) {
 	return indexeddbcodec.RecordsToProto(records)
-}
-
-// RecordsToProto converts Go IndexedDB records into provider wire records.
-//
-// Deprecated: use native IndexedDB provider requests instead of generated wire
-// records.
-func RecordsToProto(records []Record) ([]*proto.Record, error) {
-	return recordsToProto(records)
 }
 
 func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
 	return indexeddbcodec.KeyValuesToAny(kvs)
 }
 
-// KeyValuesToAny converts provider cursor key parts into Go IndexedDB key
-// values.
-//
-// Deprecated: use native IndexedDB cursor APIs instead of generated wire key
-// values.
-func KeyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
-	return keyValuesToAny(kvs)
-}
-
 func keyValueToAny(kv *proto.KeyValue) (any, error) {
 	return indexeddbcodec.KeyValueToAny(kv)
-}
-
-// KeyValueToAny converts one provider cursor key part into a Go IndexedDB key
-// value.
-//
-// Deprecated: use native IndexedDB cursor APIs instead of generated wire key
-// values.
-func KeyValueToAny(kv *proto.KeyValue) (any, error) {
-	return keyValueToAny(kv)
 }
 
 func anyToKeyValue(v any) (*proto.KeyValue, error) {
 	return indexeddbcodec.AnyToKeyValue(v)
 }
 
-// AnyToKeyValue converts a Go IndexedDB key value into one provider cursor key
-// part.
-//
-// Deprecated: use native IndexedDB cursor APIs instead of generated wire key
-// values.
-func AnyToKeyValue(v any) (*proto.KeyValue, error) {
-	return anyToKeyValue(v)
-}
-
 func cursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
 	return indexeddbcodec.CursorKeyToProto(key, indexCursor)
-}
-
-// CursorKeyToProto converts a primary-key or index-key cursor target into the
-// provider wire key representation.
-//
-// Deprecated: use native IndexedDB cursor APIs instead of generated wire key
-// values.
-func CursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
-	return cursorKeyToProto(key, indexCursor)
 }
 
 // EncodeIndexedDBKey serializes an IndexedDB key using the SDK's stable
