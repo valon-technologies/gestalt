@@ -4,7 +4,8 @@ import { Tabs } from 'nextra/components'
 
 Plugin providers are the packages that expose tools through Gestalt. Operators
 configure them under `plugins`, while the host takes care of catalog
-loading, token storage, connection management, HTTP routing, and MCP exposure.
+loading, external credential resolution, connection management, HTTP routing,
+and MCP exposure.
 
 ## How plugin providers work
 
@@ -22,22 +23,19 @@ server's `/mcp` endpoint.
 
 ## How plugin invocation uses authorization
 
-Gestalt resolves every plugin request to a canonical subject before it invokes
-the target operation. Authorization then decides whether that subject may use
-the plugin or operation at all. A plugin can be configured and healthy, but a
-particular subject may still be denied at request time if their static policy
-memberships or dynamic grants do not allow that operation.
+Gestalt resolves every plugin request to a canonical subject, then
+[authorization](/providers/authorization) decides whether that subject may use
+the plugin or operation.
 
-Connections are still stored per subject. Authorization answers whether the
-subject may invoke the plugin, while authentication and connection management
-answer how that subject proves itself to the upstream system.
+Connection resolution is separate. When a selected connection uses
+`mode: subject`, the [external credentials provider](/providers/external-credentials)
+resolves credentials for the request's effective credential subject.
 
 When executable plugins call other configured plugin operations, use the SDK
 plugin invoker for request-scoped nested calls. For application examples, see
 [Applications > Calling another plugin from your application](/applications#calling-another-plugin-from-your-application).
-Use a [service account](/service-accounts) and subject-owned API token when the
-plugin should call the Gestalt HTTP API as a stable automation subject. See
-[Service Accounts > Direct API Calls](/service-accounts#direct-api-calls).
+Use a [service account](/service-accounts) and subject-owned API token when a
+plugin should call the Gestalt HTTP API as a stable automation subject.
 
 ## First-party plugin packages
 
@@ -115,44 +113,28 @@ plugins:
 ```
 
 `plugins.<name>.runtime.provider` selects a named backend from
-`runtime.providers`. When `provider` is omitted, Gestalt uses
-`server.runtime.defaultProvider` or the one runtime entry marked
-`default: true`.
+`runtime.providers`; when omitted, Gestalt uses `server.runtime.defaultProvider`
+or the runtime entry marked `default: true`. `template`, `image`, and `metadata`
+are forwarded to the runtime backend.
 
-`template`, `image`, and `metadata` are forwarded to the runtime backend. Their
-meaning is backend-specific: one runtime may ignore them, while another may use
-them to choose a sandbox template, container image, or lifecycle labels.
-
-A built-in `local` runtime is always available for same-machine execution. The
-first installable hosted runtime provider is `modal`. It requires
-`runtime.providers.<name>.config.app` and
-`plugins.<name>.runtime.image`.
-Gestalt only uses it for plain executable plugins today. Modal can still run
-plugins that need Gestalt-owned services or hostname-based egress when the host
-is configured for the public relay and proxy path. In practice that means
-`server.baseUrl` (or `server.runtime.relayBaseUrl`) and `server.encryptionKey`
-must be set, and the runtime must report a compatible support profile. Set
-`server.runtime.relayBaseUrl` when hosted runtimes should use a private callback
-origin instead of the browser/OAuth public origin. Without those prerequisites,
-plugins that need `indexeddb`, `cache`, `s3`, workflow-manager access when
-workflows are configured, nested `invokes`, `egress.allowedHosts`, or
-`server.egress.defaultAction: deny` stay on `local`.
-
-For the runtime-provider model itself, see [Providers > Runtime](/providers/runtime).
+Hosted execution depends on the selected runtime provider's support profile.
+Plugins that need host services, nested invokes, or hostname-based egress stay
+local unless the runtime advertises support for those capabilities. See
+[Runtime](/providers/runtime) for provider setup and compatibility details.
 
 ## Connections and credentials
 
-Plugin packages declare connection models in their manifests, and the server
-stores credentials per subject.
-
-| Mode | Behavior |
-| --- | --- |
-| `none` | No upstream credential is required |
-| `subject` | The calling subject stores its own credential (`user:<id>`, `service_account:<id>`, or another canonical subject ID) |
+Plugin manifests declare connection needs; deployment config binds or overrides
+those connections. Connection `mode` is either `none`, which requires no
+upstream credential, or `subject`, which resolves credentials for the effective
+credential subject. That subject may be the caller, a subject-owned API token
+owner, or a [`runAs`](/service-accounts#runas) subject.
 
 Common auth types are `oauth2`, `mcp_oauth`, `bearer`, `manual`, and `none`.
 Operator-supplied app credentials such as `clientId` and `clientSecret` go in
-the plugin's `config` block when the provider requires them.
+the plugin's `config` block when the provider requires them. See
+[External Credentials](/providers/external-credentials) and
+[Config File > connections](/reference/config-file#connections).
 
 ## Filtering operations and egress
 
@@ -331,23 +313,14 @@ The manifest is the source of truth for display name, description, the connectio
         lib.rs
     ```
 
-    Add the SDK and schema dependencies to `Cargo.toml`:
+    Add the SDK and schema dependencies:
 
-    ```toml
-    [package]
-    name = "gestalt-slack"
-    version = "0.0.1"
-    edition = "2024"
-
-    [dependencies]
-    gestalt = { package = "gestalt-sdk", version = "0.0.1-alpha.12" }
-    schemars = { version = "0.8", features = ["derive"] }
-    serde = { version = "1", features = ["derive"] }
-    serde_json = "1"
+    ```sh
+    cargo add gestalt-sdk --rename gestalt
+    cargo add schemars --features derive
+    cargo add serde --features derive
+    cargo add serde_json
     ```
-
-    Use the current `gestalt-sdk` version from crates.io when you create a new
-    provider.
   </Tabs.Tab>
   <Tabs.Tab>
     You need Bun 1.3+ and a running `gestaltd` instance for testing.
@@ -355,7 +328,7 @@ The manifest is the source of truth for display name, description, the connectio
     ```sh
     mkdir slack && cd slack
     bun init -y
-    bun add @valon-technologies/gestalt@0.0.1-alpha.16
+    bun add @valon-technologies/gestalt
     ```
 
     Recommended layout:
@@ -376,7 +349,7 @@ The manifest is the source of truth for display name, description, the connectio
       "private": true,
       "type": "module",
       "dependencies": {
-        "@valon-technologies/gestalt": "0.0.1-alpha.16"
+        "@valon-technologies/gestalt": "latest"
       },
       "gestalt": {
         "provider": {
@@ -409,7 +382,7 @@ The manifest is the source of truth for display name, description, the connectio
 
 Operations are the callable units of a plugin. Each operation has an ID, an HTTP method, input and output types, and a handler function. You do not write an entrypoint. Gestalt synthesizes the executable wrapper automatically for local source execution and release.
 
-The following example defines a `conversations.getMessage` operation that fetches a single Slack message by channel and timestamp. The handler uses the caller's OAuth token from the request context to call the Slack API.
+The following example defines a `conversations.getMessage` operation that fetches a single Slack message by channel and timestamp. The handler uses the resolved runtime token from the request context to call the Slack API.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -456,7 +429,7 @@ The following example defines a `conversations.getMessage` operation that fetche
       input GetMessageInput,
       req gestalt.Request,
     ) (gestalt.Response[GetMessageOutput], error) {
-      // Call Slack API using req.Token as Bearer token.
+      // Call Slack API using req.Token as the resolved Bearer token.
       // Fetch conversations.history filtered to the single message at input.TS.
       return gestalt.OK(GetMessageOutput{Message: map[string]any{"ts": input.TS}}), nil
     }
@@ -485,7 +458,7 @@ The following example defines a `conversations.getMessage` operation that fetche
     def conversations_getMessage(
         input: GetMessageInput, req: Request
     ) -> GetMessageOutput:
-        # Call Slack API using req.token as Bearer token.
+        # Call Slack API using req.token as the resolved Bearer token.
         # Fetch conversations.history filtered to the single message at input.ts.
         return GetMessageOutput(message={"ts": input.ts})
     ```
@@ -529,7 +502,7 @@ The following example defines a `conversations.getMessage` operation that fetche
             .method("GET")
             .description("Get a single message from a Slack channel"),
             |_provider: Arc<Provider>, input: GetMessageInput, request: gestalt::Request| async move {
-                // Call Slack API using request.token as Bearer token.
+                // Call Slack API using request.token as the resolved Bearer token.
                 let _ = (input, request);
                 todo!("fetch conversations.history")
             },
@@ -560,7 +533,7 @@ The following example defines a `conversations.getMessage` operation that fetche
             }),
           }),
           async handler(input, request) {
-            // Call Slack API using request.token as Bearer token.
+            // Call Slack API using request.token as the resolved Bearer token.
             // Fetch conversations.history filtered to the single message at input.ts.
             return ok({ message: { ts: input.ts } });
           },
@@ -903,7 +876,11 @@ asynchronously. Without `ack`, the caller receives the operation response.
 
 ### Declarative plugins
 
-Not every plugin needs executable code. If the upstream API is already reachable over HTTP, you can expose it as a set of REST operations declared entirely in the manifest. Gestalt forwards each invocation to the upstream, injecting the caller's credentials automatically. No provider process runs.
+Not every plugin needs executable code. If the upstream API is already reachable
+over HTTP, you can expose it as REST operations declared entirely in the
+manifest. Gestalt forwards each invocation to the upstream and resolves a
+runtime credential when the selected connection requires one. No provider
+process runs.
 
 The following manifest exposes three Slack API endpoints as Gestalt operations, with no code at all:
 
@@ -979,7 +956,10 @@ plugins:
 gestalt plugin invoke slack-readonly conversations.list -p limit=5
 ```
 
-Gestalt handles OAuth token injection, request formatting, and response passthrough. The `spec.surfaces.rest.baseUrl` is the root for all declared paths, and each operation's `parameters` define how input fields map to query parameters or request body fields.
+Gestalt handles credential resolution, request formatting, and response
+passthrough. The `spec.surfaces.rest.baseUrl` is the root for all declared
+paths, and each operation's `parameters` define how input fields map to query
+parameters or request body fields.
 
 You can also declare OpenAPI, GraphQL, and MCP surfaces using `spec.surfaces.openapi`, `spec.surfaces.graphql`, and `spec.surfaces.mcp`. See [Provider Manifests](/reference/plugin-manifests) for the full surface schema.
 
@@ -1223,8 +1203,7 @@ suppressing others for a local session.
 
 Use remote provider dev when you want a remote Gestalt instance to handle auth,
 authorization, connections, secrets, and host services, but route a selected
-plugin implementation to your local machine. For the normal single-plugin case,
-a path-only attach is enough:
+plugin implementation to your local machine:
 
 ```sh
 export GESTALT_URL=https://gestalt.example.com
@@ -1232,95 +1211,17 @@ export GESTALT_URL=https://gestalt.example.com
 gestaltd provider dev --remote "$GESTALT_URL" --path ./slack
 ```
 
-The remote URL is environment-agnostic; it can point at any `gestaltd` instance
-that exposes provider-dev attach targets and has opted in with
-`server.dev.attachmentState`. Use `attachmentState: indexeddb` on shared or
-load-balanced servers so attachment metadata and queued provider/UI calls are
-available to every replica. The target plugin must also opt into private remote
-attach with `dev.attach.allowedRoles`. The CLI
-opens a browser approval page for the interactive happy path; approve it with
-your normal browser session and enter the verification code shown in your
-terminal. API-token callers must use a token with the `provider_dev.attach`
-action for that plugin. The local command replaces only the source plugin
-attached by your authenticated session. Providers that are not attached locally
-continue to run through the remote server and its existing configuration.
-
-```yaml
-server:
-  dev:
-    attachmentState: indexeddb
-
-authorization:
-  policies:
-    provider_devs:
-      default: deny
-      members:
-        - subjectID: user:usr_123
-          role: developer
-
-plugins:
-  slack:
-    authorizationPolicy: provider_devs
-    dev:
-      attach:
-        allowedRoles:
-          - developer
-```
-
-For non-interactive attach, create or supply an API token with an action
-permission and pass it with `--remote-token` or `GESTALT_API_KEY`. Provider
-scopes and operation permissions are intentionally not enough, and this action
-does not grant normal invocation access:
-
-```json
-{
-  "name": "slack local dev",
-  "permissions": [
-    {
-      "plugin": "slack",
-      "actions": ["provider_dev.attach"]
-    }
-  ]
-}
-```
-
-`attachmentState: indexeddb` stores attachment metadata and queued provider/UI
-calls in the selected host IndexedDB, so attach traffic can move across
-`gestaltd` replicas. Process-local remote attachment state is not exposed as a
-supported server mode because it is unsafe for load-balanced or multi-replica
-servers.
-
-Remote attach creates an owner-scoped attachment. The server returns an
-`attachId` and a one-time dispatcher secret; the CLI uses both for local
-poll/complete traffic. Other users keep seeing the deployed provider and UI.
-Owner cleanup can detach a stuck attachment by `attachId`:
-
-```sh
-gestaltd provider attach list --remote "$GESTALT_URL"
-gestaltd provider attach show --remote "$GESTALT_URL" att_123
-gestaltd provider attach detach --remote "$GESTALT_URL" att_123
-```
-
-These diagnostic commands use `--remote-token`, `GESTALT_API_KEY`, or a matching
-stored Gestalt CLI credential for the same remote URL. They do not require
-`provider_dev.attach` because they only list, inspect, or detach attachments
-owned by the authenticated principal. Diagnostic list/get responses never expose
-dispatcher secrets, host-service env, plugin config, access tokens, or browser
-binding URLs.
-
-For `--remote --path` without `--config`, Gestalt matches the local manifest
-`source` to a configured plugin on the remote server. The remote plugin's
-configured auth, authorization, connections, plugin config, mounted UI settings,
-secret references, and host services are preserved; only the implementation is
-routed to your local source tree. If more than one remote plugin uses the same
-manifest `source`, or the manifest has no `source`, pass `--name`:
+With `--path` and no `--config`, Gestalt matches the local manifest `source` to
+a configured remote plugin and preserves the remote plugin's config. If more
+than one remote plugin uses the same source, or the manifest has no source, pass
+`--name`:
 
 ```sh
 gestaltd provider dev --remote "$GESTALT_URL" --path ./slack --name slack
 ```
 
-Use layered config files only when you want explicit local config overrides or
-when you want to attach multiple local plugins in one session:
+Use layered config files for explicit local config overrides or multi-plugin
+attach sessions:
 
 ```sh
 gestaltd provider dev \
@@ -1341,30 +1242,13 @@ gestaltd provider dev \
   --config ./dev/local-plugins.yaml
 ```
 
-Config-driven remote attach uses the same merge behavior as local development,
-so overlays can choose which plugins are local by adding source-backed plugin
-entries, choose which remote/supporting providers are disabled by setting
-inherited config entries to `null`, and send explicit local plugin config to the
-remote session.
-Unlike local `provider dev` and `provider validate`, remote provider dev allows
-missing local environment substitutions while loading config. That keeps
-unrelated deployment-only env vars from blocking attach; if the attached plugin
-itself needs a literal env-substituted value, set that env var locally or pass a
-small local overlay.
+Remote attach is owner-scoped. The remote server must opt in with
+`server.dev.attachmentState`, and the target plugin must allow the caller's role
+or API-token action grant. Other users keep seeing the deployed provider.
 
-Remote provider dev tunnels plugin RPC, catalog, post-connect, host-service
-calls, and plugin-owned UI assets for mounted UIs that already exist on the
-remote server. For the `plugin/` + sibling `ui/` layout, the sibling UI is
-bundled for the local provider session automatically. Raw GraphQL surfaces are
-not tunneled in v1.
-
-For TypeScript plugins, `provider dev` runs `bun install` automatically when the
-plugin has a `package.json` but no `node_modules`. Source UI builds use the
-same dependency bootstrap for Bun-managed build workdirs before `build.command`
-or legacy `release.build.command` when dependencies are missing. Keep
-`@valon-technologies/gestalt` current enough for the host-service features your
-plugin uses; for example, remote IndexedDB host-service calls require an SDK
-version with `tls://` host-service transport support.
+For attach setup, token permissions, diagnostics, and cleanup, see
+[CLI](/reference/cli#provider-development) and
+[Config File > provider development](/reference/config-file#provider-development).
 
 Once the local server is running, invoke an operation:
 
