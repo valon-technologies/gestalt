@@ -29,7 +29,9 @@ locals {
 
   artifact_registry_host     = "${var.region}-docker.pkg.dev"
   chart_repository           = "oci://${local.artifact_registry_host}/${var.project_id}/${var.artifact_registry_repository_id}"
+  ci_artifact_base_url       = "https://storage.googleapis.com/${google_storage_bucket.gestaltd_ci_binaries.name}/github.com/valon-technologies/gestalt"
   deployer_member            = "serviceAccount:${var.deployer_service_account_id}@${var.project_id}.iam.gserviceaccount.com"
+  github_ref_condition       = "assertion.ref.startsWith(\"${var.github_ref_prefix}\") || assertion.ref == \"${var.ci_binary_github_ref}\""
   workload_identity_provider = "projects/${data.google_project.current.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.github_actions.workload_identity_pool_id}/providers/${google_iam_workload_identity_pool_provider.gestaltd_github_actions.workload_identity_pool_provider_id}"
 }
 
@@ -38,6 +40,7 @@ resource "google_project_iam_member" "deployer_permissions" {
     "roles/artifactregistry.admin",
     "roles/iam.workloadIdentityPoolAdmin",
     "roles/serviceusage.serviceUsageAdmin",
+    "roles/storage.admin",
   ])
 
   project = var.project_id
@@ -50,6 +53,7 @@ resource "google_project_service" "required" {
     "artifactregistry.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "storage.googleapis.com",
     "sts.googleapis.com",
   ])
 
@@ -76,11 +80,39 @@ resource "google_artifact_registry_repository" "gestaltd_charts" {
   ]
 }
 
+resource "google_storage_bucket" "gestaltd_ci_binaries" {
+  project                     = var.project_id
+  name                        = var.ci_binary_bucket_name
+  location                    = var.ci_binary_bucket_location
+  uniform_bucket_level_access = true
+  force_destroy               = false
+  labels                      = local.labels
+
+  versioning {
+    enabled = true
+  }
+
+  depends_on = [
+    google_project_service.required,
+  ]
+}
+
 resource "google_service_account" "chart_publisher" {
   project      = var.project_id
   account_id   = var.chart_publisher_service_account_id
   display_name = "gestaltd chart publisher"
   description  = "Publishes gestaltd Helm charts to Artifact Registry from GitHub Actions."
+
+  depends_on = [
+    google_project_service.required,
+  ]
+}
+
+resource "google_service_account" "ci_binary_publisher" {
+  project      = var.project_id
+  account_id   = var.ci_binary_publisher_service_account_id
+  display_name = "gestaltd CI binary publisher"
+  description  = "Publishes immutable gestaltd CI binary artifacts to GCS from GitHub Actions."
 
   depends_on = [
     google_project_service.required,
@@ -113,7 +145,7 @@ resource "google_iam_workload_identity_pool_provider" "gestaltd_github_actions" 
     "attribute.ref"              = "assertion.ref"
   }
 
-  attribute_condition = "assertion.repository == \"${var.github_repository}\" && assertion.ref.startsWith(\"${var.github_ref_prefix}\")"
+  attribute_condition = "assertion.repository == \"${var.github_repository}\" && (${local.github_ref_condition})"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -124,6 +156,24 @@ resource "google_service_account_iam_member" "github_actions_workload_identity_u
   service_account_id = google_service_account.chart_publisher.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_actions.name}/attribute.repository/${var.github_repository}"
+
+  condition {
+    title       = "GestaltdReleaseTags"
+    description = "Only gestaltd release tag workflows may impersonate the chart publisher."
+    expression  = "attribute.ref.startsWith(\"${var.github_ref_prefix}\")"
+  }
+}
+
+resource "google_service_account_iam_member" "ci_binary_github_actions_workload_identity_user" {
+  service_account_id = google_service_account.ci_binary_publisher.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_actions.name}/attribute.repository/${var.github_repository}"
+
+  condition {
+    title       = "GestaltdMainBranch"
+    description = "Only the main branch workflow may impersonate the CI binary publisher."
+    expression  = "attribute.ref == \"${var.ci_binary_github_ref}\""
+  }
 }
 
 resource "google_artifact_registry_repository_iam_member" "chart_publisher" {
@@ -142,4 +192,16 @@ resource "google_artifact_registry_repository_iam_member" "chart_readers" {
   repository = google_artifact_registry_repository.gestaltd_charts.repository_id
   role       = "roles/artifactregistry.reader"
   member     = "serviceAccount:${each.value}"
+}
+
+resource "google_storage_bucket_iam_member" "ci_binary_publisher" {
+  bucket = google_storage_bucket.gestaltd_ci_binaries.name
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.ci_binary_publisher.email}"
+}
+
+resource "google_storage_bucket_iam_member" "ci_binary_public_readers" {
+  bucket = google_storage_bucket.gestaltd_ci_binaries.name
+  role   = "roles/storage.objectViewer"
+  member = "allUsers"
 }
