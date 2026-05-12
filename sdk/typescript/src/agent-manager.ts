@@ -7,18 +7,25 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
   AgentManagerHost as AgentManagerHostService,
+  type AgentInteraction as ProtoAgentInteraction,
+  type AgentSession as ProtoAgentSession,
+  type AgentTurn as ProtoAgentTurn,
+  type AgentTurnEvent as ProtoAgentTurnEvent,
 } from "./internal/gen/v1/agent_pb.ts";
 import type { Request } from "./api.ts";
 import {
+  agentActorFromProto,
+  agentMessageFromProto,
+  agentMessageToProto,
+  agentToolRefToProto,
+  agentTurnDisplayFromProto,
+} from "./agent-conversions.ts";
+import {
   AgentExecutionStatus,
+  AgentInteractionState,
+  AgentInteractionType,
   AgentSessionState,
   AgentToolSourceMode,
-  agentInteractionFromProto,
-  agentMessageToProto,
-  agentSessionFromProto,
-  agentToolRefToProto,
-  agentTurnEventFromProto,
-  agentTurnFromProto,
   type AgentInteraction,
   type AgentMessage,
   type AgentSession,
@@ -26,7 +33,14 @@ import {
   type AgentTurn,
   type AgentTurnEvent,
 } from "./agent.ts";
-import { structFromObject, type JsonObjectInput } from "./protocol.ts";
+import {
+  dateFromTimestamp,
+  type JsonObjectInput,
+} from "./protocol.ts";
+import {
+  optionalObjectFromStruct,
+  optionalStruct,
+} from "./protocol-internal.ts";
 
 /** Environment variable containing the agent-manager host-service target. */
 export const ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_MANAGER_SOCKET";
@@ -35,25 +49,25 @@ export const ENV_AGENT_MANAGER_SOCKET_TOKEN =
   `${ENV_AGENT_MANAGER_SOCKET}_TOKEN`;
 const AGENT_MANAGER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
-export interface AgentWorkspaceGitCheckoutInput {
+export interface AgentManagerWorkspaceGitCheckout {
   url?: string | undefined;
   ref?: string | undefined;
   path?: string | undefined;
 }
 
-export interface AgentWorkspaceInput {
-  checkouts?: readonly AgentWorkspaceGitCheckoutInput[] | undefined;
+export interface AgentManagerWorkspace {
+  checkouts?: readonly AgentManagerWorkspaceGitCheckout[] | undefined;
   cwd?: string | undefined;
 }
 
 /** Shape accepted when creating an agent session through the host manager. */
 export interface AgentManagerCreateSessionInput {
-  providerName?: string | undefined;
+  providerName: string;
   model?: string | undefined;
   clientRef?: string | undefined;
   metadata?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
-  workspace?: AgentWorkspaceInput | undefined;
+  workspace?: AgentManagerWorkspace | undefined;
 }
 
 /** Shape accepted when fetching an agent session through the host manager. */
@@ -128,22 +142,6 @@ export interface AgentManagerResolveInteractionInput {
   resolution?: JsonObjectInput | undefined;
 }
 
-export interface ListAgentManagerSessionsResponse {
-  sessions: readonly AgentSession[];
-}
-
-export interface ListAgentManagerTurnsResponse {
-  turns: readonly AgentTurn[];
-}
-
-export interface ListAgentManagerTurnEventsResponse {
-  events: readonly AgentTurnEvent[];
-}
-
-export interface ListAgentManagerInteractionsResponse {
-  interactions: readonly AgentInteraction[];
-}
-
 /**
  * Client for managing agent sessions, turns, events, and interactions.
  *
@@ -179,159 +177,146 @@ export class AgentManager {
   async createSession(
     request: AgentManagerCreateSessionInput,
   ): Promise<AgentSession> {
-    return agentSessionFromProto(await this.client.createSession({
-      ...agentManagerCreateSessionRequest(request),
-      invocationToken: this.invocationToken,
-    }));
+    return agentSessionFromProto(
+      await this.client.createSession({
+        providerName: request.providerName,
+        model: request.model ?? "",
+        clientRef: request.clientRef ?? "",
+        metadata: optionalStruct(request.metadata),
+        idempotencyKey: request.idempotencyKey ?? "",
+        invocationToken: this.invocationToken,
+        workspace: workspaceToProto(request.workspace),
+      }),
+    );
   }
 
   /** Fetches one agent session. */
   async getSession(request: AgentManagerGetSessionInput): Promise<AgentSession> {
-    return agentSessionFromProto(await this.client.getSession({
-      sessionId: request.sessionId,
-      invocationToken: this.invocationToken,
-    }));
+    return agentSessionFromProto(
+      await this.client.getSession({
+        sessionId: request.sessionId,
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Lists agent sessions visible to the invocation token. */
   async listSessions(
     request: AgentManagerListSessionsInput = {},
-  ): Promise<ListAgentManagerSessionsResponse> {
+  ): Promise<AgentSession[]> {
     const response = await this.client.listSessions({
       providerName: request.providerName ?? "",
+      invocationToken: this.invocationToken,
       state: request.state ?? AgentSessionState.UNSPECIFIED,
       limit: request.limit ?? 0,
       summaryOnly: request.summaryOnly ?? false,
-      invocationToken: this.invocationToken,
     });
-    return { sessions: response.sessions.map(agentSessionFromProto) };
+    return response.sessions.map(agentSessionFromProto);
   }
 
   /** Updates mutable fields on an agent session. */
   async updateSession(
     request: AgentManagerUpdateSessionInput,
   ): Promise<AgentSession> {
-    return agentSessionFromProto(await this.client.updateSession({
-      sessionId: request.sessionId,
-      clientRef: request.clientRef ?? "",
-      state: request.state ?? AgentSessionState.UNSPECIFIED,
-      metadata: optionalStruct(request.metadata),
-      invocationToken: this.invocationToken,
-    }));
+    return agentSessionFromProto(
+      await this.client.updateSession({
+        sessionId: request.sessionId,
+        clientRef: request.clientRef ?? "",
+        state: request.state ?? AgentSessionState.UNSPECIFIED,
+        metadata: optionalStruct(request.metadata),
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Creates an agent turn. */
   async createTurn(request: AgentManagerCreateTurnInput): Promise<AgentTurn> {
-    return agentTurnFromProto(await this.client.createTurn({
-      ...agentManagerCreateTurnRequest(request),
-      invocationToken: this.invocationToken,
-    }));
+    return agentTurnFromProto(
+      await this.client.createTurn({
+        sessionId: request.sessionId,
+        model: request.model ?? "",
+        messages: request.messages?.map(agentMessageToProto) ?? [],
+        toolRefs: request.toolRefs?.map(agentToolRefToProto) ?? [],
+        toolSource: request.toolSource ?? AgentToolSourceMode.UNSPECIFIED,
+        responseSchema: optionalStruct(request.responseSchema),
+        metadata: optionalStruct(request.metadata),
+        idempotencyKey: request.idempotencyKey ?? "",
+        invocationToken: this.invocationToken,
+        modelOptions: optionalStruct(request.modelOptions),
+      }),
+    );
   }
 
   /** Fetches one agent turn. */
   async getTurn(request: AgentManagerGetTurnInput): Promise<AgentTurn> {
-    return agentTurnFromProto(await this.client.getTurn({
-      turnId: request.turnId,
-      invocationToken: this.invocationToken,
-    }));
+    return agentTurnFromProto(
+      await this.client.getTurn({
+        turnId: request.turnId,
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Lists turns for an agent session. */
-  async listTurns(
-    request: AgentManagerListTurnsInput,
-  ): Promise<ListAgentManagerTurnsResponse> {
+  async listTurns(request: AgentManagerListTurnsInput): Promise<AgentTurn[]> {
     const response = await this.client.listTurns({
       sessionId: request.sessionId,
+      invocationToken: this.invocationToken,
       status: request.status ?? AgentExecutionStatus.UNSPECIFIED,
       limit: request.limit ?? 0,
       summaryOnly: request.summaryOnly ?? false,
-      invocationToken: this.invocationToken,
     });
-    return { turns: response.turns.map(agentTurnFromProto) };
+    return response.turns.map(agentTurnFromProto);
   }
 
   /** Cancels an in-progress agent turn. */
   async cancelTurn(request: AgentManagerCancelTurnInput): Promise<AgentTurn> {
-    return agentTurnFromProto(await this.client.cancelTurn({
-      turnId: request.turnId,
-      reason: request.reason ?? "",
-      invocationToken: this.invocationToken,
-    }));
+    return agentTurnFromProto(
+      await this.client.cancelTurn({
+        turnId: request.turnId,
+        reason: request.reason ?? "",
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Lists events emitted for an agent turn. */
   async listTurnEvents(
     request: AgentManagerListTurnEventsInput,
-  ): Promise<ListAgentManagerTurnEventsResponse> {
+  ): Promise<AgentTurnEvent[]> {
     const response = await this.client.listTurnEvents({
       turnId: request.turnId,
-      afterSeq: request.afterSeq === undefined ? 0n : BigInt(request.afterSeq),
+      afterSeq: BigInt(request.afterSeq ?? 0),
       limit: request.limit ?? 0,
       invocationToken: this.invocationToken,
     });
-    return { events: response.events.map(agentTurnEventFromProto) };
+    return response.events.map(agentTurnEventFromProto);
   }
 
   /** Lists pending or completed agent interactions. */
   async listInteractions(
     request: AgentManagerListInteractionsInput,
-  ): Promise<ListAgentManagerInteractionsResponse> {
+  ): Promise<AgentInteraction[]> {
     const response = await this.client.listInteractions({
       turnId: request.turnId,
       invocationToken: this.invocationToken,
     });
-    return { interactions: response.interactions.map(agentInteractionFromProto) };
+    return response.interactions.map(agentInteractionFromProto);
   }
 
   /** Resolves an agent interaction with a host response. */
   async resolveInteraction(
     request: AgentManagerResolveInteractionInput,
   ): Promise<AgentInteraction> {
-    return agentInteractionFromProto(await this.client.resolveInteraction({
-      turnId: request.turnId,
-      interactionId: request.interactionId,
-      resolution: optionalStruct(request.resolution),
-      invocationToken: this.invocationToken,
-    }));
+    return agentInteractionFromProto(
+      await this.client.resolveInteraction({
+        turnId: request.turnId,
+        interactionId: request.interactionId,
+        resolution: optionalStruct(request.resolution),
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
-}
-
-function agentManagerCreateSessionRequest(request: AgentManagerCreateSessionInput) {
-  return {
-    providerName: request.providerName ?? "",
-    model: request.model ?? "",
-    clientRef: request.clientRef ?? "",
-    metadata: optionalStruct(request.metadata),
-    idempotencyKey: request.idempotencyKey ?? "",
-    workspace: request.workspace === undefined
-      ? undefined
-      : {
-        checkouts: (request.workspace.checkouts ?? []).map((checkout) => ({
-          url: checkout.url ?? "",
-          ref: checkout.ref ?? "",
-          path: checkout.path ?? "",
-        })),
-        cwd: request.workspace.cwd ?? "",
-      },
-  };
-}
-
-function agentManagerCreateTurnRequest(request: AgentManagerCreateTurnInput) {
-  return {
-    sessionId: request.sessionId,
-    model: request.model ?? "",
-    messages: (request.messages ?? []).map(agentMessageToProto),
-    toolRefs: (request.toolRefs ?? []).map((ref) => agentToolRefToProto(ref)!),
-    toolSource: request.toolSource ?? AgentToolSourceMode.UNSPECIFIED,
-    responseSchema: optionalStruct(request.responseSchema),
-    metadata: optionalStruct(request.metadata),
-    idempotencyKey: request.idempotencyKey ?? "",
-    modelOptions: optionalStruct(request.modelOptions),
-  };
-}
-
-function optionalStruct(value?: JsonObjectInput | undefined) {
-  return value === undefined ? undefined : structFromObject(value);
 }
 
 function normalizeInvocationToken(requestOrToken: Request | string): string {
@@ -344,6 +329,90 @@ function normalizeInvocationToken(requestOrToken: Request | string): string {
     throw new Error("agent manager: invocation token is not available");
   }
   return trimmed;
+}
+
+function workspaceToProto(workspace?: AgentManagerWorkspace | undefined) {
+  if (workspace === undefined) {
+    return undefined;
+  }
+  return {
+    checkouts: workspace.checkouts?.map((checkout) => ({
+      url: checkout.url ?? "",
+      ref: checkout.ref ?? "",
+      path: checkout.path ?? "",
+    })) ?? [],
+    cwd: workspace.cwd ?? "",
+  };
+}
+
+function agentSessionFromProto(session: ProtoAgentSession): AgentSession {
+  return {
+    id: session.id,
+    providerName: session.providerName,
+    model: session.model,
+    clientRef: session.clientRef,
+    state: session.state as AgentSessionState,
+    metadata: optionalObjectFromStruct(session.metadata),
+    createdBy: agentActorFromProto(session.createdBy),
+    createdAt: optionalDate(session.createdAt),
+    updatedAt: optionalDate(session.updatedAt),
+    lastTurnAt: optionalDate(session.lastTurnAt),
+  };
+}
+
+function agentTurnFromProto(turn: ProtoAgentTurn): AgentTurn {
+  return {
+    id: turn.id,
+    sessionId: turn.sessionId,
+    providerName: turn.providerName,
+    model: turn.model,
+    status: turn.status as AgentExecutionStatus,
+    messages: turn.messages.map(agentMessageFromProto),
+    outputText: turn.outputText,
+    structuredOutput: optionalObjectFromStruct(turn.structuredOutput),
+    statusMessage: turn.statusMessage,
+    createdBy: agentActorFromProto(turn.createdBy),
+    createdAt: optionalDate(turn.createdAt),
+    startedAt: optionalDate(turn.startedAt),
+    completedAt: optionalDate(turn.completedAt),
+    executionRef: turn.executionRef,
+  };
+}
+
+function agentTurnEventFromProto(event: ProtoAgentTurnEvent): AgentTurnEvent {
+  return {
+    id: event.id,
+    turnId: event.turnId,
+    seq: event.seq,
+    type: event.type,
+    source: event.source,
+    visibility: event.visibility,
+    data: optionalObjectFromStruct(event.data),
+    createdAt: optionalDate(event.createdAt),
+    display: agentTurnDisplayFromProto(event.display),
+  };
+}
+
+function agentInteractionFromProto(
+  interaction: ProtoAgentInteraction,
+): AgentInteraction {
+  return {
+    id: interaction.id,
+    type: interaction.type as AgentInteractionType,
+    state: interaction.state as AgentInteractionState,
+    title: interaction.title,
+    prompt: interaction.prompt,
+    request: optionalObjectFromStruct(interaction.request),
+    resolution: optionalObjectFromStruct(interaction.resolution),
+    createdAt: optionalDate(interaction.createdAt),
+    resolvedAt: optionalDate(interaction.resolvedAt),
+    turnId: interaction.turnId,
+    sessionId: interaction.sessionId,
+  };
+}
+
+function optionalDate(timestamp?: Parameters<typeof dateFromTimestamp>[0]) {
+  return timestamp === undefined ? undefined : dateFromTimestamp(timestamp);
 }
 
 function agentManagerTransportOptions(rawTarget: string): {

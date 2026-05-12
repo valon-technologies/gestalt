@@ -12,6 +12,7 @@
     "./build": "./src/build.ts",
     "./runtime": "./src/runtime.ts",
     "./schema": "./src/schema.ts",
+    "./protocol": "./src/protocol.ts",
     "./protocol/v1": "./src/protocol/v1.ts",
     "./test/agent-contract": "./src/test-agent-contract.ts",
     "./telemetry": "./src/telemetry.ts",

@@ -1,7 +1,6 @@
 import { connect } from "node:net";
 import { Writable } from "node:stream";
 
-import type { MessageInitShape } from "@bufbuild/protobuf";
 import {
   createClient,
   type Client,
@@ -10,10 +9,8 @@ import {
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
-  AppendPluginRuntimeLogsRequestSchema,
-  type AppendPluginRuntimeLogsResponse,
   PluginRuntimeLogHost as PluginRuntimeLogHostService,
-  PluginRuntimeLogStream,
+  PluginRuntimeLogStream as ProtoPluginRuntimeLogStream,
 } from "./internal/gen/v1/pluginruntime_pb.ts";
 import { timestampFromDate } from "./protocol.ts";
 
@@ -29,16 +26,8 @@ const RUNTIME_LOG_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
 /** Named runtime log streams accepted by the authored SDK. */
 export type RuntimeLogStreamName = "stdout" | "stderr" | "runtime";
-/** Runtime log stream input, either a named stream or generated enum value. */
-export type RuntimeLogStreamInput =
-  | RuntimeLogStreamName
-  | PluginRuntimeLogStream;
-/** Shape accepted by `RuntimeLogHost.appendLogs`. */
-export type RuntimeLogAppendLogsInput = MessageInitShape<
-  typeof AppendPluginRuntimeLogsRequestSchema
->;
-/** Response message returned after appending runtime logs. */
-export type RuntimeLogAppendResponseMessage = AppendPluginRuntimeLogsResponse;
+/** Runtime log stream input accepted by authored APIs. */
+export type RuntimeLogStreamInput = RuntimeLogStreamName;
 
 /** One runtime log entry to append through `RuntimeLogHost.append`. */
 export interface RuntimeLogAppendInput {
@@ -54,6 +43,20 @@ export interface RuntimeLogAppendInput {
   sourceSeq?: number | bigint;
 }
 
+/** Batch of runtime log entries to append through `RuntimeLogHost.appendLogs`. */
+export interface RuntimeLogAppendLogsInput {
+  /** Runtime session id. Defaults to `GESTALT_RUNTIME_SESSION_ID`. */
+  sessionId?: string | undefined;
+  /** Log entries to append. */
+  logs: readonly RuntimeLogAppendInput[];
+}
+
+/** Response returned after appending runtime logs. */
+export interface RuntimeLogAppendResponse {
+  /** Last source sequence accepted by the host. */
+  lastSeq: bigint;
+}
+
 /** Options for the `Writable` returned by `RuntimeLogHost.writer`. */
 export interface RuntimeLogWriterOptions {
   /** Runtime session id. Defaults to `GESTALT_RUNTIME_SESSION_ID`. */
@@ -67,8 +70,8 @@ export interface RuntimeLogWriterOptions {
 /**
  * Client for appending plugin-runtime logs to the host.
  *
- * Use `append` for a single entry, `appendLogs` for a protocol-shaped batch, or
- * `writer` to bridge Node streams into the runtime log host.
+ * Use `append` for a single entry, `appendLogs` for a native batch, or `writer`
+ * to bridge Node streams into the runtime log host.
  */
 export class RuntimeLogHost {
   private readonly client: Client<typeof PluginRuntimeLogHostService>;
@@ -103,31 +106,23 @@ export class RuntimeLogHost {
 
   async appendLogs(
     request: RuntimeLogAppendLogsInput,
-  ): Promise<RuntimeLogAppendResponseMessage> {
-    return await this.client.appendLogs(request);
+  ): Promise<RuntimeLogAppendResponse> {
+    const sessionId = runtimeLogBatchSessionId(request);
+    return runtimeLogAppendResponseFromProto(
+      await this.client.appendLogs({
+        sessionId,
+        logs: request.logs.map((log) => this.runtimeLogEntryToProto(log)),
+      }),
+    );
   }
 
   /** Appends one runtime log entry. */
   async append(
     input: RuntimeLogAppendInput,
-  ): Promise<RuntimeLogAppendResponseMessage> {
-    const sourceSeq =
-      input.sourceSeq === undefined
-        ? (this.sourceSeq += 1n)
-        : BigInt(input.sourceSeq);
-    if (sourceSeq > this.sourceSeq) {
-      this.sourceSeq = sourceSeq;
-    }
+  ): Promise<RuntimeLogAppendResponse> {
     return await this.appendLogs({
-      sessionId: runtimeSessionId(input.sessionId),
-      logs: [
-        {
-          stream: runtimeLogStream(input.stream ?? "runtime"),
-          message: runtimeLogMessage(input.message),
-          observedAt: timestampFromDate(input.observedAt ?? new Date()),
-          sourceSeq,
-        },
-      ],
+      sessionId: input.sessionId,
+      logs: [input],
     });
   }
 
@@ -172,6 +167,22 @@ export class RuntimeLogHost {
       },
     });
   }
+
+  private runtimeLogEntryToProto(input: RuntimeLogAppendInput) {
+    const sourceSeq =
+      input.sourceSeq === undefined
+        ? (this.sourceSeq += 1n)
+        : BigInt(input.sourceSeq);
+    if (sourceSeq > this.sourceSeq) {
+      this.sourceSeq = sourceSeq;
+    }
+    return {
+      stream: runtimeLogStream(input.stream ?? "runtime"),
+      message: runtimeLogMessage(input.message),
+      observedAt: timestampFromDate(input.observedAt ?? new Date()),
+      sourceSeq,
+    };
+  }
 }
 
 function runtimeSessionId(sessionId?: string): string {
@@ -180,6 +191,27 @@ function runtimeSessionId(sessionId?: string): string {
     throw new Error(`runtime session: ${ENV_RUNTIME_SESSION_ID} is not set`);
   }
   return value;
+}
+
+function runtimeLogBatchSessionId(request: RuntimeLogAppendLogsInput): string {
+  const explicitSessionIds = new Set<string>();
+  addRuntimeLogSessionId(explicitSessionIds, request.sessionId);
+  for (const log of request.logs) {
+    addRuntimeLogSessionId(explicitSessionIds, log.sessionId);
+  }
+  if (explicitSessionIds.size > 1) {
+    throw new Error("runtime log host: appendLogs entries must use one session id");
+  }
+  return runtimeSessionId(
+    request.sessionId ?? request.logs.find((log) => log.sessionId)?.sessionId,
+  );
+}
+
+function addRuntimeLogSessionId(values: Set<string>, sessionId?: string): void {
+  const value = sessionId?.trim();
+  if (value) {
+    values.add(value);
+  }
 }
 
 function runtimeLogTransportOptions(rawTarget: string): {
@@ -233,17 +265,22 @@ function runtimeLogRelayTokenInterceptor(token: string): Interceptor {
   };
 }
 
-function runtimeLogStream(stream: RuntimeLogStreamInput): PluginRuntimeLogStream {
-  if (typeof stream === "number") {
-    return stream;
-  }
+function runtimeLogAppendResponseFromProto(
+  response: { lastSeq: bigint },
+): RuntimeLogAppendResponse {
+  return { lastSeq: response.lastSeq };
+}
+
+function runtimeLogStream(
+  stream: RuntimeLogStreamInput,
+): ProtoPluginRuntimeLogStream {
   switch (stream.trim().toLowerCase()) {
     case "stdout":
-      return PluginRuntimeLogStream.STDOUT;
+      return ProtoPluginRuntimeLogStream.STDOUT;
     case "stderr":
-      return PluginRuntimeLogStream.STDERR;
+      return ProtoPluginRuntimeLogStream.STDERR;
     case "runtime":
-      return PluginRuntimeLogStream.RUNTIME;
+      return ProtoPluginRuntimeLogStream.RUNTIME;
     default:
       throw new Error(`unsupported runtime log stream ${JSON.stringify(stream)}`);
   }

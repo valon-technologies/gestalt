@@ -1,10 +1,6 @@
 import { connect } from "node:net";
 
-import {
-  create,
-  type JsonObject,
-  type MessageInitShape,
-} from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
   Code,
@@ -17,26 +13,16 @@ import {
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
-  AuthorizationProvider as AuthorizationProviderService,
-  AccessEvaluationRequestSchema,
   AccessDecisionSchema,
+  AccessEvaluationRequestSchema,
   AccessEvaluationsRequestSchema,
   AccessEvaluationsResponseSchema,
   ActionSearchRequestSchema,
   ActionSearchResponseSchema,
   ActionSchema,
   AuthorizationMetadataSchema,
-  AuthorizationModelActionSchema,
-  AuthorizationModelAllowedTargetSchema,
-  AuthorizationModelComputedUsersetSchema,
-  AuthorizationModelResourceTypeSchema,
-  AuthorizationModelRelationSchema,
-  AuthorizationModelRewriteSchema,
-  AuthorizationModelRewriteUnionSchema,
-  AuthorizationModelSchema,
   AuthorizationModelRefSchema,
-  AuthorizationModelSubjectSetTargetSchema,
-  AuthorizationModelTupleToUsersetSchema,
+  AuthorizationProvider as AuthorizationProviderService,
   EffectiveSubjectSearchRequestSchema,
   EffectiveSubjectSearchResponseSchema,
   ExpandNodeSchema,
@@ -54,15 +40,68 @@ import {
   ResourceSearchRequestSchema,
   ResourceSearchResponseSchema,
   SubjectSchema,
-  SubjectSetSchema,
   SubjectSearchRequestSchema,
   SubjectSearchResponseSchema,
+  SubjectSetSchema,
   WriteModelRequestSchema,
   WriteRelationshipsRequestSchema,
+  type AccessDecision as ProtoAccessDecision,
+  type AccessEvaluationRequest as ProtoAccessEvaluationRequest,
+  type AccessEvaluationsRequest as ProtoAccessEvaluationsRequest,
+  type AccessEvaluationsResponse as ProtoAccessEvaluationsResponse,
+  type Action as ProtoAction,
+  type ActionSearchRequest as ProtoActionSearchRequest,
+  type ActionSearchResponse as ProtoActionSearchResponse,
+  type AuthorizationMetadata as ProtoAuthorizationMetadata,
+  type AuthorizationModel as ProtoAuthorizationModel,
+  type AuthorizationModelAction as ProtoAuthorizationModelAction,
+  type AuthorizationModelAllowedTarget as ProtoAuthorizationModelAllowedTarget,
+  type AuthorizationModelComputedUserset as ProtoAuthorizationModelComputedUserset,
+  type AuthorizationModelRef as ProtoAuthorizationModelRef,
+  type AuthorizationModelRelation as ProtoAuthorizationModelRelation,
+  type AuthorizationModelResourceType as ProtoAuthorizationModelResourceType,
+  type AuthorizationModelRewrite as ProtoAuthorizationModelRewrite,
+  type AuthorizationModelRewriteUnion as ProtoAuthorizationModelRewriteUnion,
+  type AuthorizationModelSubjectSetTarget as ProtoAuthorizationModelSubjectSetTarget,
+  type AuthorizationModelTupleToUserset as ProtoAuthorizationModelTupleToUserset,
+  type EffectiveSubjectSearchRequest as ProtoEffectiveSubjectSearchRequest,
+  type EffectiveSubjectSearchResponse as ProtoEffectiveSubjectSearchResponse,
+  type ExpandNode as ProtoExpandNode,
+  type ExpandRequest as ProtoExpandRequest,
+  type ExpandResponse as ProtoExpandResponse,
+  type GetActiveModelResponse as ProtoGetActiveModelResponse,
+  type ListModelsRequest as ProtoListModelsRequest,
+  type ListModelsResponse as ProtoListModelsResponse,
+  type ReadRelationshipsRequest as ProtoReadRelationshipsRequest,
+  type ReadRelationshipsResponse as ProtoReadRelationshipsResponse,
+  type Relationship as ProtoRelationship,
+  type RelationshipKey as ProtoRelationshipKey,
+  type RelationshipTarget as ProtoRelationshipTarget,
+  type Resource as ProtoResource,
+  type ResourceSearchRequest as ProtoResourceSearchRequest,
+  type ResourceSearchResponse as ProtoResourceSearchResponse,
+  type Subject as ProtoSubject,
+  type SubjectSearchRequest as ProtoSubjectSearchRequest,
+  type SubjectSearchResponse as ProtoSubjectSearchResponse,
+  type SubjectSet as ProtoSubjectSet,
+  type WriteModelRequest as ProtoWriteModelRequest,
+  type WriteRelationshipsRequest as ProtoWriteRelationshipsRequest,
 } from "./internal/gen/v1/authorization_pb.ts";
+import {
+  dateFromTimestamp,
+  timestampFromDate,
+  type JsonObjectInput,
+} from "./protocol.ts";
+import {
+  optionalObjectFromStruct,
+  optionalStruct,
+} from "./protocol-internal.ts";
 import type { MaybePromise } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
-import { dateFromTimestamp, timestampFromDate } from "./protocol.ts";
+
+type AuthorizationProviderServiceImpl = Partial<
+  ServiceImpl<typeof AuthorizationProviderService>
+>;
 
 /**
  * Environment variable containing the Unix socket path or relay target for the
@@ -84,65 +123,69 @@ export const AGENT_SESSION_ACTION_VIEW = "view";
 export const AGENT_SESSION_ACTION_EDIT = "edit";
 
 export interface AuthorizationSubject {
-  type?: string | undefined;
-  id?: string | undefined;
-  properties?: JsonObject | undefined;
+  type: string;
+  id: string;
+  properties?: JsonObjectInput | undefined;
 }
 
 export interface AuthorizationResource {
-  type?: string | undefined;
-  id?: string | undefined;
-  properties?: JsonObject | undefined;
+  type: string;
+  id: string;
+  properties?: JsonObjectInput | undefined;
 }
 
 export interface AuthorizationSubjectSet {
   resource?: AuthorizationResource | undefined;
-  relation?: string | undefined;
+  relation: string;
 }
 
+export type AuthorizationRelationshipTargetKind =
+  | { case: "subject"; value: AuthorizationSubject }
+  | { case: "resource"; value: AuthorizationResource }
+  | { case: "subjectSet"; value: AuthorizationSubjectSet }
+  | { case: undefined; value?: undefined };
+
 export interface AuthorizationRelationshipTarget {
-  subject?: AuthorizationSubject | undefined;
-  resource?: AuthorizationResource | undefined;
-  subjectSet?: AuthorizationSubjectSet | undefined;
+  kind: AuthorizationRelationshipTargetKind;
 }
 
 export interface AuthorizationAction {
-  name?: string | undefined;
-  properties?: JsonObject | undefined;
+  name: string;
+  properties?: JsonObjectInput | undefined;
 }
 
 export interface AuthorizationEvaluateInput {
   subject?: AuthorizationSubject | undefined;
   action?: AuthorizationAction | undefined;
   resource?: AuthorizationResource | undefined;
-  context?: JsonObject | undefined;
+  context?: JsonObjectInput | undefined;
 }
 
 export interface AuthorizationDecision {
   allowed?: boolean | undefined;
-  context?: JsonObject | undefined;
+  context?: JsonObjectInput | undefined;
   modelId?: string | undefined;
 }
 
 export interface AuthorizationEvaluateManyInput {
-  requests?: AuthorizationEvaluateInput[] | undefined;
+  requests: readonly AuthorizationEvaluateInput[];
 }
 
 export interface AuthorizationEvaluationsResponse {
-  decisions?: AuthorizationDecision[] | undefined;
+  decisions: readonly AuthorizationDecision[];
 }
 
 export interface AuthorizationSearchResourcesInput {
   subject?: AuthorizationSubject | undefined;
   action?: AuthorizationAction | undefined;
   resourceType?: string | undefined;
-  context?: JsonObject | undefined;
+  context?: JsonObjectInput | undefined;
   pageSize?: number | undefined;
   pageToken?: string | undefined;
 }
 
-export interface AuthorizationResourceSearchResponse {
-  resources?: AuthorizationResource[] | undefined;
+export interface AuthorizationResourceSearch {
+  resources: readonly AuthorizationResource[];
   nextPageToken?: string | undefined;
   modelId?: string | undefined;
 }
@@ -151,13 +194,13 @@ export interface AuthorizationSearchSubjectsInput {
   resource?: AuthorizationResource | undefined;
   action?: AuthorizationAction | undefined;
   subjectType?: string | undefined;
-  context?: JsonObject | undefined;
+  context?: JsonObjectInput | undefined;
   pageSize?: number | undefined;
   pageToken?: string | undefined;
 }
 
-export interface AuthorizationSubjectSearchResponse {
-  subjects?: AuthorizationSubject[] | undefined;
+export interface AuthorizationSubjectSearch {
+  subjects: readonly AuthorizationSubject[];
   nextPageToken?: string | undefined;
   modelId?: string | undefined;
 }
@@ -165,13 +208,13 @@ export interface AuthorizationSubjectSearchResponse {
 export interface AuthorizationEffectiveSearchSubjectsInput {
   resource?: AuthorizationResource | undefined;
   action?: AuthorizationAction | undefined;
-  context?: JsonObject | undefined;
+  context?: JsonObjectInput | undefined;
   pageSize?: number | undefined;
   pageToken?: string | undefined;
 }
 
-export interface AuthorizationEffectiveSubjectSearchResponse {
-  targets?: AuthorizationRelationshipTarget[] | undefined;
+export interface AuthorizationEffectiveSubjectSearch {
+  targets: readonly AuthorizationRelationshipTarget[];
   nextPageToken?: string | undefined;
   modelId?: string | undefined;
   truncated?: boolean | undefined;
@@ -180,33 +223,33 @@ export interface AuthorizationEffectiveSubjectSearchResponse {
 export interface AuthorizationSearchActionsInput {
   subject?: AuthorizationSubject | undefined;
   resource?: AuthorizationResource | undefined;
-  context?: JsonObject | undefined;
+  context?: JsonObjectInput | undefined;
   pageSize?: number | undefined;
   pageToken?: string | undefined;
 }
 
-export interface AuthorizationActionSearchResponse {
-  actions?: AuthorizationAction[] | undefined;
+export interface AuthorizationActionSearch {
+  actions: readonly AuthorizationAction[];
   nextPageToken?: string | undefined;
   modelId?: string | undefined;
 }
 
 export interface AuthorizationMetadata {
-  capabilities?: string[] | undefined;
+  capabilities?: readonly string[] | undefined;
   activeModelId?: string | undefined;
 }
 
 export interface AuthorizationRelationship {
   subject?: AuthorizationSubject | undefined;
-  relation?: string | undefined;
+  relation: string;
   resource?: AuthorizationResource | undefined;
-  properties?: JsonObject | undefined;
+  properties?: JsonObjectInput | undefined;
   target?: AuthorizationRelationshipTarget | undefined;
 }
 
 export interface AuthorizationRelationshipKey {
   subject?: AuthorizationSubject | undefined;
-  relation?: string | undefined;
+  relation: string;
   resource?: AuthorizationResource | undefined;
   target?: AuthorizationRelationshipTarget | undefined;
 }
@@ -221,80 +264,112 @@ export interface AuthorizationReadRelationshipsInput {
   target?: AuthorizationRelationshipTarget | undefined;
 }
 
-export interface AuthorizationReadRelationshipsResponse {
-  relationships?: AuthorizationRelationship[] | undefined;
+export interface AuthorizationReadRelationships {
+  relationships: readonly AuthorizationRelationship[];
   nextPageToken?: string | undefined;
   modelId?: string | undefined;
 }
 
 export interface AuthorizationWriteRelationshipsInput {
-  writes?: AuthorizationRelationship[] | undefined;
-  deletes?: AuthorizationRelationshipKey[] | undefined;
+  writes?: readonly AuthorizationRelationship[] | undefined;
+  deletes?: readonly AuthorizationRelationshipKey[] | undefined;
   modelId?: string | undefined;
 }
 
 export interface AuthorizationModel {
   version?: number | undefined;
-  resourceTypes?: AuthorizationModelResourceType[] | undefined;
+  resourceTypes?: readonly AuthorizationModelResourceType[] | undefined;
 }
 
 export interface AuthorizationModelResourceType {
-  name?: string | undefined;
-  relations?: AuthorizationModelRelation[] | undefined;
-  actions?: AuthorizationModelAction[] | undefined;
+  name: string;
+  relations?: readonly AuthorizationModelRelation[] | undefined;
+  actions?: readonly AuthorizationModelAction[] | undefined;
 }
 
 export interface AuthorizationModelRelation {
-  name?: string | undefined;
-  subjectTypes?: string[] | undefined;
-  allowedTargets?: AuthorizationModelAllowedTarget[] | undefined;
+  name: string;
+  subjectTypes?: readonly string[] | undefined;
+  allowedTargets?: readonly AuthorizationModelAllowedTarget[] | undefined;
   rewrite?: AuthorizationModelRewrite | undefined;
 }
 
 export interface AuthorizationModelAction {
-  name?: string | undefined;
-  relations?: string[] | undefined;
+  name: string;
+  relations?: readonly string[] | undefined;
   rewrite?: AuthorizationModelRewrite | undefined;
 }
 
+export type AuthorizationModelAllowedTargetKind =
+  | { case: "subjectType"; value: string }
+  | { case: "resourceType"; value: string }
+  | { case: "subjectSet"; value: AuthorizationModelSubjectSetTarget }
+  | { case: undefined; value?: undefined };
+
 export interface AuthorizationModelAllowedTarget {
-  subjectType?: string | undefined;
-  resourceType?: string | undefined;
-  subjectSet?: AuthorizationModelSubjectSetTarget | undefined;
+  kind: AuthorizationModelAllowedTargetKind;
 }
 
 export interface AuthorizationModelSubjectSetTarget {
-  resourceType?: string | undefined;
-  relation?: string | undefined;
+  resourceType: string;
+  relation: string;
 }
+
+export type AuthorizationModelRewriteKind =
+  | { case: "this"; value: AuthorizationModelRewriteThis }
+  | { case: "computedUserset"; value: AuthorizationModelComputedUserset }
+  | { case: "tupleToUserset"; value: AuthorizationModelTupleToUserset }
+  | { case: "union"; value: AuthorizationModelRewriteUnion }
+  | { case: undefined; value?: undefined };
 
 export interface AuthorizationModelRewrite {
-  this?: Record<string, never> | undefined;
-  computedUserset?: AuthorizationModelComputedUserset | undefined;
-  tupleToUserset?: AuthorizationModelTupleToUserset | undefined;
-  union?: AuthorizationModelRewriteUnion | undefined;
+  kind: AuthorizationModelRewriteKind;
 }
 
+export interface AuthorizationModelRewriteThis {}
+
 export interface AuthorizationModelComputedUserset {
-  relation?: string | undefined;
+  relation: string;
 }
 
 export interface AuthorizationModelTupleToUserset {
-  tuplesetRelation?: string | undefined;
-  computedRelation?: string | undefined;
+  tuplesetRelation: string;
+  computedRelation: string;
 }
 
 export interface AuthorizationModelRewriteUnion {
-  children?: AuthorizationModelRewrite[] | undefined;
+  children?: readonly AuthorizationModelRewrite[] | undefined;
 }
 
 export interface AuthorizationModelRef {
-  id?: string | undefined;
-  version?: string | undefined;
+  id: string;
+  version: string;
   createdAt?: Date | undefined;
 }
 
-export interface AuthorizationGetActiveModelResponse {
+export interface AuthorizationExpandInput {
+  resource?: AuthorizationResource | undefined;
+  relation?: string | undefined;
+  context?: JsonObjectInput | undefined;
+  maxDepth?: number | undefined;
+  modelId?: string | undefined;
+}
+
+export interface AuthorizationExpandNode {
+  target?: AuthorizationRelationshipTarget | undefined;
+  relation?: string | undefined;
+  children?: readonly AuthorizationExpandNode[] | undefined;
+}
+
+export interface AuthorizationExpand {
+  root?: AuthorizationExpandNode | undefined;
+  truncated?: boolean | undefined;
+  cycleDetected?: boolean | undefined;
+  maxDepthReached?: boolean | undefined;
+  modelId?: string | undefined;
+}
+
+export interface AuthorizationGetActiveModel {
   model?: AuthorizationModelRef | undefined;
 }
 
@@ -303,35 +378,13 @@ export interface AuthorizationListModelsInput {
   pageToken?: string | undefined;
 }
 
-export interface AuthorizationListModelsResponse {
-  models?: AuthorizationModelRef[] | undefined;
+export interface AuthorizationListModels {
+  models?: readonly AuthorizationModelRef[] | undefined;
   nextPageToken?: string | undefined;
 }
 
 export interface AuthorizationWriteModelInput {
   model?: AuthorizationModel | undefined;
-}
-
-export interface AuthorizationExpandInput {
-  resource?: AuthorizationResource | undefined;
-  relation?: string | undefined;
-  context?: JsonObject | undefined;
-  maxDepth?: number | undefined;
-  modelId?: string | undefined;
-}
-
-export interface AuthorizationExpandNode {
-  target?: AuthorizationRelationshipTarget | undefined;
-  relation?: string | undefined;
-  children?: AuthorizationExpandNode[] | undefined;
-}
-
-export interface AuthorizationExpandResponse {
-  root?: AuthorizationExpandNode | undefined;
-  truncated?: boolean | undefined;
-  cycleDetected?: boolean | undefined;
-  maxDepthReached?: boolean | undefined;
-  modelId?: string | undefined;
 }
 
 const sharedAuthorizationTransport: {
@@ -360,7 +413,7 @@ export class AuthorizationClient {
     const resolvedTarget = resolveAuthorizationSocketTarget(socketTarget);
     const transportOptions = authorizationTransportOptions(resolvedTarget);
     const transport = createGrpcTransport({
-      baseUrl: transportOptions.baseUrl,
+      ...transportOptions,
       ...(transportOptions.nodeOptions
         ? {
             nodeOptions: {
@@ -379,78 +432,72 @@ export class AuthorizationClient {
   async evaluate(
     request: AuthorizationEvaluateInput,
   ): Promise<AuthorizationDecision> {
-    return authorizationDecisionFromTransport(
-      await this.client.evaluate(authorizationEvaluateToTransport(request)),
+    return authorizationDecisionFromProto(
+      await this.client.evaluate(authorizationEvaluateInputToProto(request)),
     );
   }
 
   async evaluateMany(
     request: AuthorizationEvaluateManyInput,
   ): Promise<AuthorizationEvaluationsResponse> {
-    return authorizationEvaluationsResponseFromTransport(
-      await this.client.evaluateMany(authorizationEvaluateManyToTransport(request)),
+    return authorizationEvaluationsResponseFromProto(
+      await this.client.evaluateMany(authorizationEvaluateManyInputToProto(request)),
     );
   }
 
   async searchResources(
     request: AuthorizationSearchResourcesInput,
-  ): Promise<AuthorizationResourceSearchResponse> {
-    return authorizationResourceSearchResponseFromTransport(
-      await this.client.searchResources(authorizationSearchResourcesToTransport(request)),
+  ): Promise<AuthorizationResourceSearch> {
+    return authorizationResourceSearchFromProto(
+      await this.client.searchResources(authorizationSearchResourcesInputToProto(request)),
     );
   }
 
   async searchSubjects(
     request: AuthorizationSearchSubjectsInput,
-  ): Promise<AuthorizationSubjectSearchResponse> {
-    return authorizationSubjectSearchResponseFromTransport(
-      await this.client.searchSubjects(authorizationSearchSubjectsToTransport(request)),
+  ): Promise<AuthorizationSubjectSearch> {
+    return authorizationSubjectSearchFromProto(
+      await this.client.searchSubjects(authorizationSearchSubjectsInputToProto(request)),
     );
   }
 
   async effectiveSearchResources(
     request: AuthorizationSearchResourcesInput,
-  ): Promise<AuthorizationResourceSearchResponse> {
-    return authorizationResourceSearchResponseFromTransport(
-      await this.client.effectiveSearchResources(
-        authorizationSearchResourcesToTransport(request),
-      ),
+  ): Promise<AuthorizationResourceSearch> {
+    return authorizationResourceSearchFromProto(
+      await this.client.effectiveSearchResources(authorizationSearchResourcesInputToProto(request)),
     );
   }
 
   async effectiveSearchSubjects(
     request: AuthorizationEffectiveSearchSubjectsInput,
-  ): Promise<AuthorizationEffectiveSubjectSearchResponse> {
-    return authorizationEffectiveSubjectSearchResponseFromTransport(
-      await this.client.effectiveSearchSubjects(
-        authorizationEffectiveSearchSubjectsToTransport(request),
-      ),
+  ): Promise<AuthorizationEffectiveSubjectSearch> {
+    return authorizationEffectiveSubjectSearchFromProto(
+      await this.client.effectiveSearchSubjects(authorizationEffectiveSearchSubjectsInputToProto(request)),
     );
   }
 
   async searchActions(
     request: AuthorizationSearchActionsInput,
-  ): Promise<AuthorizationActionSearchResponse> {
-    return authorizationActionSearchResponseFromTransport(
-      await this.client.searchActions(authorizationSearchActionsToTransport(request)),
+  ): Promise<AuthorizationActionSearch> {
+    return authorizationActionSearchFromProto(
+      await this.client.searchActions(authorizationSearchActionsInputToProto(request)),
     );
   }
 
   async expand(
     request: AuthorizationExpandInput,
-  ): Promise<AuthorizationExpandResponse> {
-    return authorizationExpandResponseFromTransport(
-      await this.client.expand(authorizationExpandToTransport(request)),
+  ): Promise<AuthorizationExpand> {
+    return authorizationExpandFromProto(
+      await this.client.expand(authorizationExpandInputToProto(request)),
     );
   }
 
   async readRelationships(
     request: AuthorizationReadRelationshipsInput,
-  ): Promise<AuthorizationReadRelationshipsResponse> {
-    return authorizationReadRelationshipsResponseFromTransport(
-      await this.client.readRelationships(
-        authorizationReadRelationshipsToTransport(request),
-      ),
+  ): Promise<AuthorizationReadRelationships> {
+    return authorizationReadRelationshipsFromProto(
+      await this.client.readRelationships(authorizationReadRelationshipsInputToProto(request)),
     );
   }
 
@@ -458,7 +505,7 @@ export class AuthorizationClient {
   async writeRelationships(
     request: AuthorizationWriteRelationshipsInput,
   ): Promise<void> {
-    await this.client.writeRelationships(authorizationWriteRelationshipsToTransport(request));
+    await this.client.writeRelationships(authorizationWriteRelationshipsInputToProto(request));
   }
 
   /**
@@ -476,28 +523,26 @@ export class AuthorizationClient {
   }
 
   async getMetadata(): Promise<AuthorizationMetadata> {
-    return authorizationMetadataFromTransport(await this.client.getMetadata({}));
+    return authorizationMetadataFromProto(await this.client.getMetadata({}));
   }
 
-  async getActiveModel(): Promise<AuthorizationGetActiveModelResponse> {
-    return authorizationGetActiveModelFromTransport(
-      await this.client.getActiveModel({}),
-    );
+  async getActiveModel(): Promise<AuthorizationGetActiveModel> {
+    return authorizationGetActiveModelFromProto(await this.client.getActiveModel({}));
   }
 
   async listModels(
     request: AuthorizationListModelsInput = {},
-  ): Promise<AuthorizationListModelsResponse> {
-    return authorizationListModelsResponseFromTransport(
-      await this.client.listModels(authorizationListModelsToTransport(request)),
+  ): Promise<AuthorizationListModels> {
+    return authorizationListModelsFromProto(
+      await this.client.listModels(authorizationListModelsInputToProto(request)),
     );
   }
 
   async writeModel(
     request: AuthorizationWriteModelInput,
   ): Promise<AuthorizationModelRef> {
-    return authorizationModelRefFromTransport(
-      await this.client.writeModel(authorizationWriteModelToTransport(request)),
+    return authorizationModelRefFromProtoRequired(
+      await this.client.writeModel(authorizationWriteModelInputToProto(request)),
     );
   }
 }
@@ -511,31 +556,33 @@ export interface AuthorizationProviderOptions extends ProviderBaseOptions {
   ) => MaybePromise<AuthorizationEvaluationsResponse>;
   searchResources: (
     request: AuthorizationSearchResourcesInput,
-  ) => MaybePromise<AuthorizationResourceSearchResponse>;
+  ) => MaybePromise<AuthorizationResourceSearch>;
   searchSubjects: (
     request: AuthorizationSearchSubjectsInput,
-  ) => MaybePromise<AuthorizationSubjectSearchResponse>;
+  ) => MaybePromise<AuthorizationSubjectSearch>;
   effectiveSearchResources?: (
     request: AuthorizationSearchResourcesInput,
-  ) => MaybePromise<AuthorizationResourceSearchResponse>;
+  ) => MaybePromise<AuthorizationResourceSearch>;
   effectiveSearchSubjects?: (
     request: AuthorizationEffectiveSearchSubjectsInput,
-  ) => MaybePromise<AuthorizationEffectiveSubjectSearchResponse>;
+  ) => MaybePromise<AuthorizationEffectiveSubjectSearch>;
   searchActions: (
     request: AuthorizationSearchActionsInput,
-  ) => MaybePromise<AuthorizationActionSearchResponse>;
-  expand?: (request: AuthorizationExpandInput) => MaybePromise<AuthorizationExpandResponse> | undefined;
+  ) => MaybePromise<AuthorizationActionSearch>;
+  expand?: (
+    request: AuthorizationExpandInput,
+  ) => MaybePromise<AuthorizationExpand>;
   getMetadata: () => MaybePromise<AuthorizationMetadata>;
   readRelationships: (
     request: AuthorizationReadRelationshipsInput,
-  ) => MaybePromise<AuthorizationReadRelationshipsResponse>;
+  ) => MaybePromise<AuthorizationReadRelationships>;
   writeRelationships: (
     request: AuthorizationWriteRelationshipsInput,
   ) => MaybePromise<void>;
-  getActiveModel: () => MaybePromise<AuthorizationGetActiveModelResponse>;
+  getActiveModel: () => MaybePromise<AuthorizationGetActiveModel>;
   listModels: (
     request: AuthorizationListModelsInput,
-  ) => MaybePromise<AuthorizationListModelsResponse>;
+  ) => MaybePromise<AuthorizationListModels>;
   writeModel: (
     request: AuthorizationWriteModelInput,
   ) => MaybePromise<AuthorizationModelRef>;
@@ -650,55 +697,37 @@ export function isAuthorizationProvider(
 
 export function createAuthorizationProviderService(
   provider: AuthorizationProvider,
-): Partial<ServiceImpl<typeof AuthorizationProviderService>> {
+): AuthorizationProviderServiceImpl {
   return {
     async evaluate(request) {
-      return create(
-        AccessDecisionSchema,
-        authorizationDecisionToTransport(
-          requiredAuthorizationResponse(
-            await provider.evaluate(authorizationEvaluateFromTransport(request)),
-            "evaluate",
-          ),
+      return authorizationDecisionToProto(
+        requiredAuthorizationResponse(
+          await provider.evaluate(authorizationEvaluateInputFromProto(request)),
+          "evaluate",
         ),
       );
     },
     async evaluateMany(request) {
-      return create(
-        AccessEvaluationsResponseSchema,
-        authorizationEvaluationsResponseToTransport(
-          requiredAuthorizationResponse(
-            await provider.evaluateMany(
-              authorizationEvaluateManyFromTransport(request),
-            ),
-            "evaluate many",
-          ),
+      return authorizationEvaluationsResponseToProto(
+        requiredAuthorizationResponse(
+          await provider.evaluateMany(authorizationEvaluateManyInputFromProto(request)),
+          "evaluate many",
         ),
       );
     },
     async searchResources(request) {
-      return create(
-        ResourceSearchResponseSchema,
-        authorizationResourceSearchResponseToTransport(
-          requiredAuthorizationResponse(
-            await provider.searchResources(
-              authorizationSearchResourcesFromTransport(request),
-            ),
-            "search resources",
-          ),
+      return authorizationResourceSearchToProto(
+        requiredAuthorizationResponse(
+          await provider.searchResources(authorizationSearchResourcesInputFromProto(request)),
+          "search resources",
         ),
       );
     },
     async searchSubjects(request) {
-      return create(
-        SubjectSearchResponseSchema,
-        authorizationSubjectSearchResponseToTransport(
-          requiredAuthorizationResponse(
-            await provider.searchSubjects(
-              authorizationSearchSubjectsFromTransport(request),
-            ),
-            "search subjects",
-          ),
+      return authorizationSubjectSearchToProto(
+        requiredAuthorizationResponse(
+          await provider.searchSubjects(authorizationSearchSubjectsInputFromProto(request)),
+          "search subjects",
         ),
       );
     },
@@ -709,15 +738,10 @@ export function createAuthorizationProviderService(
           Code.Unimplemented,
         );
       }
-      return create(
-        ResourceSearchResponseSchema,
-        authorizationResourceSearchResponseToTransport(
-          requiredAuthorizationResponse(
-            await provider.effectiveSearchResources(
-              authorizationSearchResourcesFromTransport(request),
-            ),
-            "effective search resources",
-          ),
+      return authorizationResourceSearchToProto(
+        requiredAuthorizationResponse(
+          await provider.effectiveSearchResources(authorizationSearchResourcesInputFromProto(request)),
+          "effective search resources",
         ),
       );
     },
@@ -728,28 +752,18 @@ export function createAuthorizationProviderService(
           Code.Unimplemented,
         );
       }
-      return create(
-        EffectiveSubjectSearchResponseSchema,
-        authorizationEffectiveSubjectSearchResponseToTransport(
-          requiredAuthorizationResponse(
-            await provider.effectiveSearchSubjects(
-              authorizationEffectiveSearchSubjectsFromTransport(request),
-            ),
-            "effective search subjects",
-          ),
+      return authorizationEffectiveSubjectSearchToProto(
+        requiredAuthorizationResponse(
+          await provider.effectiveSearchSubjects(authorizationEffectiveSearchSubjectsInputFromProto(request)),
+          "effective search subjects",
         ),
       );
     },
     async searchActions(request) {
-      return create(
-        ActionSearchResponseSchema,
-        authorizationActionSearchResponseToTransport(
-          requiredAuthorizationResponse(
-            await provider.searchActions(
-              authorizationSearchActionsFromTransport(request),
-            ),
-            "search actions",
-          ),
+      return authorizationActionSearchToProto(
+        requiredAuthorizationResponse(
+          await provider.searchActions(authorizationSearchActionsInputFromProto(request)),
+          "search actions",
         ),
       );
     },
@@ -760,22 +774,16 @@ export function createAuthorizationProviderService(
           Code.Unimplemented,
         );
       }
-      return create(
-        ExpandResponseSchema,
-        authorizationExpandResponseToTransport(
-          requiredAuthorizationResponse(
-            await provider.expand(authorizationExpandFromTransport(request)),
-            "expand",
-          ),
+      return authorizationExpandToProto(
+        requiredAuthorizationResponse(
+          await provider.expand(authorizationExpandInputFromProto(request)),
+          "expand",
         ),
       );
     },
     async getMetadata() {
-      const metadata = create(
-        AuthorizationMetadataSchema,
-        authorizationMetadataToTransport(
-          requiredAuthorizationResponse(await provider.getMetadata(), "metadata"),
-        ),
+      const metadata = authorizationMetadataToProto(
+        requiredAuthorizationResponse(await provider.getMetadata(), "metadata"),
       );
       if (provider.supportsEffectiveSearch()) {
         pushCapability(metadata.capabilities, "effective_search_resources");
@@ -787,54 +795,38 @@ export function createAuthorizationProviderService(
       return metadata;
     },
     async readRelationships(request) {
-      return create(
-        ReadRelationshipsResponseSchema,
-        authorizationReadRelationshipsResponseToTransport(
-          requiredAuthorizationResponse(
-            await provider.readRelationships(
-              authorizationReadRelationshipsFromTransport(request),
-            ),
-            "read relationships",
-          ),
+      return authorizationReadRelationshipsToProto(
+        requiredAuthorizationResponse(
+          await provider.readRelationships(authorizationReadRelationshipsInputFromProto(request)),
+          "read relationships",
         ),
       );
     },
     async writeRelationships(request) {
-      await provider.writeRelationships(
-        authorizationWriteRelationshipsFromTransport(request),
-      );
+      await provider.writeRelationships(authorizationWriteRelationshipsInputFromProto(request));
       return create(EmptySchema, {});
     },
     async getActiveModel() {
-      return create(
-        GetActiveModelResponseSchema,
-        authorizationGetActiveModelToTransport(
-          requiredAuthorizationResponse(
-            await provider.getActiveModel(),
-            "get active model",
-          ),
+      return authorizationGetActiveModelToProto(
+        requiredAuthorizationResponse(
+          await provider.getActiveModel(),
+          "get active model",
         ),
       );
     },
     async listModels(request) {
-      return create(
-        ListModelsResponseSchema,
-        authorizationListModelsResponseToTransport(
-          requiredAuthorizationResponse(
-            await provider.listModels(authorizationListModelsFromTransport(request)),
-            "list models",
-          ),
+      return authorizationListModelsToProto(
+        requiredAuthorizationResponse(
+          await provider.listModels(authorizationListModelsInputFromProto(request)),
+          "list models",
         ),
       );
     },
     async writeModel(request) {
-      return create(
-        AuthorizationModelRefSchema,
-        authorizationModelRefToTransport(
-          requiredAuthorizationResponse(
-            await provider.writeModel(authorizationWriteModelFromTransport(request)),
-            "write model",
-          ),
+      return authorizationModelRefToProto(
+        requiredAuthorizationResponse(
+          await provider.writeModel(authorizationWriteModelInputFromProto(request)),
+          "write model",
         ),
       );
     },
@@ -852,1024 +844,6 @@ function requiredAuthorizationResponse<T>(
     );
   }
   return value;
-}
-
-type SubjectTransport = MessageInitShape<typeof SubjectSchema>;
-type ResourceTransport = MessageInitShape<typeof ResourceSchema>;
-type SubjectSetTransport = MessageInitShape<typeof SubjectSetSchema>;
-type RelationshipTargetTransport = MessageInitShape<typeof RelationshipTargetSchema>;
-type ActionTransport = MessageInitShape<typeof ActionSchema>;
-type RelationshipTransport = MessageInitShape<typeof RelationshipSchema>;
-type RelationshipKeyTransport = MessageInitShape<typeof RelationshipKeySchema>;
-type AuthorizationModelTransport = MessageInitShape<typeof AuthorizationModelSchema>;
-type AuthorizationModelResourceTypeTransport = MessageInitShape<
-  typeof AuthorizationModelResourceTypeSchema
->;
-type AuthorizationModelRelationTransport = MessageInitShape<
-  typeof AuthorizationModelRelationSchema
->;
-type AuthorizationModelActionTransport = MessageInitShape<
-  typeof AuthorizationModelActionSchema
->;
-type AuthorizationModelAllowedTargetTransport = MessageInitShape<
-  typeof AuthorizationModelAllowedTargetSchema
->;
-type AuthorizationModelSubjectSetTargetTransport = MessageInitShape<
-  typeof AuthorizationModelSubjectSetTargetSchema
->;
-type AuthorizationModelRewriteTransport = MessageInitShape<
-  typeof AuthorizationModelRewriteSchema
->;
-type AuthorizationModelComputedUsersetTransport = MessageInitShape<
-  typeof AuthorizationModelComputedUsersetSchema
->;
-type AuthorizationModelTupleToUsersetTransport = MessageInitShape<
-  typeof AuthorizationModelTupleToUsersetSchema
->;
-type AuthorizationModelRewriteUnionTransport = MessageInitShape<
-  typeof AuthorizationModelRewriteUnionSchema
->;
-type AuthorizationModelRefTransport = MessageInitShape<
-  typeof AuthorizationModelRefSchema
->;
-type ExpandNodeTransport = MessageInitShape<typeof ExpandNodeSchema>;
-
-function authorizationSubjectToTransport(
-  value?: AuthorizationSubject,
-): SubjectTransport | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    type: value.type ?? "",
-    id: value.id ?? "",
-    properties: value.properties,
-  };
-}
-
-function authorizationSubjectFromTransport(
-  value?: SubjectTransport,
-): AuthorizationSubject | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    type: value.type ?? "",
-    id: value.id ?? "",
-    properties: value.properties,
-  };
-}
-
-function authorizationResourceToTransport(
-  value?: AuthorizationResource,
-): ResourceTransport | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    type: value.type ?? "",
-    id: value.id ?? "",
-    properties: value.properties,
-  };
-}
-
-function authorizationResourceFromTransport(
-  value?: ResourceTransport,
-): AuthorizationResource | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    type: value.type ?? "",
-    id: value.id ?? "",
-    properties: value.properties,
-  };
-}
-
-function authorizationSubjectSetToTransport(
-  value?: AuthorizationSubjectSet,
-): SubjectSetTransport | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    resource: authorizationResourceToTransport(value.resource),
-    relation: value.relation ?? "",
-  };
-}
-
-function authorizationSubjectSetFromTransport(
-  value?: SubjectSetTransport,
-): AuthorizationSubjectSet | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    resource: authorizationResourceFromTransport(value.resource),
-    relation: value.relation ?? "",
-  };
-}
-
-function authorizationRelationshipTargetToTransport(
-  value?: AuthorizationRelationshipTarget,
-): RelationshipTargetTransport | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value.subject !== undefined) {
-    return {
-      kind: {
-        case: "subject",
-        value: authorizationSubjectToTransport(value.subject) ?? {},
-      },
-    };
-  }
-  if (value.resource !== undefined) {
-    return {
-      kind: {
-        case: "resource",
-        value: authorizationResourceToTransport(value.resource) ?? {},
-      },
-    };
-  }
-  if (value.subjectSet !== undefined) {
-    return {
-      kind: {
-        case: "subjectSet",
-        value: authorizationSubjectSetToTransport(value.subjectSet) ?? {},
-      },
-    };
-  }
-  return undefined;
-}
-
-function authorizationRelationshipTargetFromTransport(
-  value?: RelationshipTargetTransport,
-): AuthorizationRelationshipTarget | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  switch (value.kind?.case) {
-    case "subject":
-      return { subject: authorizationSubjectFromTransport(value.kind.value) };
-    case "resource":
-      return { resource: authorizationResourceFromTransport(value.kind.value) };
-    case "subjectSet":
-      return {
-        subjectSet: authorizationSubjectSetFromTransport(value.kind.value),
-      };
-    default:
-      return {};
-  }
-}
-
-function authorizationActionToTransport(
-  value?: AuthorizationAction,
-): ActionTransport | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    name: value.name ?? "",
-    properties: value.properties,
-  };
-}
-
-function authorizationActionFromTransport(
-  value?: ActionTransport,
-): AuthorizationAction | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    name: value.name ?? "",
-    properties: value.properties,
-  };
-}
-
-function authorizationEvaluateToTransport(
-  value: AuthorizationEvaluateInput,
-): MessageInitShape<typeof AccessEvaluationRequestSchema> {
-  return {
-    subject: authorizationSubjectToTransport(value.subject),
-    action: authorizationActionToTransport(value.action),
-    resource: authorizationResourceToTransport(value.resource),
-    context: value.context,
-  };
-}
-
-function authorizationEvaluateFromTransport(
-  value: MessageInitShape<typeof AccessEvaluationRequestSchema>,
-): AuthorizationEvaluateInput {
-  return {
-    subject: authorizationSubjectFromTransport(value.subject),
-    action: authorizationActionFromTransport(value.action),
-    resource: authorizationResourceFromTransport(value.resource),
-    context: value.context,
-  };
-}
-
-function authorizationDecisionToTransport(
-  value: AuthorizationDecision,
-): MessageInitShape<typeof AccessDecisionSchema> {
-  return {
-    allowed: value.allowed ?? false,
-    context: value.context,
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationDecisionFromTransport(
-  value: MessageInitShape<typeof AccessDecisionSchema>,
-): AuthorizationDecision {
-  return {
-    allowed: value.allowed ?? false,
-    context: value.context,
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationEvaluateManyToTransport(
-  value: AuthorizationEvaluateManyInput,
-): MessageInitShape<typeof AccessEvaluationsRequestSchema> {
-  return {
-    requests: value.requests?.map(authorizationEvaluateToTransport) ?? [],
-  };
-}
-
-function authorizationEvaluateManyFromTransport(
-  value: MessageInitShape<typeof AccessEvaluationsRequestSchema>,
-): AuthorizationEvaluateManyInput {
-  return {
-    requests: value.requests?.map(authorizationEvaluateFromTransport) ?? [],
-  };
-}
-
-function authorizationEvaluationsResponseToTransport(
-  value: AuthorizationEvaluationsResponse,
-): MessageInitShape<typeof AccessEvaluationsResponseSchema> {
-  return {
-    decisions: value.decisions?.map(authorizationDecisionToTransport) ?? [],
-  };
-}
-
-function authorizationEvaluationsResponseFromTransport(
-  value: MessageInitShape<typeof AccessEvaluationsResponseSchema>,
-): AuthorizationEvaluationsResponse {
-  return {
-    decisions: value.decisions?.map(authorizationDecisionFromTransport) ?? [],
-  };
-}
-
-function authorizationSearchResourcesToTransport(
-  value: AuthorizationSearchResourcesInput,
-): MessageInitShape<typeof ResourceSearchRequestSchema> {
-  return {
-    subject: authorizationSubjectToTransport(value.subject),
-    action: authorizationActionToTransport(value.action),
-    resourceType: value.resourceType ?? "",
-    context: value.context,
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  };
-}
-
-function authorizationSearchResourcesFromTransport(
-  value: MessageInitShape<typeof ResourceSearchRequestSchema>,
-): AuthorizationSearchResourcesInput {
-  return {
-    subject: authorizationSubjectFromTransport(value.subject),
-    action: authorizationActionFromTransport(value.action),
-    resourceType: value.resourceType ?? "",
-    context: value.context,
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  };
-}
-
-function authorizationResourceSearchResponseToTransport(
-  value: AuthorizationResourceSearchResponse,
-): MessageInitShape<typeof ResourceSearchResponseSchema> {
-  return {
-    resources: value.resources?.map((entry) => authorizationResourceToTransport(entry)!) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationResourceSearchResponseFromTransport(
-  value: MessageInitShape<typeof ResourceSearchResponseSchema>,
-): AuthorizationResourceSearchResponse {
-  return {
-    resources: value.resources?.map((entry) => authorizationResourceFromTransport(entry)!) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationSearchSubjectsToTransport(
-  value: AuthorizationSearchSubjectsInput,
-): MessageInitShape<typeof SubjectSearchRequestSchema> {
-  return {
-    resource: authorizationResourceToTransport(value.resource),
-    action: authorizationActionToTransport(value.action),
-    subjectType: value.subjectType ?? "",
-    context: value.context,
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  };
-}
-
-function authorizationSearchSubjectsFromTransport(
-  value: MessageInitShape<typeof SubjectSearchRequestSchema>,
-): AuthorizationSearchSubjectsInput {
-  return {
-    resource: authorizationResourceFromTransport(value.resource),
-    action: authorizationActionFromTransport(value.action),
-    subjectType: value.subjectType ?? "",
-    context: value.context,
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  };
-}
-
-function authorizationSubjectSearchResponseToTransport(
-  value: AuthorizationSubjectSearchResponse,
-): MessageInitShape<typeof SubjectSearchResponseSchema> {
-  return {
-    subjects: value.subjects?.map((entry) => authorizationSubjectToTransport(entry)!) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationSubjectSearchResponseFromTransport(
-  value: MessageInitShape<typeof SubjectSearchResponseSchema>,
-): AuthorizationSubjectSearchResponse {
-  return {
-    subjects: value.subjects?.map((entry) => authorizationSubjectFromTransport(entry)!) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationEffectiveSearchSubjectsToTransport(
-  value: AuthorizationEffectiveSearchSubjectsInput,
-): MessageInitShape<typeof EffectiveSubjectSearchRequestSchema> {
-  return {
-    resource: authorizationResourceToTransport(value.resource),
-    action: authorizationActionToTransport(value.action),
-    context: value.context,
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  };
-}
-
-function authorizationEffectiveSearchSubjectsFromTransport(
-  value: MessageInitShape<typeof EffectiveSubjectSearchRequestSchema>,
-): AuthorizationEffectiveSearchSubjectsInput {
-  return {
-    resource: authorizationResourceFromTransport(value.resource),
-    action: authorizationActionFromTransport(value.action),
-    context: value.context,
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  };
-}
-
-function authorizationEffectiveSubjectSearchResponseToTransport(
-  value: AuthorizationEffectiveSubjectSearchResponse,
-): MessageInitShape<typeof EffectiveSubjectSearchResponseSchema> {
-  return {
-    targets: value.targets?.map((entry) => authorizationRelationshipTargetToTransport(entry)!) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-    truncated: value.truncated ?? false,
-  };
-}
-
-function authorizationEffectiveSubjectSearchResponseFromTransport(
-  value: MessageInitShape<typeof EffectiveSubjectSearchResponseSchema>,
-): AuthorizationEffectiveSubjectSearchResponse {
-  return {
-    targets: value.targets?.map((entry) => authorizationRelationshipTargetFromTransport(entry)!) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-    truncated: value.truncated ?? false,
-  };
-}
-
-function authorizationSearchActionsToTransport(
-  value: AuthorizationSearchActionsInput,
-): MessageInitShape<typeof ActionSearchRequestSchema> {
-  return {
-    subject: authorizationSubjectToTransport(value.subject),
-    resource: authorizationResourceToTransport(value.resource),
-    context: value.context,
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  };
-}
-
-function authorizationSearchActionsFromTransport(
-  value: MessageInitShape<typeof ActionSearchRequestSchema>,
-): AuthorizationSearchActionsInput {
-  return {
-    subject: authorizationSubjectFromTransport(value.subject),
-    resource: authorizationResourceFromTransport(value.resource),
-    context: value.context,
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  };
-}
-
-function authorizationActionSearchResponseToTransport(
-  value: AuthorizationActionSearchResponse,
-): MessageInitShape<typeof ActionSearchResponseSchema> {
-  return {
-    actions: value.actions?.map((entry) => authorizationActionToTransport(entry)!) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationActionSearchResponseFromTransport(
-  value: MessageInitShape<typeof ActionSearchResponseSchema>,
-): AuthorizationActionSearchResponse {
-  return {
-    actions: value.actions?.map((entry) => authorizationActionFromTransport(entry)!) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationMetadataToTransport(
-  value: AuthorizationMetadata,
-): MessageInitShape<typeof AuthorizationMetadataSchema> {
-  return {
-    capabilities: value.capabilities ?? [],
-    activeModelId: value.activeModelId ?? "",
-  };
-}
-
-function authorizationMetadataFromTransport(
-  value: MessageInitShape<typeof AuthorizationMetadataSchema>,
-): AuthorizationMetadata {
-  return {
-    capabilities: value.capabilities ?? [],
-    activeModelId: value.activeModelId ?? "",
-  };
-}
-
-function authorizationRelationshipToTransport(
-  value: AuthorizationRelationship,
-): RelationshipTransport {
-  return {
-    subject: authorizationSubjectToTransport(value.subject),
-    relation: value.relation ?? "",
-    resource: authorizationResourceToTransport(value.resource),
-    properties: value.properties,
-    target: authorizationRelationshipTargetToTransport(value.target),
-  };
-}
-
-function authorizationRelationshipFromTransport(
-  value: RelationshipTransport,
-): AuthorizationRelationship {
-  return {
-    subject: authorizationSubjectFromTransport(value.subject),
-    relation: value.relation ?? "",
-    resource: authorizationResourceFromTransport(value.resource),
-    properties: value.properties,
-    target: authorizationRelationshipTargetFromTransport(value.target),
-  };
-}
-
-function authorizationRelationshipKeyToTransport(
-  value: AuthorizationRelationshipKey,
-): RelationshipKeyTransport {
-  return {
-    subject: authorizationSubjectToTransport(value.subject),
-    relation: value.relation ?? "",
-    resource: authorizationResourceToTransport(value.resource),
-    target: authorizationRelationshipTargetToTransport(value.target),
-  };
-}
-
-function authorizationRelationshipKeyFromTransport(
-  value: RelationshipKeyTransport,
-): AuthorizationRelationshipKey {
-  return {
-    subject: authorizationSubjectFromTransport(value.subject),
-    relation: value.relation ?? "",
-    resource: authorizationResourceFromTransport(value.resource),
-    target: authorizationRelationshipTargetFromTransport(value.target),
-  };
-}
-
-function authorizationReadRelationshipsToTransport(
-  value: AuthorizationReadRelationshipsInput,
-): MessageInitShape<typeof ReadRelationshipsRequestSchema> {
-  return {
-    subject: authorizationSubjectToTransport(value.subject),
-    relation: value.relation ?? "",
-    resource: authorizationResourceToTransport(value.resource),
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-    modelId: value.modelId ?? "",
-    target: authorizationRelationshipTargetToTransport(value.target),
-  };
-}
-
-function authorizationReadRelationshipsFromTransport(
-  value: MessageInitShape<typeof ReadRelationshipsRequestSchema>,
-): AuthorizationReadRelationshipsInput {
-  return {
-    subject: authorizationSubjectFromTransport(value.subject),
-    relation: value.relation ?? "",
-    resource: authorizationResourceFromTransport(value.resource),
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-    modelId: value.modelId ?? "",
-    target: authorizationRelationshipTargetFromTransport(value.target),
-  };
-}
-
-function authorizationReadRelationshipsResponseToTransport(
-  value: AuthorizationReadRelationshipsResponse,
-): MessageInitShape<typeof ReadRelationshipsResponseSchema> {
-  return {
-    relationships:
-      value.relationships?.map(authorizationRelationshipToTransport) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationReadRelationshipsResponseFromTransport(
-  value: MessageInitShape<typeof ReadRelationshipsResponseSchema>,
-): AuthorizationReadRelationshipsResponse {
-  return {
-    relationships:
-      value.relationships?.map(authorizationRelationshipFromTransport) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationWriteRelationshipsToTransport(
-  value: AuthorizationWriteRelationshipsInput,
-): MessageInitShape<typeof WriteRelationshipsRequestSchema> {
-  return {
-    writes: value.writes?.map(authorizationRelationshipToTransport) ?? [],
-    deletes: value.deletes?.map(authorizationRelationshipKeyToTransport) ?? [],
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationWriteRelationshipsFromTransport(
-  value: MessageInitShape<typeof WriteRelationshipsRequestSchema>,
-): AuthorizationWriteRelationshipsInput {
-  return {
-    writes: value.writes?.map(authorizationRelationshipFromTransport) ?? [],
-    deletes: value.deletes?.map(authorizationRelationshipKeyFromTransport) ?? [],
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationModelToTransport(
-  value?: AuthorizationModel,
-): AuthorizationModelTransport | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    version: value.version ?? 0,
-    resourceTypes:
-      value.resourceTypes?.map(authorizationModelResourceTypeToTransport) ?? [],
-  };
-}
-
-function authorizationModelFromTransport(
-  value?: AuthorizationModelTransport,
-): AuthorizationModel | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    version: value.version ?? 0,
-    resourceTypes:
-      value.resourceTypes?.map(authorizationModelResourceTypeFromTransport) ?? [],
-  };
-}
-
-function authorizationModelResourceTypeToTransport(
-  value: AuthorizationModelResourceType,
-): AuthorizationModelResourceTypeTransport {
-  return {
-    name: value.name ?? "",
-    relations: value.relations?.map(authorizationModelRelationToTransport) ?? [],
-    actions: value.actions?.map(authorizationModelActionToTransport) ?? [],
-  };
-}
-
-function authorizationModelResourceTypeFromTransport(
-  value: AuthorizationModelResourceTypeTransport,
-): AuthorizationModelResourceType {
-  return {
-    name: value.name ?? "",
-    relations: value.relations?.map(authorizationModelRelationFromTransport) ?? [],
-    actions: value.actions?.map(authorizationModelActionFromTransport) ?? [],
-  };
-}
-
-function authorizationModelRelationToTransport(
-  value: AuthorizationModelRelation,
-): AuthorizationModelRelationTransport {
-  return {
-    name: value.name ?? "",
-    subjectTypes: value.subjectTypes ?? [],
-    allowedTargets:
-      value.allowedTargets?.map(authorizationModelAllowedTargetToTransport) ?? [],
-    rewrite: authorizationModelRewriteToTransport(value.rewrite),
-  };
-}
-
-function authorizationModelRelationFromTransport(
-  value: AuthorizationModelRelationTransport,
-): AuthorizationModelRelation {
-  return {
-    name: value.name ?? "",
-    subjectTypes: value.subjectTypes ?? [],
-    allowedTargets:
-      value.allowedTargets?.map(authorizationModelAllowedTargetFromTransport) ?? [],
-    rewrite: authorizationModelRewriteFromTransport(value.rewrite),
-  };
-}
-
-function authorizationModelActionToTransport(
-  value: AuthorizationModelAction,
-): AuthorizationModelActionTransport {
-  return {
-    name: value.name ?? "",
-    relations: value.relations ?? [],
-    rewrite: authorizationModelRewriteToTransport(value.rewrite),
-  };
-}
-
-function authorizationModelActionFromTransport(
-  value: AuthorizationModelActionTransport,
-): AuthorizationModelAction {
-  return {
-    name: value.name ?? "",
-    relations: value.relations ?? [],
-    rewrite: authorizationModelRewriteFromTransport(value.rewrite),
-  };
-}
-
-function authorizationModelAllowedTargetToTransport(
-  value: AuthorizationModelAllowedTarget,
-): AuthorizationModelAllowedTargetTransport {
-  if (value.subjectType !== undefined) {
-    return { kind: { case: "subjectType", value: value.subjectType } };
-  }
-  if (value.resourceType !== undefined) {
-    return { kind: { case: "resourceType", value: value.resourceType } };
-  }
-  if (value.subjectSet !== undefined) {
-    return {
-      kind: {
-        case: "subjectSet",
-        value: authorizationModelSubjectSetTargetToTransport(value.subjectSet),
-      },
-    };
-  }
-  return {};
-}
-
-function authorizationModelAllowedTargetFromTransport(
-  value: AuthorizationModelAllowedTargetTransport,
-): AuthorizationModelAllowedTarget {
-  switch (value.kind?.case) {
-    case "subjectType":
-      return { subjectType: value.kind.value };
-    case "resourceType":
-      return { resourceType: value.kind.value };
-    case "subjectSet":
-      return {
-        subjectSet: authorizationModelSubjectSetTargetFromTransport(
-          value.kind.value,
-        ),
-      };
-    default:
-      return {};
-  }
-}
-
-function authorizationModelSubjectSetTargetToTransport(
-  value: AuthorizationModelSubjectSetTarget,
-): AuthorizationModelSubjectSetTargetTransport {
-  return {
-    resourceType: value.resourceType ?? "",
-    relation: value.relation ?? "",
-  };
-}
-
-function authorizationModelSubjectSetTargetFromTransport(
-  value: AuthorizationModelSubjectSetTargetTransport,
-): AuthorizationModelSubjectSetTarget {
-  return {
-    resourceType: value.resourceType ?? "",
-    relation: value.relation ?? "",
-  };
-}
-
-function authorizationModelRewriteToTransport(
-  value?: AuthorizationModelRewrite,
-): AuthorizationModelRewriteTransport | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value.this !== undefined) {
-    return { kind: { case: "this", value: {} } };
-  }
-  if (value.computedUserset !== undefined) {
-    return {
-      kind: {
-        case: "computedUserset",
-        value: authorizationModelComputedUsersetToTransport(
-          value.computedUserset,
-        ),
-      },
-    };
-  }
-  if (value.tupleToUserset !== undefined) {
-    return {
-      kind: {
-        case: "tupleToUserset",
-        value: authorizationModelTupleToUsersetToTransport(
-          value.tupleToUserset,
-        ),
-      },
-    };
-  }
-  if (value.union !== undefined) {
-    return {
-      kind: {
-        case: "union",
-        value: authorizationModelRewriteUnionToTransport(value.union),
-      },
-    };
-  }
-  return {};
-}
-
-function authorizationModelRewriteFromTransport(
-  value?: AuthorizationModelRewriteTransport,
-): AuthorizationModelRewrite | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  switch (value.kind?.case) {
-    case "this":
-      return { this: {} };
-    case "computedUserset":
-      return {
-        computedUserset: authorizationModelComputedUsersetFromTransport(
-          value.kind.value,
-        ),
-      };
-    case "tupleToUserset":
-      return {
-        tupleToUserset: authorizationModelTupleToUsersetFromTransport(
-          value.kind.value,
-        ),
-      };
-    case "union":
-      return {
-        union: authorizationModelRewriteUnionFromTransport(value.kind.value),
-      };
-    default:
-      return {};
-  }
-}
-
-function authorizationModelComputedUsersetToTransport(
-  value: AuthorizationModelComputedUserset,
-): AuthorizationModelComputedUsersetTransport {
-  return { relation: value.relation ?? "" };
-}
-
-function authorizationModelComputedUsersetFromTransport(
-  value: AuthorizationModelComputedUsersetTransport,
-): AuthorizationModelComputedUserset {
-  return { relation: value.relation ?? "" };
-}
-
-function authorizationModelTupleToUsersetToTransport(
-  value: AuthorizationModelTupleToUserset,
-): AuthorizationModelTupleToUsersetTransport {
-  return {
-    tuplesetRelation: value.tuplesetRelation ?? "",
-    computedRelation: value.computedRelation ?? "",
-  };
-}
-
-function authorizationModelTupleToUsersetFromTransport(
-  value: AuthorizationModelTupleToUsersetTransport,
-): AuthorizationModelTupleToUserset {
-  return {
-    tuplesetRelation: value.tuplesetRelation ?? "",
-    computedRelation: value.computedRelation ?? "",
-  };
-}
-
-function authorizationModelRewriteUnionToTransport(
-  value: AuthorizationModelRewriteUnion,
-): AuthorizationModelRewriteUnionTransport {
-  return {
-    children: value.children?.map((entry) => authorizationModelRewriteToTransport(entry)!) ?? [],
-  };
-}
-
-function authorizationModelRewriteUnionFromTransport(
-  value: AuthorizationModelRewriteUnionTransport,
-): AuthorizationModelRewriteUnion {
-  return {
-    children: value.children?.map((entry) => authorizationModelRewriteFromTransport(entry)!) ?? [],
-  };
-}
-
-function authorizationModelRefToTransport(
-  value: AuthorizationModelRef,
-): AuthorizationModelRefTransport {
-  return {
-    id: value.id ?? "",
-    version: value.version ?? "",
-    createdAt:
-      value.createdAt === undefined
-        ? undefined
-        : timestampFromDate(value.createdAt),
-  };
-}
-
-function authorizationModelRefFromTransport(
-  value: AuthorizationModelRefTransport,
-): AuthorizationModelRef {
-  return {
-    id: value.id ?? "",
-    version: value.version ?? "",
-    createdAt:
-      value.createdAt === undefined
-        ? undefined
-        : dateFromTimestamp(
-            value.createdAt as Parameters<typeof dateFromTimestamp>[0],
-          ),
-  };
-}
-
-function authorizationGetActiveModelToTransport(
-  value: AuthorizationGetActiveModelResponse,
-): MessageInitShape<typeof GetActiveModelResponseSchema> {
-  return {
-    model:
-      value.model === undefined
-        ? undefined
-        : authorizationModelRefToTransport(value.model),
-  };
-}
-
-function authorizationGetActiveModelFromTransport(
-  value: MessageInitShape<typeof GetActiveModelResponseSchema>,
-): AuthorizationGetActiveModelResponse {
-  return {
-    model:
-      value.model === undefined
-        ? undefined
-        : authorizationModelRefFromTransport(value.model),
-  };
-}
-
-function authorizationListModelsToTransport(
-  value: AuthorizationListModelsInput,
-): MessageInitShape<typeof ListModelsRequestSchema> {
-  return {
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  };
-}
-
-function authorizationListModelsFromTransport(
-  value: MessageInitShape<typeof ListModelsRequestSchema>,
-): AuthorizationListModelsInput {
-  return {
-    pageSize: value.pageSize ?? 0,
-    pageToken: value.pageToken ?? "",
-  };
-}
-
-function authorizationListModelsResponseToTransport(
-  value: AuthorizationListModelsResponse,
-): MessageInitShape<typeof ListModelsResponseSchema> {
-  return {
-    models: value.models?.map(authorizationModelRefToTransport) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-  };
-}
-
-function authorizationListModelsResponseFromTransport(
-  value: MessageInitShape<typeof ListModelsResponseSchema>,
-): AuthorizationListModelsResponse {
-  return {
-    models: value.models?.map(authorizationModelRefFromTransport) ?? [],
-    nextPageToken: value.nextPageToken ?? "",
-  };
-}
-
-function authorizationWriteModelToTransport(
-  value: AuthorizationWriteModelInput,
-): MessageInitShape<typeof WriteModelRequestSchema> {
-  return { model: authorizationModelToTransport(value.model) };
-}
-
-function authorizationWriteModelFromTransport(
-  value: MessageInitShape<typeof WriteModelRequestSchema>,
-): AuthorizationWriteModelInput {
-  return { model: authorizationModelFromTransport(value.model) };
-}
-
-function authorizationExpandToTransport(
-  value: AuthorizationExpandInput,
-): MessageInitShape<typeof ExpandRequestSchema> {
-  return {
-    resource: authorizationResourceToTransport(value.resource),
-    relation: value.relation ?? "",
-    context: value.context,
-    maxDepth: value.maxDepth ?? 0,
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationExpandFromTransport(
-  value: MessageInitShape<typeof ExpandRequestSchema>,
-): AuthorizationExpandInput {
-  return {
-    resource: authorizationResourceFromTransport(value.resource),
-    relation: value.relation ?? "",
-    context: value.context,
-    maxDepth: value.maxDepth ?? 0,
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationExpandNodeToTransport(
-  value?: AuthorizationExpandNode,
-): ExpandNodeTransport | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    target: authorizationRelationshipTargetToTransport(value.target),
-    relation: value.relation ?? "",
-    children: value.children?.map((entry) => authorizationExpandNodeToTransport(entry)!) ?? [],
-  };
-}
-
-function authorizationExpandNodeFromTransport(
-  value?: ExpandNodeTransport,
-): AuthorizationExpandNode | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  return {
-    target: authorizationRelationshipTargetFromTransport(value.target),
-    relation: value.relation ?? "",
-    children: value.children?.map((entry) => authorizationExpandNodeFromTransport(entry)!) ?? [],
-  };
-}
-
-function authorizationExpandResponseToTransport(
-  value: AuthorizationExpandResponse,
-): MessageInitShape<typeof ExpandResponseSchema> {
-  return {
-    root: authorizationExpandNodeToTransport(value.root),
-    truncated: value.truncated ?? false,
-    cycleDetected: value.cycleDetected ?? false,
-    maxDepthReached: value.maxDepthReached ?? false,
-    modelId: value.modelId ?? "",
-  };
-}
-
-function authorizationExpandResponseFromTransport(
-  value: MessageInitShape<typeof ExpandResponseSchema>,
-): AuthorizationExpandResponse {
-  return {
-    root: authorizationExpandNodeFromTransport(value.root),
-    truncated: value.truncated ?? false,
-    cycleDetected: value.cycleDetected ?? false,
-    maxDepthReached: value.maxDepthReached ?? false,
-    modelId: value.modelId ?? "",
-  };
 }
 
 /**
@@ -1897,7 +871,7 @@ export function Authorization(): AuthorizationClient {
 export function authorizationSubject(
   type: string,
   id: string,
-  properties?: JsonObject,
+  properties?: JsonObjectInput,
 ): AuthorizationSubject {
   return properties === undefined ? { type, id } : { type, id, properties };
 }
@@ -1906,7 +880,7 @@ export function authorizationSubject(
 export function authorizationResource(
   type: string,
   id: string,
-  properties?: JsonObject,
+  properties?: JsonObjectInput,
 ): AuthorizationResource {
   return properties === undefined ? { type, id } : { type, id, properties };
 }
@@ -1923,14 +897,14 @@ export function authorizationSubjectSet(
 export function authorizationSubjectTarget(
   subject: AuthorizationSubject,
 ): AuthorizationRelationshipTarget {
-  return { subject };
+  return { kind: { case: "subject", value: subject } };
 }
 
 /** Creates a relationship target from a resource. */
 export function authorizationResourceTarget(
   resource: AuthorizationResource,
 ): AuthorizationRelationshipTarget {
-  return { resource };
+  return { kind: { case: "resource", value: resource } };
 }
 
 /** Creates a relationship target from a subject set. */
@@ -1938,7 +912,12 @@ export function authorizationSubjectSetTarget(
   resource: AuthorizationResource,
   relation: string,
 ): AuthorizationRelationshipTarget {
-  return { subjectSet: authorizationSubjectSet(resource, relation) };
+  return {
+    kind: {
+      case: "subjectSet",
+      value: authorizationSubjectSet(resource, relation),
+    },
+  };
 }
 
 /** Creates the managed authorization resource for an agent session. */
@@ -1951,7 +930,7 @@ export function agentSessionAuthorizationResource(
 /** Creates an authorization action reference. */
 export function authorizationAction(
   name: string,
-  properties?: JsonObject,
+  properties?: JsonObjectInput,
 ): AuthorizationAction {
   return properties === undefined ? { name } : { name, properties };
 }
@@ -1961,7 +940,7 @@ export function authorizationRelationship(
   subject: AuthorizationSubject,
   relation: string,
   resource: AuthorizationResource,
-  properties?: JsonObject,
+  properties?: JsonObjectInput,
 ): AuthorizationRelationship {
   return properties === undefined
     ? { subject, relation, resource }
@@ -1973,7 +952,7 @@ export function authorizationRelationshipWithTarget(
   target: AuthorizationRelationshipTarget,
   relation: string,
   resource: AuthorizationResource,
-  properties?: JsonObject,
+  properties?: JsonObjectInput,
 ): AuthorizationRelationship {
   return properties === undefined
     ? { target, relation, resource }
@@ -2032,6 +1011,785 @@ export function authorizationRelationshipKeyWithTarget(
   return { target, relation, resource };
 }
 
+function authorizationEvaluateInputToProto(input: AuthorizationEvaluateInput) {
+  return create(AccessEvaluationRequestSchema, {
+    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
+    action: input.action === undefined ? undefined : authorizationActionToProto(input.action),
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+    context: optionalStruct(input.context),
+  });
+}
+
+function authorizationEvaluateInputFromProto(
+  input: ProtoAccessEvaluationRequest,
+): AuthorizationEvaluateInput {
+  return {
+    subject: authorizationSubjectFromProto(input.subject),
+    action: authorizationActionFromProto(input.action),
+    resource: authorizationResourceFromProto(input.resource),
+    context: optionalObjectFromStruct(input.context),
+  };
+}
+
+function authorizationEvaluateManyInputToProto(input: AuthorizationEvaluateManyInput) {
+  return create(AccessEvaluationsRequestSchema, {
+    requests: input.requests?.map(authorizationEvaluateInputToProto) ?? [],
+  });
+}
+
+function authorizationEvaluateManyInputFromProto(
+  input: ProtoAccessEvaluationsRequest,
+): AuthorizationEvaluateManyInput {
+  return { requests: input.requests.map(authorizationEvaluateInputFromProto) };
+}
+
+function authorizationSearchResourcesInputToProto(input: AuthorizationSearchResourcesInput) {
+  return create(ResourceSearchRequestSchema, {
+    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
+    action: input.action === undefined ? undefined : authorizationActionToProto(input.action),
+    resourceType: input.resourceType ?? "",
+    context: optionalStruct(input.context),
+    pageSize: input.pageSize ?? 0,
+    pageToken: input.pageToken ?? "",
+  });
+}
+
+function authorizationSearchResourcesInputFromProto(
+  input: ProtoResourceSearchRequest,
+): AuthorizationSearchResourcesInput {
+  return {
+    subject: authorizationSubjectFromProto(input.subject),
+    action: authorizationActionFromProto(input.action),
+    resourceType: input.resourceType,
+    context: optionalObjectFromStruct(input.context),
+    pageSize: input.pageSize,
+    pageToken: input.pageToken,
+  };
+}
+
+function authorizationSearchSubjectsInputToProto(input: AuthorizationSearchSubjectsInput) {
+  return create(SubjectSearchRequestSchema, {
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+    action: input.action === undefined ? undefined : authorizationActionToProto(input.action),
+    subjectType: input.subjectType ?? "",
+    context: optionalStruct(input.context),
+    pageSize: input.pageSize ?? 0,
+    pageToken: input.pageToken ?? "",
+  });
+}
+
+function authorizationSearchSubjectsInputFromProto(
+  input: ProtoSubjectSearchRequest,
+): AuthorizationSearchSubjectsInput {
+  return {
+    resource: authorizationResourceFromProto(input.resource),
+    action: authorizationActionFromProto(input.action),
+    subjectType: input.subjectType,
+    context: optionalObjectFromStruct(input.context),
+    pageSize: input.pageSize,
+    pageToken: input.pageToken,
+  };
+}
+
+function authorizationEffectiveSearchSubjectsInputToProto(
+  input: AuthorizationEffectiveSearchSubjectsInput,
+) {
+  return create(EffectiveSubjectSearchRequestSchema, {
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+    action: input.action === undefined ? undefined : authorizationActionToProto(input.action),
+    context: optionalStruct(input.context),
+    pageSize: input.pageSize ?? 0,
+    pageToken: input.pageToken ?? "",
+  });
+}
+
+function authorizationEffectiveSearchSubjectsInputFromProto(
+  input: ProtoEffectiveSubjectSearchRequest,
+): AuthorizationEffectiveSearchSubjectsInput {
+  return {
+    resource: authorizationResourceFromProto(input.resource),
+    action: authorizationActionFromProto(input.action),
+    context: optionalObjectFromStruct(input.context),
+    pageSize: input.pageSize,
+    pageToken: input.pageToken,
+  };
+}
+
+function authorizationSearchActionsInputToProto(input: AuthorizationSearchActionsInput) {
+  return create(ActionSearchRequestSchema, {
+    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+    context: optionalStruct(input.context),
+    pageSize: input.pageSize ?? 0,
+    pageToken: input.pageToken ?? "",
+  });
+}
+
+function authorizationSearchActionsInputFromProto(
+  input: ProtoActionSearchRequest,
+): AuthorizationSearchActionsInput {
+  return {
+    subject: authorizationSubjectFromProto(input.subject),
+    resource: authorizationResourceFromProto(input.resource),
+    context: optionalObjectFromStruct(input.context),
+    pageSize: input.pageSize,
+    pageToken: input.pageToken,
+  };
+}
+
+function authorizationExpandInputToProto(input: AuthorizationExpandInput) {
+  return create(ExpandRequestSchema, {
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+    relation: input.relation ?? "",
+    context: optionalStruct(input.context),
+    maxDepth: input.maxDepth ?? 0,
+    modelId: input.modelId ?? "",
+  });
+}
+
+function authorizationExpandInputFromProto(input: ProtoExpandRequest): AuthorizationExpandInput {
+  return {
+    resource: authorizationResourceFromProto(input.resource),
+    relation: input.relation,
+    context: optionalObjectFromStruct(input.context),
+    maxDepth: input.maxDepth,
+    modelId: input.modelId,
+  };
+}
+
+function authorizationReadRelationshipsInputToProto(input: AuthorizationReadRelationshipsInput) {
+  return create(ReadRelationshipsRequestSchema, {
+    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
+    relation: input.relation ?? "",
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+    pageSize: input.pageSize ?? 0,
+    pageToken: input.pageToken ?? "",
+    modelId: input.modelId ?? "",
+    target: input.target === undefined ? undefined : authorizationRelationshipTargetToProto(input.target),
+  });
+}
+
+function authorizationReadRelationshipsInputFromProto(
+  input: ProtoReadRelationshipsRequest,
+): AuthorizationReadRelationshipsInput {
+  return {
+    subject: authorizationSubjectFromProto(input.subject),
+    relation: input.relation,
+    resource: authorizationResourceFromProto(input.resource),
+    pageSize: input.pageSize,
+    pageToken: input.pageToken,
+    modelId: input.modelId,
+    target: authorizationRelationshipTargetFromProto(input.target),
+  };
+}
+
+function authorizationWriteRelationshipsInputToProto(input: AuthorizationWriteRelationshipsInput) {
+  return create(WriteRelationshipsRequestSchema, {
+    writes: input.writes?.map(authorizationRelationshipToProto) ?? [],
+    deletes: input.deletes?.map(authorizationRelationshipKeyToProto) ?? [],
+    modelId: input.modelId ?? "",
+  });
+}
+
+function authorizationWriteRelationshipsInputFromProto(
+  input: ProtoWriteRelationshipsRequest,
+): AuthorizationWriteRelationshipsInput {
+  return {
+    writes: input.writes.map(authorizationRelationshipFromProto),
+    deletes: input.deletes.map(authorizationRelationshipKeyFromProto),
+    modelId: input.modelId,
+  };
+}
+
+function authorizationListModelsInputToProto(input: AuthorizationListModelsInput) {
+  return create(ListModelsRequestSchema, {
+    pageSize: input.pageSize ?? 0,
+    pageToken: input.pageToken ?? "",
+  });
+}
+
+function authorizationListModelsInputFromProto(input: ProtoListModelsRequest): AuthorizationListModelsInput {
+  return {
+    pageSize: input.pageSize,
+    pageToken: input.pageToken,
+  };
+}
+
+function authorizationWriteModelInputToProto(input: AuthorizationWriteModelInput) {
+  return create(WriteModelRequestSchema, {
+    model: input.model === undefined ? undefined : authorizationModelToProto(input.model),
+  });
+}
+
+function authorizationWriteModelInputFromProto(input: ProtoWriteModelRequest): AuthorizationWriteModelInput {
+  return {
+    model: authorizationModelFromProto(input.model),
+  };
+}
+
+function authorizationDecisionToProto(input: AuthorizationDecision) {
+  return create(AccessDecisionSchema, {
+    allowed: input.allowed ?? false,
+    context: optionalStruct(input.context),
+    modelId: input.modelId ?? "",
+  });
+}
+
+function authorizationDecisionFromProto(input: ProtoAccessDecision): AuthorizationDecision {
+  return {
+    allowed: input.allowed,
+    context: optionalObjectFromStruct(input.context),
+    modelId: input.modelId,
+  };
+}
+
+function authorizationEvaluationsResponseToProto(input: AuthorizationEvaluationsResponse) {
+  return create(AccessEvaluationsResponseSchema, {
+    decisions: input.decisions?.map(authorizationDecisionToProto) ?? [],
+  });
+}
+
+function authorizationEvaluationsResponseFromProto(
+  input: ProtoAccessEvaluationsResponse,
+): AuthorizationEvaluationsResponse {
+  return { decisions: input.decisions.map(authorizationDecisionFromProto) };
+}
+
+function authorizationResourceSearchToProto(input: AuthorizationResourceSearch) {
+  return create(ResourceSearchResponseSchema, {
+    resources: input.resources?.map(authorizationResourceToProto) ?? [],
+    nextPageToken: input.nextPageToken ?? "",
+    modelId: input.modelId ?? "",
+  });
+}
+
+function authorizationResourceSearchFromProto(input: ProtoResourceSearchResponse): AuthorizationResourceSearch {
+  return {
+    resources: input.resources.map(authorizationResourceFromProtoRequired),
+    nextPageToken: input.nextPageToken,
+    modelId: input.modelId,
+  };
+}
+
+function authorizationSubjectSearchToProto(input: AuthorizationSubjectSearch) {
+  return create(SubjectSearchResponseSchema, {
+    subjects: input.subjects?.map(authorizationSubjectToProto) ?? [],
+    nextPageToken: input.nextPageToken ?? "",
+    modelId: input.modelId ?? "",
+  });
+}
+
+function authorizationSubjectSearchFromProto(input: ProtoSubjectSearchResponse): AuthorizationSubjectSearch {
+  return {
+    subjects: input.subjects.map(authorizationSubjectFromProtoRequired),
+    nextPageToken: input.nextPageToken,
+    modelId: input.modelId,
+  };
+}
+
+function authorizationEffectiveSubjectSearchToProto(input: AuthorizationEffectiveSubjectSearch) {
+  return create(EffectiveSubjectSearchResponseSchema, {
+    targets: input.targets?.map(authorizationRelationshipTargetToProto) ?? [],
+    nextPageToken: input.nextPageToken ?? "",
+    modelId: input.modelId ?? "",
+    truncated: input.truncated ?? false,
+  });
+}
+
+function authorizationEffectiveSubjectSearchFromProto(
+  input: ProtoEffectiveSubjectSearchResponse,
+): AuthorizationEffectiveSubjectSearch {
+  return {
+    targets: input.targets.map(authorizationRelationshipTargetFromProtoRequired),
+    nextPageToken: input.nextPageToken,
+    modelId: input.modelId,
+    truncated: input.truncated,
+  };
+}
+
+function authorizationActionSearchToProto(input: AuthorizationActionSearch) {
+  return create(ActionSearchResponseSchema, {
+    actions: input.actions?.map(authorizationActionToProto) ?? [],
+    nextPageToken: input.nextPageToken ?? "",
+    modelId: input.modelId ?? "",
+  });
+}
+
+function authorizationActionSearchFromProto(input: ProtoActionSearchResponse): AuthorizationActionSearch {
+  return {
+    actions: input.actions.map(authorizationActionFromProtoRequired),
+    nextPageToken: input.nextPageToken,
+    modelId: input.modelId,
+  };
+}
+
+function authorizationMetadataToProto(input: AuthorizationMetadata) {
+  return create(AuthorizationMetadataSchema, {
+    capabilities: [...(input.capabilities ?? [])],
+    activeModelId: input.activeModelId ?? "",
+  });
+}
+
+function authorizationMetadataFromProto(input: ProtoAuthorizationMetadata): AuthorizationMetadata {
+  return {
+    capabilities: [...input.capabilities],
+    activeModelId: input.activeModelId,
+  };
+}
+
+function authorizationReadRelationshipsToProto(input: AuthorizationReadRelationships) {
+  return create(ReadRelationshipsResponseSchema, {
+    relationships: input.relationships?.map(authorizationRelationshipToProto) ?? [],
+    nextPageToken: input.nextPageToken ?? "",
+    modelId: input.modelId ?? "",
+  });
+}
+
+function authorizationReadRelationshipsFromProto(
+  input: ProtoReadRelationshipsResponse,
+): AuthorizationReadRelationships {
+  return {
+    relationships: input.relationships.map(authorizationRelationshipFromProto),
+    nextPageToken: input.nextPageToken,
+    modelId: input.modelId,
+  };
+}
+
+function authorizationGetActiveModelToProto(input: AuthorizationGetActiveModel) {
+  return create(GetActiveModelResponseSchema, {
+    model: input.model === undefined ? undefined : authorizationModelRefToProto(input.model),
+  });
+}
+
+function authorizationGetActiveModelFromProto(input: ProtoGetActiveModelResponse): AuthorizationGetActiveModel {
+  return {
+    model: authorizationModelRefFromProto(input.model),
+  };
+}
+
+function authorizationListModelsToProto(input: AuthorizationListModels) {
+  return create(ListModelsResponseSchema, {
+    models: input.models?.map(authorizationModelRefToProto) ?? [],
+    nextPageToken: input.nextPageToken ?? "",
+  });
+}
+
+function authorizationListModelsFromProto(input: ProtoListModelsResponse): AuthorizationListModels {
+  return {
+    models: input.models.map(authorizationModelRefFromProtoRequired),
+    nextPageToken: input.nextPageToken,
+  };
+}
+
+function authorizationSubjectToProto(input: AuthorizationSubject) {
+  return create(SubjectSchema, {
+    type: input.type,
+    id: input.id,
+    properties: optionalStruct(input.properties),
+  });
+}
+
+function authorizationSubjectFromProto(input?: ProtoSubject | undefined): AuthorizationSubject | undefined {
+  return input === undefined ? undefined : authorizationSubjectFromProtoRequired(input);
+}
+
+function authorizationSubjectFromProtoRequired(input: ProtoSubject): AuthorizationSubject {
+  return {
+    type: input.type,
+    id: input.id,
+    properties: optionalObjectFromStruct(input.properties),
+  };
+}
+
+function authorizationResourceToProto(input: AuthorizationResource) {
+  return create(ResourceSchema, {
+    type: input.type,
+    id: input.id,
+    properties: optionalStruct(input.properties),
+  });
+}
+
+function authorizationResourceFromProto(input?: ProtoResource | undefined): AuthorizationResource | undefined {
+  return input === undefined ? undefined : authorizationResourceFromProtoRequired(input);
+}
+
+function authorizationResourceFromProtoRequired(input: ProtoResource): AuthorizationResource {
+  return {
+    type: input.type,
+    id: input.id,
+    properties: optionalObjectFromStruct(input.properties),
+  };
+}
+
+function authorizationSubjectSetToProto(input: AuthorizationSubjectSet) {
+  return create(SubjectSetSchema, {
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+    relation: input.relation,
+  });
+}
+
+function authorizationSubjectSetFromProto(input?: ProtoSubjectSet | undefined): AuthorizationSubjectSet | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    resource: authorizationResourceFromProto(input.resource),
+    relation: input.relation,
+  };
+}
+
+function authorizationRelationshipTargetToProto(input: AuthorizationRelationshipTarget) {
+  switch (input.kind.case) {
+    case "subject":
+      return create(RelationshipTargetSchema, {
+        kind: { case: "subject", value: authorizationSubjectToProto(input.kind.value) },
+      });
+    case "resource":
+      return create(RelationshipTargetSchema, {
+        kind: { case: "resource", value: authorizationResourceToProto(input.kind.value) },
+      });
+    case "subjectSet":
+      return create(RelationshipTargetSchema, {
+        kind: { case: "subjectSet", value: authorizationSubjectSetToProto(input.kind.value) },
+      });
+    default:
+      return create(RelationshipTargetSchema);
+  }
+}
+
+function authorizationRelationshipTargetFromProto(
+  input?: ProtoRelationshipTarget | undefined,
+): AuthorizationRelationshipTarget | undefined {
+  return input === undefined ? undefined : authorizationRelationshipTargetFromProtoRequired(input);
+}
+
+function authorizationRelationshipTargetFromProtoRequired(
+  input: ProtoRelationshipTarget,
+): AuthorizationRelationshipTarget {
+  switch (input.kind.case) {
+    case "subject":
+      return { kind: { case: "subject", value: authorizationSubjectFromProtoRequired(input.kind.value) } };
+    case "resource":
+      return { kind: { case: "resource", value: authorizationResourceFromProtoRequired(input.kind.value) } };
+    case "subjectSet":
+      return { kind: { case: "subjectSet", value: authorizationSubjectSetFromProto(input.kind.value)! } };
+    default:
+      return { kind: { case: undefined } };
+  }
+}
+
+function authorizationActionToProto(input: AuthorizationAction) {
+  return create(ActionSchema, {
+    name: input.name,
+    properties: optionalStruct(input.properties),
+  });
+}
+
+function authorizationActionFromProto(input?: ProtoAction | undefined): AuthorizationAction | undefined {
+  return input === undefined ? undefined : authorizationActionFromProtoRequired(input);
+}
+
+function authorizationActionFromProtoRequired(input: ProtoAction): AuthorizationAction {
+  return {
+    name: input.name,
+    properties: optionalObjectFromStruct(input.properties),
+  };
+}
+
+function authorizationRelationshipToProto(input: AuthorizationRelationship) {
+  return create(RelationshipSchema, {
+    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
+    relation: input.relation,
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+    properties: optionalStruct(input.properties),
+    target: input.target === undefined ? undefined : authorizationRelationshipTargetToProto(input.target),
+  });
+}
+
+function authorizationRelationshipFromProto(input: ProtoRelationship): AuthorizationRelationship {
+  return {
+    subject: authorizationSubjectFromProto(input.subject),
+    relation: input.relation,
+    resource: authorizationResourceFromProto(input.resource),
+    properties: optionalObjectFromStruct(input.properties),
+    target: authorizationRelationshipTargetFromProto(input.target),
+  };
+}
+
+function authorizationRelationshipKeyToProto(input: AuthorizationRelationshipKey) {
+  return create(RelationshipKeySchema, {
+    subject: input.subject === undefined ? undefined : authorizationSubjectToProto(input.subject),
+    relation: input.relation,
+    resource: input.resource === undefined ? undefined : authorizationResourceToProto(input.resource),
+    target: input.target === undefined ? undefined : authorizationRelationshipTargetToProto(input.target),
+  });
+}
+
+function authorizationRelationshipKeyFromProto(input: ProtoRelationshipKey): AuthorizationRelationshipKey {
+  return {
+    subject: authorizationSubjectFromProto(input.subject),
+    relation: input.relation,
+    resource: authorizationResourceFromProto(input.resource),
+    target: authorizationRelationshipTargetFromProto(input.target),
+  };
+}
+
+function authorizationModelToProto(input: AuthorizationModel) {
+  return {
+    version: input.version ?? 0,
+    resourceTypes: input.resourceTypes?.map(authorizationModelResourceTypeToProto) ?? [],
+  };
+}
+
+function authorizationModelFromProto(input?: ProtoAuthorizationModel | undefined): AuthorizationModel | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    version: input.version,
+    resourceTypes: input.resourceTypes.map(authorizationModelResourceTypeFromProto),
+  };
+}
+
+function authorizationModelResourceTypeToProto(input: AuthorizationModelResourceType) {
+  return {
+    name: input.name,
+    relations: input.relations?.map(authorizationModelRelationToProto) ?? [],
+    actions: input.actions?.map(authorizationModelActionToProto) ?? [],
+  };
+}
+
+function authorizationModelResourceTypeFromProto(
+  input: ProtoAuthorizationModelResourceType,
+): AuthorizationModelResourceType {
+  return {
+    name: input.name,
+    relations: input.relations.map(authorizationModelRelationFromProto),
+    actions: input.actions.map(authorizationModelActionFromProto),
+  };
+}
+
+function authorizationModelRelationToProto(input: AuthorizationModelRelation) {
+  return {
+    name: input.name,
+    subjectTypes: [...(input.subjectTypes ?? [])],
+    allowedTargets: input.allowedTargets?.map(authorizationModelAllowedTargetToProto) ?? [],
+    rewrite: input.rewrite === undefined ? undefined : authorizationModelRewriteToProto(input.rewrite),
+  };
+}
+
+function authorizationModelRelationFromProto(
+  input: ProtoAuthorizationModelRelation,
+): AuthorizationModelRelation {
+  return {
+    name: input.name,
+    subjectTypes: [...input.subjectTypes],
+    allowedTargets: input.allowedTargets.map(authorizationModelAllowedTargetFromProto),
+    rewrite: authorizationModelRewriteFromProto(input.rewrite),
+  };
+}
+
+function authorizationModelActionToProto(input: AuthorizationModelAction) {
+  return {
+    name: input.name,
+    relations: [...(input.relations ?? [])],
+    rewrite: input.rewrite === undefined ? undefined : authorizationModelRewriteToProto(input.rewrite),
+  };
+}
+
+function authorizationModelActionFromProto(input: ProtoAuthorizationModelAction): AuthorizationModelAction {
+  return {
+    name: input.name,
+    relations: [...input.relations],
+    rewrite: authorizationModelRewriteFromProto(input.rewrite),
+  };
+}
+
+function authorizationModelAllowedTargetToProto(input: AuthorizationModelAllowedTarget) {
+  switch (input.kind.case) {
+    case "subjectType":
+      return { kind: { case: "subjectType" as const, value: input.kind.value } };
+    case "resourceType":
+      return { kind: { case: "resourceType" as const, value: input.kind.value } };
+    case "subjectSet":
+      return {
+        kind: {
+          case: "subjectSet" as const,
+          value: {
+            resourceType: input.kind.value.resourceType,
+            relation: input.kind.value.relation,
+          },
+        },
+      };
+    default:
+      return { kind: { case: undefined } };
+  }
+}
+
+function authorizationModelAllowedTargetFromProto(
+  input: ProtoAuthorizationModelAllowedTarget,
+): AuthorizationModelAllowedTarget {
+  switch (input.kind.case) {
+    case "subjectType":
+      return { kind: { case: "subjectType", value: input.kind.value } };
+    case "resourceType":
+      return { kind: { case: "resourceType", value: input.kind.value } };
+    case "subjectSet":
+      return {
+        kind: {
+          case: "subjectSet",
+          value: authorizationModelSubjectSetTargetFromProto(input.kind.value),
+        },
+      };
+    default:
+      return { kind: { case: undefined } };
+  }
+}
+
+function authorizationModelSubjectSetTargetFromProto(
+  input: ProtoAuthorizationModelSubjectSetTarget,
+): AuthorizationModelSubjectSetTarget {
+  return {
+    resourceType: input.resourceType,
+    relation: input.relation,
+  };
+}
+
+function authorizationModelRewriteToProto(input: AuthorizationModelRewrite): ProtoAuthorizationModelRewrite {
+  switch (input.kind.case) {
+    case "this":
+      return { kind: { case: "this", value: {} } } as ProtoAuthorizationModelRewrite;
+    case "computedUserset":
+      return {
+        kind: {
+          case: "computedUserset",
+          value: { relation: input.kind.value.relation },
+        },
+      } as ProtoAuthorizationModelRewrite;
+    case "tupleToUserset":
+      return {
+        kind: {
+          case: "tupleToUserset",
+          value: {
+            tuplesetRelation: input.kind.value.tuplesetRelation,
+            computedRelation: input.kind.value.computedRelation,
+          },
+        },
+      } as ProtoAuthorizationModelRewrite;
+    case "union":
+      return {
+        kind: {
+          case: "union",
+          value: {
+            children: input.kind.value.children?.map(authorizationModelRewriteToProto) ?? [],
+          },
+        },
+      } as ProtoAuthorizationModelRewrite;
+    default:
+      return { kind: { case: undefined } } as ProtoAuthorizationModelRewrite;
+  }
+}
+
+function authorizationModelRewriteFromProto(
+  input?: ProtoAuthorizationModelRewrite | undefined,
+): AuthorizationModelRewrite | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  switch (input.kind.case) {
+    case "this":
+      return { kind: { case: "this", value: {} } };
+    case "computedUserset":
+      return { kind: { case: "computedUserset", value: authorizationComputedUsersetFromProto(input.kind.value) } };
+    case "tupleToUserset":
+      return { kind: { case: "tupleToUserset", value: authorizationTupleToUsersetFromProto(input.kind.value) } };
+    case "union":
+      return { kind: { case: "union", value: authorizationRewriteUnionFromProto(input.kind.value) } };
+    default:
+      return { kind: { case: undefined } };
+  }
+}
+
+function authorizationComputedUsersetFromProto(
+  input: ProtoAuthorizationModelComputedUserset,
+): AuthorizationModelComputedUserset {
+  return { relation: input.relation };
+}
+
+function authorizationTupleToUsersetFromProto(
+  input: ProtoAuthorizationModelTupleToUserset,
+): AuthorizationModelTupleToUserset {
+  return {
+    tuplesetRelation: input.tuplesetRelation,
+    computedRelation: input.computedRelation,
+  };
+}
+
+function authorizationRewriteUnionFromProto(
+  input: ProtoAuthorizationModelRewriteUnion,
+): AuthorizationModelRewriteUnion {
+  return { children: input.children.map((child) => authorizationModelRewriteFromProto(child)!) };
+}
+
+function authorizationModelRefToProto(input: AuthorizationModelRef) {
+  return create(AuthorizationModelRefSchema, {
+    id: input.id,
+    version: input.version,
+    createdAt: input.createdAt === undefined ? undefined : timestampFromDate(input.createdAt),
+  });
+}
+
+function authorizationModelRefFromProto(input?: ProtoAuthorizationModelRef | undefined): AuthorizationModelRef | undefined {
+  return input === undefined ? undefined : authorizationModelRefFromProtoRequired(input);
+}
+
+function authorizationModelRefFromProtoRequired(input: ProtoAuthorizationModelRef): AuthorizationModelRef {
+  return {
+    id: input.id,
+    version: input.version,
+    createdAt: input.createdAt === undefined ? undefined : dateFromTimestamp(input.createdAt),
+  };
+}
+
+function authorizationExpandToProto(input: AuthorizationExpand) {
+  return create(ExpandResponseSchema, {
+    root: input.root === undefined ? undefined : authorizationExpandNodeToProto(input.root),
+    truncated: input.truncated ?? false,
+    cycleDetected: input.cycleDetected ?? false,
+    maxDepthReached: input.maxDepthReached ?? false,
+    modelId: input.modelId ?? "",
+  });
+}
+
+function authorizationExpandFromProto(input: ProtoExpandResponse): AuthorizationExpand {
+  return {
+    root: authorizationExpandNodeFromProto(input.root),
+    truncated: input.truncated,
+    cycleDetected: input.cycleDetected,
+    maxDepthReached: input.maxDepthReached,
+    modelId: input.modelId,
+  };
+}
+
+function authorizationExpandNodeToProto(input: AuthorizationExpandNode): ProtoExpandNode {
+  return create(ExpandNodeSchema, {
+    target: input.target === undefined ? undefined : authorizationRelationshipTargetToProto(input.target),
+    relation: input.relation ?? "",
+    children: input.children?.map(authorizationExpandNodeToProto) ?? [],
+  });
+}
+
+function authorizationExpandNodeFromProto(input?: ProtoExpandNode | undefined): AuthorizationExpandNode | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    target: authorizationRelationshipTargetFromProto(input.target),
+    relation: input.relation,
+    children: input.children.map((child) => authorizationExpandNodeFromProto(child)!),
+  };
+}
+
 function resolveAuthorizationSocketTarget(
   socketPath = process.env[ENV_AUTHORIZATION_SOCKET],
 ): string {
@@ -2044,7 +1802,7 @@ function resolveAuthorizationSocketTarget(
 
 function authorizationTransportOptions(rawTarget: string): {
   baseUrl: string;
-  nodeOptions?: { path: string } | undefined;
+  nodeOptions?: { path: string };
 } {
   const target = rawTarget.trim();
   if (!target) {

@@ -7,39 +7,31 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
   WorkflowManagerHost as WorkflowManagerHostService,
-  type BoundWorkflowDefinition,
-  type BoundWorkflowEventTrigger,
-  type BoundWorkflowRun,
-  type BoundWorkflowSchedule,
-  type BoundWorkflowTarget,
-  type ManagedWorkflowDefinition,
-  type ManagedWorkflowRun,
-  type ManagedWorkflowRunSignal,
-  type ManagedWorkflowSchedule,
-  type ManagedWorkflowEventTrigger,
-  type WorkflowEvent,
-  type WorkflowEventMatch,
-  type WorkflowSignal,
 } from "./internal/gen/v1/workflow_pb.ts";
 import type { Request } from "./api.ts";
 import {
-  WorkflowRunStatus,
-  boundWorkflowDefinitionInputFromDefinition,
-  boundWorkflowRunInputFromRun,
-  boundWorkflowEventTriggerInputFromTrigger,
-  boundWorkflowScheduleInputFromSchedule,
-  boundWorkflowTarget,
-  workflowEvent,
-  workflowEventInputFromEvent,
-  workflowEventMatch,
-  workflowSignal,
-  workflowSignalInputFromSignal,
-  type BoundWorkflowRunInput,
+  boundWorkflowTargetToProto,
+  managedWorkflowDefinitionFromProto,
+  managedWorkflowEventTriggerFromProto,
+  managedWorkflowRunFromProto,
+  managedWorkflowRunSignalFromProto,
+  managedWorkflowScheduleFromProto,
+  workflowEventFromProto,
+  workflowEventMatchToProto,
+  workflowEventToProto,
+  workflowSignalToProto,
+  type BoundWorkflowTarget,
   type BoundWorkflowTargetInput,
-  type WorkflowActorInput,
+  type ManagedWorkflowDefinition,
+  type ManagedWorkflowEventTrigger,
+  type ManagedWorkflowRun,
+  type ManagedWorkflowRunSignal,
+  type ManagedWorkflowSchedule,
+  type WorkflowEvent,
   type WorkflowEventInput,
+  type WorkflowEventMatch,
   type WorkflowEventMatchInput,
-  type WorkflowRunTriggerInput,
+  type WorkflowSignal,
   type WorkflowSignalInput,
 } from "./workflow.ts";
 
@@ -53,8 +45,8 @@ const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER =
 
 /** Shape accepted when starting a workflow run. */
 export interface WorkflowManagerStartRunInput {
-  providerName?: string | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
+  providerName: string;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   idempotencyKey?: string | undefined;
   workflowKey?: string | undefined;
   definitionId?: string | undefined;
@@ -63,23 +55,23 @@ export interface WorkflowManagerStartRunInput {
 /** Shape accepted when signaling an existing workflow run. */
 export interface WorkflowManagerSignalRunInput {
   runId: string;
-  signal?: WorkflowSignalInput | undefined;
+  signal?: WorkflowSignal | WorkflowSignalInput | undefined;
 }
 
 /** Shape accepted when signaling a run or starting it if missing. */
 export interface WorkflowManagerSignalOrStartRunInput {
-  providerName?: string | undefined;
-  workflowKey?: string | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
+  providerName: string;
+  workflowKey: string;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   idempotencyKey?: string | undefined;
-  signal?: WorkflowSignalInput | undefined;
+  signal?: WorkflowSignal | WorkflowSignalInput | undefined;
   definitionId?: string | undefined;
 }
 
 /** Shape accepted when creating a workflow definition. */
 export interface WorkflowManagerCreateDefinitionInput {
-  providerName?: string | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
+  providerName: string;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   idempotencyKey?: string | undefined;
 }
 
@@ -92,7 +84,7 @@ export interface WorkflowManagerGetDefinitionInput {
 export interface WorkflowManagerUpdateDefinitionInput {
   definitionId: string;
   providerName?: string | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
 }
 
 /** Shape accepted when deleting a workflow definition. */
@@ -102,10 +94,10 @@ export interface WorkflowManagerDeleteDefinitionInput {
 
 /** Shape accepted when creating a workflow schedule. */
 export interface WorkflowManagerCreateScheduleInput {
-  providerName?: string | undefined;
-  cron?: string | undefined;
+  providerName: string;
+  cron: string;
   timezone?: string | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   paused?: boolean | undefined;
   idempotencyKey?: string | undefined;
   definitionId?: string | undefined;
@@ -113,9 +105,9 @@ export interface WorkflowManagerCreateScheduleInput {
 
 /** Shape accepted when creating an event trigger. */
 export interface WorkflowManagerCreateTriggerInput {
-  providerName?: string | undefined;
-  match?: WorkflowEventMatchInput | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
+  providerName: string;
+  match?: WorkflowEventMatch | WorkflowEventMatchInput | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   paused?: boolean | undefined;
   idempotencyKey?: string | undefined;
   definitionId?: string | undefined;
@@ -137,7 +129,7 @@ export interface WorkflowManagerUpdateScheduleInput {
   providerName?: string | undefined;
   cron?: string | undefined;
   timezone?: string | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   paused?: boolean | undefined;
   definitionId?: string | undefined;
 }
@@ -146,8 +138,8 @@ export interface WorkflowManagerUpdateScheduleInput {
 export interface WorkflowManagerUpdateTriggerInput {
   triggerId: string;
   providerName?: string | undefined;
-  match?: WorkflowEventMatchInput | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
+  match?: WorkflowEventMatch | WorkflowEventMatchInput | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   paused?: boolean | undefined;
   definitionId?: string | undefined;
 }
@@ -184,85 +176,9 @@ export interface WorkflowManagerResumeTriggerInput {
 
 /** Shape accepted when publishing a workflow event. */
 export interface WorkflowManagerPublishEventInput {
+  event?: WorkflowEvent | WorkflowEventInput | undefined;
   providerName?: string | undefined;
-  event?: WorkflowEventInput | undefined;
 }
-
-export interface WorkflowManagerBoundRun {
-  id?: string | undefined;
-  status?: WorkflowRunStatus | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
-  trigger?: WorkflowRunTriggerInput | undefined;
-  createdAt?: Date | undefined;
-  startedAt?: Date | undefined;
-  completedAt?: Date | undefined;
-  statusMessage?: string | undefined;
-  resultBody?: string | undefined;
-  createdBy?: WorkflowActorInput | undefined;
-  executionRef?: string | undefined;
-  workflowKey?: string | undefined;
-}
-
-export interface WorkflowManagerBoundDefinition {
-  id?: string | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
-  createdBy?: WorkflowActorInput | undefined;
-  createdAt?: Date | undefined;
-}
-
-export interface WorkflowManagerBoundSchedule {
-  id?: string | undefined;
-  cron?: string | undefined;
-  timezone?: string | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
-  paused?: boolean | undefined;
-  createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
-  nextRunAt?: Date | undefined;
-  createdBy?: WorkflowActorInput | undefined;
-  executionRef?: string | undefined;
-}
-
-export interface WorkflowManagerBoundEventTrigger {
-  id?: string | undefined;
-  match?: WorkflowEventMatchInput | undefined;
-  target?: BoundWorkflowTargetInput | undefined;
-  paused?: boolean | undefined;
-  createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
-  createdBy?: WorkflowActorInput | undefined;
-  executionRef?: string | undefined;
-}
-
-export interface WorkflowManagerRun {
-  providerName?: string | undefined;
-  run?: WorkflowManagerBoundRun | undefined;
-}
-
-export interface WorkflowManagerRunSignal {
-  providerName?: string | undefined;
-  run?: WorkflowManagerBoundRun | undefined;
-  signal?: WorkflowSignalInput | undefined;
-  startedRun?: boolean | undefined;
-  workflowKey?: string | undefined;
-}
-
-export interface WorkflowManagerDefinition {
-  providerName?: string | undefined;
-  definition?: WorkflowManagerBoundDefinition | undefined;
-}
-
-export interface WorkflowManagerSchedule {
-  providerName?: string | undefined;
-  schedule?: WorkflowManagerBoundSchedule | undefined;
-}
-
-export interface WorkflowManagerEventTrigger {
-  providerName?: string | undefined;
-  trigger?: WorkflowManagerBoundEventTrigger | undefined;
-}
-
-export type WorkflowManagerPublishedEvent = WorkflowEventInput;
 
 /**
  * Client for creating and controlling workflow schedules and event triggers.
@@ -304,68 +220,87 @@ export class WorkflowManager {
   /** Starts a workflow run immediately. */
   async startRun(
     request: WorkflowManagerStartRunInput,
-  ): Promise<WorkflowManagerRun> {
-    return workflowManagerRunFromProto(await this.client.startRun({
-      ...workflowManagerStartRunRequest(request),
-      idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowRun> {
+    return managedWorkflowRunFromProto(
+      await this.client.startRun({
+        providerName: request.providerName,
+        target: boundWorkflowTargetToProto(request.target),
+        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+        workflowKey: request.workflowKey ?? "",
+        invocationToken: this.invocationToken,
+        definitionId: request.definitionId ?? "",
+      }),
+    );
   }
 
   /** Signals an existing workflow run. */
   async signalRun(
     request: WorkflowManagerSignalRunInput,
-  ): Promise<WorkflowManagerRunSignal> {
-    return workflowManagerRunSignalFromProto(await this.client.signalRun({
-      runId: request.runId,
-      signal: request.signal === undefined ? undefined : workflowSignal(request.signal),
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowRunSignal> {
+    return managedWorkflowRunSignalFromProto(
+      await this.client.signalRun({
+        runId: request.runId,
+        signal: workflowSignalToProto(request.signal),
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Signals a workflow run, or starts it when no run exists for the key. */
   async signalOrStartRun(
     request: WorkflowManagerSignalOrStartRunInput,
-  ): Promise<WorkflowManagerRunSignal> {
-    return workflowManagerRunSignalFromProto(await this.client.signalOrStartRun({
-      ...workflowManagerSignalOrStartRunRequest(request),
-      idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowRunSignal> {
+    return managedWorkflowRunSignalFromProto(
+      await this.client.signalOrStartRun({
+        providerName: request.providerName,
+        workflowKey: request.workflowKey,
+        target: boundWorkflowTargetToProto(request.target),
+        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+        signal: workflowSignalToProto(request.signal),
+        invocationToken: this.invocationToken,
+        definitionId: request.definitionId ?? "",
+      }),
+    );
   }
 
   /** Creates a reusable workflow definition. */
   async createDefinition(
     request: WorkflowManagerCreateDefinitionInput,
-  ): Promise<WorkflowManagerDefinition> {
-    return workflowManagerDefinitionFromProto(await this.client.createDefinition({
-      providerName: request.providerName ?? "",
-      target: request.target === undefined ? undefined : boundWorkflowTarget(request.target),
-      idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowDefinition> {
+    return managedWorkflowDefinitionFromProto(
+      await this.client.createDefinition({
+        providerName: request.providerName,
+        target: boundWorkflowTargetToProto(request.target),
+        invocationToken: this.invocationToken,
+        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+      }),
+    );
   }
 
   /** Fetches one workflow definition. */
   async getDefinition(
     request: WorkflowManagerGetDefinitionInput,
-  ): Promise<WorkflowManagerDefinition> {
-    return workflowManagerDefinitionFromProto(await this.client.getDefinition({
-      definitionId: request.definitionId,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowDefinition> {
+    return managedWorkflowDefinitionFromProto(
+      await this.client.getDefinition({
+        definitionId: request.definitionId,
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Updates a workflow definition. */
   async updateDefinition(
     request: WorkflowManagerUpdateDefinitionInput,
-  ): Promise<WorkflowManagerDefinition> {
-    return workflowManagerDefinitionFromProto(await this.client.updateDefinition({
-      definitionId: request.definitionId,
-      providerName: request.providerName ?? "",
-      target: request.target === undefined ? undefined : boundWorkflowTarget(request.target),
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowDefinition> {
+    return managedWorkflowDefinitionFromProto(
+      await this.client.updateDefinition({
+        definitionId: request.definitionId,
+        providerName: request.providerName ?? "",
+        target: boundWorkflowTargetToProto(request.target),
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Deletes a workflow definition. */
@@ -381,32 +316,49 @@ export class WorkflowManager {
   /** Creates a workflow schedule. */
   async createSchedule(
     request: WorkflowManagerCreateScheduleInput,
-  ): Promise<WorkflowManagerSchedule> {
-    return workflowManagerScheduleFromProto(await this.client.createSchedule({
-      ...workflowManagerCreateScheduleRequest(request),
-      idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowSchedule> {
+    return managedWorkflowScheduleFromProto(
+      await this.client.createSchedule({
+        providerName: request.providerName,
+        cron: request.cron,
+        timezone: request.timezone ?? "",
+        target: boundWorkflowTargetToProto(request.target),
+        paused: request.paused ?? false,
+        invocationToken: this.invocationToken,
+        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+        definitionId: request.definitionId ?? "",
+      }),
+    );
   }
 
   /** Fetches one workflow schedule. */
   async getSchedule(
     request: WorkflowManagerGetScheduleInput,
-  ): Promise<WorkflowManagerSchedule> {
-    return workflowManagerScheduleFromProto(await this.client.getSchedule({
-      scheduleId: request.scheduleId,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowSchedule> {
+    return managedWorkflowScheduleFromProto(
+      await this.client.getSchedule({
+        scheduleId: request.scheduleId,
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Updates a workflow schedule. */
   async updateSchedule(
     request: WorkflowManagerUpdateScheduleInput,
-  ): Promise<WorkflowManagerSchedule> {
-    return workflowManagerScheduleFromProto(await this.client.updateSchedule({
-      ...workflowManagerUpdateScheduleRequest(request),
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowSchedule> {
+    return managedWorkflowScheduleFromProto(
+      await this.client.updateSchedule({
+        scheduleId: request.scheduleId,
+        providerName: request.providerName ?? "",
+        cron: request.cron ?? "",
+        timezone: request.timezone ?? "",
+        target: boundWorkflowTargetToProto(request.target),
+        paused: request.paused ?? false,
+        invocationToken: this.invocationToken,
+        definitionId: request.definitionId ?? "",
+      }),
+    );
   }
 
   /** Deletes a workflow schedule. */
@@ -422,52 +374,71 @@ export class WorkflowManager {
   /** Pauses a workflow schedule. */
   async pauseSchedule(
     request: WorkflowManagerPauseScheduleInput,
-  ): Promise<WorkflowManagerSchedule> {
-    return workflowManagerScheduleFromProto(await this.client.pauseSchedule({
-      scheduleId: request.scheduleId,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowSchedule> {
+    return managedWorkflowScheduleFromProto(
+      await this.client.pauseSchedule({
+        scheduleId: request.scheduleId,
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Resumes a workflow schedule. */
   async resumeSchedule(
     request: WorkflowManagerResumeScheduleInput,
-  ): Promise<WorkflowManagerSchedule> {
-    return workflowManagerScheduleFromProto(await this.client.resumeSchedule({
-      scheduleId: request.scheduleId,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowSchedule> {
+    return managedWorkflowScheduleFromProto(
+      await this.client.resumeSchedule({
+        scheduleId: request.scheduleId,
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Creates an event trigger. */
   async createTrigger(
     request: WorkflowManagerCreateTriggerInput,
-  ): Promise<WorkflowManagerEventTrigger> {
-    return workflowManagerEventTriggerFromProto(await this.client.createEventTrigger({
-      ...workflowManagerCreateTriggerRequest(request),
-      idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowEventTrigger> {
+    return managedWorkflowEventTriggerFromProto(
+      await this.client.createEventTrigger({
+        providerName: request.providerName,
+        match: workflowEventMatchToProto(request.match),
+        target: boundWorkflowTargetToProto(request.target),
+        paused: request.paused ?? false,
+        invocationToken: this.invocationToken,
+        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
+        definitionId: request.definitionId ?? "",
+      }),
+    );
   }
 
   /** Fetches one event trigger. */
   async getTrigger(
     request: WorkflowManagerGetTriggerInput,
-  ): Promise<WorkflowManagerEventTrigger> {
-    return workflowManagerEventTriggerFromProto(await this.client.getEventTrigger({
-      triggerId: request.triggerId,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowEventTrigger> {
+    return managedWorkflowEventTriggerFromProto(
+      await this.client.getEventTrigger({
+        triggerId: request.triggerId,
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Updates an event trigger. */
   async updateTrigger(
     request: WorkflowManagerUpdateTriggerInput,
-  ): Promise<WorkflowManagerEventTrigger> {
-    return workflowManagerEventTriggerFromProto(await this.client.updateEventTrigger({
-      ...workflowManagerUpdateTriggerRequest(request),
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowEventTrigger> {
+    return managedWorkflowEventTriggerFromProto(
+      await this.client.updateEventTrigger({
+        triggerId: request.triggerId,
+        providerName: request.providerName ?? "",
+        match: workflowEventMatchToProto(request.match),
+        target: boundWorkflowTargetToProto(request.target),
+        paused: request.paused ?? false,
+        invocationToken: this.invocationToken,
+        definitionId: request.definitionId ?? "",
+      }),
+    );
   }
 
   /** Deletes an event trigger. */
@@ -483,231 +454,43 @@ export class WorkflowManager {
   /** Pauses an event trigger. */
   async pauseTrigger(
     request: WorkflowManagerPauseTriggerInput,
-  ): Promise<WorkflowManagerEventTrigger> {
-    return workflowManagerEventTriggerFromProto(await this.client.pauseEventTrigger({
-      triggerId: request.triggerId,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowEventTrigger> {
+    return managedWorkflowEventTriggerFromProto(
+      await this.client.pauseEventTrigger({
+        triggerId: request.triggerId,
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Resumes an event trigger. */
   async resumeTrigger(
     request: WorkflowManagerResumeTriggerInput,
-  ): Promise<WorkflowManagerEventTrigger> {
-    return workflowManagerEventTriggerFromProto(await this.client.resumeEventTrigger({
-      triggerId: request.triggerId,
-      invocationToken: this.invocationToken,
-    }));
+  ): Promise<ManagedWorkflowEventTrigger> {
+    return managedWorkflowEventTriggerFromProto(
+      await this.client.resumeEventTrigger({
+        triggerId: request.triggerId,
+        invocationToken: this.invocationToken,
+      }),
+    );
   }
 
   /** Publishes an event into the workflow manager. */
   async publishEvent(
     request: WorkflowManagerPublishEventInput,
-  ): Promise<WorkflowManagerPublishedEvent> {
-    const response = await this.client.publishEvent({
-      providerName: request.providerName ?? "",
-      event: request.event === undefined ? undefined : workflowEvent(request.event),
-      invocationToken: this.invocationToken,
-    });
-    return workflowEventInputFromEvent(response)!;
+  ): Promise<WorkflowEvent> {
+    const event = workflowEventFromProto(
+      await this.client.publishEvent({
+        event: workflowEventToProto(request.event),
+        invocationToken: this.invocationToken,
+        providerName: request.providerName ?? "",
+      }),
+    );
+    if (event === undefined) {
+      throw new Error("WorkflowManager.publishEvent returned no event");
+    }
+    return event;
   }
-}
-
-function workflowManagerStartRunRequest(request: WorkflowManagerStartRunInput) {
-  return {
-    providerName: request.providerName ?? "",
-    target: request.target === undefined ? undefined : boundWorkflowTarget(request.target),
-    idempotencyKey: request.idempotencyKey ?? "",
-    workflowKey: request.workflowKey ?? "",
-    definitionId: request.definitionId ?? "",
-  };
-}
-
-function workflowManagerSignalOrStartRunRequest(
-  request: WorkflowManagerSignalOrStartRunInput,
-) {
-  return {
-    providerName: request.providerName ?? "",
-    workflowKey: request.workflowKey ?? "",
-    target: request.target === undefined ? undefined : boundWorkflowTarget(request.target),
-    idempotencyKey: request.idempotencyKey ?? "",
-    signal: request.signal === undefined ? undefined : workflowSignal(request.signal),
-    definitionId: request.definitionId ?? "",
-  };
-}
-
-function workflowManagerCreateScheduleRequest(
-  request: WorkflowManagerCreateScheduleInput,
-) {
-  return {
-    providerName: request.providerName ?? "",
-    cron: request.cron ?? "",
-    timezone: request.timezone ?? "",
-    target: request.target === undefined ? undefined : boundWorkflowTarget(request.target),
-    paused: request.paused ?? false,
-    idempotencyKey: request.idempotencyKey ?? "",
-    definitionId: request.definitionId ?? "",
-  };
-}
-
-function workflowManagerUpdateScheduleRequest(
-  request: WorkflowManagerUpdateScheduleInput,
-) {
-  return {
-    scheduleId: request.scheduleId,
-    providerName: request.providerName ?? "",
-    cron: request.cron ?? "",
-    timezone: request.timezone ?? "",
-    target: request.target === undefined ? undefined : boundWorkflowTarget(request.target),
-    paused: request.paused ?? false,
-    definitionId: request.definitionId ?? "",
-  };
-}
-
-function workflowManagerCreateTriggerRequest(
-  request: WorkflowManagerCreateTriggerInput,
-) {
-  return {
-    providerName: request.providerName ?? "",
-    match: request.match === undefined ? undefined : workflowEventMatch(request.match),
-    target: request.target === undefined ? undefined : boundWorkflowTarget(request.target),
-    paused: request.paused ?? false,
-    idempotencyKey: request.idempotencyKey ?? "",
-    definitionId: request.definitionId ?? "",
-  };
-}
-
-function workflowManagerUpdateTriggerRequest(
-  request: WorkflowManagerUpdateTriggerInput,
-) {
-  return {
-    triggerId: request.triggerId,
-    providerName: request.providerName ?? "",
-    match: request.match === undefined ? undefined : workflowEventMatch(request.match),
-    target: request.target === undefined ? undefined : boundWorkflowTarget(request.target),
-    paused: request.paused ?? false,
-    definitionId: request.definitionId ?? "",
-  };
-}
-
-function workflowManagerRunFromProto(input: ManagedWorkflowRun): WorkflowManagerRun {
-  return {
-    providerName: input.providerName,
-    run: workflowManagerBoundRunFromRun(input.run),
-  };
-}
-
-function workflowManagerRunSignalFromProto(
-  input: ManagedWorkflowRunSignal,
-): WorkflowManagerRunSignal {
-  return {
-    providerName: input.providerName,
-    run: workflowManagerBoundRunFromRun(input.run),
-    signal: workflowSignalInputFromSignal(input.signal),
-    startedRun: input.startedRun,
-    workflowKey: input.workflowKey,
-  };
-}
-
-function workflowManagerDefinitionFromProto(
-  input: ManagedWorkflowDefinition,
-): WorkflowManagerDefinition {
-  return {
-    providerName: input.providerName,
-    definition: workflowManagerBoundDefinitionFromDefinition(input.definition),
-  };
-}
-
-function workflowManagerScheduleFromProto(
-  input: ManagedWorkflowSchedule,
-): WorkflowManagerSchedule {
-  return {
-    providerName: input.providerName,
-    schedule: workflowManagerBoundScheduleFromSchedule(input.schedule),
-  };
-}
-
-function workflowManagerEventTriggerFromProto(
-  input: ManagedWorkflowEventTrigger,
-): WorkflowManagerEventTrigger {
-  return {
-    providerName: input.providerName,
-    trigger: workflowManagerBoundEventTriggerFromTrigger(input.trigger),
-  };
-}
-
-function workflowManagerBoundRunFromRun(
-  input?: BoundWorkflowRun,
-): WorkflowManagerBoundRun | undefined {
-  const value: BoundWorkflowRunInput | undefined = boundWorkflowRunInputFromRun(input);
-  return value === undefined
-    ? undefined
-    : {
-      id: value.id,
-      status: value.status,
-      target: value.target as BoundWorkflowTargetInput | undefined,
-      trigger: value.trigger as WorkflowRunTriggerInput | undefined,
-      createdAt: value.createdAt as Date | undefined,
-      startedAt: value.startedAt as Date | undefined,
-      completedAt: value.completedAt as Date | undefined,
-      statusMessage: value.statusMessage,
-      resultBody: value.resultBody,
-      createdBy: value.createdBy as WorkflowActorInput | undefined,
-      executionRef: value.executionRef,
-      workflowKey: value.workflowKey,
-    };
-}
-
-function workflowManagerBoundDefinitionFromDefinition(
-  input?: BoundWorkflowDefinition,
-): WorkflowManagerBoundDefinition | undefined {
-  const value = boundWorkflowDefinitionInputFromDefinition(input);
-  return value === undefined
-    ? undefined
-    : {
-      id: value.id,
-      target: value.target as BoundWorkflowTargetInput | undefined,
-      createdBy: value.createdBy as WorkflowActorInput | undefined,
-      createdAt: value.createdAt as Date | undefined,
-    };
-}
-
-function workflowManagerBoundScheduleFromSchedule(
-  input?: BoundWorkflowSchedule,
-): WorkflowManagerBoundSchedule | undefined {
-  const value = boundWorkflowScheduleInputFromSchedule(input);
-  return value === undefined
-    ? undefined
-    : {
-      id: value.id,
-      cron: value.cron,
-      timezone: value.timezone,
-      target: value.target as BoundWorkflowTargetInput | undefined,
-      paused: value.paused,
-      createdAt: value.createdAt as Date | undefined,
-      updatedAt: value.updatedAt as Date | undefined,
-      nextRunAt: value.nextRunAt as Date | undefined,
-      createdBy: value.createdBy as WorkflowActorInput | undefined,
-      executionRef: value.executionRef,
-    };
-}
-
-function workflowManagerBoundEventTriggerFromTrigger(
-  input?: BoundWorkflowEventTrigger,
-): WorkflowManagerBoundEventTrigger | undefined {
-  const value = boundWorkflowEventTriggerInputFromTrigger(input);
-  return value === undefined
-    ? undefined
-    : {
-      id: value.id,
-      match: value.match,
-      target: value.target as BoundWorkflowTargetInput | undefined,
-      paused: value.paused,
-      createdAt: value.createdAt as Date | undefined,
-      updatedAt: value.updatedAt as Date | undefined,
-      createdBy: value.createdBy as WorkflowActorInput | undefined,
-      executionRef: value.executionRef,
-    };
 }
 
 function normalizeInvocationToken(requestOrToken: Request | string): string {

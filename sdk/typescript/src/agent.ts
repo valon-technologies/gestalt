@@ -1,6 +1,5 @@
 import {
   create,
-  type JsonObject,
   type MessageInitShape,
 } from "@bufbuild/protobuf";
 import {
@@ -14,16 +13,11 @@ import {
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
-  AgentActorSchema,
   AgentHost as AgentHostService,
   AgentInteractionSchema,
-  AgentMessageSchema,
-  AgentMessagePartSchema,
   AgentProvider as AgentProviderService,
   AgentProviderCapabilitiesSchema,
   AgentSessionSchema,
-  AgentToolRefSchema,
-  AgentTurnDisplaySchema,
   AgentTurnEventSchema,
   AgentTurnSchema,
   AgentExecutionStatus as ProtoAgentExecutionStatus,
@@ -42,8 +36,6 @@ import {
   ResolveAgentConnectionRequestSchema,
   type AgentActor as ProtoAgentActor,
   type AgentInteraction as ProtoAgentInteraction,
-  type AgentMessage as ProtoAgentMessage,
-  type AgentMessagePart as ProtoAgentMessagePart,
   type AgentMessagePartImageRef as ProtoAgentMessagePartImageRef,
   type AgentMessagePartToolCall as ProtoAgentMessagePartToolCall,
   type AgentMessagePartToolResult as ProtoAgentMessagePartToolResult,
@@ -51,7 +43,6 @@ import {
   type AgentSubjectContext as ProtoAgentSubjectContext,
   type AgentToolRef as ProtoAgentToolRef,
   type AgentTurn as ProtoAgentTurn,
-  type AgentTurnDisplay as ProtoAgentTurnDisplay,
   type AgentTurnEvent as ProtoAgentTurnEvent,
   type CancelAgentProviderTurnRequest as ProtoCancelAgentProviderTurnRequest,
   type CreateAgentProviderSessionRequest as ProtoCreateAgentProviderSessionRequest,
@@ -77,15 +68,23 @@ import {
 } from "./internal/gen/v1/agent_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import {
+  agentActorFromProto,
+  agentActorToProto,
+  agentMessageFromProto,
+  agentMessageToProto,
+  agentToolRefFromProto,
+  agentTurnDisplayToProto,
+} from "./agent-conversions.ts";
+import {
   dateFromTimestamp,
-  jsonFromValue,
-  jsonObjectFromStruct,
-  structFromObject,
   timestampFromDate,
-  valueFromJson,
   type JsonInput,
   type JsonObjectInput,
 } from "./protocol.ts";
+import {
+  optionalObjectFromStruct,
+  optionalStruct,
+} from "./protocol-internal.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 
 /** Environment variable containing the agent-host service target. */
@@ -753,28 +752,6 @@ export function defineAgentProvider(options: AgentProviderOptions): AgentProvide
   return new AgentProvider(options);
 }
 
-function agentTurnDisplayToProto(
-  display: AgentTurnDisplay | undefined,
-): MessageInitShape<typeof AgentTurnDisplaySchema> | undefined {
-  if (!display) {
-    return undefined;
-  }
-  return {
-    kind: display.kind ?? "",
-    phase: display.phase ?? "",
-    text: display.text ?? "",
-    label: display.label ?? "",
-    ref: display.ref ?? "",
-    parentRef: display.parentRef ?? "",
-    input: display.input === undefined ? undefined : valueFromJson(display.input),
-    output: display.output === undefined ? undefined : valueFromJson(display.output),
-    error: display.error === undefined ? undefined : valueFromJson(display.error),
-    action: display.action ?? "",
-    format: display.format ?? "",
-    language: display.language ?? "",
-  };
-}
-
 function createAgentProviderSessionRequestFromProto(
   request: ProtoCreateAgentProviderSessionRequest,
 ): CreateAgentProviderSessionRequest {
@@ -1003,70 +980,6 @@ function agentInteractionToProto(
   };
 }
 
-export function agentSessionFromProto(session: ProtoAgentSession): AgentSession {
-  return {
-    id: session.id,
-    providerName: session.providerName,
-    model: session.model,
-    clientRef: session.clientRef,
-    state: session.state as AgentSessionState,
-    metadata: optionalObjectFromStruct(session.metadata),
-    createdBy: agentActorFromProto(session.createdBy),
-    createdAt: session.createdAt === undefined ? undefined : dateFromTimestamp(session.createdAt),
-    updatedAt: session.updatedAt === undefined ? undefined : dateFromTimestamp(session.updatedAt),
-    lastTurnAt: session.lastTurnAt === undefined ? undefined : dateFromTimestamp(session.lastTurnAt),
-  };
-}
-
-export function agentTurnFromProto(turn: ProtoAgentTurn): AgentTurn {
-  return {
-    id: turn.id,
-    sessionId: turn.sessionId,
-    providerName: turn.providerName,
-    model: turn.model,
-    status: turn.status as AgentExecutionStatus,
-    messages: turn.messages.map(agentMessageFromProto),
-    outputText: turn.outputText,
-    structuredOutput: optionalObjectFromStruct(turn.structuredOutput),
-    statusMessage: turn.statusMessage,
-    createdBy: agentActorFromProto(turn.createdBy),
-    createdAt: turn.createdAt === undefined ? undefined : dateFromTimestamp(turn.createdAt),
-    startedAt: turn.startedAt === undefined ? undefined : dateFromTimestamp(turn.startedAt),
-    completedAt: turn.completedAt === undefined ? undefined : dateFromTimestamp(turn.completedAt),
-    executionRef: turn.executionRef,
-  };
-}
-
-export function agentTurnEventFromProto(event: ProtoAgentTurnEvent): AgentTurnEvent {
-  return {
-    id: event.id,
-    turnId: event.turnId,
-    seq: event.seq,
-    type: event.type,
-    source: event.source,
-    visibility: event.visibility,
-    data: optionalObjectFromStruct(event.data),
-    createdAt: event.createdAt === undefined ? undefined : dateFromTimestamp(event.createdAt),
-    display: agentTurnDisplayFromProto(event.display),
-  };
-}
-
-export function agentInteractionFromProto(interaction: ProtoAgentInteraction): AgentInteraction {
-  return {
-    id: interaction.id,
-    type: interaction.type as AgentInteractionType,
-    state: interaction.state as AgentInteractionState,
-    title: interaction.title,
-    prompt: interaction.prompt,
-    request: optionalObjectFromStruct(interaction.request),
-    resolution: optionalObjectFromStruct(interaction.resolution),
-    createdAt: interaction.createdAt === undefined ? undefined : dateFromTimestamp(interaction.createdAt),
-    resolvedAt: interaction.resolvedAt === undefined ? undefined : dateFromTimestamp(interaction.resolvedAt),
-    turnId: interaction.turnId,
-    sessionId: interaction.sessionId,
-  };
-}
-
 function capabilitiesToProto(
   capabilities: AgentProviderCapabilities,
 ): MessageInitShape<typeof AgentProviderCapabilitiesSchema> {
@@ -1085,94 +998,6 @@ function capabilitiesToProto(
   };
 }
 
-function agentMessageFromProto(message: ProtoAgentMessage): AgentMessage {
-  return {
-    role: message.role,
-    text: message.text,
-    parts: message.parts.map(agentMessagePartFromProto),
-    metadata: optionalObjectFromStruct(message.metadata),
-  };
-}
-
-export function agentMessageToProto(
-  message: AgentMessage,
-): MessageInitShape<typeof AgentMessageSchema> {
-  return {
-    role: message.role ?? "",
-    text: message.text ?? "",
-    parts: message.parts?.map(agentMessagePartToProto) ?? [],
-    metadata: optionalStruct(message.metadata),
-  };
-}
-
-function agentTurnDisplayFromProto(display?: ProtoAgentTurnDisplay): AgentTurnDisplay | undefined {
-  if (display === undefined) {
-    return undefined;
-  }
-  return {
-    kind: display.kind,
-    phase: display.phase,
-    text: display.text,
-    label: display.label,
-    ref: display.ref,
-    parentRef: display.parentRef,
-    input: display.input === undefined ? undefined : jsonFromValue(display.input) as JsonInput,
-    output: display.output === undefined ? undefined : jsonFromValue(display.output) as JsonInput,
-    error: display.error === undefined ? undefined : jsonFromValue(display.error) as JsonInput,
-    action: display.action,
-    format: display.format,
-    language: display.language,
-  };
-}
-
-function agentMessagePartFromProto(part: ProtoAgentMessagePart): AgentMessagePart {
-  return {
-    type: part.type as AgentMessagePartType,
-    text: part.text,
-    json: optionalObjectFromStruct(part.json),
-    toolCall: part.toolCall === undefined ? undefined : {
-      id: part.toolCall.id,
-      toolId: part.toolCall.toolId,
-      arguments: optionalObjectFromStruct(part.toolCall.arguments),
-    },
-    toolResult: part.toolResult === undefined ? undefined : {
-      toolCallId: part.toolResult.toolCallId,
-      status: part.toolResult.status,
-      content: part.toolResult.content,
-      output: optionalObjectFromStruct(part.toolResult.output),
-    },
-    imageRef: part.imageRef === undefined ? undefined : {
-      uri: part.imageRef.uri,
-      mimeType: part.imageRef.mimeType,
-    },
-  };
-}
-
-function agentMessagePartToProto(
-  part: AgentMessagePart,
-): MessageInitShape<typeof AgentMessagePartSchema> {
-  return {
-    type: part.type ?? AgentMessagePartType.UNSPECIFIED,
-    text: part.text ?? "",
-    json: optionalStruct(part.json),
-    toolCall: part.toolCall === undefined ? undefined : {
-      id: part.toolCall.id ?? "",
-      toolId: part.toolCall.toolId ?? "",
-      arguments: optionalStruct(part.toolCall.arguments),
-    },
-    toolResult: part.toolResult === undefined ? undefined : {
-      toolCallId: part.toolResult.toolCallId ?? "",
-      status: part.toolResult.status ?? 0,
-      content: part.toolResult.content ?? "",
-      output: optionalStruct(part.toolResult.output),
-    },
-    imageRef: part.imageRef === undefined ? undefined : {
-      uri: part.imageRef.uri ?? "",
-      mimeType: part.imageRef.mimeType ?? "",
-    },
-  };
-}
-
 function resolvedAgentToolFromProto(tool: ProtoResolvedAgentTool): ResolvedAgentTool {
   return {
     id: tool.id,
@@ -1180,30 +1005,6 @@ function resolvedAgentToolFromProto(tool: ProtoResolvedAgentTool): ResolvedAgent
     description: tool.description,
     parametersSchema: optionalObjectFromStruct(tool.parametersSchema),
   };
-}
-
-function agentActorFromProto(actor?: ProtoAgentActor | undefined): AgentActor | undefined {
-  if (actor === undefined) {
-    return undefined;
-  }
-  return {
-    subjectId: actor.subjectId,
-    subjectKind: actor.subjectKind,
-    displayName: actor.displayName,
-    authSource: actor.authSource,
-  };
-}
-
-function agentActorToProto(actor?: AgentActor | undefined): ProtoAgentActor | undefined {
-  if (actor === undefined) {
-    return undefined;
-  }
-  return create(AgentActorSchema, {
-    subjectId: actor.subjectId ?? "",
-    subjectKind: actor.subjectKind ?? "",
-    displayName: actor.displayName ?? "",
-    authSource: actor.authSource ?? "",
-  });
 }
 
 function agentSubjectFromProto(
@@ -1219,43 +1020,6 @@ function agentSubjectFromProto(
     displayName: subject.displayName,
     authSource: subject.authSource,
   };
-}
-
-function agentToolRefFromProto(ref: ProtoAgentToolRef): AgentToolRef {
-  return {
-    plugin: ref.plugin,
-    operation: ref.operation,
-    connection: ref.connection,
-    instance: ref.instance,
-    title: ref.title,
-    description: ref.description,
-    system: ref.system,
-  };
-}
-
-export function agentToolRefToProto(ref?: AgentToolRef | undefined): ProtoAgentToolRef | undefined {
-  if (ref === undefined) {
-    return undefined;
-  }
-  return create(AgentToolRefSchema, {
-    plugin: ref.plugin ?? "",
-    operation: ref.operation ?? "",
-    connection: ref.connection ?? "",
-    instance: ref.instance ?? "",
-    title: ref.title ?? "",
-    description: ref.description ?? "",
-    system: ref.system ?? "",
-  });
-}
-
-function optionalStruct(value?: JsonObjectInput | undefined): JsonObject | undefined {
-  return value === undefined ? undefined : structFromObject(value);
-}
-
-function optionalObjectFromStruct(
-  value?: JsonObject | undefined,
-): JsonObjectInput | undefined {
-  return value === undefined ? undefined : jsonObjectFromStruct(value);
 }
 
 function optionalTimestamp(value?: Date | undefined) {
