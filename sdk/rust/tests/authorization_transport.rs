@@ -16,6 +16,7 @@ use gestalt::proto::v1::{
     ActionSearchRequest as ProtoActionSearchRequest,
     ActionSearchResponse as ProtoActionSearchResponse,
     AuthorizationMetadata as ProtoAuthorizationMetadata,
+    AuthorizationModel as ProtoAuthorizationModel,
     AuthorizationModelRef as ProtoAuthorizationModelRef,
     EffectiveSubjectSearchRequest as ProtoEffectiveSubjectSearchRequest,
     EffectiveSubjectSearchResponse as ProtoEffectiveSubjectSearchResponse,
@@ -35,7 +36,7 @@ use gestalt::proto::v1::{
 use gestalt::{
     AccessDecision, AccessEvaluationRequest, AccessEvaluationsRequest, AccessEvaluationsResponse,
     ActionSearchResponse, Authorization, AuthorizationAction, AuthorizationMetadata,
-    AuthorizationModel, AuthorizationModelRef, AuthorizationProvider as SdkAuthorizationProvider,
+    AuthorizationModelRef, AuthorizationProvider as SdkAuthorizationProvider,
     AuthorizationRelationshipTarget, AuthorizationResource, AuthorizationSubject,
     AuthorizationSubjectSet, ENV_AUTHORIZATION_SOCKET, ENV_AUTHORIZATION_SOCKET_TOKEN,
     EffectiveSubjectSearchRequest, ExpandRequest, GetActiveModelResponse, ListModelsResponse,
@@ -664,7 +665,7 @@ async fn authorization_runtime_and_server_round_trip_over_unix_socket() {
 
     let model_ref = authz
         .write_model(ProtoWriteModelRequest {
-            model: Some(AuthorizationModel {
+            model: Some(ProtoAuthorizationModel {
                 version: 2,
                 resource_types: Vec::new(),
             }),

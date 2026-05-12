@@ -309,7 +309,7 @@ func TestNewAuthorizationModelRefUsesNativeTime(t *testing.T) {
 	if ref.GetId() != "model-1" || ref.GetVersion() != "v1" {
 		t.Fatalf("ref = %q/%q, want model-1/v1", ref.GetId(), ref.GetVersion())
 	}
-	if got := ref.GetCreatedAt().AsTime(); !got.Equal(createdAt) {
+	if got := ref.GetCreatedAt(); !got.Equal(createdAt) {
 		t.Fatalf("created_at = %v, want %v", got, createdAt)
 	}
 }

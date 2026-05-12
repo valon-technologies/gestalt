@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -79,8 +79,19 @@ func (h *authorizationTransportHarness) EffectiveSearchSubjects(ctx context.Cont
 
 	return &proto.EffectiveSubjectSearchResponse{
 		Targets: []*proto.RelationshipTarget{
-			gestalt.NewAuthorizationSubjectTarget(gestalt.NewAuthorizationSubject("subject", "user:user-123")),
-			gestalt.NewAuthorizationSubjectSetTarget(gestalt.NewAuthorizationResource("slack_channel", "C123"), "member"),
+			{
+				Kind: &proto.RelationshipTarget_Subject{
+					Subject: &proto.Subject{Type: "subject", Id: "user:user-123"},
+				},
+			},
+			{
+				Kind: &proto.RelationshipTarget_SubjectSet{
+					SubjectSet: &proto.SubjectSet{
+						Resource: &proto.Resource{Type: "slack_channel", Id: "C123"},
+						Relation: "member",
+					},
+				},
+			},
 		},
 		ModelId:   "authz-model-1",
 		Truncated: true,
@@ -99,10 +110,10 @@ func (h *authorizationTransportHarness) Expand(ctx context.Context, req *proto.E
 
 	return &proto.ExpandResponse{
 		Root: &proto.ExpandNode{
-			Target:   gestalt.NewAuthorizationResourceTarget(req.GetResource()),
+			Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Resource{Resource: req.GetResource()}},
 			Relation: req.GetRelation(),
 			Children: []*proto.ExpandNode{{
-				Target:   gestalt.NewAuthorizationSubjectTarget(gestalt.NewAuthorizationSubject("subject", "user:user-123")),
+				Target:   &proto.RelationshipTarget{Kind: &proto.RelationshipTarget_Subject{Subject: &proto.Subject{Type: "subject", Id: "user:user-123"}}},
 				Relation: "member",
 			}},
 		},
@@ -275,10 +286,6 @@ func TestTransport_AuthorizationTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("write resource = %#v, want agent_session/session-123", write.GetResource())
 	}
 	helperWrite := harness.writes[1].GetWrites()[0]
-	expectedHelperWrite := gestalt.NewAgentSessionEditorWriteRequest("user:user-123", "session-123").GetWrites()[0]
-	if !gproto.Equal(helperWrite, expectedHelperWrite) {
-		t.Fatalf("helper write = %#v, want %#v", helperWrite, expectedHelperWrite)
-	}
 	if helperWrite.GetSubject().GetType() != "subject" || helperWrite.GetSubject().GetId() != "user:user-123" {
 		t.Fatalf("helper write subject = %#v, want subject/user:user-123", helperWrite.GetSubject())
 	}
@@ -424,8 +431,8 @@ func TestAuthorizationProviderOptionalZanzibarTransport(t *testing.T) {
 	}
 
 	resourceResp, err := client.EffectiveSearchResources(rpcCtx, &proto.ResourceSearchRequest{
-		Subject:      gestalt.NewAuthorizationSubject("subject", "user:user-123"),
-		Action:       gestalt.NewAuthorizationAction("edit"),
+		Subject:      &proto.Subject{Type: "subject", Id: "user:user-123"},
+		Action:       &proto.Action{Name: "edit"},
 		ResourceType: "agent_session",
 	}, grpc.WaitForReady(true))
 	if err != nil {
@@ -436,8 +443,8 @@ func TestAuthorizationProviderOptionalZanzibarTransport(t *testing.T) {
 	}
 
 	subjectResp, err := client.EffectiveSearchSubjects(rpcCtx, &proto.EffectiveSubjectSearchRequest{
-		Resource: gestalt.NewAuthorizationResource("agent_session", "session-123"),
-		Action:   gestalt.NewAuthorizationAction("edit"),
+		Resource: &proto.Resource{Type: "agent_session", Id: "session-123"},
+		Action:   &proto.Action{Name: "edit"},
 	})
 	if err != nil {
 		t.Fatalf("EffectiveSearchSubjects: %v", err)
@@ -447,7 +454,7 @@ func TestAuthorizationProviderOptionalZanzibarTransport(t *testing.T) {
 	}
 
 	expandResp, err := client.Expand(rpcCtx, &proto.ExpandRequest{
-		Resource: gestalt.NewAuthorizationResource("agent_session", "session-123"),
+		Resource: &proto.Resource{Type: "agent_session", Id: "session-123"},
 		Relation: "editor",
 	})
 	if err != nil {
@@ -483,8 +490,8 @@ func TestAuthorizationProviderOptionalZanzibarTransportUnimplemented(t *testing.
 	defer rpcCancel()
 
 	_, err := client.EffectiveSearchSubjects(rpcCtx, &proto.EffectiveSubjectSearchRequest{
-		Resource: gestalt.NewAuthorizationResource("agent_session", "session-123"),
-		Action:   gestalt.NewAuthorizationAction("edit"),
+		Resource: &proto.Resource{Type: "agent_session", Id: "session-123"},
+		Action:   &proto.Action{Name: "edit"},
 	}, grpc.WaitForReady(true))
 	if status.Code(err) != codes.Unimplemented {
 		t.Fatalf("EffectiveSearchSubjects error = %v, want Unimplemented", err)

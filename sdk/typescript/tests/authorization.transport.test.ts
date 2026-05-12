@@ -28,7 +28,6 @@ import {
   authorizationAction,
   authorizationRelationshipWithTarget,
   authorizationResource,
-  authorizationResourceTarget,
   authorizationSubject,
   authorizationSubjectSetTarget,
 } from "../src/index.ts";
@@ -137,10 +136,15 @@ test("Authorization() forwards authorization requests to the host socket", async
             });
             return create(EffectiveSubjectSearchResponseSchema, {
               targets: [
-                authorizationSubjectSetTarget(
-                  authorizationResource("slack_channel", "C123"),
-                  "member",
-                ),
+                {
+                  kind: {
+                    case: "subjectSet",
+                    value: {
+                      resource: { type: "slack_channel", id: "C123" },
+                      relation: "member",
+                    },
+                  },
+                },
               ],
               modelId: "authz-model-1",
               truncated: true,
@@ -153,9 +157,12 @@ test("Authorization() forwards authorization requests to the host socket", async
             });
             return create(ExpandResponseSchema, {
               root: {
-                target: authorizationResourceTarget(
-                  input.resource ?? authorizationResource("agent_session", ""),
-                ),
+                target: {
+                  kind: {
+                    case: "resource",
+                    value: input.resource ?? { type: "agent_session", id: "" },
+                  },
+                },
                 relation: input.relation,
               },
               modelId: "authz-model-1",
@@ -228,8 +235,8 @@ test("Authorization() forwards authorization requests to the host socket", async
       pageSize: 1,
     });
     expect(response.modelId).toBe("authz-model-1");
-    expect(response.subjects).toHaveLength(1);
-    expect(response.subjects[0]).toMatchObject({
+    expect(response.subjects ?? []).toHaveLength(1);
+    expect(response.subjects?.[0]).toMatchObject({
       type: "user",
       id: "user:user-123",
     });
@@ -247,7 +254,7 @@ test("Authorization() forwards authorization requests to the host socket", async
       action: authorizationAction("edit"),
       resourceType: "agent_session",
     });
-    expect(resourceResponse.resources[0]?.id).toBe("session-123");
+    expect(resourceResponse.resources?.[0]?.id).toBe("session-123");
     expect(effectiveResourceCalls).toEqual([
       {
         subjectId: "user:user-123",
@@ -261,7 +268,7 @@ test("Authorization() forwards authorization requests to the host socket", async
       action: authorizationAction("edit"),
     });
     expect(targetResponse.truncated).toBe(true);
-    expect(targetResponse.targets[0]?.kind.case).toBe("subjectSet");
+    expect(targetResponse.targets?.[0]?.subjectSet?.relation).toBe("member");
     expect(effectiveSubjectCalls).toEqual([
       {
         resourceId: "session-123",
@@ -275,7 +282,7 @@ test("Authorization() forwards authorization requests to the host socket", async
       maxDepth: 1,
     });
     expect(expandResponse.maxDepthReached).toBe(true);
-    expect(expandResponse.root?.target?.kind.case).toBe("resource");
+    expect(expandResponse.root?.target?.resource?.type).toBe("agent_session");
     expect(expandCalls).toEqual([
       {
         resourceId: "session-123",
@@ -301,10 +308,7 @@ test("Authorization() forwards authorization requests to the host socket", async
     ).toEqual({
       subject: { type: "subject", id: "user:user-123" },
       target: {
-        kind: {
-          case: "subject",
-          value: { type: "subject", id: "user:user-123" },
-        },
+        subject: { type: "subject", id: "user:user-123" },
       },
       relation: "editor",
       resource: { type: "agent_session", id: "session-123" },
@@ -424,8 +428,8 @@ test("Authorization honors tcp target env and relay token env", async () => {
     });
 
     expect(response.modelId).toBe("authz-model-1");
-    expect(response.subjects).toHaveLength(1);
-    expect(response.subjects[0]?.id).toBe("user:user-123");
+    expect(response.subjects ?? []).toHaveLength(1);
+    expect(response.subjects?.[0]?.id).toBe("user:user-123");
     expect(seenTokens).toEqual(["relay-token-typescript"]);
   } finally {
     if (previousSocket === undefined) {
