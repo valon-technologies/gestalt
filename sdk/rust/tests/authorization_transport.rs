@@ -4,9 +4,11 @@ mod helpers;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
+use gestalt::proto::v1::authorization_provider_client::AuthorizationProviderClient as ProtoAuthorizationClient;
 use gestalt::proto::v1::authorization_provider_server::{
     AuthorizationProvider as ProtoAuthorizationProvider, AuthorizationProviderServer,
 };
+use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use gestalt::proto::v1::{
     AccessDecision as ProtoAccessDecision, AccessEvaluationRequest as ProtoAccessEvaluationRequest,
     AccessEvaluationsRequest as ProtoAccessEvaluationsRequest,
@@ -20,7 +22,7 @@ use gestalt::proto::v1::{
     ExpandNode as ProtoExpandNode, ExpandRequest as ProtoExpandRequest,
     ExpandResponse as ProtoExpandResponse, GetActiveModelResponse as ProtoGetActiveModelResponse,
     ListModelsRequest as ProtoListModelsRequest, ListModelsResponse as ProtoListModelsResponse,
-    ReadRelationshipsRequest as ProtoReadRelationshipsRequest,
+    ProviderKind, ReadRelationshipsRequest as ProtoReadRelationshipsRequest,
     ReadRelationshipsResponse as ProtoReadRelationshipsResponse,
     RelationshipTarget as ProtoRelationshipTarget, Resource as ProtoResource,
     ResourceSearchRequest as ProtoResourceSearchRequest,
@@ -31,21 +33,159 @@ use gestalt::proto::v1::{
     WriteRelationshipsRequest as ProtoWriteRelationshipsRequest, relationship_target,
 };
 use gestalt::{
-    Authorization, AuthorizationAction, AuthorizationRelationshipTarget, AuthorizationResource,
+    AccessDecision, AccessEvaluationRequest, AccessEvaluationsRequest, AccessEvaluationsResponse,
+    ActionSearchResponse, Authorization, AuthorizationAction, AuthorizationMetadata,
+    AuthorizationModel, AuthorizationModelRef, AuthorizationProvider as SdkAuthorizationProvider,
+    AuthorizationRelationshipTarget, AuthorizationResource, AuthorizationSubject,
     AuthorizationSubjectSet, ENV_AUTHORIZATION_SOCKET, ENV_AUTHORIZATION_SOCKET_TOKEN,
-    EffectiveSubjectSearchRequest, ExpandRequest, Relationship, ResourceSearchRequest,
-    SubjectSearchRequest, WriteRelationshipsRequest,
+    EffectiveSubjectSearchRequest, ExpandRequest, GetActiveModelResponse, ListModelsResponse,
+    ReadRelationshipsResponse, Relationship, ResourceSearchRequest, ResourceSearchResponse,
+    SubjectSearchRequest, SubjectSearchResponse, WriteRelationshipsRequest,
 };
-use tokio::net::UnixListener;
+use hyper_util::rt::TokioIo;
+use tokio::net::{UnixListener, UnixStream};
 use tokio_stream::wrappers::UnixListenerStream;
-use tonic::transport::Server;
+use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
+use tower::service_fn;
 
 #[derive(Clone, Default)]
 struct TestAuthorizationServer {
     seen_tokens: Arc<Mutex<Vec<String>>>,
     searches: Arc<Mutex<Vec<ProtoSubjectSearchRequest>>>,
     writes: Arc<Mutex<Vec<ProtoWriteRelationshipsRequest>>>,
+}
+
+#[derive(Default)]
+struct SdkAuthorizationServer {
+    writes: Mutex<Vec<WriteRelationshipsRequest>>,
+}
+
+#[gestalt::async_trait]
+impl SdkAuthorizationProvider for SdkAuthorizationServer {
+    fn metadata(&self) -> Option<gestalt::RuntimeMetadata> {
+        Some(gestalt::RuntimeMetadata {
+            name: "authz-example".to_string(),
+            ..Default::default()
+        })
+    }
+
+    async fn evaluate(&self, request: AccessEvaluationRequest) -> gestalt::Result<AccessDecision> {
+        Ok(AccessDecision {
+            allowed: request.subject.id == "user:1",
+            model_id: "authz-model-1".to_string(),
+            ..Default::default()
+        })
+    }
+
+    async fn evaluate_many(
+        &self,
+        request: AccessEvaluationsRequest,
+    ) -> gestalt::Result<AccessEvaluationsResponse> {
+        Ok(AccessEvaluationsResponse {
+            decisions: request
+                .requests
+                .into_iter()
+                .map(|request| AccessDecision {
+                    allowed: request.subject.id == "user:1",
+                    model_id: "authz-model-1".to_string(),
+                    ..Default::default()
+                })
+                .collect(),
+        })
+    }
+
+    async fn search_resources(
+        &self,
+        request: ResourceSearchRequest,
+    ) -> gestalt::Result<ResourceSearchResponse> {
+        Ok(ResourceSearchResponse {
+            resources: vec![AuthorizationResource::new(request.resource_type, "doc-1")],
+            model_id: "authz-model-1".to_string(),
+            ..Default::default()
+        })
+    }
+
+    async fn search_subjects(
+        &self,
+        request: SubjectSearchRequest,
+    ) -> gestalt::Result<SubjectSearchResponse> {
+        Ok(SubjectSearchResponse {
+            subjects: vec![AuthorizationSubject::new(request.subject_type, "user:1")],
+            model_id: "authz-model-1".to_string(),
+            ..Default::default()
+        })
+    }
+
+    async fn search_actions(
+        &self,
+        _request: gestalt::ActionSearchRequest,
+    ) -> gestalt::Result<ActionSearchResponse> {
+        Ok(ActionSearchResponse {
+            actions: vec![AuthorizationAction::new("view")],
+            model_id: "authz-model-1".to_string(),
+            ..Default::default()
+        })
+    }
+
+    async fn get_metadata(&self) -> gestalt::Result<AuthorizationMetadata> {
+        Ok(AuthorizationMetadata {
+            capabilities: vec!["evaluate".to_string()],
+            active_model_id: "authz-model-1".to_string(),
+        })
+    }
+
+    async fn read_relationships(
+        &self,
+        _request: gestalt::ReadRelationshipsRequest,
+    ) -> gestalt::Result<ReadRelationshipsResponse> {
+        Ok(ReadRelationshipsResponse {
+            model_id: "authz-model-1".to_string(),
+            ..Default::default()
+        })
+    }
+
+    async fn write_relationships(&self, request: WriteRelationshipsRequest) -> gestalt::Result<()> {
+        self.writes.lock().expect("writes lock").push(request);
+        Ok(())
+    }
+
+    async fn get_active_model(&self) -> gestalt::Result<GetActiveModelResponse> {
+        Ok(GetActiveModelResponse {
+            model: Some(AuthorizationModelRef {
+                id: "authz-model-1".to_string(),
+                version: "1".to_string(),
+                created_at: None,
+            }),
+        })
+    }
+
+    async fn list_models(
+        &self,
+        _request: gestalt::ListModelsRequest,
+    ) -> gestalt::Result<ListModelsResponse> {
+        Ok(ListModelsResponse {
+            models: vec![AuthorizationModelRef {
+                id: "authz-model-1".to_string(),
+                version: "1".to_string(),
+                created_at: None,
+            }],
+            next_page_token: String::new(),
+        })
+    }
+
+    async fn write_model(
+        &self,
+        request: gestalt::WriteModelRequest,
+    ) -> gestalt::Result<AuthorizationModelRef> {
+        Ok(AuthorizationModelRef {
+            id: "authz-model-2".to_string(),
+            version: request
+                .model
+                .map_or_else(String::new, |model| model.version.to_string()),
+            created_at: None,
+        })
+    }
 }
 
 #[gestalt::async_trait]
@@ -285,6 +425,19 @@ async fn authorization_client_uses_public_sdk_types_for_search_and_writes() {
         ]
     );
 
+    let batch = authorization
+        .evaluate_many(AccessEvaluationsRequest {
+            requests: vec![AccessEvaluationRequest {
+                subject: AuthorizationSubject::new("subject", "user:user-123"),
+                action: AuthorizationAction::new("edit"),
+                resource: AuthorizationResource::new("agent_session", "session-123"),
+                ..Default::default()
+            }],
+        })
+        .await
+        .expect("evaluate many");
+    assert!(batch.decisions[0].allowed);
+
     let subjects = authorization
         .search_subjects(SubjectSearchRequest {
             resource: AuthorizationResource::new("slack_identity", "team:T123:user:U456"),
@@ -427,6 +580,116 @@ async fn authorization_client_uses_public_sdk_types_for_search_and_writes() {
     let _ = serve_task.await;
 }
 
+#[tokio::test]
+async fn authorization_runtime_and_server_round_trip_over_unix_socket() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("gestalt-rust-authorization.sock");
+    let _provider_socket = helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
+
+    let provider = Arc::new(SdkAuthorizationServer::default());
+    let serve_provider = Arc::clone(&provider);
+    let serve_task = tokio::spawn(async move {
+        gestalt::runtime::serve_authorization_provider(serve_provider)
+            .await
+            .expect("serve authorization provider");
+    });
+    helpers::wait_for_socket(&socket).await;
+
+    let channel = connect_unix(&socket).await;
+    let mut runtime = ProviderLifecycleClient::new(channel.clone());
+    let identity = runtime
+        .get_provider_identity(())
+        .await
+        .expect("get provider identity")
+        .into_inner();
+    assert_eq!(
+        ProviderKind::try_from(identity.kind)
+            .expect("valid provider kind")
+            .as_str_name(),
+        "PROVIDER_KIND_AUTHORIZATION"
+    );
+    assert_eq!(identity.name, "authz-example");
+
+    let mut authz = ProtoAuthorizationClient::new(channel);
+    let decision = authz
+        .evaluate(ProtoAccessEvaluationRequest {
+            subject: Some(ProtoSubject {
+                r#type: "subject".to_string(),
+                id: "user:1".to_string(),
+                properties: None,
+            }),
+            action: Some(ProtoAction {
+                name: "view".to_string(),
+                properties: None,
+            }),
+            resource: Some(ProtoResource {
+                r#type: "doc".to_string(),
+                id: "doc-1".to_string(),
+                properties: None,
+            }),
+            context: None,
+        })
+        .await
+        .expect("evaluate")
+        .into_inner();
+    assert!(decision.allowed);
+
+    let batch = authz
+        .evaluate_many(ProtoAccessEvaluationsRequest {
+            requests: vec![ProtoAccessEvaluationRequest {
+                subject: Some(ProtoSubject {
+                    r#type: "subject".to_string(),
+                    id: "user:1".to_string(),
+                    properties: None,
+                }),
+                action: Some(ProtoAction {
+                    name: "view".to_string(),
+                    properties: None,
+                }),
+                resource: Some(ProtoResource {
+                    r#type: "doc".to_string(),
+                    id: "doc-1".to_string(),
+                    properties: None,
+                }),
+                context: None,
+            }],
+        })
+        .await
+        .expect("evaluate many")
+        .into_inner();
+    assert!(batch.decisions[0].allowed);
+
+    let metadata = authz.get_metadata(()).await.expect("metadata").into_inner();
+    assert_eq!(metadata.capabilities, vec!["evaluate".to_string()]);
+
+    let model_ref = authz
+        .write_model(ProtoWriteModelRequest {
+            model: Some(AuthorizationModel {
+                version: 2,
+                resource_types: Vec::new(),
+            }),
+        })
+        .await
+        .expect("write model")
+        .into_inner();
+    assert_eq!(model_ref.version, "2");
+
+    let error = authz
+        .expand(ProtoExpandRequest {
+            resource: None,
+            relation: String::new(),
+            context: None,
+            max_depth: 0,
+            model_id: String::new(),
+        })
+        .await
+        .expect_err("expand should be unimplemented");
+    assert_eq!(error.code(), tonic::Code::Unimplemented);
+
+    serve_task.abort();
+    let _ = serve_task.await;
+}
+
 async fn serve_authorization(
     server: TestAuthorizationServer,
     socket: &Path,
@@ -437,6 +700,20 @@ async fn serve_authorization(
         .add_service(AuthorizationProviderServer::new(server))
         .serve_with_incoming(UnixListenerStream::new(listener))
         .await
+}
+
+async fn connect_unix(path: &Path) -> tonic::transport::Channel {
+    Endpoint::try_from("http://[::]:50051")
+        .expect("endpoint")
+        .connect_with_connector(service_fn({
+            let path = path.to_path_buf();
+            move |_| {
+                let path = path.clone();
+                async move { UnixStream::connect(path).await.map(TokioIo::new) }
+            }
+        }))
+        .await
+        .expect("connect channel")
 }
 
 fn maybe_record_relay_token(

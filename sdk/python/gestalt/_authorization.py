@@ -76,10 +76,34 @@ def AccessEvaluationRequest(*args: Any, **kwargs: Any) -> Any:
     return authorization_pb2.AccessEvaluationRequest(*args, **kwargs)
 
 
+def AccessDecision(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization access decision."""
+
+    return authorization_pb2.AccessDecision(*args, **kwargs)
+
+
+def AccessEvaluationsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization batch access-evaluation request."""
+
+    return authorization_pb2.AccessEvaluationsRequest(*args, **kwargs)
+
+
+def AccessEvaluationsResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization batch access-evaluation response."""
+
+    return authorization_pb2.AccessEvaluationsResponse(*args, **kwargs)
+
+
 def ResourceSearchRequest(*args: Any, **kwargs: Any) -> Any:
     """Create an authorization resource-search request."""
 
     return authorization_pb2.ResourceSearchRequest(*args, **kwargs)
+
+
+def ResourceSearchResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization resource-search response."""
+
+    return authorization_pb2.ResourceSearchResponse(*args, **kwargs)
 
 
 def SubjectSearchRequest(*args: Any, **kwargs: Any) -> Any:
@@ -88,10 +112,22 @@ def SubjectSearchRequest(*args: Any, **kwargs: Any) -> Any:
     return authorization_pb2.SubjectSearchRequest(*args, **kwargs)
 
 
+def SubjectSearchResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization subject-search response."""
+
+    return authorization_pb2.SubjectSearchResponse(*args, **kwargs)
+
+
 def EffectiveSubjectSearchRequest(*args: Any, **kwargs: Any) -> Any:
     """Create an authorization effective-subject-search request."""
 
     return authorization_pb2.EffectiveSubjectSearchRequest(*args, **kwargs)
+
+
+def EffectiveSubjectSearchResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization effective-subject-search response."""
+
+    return authorization_pb2.EffectiveSubjectSearchResponse(*args, **kwargs)
 
 
 def ActionSearchRequest(*args: Any, **kwargs: Any) -> Any:
@@ -100,16 +136,46 @@ def ActionSearchRequest(*args: Any, **kwargs: Any) -> Any:
     return authorization_pb2.ActionSearchRequest(*args, **kwargs)
 
 
+def ActionSearchResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization action-search response."""
+
+    return authorization_pb2.ActionSearchResponse(*args, **kwargs)
+
+
+def AuthorizationMetadata(*args: Any, **kwargs: Any) -> Any:
+    """Create authorization provider metadata."""
+
+    return authorization_pb2.AuthorizationMetadata(*args, **kwargs)
+
+
 def ExpandRequest(*args: Any, **kwargs: Any) -> Any:
     """Create an authorization relationship-expansion request."""
 
     return authorization_pb2.ExpandRequest(*args, **kwargs)
 
 
+def ExpandNode(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization relationship-expansion node."""
+
+    return authorization_pb2.ExpandNode(*args, **kwargs)
+
+
+def ExpandResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization relationship-expansion response."""
+
+    return authorization_pb2.ExpandResponse(*args, **kwargs)
+
+
 def ReadRelationshipsRequest(*args: Any, **kwargs: Any) -> Any:
     """Create an authorization relationship-read request."""
 
     return authorization_pb2.ReadRelationshipsRequest(*args, **kwargs)
+
+
+def ReadRelationshipsResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization relationship-read response."""
+
+    return authorization_pb2.ReadRelationshipsResponse(*args, **kwargs)
 
 
 def Relationship(*args: Any, **kwargs: Any) -> Any:
@@ -128,6 +194,102 @@ def WriteRelationshipsRequest(*args: Any, **kwargs: Any) -> Any:
     """Create an authorization relationship-write request."""
 
     return authorization_pb2.WriteRelationshipsRequest(*args, **kwargs)
+
+
+def AuthorizationModel(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model."""
+
+    return authorization_pb2.AuthorizationModel(*args, **kwargs)
+
+
+def AuthorizationModelResourceType(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model resource type."""
+
+    return authorization_pb2.AuthorizationModelResourceType(*args, **kwargs)
+
+
+def AuthorizationModelRelation(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model relation."""
+
+    return authorization_pb2.AuthorizationModelRelation(*args, **kwargs)
+
+
+def AuthorizationModelAction(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model action."""
+
+    return authorization_pb2.AuthorizationModelAction(*args, **kwargs)
+
+
+def AuthorizationModelAllowedTarget(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model allowed target."""
+
+    return authorization_pb2.AuthorizationModelAllowedTarget(*args, **kwargs)
+
+
+def AuthorizationModelSubjectSetTarget(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model subject-set target."""
+
+    return authorization_pb2.AuthorizationModelSubjectSetTarget(*args, **kwargs)
+
+
+def AuthorizationModelRewrite(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model rewrite."""
+
+    return authorization_pb2.AuthorizationModelRewrite(*args, **kwargs)
+
+
+def AuthorizationModelRewriteThis(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model rewrite leaf."""
+
+    return authorization_pb2.AuthorizationModelRewriteThis(*args, **kwargs)
+
+
+def AuthorizationModelComputedUserset(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model computed-userset rewrite."""
+
+    return authorization_pb2.AuthorizationModelComputedUserset(*args, **kwargs)
+
+
+def AuthorizationModelTupleToUserset(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model tuple-to-userset rewrite."""
+
+    return authorization_pb2.AuthorizationModelTupleToUserset(*args, **kwargs)
+
+
+def AuthorizationModelRewriteUnion(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model union rewrite."""
+
+    return authorization_pb2.AuthorizationModelRewriteUnion(*args, **kwargs)
+
+
+def AuthorizationModelRef(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization model reference."""
+
+    return authorization_pb2.AuthorizationModelRef(*args, **kwargs)
+
+
+def GetActiveModelResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization active-model response."""
+
+    return authorization_pb2.GetActiveModelResponse(*args, **kwargs)
+
+
+def ListModelsRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization list-models request."""
+
+    return authorization_pb2.ListModelsRequest(*args, **kwargs)
+
+
+def ListModelsResponse(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization list-models response."""
+
+    return authorization_pb2.ListModelsResponse(*args, **kwargs)
+
+
+def WriteModelRequest(*args: Any, **kwargs: Any) -> Any:
+    """Create an authorization write-model request."""
+
+    return authorization_pb2.WriteModelRequest(*args, **kwargs)
 
 
 def agent_session_resource(session_id: str) -> Any:
@@ -214,6 +376,16 @@ class AuthorizationClient:
             _authorization_message(
                 request,
                 authorization_pb2.AccessEvaluationRequest,
+            )
+        )
+
+    def evaluate_many(self, request: Any) -> Any:
+        """Evaluate multiple authorization requests."""
+
+        return self._stub.EvaluateMany(
+            _authorization_message(
+                request,
+                authorization_pb2.AccessEvaluationsRequest,
             )
         )
 
@@ -313,6 +485,31 @@ class AuthorizationClient:
         """Return host authorization provider metadata."""
 
         return self._stub.GetMetadata(empty_pb2.Empty())
+
+    def get_active_model(self) -> Any:
+        """Return the active authorization model."""
+
+        return self._stub.GetActiveModel(empty_pb2.Empty())
+
+    def list_models(self, request: Any) -> Any:
+        """List authorization model references."""
+
+        return self._stub.ListModels(
+            _authorization_message(
+                request,
+                authorization_pb2.ListModelsRequest,
+            )
+        )
+
+    def write_model(self, request: Any) -> Any:
+        """Write an authorization model."""
+
+        return self._stub.WriteModel(
+            _authorization_message(
+                request,
+                authorization_pb2.WriteModelRequest,
+            )
+        )
 
     def __enter__(self) -> AuthorizationClient:
         return self

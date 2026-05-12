@@ -1,53 +1,102 @@
 import { connect } from "node:net";
 
-import type { JsonObject, MessageInitShape } from "@bufbuild/protobuf";
 import {
+  create,
+  type JsonObject,
+  type MessageInitShape,
+} from "@bufbuild/protobuf";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
+import {
+  Code,
+  ConnectError,
   createClient,
   type Client,
   type Interceptor,
+  type ServiceImpl,
 } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
   type AccessDecision,
+  type AccessEvaluationRequest,
+  type AccessEvaluationsRequest,
+  type AccessEvaluationsResponse,
+  type ActionSearchRequest,
   type ActionSearchResponse,
   type AuthorizationMetadata,
+  type AuthorizationModel,
+  type AuthorizationModelAction,
+  type AuthorizationModelAllowedTarget,
+  type AuthorizationModelComputedUserset,
+  type AuthorizationModelRef,
+  type AuthorizationModelRelation,
+  type AuthorizationModelResourceType,
+  type AuthorizationModelRewrite,
+  type AuthorizationModelRewriteThis,
+  type AuthorizationModelRewriteUnion,
+  type AuthorizationModelSubjectSetTarget,
+  type AuthorizationModelTupleToUserset,
   AuthorizationProvider as AuthorizationProviderService,
+  type EffectiveSubjectSearchRequest,
   type EffectiveSubjectSearchResponse,
+  type ExpandRequest,
   type ExpandResponse,
+  type GetActiveModelResponse,
+  type ListModelsRequest,
+  type ListModelsResponse,
+  type ReadRelationshipsRequest,
   type ReadRelationshipsResponse,
   type Relationship,
   type RelationshipKey,
   type RelationshipTarget,
+  type ResourceSearchRequest,
   type ResourceSearchResponse,
   type SubjectSet,
+  type SubjectSearchRequest,
   type SubjectSearchResponse,
+  type WriteModelRequest,
+  type WriteRelationshipsRequest,
   AccessEvaluationRequestSchema,
+  AccessDecisionSchema,
+  AccessEvaluationsRequestSchema,
+  AccessEvaluationsResponseSchema,
   ActionSearchRequestSchema,
+  ActionSearchResponseSchema,
   ActionSchema,
+  AuthorizationMetadataSchema,
+  AuthorizationModelRefSchema,
   EffectiveSubjectSearchRequestSchema,
+  EffectiveSubjectSearchResponseSchema,
   ExpandRequestSchema,
+  ExpandResponseSchema,
+  GetActiveModelResponseSchema,
+  ListModelsRequestSchema,
+  ListModelsResponseSchema,
   ReadRelationshipsRequestSchema,
+  ReadRelationshipsResponseSchema,
   RelationshipKeySchema,
   RelationshipSchema,
   RelationshipTargetSchema,
   ResourceSchema,
   ResourceSearchRequestSchema,
+  ResourceSearchResponseSchema,
   SubjectSchema,
   SubjectSetSchema,
   SubjectSearchRequestSchema,
+  SubjectSearchResponseSchema,
+  WriteModelRequestSchema,
   WriteRelationshipsRequestSchema,
 } from "./internal/gen/v1/authorization_pb.ts";
+import type { MaybePromise } from "./api.ts";
+import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 
 /**
  * Environment variable containing the Unix socket path or relay target for the
  * host authorization client exposed to plugins.
  */
 export const ENV_AUTHORIZATION_SOCKET = "GESTALT_AUTHORIZATION_SOCKET";
-export const ENV_AUTHORIZATION_SOCKET_TOKEN =
-  `${ENV_AUTHORIZATION_SOCKET}_TOKEN`;
-const AUTHORIZATION_RELAY_TOKEN_HEADER =
-  "x-gestalt-host-service-relay-token";
+export const ENV_AUTHORIZATION_SOCKET_TOKEN = `${ENV_AUTHORIZATION_SOCKET}_TOKEN`;
+const AUTHORIZATION_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
 /** Subject type used for canonical Gestalt subject ids in managed grants. */
 export const AUTHORIZATION_SUBJECT_TYPE_SUBJECT = "subject";
@@ -62,6 +111,9 @@ export const AGENT_SESSION_ACTION_EDIT = "edit";
 
 export type AuthorizationEvaluateInput = MessageInitShape<
   typeof AccessEvaluationRequestSchema
+>;
+export type AuthorizationEvaluateManyInput = MessageInitShape<
+  typeof AccessEvaluationsRequestSchema
 >;
 export type AuthorizationSearchResourcesInput = MessageInitShape<
   typeof ResourceSearchRequestSchema
@@ -84,6 +136,12 @@ export type AuthorizationReadRelationshipsInput = MessageInitShape<
 export type AuthorizationWriteRelationshipsInput = MessageInitShape<
   typeof WriteRelationshipsRequestSchema
 >;
+export type AuthorizationWriteModelInput = MessageInitShape<
+  typeof WriteModelRequestSchema
+>;
+export type AuthorizationListModelsInput = MessageInitShape<
+  typeof ListModelsRequestSchema
+>;
 export type AuthorizationSubject = MessageInitShape<typeof SubjectSchema>;
 export type AuthorizationResource = MessageInitShape<typeof ResourceSchema>;
 export type AuthorizationSubjectSet = MessageInitShape<typeof SubjectSetSchema>;
@@ -99,7 +157,28 @@ export type AuthorizationRelationshipKey = MessageInitShape<
 >;
 
 export type AuthorizationDecisionMessage = AccessDecision;
+export type AuthorizationEvaluationsRequestMessage = AccessEvaluationsRequest;
+export type AuthorizationEvaluationsResponseMessage = AccessEvaluationsResponse;
 export type AuthorizationMetadataMessage = AuthorizationMetadata;
+export type AuthorizationModelMessage = AuthorizationModel;
+export type AuthorizationModelActionMessage = AuthorizationModelAction;
+export type AuthorizationModelAllowedTargetMessage =
+  AuthorizationModelAllowedTarget;
+export type AuthorizationModelComputedUsersetMessage =
+  AuthorizationModelComputedUserset;
+export type AuthorizationModelRefMessage = AuthorizationModelRef;
+export type AuthorizationModelRelationMessage = AuthorizationModelRelation;
+export type AuthorizationModelResourceTypeMessage =
+  AuthorizationModelResourceType;
+export type AuthorizationModelRewriteMessage = AuthorizationModelRewrite;
+export type AuthorizationModelRewriteThisMessage =
+  AuthorizationModelRewriteThis;
+export type AuthorizationModelRewriteUnionMessage =
+  AuthorizationModelRewriteUnion;
+export type AuthorizationModelSubjectSetTargetMessage =
+  AuthorizationModelSubjectSetTarget;
+export type AuthorizationModelTupleToUsersetMessage =
+  AuthorizationModelTupleToUserset;
 export type AuthorizationResourceSearchMessage = ResourceSearchResponse;
 export type AuthorizationSubjectSearchMessage = SubjectSearchResponse;
 export type AuthorizationEffectiveSubjectSearchMessage =
@@ -111,6 +190,10 @@ export type AuthorizationRelationshipMessage = Relationship;
 export type AuthorizationRelationshipKeyMessage = RelationshipKey;
 export type AuthorizationRelationshipTargetMessage = RelationshipTarget;
 export type AuthorizationSubjectSetMessage = SubjectSet;
+export type AuthorizationGetActiveModelMessage = GetActiveModelResponse;
+export type AuthorizationListModelsRequestMessage = ListModelsRequest;
+export type AuthorizationListModelsResponseMessage = ListModelsResponse;
+export type AuthorizationWriteModelRequestMessage = WriteModelRequest;
 
 const sharedAuthorizationTransport: {
   target: string;
@@ -158,6 +241,12 @@ export class AuthorizationClient {
     request: AuthorizationEvaluateInput,
   ): Promise<AuthorizationDecisionMessage> {
     return await this.client.evaluate(request);
+  }
+
+  async evaluateMany(
+    request: AuthorizationEvaluateManyInput,
+  ): Promise<AuthorizationEvaluationsResponseMessage> {
+    return await this.client.evaluateMany(request);
   }
 
   async searchResources(
@@ -226,6 +315,337 @@ export class AuthorizationClient {
   async getMetadata(): Promise<AuthorizationMetadataMessage> {
     return await this.client.getMetadata({});
   }
+
+  async getActiveModel(): Promise<AuthorizationGetActiveModelMessage> {
+    return await this.client.getActiveModel({});
+  }
+
+  async listModels(
+    request: AuthorizationListModelsInput = {},
+  ): Promise<AuthorizationListModelsResponseMessage> {
+    return await this.client.listModels(request);
+  }
+
+  async writeModel(
+    request: AuthorizationWriteModelInput,
+  ): Promise<AuthorizationModelRefMessage> {
+    return await this.client.writeModel(request);
+  }
+}
+
+export interface AuthorizationProviderOptions extends ProviderBaseOptions {
+  evaluate: (
+    request: AccessEvaluationRequest,
+  ) => MaybePromise<MessageInitShape<typeof AccessDecisionSchema>>;
+  evaluateMany: (
+    request: AccessEvaluationsRequest,
+  ) => MaybePromise<MessageInitShape<typeof AccessEvaluationsResponseSchema>>;
+  searchResources: (
+    request: ResourceSearchRequest,
+  ) => MaybePromise<MessageInitShape<typeof ResourceSearchResponseSchema>>;
+  searchSubjects: (
+    request: SubjectSearchRequest,
+  ) => MaybePromise<MessageInitShape<typeof SubjectSearchResponseSchema>>;
+  effectiveSearchResources?: (
+    request: ResourceSearchRequest,
+  ) => MaybePromise<MessageInitShape<typeof ResourceSearchResponseSchema>>;
+  effectiveSearchSubjects?: (
+    request: EffectiveSubjectSearchRequest,
+  ) => MaybePromise<
+    MessageInitShape<typeof EffectiveSubjectSearchResponseSchema>
+  >;
+  searchActions: (
+    request: ActionSearchRequest,
+  ) => MaybePromise<MessageInitShape<typeof ActionSearchResponseSchema>>;
+  expand?: (
+    request: ExpandRequest,
+  ) => MaybePromise<MessageInitShape<typeof ExpandResponseSchema>>;
+  getMetadata: () => MaybePromise<
+    MessageInitShape<typeof AuthorizationMetadataSchema>
+  >;
+  readRelationships: (
+    request: ReadRelationshipsRequest,
+  ) => MaybePromise<MessageInitShape<typeof ReadRelationshipsResponseSchema>>;
+  writeRelationships: (
+    request: WriteRelationshipsRequest,
+  ) => MaybePromise<void>;
+  getActiveModel: () => MaybePromise<
+    MessageInitShape<typeof GetActiveModelResponseSchema>
+  >;
+  listModels: (
+    request: ListModelsRequest,
+  ) => MaybePromise<MessageInitShape<typeof ListModelsResponseSchema>>;
+  writeModel: (
+    request: WriteModelRequest,
+  ) => MaybePromise<MessageInitShape<typeof AuthorizationModelRefSchema>>;
+}
+
+export class AuthorizationProvider extends ProviderBase {
+  readonly kind = "authorization" as const;
+
+  private readonly options: AuthorizationProviderOptions;
+
+  constructor(options: AuthorizationProviderOptions) {
+    super(options);
+    this.options = options;
+  }
+
+  async evaluate(request: AccessEvaluationRequest) {
+    return await this.options.evaluate(request);
+  }
+
+  async evaluateMany(request: AccessEvaluationsRequest) {
+    return await this.options.evaluateMany(request);
+  }
+
+  async searchResources(request: ResourceSearchRequest) {
+    return await this.options.searchResources(request);
+  }
+
+  async searchSubjects(request: SubjectSearchRequest) {
+    return await this.options.searchSubjects(request);
+  }
+
+  supportsEffectiveSearch(): boolean {
+    return (
+      this.options.effectiveSearchResources !== undefined &&
+      this.options.effectiveSearchSubjects !== undefined
+    );
+  }
+
+  async effectiveSearchResources(request: ResourceSearchRequest) {
+    return await this.options.effectiveSearchResources?.(request);
+  }
+
+  async effectiveSearchSubjects(request: EffectiveSubjectSearchRequest) {
+    return await this.options.effectiveSearchSubjects?.(request);
+  }
+
+  async searchActions(request: ActionSearchRequest) {
+    return await this.options.searchActions(request);
+  }
+
+  supportsExpand(): boolean {
+    return this.options.expand !== undefined;
+  }
+
+  async expand(request: ExpandRequest) {
+    return await this.options.expand?.(request);
+  }
+
+  async getMetadata() {
+    return await this.options.getMetadata();
+  }
+
+  async readRelationships(request: ReadRelationshipsRequest) {
+    return await this.options.readRelationships(request);
+  }
+
+  async writeRelationships(request: WriteRelationshipsRequest): Promise<void> {
+    await this.options.writeRelationships(request);
+  }
+
+  async getActiveModel() {
+    return await this.options.getActiveModel();
+  }
+
+  async listModels(request: ListModelsRequest) {
+    return await this.options.listModels(request);
+  }
+
+  async writeModel(request: WriteModelRequest) {
+    return await this.options.writeModel(request);
+  }
+}
+
+export function defineAuthorizationProvider(
+  options: AuthorizationProviderOptions,
+): AuthorizationProvider {
+  return new AuthorizationProvider(options);
+}
+
+export function isAuthorizationProvider(
+  value: unknown,
+): value is AuthorizationProvider {
+  return (
+    value instanceof AuthorizationProvider ||
+    (typeof value === "object" &&
+      value !== null &&
+      "kind" in value &&
+      String((value as { kind?: unknown }).kind ?? "") === "authorization" &&
+      "evaluate" in value &&
+      "evaluateMany" in value &&
+      "searchResources" in value &&
+      "searchSubjects" in value &&
+      "searchActions" in value &&
+      "getMetadata" in value &&
+      "readRelationships" in value &&
+      "writeRelationships" in value &&
+      "getActiveModel" in value &&
+      "listModels" in value &&
+      "writeModel" in value)
+  );
+}
+
+export function createAuthorizationProviderService(
+  provider: AuthorizationProvider,
+): Partial<ServiceImpl<typeof AuthorizationProviderService>> {
+  return {
+    async evaluate(request) {
+      return create(
+        AccessDecisionSchema,
+        requiredAuthorizationResponse(
+          await provider.evaluate(request),
+          "evaluate",
+        ),
+      );
+    },
+    async evaluateMany(request) {
+      return create(
+        AccessEvaluationsResponseSchema,
+        requiredAuthorizationResponse(
+          await provider.evaluateMany(request),
+          "evaluate many",
+        ),
+      );
+    },
+    async searchResources(request) {
+      return create(
+        ResourceSearchResponseSchema,
+        requiredAuthorizationResponse(
+          await provider.searchResources(request),
+          "search resources",
+        ),
+      );
+    },
+    async searchSubjects(request) {
+      return create(
+        SubjectSearchResponseSchema,
+        requiredAuthorizationResponse(
+          await provider.searchSubjects(request),
+          "search subjects",
+        ),
+      );
+    },
+    async effectiveSearchResources(request) {
+      if (!provider.supportsEffectiveSearch()) {
+        throw new ConnectError(
+          "authorization provider does not support effective search",
+          Code.Unimplemented,
+        );
+      }
+      return create(
+        ResourceSearchResponseSchema,
+        requiredAuthorizationResponse(
+          await provider.effectiveSearchResources(request),
+          "effective search resources",
+        ),
+      );
+    },
+    async effectiveSearchSubjects(request) {
+      if (!provider.supportsEffectiveSearch()) {
+        throw new ConnectError(
+          "authorization provider does not support effective search",
+          Code.Unimplemented,
+        );
+      }
+      return create(
+        EffectiveSubjectSearchResponseSchema,
+        requiredAuthorizationResponse(
+          await provider.effectiveSearchSubjects(request),
+          "effective search subjects",
+        ),
+      );
+    },
+    async searchActions(request) {
+      return create(
+        ActionSearchResponseSchema,
+        requiredAuthorizationResponse(
+          await provider.searchActions(request),
+          "search actions",
+        ),
+      );
+    },
+    async expand(request) {
+      if (!provider.supportsExpand()) {
+        throw new ConnectError(
+          "authorization provider does not support expansion",
+          Code.Unimplemented,
+        );
+      }
+      return create(
+        ExpandResponseSchema,
+        requiredAuthorizationResponse(await provider.expand(request), "expand"),
+      );
+    },
+    async getMetadata() {
+      const metadata = create(
+        AuthorizationMetadataSchema,
+        requiredAuthorizationResponse(await provider.getMetadata(), "metadata"),
+      );
+      if (provider.supportsEffectiveSearch()) {
+        pushCapability(metadata.capabilities, "effective_search_resources");
+        pushCapability(metadata.capabilities, "effective_search_subjects");
+      }
+      if (provider.supportsExpand()) {
+        pushCapability(metadata.capabilities, "expand");
+      }
+      return metadata;
+    },
+    async readRelationships(request) {
+      return create(
+        ReadRelationshipsResponseSchema,
+        requiredAuthorizationResponse(
+          await provider.readRelationships(request),
+          "read relationships",
+        ),
+      );
+    },
+    async writeRelationships(request) {
+      await provider.writeRelationships(request);
+      return create(EmptySchema, {});
+    },
+    async getActiveModel() {
+      return create(
+        GetActiveModelResponseSchema,
+        requiredAuthorizationResponse(
+          await provider.getActiveModel(),
+          "get active model",
+        ),
+      );
+    },
+    async listModels(request) {
+      return create(
+        ListModelsResponseSchema,
+        requiredAuthorizationResponse(
+          await provider.listModels(request),
+          "list models",
+        ),
+      );
+    },
+    async writeModel(request) {
+      return create(
+        AuthorizationModelRefSchema,
+        requiredAuthorizationResponse(
+          await provider.writeModel(request),
+          "write model",
+        ),
+      );
+    },
+  };
+}
+
+function requiredAuthorizationResponse<T>(
+  value: T | null | undefined,
+  label: string,
+): T {
+  if (value === null || value === undefined) {
+    throw new ConnectError(
+      `authorization provider returned nil ${label} response`,
+      Code.Internal,
+    );
+  }
+  return value;
 }
 
 /**
@@ -452,4 +872,10 @@ function authorizationRelayTokenInterceptor(token: string): Interceptor {
     req.header.set(AUTHORIZATION_RELAY_TOKEN_HEADER, token);
     return next(req);
   };
+}
+
+function pushCapability(capabilities: string[], capability: string): void {
+  if (!capabilities.includes(capability)) {
+    capabilities.push(capability);
+  }
 }

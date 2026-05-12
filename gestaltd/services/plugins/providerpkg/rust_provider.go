@@ -162,13 +162,7 @@ func BuildRustComponentBinary(root, outputPath, kind, goos, goarch string) (stri
 }
 
 func validateRustComponentKind(kind string) error {
-	if err := validateSourceComponentKind(kind); err != nil {
-		return err
-	}
-	if kind == providermanifestv1.KindAuthorization {
-		return fmt.Errorf("unsupported Rust provider kind %q", kind)
-	}
-	return nil
+	return validateSourceComponentKind(kind)
 }
 
 func buildRustBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
@@ -306,6 +300,8 @@ func rustServeFunction(kind string) (string, bool, error) {
 		return "__gestalt_serve", true, nil
 	case providermanifestv1.KindAuthentication:
 		return "__gestalt_serve_authentication", false, nil
+	case providermanifestv1.KindAuthorization:
+		return "__gestalt_serve_authorization", false, nil
 	case providermanifestv1.KindCache:
 		return "__gestalt_serve_cache", false, nil
 	case providermanifestv1.KindIndexedDB:
@@ -328,7 +324,7 @@ func rustServeFunction(kind string) (string, bool, error) {
 func rustBinaryName(kind string) string {
 	kind = providermanifestv1.NormalizeKind(kind)
 	switch kind {
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindCache, providermanifestv1.KindIndexedDB, providermanifestv1.KindS3, providermanifestv1.KindRuntime, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindCache, providermanifestv1.KindIndexedDB, providermanifestv1.KindS3, providermanifestv1.KindRuntime, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets:
 		return kind
 	default:
 		return "provider"

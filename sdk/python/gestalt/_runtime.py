@@ -28,6 +28,7 @@ from ._plugin import ConnectedToken, Plugin, _module_plugin
 from ._providers import (
     AgentProvider,
     AuthenticationProvider,
+    AuthorizationProvider,
     CacheProvider,
     Closer,
     ExternalTokenValidator,
@@ -59,6 +60,8 @@ runtime_pb2: Any = cast(Any, None)
 runtime_pb2_grpc: Any = cast(Any, None)
 authentication_pb2: Any = cast(Any, None)
 authentication_pb2_grpc: Any = cast(Any, None)
+authorization_pb2: Any = cast(Any, None)
+authorization_pb2_grpc: Any = cast(Any, None)
 cache_pb2: Any = cast(Any, None)
 cache_pb2_grpc: Any = cast(Any, None)
 s3_pb2_grpc: Any = cast(Any, None)
@@ -83,6 +86,8 @@ def _ensure_grpc_runtime() -> None:
     global json_format
     global authentication_pb2
     global authentication_pb2_grpc
+    global authorization_pb2
+    global authorization_pb2_grpc
     global cache_pb2
     global cache_pb2_grpc
     global duration_pb2
@@ -111,6 +116,8 @@ def _ensure_grpc_runtime() -> None:
     from ._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
     from ._gen.v1 import authentication_pb2 as _authentication_pb2
     from ._gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
+    from ._gen.v1 import authorization_pb2 as _authorization_pb2
+    from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
     from ._gen.v1 import cache_pb2 as _cache_pb2
     from ._gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
     from ._gen.v1 import plugin_pb2 as _plugin_pb2
@@ -135,6 +142,8 @@ def _ensure_grpc_runtime() -> None:
     runtime_pb2_grpc = _runtime_pb2_grpc
     authentication_pb2 = _authentication_pb2
     authentication_pb2_grpc = _authentication_pb2_grpc
+    authorization_pb2 = _authorization_pb2
+    authorization_pb2_grpc = _authorization_pb2_grpc
     cache_pb2 = _cache_pb2
     cache_pb2_grpc = _cache_pb2_grpc
     s3_pb2_grpc = _s3_pb2_grpc
@@ -324,6 +333,10 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
         target, AuthenticationProvider
     ):
         return _authentication_runtime_plugin(target)
+    if resolved_kind == ProviderKind.AUTHORIZATION and isinstance(
+        target, AuthorizationProvider
+    ):
+        return _authorization_runtime_plugin(target)
     if resolved_kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
         return _cache_runtime_plugin(target)
     if resolved_kind == ProviderKind.S3 and isinstance(target, S3Provider):
@@ -340,7 +353,7 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
         return _secrets_runtime_plugin(target)
     if isinstance(target, PluginProvider):
         raise RuntimeError(
-            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is authentication, cache, s3, agent, runtime, workflow, or secrets"
+            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is authentication, authorization, cache, s3, agent, runtime, workflow, or secrets"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -444,6 +457,8 @@ def _servable_target(
         target, AuthenticationProvider
     ):
         return _authentication_runtime_plugin(target)
+    if kind == ProviderKind.AUTHORIZATION and isinstance(target, AuthorizationProvider):
+        return _authorization_runtime_plugin(target)
     if kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
         return _cache_runtime_plugin(target)
     if kind == ProviderKind.S3 and isinstance(target, S3Provider):
@@ -466,6 +481,28 @@ def _authentication_runtime_plugin(
         kind=ProviderKind.AUTHENTICATION,
         provider=provider,
         register_services=_register_authentication_services,
+    )
+
+
+def _authorization_runtime_plugin(
+    provider: AuthorizationProvider,
+) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
+        kind=ProviderKind.AUTHORIZATION,
+        provider=provider,
+        register_services=_register_authorization_services,
+    )
+
+
+def _register_authorization_services(server: Any, provider: PluginProvider) -> None:
+    _ensure_grpc_runtime()
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
+        _runtime_servicer(provider=provider, kind=ProviderKind.AUTHORIZATION),
+        server,
+    )
+    authorization_pb2_grpc.add_AuthorizationProviderServicer_to_server(
+        _authorization_servicer(provider=provider),
+        server,
     )
 
 
@@ -1077,6 +1114,213 @@ def _authentication_servicer(*, provider: PluginProvider) -> Any:
     return AuthenticationServicer()
 
 
+_AUTHORIZATION_EFFECTIVE_SEARCH_CAPABILITIES: Final[tuple[str, str]] = (
+    "effective_search_resources",
+    "effective_search_subjects",
+)
+
+
+def _authorization_servicer(*, provider: PluginProvider) -> Any:
+    _ensure_grpc_runtime()
+    authz_provider = cast(AuthorizationProvider, provider)
+
+    class AuthorizationServicer(authorization_pb2_grpc.AuthorizationProviderServicer):
+        @_grpc_handler("authorization evaluate")
+        def Evaluate(self, request: Any, context: Any) -> Any:
+            return _authorization_response(
+                authz_provider.evaluate(request),
+                authorization_pb2.AccessDecision,
+                context,
+                "evaluate",
+            )
+
+        @_grpc_handler("authorization evaluate many")
+        def EvaluateMany(self, request: Any, context: Any) -> Any:
+            return _authorization_response(
+                authz_provider.evaluate_many(request),
+                authorization_pb2.AccessEvaluationsResponse,
+                context,
+                "evaluate many",
+            )
+
+        @_grpc_handler("authorization search resources")
+        def SearchResources(self, request: Any, context: Any) -> Any:
+            return _authorization_response(
+                authz_provider.search_resources(request),
+                authorization_pb2.ResourceSearchResponse,
+                context,
+                "search resources",
+            )
+
+        @_grpc_handler("authorization search subjects")
+        def SearchSubjects(self, request: Any, context: Any) -> Any:
+            return _authorization_response(
+                authz_provider.search_subjects(request),
+                authorization_pb2.SubjectSearchResponse,
+                context,
+                "search subjects",
+            )
+
+        @_grpc_handler("authorization effective search resources")
+        def EffectiveSearchResources(self, request: Any, context: Any) -> Any:
+            if not _authorization_supports_effective_search(authz_provider):
+                return context.abort(
+                    grpc.StatusCode.UNIMPLEMENTED,
+                    "authorization provider does not support effective search",
+                )
+            return _authorization_response(
+                authz_provider.effective_search_resources(request),
+                authorization_pb2.ResourceSearchResponse,
+                context,
+                "effective search resources",
+            )
+
+        @_grpc_handler("authorization effective search subjects")
+        def EffectiveSearchSubjects(self, request: Any, context: Any) -> Any:
+            if not _authorization_supports_effective_search(authz_provider):
+                return context.abort(
+                    grpc.StatusCode.UNIMPLEMENTED,
+                    "authorization provider does not support effective search",
+                )
+            return _authorization_response(
+                authz_provider.effective_search_subjects(request),
+                authorization_pb2.EffectiveSubjectSearchResponse,
+                context,
+                "effective search subjects",
+            )
+
+        @_grpc_handler("authorization search actions")
+        def SearchActions(self, request: Any, context: Any) -> Any:
+            return _authorization_response(
+                authz_provider.search_actions(request),
+                authorization_pb2.ActionSearchResponse,
+                context,
+                "search actions",
+            )
+
+        @_grpc_handler("authorization expand")
+        def Expand(self, request: Any, context: Any) -> Any:
+            if not _provider_overrides(authz_provider, "expand", AuthorizationProvider):
+                return context.abort(
+                    grpc.StatusCode.UNIMPLEMENTED,
+                    "authorization provider does not support expansion",
+                )
+            return _authorization_response(
+                authz_provider.expand(request),
+                authorization_pb2.ExpandResponse,
+                context,
+                "expand",
+            )
+
+        @_grpc_handler("authorization metadata")
+        def GetMetadata(self, _request: Any, context: Any) -> Any:
+            metadata = _authorization_response(
+                authz_provider.get_metadata(),
+                authorization_pb2.AuthorizationMetadata,
+                context,
+                "metadata",
+            )
+            existing = set(metadata.capabilities)
+            if _authorization_supports_effective_search(authz_provider):
+                for capability in _AUTHORIZATION_EFFECTIVE_SEARCH_CAPABILITIES:
+                    if capability not in existing:
+                        metadata.capabilities.append(capability)
+                        existing.add(capability)
+            if _provider_overrides(authz_provider, "expand", AuthorizationProvider):
+                if "expand" not in existing:
+                    metadata.capabilities.append("expand")
+                    existing.add("expand")
+            return metadata
+
+        @_grpc_handler("authorization read relationships")
+        def ReadRelationships(self, request: Any, context: Any) -> Any:
+            return _authorization_response(
+                authz_provider.read_relationships(request),
+                authorization_pb2.ReadRelationshipsResponse,
+                context,
+                "read relationships",
+            )
+
+        @_grpc_handler("authorization write relationships")
+        def WriteRelationships(self, request: Any, _context: Any) -> Any:
+            authz_provider.write_relationships(request)
+            return empty_pb2.Empty()
+
+        @_grpc_handler("authorization get active model")
+        def GetActiveModel(self, _request: Any, context: Any) -> Any:
+            return _authorization_response(
+                authz_provider.get_active_model(),
+                authorization_pb2.GetActiveModelResponse,
+                context,
+                "get active model",
+            )
+
+        @_grpc_handler("authorization list models")
+        def ListModels(self, request: Any, context: Any) -> Any:
+            return _authorization_response(
+                authz_provider.list_models(request),
+                authorization_pb2.ListModelsResponse,
+                context,
+                "list models",
+            )
+
+        @_grpc_handler("authorization write model")
+        def WriteModel(self, request: Any, context: Any) -> Any:
+            return _authorization_response(
+                authz_provider.write_model(request),
+                authorization_pb2.AuthorizationModelRef,
+                context,
+                "write model",
+            )
+
+    return AuthorizationServicer()
+
+
+def _authorization_response(
+    value: Any,
+    message_type: Any,
+    context: Any,
+    label: str,
+) -> Any:
+    if value is None:
+        return context.abort(
+            grpc.StatusCode.INTERNAL,
+            f"authorization provider returned nil {label} response",
+        )
+    if isinstance(value, message_type):
+        return value
+    if isinstance(value, dict):
+        message = message_type()
+        json_format.ParseDict(value, message)
+        return message
+    raise TypeError(
+        f"authorization provider returned {type(value).__name__} for {label}, "
+        f"want {message_type.__name__} or dict"
+    )
+
+
+def _authorization_supports_effective_search(provider: AuthorizationProvider) -> bool:
+    return _provider_overrides(
+        provider,
+        "effective_search_resources",
+        AuthorizationProvider,
+    ) and _provider_overrides(
+        provider,
+        "effective_search_subjects",
+        AuthorizationProvider,
+    )
+
+
+def _provider_overrides(
+    provider: PluginProvider,
+    method_name: str,
+    base_cls: type[Any],
+) -> bool:
+    provider_method = getattr(type(provider), method_name, None)
+    base_method = getattr(base_cls, method_name, None)
+    return provider_method is not None and provider_method is not base_method
+
+
 def _secrets_servicer(*, provider: PluginProvider) -> Any:
     _ensure_grpc_runtime()
     secrets_provider = cast(SecretsProvider, provider)
@@ -1338,6 +1582,7 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
     return {
         ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_INTEGRATION,
         ProviderKind.AUTHENTICATION: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHENTICATION,
+        ProviderKind.AUTHORIZATION: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTHORIZATION,
         ProviderKind.CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
         ProviderKind.S3: runtime_pb2.ProviderKind.PROVIDER_KIND_S3,
         ProviderKind.AGENT: runtime_pb2.ProviderKind.PROVIDER_KIND_AGENT,

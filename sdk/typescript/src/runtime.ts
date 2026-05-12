@@ -25,6 +25,7 @@ import {
   type CompleteLoginRequest as AuthCompleteLoginRequest,
   type ValidateExternalTokenRequest,
 } from "./internal/gen/v1/authentication_pb.ts";
+import { AuthorizationProvider as AuthorizationProviderService } from "./internal/gen/v1/authorization_pb.ts";
 import {
   Cache as CacheService,
   CacheDeleteManyResponseSchema,
@@ -84,6 +85,11 @@ import {
   isAuthenticationProvider,
   type AuthenticatedUser,
 } from "./auth.ts";
+import {
+  AuthorizationProvider,
+  createAuthorizationProviderService,
+  isAuthorizationProvider,
+} from "./authorization.ts";
 import { CacheProvider, isCacheProvider } from "./cache.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
@@ -145,6 +151,7 @@ export const CURRENT_PROTOCOL_VERSION = 3;
  */
 export const USAGE = "usage: bun run runtime.ts ROOT PROVIDER_TARGET";
 export { createAgentProviderService } from "./agent.ts";
+export { createAuthorizationProviderService } from "./authorization.ts";
 export { createPluginRuntimeProviderService } from "./pluginruntime.ts";
 export { createWorkflowProviderService } from "./workflow.ts";
 
@@ -162,6 +169,7 @@ export type RuntimeArgs = {
 export type LoadedProvider =
   | PluginProvider
   | AuthenticationProvider
+  | AuthorizationProvider
   | CacheProvider
   | SecretsProvider
   | S3Provider
@@ -196,6 +204,18 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
       router.service(
         AuthenticationProviderService,
         createAuthenticationService(provider as AuthenticationProvider),
+      );
+    },
+  },
+  authorization: {
+    isProvider: isAuthorizationProvider as (
+      value: unknown,
+    ) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.AUTHORIZATION,
+    registerService(router, provider) {
+      router.service(
+        AuthorizationProviderService,
+        createAuthorizationProviderService(provider as AuthorizationProvider),
       );
     },
   },

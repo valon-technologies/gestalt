@@ -2,533 +2,72 @@ import { Tabs } from 'nextra/components'
 
 # Authorization
 
-Authorization providers back dynamic subject authorization state. They are
-separate from platform login: `providers.authentication.<name>` decides how users
-sign in to Gestalt, while `providers.authorization.<name>` stores authorization
-relationships and answers authorization queries for Gestalt itself.
+Authorization providers store relationship data and answer access checks for
+Gestalt. They are separate from [Authentication](/providers/authentication),
+which identifies the caller.
 
-This relationship-oriented authorization model is inspired by
-[Google Zanzibar](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/),
-Google's global authorization system. Gestalt's implementation follows Zanzibar's
-core ideas---subjects, resources, relations, and relationship tuples---while
-adapting them to a smaller deployment model that does not require its own NewSQL
-cluster.
+Gestalt's model follows the core ideas from
+[Google Zanzibar](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/):
+subjects, resources, relations, actions, and relationship tuples.
 
-## Core concepts
+## Concepts
 
-Before reading how Gestalt applies authorization, it helps to know the Zanzibar
-concepts it uses.
-
-### Subjects
-
-A subject is the entity an authorization check is for. In Gestalt, subjects are
-canonical identifiers like `user:<id>`, `service_account:<id>`, or a system
-subject used by a runtime surface. When a request arrives, Gestalt resolves
-the caller to a subject, then performs every subsequent check in terms of that
-subject.
-
-### Resources
-
-A resource is the thing a subject is asking to access. In Gestalt, the most
-common resources are:
-
-- A **plugin**, such as `plugin_static:github`
-- A **policy**, such as `policy_static:admin`
-- An **external identity**, such as `external_identity:google-123`
-- A **managed subject**, such as `managed_subject:deploy-bot`
-
-### Relations
-
-A relation is the named edge between a subject and a resource. The relation
-`triage` on a plugin means "this subject can triage issues on this plugin."
-The relation `admin` on a policy means "this subject is an admin in this policy."
-
-### Relationship tuples
-
-A relationship tuple is the concrete instance of a relation:
-
-```
-<subject> <relation> <resource>
-```
-
-For example:
-
-```
-user:alice viewer plugin_static:github
-user:bob editor plugin_static:github
-```
-
-These tuples are stored in the configured authorization provider. The provider
-treats them as the source of truth for every dynamic access decision.
-
-### Actions
-
-Relations describe membership. Actions describe what the membership grants.
-A provider's authorization model defines which actions a role implies, then
-maps those actions back to relations. When Gestalt asks "may user:alice read
-this operation?" the provider checks whether alice has any relation on the
-resource that includes the `read` action.
-
-## Static and dynamic authorization
-
-Gestalt has two ways to express who may do what.
-
-### Static authorization
-
-Static authorization lives in config under `authorization.policies`.
-It is loaded at startup, immutable at runtime, and takes precedence over
-dynamic grants. Static membership is useful for:
-
-- Initial admin access when no provider is configured
-- Infrastructure-as-code role assignments
-- Break-glass access that does not depend on a running provider
-
-### Dynamic authorization
-
-Dynamic authorization lives in the configured authorization provider.
-Administrators can add or remove grants through the built-in admin
-authorization API without restarting the server. Dynamic authorization is
-useful for:
-
-- User self-service role requests
-- Time-bound access grants
-- Role changes that must propagate without a deployment
-
-When both static and dynamic grants exist for the same subject and resource,
-static grants win. If a static policy grants alice `admin` on the admin
-policy, the provider is not consulted for alice's admin role.
-
-## Product authorization semantics
-
-At the product level, authorization is about subjects and runtime surfaces.
-Gestalt resolves each request to a canonical subject, then asks whether that
-subject may access the thing they are trying to use.
-
-There are four related layers involved in most runtime decisions:
-
-| Layer | What it answers |
+| Concept | Meaning |
 | --- | --- |
-| Authentication | Who is calling? |
-| Operation scope | Which plugin operations may this principal call? |
-| Runtime authorization | Is this subject allowed under the deployment policy? |
-| Credentials | Which subject-owned upstream token should be used? |
+| Subject | Who is acting, such as `user:alice` or `service_account:deploy-bot` |
+| Resource | What is protected, such as `plugin_static:github` |
+| Relation | A named edge on a resource, such as `viewer` or `admin` |
+| Action | What the subject wants to do, such as `read` or `invoke` |
+| Tuple | A stored grant: `<subject> <relation> <resource>` |
 
-These layers are checked independently. Granting one does not imply the others.
-An execution can be authenticated, allowed by policy, and still fail if its
-token does not include the target operation scope. Likewise, an execution can
-have the correct operation scope and still fail if the selected connection has
-no usable credential for the credential subject.
+Relations grant actions through the active authorization model. For example,
+`viewer` on a plugin may grant `read`; `editor` may grant `read` and `invoke`.
 
-## Plugin invocation
+## Static And Dynamic Grants
 
-Plugin authorization happens at request time. Gestalt checks whether the
-calling subject may access the plugin or operation before it invokes the
-target.
+Static grants live in `authorization.policies`. They load at startup, do not
+change at runtime, and take precedence over provider-backed grants.
 
-The broker is the common runtime gate for HTTP, MCP, workflow, agent-tool, and
-nested plugin invocations. For a plugin operation call, it:
+Dynamic grants live in the selected authorization provider. Admin APIs can add
+or remove them without restarting `gestaltd`.
 
-1. Resolves the target plugin and operation
-2. Verifies the principal can call them at the operation-scope layer
-3. Applies any bound authorization provider or policy for the canonical subject
-4. Resolves the operation connection and credential
-5. Invokes the provider with only the token needed for that invocation
+## Where Gestalt Uses Authorization
 
-### Nested plugin calls and invocation tokens
+Gestalt checks authorization before serving protected surfaces:
 
-Executable plugins can call other plugins through the host-provided plugin
-invoker. This is a propagation and attenuation primitive, not an
-authority-expansion primitive.
+- Plugin and operation invocation
+- Admin APIs and UI routes
+- External identity assumption
+- Managed subjects and service accounts
+- Workflow and agent execution grants
 
-`plugins.<caller>.invokes` defines the allowed call graph. The caller declares
-which plugins, operations, or surfaces it may invoke:
+Authentication, operation scope, authorization, and credential selection are
+separate checks. Passing one does not imply the others.
 
-```yaml
-plugins:
-  indexer:
-    source: ./plugins/indexer/manifest.yaml
-    invokes:
-      - plugin: source
-        operation: messages.list
-      - plugin: source
-        operation: messages.get
-      - plugin: github
-        surface: graphql
-```
+## Provider Contract
 
-At runtime, the caller receives an invocation token that encodes its declared
-grants. When the caller asks to invoke another plugin, the host verifies the
-requested grant is a subset of the parent's declared `invokes`. If the caller
-requests no specific grant, it inherits the full parent grant. If it requests
-a narrower grant, the host intersects the two.
+Authorization providers implement three groups of RPCs.
 
-This means plugins can narrow delegated authority but cannot add new target
-plugins or operations. A plugin with `invokes: [source.messages.list]` can
-exchange its token for a token that only has `source.messages.list`, but it
-cannot exchange its token for a token that also has `github.issues.create`.
-
-#### Invocation token lifecycle
-
-Invocation tokens are signed JWTs with the following guarantees:
-
-- **Issuer**: `gestaltd`, audience: `gestalt-provider-host`
-- **Caller binding**: the token is bound to the plugin that minted it
-- **Delegation expiry**: a separate delegation expiry limits how long a token
-can be exchanged, even if the token itself has not expired
-- **Depth tracking**: the call chain depth is tracked to prevent unbounded
-recursion
-- **Principal propagation**: the original subject, permissions, and credential
-context are forwarded so the nested call runs with the same identity
-
-A root invocation token lives for 15 minutes. A child token can be exchanged
-for up to 10 minutes, with a maximum delegation window of 15 minutes from the
-root. If a parent token's delegation window has passed, no child exchange
-succeeds.
-
-#### Credential modes in nested calls
-
-By default, nested plugin calls use the same credential subject as the parent.
-For automation, declare the managed subject with `runAs` and keep nested calls
-on normal user-mode connections:
-
-```yaml
-plugins:
-  reporter:
-    source: ./plugins/reporter/manifest.yaml
-    invokes:
-      - plugin: slack
-        runAs:
-          subject:
-            id: service_account:reporter-bot
-```
-
-This causes the nested call to resolve Slack credentials for the
-`service_account:reporter-bot` subject instead of the calling user's credential.
-
-### Service accounts for direct API calls
-
-Use the host-provided plugin invoker when a plugin calls another plugin as part
-of the current request. The invoker sends an invocation token through the SDK
-host service, so the nested call keeps the original subject, credential context,
-and permission ceiling from `plugins.<caller>.invokes`.
-
-Use a managed subject when the call should run as a stable non-human principal
-instead of the current caller. Managed subjects are service-account identities
-with canonical IDs like `service_account:release-bot`. You can grant a managed
-subject access to specific plugins, store upstream credentials under that same
-subject, and create a subject-owned API token for direct calls to
-`/api/v1/{integration}/{operation}`.
-
-This pattern is useful when you want to:
-
-- Run release bots, sync jobs, or shared automation under one owned identity
-- Give a plugin access to a narrow set of Gestalt operations without inheriting
-  the invoking user's full access
-- Rotate the Gestalt API token independently from upstream OAuth tokens or API
-  keys
-
-Before a managed subject can call a plugin operation, it needs both Gestalt API
-access and plugin runtime access:
-
-1. Create a managed subject, such as `service_account:release-bot`.
-2. Grant the managed subject the plugin role required by the target plugin.
-3. If the target plugin uses a `user` connection, connect OAuth or manual
-   credentials for the managed subject. Gestalt stores those credentials under
-   the same `service_account:<id>` subject ID.
-4. Create a subject-owned API token with only the plugin operations the caller
-   needs.
-5. Store that API token as a secret and use it as
-   `Authorization: Bearer gst_api_...` when calling the Gestalt HTTP API.
-
-The API token authenticates the caller to Gestalt. It does not replace upstream
-credentials. The target operation still resolves credentials from its configured
-connection mode. For `user` connections, that means the managed subject's stored
-credential.
-
-Subject-owned API tokens cannot manage managed subjects. Use a browser session
-or an unscoped user-owned API token for managed-subject administration. See
-[HTTP API > Managed Subjects](/reference/http-api#managed-subjects) for the
-management endpoints and example requests.
-
-## Workflow execution
-
-Workflow authorization happens twice. Gestalt checks access when a user creates
-a schedule, then checks again when that schedule or trigger fires later.
-
-User-owned workflows keep the creating subject plus a permission ceiling for
-delayed execution. Config-managed workflows are reconciled and listed under the
-system config subject. They may declare `runAs.subject.id` to execute as a
-service account at runtime; user-mode plugin connections then resolve
-credentials stored for that same service-account subject. Without `runAs`,
-config-managed workflows execute as `system:config` and user-mode targets are
-rejected.
-
-Config-managed workflows include the direct target operation automatically. If
-the target performs nested plugin calls, declare those additional operation
-grants with `invokes`:
-
-```yaml
-workflows:
-  schedules:
-    external_source_sync:
-      provider: local
-      cron: "*/15 * * * *"
-      target:
-        plugin:
-          name: indexer
-          operation: sources.sync
-          input:
-            sourceId: primary-source
-      runAs:
-        subject:
-          id: service_account:indexer-sync
-      invokes:
-        - plugin: source
-          operation: messages.list
-        - plugin: source
-          operation: messages.get
-```
-
-This grants the runtime principal `indexer.sources.sync` plus the listed
-source operation scopes. It does not grant source credentials or authorize the
-target plugin to mint arbitrary nested invocation tokens. The source plugin
-still uses the connection selected by the target operation and deployment
-config, and the target plugin must still declare compatible
-`plugins.<target>.invokes` entries for any nested calls it performs.
-
-Config-owned direct targets, agent tools, and output-delivery targets must
-resolve to `none` connections unless the workflow declares `runAs`. Mixed
-plugins are still supported when the target explicitly selects a connection that
-has credentials provisioned for the `runAs` subject.
-
-## UI routes
-
-Mounted UI bundles can bind an `authorizationPolicy`, and their manifests can
-declare route-level `allowedRoles`. Gestalt resolves the caller's subject,
-derives their role for the bound policy, and checks that role before serving
-the matched route. The built-in admin UI uses the same model.
-
-## Authorization provider architecture
-
-When `server.providers.authorization` selects a provider, Gestalt writes its
-authorization model plus dynamic subject plugin and built-in admin relationships
-into that provider and uses it for runtime subject authorization checks.
-
-### Decision plane
-
-The authorization provider answers access queries through these methods:
-
-| Method | Purpose |
+| Group | Methods |
 | --- | --- |
-| `Evaluate` | Check a single subject-action-resource tuple |
-| `EvaluateMany` | Check many tuples in one batch |
-| `SearchResources` | List resources a subject can access |
-| `SearchSubjects` | List subjects that can access a resource |
-| `SearchActions` | List actions a subject can perform on a resource |
-| `GetMetadata` | Return provider capabilities and active model |
+| Decisions | `Evaluate`, `EvaluateMany`, `SearchResources`, `SearchSubjects`, `SearchActions`, `GetMetadata` |
+| Relationships | `ReadRelationships`, `WriteRelationships` |
+| Models | `GetActiveModel`, `ListModels`, `WriteModel` |
 
-Gestalt uses `EvaluateMany` heavily. When it resolves a provider role for a
-principal, it batches all possible role checks into one call. This is
-important for latency: a principal with five possible roles on a resource
-causes one `EvaluateMany` call, not five sequential `Evaluate` calls.
+`EvaluateMany` is important for latency. Gestalt batches role checks instead of
+calling `Evaluate` once per possible role.
 
-### Relationship control plane
+Optional methods advertise capabilities through `GetMetadata`. Effective search
+is paired: providers must support and advertise both methods or neither.
 
-| Method | Purpose |
+| Capability | Methods |
 | --- | --- |
-| `ReadRelationships` | Query stored relationship tuples |
-| `WriteRelationships` | Atomically write and delete tuples |
+| `effective_search_resources`, `effective_search_subjects` | `EffectiveSearchResources`, `EffectiveSearchSubjects` |
+| `expand` | `Expand` |
 
-Gestalt uses `WriteRelationships` to sync its managed model and state into the
-provider. It computes the desired set of relationship tuples from config and
-current grants, diffs that against the existing set, and issues writes and
-deletes to converge. This runs on startup and then polls every 5 seconds.
+If an optional method is not implemented, the SDK returns `UNIMPLEMENTED`.
 
-### Model lifecycle
-
-| Method | Purpose |
-| --- | --- |
-| `GetActiveModel` | Return the current authorization model |
-| `ListModels` | Return all stored models |
-| `WriteModel` | Store a new authorization model |
-
-Gestalt builds an authorization model from the configured policies and roles.
-The model declares resource types, their relations, and the actions each
-relation implies. When policies change, Gestalt writes a new model and
-then migrates the relationships.
-
-### Managed resource types
-
-Gestalt's provider-backed authorizer manages these resource types in the
-provider:
-
-| Resource type | What it represents |
-| --- | --- |
-| `policy_static` | Static policy definitions from config |
-| `plugin_static` | Static plugin grants from config |
-| `plugin_dynamic` | Dynamic plugin grants from the admin API |
-| `admin_policy_static` | Static admin policy definitions |
-| `admin_dynamic` | Dynamic admin grants from the admin API |
-| `external_identity` | External identity assumption mappings |
-| `managed_subject` | Service accounts and managed subjects |
-
-Every managed resource type follows the same pattern: a resource instance
-has relations, and relations have subject types. Actions are computed from
-relations. This is the core Zanzibar model.
-
-## Using `Authorization` from provider code
-
-Provider code can query the selected host authorization provider through the
-read-only SDK authorization client. Use this when a plugin or provider needs to
-look up authorization-derived routing information, such as the Gestalt users
-allowed to assume an external identity. This client is for reads only; Gestalt
-still owns relationship writes and model lifecycle for managed authorization
-state.
-
-<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
-  <Tabs.Tab>
-    ```go
-    import (
-        "context"
-
-        gestalt "github.com/valon-technologies/gestalt/sdk/go"
-    )
-
-    func usersForSlackIdentity(
-        ctx context.Context,
-        request gestalt.Request,
-        teamID string,
-        slackUserID string,
-    ) ([]string, error) {
-        authz, err := request.Authorization()
-        if err != nil {
-            return nil, err
-        }
-        defer authz.Close()
-
-        subjects, err := authz.SearchSubjects(ctx, &gestalt.SubjectSearchRequest{
-            Resource: &gestalt.AuthorizationResource{
-                Type: "slack_identity",
-                Id:   "team:" + teamID + ":user:" + slackUserID,
-            },
-            Action: &gestalt.AuthorizationAction{Name: "assume"},
-            SubjectType: "user",
-            PageSize:    10,
-        })
-        if err != nil {
-            return nil, err
-        }
-
-        ids := make([]string, 0, len(subjects.GetSubjects()))
-        for _, subject := range subjects.GetSubjects() {
-            ids = append(ids, subject.GetId())
-        }
-        return ids, nil
-    }
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```python
-    from gestalt import (
-        Request,
-        SubjectSearchRequest,
-        AuthorizationResource,
-        AuthorizationAction,
-    )
-
-    def users_for_slack_identity(
-        request: Request,
-        team_id: str,
-        slack_user_id: str,
-    ) -> list[str]:
-        with request.authorization() as authz:
-            subjects = authz.search_subjects(
-                SubjectSearchRequest(
-                    resource=AuthorizationResource(
-                        type="slack_identity",
-                        id=f"team:{team_id}:user:{slack_user_id}",
-                    ),
-                    action=AuthorizationAction(name="assume"),
-                    subject_type="user",
-                    page_size=10,
-                )
-            )
-
-        return [subject.id for subject in subjects.subjects]
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```rust
-    use gestalt::{
-        Authorization, AuthorizationAction, AuthorizationResource,
-        SubjectSearchRequest,
-    };
-
-    async fn users_for_slack_identity(
-        team_id: &str,
-        slack_user_id: &str,
-    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let mut authz = Authorization::connect().await?;
-        let subjects = authz
-            .search_subjects(SubjectSearchRequest {
-                resource: AuthorizationResource::new(
-                    "slack_identity",
-                    format!("team:{team_id}:user:{slack_user_id}"),
-                ),
-                action: AuthorizationAction::new("assume"),
-                subject_type: "user".to_string(),
-                page_size: 10,
-                ..Default::default()
-            })
-            .await?;
-
-        Ok(subjects
-            .subjects
-            .into_iter()
-            .map(|subject| subject.id)
-            .collect())
-    }
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts
-    import { Authorization, type Request } from "@valon-technologies/gestalt";
-
-    export async function usersForSlackIdentity(
-      _request: Request,
-      teamId: string,
-      slackUserId: string,
-    ) {
-      const authz = Authorization();
-
-      const subjects = await authz.searchSubjects({
-        resource: {
-          type: "slack_identity",
-          id: `team:${teamId}:user:${slackUserId}`,
-        },
-        action: {
-          name: "assume",
-        },
-        subjectType: "user",
-        pageSize: 10,
-      });
-
-      return subjects.subjects.map((subject) => subject.id);
-    }
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-## First-party authorization providers
-
-First-party authorization providers live under
-[`valon-technologies/gestalt-providers/authorization`](https://github.com/valon-technologies/gestalt-providers/tree/main/authorization).
-
-| Provider | Use case |
-| --- | --- |
-| [`github.com/valon-technologies/gestalt-providers/authorization/indexeddb`](https://github.com/valon-technologies/gestalt-providers/tree/main/authorization/indexeddb) | Stores authorization models and relationships in a host IndexedDB provider |
-
-## Configuring `providers.authorization`
+## Configure
 
 ```yaml
 server:
@@ -554,188 +93,242 @@ providers:
         indexeddb: main
 ```
 
-The first-party `authorization/indexeddb` provider expects the name of a host
-IndexedDB provider and stores authorization models plus relationships there.
+The first-party IndexedDB authorization provider stores models and relationship
+tuples in a configured IndexedDB provider.
 
-## Operational notes
+## Use The Host Client
 
-`server.providers.authorization` selects the host authorization provider. If
-more than one entry exists under `providers.authorization`, set
-`server.providers.authorization` explicitly or mark one entry `default: true`.
-Built-in admin authorization membership and inspection APIs use the selected
-provider. Static policy members still take precedence over dynamic grants.
+Provider code can query the selected authorization provider through the SDK host
+client.
 
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    import (
+        "context"
 
-## Building your own authorization provider
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
 
-### Manifest
+    func canView(ctx context.Context, req gestalt.Request, userID string) (bool, error) {
+        authz, err := req.Authorization()
+        if err != nil {
+            return false, err
+        }
+        defer authz.Close()
 
-An authorization provider manifest declares `kind: authorization`:
+        decision, err := authz.Evaluate(ctx, &gestalt.AccessEvaluationRequest{
+            Subject:  &gestalt.AuthorizationSubject{Type: "subject", Id: userID},
+            Action:   &gestalt.AuthorizationAction{Name: "view"},
+            Resource: &gestalt.AuthorizationResource{Type: "agent_session", Id: "session-1"},
+        })
+        return decision.GetAllowed(), err
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import Authorization, AccessEvaluationRequest
+    from gestalt import AuthorizationAction, AuthorizationResource, AuthorizationSubject
+
+    def can_view(user_id: str) -> bool:
+        decision = Authorization().evaluate(
+            AccessEvaluationRequest(
+                subject=AuthorizationSubject(type="subject", id=user_id),
+                action=AuthorizationAction(name="view"),
+                resource=AuthorizationResource(type="agent_session", id="session-1"),
+            )
+        )
+        return decision.allowed
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt::{
+        AccessEvaluationRequest, Authorization, AuthorizationAction,
+        AuthorizationResource, AuthorizationSubject,
+    };
+
+    async fn can_view(user_id: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        let mut authz = Authorization::connect().await?;
+        let decision = authz.evaluate(AccessEvaluationRequest {
+            subject: AuthorizationSubject::new("subject", user_id),
+            action: AuthorizationAction::new("view"),
+            resource: AuthorizationResource::new("agent_session", "session-1"),
+            ..Default::default()
+        }).await?;
+        Ok(decision.allowed)
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { Authorization } from "@valon-technologies/gestalt";
+
+    export async function canView(userId: string) {
+      const decision = await Authorization().evaluate({
+        subject: { type: "subject", id: userId },
+        action: { name: "view" },
+        resource: { type: "agent_session", id: "session-1" },
+      });
+      return decision.allowed;
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Build A Provider
+
+An authorization provider manifest uses `kind: authorization`:
 
 ```yaml
 kind: authorization
 source: github.com/your-org/authorization/example
 version: 0.0.1
 displayName: Example Authorization
-description: Authorization provider with custom model and relationship storage.
-spec:
-  configSchemaPath: ./authorization_config.json
+description: Custom authorization provider.
 ```
 
-### Provider interface
-
-Authorization provider authoring is currently exposed through the Go SDK.
-
-The provider contract uses the decision plane, relationship control plane, and
-model lifecycle surfaces described in
-[Authorization provider architecture](/providers/authorization#authorization-provider-architecture).
-The example below shows the shape of a minimal in-memory provider; the remaining
-methods follow the same request/response pattern.
-
-### Observability
-
-Provider authors do not need to emit the baseline `gestaltd` authorization
-metrics. `gestaltd` wraps the configured provider interface and records
-`gestaltd.authorization.provider.operation.*` for every provider method. When
-the provider is used for provider-backed subject access, `gestaltd` also records
-`gestaltd.authorization.provider.evaluate.*` around the batched authorization
-checks it performs.
-
-When OTLP tracing is enabled, preserve the `context.Context` passed into
-provider methods for downstream calls so provider work remains attached to the
-same trace tree.
+Authoring support is available in Go, Python, Rust, and TypeScript.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
-    package exampleauthz
-
     import (
         "context"
-        "fmt"
 
         gestalt "github.com/valon-technologies/gestalt/sdk/go"
     )
 
-    type Provider struct {
-        modelID string
-    }
+    type Provider struct{}
 
     func New() *Provider { return &Provider{} }
 
-    func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
-        p.modelID, _ = config["modelId"].(string)
-        return nil
-    }
-
-    func (p *Provider) Evaluate(_ context.Context, req *gestalt.AccessEvaluationRequest) (*gestalt.AccessDecision, error) {
-        allowed := req.GetAction().GetName() == "read"
-        return &gestalt.AccessDecision{
-            Allowed: allowed,
-            ModelId: p.modelID,
-        }, nil
+    func (p *Provider) Evaluate(context.Context, *gestalt.AccessEvaluationRequest) (*gestalt.AccessDecision, error) {
+        return &gestalt.AccessDecision{Allowed: true, ModelId: "model-1"}, nil
     }
 
     func (p *Provider) EvaluateMany(ctx context.Context, req *gestalt.AccessEvaluationsRequest) (*gestalt.AccessEvaluationsResponse, error) {
-        decisions := make([]*gestalt.AccessDecision, 0, len(req.GetRequests()))
-        for _, item := range req.GetRequests() {
-            decision, err := p.Evaluate(ctx, item)
-            if err != nil {
-                return nil, err
-            }
-            decisions = append(decisions, decision)
+        out := &gestalt.AccessEvaluationsResponse{}
+        for range req.GetRequests() {
+            out.Decisions = append(out.Decisions, &gestalt.AccessDecision{Allowed: true, ModelId: "model-1"})
         }
-        return &gestalt.AccessEvaluationsResponse{Decisions: decisions}, nil
-    }
-
-    func (p *Provider) SearchResources(context.Context, *gestalt.ResourceSearchRequest) (*gestalt.ResourceSearchResponse, error) {
-        return &gestalt.ResourceSearchResponse{ModelId: p.modelID}, nil
-    }
-
-    func (p *Provider) SearchSubjects(context.Context, *gestalt.SubjectSearchRequest) (*gestalt.SubjectSearchResponse, error) {
-        return &gestalt.SubjectSearchResponse{ModelId: p.modelID}, nil
-    }
-
-    func (p *Provider) SearchActions(context.Context, *gestalt.ActionSearchRequest) (*gestalt.ActionSearchResponse, error) {
-        return &gestalt.ActionSearchResponse{ModelId: p.modelID}, nil
-    }
-
-    func (p *Provider) GetMetadata(context.Context) (*gestalt.AuthorizationMetadata, error) {
-        return &gestalt.AuthorizationMetadata{
-            Capabilities:  []string{"evaluate", "relationships", "models"},
-            ActiveModelId: p.modelID,
-        }, nil
-    }
-
-    func (p *Provider) ReadRelationships(context.Context, *gestalt.ReadRelationshipsRequest) (*gestalt.ReadRelationshipsResponse, error) {
-        return &gestalt.ReadRelationshipsResponse{ModelId: p.modelID}, nil
-    }
-
-    func (p *Provider) WriteRelationships(context.Context, *gestalt.WriteRelationshipsRequest) error {
-        return nil
-    }
-
-    func (p *Provider) GetActiveModel(context.Context) (*gestalt.GetActiveModelResponse, error) {
-        if p.modelID == "" {
-            return &gestalt.GetActiveModelResponse{}, nil
-        }
-        return &gestalt.GetActiveModelResponse{
-            Model: &gestalt.AuthorizationModelRef{Id: p.modelID, Version: "v1"},
-        }, nil
-    }
-
-    func (p *Provider) ListModels(context.Context, *gestalt.ListModelsRequest) (*gestalt.ListModelsResponse, error) {
-        if p.modelID == "" {
-            return &gestalt.ListModelsResponse{}, nil
-        }
-        return &gestalt.ListModelsResponse{
-            Models: []*gestalt.AuthorizationModelRef{{Id: p.modelID, Version: "v1"}},
-        }, nil
-    }
-
-    func (p *Provider) WriteModel(_ context.Context, req *gestalt.WriteModelRequest) (*gestalt.AuthorizationModelRef, error) {
-        if req.GetModel() == nil {
-            return nil, fmt.Errorf("model is required")
-        }
-        p.modelID = "example-model"
-        return &gestalt.AuthorizationModelRef{Id: p.modelID, Version: "v1"}, nil
+        return out, nil
     }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Authorization provider implementation is currently exposed through the Go
-    SDK. Python provider or plugin code can still call the configured
-    authorization provider through the `Authorization` host-service client in
-    [Using `Authorization` from provider code](/providers/authorization#using-authorization-from-provider-code).
+    ```python
+    from gestalt import (
+        AccessDecision,
+        AccessEvaluationsResponse,
+        AuthorizationMetadata,
+        AuthorizationProvider,
+    )
+
+    class Provider(AuthorizationProvider):
+        def evaluate(self, request):
+            return AccessDecision(allowed=True, model_id="model-1")
+
+        def evaluate_many(self, request):
+            return AccessEvaluationsResponse(
+                decisions=[self.evaluate(item) for item in request.requests]
+            )
+
+        def get_metadata(self):
+            return AuthorizationMetadata(
+                capabilities=["evaluate"],
+                active_model_id="model-1",
+            )
+
+    authorization = Provider()
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Authorization provider implementation is currently exposed through the Go
-    SDK. Rust provider or plugin code can still call the configured
-    authorization provider through the `Authorization` host-service client in
-    [Using `Authorization` from provider code](/providers/authorization#using-authorization-from-provider-code).
+    ```rust
+    use gestalt::{
+        AccessDecision, AccessEvaluationRequest, AccessEvaluationsRequest,
+        AccessEvaluationsResponse, AuthorizationMetadata, AuthorizationProvider,
+    };
+
+    #[derive(Default)]
+    struct Provider;
+
+    #[gestalt::async_trait]
+    impl AuthorizationProvider for Provider {
+        async fn evaluate(&self, _request: AccessEvaluationRequest) -> gestalt::Result<AccessDecision> {
+            Ok(AccessDecision { allowed: true, model_id: "model-1".into(), ..Default::default() })
+        }
+
+        async fn evaluate_many(&self, request: AccessEvaluationsRequest) -> gestalt::Result<AccessEvaluationsResponse> {
+            Ok(AccessEvaluationsResponse {
+                decisions: request.requests.into_iter().map(|_| AccessDecision {
+                    allowed: true,
+                    model_id: "model-1".into(),
+                    ..Default::default()
+                }).collect(),
+            })
+        }
+
+        async fn get_metadata(&self) -> gestalt::Result<AuthorizationMetadata> {
+            Ok(AuthorizationMetadata {
+                capabilities: vec!["evaluate".into()],
+                active_model_id: "model-1".into(),
+            })
+        }
+    }
+
+    gestalt::export_authorization_provider!(constructor = Provider::default);
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Authorization provider implementation is currently exposed through the Go
-    SDK. TypeScript provider or plugin code can still call the configured
-    authorization provider through the `Authorization` host-service client in
-    [Using `Authorization` from provider code](/providers/authorization#using-authorization-from-provider-code).
+    ```ts
+    import { defineAuthorizationProvider } from "@valon-technologies/gestalt";
+
+    export const authorization = defineAuthorizationProvider({
+      evaluate() {
+        return { allowed: true, modelId: "model-1" };
+      },
+      evaluateMany(request) {
+        return {
+          decisions: request.requests.map(() => ({
+            allowed: true,
+            modelId: "model-1",
+          })),
+        };
+      },
+      searchResources: () => ({ resources: [], modelId: "model-1" }),
+      searchSubjects: () => ({ subjects: [], modelId: "model-1" }),
+      searchActions: () => ({ actions: [], modelId: "model-1" }),
+      getMetadata: () => ({ capabilities: ["evaluate"], activeModelId: "model-1" }),
+      readRelationships: () => ({ relationships: [], modelId: "model-1" }),
+      writeRelationships: () => {},
+      getActiveModel: () => ({ model: { id: "model-1", version: "1" } }),
+      listModels: () => ({ models: [{ id: "model-1", version: "1" }] }),
+      writeModel: () => ({ id: "model-1", version: "1" }),
+    });
+    ```
   </Tabs.Tab>
 </Tabs>
 
-### Deploying the provider
+Production providers should implement every required RPC. The snippets above
+focus on the SDK entrypoints and batch-evaluation shape.
 
-Configure a custom authorization provider through the same
-`providers.authorization` and `server.providers.authorization` blocks shown in
-[Configuring `providers.authorization`](/providers/authorization#configuring-providersauthorization).
-For package publishing, use the common flow in
-[Releasing provider packages](/providers#releasing-provider-packages).
+## Operational Notes
 
-## What to read next
+`server.providers.authorization` selects the active provider. If multiple
+entries exist under `providers.authorization`, set the server provider name or
+mark one entry `default: true`.
 
-For the full server and provider config structure, read
-[Configuration](/reference/configuration). For the exact `providers.authorization`
-reference, continue to [Config File](/reference/config-file). If you want to
-see how these semantics apply to concrete surfaces, read
-[Plugin](/providers/plugins), [Workflow](/providers/workflow), and
-[UI](/providers/ui). For the relationship between authorization and
-credentials, read [External Credentials](/providers/external-credentials).
+Static policy members still win over dynamic grants. Gestalt also writes managed
+models and relationships into the provider for built-in admin, plugin,
+external-identity, managed-subject, workflow, and agent authorization.
+
+When OTLP tracing is enabled, keep the incoming request context attached to
+downstream calls so provider work stays in the same trace.
+
+## Next
+
+For exact config fields, see [Config File](/reference/config-file). For package
+publishing, see [Releasing provider packages](/providers#releasing-provider-packages).
+For credentials, see [External Credentials](/providers/external-credentials).

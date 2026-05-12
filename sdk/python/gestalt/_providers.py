@@ -37,6 +37,31 @@ if TYPE_CHECKING:
     )
     from ._api import Error
     from ._cache import CacheEntry
+    from ._gen.v1.authorization_pb2 import (
+        AccessDecision,
+        AccessEvaluationRequest,
+        AccessEvaluationsRequest,
+        AccessEvaluationsResponse,
+        ActionSearchRequest,
+        ActionSearchResponse,
+        AuthorizationMetadata,
+        AuthorizationModelRef,
+        EffectiveSubjectSearchRequest,
+        EffectiveSubjectSearchResponse,
+        ExpandRequest,
+        ExpandResponse,
+        GetActiveModelResponse,
+        ListModelsRequest,
+        ListModelsResponse,
+        ReadRelationshipsRequest,
+        ReadRelationshipsResponse,
+        ResourceSearchRequest,
+        ResourceSearchResponse,
+        SubjectSearchRequest,
+        SubjectSearchResponse,
+        WriteModelRequest,
+        WriteRelationshipsRequest,
+    )
 
 else:
     from ._api import Error
@@ -47,6 +72,7 @@ class ProviderKind(str, Enum):
 
     INTEGRATION = "integration"
     AUTHENTICATION = "authentication"
+    AUTHORIZATION = "authorization"
     CACHE = "cache"
     S3 = "s3"
     AGENT = "agent"
@@ -176,6 +202,75 @@ class AuthenticationProvider(PluginProvider):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.AUTHENTICATION)
+
+
+class AuthorizationProvider(PluginProvider):
+    """Base class for authorization-provider runtimes."""
+
+    def _unimplemented(self, method: str) -> NoReturn:
+        raise Error(
+            HTTPStatus.NOT_IMPLEMENTED,
+            f"{type(self).__name__}.{method} is not implemented",
+        )
+
+    def evaluate(self, request: AccessEvaluationRequest) -> AccessDecision:
+        self._unimplemented("evaluate")
+
+    def evaluate_many(
+        self, request: AccessEvaluationsRequest
+    ) -> AccessEvaluationsResponse:
+        self._unimplemented("evaluate_many")
+
+    def search_resources(
+        self, request: ResourceSearchRequest
+    ) -> ResourceSearchResponse:
+        self._unimplemented("search_resources")
+
+    def search_subjects(self, request: SubjectSearchRequest) -> SubjectSearchResponse:
+        self._unimplemented("search_subjects")
+
+    def effective_search_resources(
+        self, request: ResourceSearchRequest
+    ) -> ResourceSearchResponse:
+        self._unimplemented("effective_search_resources")
+
+    def effective_search_subjects(
+        self, request: EffectiveSubjectSearchRequest
+    ) -> EffectiveSubjectSearchResponse:
+        self._unimplemented("effective_search_subjects")
+
+    def search_actions(self, request: ActionSearchRequest) -> ActionSearchResponse:
+        self._unimplemented("search_actions")
+
+    def expand(self, request: ExpandRequest) -> ExpandResponse:
+        self._unimplemented("expand")
+
+    def get_metadata(self) -> AuthorizationMetadata:
+        self._unimplemented("get_metadata")
+
+    def read_relationships(
+        self, request: ReadRelationshipsRequest
+    ) -> ReadRelationshipsResponse:
+        self._unimplemented("read_relationships")
+
+    def write_relationships(self, request: WriteRelationshipsRequest) -> None:
+        self._unimplemented("write_relationships")
+
+    def get_active_model(self) -> GetActiveModelResponse:
+        self._unimplemented("get_active_model")
+
+    def list_models(self, request: ListModelsRequest) -> ListModelsResponse:
+        self._unimplemented("list_models")
+
+    def write_model(self, request: WriteModelRequest) -> AuthorizationModelRef:
+        self._unimplemented("write_model")
+
+    def serve(self) -> None:
+        """Start the authorization runtime."""
+
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.AUTHORIZATION)
 
 
 class ExternalTokenValidator:
