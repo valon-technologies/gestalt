@@ -2983,6 +2983,58 @@ func TestE2ELockLocalProviders(t *testing.T) {
 	}
 }
 
+func TestE2ELockAndSyncSkipRuntimeSecretRefs(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping E2E runtime secret lock/sync test in short mode")
+	}
+
+	dir := t.TempDir()
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	missingSecretName := "GESTALT_E2E_RUNTIME_SECRET_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+server:
+  encryptionKey:
+    secret:
+      provider: env
+      name: %s
+  providers:
+    indexeddb: inmem
+providers:
+  secrets:
+    env:
+      source: env
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+      config:
+        dsn: sqlite://%s
+`, missingSecretName, indexedDBManifest, filepath.Join(dir, "gestalt.db"))
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lockPath := filepath.Join(dir, "gestalt.lock.json")
+	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd lock should not resolve runtime secret refs: %v\n%s", err, out)
+	}
+	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd sync should not resolve runtime secret refs: %v\n%s", err, out)
+	}
+	out, err = exec.Command(gestaltdBin, "validate", "--runtime", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("gestaltd validate --runtime unexpectedly succeeded without runtime secret:\n%s", out)
+	}
+	if !strings.Contains(string(out), missingSecretName) {
+		t.Fatalf("validate --runtime error should mention missing runtime secret %q, got:\n%s", missingSecretName, out)
+	}
+}
+
 func TestE2ELockSyncLocalProviders(t *testing.T) {
 	t.Parallel()
 
