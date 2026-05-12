@@ -19,12 +19,12 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/fakebun"
@@ -2436,7 +2436,7 @@ func TestRun_ProviderReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypo
 				DisplayName: "Missing Authorization",
 				Spec:        &providermanifestv1.Spec{},
 			},
-			wantError: "no Go authorization source package found",
+			wantError: "no Go, Rust, Python, or TypeScript authorization source package found",
 		},
 		{
 			name: "secrets",

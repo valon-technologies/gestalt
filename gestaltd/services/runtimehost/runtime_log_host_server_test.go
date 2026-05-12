@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,23 +25,30 @@ func newRuntimeLogHostTestClient(t *testing.T, socket string) proto.PluginRuntim
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, "passthrough:///localhost",
+	conn, err := grpc.NewClient("passthrough:///localhost",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", socket)
 		}),
 		grpc.WithAuthority("localhost"),
-		grpc.WithBlock(),
 	)
 	if err != nil {
-		t.Fatalf("dial runtime log host: %v", err)
+		t.Fatalf("create runtime log host client: %v", err)
+	}
+	conn.Connect()
+	for state := conn.GetState(); state != connectivity.Ready; state = conn.GetState() {
+		if !conn.WaitForStateChange(ctx, state) {
+			t.Fatalf("dial runtime log host: %v", ctx.Err())
+		}
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 	return proto.NewPluginRuntimeLogHostClient(conn)
 }
 
 func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
+	t.Parallel()
+
 	type appendCall struct {
 		runtimeProviderName string
 		sessionID           string
@@ -124,6 +132,8 @@ func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
 }
 
 func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	store := runtimelogs.NewMemoryStore()
 	if err := store.RegisterSession(ctx, runtimelogs.SessionRegistration{
@@ -203,6 +213,8 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 }
 
 func TestRuntimeLogHostServerMapsUnknownSessionToNotFound(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	store := runtimelogs.NewMemoryStore()
 	if err := store.MarkSessionStopped(ctx, "modal", "never-registered", time.Now().UTC()); err != nil {
@@ -236,6 +248,8 @@ func TestRuntimeLogHostServerMapsUnknownSessionToNotFound(t *testing.T) {
 }
 
 func TestRuntimeLogHostServerKeepsStoppedSessionThroughEvictionPressure(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	store := runtimelogs.NewMemoryStore()
 	if err := store.RegisterSession(ctx, runtimelogs.SessionRegistration{

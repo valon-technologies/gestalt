@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
