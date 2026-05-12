@@ -496,10 +496,11 @@ artifacts:
 ## UI Metadata
 
 The `spec` block for a `kind: ui` manifest describes a static UI package.
-Source UI manifests can either point at checked-in static assets with
-`spec.assetRoot` or declare top-level `build.output` to generate those assets
-during preparation. Released and prepared UI manifests always contain
-`spec.assetRoot` and do not contain top-level `build`.
+Source UI manifests should normally declare top-level `build.output` to
+generate static assets during preparation. They may point at checked-in static
+assets with `spec.assetRoot` when the bundle is intentionally prebuilt.
+Released and prepared UI manifests always contain `spec.assetRoot` and do not
+contain top-level `build`.
 
 | Field       | Type         | Required | Purpose                                                                                                                     |
 | ----------- | ------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -527,6 +528,7 @@ build:
   output: ui/out
   inputs:
     - ui/package.json
+    - ui/package-lock.json
     - ui/src
 spec:
   routes:
@@ -537,7 +539,8 @@ spec:
 ```
 
 Top-level `build` is source-only and currently supported for `kind: ui`
-manifests.
+manifests. It is the recommended form for new UI packages authored from
+TypeScript, React, Next.js static export, Vite, or similar frontend source.
 
 | Build field | Type     | Required | Purpose                                                                                           |
 | ----------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
@@ -861,6 +864,7 @@ build:
   output: ui/out
   inputs:
     - ui/package.json
+    - ui/package-lock.json
     - ui/src
 spec:
   routes:

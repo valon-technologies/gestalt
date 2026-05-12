@@ -39,6 +39,7 @@ workspace-review/
   ui/
     manifest.yaml
     package.json
+    package-lock.json
     src/
       app.tsx
 ```
@@ -63,11 +64,19 @@ spec:
     path: ../ui/manifest.yaml
 ```
 
-The UI bundle produces static assets. A source UI manifest can declare a
-`build` command and `output` directory, so the generated `out/` or `dist/`
-directory does not need to be checked in. Route rules are required when the
-mounted plugin binds an `authorizationPolicy`. For UI package details, see
-[Providers > UI](/providers/ui).
+The UI bundle should be authored from source. Check in the UI source and
+dependency lockfile, declare a `build` command and `output` directory, and leave
+the generated `out/` or `dist/` directory out of source control. Gestalt builds
+the static assets during preparation and serves the prepared output at runtime.
+Route rules are required when the mounted plugin binds an `authorizationPolicy`.
+For UI package details, see [Providers > UI](/providers/ui).
+
+<Callout type="info">
+  Source-built UI packages are the recommended shape for new applications, but
+  the workflow is still alpha. Current manifests need explicit build commands,
+  output paths, and build tools in the preparation environment; improving those
+  ergonomics is on the radar.
+</Callout>
 
 ```yaml
 kind: ui
@@ -83,6 +92,7 @@ build:
   output: out
   inputs:
     - package.json
+    - package-lock.json
     - src
 spec:
   routes:
@@ -806,7 +816,9 @@ export async function saveItem(item) {
 ```
 
 Use [Providers > UI](/providers/ui) for UI bundle configuration and route
-authorization rules.
+authorization rules. Source-built UI packages are the recommended shape for
+new applications; generated static output is prepared by Gestalt and should not
+normally be checked in.
 
 ## Local Development
 
