@@ -17,7 +17,7 @@ mod generated;
 pub mod indexeddb;
 mod invoker;
 mod plugin_runtime;
-/// Protocol conversion helpers for generated protobuf well-known types.
+#[doc(hidden)]
 pub mod protocol;
 mod provider_server;
 mod router;
@@ -36,10 +36,13 @@ mod workflow;
 mod workflow_manager;
 
 /// Generated protobuf and gRPC bindings for the Gestalt provider protocol.
+#[doc(hidden)]
 pub mod proto {
     pub use crate::generated::v1;
 }
 
+#[doc(hidden)]
+pub use agent::ENV_AGENT_HOST_SOCKET_TOKEN;
 pub use agent::{
     AgentActor, AgentExecutionStatus, AgentHost, AgentHostError, AgentHostExecuteToolInput,
     AgentHostListToolsInput, AgentHostResolveConnectionInput, AgentInteraction,
@@ -53,7 +56,7 @@ pub use agent::{
     AgentToolSourceMode, AgentTurn, AgentTurnDisplay, AgentTurnEvent,
     AgentWorkspaceGitCheckoutInput, AgentWorkspaceInput, CancelAgentProviderTurnRequest,
     CreateAgentProviderSessionRequest, CreateAgentProviderTurnRequest, ENV_AGENT_HOST_SOCKET,
-    ENV_AGENT_HOST_SOCKET_TOKEN, ExecuteAgentToolResponse, GetAgentProviderCapabilitiesRequest,
+    ExecuteAgentToolResponse, GetAgentProviderCapabilitiesRequest,
     GetAgentProviderInteractionRequest, GetAgentProviderSessionRequest,
     GetAgentProviderTurnRequest, ListAgentProviderInteractionsRequest,
     ListAgentProviderInteractionsResponse, ListAgentProviderSessionsRequest,
@@ -65,18 +68,22 @@ pub use agent::{
     new_agent_message_part, new_agent_tool_call, new_agent_tool_ref, new_agent_tool_result,
     new_agent_workspace,
 };
+#[doc(hidden)]
+pub use agent_manager::ENV_AGENT_MANAGER_SOCKET_TOKEN;
 pub use agent_manager::{
     AgentManager, AgentManagerCancelTurnInput, AgentManagerCreateSessionInput,
     AgentManagerCreateTurnInput, AgentManagerError, AgentManagerGetSessionInput,
     AgentManagerGetTurnInput, AgentManagerListInteractionsInput, AgentManagerListSessionsInput,
     AgentManagerListTurnEventsInput, AgentManagerListTurnsInput,
     AgentManagerResolveInteractionInput, AgentManagerUpdateSessionInput, ENV_AGENT_MANAGER_SOCKET,
-    ENV_AGENT_MANAGER_SOCKET_TOKEN, new_agent_manager_cancel_turn_request,
-    new_agent_manager_create_session_request, new_agent_manager_create_turn_request,
-    new_agent_manager_get_session_request, new_agent_manager_get_turn_request,
-    new_agent_manager_list_interactions_request, new_agent_manager_list_sessions_request,
-    new_agent_manager_list_turn_events_request, new_agent_manager_list_turns_request,
-    new_agent_manager_resolve_interaction_request, new_agent_manager_update_session_request,
+    ListAgentManagerInteractionsResponse, ListAgentManagerSessionsResponse,
+    ListAgentManagerTurnEventsResponse, ListAgentManagerTurnsResponse,
+    new_agent_manager_cancel_turn_request, new_agent_manager_create_session_request,
+    new_agent_manager_create_turn_request, new_agent_manager_get_session_request,
+    new_agent_manager_get_turn_request, new_agent_manager_list_interactions_request,
+    new_agent_manager_list_sessions_request, new_agent_manager_list_turn_events_request,
+    new_agent_manager_list_turns_request, new_agent_manager_resolve_interaction_request,
+    new_agent_manager_update_session_request,
 };
 pub use api::{
     Access, Credential, ExternalIdentity, Host, Provider, Request, Response, RuntimeMetadata,
@@ -86,6 +93,8 @@ pub use auth::{
     AuthenticatedUser, AuthenticationProvider, BeginLoginRequest, BeginLoginResponse,
     CompleteLoginRequest,
 };
+#[doc(hidden)]
+pub use authorization::ENV_AUTHORIZATION_SOCKET_TOKEN;
 pub use authorization::{
     AGENT_SESSION_ACTION_EDIT, AGENT_SESSION_ACTION_VIEW, AGENT_SESSION_RELATION_EDITOR,
     AGENT_SESSION_RESOURCE_TYPE, AUTHORIZATION_SUBJECT_TYPE_SUBJECT, AccessDecision,
@@ -97,16 +106,18 @@ pub use authorization::{
     AuthorizationModelRewriteThis, AuthorizationModelRewriteUnion,
     AuthorizationModelSubjectSetTarget, AuthorizationModelTupleToUserset, AuthorizationProvider,
     AuthorizationRelationshipTarget, AuthorizationResource, AuthorizationSubject,
-    AuthorizationSubjectSet, ENV_AUTHORIZATION_SOCKET, ENV_AUTHORIZATION_SOCKET_TOKEN,
-    EffectiveSubjectSearchRequest, EffectiveSubjectSearchResponse, ExpandNode, ExpandRequest,
-    ExpandResponse, GetActiveModelResponse, ListModelsRequest, ListModelsResponse,
-    ReadRelationshipsRequest, ReadRelationshipsResponse, Relationship, RelationshipKey,
-    ResourceSearchRequest, ResourceSearchResponse, SubjectSearchRequest, SubjectSearchResponse,
-    WriteModelRequest, WriteRelationshipsRequest,
+    AuthorizationSubjectSet, ENV_AUTHORIZATION_SOCKET, EffectiveSubjectSearchRequest,
+    EffectiveSubjectSearchResponse, ExpandNode, ExpandRequest, ExpandResponse,
+    GetActiveModelResponse, ListModelsRequest, ListModelsResponse, ReadRelationshipsRequest,
+    ReadRelationshipsResponse, Relationship, RelationshipKey, ResourceSearchRequest,
+    ResourceSearchResponse, SubjectSearchRequest, SubjectSearchResponse, WriteModelRequest,
+    WriteRelationshipsRequest,
 };
+#[doc(hidden)]
+pub use cache::ENV_CACHE_SOCKET_TOKEN;
 pub use cache::{
     Cache, CacheEntry, CacheError, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET,
-    ENV_CACHE_SOCKET_TOKEN, cache_socket_env, cache_socket_token_env,
+    cache_socket_env, cache_socket_token_env,
 };
 pub use catalog::{Catalog, CatalogOperation};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
@@ -171,34 +182,40 @@ pub use indexeddb::{
     TransactionDurabilityHint, TransactionIndexClient, TransactionMode, TransactionObjectStore,
     TransactionOptions, indexeddb_socket_env, indexeddb_socket_token_env,
 };
+#[doc(hidden)]
+pub use invoker::ENV_PLUGIN_INVOKER_SOCKET_TOKEN;
 pub use invoker::{
-    ENV_PLUGIN_INVOKER_SOCKET, ENV_PLUGIN_INVOKER_SOCKET_TOKEN, InvocationGrant, InvokeOptions,
-    PluginInvoker, PluginInvokerError,
+    ENV_PLUGIN_INVOKER_SOCKET, InvocationGrant, InvokeOptions, PluginInvoker, PluginInvokerError,
 };
 pub use plugin_runtime::PluginRuntimeProvider;
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
+#[doc(hidden)]
+pub use runtime_log_host::ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN;
 pub use runtime_log_host::{
-    ENV_RUNTIME_LOG_HOST_SOCKET, ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN, ENV_RUNTIME_SESSION_ID,
-    RuntimeLogHost, RuntimeLogHostError, RuntimeLogStream, runtime_session_id,
+    ENV_RUNTIME_LOG_HOST_SOCKET, ENV_RUNTIME_SESSION_ID, RuntimeLogHost, RuntimeLogHostError,
+    RuntimeLogStream, runtime_session_id,
 };
-pub use s3::{
-    ENV_S3_SOCKET, ENV_S3_SOCKET_TOKEN, S3, S3Error, S3Provider, s3_socket_env, s3_socket_token_env,
-};
+#[doc(hidden)]
+pub use s3::ENV_S3_SOCKET_TOKEN;
+pub use s3::{ENV_S3_SOCKET, S3, S3Error, S3Provider, s3_socket_env, s3_socket_token_env};
 pub use s3::{S3ReadObjectStream, S3WriteObjectStream};
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
+#[doc(hidden)]
+pub use workflow::ENV_WORKFLOW_HOST_SOCKET_TOKEN;
 pub use workflow::{
-    BoundWorkflowAgentTargetInput, BoundWorkflowEventTriggerInput, BoundWorkflowPluginTargetInput,
-    BoundWorkflowRunInput, BoundWorkflowScheduleInput, BoundWorkflowTargetInput,
-    ENV_WORKFLOW_HOST_SOCKET, ENV_WORKFLOW_HOST_SOCKET_TOKEN, InvokeWorkflowOperationInput,
+    BoundWorkflowAgentTargetInput, BoundWorkflowDefinitionInput, BoundWorkflowEventTriggerInput,
+    BoundWorkflowPluginTargetInput, BoundWorkflowRunInput, BoundWorkflowScheduleInput,
+    BoundWorkflowTargetInput, ENV_WORKFLOW_HOST_SOCKET, InvokeWorkflowOperationInput,
     InvokeWorkflowOperationResponse, WorkflowAccessPermissionInput, WorkflowActorInput,
     WorkflowEventInput, WorkflowEventMatchInput, WorkflowEventTriggerInvocationInput,
     WorkflowExecutionReferenceInput, WorkflowHost, WorkflowHostError, WorkflowOutputBindingInput,
     WorkflowOutputDeliveryInput, WorkflowOutputValueSourceInput, WorkflowProvider,
     WorkflowRunAsSubjectInput, WorkflowRunTriggerInput, WorkflowScheduleTriggerInput,
     WorkflowSignalInput, bound_workflow_agent_target_input_from_target,
+    bound_workflow_definition_input_from_definition,
     bound_workflow_event_trigger_input_from_trigger,
     bound_workflow_plugin_target_input_from_target, bound_workflow_run_input_from_run,
     bound_workflow_schedule_input_from_schedule, bound_workflow_target_input_from_target,
@@ -220,16 +237,21 @@ pub use workflow::{
     workflow_run_as_subject_input_from_subject, workflow_run_trigger_input_from_trigger,
     workflow_signal_input_from_signal,
 };
+#[doc(hidden)]
+pub use workflow_manager::ENV_WORKFLOW_MANAGER_SOCKET_TOKEN;
 pub use workflow_manager::{
-    ENV_WORKFLOW_MANAGER_SOCKET, ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, WorkflowManager,
+    ENV_WORKFLOW_MANAGER_SOCKET, WorkflowManager, WorkflowManagerBoundDefinition,
+    WorkflowManagerBoundEventTrigger, WorkflowManagerBoundRun, WorkflowManagerBoundSchedule,
     WorkflowManagerCreateDefinitionInput, WorkflowManagerCreateEventTriggerInput,
-    WorkflowManagerCreateScheduleInput, WorkflowManagerDeleteDefinitionInput,
-    WorkflowManagerDeleteEventTriggerInput, WorkflowManagerDeleteScheduleInput,
-    WorkflowManagerError, WorkflowManagerGetDefinitionInput, WorkflowManagerGetEventTriggerInput,
+    WorkflowManagerCreateScheduleInput, WorkflowManagerDefinition,
+    WorkflowManagerDeleteDefinitionInput, WorkflowManagerDeleteEventTriggerInput,
+    WorkflowManagerDeleteScheduleInput, WorkflowManagerError, WorkflowManagerEventTrigger,
+    WorkflowManagerGetDefinitionInput, WorkflowManagerGetEventTriggerInput,
     WorkflowManagerGetScheduleInput, WorkflowManagerPauseEventTriggerInput,
     WorkflowManagerPauseScheduleInput, WorkflowManagerPublishEventInput,
-    WorkflowManagerResumeEventTriggerInput, WorkflowManagerResumeScheduleInput,
-    WorkflowManagerSignalOrStartRunInput, WorkflowManagerSignalRunInput,
+    WorkflowManagerPublishedEvent, WorkflowManagerResumeEventTriggerInput,
+    WorkflowManagerResumeScheduleInput, WorkflowManagerRun, WorkflowManagerRunSignal,
+    WorkflowManagerSchedule, WorkflowManagerSignalOrStartRunInput, WorkflowManagerSignalRunInput,
     WorkflowManagerStartRunInput, WorkflowManagerUpdateDefinitionInput,
     WorkflowManagerUpdateEventTriggerInput, WorkflowManagerUpdateScheduleInput,
     new_workflow_manager_create_definition_request,

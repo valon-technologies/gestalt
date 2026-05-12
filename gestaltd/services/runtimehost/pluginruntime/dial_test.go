@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"

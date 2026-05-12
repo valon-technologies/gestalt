@@ -285,6 +285,15 @@ impl Default for BoundWorkflowRunInput {
     }
 }
 
+/// Input copied from a workflow-provider definition.
+#[derive(Clone, Debug, Default)]
+pub struct BoundWorkflowDefinitionInput {
+    pub id: String,
+    pub target: Option<BoundWorkflowTargetInput>,
+    pub created_by: Option<WorkflowActorInput>,
+    pub created_at: Option<SystemTime>,
+}
+
 /// Input for a workflow-provider schedule.
 #[derive(Clone, Debug, Default)]
 pub struct BoundWorkflowScheduleInput {
@@ -927,6 +936,29 @@ pub fn new_bound_workflow_run_from_run(
     input: &pb::BoundWorkflowRun,
 ) -> ProviderResult<pb::BoundWorkflowRun> {
     new_bound_workflow_run(bound_workflow_run_input_from_run(input)?)
+}
+
+/// Returns input copied from a workflow-provider definition.
+pub fn bound_workflow_definition_input_from_definition(
+    input: &pb::BoundWorkflowDefinition,
+) -> ProviderResult<BoundWorkflowDefinitionInput> {
+    Ok(BoundWorkflowDefinitionInput {
+        id: input.id.clone(),
+        target: input
+            .target
+            .as_ref()
+            .map(bound_workflow_target_input_from_target)
+            .transpose()?,
+        created_by: input
+            .created_by
+            .as_ref()
+            .map(workflow_actor_input_from_actor),
+        created_at: input
+            .created_at
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()?,
+    })
 }
 
 /// Creates a workflow-provider schedule.

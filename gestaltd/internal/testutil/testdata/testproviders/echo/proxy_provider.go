@@ -21,7 +21,6 @@ import (
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const transportPlugin = "plugin"
@@ -936,30 +935,30 @@ func workflowEvent(input publishWorkflowEventInput) (*gestalt.WorkflowEventInput
 	return event, nil
 }
 
-func managedWorkflowScheduleBody(value *proto.ManagedWorkflowSchedule) map[string]any {
+func managedWorkflowScheduleBody(value *gestalt.WorkflowManagerSchedule) map[string]any {
 	if value == nil {
 		return map[string]any{}
 	}
-	schedule := value.GetSchedule()
+	schedule := value.Schedule
 	body := map[string]any{
-		"provider_name": value.GetProviderName(),
+		"provider_name": value.ProviderName,
 	}
 	if schedule == nil {
 		return body
 	}
-	target := schedule.GetTarget()
+	target := schedule.Target
 	body["schedule"] = map[string]any{
-		"id":         schedule.GetId(),
-		"cron":       schedule.GetCron(),
-		"timezone":   schedule.GetTimezone(),
-		"paused":     schedule.GetPaused(),
-		"created_at": timestampBody(schedule.GetCreatedAt()),
-		"updated_at": timestampBody(schedule.GetUpdatedAt()),
+		"id":         schedule.ID,
+		"cron":       schedule.Cron,
+		"timezone":   schedule.Timezone,
+		"paused":     schedule.Paused,
+		"created_at": timeBody(schedule.CreatedAt),
+		"updated_at": timeBody(schedule.UpdatedAt),
 		"next_run_at": func() any {
-			if schedule.GetNextRunAt() == nil {
+			if schedule.NextRunAt == nil {
 				return nil
 			}
-			return schedule.GetNextRunAt().AsTime()
+			return *schedule.NextRunAt
 		}(),
 		"target": map[string]any{
 			"plugin":     "",
@@ -969,37 +968,37 @@ func managedWorkflowScheduleBody(value *proto.ManagedWorkflowSchedule) map[strin
 			"input":      map[string]any{},
 		},
 	}
-	if target != nil {
-		pluginTarget := target.GetPlugin()
+	if target != nil && target.Plugin != nil {
+		pluginTarget := target.Plugin
 		body["schedule"].(map[string]any)["target"] = map[string]any{
-			"plugin":     pluginTarget.GetPluginName(),
-			"operation":  pluginTarget.GetOperation(),
-			"connection": pluginTarget.GetConnection(),
-			"instance":   pluginTarget.GetInstance(),
+			"plugin":     pluginTarget.PluginName,
+			"operation":  pluginTarget.Operation,
+			"connection": pluginTarget.Connection,
+			"instance":   pluginTarget.Instance,
 			"input":      workflowPluginTargetInputMap(pluginTarget),
 		}
 	}
 	return body
 }
 
-func managedWorkflowTriggerBody(value *proto.ManagedWorkflowEventTrigger) map[string]any {
+func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerEventTrigger) map[string]any {
 	if value == nil {
 		return map[string]any{}
 	}
-	trigger := value.GetTrigger()
+	trigger := value.Trigger
 	body := map[string]any{
-		"provider_name": value.GetProviderName(),
+		"provider_name": value.ProviderName,
 	}
 	if trigger == nil {
 		return body
 	}
-	target := trigger.GetTarget()
-	match := trigger.GetMatch()
+	target := trigger.Target
+	match := trigger.Match
 	body["trigger"] = map[string]any{
-		"id":         trigger.GetId(),
-		"paused":     trigger.GetPaused(),
-		"created_at": timestampBody(trigger.GetCreatedAt()),
-		"updated_at": timestampBody(trigger.GetUpdatedAt()),
+		"id":         trigger.ID,
+		"paused":     trigger.Paused,
+		"created_at": timeBody(trigger.CreatedAt),
+		"updated_at": timeBody(trigger.UpdatedAt),
 		"match": map[string]any{
 			"type":    "",
 			"source":  "",
@@ -1015,52 +1014,52 @@ func managedWorkflowTriggerBody(value *proto.ManagedWorkflowEventTrigger) map[st
 	}
 	if match != nil {
 		body["trigger"].(map[string]any)["match"] = map[string]any{
-			"type":    match.GetType(),
-			"source":  match.GetSource(),
-			"subject": match.GetSubject(),
+			"type":    match.Type,
+			"source":  match.Source,
+			"subject": match.Subject,
 		}
 	}
-	if target != nil {
-		pluginTarget := target.GetPlugin()
+	if target != nil && target.Plugin != nil {
+		pluginTarget := target.Plugin
 		body["trigger"].(map[string]any)["target"] = map[string]any{
-			"plugin":     pluginTarget.GetPluginName(),
-			"operation":  pluginTarget.GetOperation(),
-			"connection": pluginTarget.GetConnection(),
-			"instance":   pluginTarget.GetInstance(),
+			"plugin":     pluginTarget.PluginName,
+			"operation":  pluginTarget.Operation,
+			"connection": pluginTarget.Connection,
+			"instance":   pluginTarget.Instance,
 			"input":      workflowPluginTargetInputMap(pluginTarget),
 		}
 	}
 	return body
 }
 
-func workflowPluginTargetInputMap(target *proto.BoundWorkflowPluginTarget) map[string]any {
-	if target == nil || target.GetInput() == nil {
+func workflowPluginTargetInputMap(target *gestalt.BoundWorkflowPluginTargetInput) map[string]any {
+	if target == nil || target.Input == nil {
 		return map[string]any{}
 	}
-	return target.GetInput().AsMap()
+	return anyMap(target.Input)
 }
 
-func workflowEventBody(value *proto.WorkflowEvent) map[string]any {
+func workflowEventBody(value *gestalt.WorkflowEventInput) map[string]any {
 	if value == nil {
 		return map[string]any{}
 	}
 	return map[string]any{
-		"id":                value.GetId(),
-		"source":            value.GetSource(),
-		"spec_version":      value.GetSpecVersion(),
-		"type":              value.GetType(),
-		"subject":           value.GetSubject(),
-		"time":              timestampBody(value.GetTime()),
-		"data_content_type": value.GetDatacontenttype(),
-		"data":              value.GetData().AsMap(),
+		"id":                value.ID,
+		"source":            value.Source,
+		"spec_version":      value.SpecVersion,
+		"type":              value.Type,
+		"subject":           value.Subject,
+		"time":              timeBody(value.Time),
+		"data_content_type": value.DataContentType,
+		"data":              anyMap(value.Data),
 		"extensions": func() map[string]any {
-			if len(value.GetExtensions()) == 0 {
+			if len(value.Extensions) == 0 {
 				return map[string]any{}
 			}
-			out := make(map[string]any, len(value.GetExtensions()))
-			for key, field := range value.GetExtensions() {
+			out := make(map[string]any, len(value.Extensions))
+			for key, field := range value.Extensions {
 				if field != nil {
-					out[key] = field.AsInterface()
+					out[key] = field
 				}
 			}
 			return out
@@ -1068,11 +1067,29 @@ func workflowEventBody(value *proto.WorkflowEvent) map[string]any {
 	}
 }
 
-func timestampBody(value *timestamppb.Timestamp) any {
+func anyMap(value any) map[string]any {
 	if value == nil {
+		return map[string]any{}
+	}
+	if typed, ok := value.(map[string]any); ok {
+		return typed
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil || out == nil {
+		return map[string]any{}
+	}
+	return out
+}
+
+func timeBody(value time.Time) any {
+	if value.IsZero() {
 		return nil
 	}
-	return value.AsTime()
+	return value
 }
 
 func decodeResultBody(body string) any {

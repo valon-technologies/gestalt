@@ -452,6 +452,46 @@ func agentSessionsToProto(values []AgentSession) ([]*proto.AgentSession, error) 
 	return out, nil
 }
 
+func agentSessionFromProto(value *proto.AgentSession) *AgentSession {
+	if value == nil {
+		return nil
+	}
+	return &AgentSession{
+		ID:           value.GetId(),
+		ProviderName: value.GetProviderName(),
+		Model:        value.GetModel(),
+		ClientRef:    value.GetClientRef(),
+		State:        AgentSessionState(value.GetState()),
+		Metadata:     MapFromStruct(value.GetMetadata()),
+		CreatedBy:    agentActorFromProto(value.GetCreatedBy()),
+		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
+		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
+		LastTurnAt:   timePtrFromTimestampUnchecked(value.GetLastTurnAt()),
+	}
+}
+
+func agentSessionsFromProto(values []*proto.AgentSession) []AgentSession {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]AgentSession, 0, len(values))
+	for _, value := range values {
+		session := agentSessionFromProto(value)
+		if session == nil {
+			continue
+		}
+		out = append(out, *session)
+	}
+	return out
+}
+
+func listAgentManagerSessionsResponseFromProto(value *proto.AgentManagerListSessionsResponse) *ListAgentManagerSessionsResponse {
+	if value == nil {
+		return nil
+	}
+	return &ListAgentManagerSessionsResponse{Sessions: agentSessionsFromProto(value.GetSessions())}
+}
+
 func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSessionRequest) *CreateAgentProviderSessionRequest {
 	if req == nil {
 		return &CreateAgentProviderSessionRequest{}
@@ -597,6 +637,50 @@ func agentTurnsToProto(values []AgentTurn) ([]*proto.AgentTurn, error) {
 	return out, nil
 }
 
+func agentTurnFromProto(value *proto.AgentTurn) *AgentTurn {
+	if value == nil {
+		return nil
+	}
+	return &AgentTurn{
+		ID:               value.GetId(),
+		SessionID:        value.GetSessionId(),
+		ProviderName:     value.GetProviderName(),
+		Model:            value.GetModel(),
+		Status:           AgentExecutionStatus(value.GetStatus()),
+		Messages:         agentMessagesFromProto(value.GetMessages()),
+		OutputText:       value.GetOutputText(),
+		StructuredOutput: MapFromStruct(value.GetStructuredOutput()),
+		StatusMessage:    value.GetStatusMessage(),
+		CreatedBy:        agentActorFromProto(value.GetCreatedBy()),
+		CreatedAt:        timeFromTimestamp(value.GetCreatedAt()),
+		StartedAt:        timePtrFromTimestampUnchecked(value.GetStartedAt()),
+		CompletedAt:      timePtrFromTimestampUnchecked(value.GetCompletedAt()),
+		ExecutionRef:     value.GetExecutionRef(),
+	}
+}
+
+func agentTurnsFromProto(values []*proto.AgentTurn) []AgentTurn {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]AgentTurn, 0, len(values))
+	for _, value := range values {
+		turn := agentTurnFromProto(value)
+		if turn == nil {
+			continue
+		}
+		out = append(out, *turn)
+	}
+	return out
+}
+
+func listAgentManagerTurnsResponseFromProto(value *proto.AgentManagerListTurnsResponse) *ListAgentManagerTurnsResponse {
+	if value == nil {
+		return nil
+	}
+	return &ListAgentManagerTurnsResponse{Turns: agentTurnsFromProto(value.GetTurns())}
+}
+
 func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnRequest) *CreateAgentProviderTurnRequest {
 	if req == nil {
 		return &CreateAgentProviderTurnRequest{}
@@ -701,6 +785,64 @@ func agentTurnEventsToProto(values []AgentTurnEvent) ([]*proto.AgentTurnEvent, e
 		out = append(out, pbValue)
 	}
 	return out, nil
+}
+
+func agentTurnDisplayFromProto(value *proto.AgentTurnDisplay) *AgentTurnDisplay {
+	if value == nil {
+		return nil
+	}
+	return &AgentTurnDisplay{
+		Kind:      value.GetKind(),
+		Phase:     value.GetPhase(),
+		Text:      value.GetText(),
+		Label:     value.GetLabel(),
+		Ref:       value.GetRef(),
+		ParentRef: value.GetParentRef(),
+		Input:     AnyFromValue(value.GetInput()),
+		Output:    AnyFromValue(value.GetOutput()),
+		Error:     AnyFromValue(value.GetError()),
+		Action:    value.GetAction(),
+		Format:    value.GetFormat(),
+		Language:  value.GetLanguage(),
+	}
+}
+
+func agentTurnEventFromProto(value *proto.AgentTurnEvent) AgentTurnEvent {
+	if value == nil {
+		return AgentTurnEvent{}
+	}
+	return AgentTurnEvent{
+		ID:         value.GetId(),
+		TurnID:     value.GetTurnId(),
+		Seq:        value.GetSeq(),
+		Type:       value.GetType(),
+		Source:     value.GetSource(),
+		Visibility: value.GetVisibility(),
+		Data:       MapFromStruct(value.GetData()),
+		CreatedAt:  timeFromTimestamp(value.GetCreatedAt()),
+		Display:    agentTurnDisplayFromProto(value.GetDisplay()),
+	}
+}
+
+func agentTurnEventsFromProto(values []*proto.AgentTurnEvent) []AgentTurnEvent {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]AgentTurnEvent, 0, len(values))
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		out = append(out, agentTurnEventFromProto(value))
+	}
+	return out
+}
+
+func listAgentManagerTurnEventsResponseFromProto(value *proto.AgentManagerListTurnEventsResponse) *ListAgentManagerTurnEventsResponse {
+	if value == nil {
+		return nil
+	}
+	return &ListAgentManagerTurnEventsResponse{Events: agentTurnEventsFromProto(value.GetEvents())}
 }
 
 func agentTurnDisplayToProto(value *AgentTurnDisplay) (*proto.AgentTurnDisplay, error) {
@@ -818,6 +960,47 @@ func agentInteractionsToProto(values []AgentInteraction) ([]*proto.AgentInteract
 		out = append(out, pbValue)
 	}
 	return out, nil
+}
+
+func agentInteractionFromProto(value *proto.AgentInteraction) *AgentInteraction {
+	if value == nil {
+		return nil
+	}
+	return &AgentInteraction{
+		ID:         value.GetId(),
+		Type:       AgentInteractionType(value.GetType()),
+		State:      AgentInteractionState(value.GetState()),
+		Title:      value.GetTitle(),
+		Prompt:     value.GetPrompt(),
+		Request:    MapFromStruct(value.GetRequest()),
+		Resolution: MapFromStruct(value.GetResolution()),
+		CreatedAt:  timeFromTimestamp(value.GetCreatedAt()),
+		ResolvedAt: timePtrFromTimestampUnchecked(value.GetResolvedAt()),
+		TurnID:     value.GetTurnId(),
+		SessionID:  value.GetSessionId(),
+	}
+}
+
+func agentInteractionsFromProto(values []*proto.AgentInteraction) []AgentInteraction {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]AgentInteraction, 0, len(values))
+	for _, value := range values {
+		interaction := agentInteractionFromProto(value)
+		if interaction == nil {
+			continue
+		}
+		out = append(out, *interaction)
+	}
+	return out
+}
+
+func listAgentManagerInteractionsResponseFromProto(value *proto.AgentManagerListInteractionsResponse) *ListAgentManagerInteractionsResponse {
+	if value == nil {
+		return nil
+	}
+	return &ListAgentManagerInteractionsResponse{Interactions: agentInteractionsFromProto(value.GetInteractions())}
 }
 
 func listAgentProviderInteractionsResponseToProto(value *ListAgentProviderInteractionsResponse) (*proto.ListAgentProviderInteractionsResponse, error) {

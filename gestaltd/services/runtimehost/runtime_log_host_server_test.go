@@ -19,6 +19,7 @@ import (
 
 const envRuntimeLogHostSocket = "GESTALT_RUNTIME_LOG_SOCKET"
 
+//nolint:staticcheck // grpc.DialContext/WithBlock are still used for this test-only Unix dialer.
 func newRuntimeLogHostTestClient(t *testing.T, socket string) proto.PluginRuntimeLogHostClient {
 	t.Helper()
 
@@ -41,6 +42,8 @@ func newRuntimeLogHostTestClient(t *testing.T, socket string) proto.PluginRuntim
 }
 
 func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
+	t.Parallel()
+
 	type appendCall struct {
 		runtimeProviderName string
 		sessionID           string
@@ -124,6 +127,8 @@ func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
 }
 
 func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	store := runtimelogs.NewMemoryStore()
 	if err := store.RegisterSession(ctx, runtimelogs.SessionRegistration{
@@ -203,6 +208,8 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 }
 
 func TestRuntimeLogHostServerMapsUnknownSessionToNotFound(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	store := runtimelogs.NewMemoryStore()
 	if err := store.MarkSessionStopped(ctx, "modal", "never-registered", time.Now().UTC()); err != nil {
@@ -236,6 +243,8 @@ func TestRuntimeLogHostServerMapsUnknownSessionToNotFound(t *testing.T) {
 }
 
 func TestRuntimeLogHostServerKeepsStoppedSessionThroughEvictionPressure(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	store := runtimelogs.NewMemoryStore()
 	if err := store.RegisterSession(ctx, runtimelogs.SessionRegistration{

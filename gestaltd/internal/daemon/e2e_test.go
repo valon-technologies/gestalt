@@ -1579,25 +1579,6 @@ func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string
 	return providerDir
 }
 
-func gestaltdRootForE2E(t *testing.T) string {
-	t.Helper()
-
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "internal", "testutil", "testdata", "testproviders", "agent")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatalf("could not find gestaltd root from %s", dir)
-		}
-		dir = parent
-	}
-}
-
 func authProviderSource(name string) string {
 	source := testutil.GeneratedAuthPackageSource()
 	displayName := name

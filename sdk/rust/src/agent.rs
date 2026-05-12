@@ -1183,6 +1183,10 @@ fn json_from_struct(value: Option<Struct>) -> Option<AgentJson> {
     value.map(|value| protocol::json_from_struct(&value))
 }
 
+fn json_from_value(value: Option<Value>) -> Option<AgentJson> {
+    value.as_ref().map(protocol::json_from_value)
+}
+
 fn struct_from_json(value: Option<AgentJson>) -> ProviderResult<Option<Struct>> {
     value.map(protocol::struct_from_json).transpose()
 }
@@ -1416,6 +1420,91 @@ fn interaction_to_proto(value: AgentInteraction) -> ProviderResult<pb::AgentInte
         resolution: struct_from_json(value.resolution)?,
         created_at: timestamp_from_time(value.created_at),
         resolved_at: timestamp_from_time(value.resolved_at),
+        turn_id: value.turn_id,
+        session_id: value.session_id,
+    })
+}
+
+pub(crate) fn agent_session_from_proto(value: pb::AgentSession) -> ProviderResult<AgentSession> {
+    Ok(AgentSession {
+        id: value.id,
+        provider_name: value.provider_name,
+        model: value.model,
+        client_ref: value.client_ref,
+        state: AgentSessionState::from_i32_lossy(value.state),
+        metadata: json_from_struct(value.metadata),
+        created_by: agent_actor_from_proto(value.created_by),
+        created_at: time_from_timestamp(value.created_at)?,
+        updated_at: time_from_timestamp(value.updated_at)?,
+        last_turn_at: time_from_timestamp(value.last_turn_at)?,
+    })
+}
+
+pub(crate) fn agent_turn_from_proto(value: pb::AgentTurn) -> ProviderResult<AgentTurn> {
+    Ok(AgentTurn {
+        id: value.id,
+        session_id: value.session_id,
+        provider_name: value.provider_name,
+        model: value.model,
+        status: AgentExecutionStatus::from_i32_lossy(value.status),
+        messages: value.messages.into_iter().map(message_from_proto).collect(),
+        output_text: value.output_text,
+        structured_output: json_from_struct(value.structured_output),
+        status_message: value.status_message,
+        created_by: agent_actor_from_proto(value.created_by),
+        created_at: time_from_timestamp(value.created_at)?,
+        started_at: time_from_timestamp(value.started_at)?,
+        completed_at: time_from_timestamp(value.completed_at)?,
+        execution_ref: value.execution_ref,
+    })
+}
+
+pub(crate) fn agent_turn_display_from_proto(value: pb::AgentTurnDisplay) -> AgentTurnDisplay {
+    AgentTurnDisplay {
+        kind: value.kind,
+        phase: value.phase,
+        text: value.text,
+        label: value.label,
+        r#ref: value.r#ref,
+        parent_ref: value.parent_ref,
+        input: json_from_value(value.input),
+        output: json_from_value(value.output),
+        error: json_from_value(value.error),
+        action: value.action,
+        format: value.format,
+        language: value.language,
+    }
+}
+
+pub(crate) fn agent_turn_event_from_proto(
+    value: pb::AgentTurnEvent,
+) -> ProviderResult<AgentTurnEvent> {
+    Ok(AgentTurnEvent {
+        id: value.id,
+        turn_id: value.turn_id,
+        seq: value.seq,
+        r#type: value.r#type,
+        source: value.source,
+        visibility: value.visibility,
+        data: json_from_struct(value.data),
+        created_at: time_from_timestamp(value.created_at)?,
+        display: value.display.map(agent_turn_display_from_proto),
+    })
+}
+
+pub(crate) fn agent_interaction_from_proto(
+    value: pb::AgentInteraction,
+) -> ProviderResult<AgentInteraction> {
+    Ok(AgentInteraction {
+        id: value.id,
+        r#type: AgentInteractionType::from_i32_lossy(value.r#type),
+        state: AgentInteractionState::from_i32_lossy(value.state),
+        title: value.title,
+        prompt: value.prompt,
+        request: json_from_struct(value.request),
+        resolution: json_from_struct(value.resolution),
+        created_at: time_from_timestamp(value.created_at)?,
+        resolved_at: time_from_timestamp(value.resolved_at)?,
         turn_id: value.turn_id,
         session_id: value.session_id,
     })

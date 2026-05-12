@@ -22,6 +22,7 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
   BoundWorkflowAgentTargetSchema,
+  BoundWorkflowDefinitionSchema,
   BoundWorkflowEventTriggerSchema,
   BoundWorkflowPluginTargetSchema,
   BoundWorkflowRunSchema,
@@ -49,6 +50,7 @@ import {
   WorkflowScheduleTriggerSchema,
   WorkflowSignalSchema,
   type BoundWorkflowAgentTarget,
+  type BoundWorkflowDefinition,
   type BoundWorkflowEventTrigger,
   type BoundWorkflowPluginTarget,
   type BoundWorkflowRun,
@@ -87,7 +89,6 @@ import {
   type WorkflowRunAsSubject,
   type WorkflowRunTrigger,
   type WorkflowScheduleTrigger,
-  WorkflowRunStatus,
   type WorkflowSignal,
 } from "./internal/gen/v1/workflow_pb.ts";
 import {
@@ -123,6 +124,7 @@ const WORKFLOW_HOST_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
  */
 export type {
   BoundWorkflowAgentTarget,
+  BoundWorkflowDefinition,
   BoundWorkflowEventTrigger,
   BoundWorkflowPluginTarget,
   BoundWorkflowRun,
@@ -162,7 +164,18 @@ export type {
   WorkflowScheduleTrigger,
   WorkflowSignal,
 };
-export { WorkflowRunStatus };
+
+/** Native workflow run-status constants. */
+export const WorkflowRunStatus = {
+  UNSPECIFIED: 0,
+  PENDING: 1,
+  RUNNING: 2,
+  SUCCEEDED: 3,
+  FAILED: 4,
+  CANCELED: 5,
+} as const;
+export type WorkflowRunStatus =
+  (typeof WorkflowRunStatus)[keyof typeof WorkflowRunStatus];
 
 type TimestampInput = Date | Timestamp;
 type AgentMessageInput = AgentMessage | MessageInitShape<typeof AgentMessageSchema>;
@@ -308,6 +321,14 @@ export interface BoundWorkflowRunInput {
   createdBy?: WorkflowActorInput | WorkflowActor | undefined;
   executionRef?: string | undefined;
   workflowKey?: string | undefined;
+}
+
+/** Native input copied from a workflow-provider definition. */
+export interface BoundWorkflowDefinitionInput {
+  id?: string | undefined;
+  target?: BoundWorkflowTargetInput | BoundWorkflowTarget | undefined;
+  createdBy?: WorkflowActorInput | WorkflowActor | undefined;
+  createdAt?: TimestampInput | undefined;
 }
 
 /** Native input for a workflow-provider schedule. */
@@ -931,6 +952,33 @@ export function boundWorkflowRunInputFromRun(input?: BoundWorkflowRun): BoundWor
 /** Returns a deep copy of a workflow-provider run. */
 export function boundWorkflowRunFromRun(input: BoundWorkflowRun): BoundWorkflowRun {
   return boundWorkflowRun(boundWorkflowRunInputFromRun(input) ?? {});
+}
+
+/** Creates a workflow-provider definition from native input. */
+export function boundWorkflowDefinition(
+  input: BoundWorkflowDefinitionInput | BoundWorkflowDefinition = {},
+): BoundWorkflowDefinition {
+  return create(BoundWorkflowDefinitionSchema, {
+    id: input.id ?? "",
+    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
+    createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
+    createdAt: timestampInput(input.createdAt),
+  });
+}
+
+/** Returns native input copied from a workflow-provider definition. */
+export function boundWorkflowDefinitionInputFromDefinition(
+  input?: BoundWorkflowDefinition,
+): BoundWorkflowDefinitionInput | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    id: input.id,
+    target: boundWorkflowTargetInputFromTarget(input.target),
+    createdBy: workflowActorInputFromActor(input.createdBy),
+    createdAt: input.createdAt === undefined ? undefined : dateFromTimestamp(input.createdAt),
+  };
 }
 
 /** Creates a workflow-provider schedule from native input. */

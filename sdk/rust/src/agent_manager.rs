@@ -12,8 +12,10 @@ use crate::generated::v1::{
 };
 use crate::{
     agent::{
-        AgentMessageInput, AgentToolRefInput, AgentWorkspaceInput, new_agent_messages,
-        new_agent_tool_refs, new_agent_workspace,
+        AgentExecutionStatus, AgentInteraction, AgentMessageInput, AgentSession, AgentSessionState,
+        AgentToolRefInput, AgentToolSourceMode, AgentTurn, AgentTurnEvent, AgentWorkspaceInput,
+        agent_interaction_from_proto, agent_session_from_proto, agent_turn_event_from_proto,
+        agent_turn_from_proto, new_agent_messages, new_agent_tool_refs, new_agent_workspace,
     },
     protocol,
 };
@@ -67,7 +69,7 @@ pub struct AgentManagerGetSessionInput {
 #[derive(Clone, Debug)]
 pub struct AgentManagerListSessionsInput {
     pub provider_name: String,
-    pub state: pb::AgentSessionState,
+    pub state: AgentSessionState,
     pub limit: i32,
     pub summary_only: bool,
 }
@@ -76,7 +78,7 @@ impl Default for AgentManagerListSessionsInput {
     fn default() -> Self {
         Self {
             provider_name: String::new(),
-            state: pb::AgentSessionState::Unspecified,
+            state: AgentSessionState::Unspecified,
             limit: 0,
             summary_only: false,
         }
@@ -88,7 +90,7 @@ impl Default for AgentManagerListSessionsInput {
 pub struct AgentManagerUpdateSessionInput {
     pub session_id: String,
     pub client_ref: String,
-    pub state: pb::AgentSessionState,
+    pub state: AgentSessionState,
     pub metadata: Option<serde_json::Value>,
 }
 
@@ -97,7 +99,7 @@ impl Default for AgentManagerUpdateSessionInput {
         Self {
             session_id: String::new(),
             client_ref: String::new(),
-            state: pb::AgentSessionState::Unspecified,
+            state: AgentSessionState::Unspecified,
             metadata: None,
         }
     }
@@ -110,7 +112,7 @@ pub struct AgentManagerCreateTurnInput {
     pub model: String,
     pub messages: Vec<AgentMessageInput>,
     pub tool_refs: Vec<AgentToolRefInput>,
-    pub tool_source: pb::AgentToolSourceMode,
+    pub tool_source: AgentToolSourceMode,
     pub response_schema: Option<serde_json::Value>,
     pub metadata: Option<serde_json::Value>,
     pub idempotency_key: String,
@@ -124,7 +126,7 @@ impl Default for AgentManagerCreateTurnInput {
             model: String::new(),
             messages: Vec::new(),
             tool_refs: Vec::new(),
-            tool_source: pb::AgentToolSourceMode::Unspecified,
+            tool_source: AgentToolSourceMode::Unspecified,
             response_schema: None,
             metadata: None,
             idempotency_key: String::new(),
@@ -143,7 +145,7 @@ pub struct AgentManagerGetTurnInput {
 #[derive(Clone, Debug)]
 pub struct AgentManagerListTurnsInput {
     pub session_id: String,
-    pub status: pb::AgentExecutionStatus,
+    pub status: AgentExecutionStatus,
     pub limit: i32,
     pub summary_only: bool,
 }
@@ -152,7 +154,7 @@ impl Default for AgentManagerListTurnsInput {
     fn default() -> Self {
         Self {
             session_id: String::new(),
-            status: pb::AgentExecutionStatus::Unspecified,
+            status: AgentExecutionStatus::Unspecified,
             limit: 0,
             summary_only: false,
         }
@@ -188,6 +190,30 @@ pub struct AgentManagerResolveInteractionInput {
     pub resolution: Option<serde_json::Value>,
 }
 
+/// Native response from listing agent sessions through the manager.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListAgentManagerSessionsResponse {
+    pub sessions: Vec<AgentSession>,
+}
+
+/// Native response from listing agent turns through the manager.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListAgentManagerTurnsResponse {
+    pub turns: Vec<AgentTurn>,
+}
+
+/// Native response from listing agent turn events through the manager.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListAgentManagerTurnEventsResponse {
+    pub events: Vec<AgentTurnEvent>,
+}
+
+/// Native response from listing agent interactions through the manager.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListAgentManagerInteractionsResponse {
+    pub interactions: Vec<AgentInteraction>,
+}
+
 /// Creates a protocol create-session request.
 pub fn new_agent_manager_create_session_request(
     input: AgentManagerCreateSessionInput,
@@ -218,7 +244,7 @@ pub fn new_agent_manager_list_sessions_request(
     pb::AgentManagerListSessionsRequest {
         provider_name: input.provider_name,
         invocation_token: String::new(),
-        state: input.state as i32,
+        state: input.state.as_i32(),
         limit: input.limit,
         summary_only: input.summary_only,
     }
@@ -230,7 +256,7 @@ pub fn new_agent_manager_update_session_request(
     Ok(pb::AgentManagerUpdateSessionRequest {
         session_id: input.session_id,
         client_ref: input.client_ref,
-        state: input.state as i32,
+        state: input.state.as_i32(),
         metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
         invocation_token: String::new(),
     })
@@ -244,7 +270,7 @@ pub fn new_agent_manager_create_turn_request(
         model: input.model,
         messages: new_agent_messages(input.messages)?,
         tool_refs: new_agent_tool_refs(input.tool_refs),
-        tool_source: input.tool_source as i32,
+        tool_source: input.tool_source.as_i32(),
         response_schema: input
             .response_schema
             .map(protocol::struct_from_json)
@@ -274,7 +300,7 @@ pub fn new_agent_manager_list_turns_request(
     pb::AgentManagerListTurnsRequest {
         session_id: input.session_id,
         invocation_token: String::new(),
-        status: input.status as i32,
+        status: input.status.as_i32(),
         limit: input.limit,
         summary_only: input.summary_only,
     }
@@ -379,110 +405,152 @@ impl AgentManager {
     pub async fn create_session(
         &mut self,
         input: AgentManagerCreateSessionInput,
-    ) -> std::result::Result<pb::AgentSession, AgentManagerError> {
+    ) -> std::result::Result<AgentSession, AgentManagerError> {
         let mut request = new_agent_manager_create_session_request(input)?;
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.create_session(request).await?.into_inner())
+        Ok(agent_session_from_proto(
+            self.client.create_session(request).await?.into_inner(),
+        )?)
     }
 
     /// Fetches one agent session.
     pub async fn get_session(
         &mut self,
         input: AgentManagerGetSessionInput,
-    ) -> std::result::Result<pb::AgentSession, AgentManagerError> {
+    ) -> std::result::Result<AgentSession, AgentManagerError> {
         let mut request = new_agent_manager_get_session_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.get_session(request).await?.into_inner())
+        Ok(agent_session_from_proto(
+            self.client.get_session(request).await?.into_inner(),
+        )?)
     }
 
     /// Lists agent sessions visible to the invocation token.
     pub async fn list_sessions(
         &mut self,
         input: AgentManagerListSessionsInput,
-    ) -> std::result::Result<pb::AgentManagerListSessionsResponse, AgentManagerError> {
+    ) -> std::result::Result<ListAgentManagerSessionsResponse, AgentManagerError> {
         let mut request = new_agent_manager_list_sessions_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.list_sessions(request).await?.into_inner())
+        let response = self.client.list_sessions(request).await?.into_inner();
+        Ok(ListAgentManagerSessionsResponse {
+            sessions: response
+                .sessions
+                .into_iter()
+                .map(agent_session_from_proto)
+                .collect::<crate::Result<Vec<_>>>()?,
+        })
     }
 
     /// Updates mutable fields on an agent session.
     pub async fn update_session(
         &mut self,
         input: AgentManagerUpdateSessionInput,
-    ) -> std::result::Result<pb::AgentSession, AgentManagerError> {
+    ) -> std::result::Result<AgentSession, AgentManagerError> {
         let mut request = new_agent_manager_update_session_request(input)?;
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.update_session(request).await?.into_inner())
+        Ok(agent_session_from_proto(
+            self.client.update_session(request).await?.into_inner(),
+        )?)
     }
 
     /// Creates an agent turn.
     pub async fn create_turn(
         &mut self,
         input: AgentManagerCreateTurnInput,
-    ) -> std::result::Result<pb::AgentTurn, AgentManagerError> {
+    ) -> std::result::Result<AgentTurn, AgentManagerError> {
         let mut request = new_agent_manager_create_turn_request(input)?;
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.create_turn(request).await?.into_inner())
+        Ok(agent_turn_from_proto(
+            self.client.create_turn(request).await?.into_inner(),
+        )?)
     }
 
     /// Fetches one agent turn.
     pub async fn get_turn(
         &mut self,
         input: AgentManagerGetTurnInput,
-    ) -> std::result::Result<pb::AgentTurn, AgentManagerError> {
+    ) -> std::result::Result<AgentTurn, AgentManagerError> {
         let mut request = new_agent_manager_get_turn_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.get_turn(request).await?.into_inner())
+        Ok(agent_turn_from_proto(
+            self.client.get_turn(request).await?.into_inner(),
+        )?)
     }
 
     /// Lists turns for an agent session.
     pub async fn list_turns(
         &mut self,
         input: AgentManagerListTurnsInput,
-    ) -> std::result::Result<pb::AgentManagerListTurnsResponse, AgentManagerError> {
+    ) -> std::result::Result<ListAgentManagerTurnsResponse, AgentManagerError> {
         let mut request = new_agent_manager_list_turns_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.list_turns(request).await?.into_inner())
+        let response = self.client.list_turns(request).await?.into_inner();
+        Ok(ListAgentManagerTurnsResponse {
+            turns: response
+                .turns
+                .into_iter()
+                .map(agent_turn_from_proto)
+                .collect::<crate::Result<Vec<_>>>()?,
+        })
     }
 
     /// Cancels an in-progress agent turn.
     pub async fn cancel_turn(
         &mut self,
         input: AgentManagerCancelTurnInput,
-    ) -> std::result::Result<pb::AgentTurn, AgentManagerError> {
+    ) -> std::result::Result<AgentTurn, AgentManagerError> {
         let mut request = new_agent_manager_cancel_turn_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.cancel_turn(request).await?.into_inner())
+        Ok(agent_turn_from_proto(
+            self.client.cancel_turn(request).await?.into_inner(),
+        )?)
     }
 
     /// Lists events emitted for an agent turn.
     pub async fn list_turn_events(
         &mut self,
         input: AgentManagerListTurnEventsInput,
-    ) -> std::result::Result<pb::AgentManagerListTurnEventsResponse, AgentManagerError> {
+    ) -> std::result::Result<ListAgentManagerTurnEventsResponse, AgentManagerError> {
         let mut request = new_agent_manager_list_turn_events_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.list_turn_events(request).await?.into_inner())
+        let response = self.client.list_turn_events(request).await?.into_inner();
+        Ok(ListAgentManagerTurnEventsResponse {
+            events: response
+                .events
+                .into_iter()
+                .map(agent_turn_event_from_proto)
+                .collect::<crate::Result<Vec<_>>>()?,
+        })
     }
 
     /// Lists pending or completed agent interactions.
     pub async fn list_interactions(
         &mut self,
         input: AgentManagerListInteractionsInput,
-    ) -> std::result::Result<pb::AgentManagerListInteractionsResponse, AgentManagerError> {
+    ) -> std::result::Result<ListAgentManagerInteractionsResponse, AgentManagerError> {
         let mut request = new_agent_manager_list_interactions_request(input);
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.list_interactions(request).await?.into_inner())
+        let response = self.client.list_interactions(request).await?.into_inner();
+        Ok(ListAgentManagerInteractionsResponse {
+            interactions: response
+                .interactions
+                .into_iter()
+                .map(agent_interaction_from_proto)
+                .collect::<crate::Result<Vec<_>>>()?,
+        })
     }
 
     /// Resolves an agent interaction with a host response.
     pub async fn resolve_interaction(
         &mut self,
         input: AgentManagerResolveInteractionInput,
-    ) -> std::result::Result<pb::AgentInteraction, AgentManagerError> {
+    ) -> std::result::Result<AgentInteraction, AgentManagerError> {
         let mut request = new_agent_manager_resolve_interaction_request(input)?;
         request.invocation_token = self.invocation_token.clone();
-        Ok(self.client.resolve_interaction(request).await?.into_inner())
+        Ok(agent_interaction_from_proto(
+            self.client.resolve_interaction(request).await?.into_inner(),
+        )?)
     }
 }
 

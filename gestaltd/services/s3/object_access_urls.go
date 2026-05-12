@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"

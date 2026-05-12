@@ -98,11 +98,11 @@ func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
-	if created.GetProviderName() != "managed" {
-		t.Fatalf("provider_name = %q, want %q", created.GetProviderName(), "managed")
+	if created.ProviderName != "managed" {
+		t.Fatalf("provider_name = %q, want %q", created.ProviderName, "managed")
 	}
-	if created.GetSchedule().GetId() != "sched-1" {
-		t.Fatalf("schedule id = %q, want %q", created.GetSchedule().GetId(), "sched-1")
+	if created.Schedule == nil || created.Schedule.ID != "sched-1" {
+		t.Fatalf("schedule = %#v, want id sched-1", created.Schedule)
 	}
 
 	harness.mu.Lock()
@@ -173,7 +173,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
 	}
-	if resp.GetProviderName() != "local" || resp.GetRun().GetId() != "run-1" || !resp.GetStartedRun() {
+	if resp.ProviderName != "local" || resp.Run == nil || resp.Run.ID != "run-1" || !resp.StartedRun {
 		t.Fatalf("response = %#v", resp)
 	}
 
@@ -277,7 +277,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
 	}
-	if resp.GetProviderName() != "local" || resp.GetRun().GetId() != "run-1" || !resp.GetStartedRun() {
+	if resp.ProviderName != "local" || resp.Run == nil || resp.Run.ID != "run-1" || !resp.StartedRun {
 		t.Fatalf("response = %#v", resp)
 	}
 

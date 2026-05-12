@@ -77,6 +77,10 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         request: GrpcRequest<WorkflowManagerStartRunRequest>,
     ) -> std::result::Result<GrpcResponse<ManagedWorkflowRun>, Status> {
         let request = request.into_inner();
+        self.idempotency_keys
+            .lock()
+            .expect("lock idempotency keys")
+            .push(request.idempotency_key.clone());
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "start-run".to_string(),
             invocation_token: request.invocation_token.clone(),
@@ -132,6 +136,10 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         request: GrpcRequest<WorkflowManagerSignalOrStartRunRequest>,
     ) -> std::result::Result<GrpcResponse<ManagedWorkflowRunSignal>, Status> {
         let request = request.into_inner();
+        self.idempotency_keys
+            .lock()
+            .expect("lock idempotency keys")
+            .push(request.idempotency_key.clone());
         self.signal_or_start_requests
             .lock()
             .expect("lock signal or start requests")
@@ -839,19 +847,34 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     assert!(paused.schedule.expect("paused schedule").paused);
     assert!(!resumed.schedule.expect("resumed schedule").paused);
     assert_eq!(created_trigger.provider_name, "basic");
+    let created_trigger = created_trigger.trigger.expect("created trigger");
+    assert_eq!(created_trigger.id, "trg-1");
     assert_eq!(
-        created_trigger.trigger.expect("created trigger").id,
-        "trg-1"
+        created_trigger
+            .r#match
+            .as_ref()
+            .expect("created trigger match")
+            .event_type,
+        "roadmap.item.updated"
     );
     assert_eq!(
         fetched_trigger.trigger.expect("fetched trigger").id,
         "trg-1"
     );
     assert_eq!(updated_trigger.provider_name, "secondary");
-    assert!(updated_trigger.trigger.expect("updated trigger").paused);
+    let updated_trigger = updated_trigger.trigger.expect("updated trigger");
+    assert!(updated_trigger.paused);
+    assert_eq!(
+        updated_trigger
+            .r#match
+            .as_ref()
+            .expect("updated trigger match")
+            .event_type,
+        "roadmap.item.synced"
+    );
     assert!(paused_trigger.trigger.expect("paused trigger").paused);
     assert!(!resumed_trigger.trigger.expect("resumed trigger").paused);
-    assert_eq!(published_event.r#type, "roadmap.item.updated");
+    assert_eq!(published_event.event_type, "roadmap.item.updated");
 
     let seen = server.seen.lock().expect("lock seen").clone();
     let idempotency_keys = server
@@ -862,6 +885,8 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
     assert_eq!(
         idempotency_keys,
         vec![
+            "workflow-request-key-rust".to_string(),
+            "workflow-request-key-rust".to_string(),
             "workflow-request-key-rust".to_string(),
             "workflow-request-key-rust".to_string(),
             "workflow-request-key-rust".to_string(),
