@@ -1,0 +1,102 @@
+name: Temporary Gestaltd Package Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type DELETE_GESTALTD_ALPHA_PACKAGES to delete gestaltd alpha Docker Hub and GHCR package tags.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    if: ${{ inputs.confirm == 'DELETE_GESTALTD_ALPHA_PACKAGES' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Delete Docker Hub alpha tags
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          namespace="valontechnologies"
+          repository="gestaltd"
+
+          token="$(
+            jq -n \
+              --arg identifier "$DOCKERHUB_USERNAME" \
+              --arg secret "$DOCKERHUB_TOKEN" \
+              '{identifier: $identifier, secret: $secret}' \
+              | curl -fsSL \
+                  -H 'Content-Type: application/json' \
+                  -X POST \
+                  -d @- \
+                  https://hub.docker.com/v2/auth/token \
+              | jq -r '.access_token'
+          )"
+          if [[ -z "$token" || "$token" == "null" ]]; then
+            echo "Failed to obtain Docker Hub API token" >&2
+            exit 1
+          fi
+
+          curl -fsSL "https://hub.docker.com/v2/namespaces/${namespace}/repositories/${repository}/tags?page_size=100" \
+            | jq -r '.results[] | select(.name | test("^0\\.0\\.1-alpha")) | .name' \
+            | sort -V > /tmp/dockerhub-alpha-tags.txt
+
+          echo "Docker Hub alpha tags to delete: $(wc -l < /tmp/dockerhub-alpha-tags.txt | tr -d ' ')"
+          cat /tmp/dockerhub-alpha-tags.txt
+
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            echo "Deleting Docker Hub tag ${tag}"
+            code="$(
+              curl -sS -o /tmp/dockerhub-delete.json -w '%{http_code}' \
+                -H "Authorization: Bearer ${token}" \
+                -X DELETE \
+                "https://hub.docker.com/v2/namespaces/${namespace}/repositories/${repository}/tags/${tag}" || true
+            )"
+            if [[ "$code" != "202" && "$code" != "204" && "$code" != "404" ]]; then
+              cat /tmp/dockerhub-delete.json >&2 || true
+              echo "Docker Hub delete failed for ${tag}: HTTP ${code}" >&2
+              exit 1
+            fi
+          done < /tmp/dockerhub-alpha-tags.txt
+
+          remaining="$(
+            curl -fsSL "https://hub.docker.com/v2/namespaces/${namespace}/repositories/${repository}/tags?page_size=100" \
+              | jq '[.results[] | select(.name | test("^0\\.0\\.1-alpha"))] | length'
+          )"
+          echo "Remaining Docker Hub alpha tags: ${remaining}"
+          test "$remaining" = "0"
+
+      - name: Delete GHCR alpha chart versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          package="charts%2Fgestaltd"
+
+          gh api --paginate "/orgs/valon-technologies/packages/container/${package}/versions?per_page=100" \
+            --jq '.[] | select((.metadata.container.tags // []) | any(startswith("0.0.1-alpha") or . == "multitenant-wave1-de46eee")) | [.id, ((.metadata.container.tags // []) | join(","))] | @tsv' \
+            > /tmp/ghcr-alpha-versions.txt
+
+          echo "GHCR alpha chart versions to delete: $(wc -l < /tmp/ghcr-alpha-versions.txt | tr -d ' ')"
+          cat /tmp/ghcr-alpha-versions.txt
+
+          while IFS=$'\t' read -r version_id tags; do
+            [[ -n "$version_id" ]] || continue
+            echo "Deleting GHCR package version ${version_id} (${tags})"
+            gh api -X DELETE "/orgs/valon-technologies/packages/container/${package}/versions/${version_id}"
+          done < /tmp/ghcr-alpha-versions.txt
+
+          gh api --paginate "/orgs/valon-technologies/packages/container/${package}/versions?per_page=100" \
+            --jq '.[] | select((.metadata.container.tags // []) | any(startswith("0.0.1-alpha") or . == "multitenant-wave1-de46eee")) | .id' \
+            > /tmp/ghcr-alpha-remaining.txt
+          remaining="$(wc -l < /tmp/ghcr-alpha-remaining.txt | tr -d ' ')"
+          echo "Remaining GHCR alpha chart versions: ${remaining}"
+          test "$remaining" = "0"
