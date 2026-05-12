@@ -14,7 +14,7 @@ plugins:
       - paths=source_relative
 
   # Go gRPC stubs
-  - remote: buf.build/grpc/go:v1.6.2
+  - remote: buf.build/grpc/go:v1.6.1
     out: ../../gestaltd/internal/gen
     opt:
       - paths=source_relative
