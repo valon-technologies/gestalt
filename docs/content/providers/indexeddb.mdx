@@ -154,6 +154,391 @@ Normal plugin config gives the plugin one effective IndexedDB binding. If you
 need a different backing store or a different scoped database name, choose that
 in YAML instead of encoding transport details in plugin code.
 
+### Advanced reads and writes
+
+The snippets below continue from the basic setup above: `db` is a connected
+IndexedDB client, `tasks` is the `tasks` object-store handle, and Go examples
+also use `ctx`. The examples assume primary keys such as `task-100` and a
+secondary index named `by_status`.
+
+#### Range reads
+
+Use a key range when you need a bounded primary-key scan instead of one exact
+lookup.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    recent, err := tasks.GetAll(ctx, &gestalt.KeyRange{
+        Lower: "task-100",
+        Upper: "task-199",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    _ = recent
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import KeyRange
+
+    recent = tasks.get_all(KeyRange(lower="task-100", upper="task-199"))
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt::KeyRange;
+    use serde_json::json;
+
+    let recent = tasks
+        .get_all(Some(KeyRange {
+            lower: Some(json!("task-100")),
+            upper: Some(json!("task-199")),
+            lower_open: false,
+            upper_open: false,
+        }))
+        .await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    const recent = await tasks.getAll({
+      lower: "task-100",
+      upper: "task-199",
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+#### Cursor pagination
+
+IndexedDB pagination is cursor-based. The SDKs do not expose a page-token list
+API for object stores; keep the last primary key from one cursor page and use an
+exclusive lower bound for the next page.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    func readTaskPage(
+        ctx context.Context,
+        tasks *gestalt.ObjectStoreClient,
+        after string,
+        limit int,
+    ) ([]gestalt.Record, string, error) {
+        var keyRange *gestalt.KeyRange
+        if after != "" {
+            keyRange = &gestalt.KeyRange{
+                Lower:     after,
+                LowerOpen: true,
+            }
+        }
+
+        cursor, err := tasks.OpenCursor(ctx, keyRange, gestalt.CursorNext)
+        if err != nil {
+            return nil, "", err
+        }
+        defer cursor.Close()
+
+        page := make([]gestalt.Record, 0, limit)
+        var nextAfter string
+        for len(page) < limit && cursor.Continue() {
+            record, err := cursor.Value()
+            if err != nil {
+                return nil, "", err
+            }
+            page = append(page, record)
+            nextAfter = cursor.PrimaryKey()
+        }
+        if err := cursor.Err(); err != nil {
+            return nil, "", err
+        }
+        return page, nextAfter, nil
+    }
+
+    page, nextAfter, err := readTaskPage(ctx, tasks, "", 25)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    _ = page
+    _ = nextAfter
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import CURSOR_NEXT, KeyRange
+
+    def read_task_page(tasks, after: str | None = None, limit: int = 25):
+        key_range = (
+            KeyRange(lower=after, lower_open=True)
+            if after
+            else None
+        )
+        page = []
+        next_after = None
+
+        with tasks.open_cursor(key_range, direction=CURSOR_NEXT) as cursor:
+            while len(page) < limit and cursor.continue_():
+                page.append(cursor.value)
+                next_after = cursor.primary_key
+
+        return page, next_after
+
+    page, next_after = read_task_page(tasks, limit=25)
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt::{CursorDirection, KeyRange};
+    use serde_json::json;
+
+    let after = None::<String>;
+    let cursor_range = after.map(|id| KeyRange {
+        lower: Some(json!(id)),
+        upper: None,
+        lower_open: true,
+        upper_open: false,
+    });
+    let mut cursor = tasks
+        .open_cursor(cursor_range, CursorDirection::Next)
+        .await?;
+
+    let mut page = Vec::new();
+    let mut next_after = None::<String>;
+    while page.len() < 25 && cursor.continue_next().await? {
+        page.push(cursor.value()?);
+        next_after = Some(cursor.primary_key().to_string());
+    }
+    cursor.close().await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import {
+      CursorDirection,
+      type KeyRange,
+      type Record,
+    } from "@valon-technologies/gestalt";
+
+    async function readTaskPage(after?: string, limit = 25) {
+      const range: KeyRange | undefined = after
+        ? { lower: after, lowerOpen: true }
+        : undefined;
+      const cursor = await tasks.openCursor({
+        range,
+        direction: CursorDirection.Next,
+      });
+      const page: Record[] = [];
+      let nextAfter: string | undefined;
+
+      if (!cursor) return { page, nextAfter };
+
+      try {
+        while (page.length < limit) {
+          const hasNext = await cursor.continue();
+          if (!hasNext) break;
+          if (cursor.value) page.push(cursor.value);
+          nextAfter = cursor.primaryKey;
+        }
+      } finally {
+        cursor.close();
+      }
+
+      return { page, nextAfter };
+    }
+
+    const { page, nextAfter } = await readTaskPage(undefined, 25);
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+#### Secondary index queries
+
+Use an index when you need to find or count rows by a field other than the
+primary key. In TypeScript, the first index-query argument is the optional key
+range; pass `undefined` before index values when no range is needed.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    byStatus := tasks.Index("by_status")
+
+    activeCount, err := byStatus.Count(ctx, nil, "active")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    activeKeys, err := byStatus.GetAllKeys(ctx, nil, "active")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    _, _ = activeCount, activeKeys
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    by_status = tasks.index("by_status")
+
+    active_count = by_status.count("active")
+    active_keys = by_status.get_all_keys("active")
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use serde_json::json;
+
+    let mut by_status = tasks.index("by_status");
+
+    let active_count = by_status.count(&[json!("active")], None).await?;
+    let active_keys = by_status.get_all_keys(&[json!("active")], None).await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    const byStatus = tasks.index("by_status");
+
+    const activeCount = await byStatus.count(undefined, "active");
+    const activeKeys = await byStatus.getAllKeys(undefined, "active");
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+#### Transactions
+
+Use an explicit transaction when a group of reads and writes should commit or
+roll back together.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    tx, err := db.Transaction(
+        ctx,
+        []string{"tasks"},
+        gestalt.TransactionReadwrite,
+        gestalt.TransactionOptions{
+            DurabilityHint: gestalt.TransactionDurabilityStrict,
+        },
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    txTasks := tx.ObjectStore("tasks")
+    now := time.Now().UTC().Format(time.RFC3339)
+    for _, record := range []gestalt.Record{
+        {"id": "task-123", "status": "active", "priority": 2, "updatedAt": now},
+        {"id": "task-124", "status": "queued", "priority": 1, "updatedAt": now},
+    } {
+        if err := txTasks.Put(ctx, record); err != nil {
+            _ = tx.Abort(ctx)
+            log.Fatal(err)
+        }
+    }
+    if err := tx.Commit(ctx); err != nil {
+        log.Fatal(err)
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import datetime as dt
+
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    with db.transaction(["tasks"], "readwrite", durability_hint="strict") as tx:
+        tx_tasks = tx.object_store("tasks")
+        tx_tasks.put(
+            {
+                "id": "task-123",
+                "status": "active",
+                "priority": 2,
+                "updatedAt": now,
+            }
+        )
+        tx_tasks.put(
+            {
+                "id": "task-124",
+                "status": "queued",
+                "priority": 1,
+                "updatedAt": now,
+            }
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::collections::BTreeMap;
+
+    use gestalt::{
+        TransactionDurabilityHint, TransactionMode, TransactionOptions,
+    };
+    use serde_json::json;
+
+    let mut tx = db
+        .transaction(
+            &["tasks"],
+            TransactionMode::Readwrite,
+            TransactionOptions {
+                durability_hint: TransactionDurabilityHint::Strict,
+            },
+        )
+        .await?;
+
+    {
+        let mut tx_tasks = tx.object_store("tasks");
+        tx_tasks.put(
+            BTreeMap::from([
+                ("id".to_string(), json!("task-123")),
+                ("status".to_string(), json!("active")),
+                ("priority".to_string(), json!(2)),
+                ("updatedAt".to_string(), json!("2026-05-12T12:00:00Z")),
+            ])
+        )
+        .await?;
+        tx_tasks.put(
+            BTreeMap::from([
+                ("id".to_string(), json!("task-124")),
+                ("status".to_string(), json!("queued")),
+                ("priority".to_string(), json!(1)),
+                ("updatedAt".to_string(), json!("2026-05-12T12:00:00Z")),
+            ])
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    const tx = await db.transaction(["tasks"], "readwrite", {
+      durabilityHint: "strict",
+    });
+    try {
+      const txTasks = tx.objectStore("tasks");
+      const updatedAt = new Date().toISOString();
+      await txTasks.put({
+        id: "task-123",
+        status: "active",
+        priority: 2,
+        updatedAt,
+      });
+      await txTasks.put({
+        id: "task-124",
+        status: "queued",
+        priority: 1,
+        updatedAt,
+      });
+      await tx.commit();
+    } catch (error) {
+      await tx.abort("failed to save task batch");
+      throw error;
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
 ## First-party IndexedDB providers
 
 First-party storage backends live under
