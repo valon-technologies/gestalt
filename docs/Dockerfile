@@ -59,11 +59,15 @@ server {
         return 301 /latest/;
     }
 
+    location = /dev {
+        return 301 /dev/;
+    }
+
     location ~ ^(/versions/v[^/]+)$ {
         return 301 $1/;
     }
 
-    location ~ ^(/latest/.+)/$ {
+    location ~ ^(/(dev|latest)/.+)/$ {
         return 301 $1;
     }
 
@@ -71,9 +75,13 @@ server {
         return 301 $1;
     }
 
-    location ~ ^/(latest|versions/v[^/]+)/_next/ {
+    location ~ ^/(dev|latest|versions/v[^/]+)/_next/ {
         add_header Cache-Control "public, max-age=31536000, immutable" always;
         try_files $uri =404;
+    }
+
+    location /dev/ {
+        try_files $uri $uri.html $uri/ =404;
     }
 
     location /latest/ {

@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 const siteRoot = path.resolve("out");
@@ -53,6 +53,15 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 try {
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
+  const devAssetPath = findStaticAssetPath("dev/_next/static");
+  const versionsManifest = await readVersionsManifest(
+    `${baseUrl}/versions.json`,
+    "gestaltd.ai",
+  );
+  const exactVersionPrefix = versionsManifest.versions[0]?.pathPrefix;
+  if (!exactVersionPrefix) {
+    throw new Error("/versions.json did not contain any exact versions");
+  }
   await assertResponse({
     url: `${baseUrl}/`,
     host: "registry.gestaltd.ai",
@@ -104,6 +113,48 @@ try {
     host: "gestaltd.ai",
     location: "/latest/",
   });
+  await assertRedirect({
+    url: `${baseUrl}/dev`,
+    host: "gestaltd.ai",
+    location: "/dev/",
+  });
+  await assertResponse({
+    url: `${baseUrl}/dev/`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "Gestalt",
+    excludes: registryMarker,
+  });
+  await assertResponse({
+    url: `${baseUrl}/dev/providers`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "Providers",
+    excludes: registryMarker,
+  });
+  await assertResponse({
+    url: `${baseUrl}/dev/providers.txt`,
+    host: "gestaltd.ai",
+    status: 200,
+    includes: "What Providers Do",
+    excludes: registryMarker,
+  });
+  await assertResponse({
+    url: `${baseUrl}${devAssetPath}`,
+    host: "gestaltd.ai",
+    status: 200,
+  });
+  await assertRedirect({
+    url: `${baseUrl}/dev/providers/`,
+    host: "gestaltd.ai",
+    location: "/dev/providers",
+  });
+  await assertResponse({
+    url: `${baseUrl}/dev/does-not-exist`,
+    host: "gestaltd.ai",
+    status: 404,
+    excludes: registryMarker,
+  });
   await assertResponse({
     url: `${baseUrl}/latest/`,
     host: "gestaltd.ai",
@@ -124,35 +175,28 @@ try {
     location: "/latest/getting-started",
   });
   await assertRedirect({
-    url: `${baseUrl}/versions/v0.0.1-alpha.24`,
+    url: `${baseUrl}${exactVersionPrefix}`,
     host: "gestaltd.ai",
-    location: "/versions/v0.0.1-alpha.24/",
+    location: `${exactVersionPrefix}/`,
   });
   await assertResponse({
-    url: `${baseUrl}/versions/v0.0.1-alpha.24/`,
+    url: `${baseUrl}${exactVersionPrefix}/`,
     host: "gestaltd.ai",
     status: 200,
     includes: "Gestalt",
     excludes: registryMarker,
   });
   await assertResponse({
-    url: `${baseUrl}/versions/v0.0.1-alpha.24/reference/cli`,
+    url: `${baseUrl}${exactVersionPrefix}/reference/cli`,
     host: "gestaltd.ai",
     status: 200,
     includes: "Server CLI",
     excludes: registryMarker,
   });
   await assertRedirect({
-    url: `${baseUrl}/versions/v0.0.1-alpha.24/reference/cli/`,
+    url: `${baseUrl}${exactVersionPrefix}/reference/cli/`,
     host: "gestaltd.ai",
-    location: "/versions/v0.0.1-alpha.24/reference/cli",
-  });
-  await assertResponse({
-    url: `${baseUrl}/versions/v0.0.1-alpha.24/reference/sdk/python`,
-    host: "gestaltd.ai",
-    status: 200,
-    includes: "Python SDK",
-    excludes: registryMarker,
+    location: `${exactVersionPrefix}/reference/cli`,
   });
   await assertResponse({
     url: `${baseUrl}/versions/v9.9.9/`,
@@ -160,12 +204,7 @@ try {
     status: 404,
     excludes: registryMarker,
   });
-  await assertResponse({
-    url: `${baseUrl}/versions.json`,
-    host: "gestaltd.ai",
-    status: 200,
-    includes: "\"versions\"",
-  });
+  await readVersionsManifest(`${baseUrl}/versions.json`, "gestaltd.ai");
   await assertResponse({
     url: `${baseUrl}/api/does-not-exist`,
     host: "gestaltd.ai",
@@ -238,19 +277,26 @@ async function serveDocsHost(pathname, response) {
   if (pathname === "/latest") {
     return redirect(response, "/latest/");
   }
+  if (pathname === "/dev") {
+    return redirect(response, "/dev/");
+  }
   const versionWithoutSlash = pathname.match(/^\/versions\/v[^/]+$/);
   if (versionWithoutSlash) {
     return redirect(response, `${pathname}/`);
   }
-  const latestPageWithSlash = pathname.match(/^(\/latest\/.+)\/$/);
-  if (latestPageWithSlash) {
-    return redirect(response, latestPageWithSlash[1]);
+  const docsPageWithSlash = pathname.match(/^(\/(?:dev|latest)\/.+)\/$/);
+  if (docsPageWithSlash) {
+    return redirect(response, docsPageWithSlash[1]);
   }
   const versionPageWithSlash = pathname.match(/^(\/versions\/v[^/]+\/.+)\/$/);
   if (versionPageWithSlash) {
     return redirect(response, versionPageWithSlash[1]);
   }
-  if (pathname.startsWith("/latest/") || pathname.startsWith("/versions/")) {
+  if (
+    pathname.startsWith("/dev/") ||
+    pathname.startsWith("/latest/") ||
+    pathname.startsWith("/versions/")
+  ) {
     return serveFile(pathname, response, true, null);
   }
   if (pathname === "/registry" || pathname.startsWith("/registry/")) {
@@ -327,7 +373,14 @@ function candidateFiles(pathname) {
   ];
 }
 
-async function assertResponse({ url, host, status, includes, excludes, location }) {
+async function assertResponse({
+  url,
+  host,
+  status,
+  includes,
+  excludes,
+  location,
+}) {
   const response = await fetch(url, {
     headers: { "x-test-host": host },
     redirect: "manual",
@@ -367,4 +420,51 @@ async function assertRedirect({ url, host, location }) {
   if (actualLocation !== location) {
     throw new Error(`${host} ${url} redirected to ${actualLocation}, want ${location}`);
   }
+}
+
+async function readVersionsManifest(url, host) {
+  const response = await fetch(url, {
+    headers: { "x-test-host": host },
+    redirect: "manual",
+  });
+  const body = await response.text();
+  if (response.status !== 200) {
+    throw new Error(`${host} ${url} returned ${response.status}, want 200`);
+  }
+  return assertVersionsManifest(body);
+}
+
+function assertVersionsManifest(body) {
+  const manifest = JSON.parse(body);
+  if (!manifest.latest?.pathPrefix || !Array.isArray(manifest.versions)) {
+    throw new Error("/versions.json did not contain a versions manifest");
+  }
+  if (
+    manifest.development?.pathPrefix !== "/dev" ||
+    manifest.development?.version !== "main" ||
+    manifest.development?.development !== true
+  ) {
+    throw new Error("/versions.json did not contain the /dev development channel");
+  }
+  return manifest;
+}
+
+function findStaticAssetPath(relativeRoot) {
+  const root = path.join(siteRoot, relativeRoot);
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    for (const entry of readdirSync(current)) {
+      const fullPath = path.join(current, entry);
+      const stat = statSync(fullPath);
+      if (stat.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (/\.(?:css|js)$/.test(entry)) {
+        return `/${path.relative(siteRoot, fullPath).split(path.sep).join("/")}`;
+      }
+    }
+  }
+  throw new Error(`could not find a CSS or JS asset under out/${relativeRoot}`);
 }
