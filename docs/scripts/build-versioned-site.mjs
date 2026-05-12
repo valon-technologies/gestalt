@@ -114,6 +114,7 @@ async function main() {
     );
     await runPagefind(outDir);
     await assertNoUnversionedDocLinks(outDir);
+    await assertFlightPayloadsUseUnprefixedInternalLinks(outDir);
   } finally {
     await rm(tempRoot, { force: true, recursive: true });
   }
@@ -398,34 +399,40 @@ async function copyRootOutputs(rootOut, finalOut) {
 
 async function rewriteVersionedPaths(root, prefix) {
   const files = await walk(root);
-  for (const file of files.filter((candidate) => /\.(html|txt)$/.test(candidate))) {
+  for (const file of files.filter((candidate) => candidate.endsWith(".html"))) {
     const original = await readFile(file, "utf8");
-    const rewritten = original
-      .replace(
-        /\b(href|src|action)=(["'])\/([^"'\s>]*)/g,
-        (match, attr, quote, rest) => {
-          const absolute = `/${rest}`;
-          return shouldPrefixPath(absolute, prefix)
-            ? `${attr}=${quote}${prefix}${absolute}`
-            : match;
-        },
-      )
-      .replace(/("href"\s*:\s*")\/([^"]*)/g, (match, start, rest) => {
-        const absolute = `/${rest}`;
-        return shouldPrefixPath(absolute, prefix)
-          ? `${start}${prefix}${absolute}`
-          : match;
-      })
-      .replace(/(\\"href\\":\\")\/([^"\\]*)/g, (match, start, rest) => {
-        const absolute = `/${rest}`;
-        return shouldPrefixPath(absolute, prefix)
-          ? `${start}${prefix}${absolute}`
-          : match;
-      });
+    const rewritten = rewriteHtmlDocumentPaths(original, prefix);
     if (rewritten !== original) {
       await writeFile(file, rewritten);
     }
   }
+}
+
+function rewriteHtmlDocumentPaths(html, prefix) {
+  return rewriteNonScriptHtml(html, (chunk) =>
+    chunk.replace(
+      /\b(href|src|action)=(["'])\/([^"'\s>]*)/g,
+      (match, attr, quote, rest) => {
+        const absolute = `/${rest}`;
+        return shouldPrefixPath(absolute, prefix)
+          ? `${attr}=${quote}${prefix}${absolute}`
+          : match;
+      },
+    ),
+  );
+}
+
+function rewriteNonScriptHtml(html, rewriteChunk) {
+  const scriptPattern = /<script\b[^>]*>[\s\S]*?<\/script>/gi;
+  let rewritten = "";
+  let lastIndex = 0;
+  for (const match of html.matchAll(scriptPattern)) {
+    rewritten += rewriteChunk(html.slice(lastIndex, match.index));
+    rewritten += match[0];
+    lastIndex = match.index + match[0].length;
+  }
+  rewritten += rewriteChunk(html.slice(lastIndex));
+  return rewritten;
 }
 
 function shouldPrefixPath(value, prefix) {
@@ -480,12 +487,11 @@ async function assertNoUnversionedDocLinks(finalOut) {
   const bad = [];
   const patterns = [
     /\b(?:href|src|action)=["']\/(?!latest(?:\/|["'])|versions(?:\/|["'])|api\/|admin(?:\/|["'])|favicon\.svg|fonts\/|install(?:-|\.sh)|mcp(?:\/|["'])|registry(?:\/|["'])|versions\.json|_pagefind\/)/g,
-    /"href"\s*:\s*"\/(?!latest(?:\/|")|versions(?:\/|")|api\/|admin(?:\/|")|favicon\.svg|fonts\/|install(?:-|\.sh)|mcp(?:\/|")|registry(?:\/|")|versions\.json|_pagefind\/)/g,
-    /\\"href\\":\\"\/(?!latest(?:\/|\\")|versions(?:\/|\\")|api\/|admin(?:\/|\\")|favicon\.svg|fonts\/|install(?:-|\.sh)|mcp(?:\/|\\")|registry(?:\/|\\")|versions\.json|_pagefind\/)/g,
   ];
-  for (const file of files.filter((candidate) => /\.(html|txt)$/.test(candidate))) {
+  for (const file of files.filter((candidate) => candidate.endsWith(".html"))) {
     const body = await readFile(file, "utf8");
-    const matches = patterns.flatMap((pattern) => body.match(pattern) ?? []);
+    const visibleHtml = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+    const matches = patterns.flatMap((pattern) => visibleHtml.match(pattern) ?? []);
     if (matches.length > 0) {
       bad.push(`${path.relative(finalOut, file)}: ${matches.slice(0, 5).join(", ")}`);
     }
@@ -495,6 +501,70 @@ async function assertNoUnversionedDocLinks(finalOut) {
       `versioned docs contain unversioned internal links:\n${bad.join("\n")}`,
     );
   }
+}
+
+async function assertFlightPayloadsUseUnprefixedInternalLinks(finalOut) {
+  const versionedRoots = await versionedOutputRoots(finalOut);
+  const bad = [];
+  for (const { root, prefix } of versionedRoots) {
+    const files = await walk(root);
+    for (const file of files.filter((candidate) => /\.(html|txt)$/.test(candidate))) {
+      const body = await readFile(file, "utf8");
+      const flightText = file.endsWith(".html")
+        ? [...body.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)]
+            .map((match) => match[1])
+            .join("\n")
+        : body;
+      for (const value of flightHrefValues(flightText)) {
+        if (
+          (value === prefix || value.startsWith(`${prefix}/`)) &&
+          !value.startsWith(`${prefix}/_next/`)
+        ) {
+          bad.push(`${path.relative(finalOut, file)}: href ${value}`);
+          break;
+        }
+      }
+    }
+  }
+  if (bad.length > 0) {
+    throw new Error(
+      `versioned docs flight payloads contain base-prefixed internal links:\n${bad.join("\n")}`,
+    );
+  }
+}
+
+function flightHrefValues(text) {
+  const values = [];
+  const patterns = [
+    /"href"\s*:\s*"([^"]+)"/g,
+    /\\"href\\":\\"([^"\\]+)\\"/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      values.push(match[1]);
+    }
+  }
+  return values;
+}
+
+async function versionedOutputRoots(finalOut) {
+  const roots = [];
+  const latest = path.join(finalOut, "latest");
+  if (existsSync(latest)) {
+    roots.push({ prefix: "/latest", root: latest });
+  }
+  const versions = path.join(finalOut, "versions");
+  if (existsSync(versions)) {
+    for (const entry of await readdir(versions, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        roots.push({
+          prefix: `/versions/${entry.name}`,
+          root: path.join(versions, entry.name),
+        });
+      }
+    }
+  }
+  return roots;
 }
 
 async function runPagefind(finalOut) {
