@@ -4,13 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build && pagefind --site out --output-subdir _pagefind",
+    "build": "npm run build:single && pagefind --site out --output-subdir _pagefind",
+    "build:single": "next build --webpack",
+    "build:versioned": "node scripts/build-versioned-site.mjs --out out --include-all-gestaltd-tags --latest-policy supported",
+    "build:versioned:test": "node scripts/build-versioned-site.mjs --out out --tag gestaltd/v0.0.1-alpha.24 --latest-tag gestaltd/v0.0.1-alpha.24",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
     "test:sdk-docs": "bash scripts/check-sdk-doc-leaks.sh docs out",
     "test:installer": "bash scripts/test-installer.sh",
     "test:linux-installer": "npm run test:installer",
+    "test:nginx-routing": "node scripts/check-nginx-routing.mjs",
     "test:registry": "node scripts/check-registry-static.mjs",
     "test:registry-docs": "node scripts/check-registry-docs-render.mjs"
   },

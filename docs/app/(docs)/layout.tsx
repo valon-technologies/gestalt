@@ -2,8 +2,10 @@ import { Footer, Layout, Navbar } from "nextra-theme-docs";
 import { Search } from "nextra/components";
 import { GitHubIcon } from "nextra/icons";
 import { getPageMap } from "nextra/page-map";
+import VersionPicker from "../../components/VersionPicker";
 
 const repositoryUrl = "https://github.com/valon-technologies/gestalt";
+const repositoryRef = process.env.GESTALT_DOCS_REPOSITORY_REF || "main";
 
 const navbar = (
   <Navbar
@@ -22,6 +24,7 @@ const navbar = (
 
 const search = (
   <div className="docs-header-search">
+    <VersionPicker />
     <a
       href={repositoryUrl}
       target="_blank"
@@ -49,7 +52,7 @@ export default async function DocsLayout({
       footer={footer}
       search={search}
       pageMap={await getPageMap()}
-      docsRepositoryBase="https://github.com/valon-technologies/gestalt/tree/main/docs"
+      docsRepositoryBase={`https://github.com/valon-technologies/gestalt/tree/${repositoryRef}/docs`}
       nextThemes={{
         defaultTheme: "system",
         storageKey: "gestalt-docs-theme",

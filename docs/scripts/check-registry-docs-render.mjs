@@ -10,6 +10,7 @@ import ts from "typescript";
 const siteRoot = path.resolve("out");
 const fixtureRoot = path.resolve("scripts/fixtures/registry-docs");
 const registryHtml = path.join(siteRoot, "registry.html");
+const registryMarker = "registry_shell__";
 
 if (!existsSync(registryHtml)) {
   throw new Error("out/registry.html is missing; run npm run build first");
@@ -58,17 +59,17 @@ try {
   await assertResponse({
     url: `${baseUrl}/providers/plugin/slack/`,
     status: 200,
-    includes: "registry-module",
+    includes: registryMarker,
   });
   await assertResponse({
     url: `${baseUrl}/providers/plugin/slack/events/`,
     status: 200,
-    includes: "registry-module",
+    includes: registryMarker,
   });
   await assertResponse({
     url: `${baseUrl}/providers/plugin/slack/missing/`,
     status: 200,
-    includes: "registry-module",
+    includes: registryMarker,
   });
 
   const catalogResponse = await fetch(`${baseUrl}/registry-test/catalog.json`);
