@@ -1,15 +1,5 @@
-import {
-  create,
-  type JsonObject,
-  type MessageInitShape,
-} from "@bufbuild/protobuf";
-import {
-  EmptySchema,
-  TimestampSchema,
-  ValueSchema,
-  type Timestamp,
-  type Value,
-} from "@bufbuild/protobuf/wkt";
+import { create, type JsonObject } from "@bufbuild/protobuf";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
   Code,
   ConnectError,
@@ -28,6 +18,7 @@ import {
   BoundWorkflowRunSchema,
   BoundWorkflowScheduleSchema,
   BoundWorkflowTargetSchema,
+  InvokeWorkflowOperationRequestSchema,
   ListWorkflowExecutionReferencesResponseSchema,
   ListWorkflowProviderEventTriggersResponseSchema,
   ListWorkflowProviderRunsResponseSchema,
@@ -39,64 +30,67 @@ import {
   WorkflowEventTriggerInvocationSchema,
   WorkflowExecutionReferenceSchema,
   WorkflowHost as WorkflowHostService,
-  InvokeWorkflowOperationRequestSchema,
   WorkflowManualTriggerSchema,
   WorkflowOutputBindingSchema,
   WorkflowOutputDeliverySchema,
   WorkflowOutputValueSourceSchema,
   WorkflowProvider as WorkflowProviderService,
   WorkflowRunAsSubjectSchema,
+  WorkflowRunStatus as ProtoWorkflowRunStatus,
   WorkflowRunTriggerSchema,
   WorkflowScheduleTriggerSchema,
   WorkflowSignalSchema,
-  type BoundWorkflowAgentTarget,
-  type BoundWorkflowDefinition,
-  type BoundWorkflowEventTrigger,
-  type BoundWorkflowPluginTarget,
-  type BoundWorkflowRun,
-  type BoundWorkflowSchedule,
-  type BoundWorkflowTarget,
-  type CancelWorkflowProviderRunRequest,
-  type DeleteWorkflowProviderEventTriggerRequest,
-  type DeleteWorkflowProviderScheduleRequest,
-  type GetWorkflowExecutionReferenceRequest,
-  type GetWorkflowProviderEventTriggerRequest,
-  type GetWorkflowProviderRunRequest,
-  type GetWorkflowProviderScheduleRequest,
-  type ListWorkflowExecutionReferencesResponse,
-  type ListWorkflowExecutionReferencesRequest,
-  type ListWorkflowProviderEventTriggersRequest,
-  type ListWorkflowProviderRunsRequest,
-  type ListWorkflowProviderSchedulesRequest,
-  type PauseWorkflowProviderEventTriggerRequest,
-  type PauseWorkflowProviderScheduleRequest,
-  type PublishWorkflowProviderEventRequest,
-  type PutWorkflowExecutionReferenceRequest,
-  type ResumeWorkflowProviderEventTriggerRequest,
-  type ResumeWorkflowProviderScheduleRequest,
-  type StartWorkflowProviderRunRequest,
-  type UpsertWorkflowProviderEventTriggerRequest,
-  type UpsertWorkflowProviderScheduleRequest,
-  type WorkflowAccessPermission,
-  type WorkflowActor,
-  type WorkflowEvent,
-  type WorkflowEventMatch,
-  type WorkflowEventTriggerInvocation,
-  type WorkflowExecutionReference,
-  type WorkflowOutputBinding,
-  type WorkflowOutputDelivery,
-  type WorkflowOutputValueSource,
-  type WorkflowRunAsSubject,
-  type WorkflowRunTrigger,
-  type WorkflowScheduleTrigger,
-  type WorkflowSignal,
+  type BoundWorkflowAgentTarget as ProtoBoundWorkflowAgentTarget,
+  type BoundWorkflowDefinition as ProtoBoundWorkflowDefinition,
+  type BoundWorkflowEventTrigger as ProtoBoundWorkflowEventTrigger,
+  type BoundWorkflowPluginTarget as ProtoBoundWorkflowPluginTarget,
+  type BoundWorkflowRun as ProtoBoundWorkflowRun,
+  type BoundWorkflowSchedule as ProtoBoundWorkflowSchedule,
+  type BoundWorkflowTarget as ProtoBoundWorkflowTarget,
+  type CancelWorkflowProviderRunRequest as ProtoCancelWorkflowProviderRunRequest,
+  type DeleteWorkflowProviderEventTriggerRequest as ProtoDeleteWorkflowProviderEventTriggerRequest,
+  type DeleteWorkflowProviderScheduleRequest as ProtoDeleteWorkflowProviderScheduleRequest,
+  type GetWorkflowExecutionReferenceRequest as ProtoGetWorkflowExecutionReferenceRequest,
+  type GetWorkflowProviderEventTriggerRequest as ProtoGetWorkflowProviderEventTriggerRequest,
+  type GetWorkflowProviderRunRequest as ProtoGetWorkflowProviderRunRequest,
+  type GetWorkflowProviderScheduleRequest as ProtoGetWorkflowProviderScheduleRequest,
+  type ListWorkflowExecutionReferencesRequest as ProtoListWorkflowExecutionReferencesRequest,
+  type ListWorkflowProviderEventTriggersRequest as ProtoListWorkflowProviderEventTriggersRequest,
+  type ListWorkflowProviderRunsRequest as ProtoListWorkflowProviderRunsRequest,
+  type ListWorkflowProviderSchedulesRequest as ProtoListWorkflowProviderSchedulesRequest,
+  type PauseWorkflowProviderEventTriggerRequest as ProtoPauseWorkflowProviderEventTriggerRequest,
+  type PauseWorkflowProviderScheduleRequest as ProtoPauseWorkflowProviderScheduleRequest,
+  type PublishWorkflowProviderEventRequest as ProtoPublishWorkflowProviderEventRequest,
+  type PutWorkflowExecutionReferenceRequest as ProtoPutWorkflowExecutionReferenceRequest,
+  type ResumeWorkflowProviderEventTriggerRequest as ProtoResumeWorkflowProviderEventTriggerRequest,
+  type ResumeWorkflowProviderScheduleRequest as ProtoResumeWorkflowProviderScheduleRequest,
+  type StartWorkflowProviderRunRequest as ProtoStartWorkflowProviderRunRequest,
+  type UpsertWorkflowProviderEventTriggerRequest as ProtoUpsertWorkflowProviderEventTriggerRequest,
+  type UpsertWorkflowProviderScheduleRequest as ProtoUpsertWorkflowProviderScheduleRequest,
+  type WorkflowAccessPermission as ProtoWorkflowAccessPermission,
+  type WorkflowActor as ProtoWorkflowActor,
+  type WorkflowEvent as ProtoWorkflowEvent,
+  type WorkflowEventMatch as ProtoWorkflowEventMatch,
+  type WorkflowEventTriggerInvocation as ProtoWorkflowEventTriggerInvocation,
+  type WorkflowExecutionReference as ProtoWorkflowExecutionReference,
+  type WorkflowOutputBinding as ProtoWorkflowOutputBinding,
+  type WorkflowOutputDelivery as ProtoWorkflowOutputDelivery,
+  type WorkflowOutputValueSource as ProtoWorkflowOutputValueSource,
+  type WorkflowRunAsSubject as ProtoWorkflowRunAsSubject,
+  type WorkflowRunTrigger as ProtoWorkflowRunTrigger,
+  type WorkflowScheduleTrigger as ProtoWorkflowScheduleTrigger,
+  type WorkflowSignal as ProtoWorkflowSignal,
 } from "./internal/gen/v1/workflow_pb.ts";
+import type {
+  AgentMessage,
+  AgentToolRef,
+} from "./agent.ts";
 import {
-  AgentMessageSchema,
-  AgentToolRefSchema,
-  type AgentMessage,
-  type AgentToolRef,
-} from "./internal/gen/v1/agent_pb.ts";
+  agentMessageFromProto,
+  agentMessageToProto,
+  agentToolRefFromProto,
+  agentToolRefToProto,
+} from "./agent-conversions.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import {
@@ -109,6 +103,14 @@ import {
   type JsonInput,
   type JsonObjectInput,
 } from "./protocol.ts";
+import {
+  optionalObjectFromStruct,
+  optionalStruct,
+} from "./protocol-internal.ts";
+
+type WorkflowProviderServiceImpl = Partial<
+  ServiceImpl<typeof WorkflowProviderService>
+>;
 
 /** Environment variable containing the workflow-host service target. */
 export const ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET";
@@ -116,73 +118,19 @@ export const ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET";
 export const ENV_WORKFLOW_HOST_SOCKET_TOKEN = `${ENV_WORKFLOW_HOST_SOCKET}_TOKEN`;
 const WORKFLOW_HOST_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
-/**
- * Generated workflow protocol message types commonly used by providers.
- *
- * These are re-exported so workflow provider code can type runs, schedules,
- * triggers, and operation-invocation requests without importing from `gen`.
- */
-export type {
-  BoundWorkflowAgentTarget,
-  BoundWorkflowDefinition,
-  BoundWorkflowEventTrigger,
-  BoundWorkflowPluginTarget,
-  BoundWorkflowRun,
-  BoundWorkflowSchedule,
-  BoundWorkflowTarget,
-  CancelWorkflowProviderRunRequest,
-  DeleteWorkflowProviderEventTriggerRequest,
-  DeleteWorkflowProviderScheduleRequest,
-  GetWorkflowExecutionReferenceRequest,
-  GetWorkflowProviderEventTriggerRequest,
-  GetWorkflowProviderRunRequest,
-  GetWorkflowProviderScheduleRequest,
-  ListWorkflowExecutionReferencesResponse,
-  ListWorkflowExecutionReferencesRequest,
-  ListWorkflowProviderEventTriggersRequest,
-  ListWorkflowProviderRunsRequest,
-  ListWorkflowProviderSchedulesRequest,
-  PauseWorkflowProviderEventTriggerRequest,
-  PauseWorkflowProviderScheduleRequest,
-  PublishWorkflowProviderEventRequest,
-  PutWorkflowExecutionReferenceRequest,
-  ResumeWorkflowProviderEventTriggerRequest,
-  ResumeWorkflowProviderScheduleRequest,
-  StartWorkflowProviderRunRequest,
-  UpsertWorkflowProviderEventTriggerRequest,
-  UpsertWorkflowProviderScheduleRequest,
-  WorkflowAccessPermission,
-  WorkflowActor,
-  WorkflowEvent,
-  WorkflowEventMatch,
-  WorkflowExecutionReference,
-  WorkflowOutputBinding,
-  WorkflowOutputDelivery,
-  WorkflowOutputValueSource,
-  WorkflowRunAsSubject,
-  WorkflowRunTrigger,
-  WorkflowScheduleTrigger,
-  WorkflowSignal,
-};
-
-/** Native workflow run-status constants. */
+/** Native workflow-run status constants for authored workflow providers. */
 export const WorkflowRunStatus = {
-  UNSPECIFIED: 0,
-  PENDING: 1,
-  RUNNING: 2,
-  SUCCEEDED: 3,
-  FAILED: 4,
-  CANCELED: 5,
+  UNSPECIFIED: ProtoWorkflowRunStatus.UNSPECIFIED,
+  PENDING: ProtoWorkflowRunStatus.PENDING,
+  RUNNING: ProtoWorkflowRunStatus.RUNNING,
+  SUCCEEDED: ProtoWorkflowRunStatus.SUCCEEDED,
+  FAILED: ProtoWorkflowRunStatus.FAILED,
+  CANCELED: ProtoWorkflowRunStatus.CANCELED,
 } as const;
 export type WorkflowRunStatus =
   (typeof WorkflowRunStatus)[keyof typeof WorkflowRunStatus];
 
-type TimestampInput = Date | Timestamp;
-type AgentMessageInput = AgentMessage | MessageInitShape<typeof AgentMessageSchema>;
-type AgentToolRefInput = AgentToolRef | MessageInitShape<typeof AgentToolRefSchema>;
-
-/** Native input for a bound plugin workflow target. */
-export interface BoundWorkflowPluginTargetInput {
+export interface BoundWorkflowPluginTarget {
   pluginName?: string | undefined;
   operation?: string | undefined;
   input?: JsonObjectInput | undefined;
@@ -190,201 +138,378 @@ export interface BoundWorkflowPluginTargetInput {
   instance?: string | undefined;
   credentialMode?: string | undefined;
 }
+export type BoundWorkflowPluginTargetInput = BoundWorkflowPluginTarget;
 
-/** Native input for a workflow output value source. */
+export type WorkflowOutputValueSourceKind =
+  | { case: "agentOutput"; value: string }
+  | { case: "signalPayload"; value: string }
+  | { case: "signalMetadata"; value: string }
+  | { case: "literal"; value: JsonInput }
+  | { case: "agentSession"; value: string }
+  | { case: undefined; value?: undefined };
+
+export interface WorkflowOutputValueSource {
+  kind: WorkflowOutputValueSourceKind;
+}
+
 export interface WorkflowOutputValueSourceInput {
   agentOutput?: string | undefined;
   signalPayload?: string | undefined;
   signalMetadata?: string | undefined;
-  literal?: JsonInput | Value | undefined;
+  literal?: JsonInput | undefined;
   agentSession?: string | undefined;
+  kind?: WorkflowOutputValueSourceKind | undefined;
 }
 
-/** Native input for one workflow output binding. */
-export interface WorkflowOutputBindingInput {
+export interface WorkflowOutputBinding {
   inputField?: string | undefined;
-  value?: WorkflowOutputValueSourceInput | WorkflowOutputValueSource | undefined;
+  value?: WorkflowOutputValueSource | WorkflowOutputValueSourceInput | undefined;
 }
+export type WorkflowOutputBindingInput = WorkflowOutputBinding;
 
-/** Native input for a workflow output delivery. */
-export interface WorkflowOutputDeliveryInput {
-  target?: BoundWorkflowPluginTargetInput | BoundWorkflowPluginTarget | undefined;
-  inputBindings?: readonly (WorkflowOutputBindingInput | WorkflowOutputBinding)[] | undefined;
+export interface WorkflowOutputDelivery {
+  target?: BoundWorkflowPluginTarget | undefined;
+  inputBindings?: readonly WorkflowOutputBinding[] | undefined;
   credentialMode?: string | undefined;
 }
+export type WorkflowOutputDeliveryInput = WorkflowOutputDelivery;
 
-/** Native input for a bound agent workflow target. */
-export interface BoundWorkflowAgentTargetInput {
+export interface BoundWorkflowAgentTarget {
   providerName?: string | undefined;
   model?: string | undefined;
   prompt?: string | undefined;
-  messages?: readonly AgentMessageInput[] | undefined;
-  toolRefs?: readonly AgentToolRefInput[] | undefined;
+  messages?: readonly AgentMessage[] | undefined;
+  toolRefs?: readonly AgentToolRef[] | undefined;
   responseSchema?: JsonObjectInput | undefined;
   metadata?: JsonObjectInput | undefined;
   timeoutSeconds?: number | undefined;
-  outputDelivery?: WorkflowOutputDeliveryInput | WorkflowOutputDelivery | undefined;
+  outputDelivery?: WorkflowOutputDelivery | undefined;
   modelOptions?: JsonObjectInput | undefined;
-  sessionReadyDelivery?: WorkflowOutputDeliveryInput | WorkflowOutputDelivery | undefined;
+  sessionReadyDelivery?: WorkflowOutputDelivery | undefined;
+}
+export type BoundWorkflowAgentTargetInput = BoundWorkflowAgentTarget;
+
+export type BoundWorkflowTargetKind =
+  | { case: "plugin"; value: BoundWorkflowPluginTarget }
+  | { case: "agent"; value: BoundWorkflowAgentTarget }
+  | { case: undefined; value?: undefined };
+
+export interface BoundWorkflowTarget {
+  kind: BoundWorkflowTargetKind;
 }
 
-/** Native input for a bound workflow target. */
 export interface BoundWorkflowTargetInput {
-  plugin?: BoundWorkflowPluginTargetInput | BoundWorkflowPluginTarget | undefined;
-  agent?: BoundWorkflowAgentTargetInput | BoundWorkflowAgentTarget | undefined;
+  plugin?: BoundWorkflowPluginTarget | undefined;
+  agent?: BoundWorkflowAgentTarget | undefined;
+  kind?: BoundWorkflowTargetKind | undefined;
 }
 
-/** Native input for workflow actor metadata. */
-export interface WorkflowActorInput {
+export interface WorkflowActor {
   subjectId?: string | undefined;
   subjectKind?: string | undefined;
   displayName?: string | undefined;
   authSource?: string | undefined;
 }
+export type WorkflowActorInput = WorkflowActor;
 
-/** Native input for workflow run-as metadata. */
-export interface WorkflowRunAsSubjectInput {
+export interface WorkflowRunAsSubject {
   subjectId?: string | undefined;
   subjectKind?: string | undefined;
   displayName?: string | undefined;
   authSource?: string | undefined;
 }
+export type WorkflowRunAsSubjectInput = WorkflowRunAsSubject;
 
-/** Native input for an execution-reference permission. */
-export interface WorkflowAccessPermissionInput {
+export interface WorkflowAccessPermission {
   plugin?: string | undefined;
   operations?: readonly string[] | undefined;
 }
+export type WorkflowAccessPermissionInput = WorkflowAccessPermission;
 
-/** Native input for a workflow event. */
-export interface WorkflowEventInput {
+export interface WorkflowEvent {
   id?: string | undefined;
   source?: string | undefined;
   specVersion?: string | undefined;
   type?: string | undefined;
   subject?: string | undefined;
-  time?: TimestampInput | undefined;
+  time?: Date | undefined;
   datacontenttype?: string | undefined;
   data?: JsonObjectInput | undefined;
-  extensions?: Record<string, JsonInput | Value> | undefined;
+  extensions?: Record<string, JsonInput> | undefined;
 }
+export type WorkflowEventInput = WorkflowEvent;
 
-/** Native input for workflow event matching fields. */
-export interface WorkflowEventMatchInput {
+export interface WorkflowEventMatch {
   type?: string | undefined;
   source?: string | undefined;
   subject?: string | undefined;
 }
+export type WorkflowEventMatchInput = WorkflowEventMatch;
 
-/** Native input for a workflow signal. */
-export interface WorkflowSignalInput {
+export interface WorkflowSignal {
   id?: string | undefined;
   name?: string | undefined;
   payload?: JsonObjectInput | undefined;
   metadata?: JsonObjectInput | undefined;
-  createdBy?: WorkflowActorInput | WorkflowActor | undefined;
-  createdAt?: TimestampInput | undefined;
+  createdBy?: WorkflowActor | undefined;
+  createdAt?: Date | undefined;
   idempotencyKey?: string | undefined;
   sequence?: bigint | number | undefined;
 }
+export type WorkflowSignalInput = WorkflowSignal;
 
-/** Native input for a schedule-triggered workflow run. */
-export interface WorkflowScheduleTriggerInput {
+export interface WorkflowScheduleTrigger {
   scheduleId?: string | undefined;
-  scheduledFor?: TimestampInput | undefined;
+  scheduledFor?: Date | undefined;
 }
+export type WorkflowScheduleTriggerInput = WorkflowScheduleTrigger;
 
-/** Native input for an event-triggered workflow run. */
-export interface WorkflowEventTriggerInvocationInput {
+export interface WorkflowEventTriggerInvocation {
   triggerId?: string | undefined;
-  event?: WorkflowEventInput | WorkflowEvent | undefined;
+  event?: WorkflowEvent | undefined;
+}
+export type WorkflowEventTriggerInvocationInput = WorkflowEventTriggerInvocation;
+
+export type WorkflowRunTriggerKind =
+  | { case: "manual"; value?: Record<string, never> }
+  | { case: "schedule"; value: WorkflowScheduleTrigger }
+  | { case: "event"; value: WorkflowEventTriggerInvocation }
+  | { case: undefined; value?: undefined };
+
+export interface WorkflowRunTrigger {
+  kind: WorkflowRunTriggerKind;
 }
 
-/** Native input for a workflow run trigger. */
 export interface WorkflowRunTriggerInput {
   manual?: boolean | undefined;
-  schedule?: WorkflowScheduleTriggerInput | WorkflowScheduleTrigger | undefined;
-  event?: WorkflowEventTriggerInvocationInput | WorkflowEventTriggerInvocation | undefined;
+  schedule?: WorkflowScheduleTrigger | undefined;
+  event?: WorkflowEventTriggerInvocation | undefined;
+  kind?: WorkflowRunTriggerKind | undefined;
 }
 
-/** Native input for a workflow-provider run. */
+export interface BoundWorkflowRun {
+  id: string;
+  status: WorkflowRunStatus;
+  target?: BoundWorkflowTarget | undefined;
+  trigger?: WorkflowRunTrigger | undefined;
+  createdAt?: Date | undefined;
+  startedAt?: Date | undefined;
+  completedAt?: Date | undefined;
+  statusMessage: string;
+  resultBody: string;
+  createdBy?: WorkflowActor | undefined;
+  executionRef: string;
+  workflowKey: string;
+}
 export interface BoundWorkflowRunInput {
   id?: string | undefined;
   status?: WorkflowRunStatus | undefined;
-  target?: BoundWorkflowTargetInput | BoundWorkflowTarget | undefined;
-  trigger?: WorkflowRunTriggerInput | WorkflowRunTrigger | undefined;
-  createdAt?: TimestampInput | undefined;
-  startedAt?: TimestampInput | undefined;
-  completedAt?: TimestampInput | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
+  trigger?: WorkflowRunTrigger | WorkflowRunTriggerInput | undefined;
+  createdAt?: Date | undefined;
+  startedAt?: Date | undefined;
+  completedAt?: Date | undefined;
   statusMessage?: string | undefined;
   resultBody?: string | undefined;
-  createdBy?: WorkflowActorInput | WorkflowActor | undefined;
+  createdBy?: WorkflowActor | WorkflowActorInput | undefined;
   executionRef?: string | undefined;
   workflowKey?: string | undefined;
 }
 
-/** Native input copied from a workflow-provider definition. */
-export interface BoundWorkflowDefinitionInput {
-  id?: string | undefined;
-  target?: BoundWorkflowTargetInput | BoundWorkflowTarget | undefined;
-  createdBy?: WorkflowActorInput | WorkflowActor | undefined;
-  createdAt?: TimestampInput | undefined;
+export interface BoundWorkflowSchedule {
+  id: string;
+  cron: string;
+  timezone: string;
+  target?: BoundWorkflowTarget | undefined;
+  paused: boolean;
+  createdAt?: Date | undefined;
+  updatedAt?: Date | undefined;
+  nextRunAt?: Date | undefined;
+  createdBy?: WorkflowActor | undefined;
+  executionRef: string;
 }
-
-/** Native input for a workflow-provider schedule. */
 export interface BoundWorkflowScheduleInput {
   id?: string | undefined;
   cron?: string | undefined;
   timezone?: string | undefined;
-  target?: BoundWorkflowTargetInput | BoundWorkflowTarget | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   paused?: boolean | undefined;
-  createdAt?: TimestampInput | undefined;
-  updatedAt?: TimestampInput | undefined;
-  nextRunAt?: TimestampInput | undefined;
-  createdBy?: WorkflowActorInput | WorkflowActor | undefined;
+  createdAt?: Date | undefined;
+  updatedAt?: Date | undefined;
+  nextRunAt?: Date | undefined;
+  createdBy?: WorkflowActor | WorkflowActorInput | undefined;
   executionRef?: string | undefined;
 }
 
-/** Native input for a workflow-provider event trigger. */
+export interface BoundWorkflowEventTrigger {
+  id: string;
+  match?: WorkflowEventMatch | undefined;
+  target?: BoundWorkflowTarget | undefined;
+  paused: boolean;
+  createdAt?: Date | undefined;
+  updatedAt?: Date | undefined;
+  createdBy?: WorkflowActor | undefined;
+  executionRef: string;
+}
 export interface BoundWorkflowEventTriggerInput {
   id?: string | undefined;
-  match?: WorkflowEventMatchInput | WorkflowEventMatch | undefined;
-  target?: BoundWorkflowTargetInput | BoundWorkflowTarget | undefined;
+  match?: WorkflowEventMatch | WorkflowEventMatchInput | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   paused?: boolean | undefined;
-  createdAt?: TimestampInput | undefined;
-  updatedAt?: TimestampInput | undefined;
-  createdBy?: WorkflowActorInput | WorkflowActor | undefined;
+  createdAt?: Date | undefined;
+  updatedAt?: Date | undefined;
+  createdBy?: WorkflowActor | WorkflowActorInput | undefined;
   executionRef?: string | undefined;
 }
 
-/** Native input for a workflow execution reference. */
+export interface BoundWorkflowDefinition {
+  id: string;
+  target?: BoundWorkflowTarget | undefined;
+  createdBy?: WorkflowActor | undefined;
+  createdAt?: Date | undefined;
+}
+export interface BoundWorkflowDefinitionInput {
+  id?: string | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
+  createdBy?: WorkflowActor | WorkflowActorInput | undefined;
+  createdAt?: Date | undefined;
+}
+
+export interface WorkflowExecutionReference {
+  id: string;
+  providerName: string;
+  target?: BoundWorkflowTarget | undefined;
+  subjectId: string;
+  credentialSubjectId: string;
+  permissions: readonly WorkflowAccessPermission[];
+  createdAt?: Date | undefined;
+  revokedAt?: Date | undefined;
+  subjectKind: string;
+  displayName: string;
+  authSource: string;
+  callerPluginName: string;
+  runAs?: WorkflowRunAsSubject | undefined;
+  sourceDefinitionId: string;
+}
 export interface WorkflowExecutionReferenceInput {
   id?: string | undefined;
   providerName?: string | undefined;
-  target?: BoundWorkflowTargetInput | BoundWorkflowTarget | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   subjectId?: string | undefined;
   credentialSubjectId?: string | undefined;
-  permissions?: readonly (WorkflowAccessPermissionInput | WorkflowAccessPermission)[] | undefined;
-  createdAt?: TimestampInput | undefined;
-  revokedAt?: TimestampInput | undefined;
+  permissions?: readonly (WorkflowAccessPermission | WorkflowAccessPermissionInput)[] | undefined;
+  createdAt?: Date | undefined;
+  revokedAt?: Date | undefined;
   subjectKind?: string | undefined;
   displayName?: string | undefined;
   authSource?: string | undefined;
   callerPluginName?: string | undefined;
-  runAs?: WorkflowRunAsSubjectInput | WorkflowRunAsSubject | undefined;
+  runAs?: WorkflowRunAsSubject | WorkflowRunAsSubjectInput | undefined;
   sourceDefinitionId?: string | undefined;
+}
+
+export interface StartWorkflowProviderRunRequest {
+  target?: BoundWorkflowTarget | undefined;
+  idempotencyKey: string;
+  createdBy?: WorkflowActor | undefined;
+  executionRef: string;
+  workflowKey: string;
+}
+
+export interface GetWorkflowProviderRunRequest {
+  runId: string;
+}
+
+export interface ListWorkflowProviderRunsRequest {}
+
+export interface CancelWorkflowProviderRunRequest {
+  runId: string;
+  reason: string;
+}
+
+export interface UpsertWorkflowProviderScheduleRequest {
+  scheduleId: string;
+  cron: string;
+  timezone: string;
+  target?: BoundWorkflowTarget | undefined;
+  paused: boolean;
+  requestedBy?: WorkflowActor | undefined;
+  executionRef: string;
+}
+
+export interface GetWorkflowProviderScheduleRequest {
+  scheduleId: string;
+}
+
+export interface ListWorkflowProviderSchedulesRequest {}
+
+export interface DeleteWorkflowProviderScheduleRequest {
+  scheduleId: string;
+}
+
+export interface PauseWorkflowProviderScheduleRequest {
+  scheduleId: string;
+}
+
+export interface ResumeWorkflowProviderScheduleRequest {
+  scheduleId: string;
+}
+
+export interface UpsertWorkflowProviderEventTriggerRequest {
+  triggerId: string;
+  match?: WorkflowEventMatch | undefined;
+  target?: BoundWorkflowTarget | undefined;
+  paused: boolean;
+  requestedBy?: WorkflowActor | undefined;
+  executionRef: string;
+}
+
+export interface GetWorkflowProviderEventTriggerRequest {
+  triggerId: string;
+}
+
+export interface ListWorkflowProviderEventTriggersRequest {}
+
+export interface DeleteWorkflowProviderEventTriggerRequest {
+  triggerId: string;
+}
+
+export interface PauseWorkflowProviderEventTriggerRequest {
+  triggerId: string;
+}
+
+export interface ResumeWorkflowProviderEventTriggerRequest {
+  triggerId: string;
+}
+
+export interface PutWorkflowExecutionReferenceRequest {
+  reference?: WorkflowExecutionReference | undefined;
+}
+
+export interface GetWorkflowExecutionReferenceRequest {
+  id: string;
+}
+
+export interface ListWorkflowExecutionReferencesRequest {
+  subjectId: string;
+}
+
+export interface PublishWorkflowProviderEventRequest {
+  pluginName: string;
+  event?: WorkflowEvent | undefined;
+  publishedBy?: WorkflowActor | undefined;
 }
 
 /** Native input for invoking a workflow operation through the host service. */
 export interface InvokeWorkflowOperationInput {
-  target?: BoundWorkflowTargetInput | BoundWorkflowTarget | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   runId?: string | undefined;
-  trigger?: WorkflowRunTriggerInput | WorkflowRunTrigger | undefined;
+  trigger?: WorkflowRunTrigger | WorkflowRunTriggerInput | undefined;
   input?: JsonObjectInput | undefined;
   metadata?: JsonObjectInput | undefined;
-  createdBy?: WorkflowActorInput | WorkflowActor | undefined;
+  createdBy?: WorkflowActor | undefined;
   executionRef?: string | undefined;
-  signals?: readonly (WorkflowSignalInput | WorkflowSignal)[] | undefined;
+  signals?: readonly WorkflowSignal[] | undefined;
 }
 
 /** Native response returned after invoking a workflow operation. */
@@ -393,64 +518,76 @@ export interface InvokeWorkflowOperationResponse {
   body: string;
 }
 
+export interface ManagedWorkflowSchedule {
+  providerName?: string | undefined;
+  schedule?: BoundWorkflowSchedule | undefined;
+}
+
+export interface ManagedWorkflowEventTrigger {
+  providerName?: string | undefined;
+  trigger?: BoundWorkflowEventTrigger | undefined;
+}
+
+export interface ManagedWorkflowDefinition {
+  providerName?: string | undefined;
+  definition?: BoundWorkflowDefinition | undefined;
+}
+
+export interface ManagedWorkflowRun {
+  providerName?: string | undefined;
+  run?: BoundWorkflowRun | undefined;
+}
+
+export interface ManagedWorkflowRunSignal {
+  providerName?: string | undefined;
+  run?: BoundWorkflowRun | undefined;
+  signal?: WorkflowSignal | undefined;
+  startedRun?: boolean | undefined;
+  workflowKey?: string | undefined;
+}
+
 /** Creates workflow actor metadata from native input. */
-export function workflowActor(input: WorkflowActorInput | WorkflowActor = {}): WorkflowActor {
-  return create(WorkflowActorSchema, {
+export function workflowActor(input: WorkflowActorInput = {}): WorkflowActor {
+  return {
     subjectId: input.subjectId ?? "",
     subjectKind: input.subjectKind ?? "",
     displayName: input.displayName ?? "",
     authSource: input.authSource ?? "",
-  });
+  };
 }
 
 /** Returns native input copied from workflow actor metadata. */
 export function workflowActorInputFromActor(input?: WorkflowActor): WorkflowActorInput | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    subjectId: input.subjectId,
-    subjectKind: input.subjectKind,
-    displayName: input.displayName,
-    authSource: input.authSource,
-  };
+  return input === undefined ? undefined : { ...input };
 }
 
 /** Creates workflow run-as metadata from native input. */
 export function workflowRunAsSubject(
-  input: WorkflowRunAsSubjectInput | WorkflowRunAsSubject = {},
+  input: WorkflowRunAsSubjectInput = {},
 ): WorkflowRunAsSubject {
-  return create(WorkflowRunAsSubjectSchema, {
+  return {
     subjectId: input.subjectId ?? "",
     subjectKind: input.subjectKind ?? "",
     displayName: input.displayName ?? "",
     authSource: input.authSource ?? "",
-  });
+  };
 }
 
 /** Returns native input copied from workflow run-as metadata. */
 export function workflowRunAsSubjectInputFromSubject(
   input?: WorkflowRunAsSubject,
 ): WorkflowRunAsSubjectInput | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    subjectId: input.subjectId,
-    subjectKind: input.subjectKind,
-    displayName: input.displayName,
-    authSource: input.authSource,
-  };
+  return input === undefined ? undefined : { ...input };
 }
 
 /** Creates an execution-reference permission from native input. */
 export function workflowAccessPermission(
-  input: WorkflowAccessPermissionInput | WorkflowAccessPermission = {},
+  input: WorkflowAccessPermissionInput = {},
 ): WorkflowAccessPermission {
-  return create(WorkflowAccessPermissionSchema, {
+  return {
     plugin: input.plugin ?? "",
     operations: [...(input.operations ?? [])],
-  });
+  };
 }
 
 /** Returns native input copied from an execution-reference permission. */
@@ -459,85 +596,60 @@ export function workflowAccessPermissionInputFromPermission(
 ): WorkflowAccessPermissionInput {
   return {
     plugin: input.plugin,
-    operations: [...input.operations],
+    operations: [...(input.operations ?? [])],
   };
 }
 
 /** Creates workflow event-match fields from native input. */
 export function workflowEventMatch(
-  input: WorkflowEventMatchInput | WorkflowEventMatch = {},
+  input: WorkflowEventMatchInput = {},
 ): WorkflowEventMatch {
-  return create(WorkflowEventMatchSchema, {
+  return {
     type: input.type ?? "",
     source: input.source ?? "",
     subject: input.subject ?? "",
-  });
+  };
 }
 
 /** Returns native input copied from workflow event-match fields. */
 export function workflowEventMatchInputFromMatch(
   input?: WorkflowEventMatch,
 ): WorkflowEventMatchInput | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    type: input.type,
-    source: input.source,
-    subject: input.subject,
-  };
+  return input === undefined ? undefined : { ...input };
 }
 
 /** Creates a workflow output value source from native input. */
 export function workflowOutputValueSource(
   input: WorkflowOutputValueSourceInput | WorkflowOutputValueSource = {},
 ): WorkflowOutputValueSource {
-  if ("kind" in input) {
-    return create(WorkflowOutputValueSourceSchema, input);
+  if ("kind" in input && input.kind !== undefined) {
+    return { kind: cloneWorkflowOutputValueSourceKind(input.kind) };
   }
-  const selected: string[] = [];
-  if (input.agentOutput !== undefined) {
-    selected.push("agentOutput");
-  }
-  if (input.signalPayload !== undefined) {
-    selected.push("signalPayload");
-  }
-  if (input.signalMetadata !== undefined) {
-    selected.push("signalMetadata");
-  }
-  if (Object.prototype.hasOwnProperty.call(input, "literal")) {
-    selected.push("literal");
-  }
-  if (input.agentSession !== undefined) {
-    selected.push("agentSession");
-  }
+  const sourceInput = input as WorkflowOutputValueSourceInput;
+  const selected = [
+    sourceInput.agentOutput === undefined ? undefined : "agentOutput",
+    sourceInput.signalPayload === undefined ? undefined : "signalPayload",
+    sourceInput.signalMetadata === undefined ? undefined : "signalMetadata",
+    Object.prototype.hasOwnProperty.call(sourceInput, "literal") ? "literal" : undefined,
+    sourceInput.agentSession === undefined ? undefined : "agentSession",
+  ].filter((value): value is string => value !== undefined);
   if (selected.length === 0) {
-    return create(WorkflowOutputValueSourceSchema);
+    return { kind: { case: undefined } };
   }
   if (selected.length > 1) {
     throw new Error("workflow output value source must set exactly one source");
   }
   switch (selected[0]) {
     case "agentOutput":
-      return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "agentOutput", value: input.agentOutput ?? "" },
-      });
+      return { kind: { case: "agentOutput", value: sourceInput.agentOutput ?? "" } };
     case "signalPayload":
-      return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "signalPayload", value: input.signalPayload ?? "" },
-      });
+      return { kind: { case: "signalPayload", value: sourceInput.signalPayload ?? "" } };
     case "signalMetadata":
-      return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "signalMetadata", value: input.signalMetadata ?? "" },
-      });
+      return { kind: { case: "signalMetadata", value: sourceInput.signalMetadata ?? "" } };
     case "agentSession":
-      return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "agentSession", value: input.agentSession ?? "" },
-      });
+      return { kind: { case: "agentSession", value: sourceInput.agentSession ?? "" } };
     default:
-      return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "literal", value: valueInput(input.literal) },
-      });
+      return { kind: { case: "literal", value: sourceInput.literal ?? null } };
   }
 }
 
@@ -558,7 +670,7 @@ export function workflowOutputValueSourceInputFromSource(
     case "agentSession":
       return { agentSession: input.kind.value };
     case "literal":
-      return { literal: jsonFromValue(input.kind.value) as JsonInput };
+      return { literal: input.kind.value };
     default:
       return {};
   }
@@ -566,12 +678,12 @@ export function workflowOutputValueSourceInputFromSource(
 
 /** Creates a workflow output binding from native input. */
 export function workflowOutputBinding(
-  input: WorkflowOutputBindingInput | WorkflowOutputBinding = {},
+  input: WorkflowOutputBindingInput = {},
 ): WorkflowOutputBinding {
-  return create(WorkflowOutputBindingSchema, {
+  return {
     inputField: input.inputField ?? "",
     value: input.value === undefined ? undefined : workflowOutputValueSource(input.value),
-  });
+  };
 }
 
 /** Returns native input copied from a workflow output binding. */
@@ -580,19 +692,21 @@ export function workflowOutputBindingInputFromBinding(
 ): WorkflowOutputBindingInput {
   return {
     inputField: input.inputField,
-    value: workflowOutputValueSourceInputFromSource(input.value),
+    value: input.value === undefined
+      ? undefined
+      : workflowOutputValueSourceInputFromSource(workflowOutputValueSource(input.value)),
   };
 }
 
 /** Creates a workflow output delivery from native input. */
 export function workflowOutputDelivery(
-  input: WorkflowOutputDeliveryInput | WorkflowOutputDelivery = {},
+  input: WorkflowOutputDeliveryInput = {},
 ): WorkflowOutputDelivery {
-  return create(WorkflowOutputDeliverySchema, {
+  return {
     target: input.target === undefined ? undefined : boundWorkflowPluginTarget(input.target),
-    inputBindings: (input.inputBindings ?? []).map((binding) => workflowOutputBinding(binding)),
+    inputBindings: input.inputBindings?.map((binding) => workflowOutputBinding(binding)) ?? [],
     credentialMode: input.credentialMode ?? "",
-  });
+  };
 }
 
 /** Returns native input copied from a workflow output delivery. */
@@ -604,23 +718,23 @@ export function workflowOutputDeliveryInputFromDelivery(
   }
   return {
     target: boundWorkflowPluginTargetInputFromTarget(input.target),
-    inputBindings: input.inputBindings.map((binding) => workflowOutputBindingInputFromBinding(binding)),
+    inputBindings: input.inputBindings?.map((binding) => workflowOutputBindingInputFromBinding(binding)) ?? [],
     credentialMode: input.credentialMode,
   };
 }
 
 /** Creates a bound plugin workflow target from native input. */
 export function boundWorkflowPluginTarget(
-  input: BoundWorkflowPluginTargetInput | BoundWorkflowPluginTarget = {},
+  input: BoundWorkflowPluginTargetInput = {},
 ): BoundWorkflowPluginTarget {
-  return create(BoundWorkflowPluginTargetSchema, {
+  return {
     pluginName: input.pluginName ?? "",
     operation: input.operation ?? "",
     input: input.input === undefined ? undefined : structFromObject(input.input),
     connection: input.connection ?? "",
     instance: input.instance ?? "",
     credentialMode: input.credentialMode ?? "",
-  });
+  };
 }
 
 /** Returns native input copied from a bound plugin workflow target. */
@@ -642,14 +756,14 @@ export function boundWorkflowPluginTargetInputFromTarget(
 
 /** Creates a bound agent workflow target from native input. */
 export function boundWorkflowAgentTarget(
-  input: BoundWorkflowAgentTargetInput | BoundWorkflowAgentTarget = {},
+  input: BoundWorkflowAgentTargetInput = {},
 ): BoundWorkflowAgentTarget {
-  return create(BoundWorkflowAgentTargetSchema, {
+  return {
     providerName: input.providerName ?? "",
     model: input.model ?? "",
     prompt: input.prompt ?? "",
-    messages: (input.messages ?? []).map((message) => create(AgentMessageSchema, message)),
-    toolRefs: (input.toolRefs ?? []).map((toolRef) => create(AgentToolRefSchema, toolRef)),
+    messages: [...(input.messages ?? [])],
+    toolRefs: [...(input.toolRefs ?? [])],
     responseSchema: input.responseSchema === undefined ? undefined : structFromObject(input.responseSchema),
     metadata: input.metadata === undefined ? undefined : structFromObject(input.metadata),
     timeoutSeconds: input.timeoutSeconds ?? 0,
@@ -658,7 +772,7 @@ export function boundWorkflowAgentTarget(
     sessionReadyDelivery: input.sessionReadyDelivery === undefined
       ? undefined
       : workflowOutputDelivery(input.sessionReadyDelivery),
-  });
+  };
 }
 
 /** Returns native input copied from a bound agent workflow target. */
@@ -672,8 +786,8 @@ export function boundWorkflowAgentTargetInputFromTarget(
     providerName: input.providerName,
     model: input.model,
     prompt: input.prompt,
-    messages: input.messages.map((message) => create(AgentMessageSchema, message)),
-    toolRefs: input.toolRefs.map((toolRef) => create(AgentToolRefSchema, toolRef)),
+    messages: [...(input.messages ?? [])],
+    toolRefs: [...(input.toolRefs ?? [])],
     responseSchema: input.responseSchema === undefined ? undefined : jsonObjectClone(input.responseSchema),
     metadata: input.metadata === undefined ? undefined : jsonObjectClone(input.metadata),
     timeoutSeconds: input.timeoutSeconds,
@@ -687,23 +801,20 @@ export function boundWorkflowAgentTargetInputFromTarget(
 export function boundWorkflowTarget(
   input: BoundWorkflowTargetInput | BoundWorkflowTarget = {},
 ): BoundWorkflowTarget {
-  if ("kind" in input) {
-    return boundWorkflowTargetFromTarget(input);
+  if ("kind" in input && input.kind !== undefined) {
+    return boundWorkflowTargetFromTarget({ kind: input.kind });
   }
-  if (input.plugin !== undefined && input.agent !== undefined) {
+  const targetInput = input as BoundWorkflowTargetInput;
+  if (targetInput.plugin !== undefined && targetInput.agent !== undefined) {
     throw new Error("bound workflow target must set either plugin or agent");
   }
-  if (input.plugin !== undefined) {
-    return create(BoundWorkflowTargetSchema, {
-      kind: { case: "plugin", value: boundWorkflowPluginTarget(input.plugin) },
-    });
+  if (targetInput.plugin !== undefined) {
+    return { kind: { case: "plugin", value: boundWorkflowPluginTarget(targetInput.plugin) } };
   }
-  if (input.agent !== undefined) {
-    return create(BoundWorkflowTargetSchema, {
-      kind: { case: "agent", value: boundWorkflowAgentTarget(input.agent) },
-    });
+  if (targetInput.agent !== undefined) {
+    return { kind: { case: "agent", value: boundWorkflowAgentTarget(targetInput.agent) } };
   }
-  return create(BoundWorkflowTargetSchema);
+  return { kind: { case: undefined } };
 }
 
 /** Returns native input copied from a bound workflow target. */
@@ -729,21 +840,18 @@ export function boundWorkflowTargetFromTarget(input: BoundWorkflowTarget): Bound
 }
 
 /** Creates a workflow event from native input. */
-export function workflowEvent(input: WorkflowEventInput | WorkflowEvent = {}): WorkflowEvent {
-  if ("extensions" in input && "$typeName" in input) {
-    return workflowEvent(workflowEventInputFromEvent(input as WorkflowEvent));
-  }
-  return create(WorkflowEventSchema, {
+export function workflowEvent(input: WorkflowEventInput = {}): WorkflowEvent {
+  return {
     id: input.id ?? "",
     source: input.source ?? "",
     specVersion: input.specVersion ?? "",
     type: input.type ?? "",
     subject: input.subject ?? "",
-    time: timestampInput(input.time),
+    time: input.time,
     datacontenttype: input.datacontenttype ?? "",
     data: input.data === undefined ? undefined : structFromObject(input.data),
     extensions: valueMapInput(input.extensions),
-  });
+  };
 }
 
 /** Returns native input copied from a workflow event. */
@@ -757,12 +865,10 @@ export function workflowEventInputFromEvent(input?: WorkflowEvent): WorkflowEven
     specVersion: input.specVersion,
     type: input.type,
     subject: input.subject,
-    time: input.time === undefined ? undefined : dateFromTimestamp(input.time),
+    time: input.time,
     datacontenttype: input.datacontenttype,
     data: input.data === undefined ? undefined : jsonObjectClone(input.data),
-    extensions: Object.fromEntries(
-      Object.entries(input.extensions).map(([key, value]) => [key, jsonFromValue(value) as JsonInput]),
-    ),
+    extensions: input.extensions === undefined ? undefined : { ...input.extensions },
   };
 }
 
@@ -772,17 +878,17 @@ export function workflowEventFromEvent(input: WorkflowEvent): WorkflowEvent {
 }
 
 /** Creates a workflow signal from native input. */
-export function workflowSignal(input: WorkflowSignalInput | WorkflowSignal = {}): WorkflowSignal {
-  return create(WorkflowSignalSchema, {
+export function workflowSignal(input: WorkflowSignalInput = {}): WorkflowSignal {
+  return {
     id: input.id ?? "",
     name: input.name ?? "",
     payload: input.payload === undefined ? undefined : structFromObject(input.payload),
     metadata: input.metadata === undefined ? undefined : structFromObject(input.metadata),
     createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
-    createdAt: timestampInput(input.createdAt),
+    createdAt: input.createdAt,
     idempotencyKey: input.idempotencyKey ?? "",
     sequence: input.sequence === undefined ? 0n : BigInt(input.sequence),
-  });
+  };
 }
 
 /** Returns native input copied from a workflow signal. */
@@ -796,7 +902,7 @@ export function workflowSignalInputFromSignal(input?: WorkflowSignal): WorkflowS
     payload: input.payload === undefined ? undefined : jsonObjectClone(input.payload),
     metadata: input.metadata === undefined ? undefined : jsonObjectClone(input.metadata),
     createdBy: workflowActorInputFromActor(input.createdBy),
-    createdAt: input.createdAt === undefined ? undefined : dateFromTimestamp(input.createdAt),
+    createdAt: input.createdAt,
     idempotencyKey: input.idempotencyKey,
     sequence: input.sequence,
   };
@@ -809,55 +915,50 @@ export function workflowSignalFromSignal(input: WorkflowSignal): WorkflowSignal 
 
 /** Creates a workflow schedule trigger from native input. */
 export function workflowScheduleTrigger(
-  input: WorkflowScheduleTriggerInput | WorkflowScheduleTrigger = {},
+  input: WorkflowScheduleTriggerInput = {},
 ): WorkflowScheduleTrigger {
-  return create(WorkflowScheduleTriggerSchema, {
+  return {
     scheduleId: input.scheduleId ?? "",
-    scheduledFor: timestampInput(input.scheduledFor),
-  });
+    scheduledFor: input.scheduledFor,
+  };
 }
 
 /** Creates a workflow event-trigger invocation from native input. */
 export function workflowEventTriggerInvocation(
-  input: WorkflowEventTriggerInvocationInput | WorkflowEventTriggerInvocation = {},
+  input: WorkflowEventTriggerInvocationInput = {},
 ): WorkflowEventTriggerInvocation {
-  return create(WorkflowEventTriggerInvocationSchema, {
+  return {
     triggerId: input.triggerId ?? "",
     event: input.event === undefined ? undefined : workflowEvent(input.event),
-  });
+  };
 }
 
 /** Creates a workflow run trigger from native input. */
 export function workflowRunTrigger(
   input: WorkflowRunTriggerInput | WorkflowRunTrigger = {},
 ): WorkflowRunTrigger {
-  if ("kind" in input) {
-    return workflowRunTriggerFromTrigger(input);
+  if ("kind" in input && input.kind !== undefined) {
+    return workflowRunTriggerFromTrigger({ kind: input.kind });
   }
+  const triggerInput = input as WorkflowRunTriggerInput;
   const selected = [
-    input.manual === true ? "manual" : undefined,
-    input.schedule === undefined ? undefined : "schedule",
-    input.event === undefined ? undefined : "event",
+    triggerInput.manual === true ? "manual" : undefined,
+    triggerInput.schedule === undefined ? undefined : "schedule",
+    triggerInput.event === undefined ? undefined : "event",
   ].filter((value): value is string => value !== undefined);
   if (selected.length === 0) {
-    return create(WorkflowRunTriggerSchema);
+    return { kind: { case: undefined } };
   }
   if (selected.length > 1) {
     throw new Error("workflow run trigger must set exactly one trigger kind");
   }
   switch (selected[0]) {
     case "manual":
-      return create(WorkflowRunTriggerSchema, {
-        kind: { case: "manual", value: create(WorkflowManualTriggerSchema) },
-      });
+      return { kind: { case: "manual", value: {} } };
     case "schedule":
-      return create(WorkflowRunTriggerSchema, {
-        kind: { case: "schedule", value: workflowScheduleTrigger(input.schedule!) },
-      });
+      return { kind: { case: "schedule", value: workflowScheduleTrigger(triggerInput.schedule!) } };
     default:
-      return create(WorkflowRunTriggerSchema, {
-        kind: { case: "event", value: workflowEventTriggerInvocation(input.event!) },
-      });
+      return { kind: { case: "event", value: workflowEventTriggerInvocation(triggerInput.event!) } };
   }
 }
 
@@ -872,14 +973,7 @@ export function workflowRunTriggerInputFromTrigger(
     case "manual":
       return { manual: true };
     case "schedule":
-      return {
-        schedule: {
-          scheduleId: input.kind.value.scheduleId,
-          scheduledFor: input.kind.value.scheduledFor === undefined
-            ? undefined
-            : dateFromTimestamp(input.kind.value.scheduledFor),
-        },
-      };
+      return { schedule: { ...input.kind.value } };
     case "event":
       return {
         event: {
@@ -897,35 +991,22 @@ export function workflowRunTriggerFromTrigger(input: WorkflowRunTrigger): Workfl
   return workflowRunTrigger(workflowRunTriggerInputFromTrigger(input) ?? {});
 }
 
-function invokeWorkflowOperationRequest(input: InvokeWorkflowOperationInput) {
-  return create(InvokeWorkflowOperationRequestSchema, {
-    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
-    runId: input.runId ?? "",
-    trigger: input.trigger === undefined ? undefined : workflowRunTrigger(input.trigger),
-    input: input.input === undefined ? undefined : structFromObject(input.input),
-    metadata: input.metadata === undefined ? undefined : structFromObject(input.metadata),
-    createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
-    executionRef: input.executionRef ?? "",
-    signals: (input.signals ?? []).map((signal) => workflowSignal(signal)),
-  });
-}
-
 /** Creates a workflow-provider run from native input. */
-export function boundWorkflowRun(input: BoundWorkflowRunInput | BoundWorkflowRun = {}): BoundWorkflowRun {
-  return create(BoundWorkflowRunSchema, {
+export function boundWorkflowRun(input: BoundWorkflowRunInput = {}): BoundWorkflowRun {
+  return {
     id: input.id ?? "",
     status: input.status ?? WorkflowRunStatus.UNSPECIFIED,
     target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
     trigger: input.trigger === undefined ? undefined : workflowRunTrigger(input.trigger),
-    createdAt: timestampInput(input.createdAt),
-    startedAt: timestampInput(input.startedAt),
-    completedAt: timestampInput(input.completedAt),
+    createdAt: input.createdAt,
+    startedAt: input.startedAt,
+    completedAt: input.completedAt,
     statusMessage: input.statusMessage ?? "",
     resultBody: input.resultBody ?? "",
     createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
     executionRef: input.executionRef ?? "",
     workflowKey: input.workflowKey ?? "",
-  });
+  };
 }
 
 /** Returns native input copied from a workflow-provider run. */
@@ -934,18 +1015,14 @@ export function boundWorkflowRunInputFromRun(input?: BoundWorkflowRun): BoundWor
     return undefined;
   }
   return {
-    id: input.id,
-    status: input.status,
-    target: boundWorkflowTargetInputFromTarget(input.target),
-    trigger: workflowRunTriggerInputFromTrigger(input.trigger),
-    createdAt: input.createdAt === undefined ? undefined : dateFromTimestamp(input.createdAt),
-    startedAt: input.startedAt === undefined ? undefined : dateFromTimestamp(input.startedAt),
-    completedAt: input.completedAt === undefined ? undefined : dateFromTimestamp(input.completedAt),
-    statusMessage: input.statusMessage,
-    resultBody: input.resultBody,
+    ...input,
+    target: boundWorkflowTargetInputFromTarget(input.target) === undefined
+      ? undefined
+      : boundWorkflowTarget(input.target!),
+    trigger: workflowRunTriggerInputFromTrigger(input.trigger) === undefined
+      ? undefined
+      : workflowRunTrigger(input.trigger!),
     createdBy: workflowActorInputFromActor(input.createdBy),
-    executionRef: input.executionRef,
-    workflowKey: input.workflowKey,
   };
 }
 
@@ -954,49 +1031,22 @@ export function boundWorkflowRunFromRun(input: BoundWorkflowRun): BoundWorkflowR
   return boundWorkflowRun(boundWorkflowRunInputFromRun(input) ?? {});
 }
 
-/** Creates a workflow-provider definition from native input. */
-export function boundWorkflowDefinition(
-  input: BoundWorkflowDefinitionInput | BoundWorkflowDefinition = {},
-): BoundWorkflowDefinition {
-  return create(BoundWorkflowDefinitionSchema, {
-    id: input.id ?? "",
-    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
-    createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
-    createdAt: timestampInput(input.createdAt),
-  });
-}
-
-/** Returns native input copied from a workflow-provider definition. */
-export function boundWorkflowDefinitionInputFromDefinition(
-  input?: BoundWorkflowDefinition,
-): BoundWorkflowDefinitionInput | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    id: input.id,
-    target: boundWorkflowTargetInputFromTarget(input.target),
-    createdBy: workflowActorInputFromActor(input.createdBy),
-    createdAt: input.createdAt === undefined ? undefined : dateFromTimestamp(input.createdAt),
-  };
-}
-
 /** Creates a workflow-provider schedule from native input. */
 export function boundWorkflowSchedule(
-  input: BoundWorkflowScheduleInput | BoundWorkflowSchedule = {},
+  input: BoundWorkflowScheduleInput = {},
 ): BoundWorkflowSchedule {
-  return create(BoundWorkflowScheduleSchema, {
+  return {
     id: input.id ?? "",
     cron: input.cron ?? "",
     timezone: input.timezone ?? "",
     target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
     paused: input.paused ?? false,
-    createdAt: timestampInput(input.createdAt),
-    updatedAt: timestampInput(input.updatedAt),
-    nextRunAt: timestampInput(input.nextRunAt),
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
+    nextRunAt: input.nextRunAt,
     createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
     executionRef: input.executionRef ?? "",
-  });
+  };
 }
 
 /** Returns native input copied from a workflow-provider schedule. */
@@ -1007,16 +1057,9 @@ export function boundWorkflowScheduleInputFromSchedule(
     return undefined;
   }
   return {
-    id: input.id,
-    cron: input.cron,
-    timezone: input.timezone,
-    target: boundWorkflowTargetInputFromTarget(input.target),
-    paused: input.paused,
-    createdAt: input.createdAt === undefined ? undefined : dateFromTimestamp(input.createdAt),
-    updatedAt: input.updatedAt === undefined ? undefined : dateFromTimestamp(input.updatedAt),
-    nextRunAt: input.nextRunAt === undefined ? undefined : dateFromTimestamp(input.nextRunAt),
+    ...input,
+    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
     createdBy: workflowActorInputFromActor(input.createdBy),
-    executionRef: input.executionRef,
   };
 }
 
@@ -1029,18 +1072,18 @@ export function boundWorkflowScheduleFromSchedule(
 
 /** Creates a workflow-provider event trigger from native input. */
 export function boundWorkflowEventTrigger(
-  input: BoundWorkflowEventTriggerInput | BoundWorkflowEventTrigger = {},
+  input: BoundWorkflowEventTriggerInput = {},
 ): BoundWorkflowEventTrigger {
-  return create(BoundWorkflowEventTriggerSchema, {
+  return {
     id: input.id ?? "",
     match: input.match === undefined ? undefined : workflowEventMatch(input.match),
     target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
     paused: input.paused ?? false,
-    createdAt: timestampInput(input.createdAt),
-    updatedAt: timestampInput(input.updatedAt),
+    createdAt: input.createdAt,
+    updatedAt: input.updatedAt,
     createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
     executionRef: input.executionRef ?? "",
-  });
+  };
 }
 
 /** Returns native input copied from a workflow-provider event trigger. */
@@ -1051,14 +1094,10 @@ export function boundWorkflowEventTriggerInputFromTrigger(
     return undefined;
   }
   return {
-    id: input.id,
+    ...input,
     match: workflowEventMatchInputFromMatch(input.match),
-    target: boundWorkflowTargetInputFromTarget(input.target),
-    paused: input.paused,
-    createdAt: input.createdAt === undefined ? undefined : dateFromTimestamp(input.createdAt),
-    updatedAt: input.updatedAt === undefined ? undefined : dateFromTimestamp(input.updatedAt),
+    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
     createdBy: workflowActorInputFromActor(input.createdBy),
-    executionRef: input.executionRef,
   };
 }
 
@@ -1071,24 +1110,24 @@ export function boundWorkflowEventTriggerFromTrigger(
 
 /** Creates a workflow execution reference from native input. */
 export function workflowExecutionReference(
-  input: WorkflowExecutionReferenceInput | WorkflowExecutionReference = {},
+  input: WorkflowExecutionReferenceInput = {},
 ): WorkflowExecutionReference {
-  return create(WorkflowExecutionReferenceSchema, {
+  return {
     id: input.id ?? "",
     providerName: input.providerName ?? "",
     target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
     subjectId: input.subjectId ?? "",
     credentialSubjectId: input.credentialSubjectId ?? "",
-    permissions: (input.permissions ?? []).map((permission) => workflowAccessPermission(permission)),
-    createdAt: timestampInput(input.createdAt),
-    revokedAt: timestampInput(input.revokedAt),
+    permissions: input.permissions?.map((permission) => workflowAccessPermission(permission)) ?? [],
+    createdAt: input.createdAt,
+    revokedAt: input.revokedAt,
     subjectKind: input.subjectKind ?? "",
     displayName: input.displayName ?? "",
     authSource: input.authSource ?? "",
     callerPluginName: input.callerPluginName ?? "",
     runAs: input.runAs === undefined ? undefined : workflowRunAsSubject(input.runAs),
     sourceDefinitionId: input.sourceDefinitionId ?? "",
-  });
+  };
 }
 
 /** Returns native input copied from a workflow execution reference. */
@@ -1099,20 +1138,10 @@ export function workflowExecutionReferenceInputFromReference(
     return undefined;
   }
   return {
-    id: input.id,
-    providerName: input.providerName,
-    target: boundWorkflowTargetInputFromTarget(input.target),
-    subjectId: input.subjectId,
-    credentialSubjectId: input.credentialSubjectId,
-    permissions: input.permissions.map((permission) => workflowAccessPermissionInputFromPermission(permission)),
-    createdAt: input.createdAt === undefined ? undefined : dateFromTimestamp(input.createdAt),
-    revokedAt: input.revokedAt === undefined ? undefined : dateFromTimestamp(input.revokedAt),
-    subjectKind: input.subjectKind,
-    displayName: input.displayName,
-    authSource: input.authSource,
-    callerPluginName: input.callerPluginName,
+    ...input,
+    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
+    permissions: input.permissions?.map((permission) => workflowAccessPermissionInputFromPermission(permission)) ?? [],
     runAs: workflowRunAsSubjectInputFromSubject(input.runAs),
-    sourceDefinitionId: input.sourceDefinitionId,
   };
 }
 
@@ -1123,107 +1152,68 @@ export function workflowExecutionReferenceFromReference(
   return workflowExecutionReference(workflowExecutionReferenceInputFromReference(input) ?? {});
 }
 
-function timestampInput(input?: TimestampInput): Timestamp | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  if (input instanceof Date) {
-    return timestampFromDate(input);
-  }
-  return create(TimestampSchema, input);
-}
-
-function valueInput(input: JsonInput | Value | undefined): Value {
-  if (isValue(input)) {
-    return create(ValueSchema, input);
-  }
-  return valueFromJson(input as JsonInput);
-}
-
-function valueMapInput(input?: Record<string, JsonInput | Value>): Record<string, Value> {
-  if (input === undefined) {
-    return {};
-  }
-  return Object.fromEntries(
-    Object.entries(input).map(([key, value]) => [key, valueInput(value)]),
-  );
-}
-
-function jsonObjectClone(input: JsonObject): JsonObject {
-  return structFromObject(jsonObjectFromStruct(input));
-}
-
-function isValue(input: unknown): input is Value {
-  return (
-    typeof input === "object"
-    && input !== null
-    && "$typeName" in input
-    && (input as { $typeName?: unknown }).$typeName === "google.protobuf.Value"
-  );
-}
-
 /** Handlers and runtime metadata for a workflow provider. */
 export interface WorkflowProviderOptions extends ProviderBaseOptions {
   startRun: (
     request: StartWorkflowProviderRunRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowRunSchema>>;
+  ) => MaybePromise<BoundWorkflowRun>;
   getRun: (
     request: GetWorkflowProviderRunRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowRunSchema>>;
+  ) => MaybePromise<BoundWorkflowRun>;
   listRuns: (
     request: ListWorkflowProviderRunsRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowRunSchema>[]>;
+  ) => MaybePromise<readonly BoundWorkflowRun[]>;
   cancelRun: (
     request: CancelWorkflowProviderRunRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowRunSchema>>;
+  ) => MaybePromise<BoundWorkflowRun>;
   upsertSchedule: (
     request: UpsertWorkflowProviderScheduleRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowScheduleSchema>>;
+  ) => MaybePromise<BoundWorkflowSchedule>;
   getSchedule: (
     request: GetWorkflowProviderScheduleRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowScheduleSchema>>;
+  ) => MaybePromise<BoundWorkflowSchedule>;
   listSchedules: (
     request: ListWorkflowProviderSchedulesRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowScheduleSchema>[]>;
+  ) => MaybePromise<readonly BoundWorkflowSchedule[]>;
   deleteSchedule: (
     request: DeleteWorkflowProviderScheduleRequest,
   ) => MaybePromise<void>;
   pauseSchedule: (
     request: PauseWorkflowProviderScheduleRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowScheduleSchema>>;
+  ) => MaybePromise<BoundWorkflowSchedule>;
   resumeSchedule: (
     request: ResumeWorkflowProviderScheduleRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowScheduleSchema>>;
+  ) => MaybePromise<BoundWorkflowSchedule>;
   upsertEventTrigger: (
     request: UpsertWorkflowProviderEventTriggerRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>>;
+  ) => MaybePromise<BoundWorkflowEventTrigger>;
   getEventTrigger: (
     request: GetWorkflowProviderEventTriggerRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>>;
+  ) => MaybePromise<BoundWorkflowEventTrigger>;
   listEventTriggers: (
     request: ListWorkflowProviderEventTriggersRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>[]>;
+  ) => MaybePromise<readonly BoundWorkflowEventTrigger[]>;
   deleteEventTrigger: (
     request: DeleteWorkflowProviderEventTriggerRequest,
   ) => MaybePromise<void>;
   pauseEventTrigger: (
     request: PauseWorkflowProviderEventTriggerRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>>;
+  ) => MaybePromise<BoundWorkflowEventTrigger>;
   resumeEventTrigger: (
     request: ResumeWorkflowProviderEventTriggerRequest,
-  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>>;
+  ) => MaybePromise<BoundWorkflowEventTrigger>;
   /** Store or update an execution reference for a workflow target. */
   putExecutionReference?: (
     request: PutWorkflowExecutionReferenceRequest,
-  ) => MaybePromise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>>;
+  ) => MaybePromise<WorkflowExecutionReference>;
   /** Load one execution reference by provider-owned lookup fields. */
   getExecutionReference?: (
     request: GetWorkflowExecutionReferenceRequest,
-  ) => MaybePromise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>>;
+  ) => MaybePromise<WorkflowExecutionReference>;
   /** List execution references for the requested scope. */
   listExecutionReferences?: (
     request: ListWorkflowExecutionReferencesRequest,
-  ) => MaybePromise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>[]>;
+  ) => MaybePromise<readonly WorkflowExecutionReference[]>;
   publishEvent: (
     request: PublishWorkflowProviderEventRequest,
   ) => MaybePromise<void>;
@@ -1278,106 +1268,86 @@ export class WorkflowProvider extends ProviderBase {
     this.publishEventHandler = options.publishEvent;
   }
 
-  async startRun(
-    request: StartWorkflowProviderRunRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowRunSchema>> {
+  async startRun(request: StartWorkflowProviderRunRequest): Promise<BoundWorkflowRun> {
     return await this.startRunHandler(request);
   }
 
-  async getRun(
-    request: GetWorkflowProviderRunRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowRunSchema>> {
+  async getRun(request: GetWorkflowProviderRunRequest): Promise<BoundWorkflowRun> {
     return await this.getRunHandler(request);
   }
 
-  async listRuns(
-    request: ListWorkflowProviderRunsRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowRunSchema>[]> {
+  async listRuns(request: ListWorkflowProviderRunsRequest): Promise<readonly BoundWorkflowRun[]> {
     return await this.listRunsHandler(request);
   }
 
-  async cancelRun(
-    request: CancelWorkflowProviderRunRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowRunSchema>> {
+  async cancelRun(request: CancelWorkflowProviderRunRequest): Promise<BoundWorkflowRun> {
     return await this.cancelRunHandler(request);
   }
 
-  async upsertSchedule(
-    request: UpsertWorkflowProviderScheduleRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowScheduleSchema>> {
+  async upsertSchedule(request: UpsertWorkflowProviderScheduleRequest): Promise<BoundWorkflowSchedule> {
     return await this.upsertScheduleHandler(request);
   }
 
-  async getSchedule(
-    request: GetWorkflowProviderScheduleRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowScheduleSchema>> {
+  async getSchedule(request: GetWorkflowProviderScheduleRequest): Promise<BoundWorkflowSchedule> {
     return await this.getScheduleHandler(request);
   }
 
   async listSchedules(
     request: ListWorkflowProviderSchedulesRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowScheduleSchema>[]> {
+  ): Promise<readonly BoundWorkflowSchedule[]> {
     return await this.listSchedulesHandler(request);
   }
 
-  async deleteSchedule(
-    request: DeleteWorkflowProviderScheduleRequest,
-  ): Promise<void> {
+  async deleteSchedule(request: DeleteWorkflowProviderScheduleRequest): Promise<void> {
     await this.deleteScheduleHandler(request);
   }
 
-  async pauseSchedule(
-    request: PauseWorkflowProviderScheduleRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowScheduleSchema>> {
+  async pauseSchedule(request: PauseWorkflowProviderScheduleRequest): Promise<BoundWorkflowSchedule> {
     return await this.pauseScheduleHandler(request);
   }
 
-  async resumeSchedule(
-    request: ResumeWorkflowProviderScheduleRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowScheduleSchema>> {
+  async resumeSchedule(request: ResumeWorkflowProviderScheduleRequest): Promise<BoundWorkflowSchedule> {
     return await this.resumeScheduleHandler(request);
   }
 
   async upsertEventTrigger(
     request: UpsertWorkflowProviderEventTriggerRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>> {
+  ): Promise<BoundWorkflowEventTrigger> {
     return await this.upsertEventTriggerHandler(request);
   }
 
   async getEventTrigger(
     request: GetWorkflowProviderEventTriggerRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>> {
+  ): Promise<BoundWorkflowEventTrigger> {
     return await this.getEventTriggerHandler(request);
   }
 
   async listEventTriggers(
     request: ListWorkflowProviderEventTriggersRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>[]> {
+  ): Promise<readonly BoundWorkflowEventTrigger[]> {
     return await this.listEventTriggersHandler(request);
   }
 
-  async deleteEventTrigger(
-    request: DeleteWorkflowProviderEventTriggerRequest,
-  ): Promise<void> {
+  async deleteEventTrigger(request: DeleteWorkflowProviderEventTriggerRequest): Promise<void> {
     await this.deleteEventTriggerHandler(request);
   }
 
   async pauseEventTrigger(
     request: PauseWorkflowProviderEventTriggerRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>> {
+  ): Promise<BoundWorkflowEventTrigger> {
     return await this.pauseEventTriggerHandler(request);
   }
 
   async resumeEventTrigger(
     request: ResumeWorkflowProviderEventTriggerRequest,
-  ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>> {
+  ): Promise<BoundWorkflowEventTrigger> {
     return await this.resumeEventTriggerHandler(request);
   }
 
   /** Store or update an execution reference for a workflow target. */
   async putExecutionReference(
     request: PutWorkflowExecutionReferenceRequest,
-  ): Promise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>> {
+  ): Promise<WorkflowExecutionReference> {
     return await requireWorkflowProviderHandler(
       "put execution reference",
       this.putExecutionReferenceHandler,
@@ -1388,7 +1358,7 @@ export class WorkflowProvider extends ProviderBase {
   /** Load one execution reference by provider-owned lookup fields. */
   async getExecutionReference(
     request: GetWorkflowExecutionReferenceRequest,
-  ): Promise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>> {
+  ): Promise<WorkflowExecutionReference> {
     return await requireWorkflowProviderHandler(
       "get execution reference",
       this.getExecutionReferenceHandler,
@@ -1399,7 +1369,7 @@ export class WorkflowProvider extends ProviderBase {
   /** List execution references for the requested scope. */
   async listExecutionReferences(
     request: ListWorkflowExecutionReferencesRequest,
-  ): Promise<MessageInitShape<typeof WorkflowExecutionReferenceSchema>[]> {
+  ): Promise<readonly WorkflowExecutionReference[]> {
     return await requireWorkflowProviderHandler(
       "list execution references",
       this.listExecutionReferencesHandler,
@@ -1407,9 +1377,7 @@ export class WorkflowProvider extends ProviderBase {
     );
   }
 
-  async publishEvent(
-    request: PublishWorkflowProviderEventRequest,
-  ): Promise<void> {
+  async publishEvent(request: PublishWorkflowProviderEventRequest): Promise<void> {
     await this.publishEventHandler(request);
   }
 }
@@ -1472,9 +1440,1083 @@ export class WorkflowHost {
   async invokeOperation(
     input: InvokeWorkflowOperationInput,
   ): Promise<InvokeWorkflowOperationResponse> {
-    const response = await this.client.invokeOperation(invokeWorkflowOperationRequest(input));
+    const response = await this.client.invokeOperation(invokeWorkflowOperationRequestToProto(input));
     return { status: response.status, body: response.body };
   }
+}
+
+/** Builds the Connect service implementation used by the TypeScript runtime. */
+export function createWorkflowProviderService(
+  provider: WorkflowProvider,
+): WorkflowProviderServiceImpl {
+  return {
+    async startRun(request) {
+      return create(
+        BoundWorkflowRunSchema,
+        boundWorkflowRunToProto(
+          await invokeWorkflowProvider("start run", () =>
+            provider.startRun(startWorkflowProviderRunRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async getRun(request) {
+      return create(
+        BoundWorkflowRunSchema,
+        boundWorkflowRunToProto(
+          await invokeWorkflowProvider("get run", () =>
+            provider.getRun(getWorkflowProviderRunRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async listRuns(request) {
+      return create(ListWorkflowProviderRunsResponseSchema, {
+        runs: (
+          await invokeWorkflowProvider("list runs", () =>
+            provider.listRuns(listWorkflowProviderRunsRequestFromProto(request)),
+          )
+        ).map(boundWorkflowRunToProto),
+      });
+    },
+    async cancelRun(request) {
+      return create(
+        BoundWorkflowRunSchema,
+        boundWorkflowRunToProto(
+          await invokeWorkflowProvider("cancel run", () =>
+            provider.cancelRun(cancelWorkflowProviderRunRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async upsertSchedule(request) {
+      return create(
+        BoundWorkflowScheduleSchema,
+        boundWorkflowScheduleToProto(
+          await invokeWorkflowProvider("upsert schedule", () =>
+            provider.upsertSchedule(upsertWorkflowProviderScheduleRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async getSchedule(request) {
+      return create(
+        BoundWorkflowScheduleSchema,
+        boundWorkflowScheduleToProto(
+          await invokeWorkflowProvider("get schedule", () =>
+            provider.getSchedule(getWorkflowProviderScheduleRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async listSchedules(request) {
+      return create(ListWorkflowProviderSchedulesResponseSchema, {
+        schedules: (
+          await invokeWorkflowProvider("list schedules", () =>
+            provider.listSchedules(listWorkflowProviderSchedulesRequestFromProto(request)),
+          )
+        ).map(boundWorkflowScheduleToProto),
+      });
+    },
+    async deleteSchedule(request) {
+      await invokeWorkflowProvider("delete schedule", () =>
+        provider.deleteSchedule(deleteWorkflowProviderScheduleRequestFromProto(request)),
+      );
+      return create(EmptySchema, {});
+    },
+    async pauseSchedule(request) {
+      return create(
+        BoundWorkflowScheduleSchema,
+        boundWorkflowScheduleToProto(
+          await invokeWorkflowProvider("pause schedule", () =>
+            provider.pauseSchedule(pauseWorkflowProviderScheduleRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async resumeSchedule(request) {
+      return create(
+        BoundWorkflowScheduleSchema,
+        boundWorkflowScheduleToProto(
+          await invokeWorkflowProvider("resume schedule", () =>
+            provider.resumeSchedule(resumeWorkflowProviderScheduleRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async upsertEventTrigger(request) {
+      return create(
+        BoundWorkflowEventTriggerSchema,
+        boundWorkflowEventTriggerToProto(
+          await invokeWorkflowProvider("upsert event trigger", () =>
+            provider.upsertEventTrigger(upsertWorkflowProviderEventTriggerRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async getEventTrigger(request) {
+      return create(
+        BoundWorkflowEventTriggerSchema,
+        boundWorkflowEventTriggerToProto(
+          await invokeWorkflowProvider("get event trigger", () =>
+            provider.getEventTrigger(getWorkflowProviderEventTriggerRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async listEventTriggers(request) {
+      return create(ListWorkflowProviderEventTriggersResponseSchema, {
+        triggers: (
+          await invokeWorkflowProvider("list event triggers", () =>
+            provider.listEventTriggers(listWorkflowProviderEventTriggersRequestFromProto(request)),
+          )
+        ).map(boundWorkflowEventTriggerToProto),
+      });
+    },
+    async deleteEventTrigger(request) {
+      await invokeWorkflowProvider("delete event trigger", () =>
+        provider.deleteEventTrigger(deleteWorkflowProviderEventTriggerRequestFromProto(request)),
+      );
+      return create(EmptySchema, {});
+    },
+    async pauseEventTrigger(request) {
+      return create(
+        BoundWorkflowEventTriggerSchema,
+        boundWorkflowEventTriggerToProto(
+          await invokeWorkflowProvider("pause event trigger", () =>
+            provider.pauseEventTrigger(pauseWorkflowProviderEventTriggerRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async resumeEventTrigger(request) {
+      return create(
+        BoundWorkflowEventTriggerSchema,
+        boundWorkflowEventTriggerToProto(
+          await invokeWorkflowProvider("resume event trigger", () =>
+            provider.resumeEventTrigger(resumeWorkflowProviderEventTriggerRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async putExecutionReference(request) {
+      return create(
+        WorkflowExecutionReferenceSchema,
+        workflowExecutionReferenceToProto(
+          await invokeWorkflowProvider("put execution reference", () =>
+            provider.putExecutionReference(putWorkflowExecutionReferenceRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async getExecutionReference(request) {
+      return create(
+        WorkflowExecutionReferenceSchema,
+        workflowExecutionReferenceToProto(
+          await invokeWorkflowProvider("get execution reference", () =>
+            provider.getExecutionReference(getWorkflowExecutionReferenceRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async listExecutionReferences(request) {
+      return create(ListWorkflowExecutionReferencesResponseSchema, {
+        references: (
+          await invokeWorkflowProvider("list execution references", () =>
+            provider.listExecutionReferences(listWorkflowExecutionReferencesRequestFromProto(request)),
+          )
+        ).map(workflowExecutionReferenceToProto),
+      });
+    },
+    async publishEvent(request) {
+      await invokeWorkflowProvider("publish event", () =>
+        provider.publishEvent(publishWorkflowProviderEventRequestFromProto(request)),
+      );
+      return create(EmptySchema, {});
+    },
+  };
+}
+
+export function workflowActorToProto(input?: WorkflowActor | undefined): ProtoWorkflowActor | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowActorSchema, {
+    subjectId: input.subjectId ?? "",
+    subjectKind: input.subjectKind ?? "",
+    displayName: input.displayName ?? "",
+    authSource: input.authSource ?? "",
+  });
+}
+
+export function workflowActorFromProto(input?: ProtoWorkflowActor | undefined): WorkflowActor | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    subjectId: input.subjectId,
+    subjectKind: input.subjectKind,
+    displayName: input.displayName,
+    authSource: input.authSource,
+  };
+}
+
+export function workflowRunAsSubjectToProto(
+  input?: WorkflowRunAsSubject | undefined,
+): ProtoWorkflowRunAsSubject | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowRunAsSubjectSchema, {
+    subjectId: input.subjectId ?? "",
+    subjectKind: input.subjectKind ?? "",
+    displayName: input.displayName ?? "",
+    authSource: input.authSource ?? "",
+  });
+}
+
+export function workflowRunAsSubjectFromProto(
+  input?: ProtoWorkflowRunAsSubject | undefined,
+): WorkflowRunAsSubject | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    subjectId: input.subjectId,
+    subjectKind: input.subjectKind,
+    displayName: input.displayName,
+    authSource: input.authSource,
+  };
+}
+
+export function workflowAccessPermissionToProto(input: WorkflowAccessPermission) {
+  return create(WorkflowAccessPermissionSchema, {
+    plugin: input.plugin ?? "",
+    operations: [...(input.operations ?? [])],
+  });
+}
+
+export function workflowAccessPermissionFromProto(
+  input: ProtoWorkflowAccessPermission,
+): WorkflowAccessPermission {
+  return {
+    plugin: input.plugin,
+    operations: [...input.operations],
+  };
+}
+
+export function workflowEventMatchToProto(
+  input?: WorkflowEventMatch | undefined,
+): ProtoWorkflowEventMatch | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowEventMatchSchema, {
+    type: input.type ?? "",
+    source: input.source ?? "",
+    subject: input.subject ?? "",
+  });
+}
+
+export function workflowEventMatchFromProto(
+  input?: ProtoWorkflowEventMatch | undefined,
+): WorkflowEventMatch | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    type: input.type,
+    source: input.source,
+    subject: input.subject,
+  };
+}
+
+export function workflowOutputValueSourceToProto(
+  input?: WorkflowOutputValueSource | WorkflowOutputValueSourceInput | undefined,
+): ProtoWorkflowOutputValueSource | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const source = workflowOutputValueSource(input);
+  switch (source.kind.case) {
+    case "agentOutput":
+      return create(WorkflowOutputValueSourceSchema, {
+        kind: { case: "agentOutput", value: source.kind.value },
+      });
+    case "signalPayload":
+      return create(WorkflowOutputValueSourceSchema, {
+        kind: { case: "signalPayload", value: source.kind.value },
+      });
+    case "signalMetadata":
+      return create(WorkflowOutputValueSourceSchema, {
+        kind: { case: "signalMetadata", value: source.kind.value },
+      });
+    case "agentSession":
+      return create(WorkflowOutputValueSourceSchema, {
+        kind: { case: "agentSession", value: source.kind.value },
+      });
+    case "literal":
+      return create(WorkflowOutputValueSourceSchema, {
+        kind: { case: "literal", value: valueFromJson(source.kind.value) },
+      });
+    default:
+      return create(WorkflowOutputValueSourceSchema);
+  }
+}
+
+export function workflowOutputValueSourceFromProto(
+  input?: ProtoWorkflowOutputValueSource | undefined,
+): WorkflowOutputValueSource | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  switch (input.kind.case) {
+    case "agentOutput":
+      return { kind: { case: "agentOutput", value: input.kind.value } };
+    case "signalPayload":
+      return { kind: { case: "signalPayload", value: input.kind.value } };
+    case "signalMetadata":
+      return { kind: { case: "signalMetadata", value: input.kind.value } };
+    case "agentSession":
+      return { kind: { case: "agentSession", value: input.kind.value } };
+    case "literal":
+      return { kind: { case: "literal", value: jsonFromValue(input.kind.value) as JsonInput } };
+    default:
+      return { kind: { case: undefined } };
+  }
+}
+
+export function workflowOutputBindingToProto(input: WorkflowOutputBinding) {
+  return create(WorkflowOutputBindingSchema, {
+    inputField: input.inputField ?? "",
+    value: workflowOutputValueSourceToProto(input.value),
+  });
+}
+
+export function workflowOutputBindingFromProto(
+  input: ProtoWorkflowOutputBinding,
+): WorkflowOutputBinding {
+  return {
+    inputField: input.inputField,
+    value: workflowOutputValueSourceFromProto(input.value),
+  };
+}
+
+export function workflowOutputDeliveryToProto(
+  input?: WorkflowOutputDelivery | undefined,
+): ProtoWorkflowOutputDelivery | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowOutputDeliverySchema, {
+    target: boundWorkflowPluginTargetToProto(input.target),
+    inputBindings: input.inputBindings?.map(workflowOutputBindingToProto) ?? [],
+    credentialMode: input.credentialMode ?? "",
+  });
+}
+
+export function workflowOutputDeliveryFromProto(
+  input?: ProtoWorkflowOutputDelivery | undefined,
+): WorkflowOutputDelivery | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    target: boundWorkflowPluginTargetFromProto(input.target),
+    inputBindings: input.inputBindings.map(workflowOutputBindingFromProto),
+    credentialMode: input.credentialMode,
+  };
+}
+
+export function boundWorkflowPluginTargetToProto(
+  input?: BoundWorkflowPluginTarget | undefined,
+): ProtoBoundWorkflowPluginTarget | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(BoundWorkflowPluginTargetSchema, {
+    pluginName: input.pluginName ?? "",
+    operation: input.operation ?? "",
+    input: optionalStruct(input.input),
+    connection: input.connection ?? "",
+    instance: input.instance ?? "",
+    credentialMode: input.credentialMode ?? "",
+  });
+}
+
+export function boundWorkflowPluginTargetFromProto(
+  input?: ProtoBoundWorkflowPluginTarget | undefined,
+): BoundWorkflowPluginTarget | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    pluginName: input.pluginName,
+    operation: input.operation,
+    input: optionalObjectFromStruct(input.input),
+    connection: input.connection,
+    instance: input.instance,
+    credentialMode: input.credentialMode,
+  };
+}
+
+export function boundWorkflowAgentTargetToProto(
+  input?: BoundWorkflowAgentTarget | undefined,
+): ProtoBoundWorkflowAgentTarget | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(BoundWorkflowAgentTargetSchema, {
+    providerName: input.providerName ?? "",
+    model: input.model ?? "",
+    prompt: input.prompt ?? "",
+    messages: input.messages?.map(agentMessageToProto) ?? [],
+    toolRefs: input.toolRefs?.map(agentToolRefToProto) ?? [],
+    responseSchema: optionalStruct(input.responseSchema),
+    metadata: optionalStruct(input.metadata),
+    timeoutSeconds: input.timeoutSeconds ?? 0,
+    outputDelivery: workflowOutputDeliveryToProto(input.outputDelivery),
+    modelOptions: optionalStruct(input.modelOptions),
+    sessionReadyDelivery: workflowOutputDeliveryToProto(input.sessionReadyDelivery),
+  });
+}
+
+export function boundWorkflowAgentTargetFromProto(
+  input?: ProtoBoundWorkflowAgentTarget | undefined,
+): BoundWorkflowAgentTarget | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    providerName: input.providerName,
+    model: input.model,
+    prompt: input.prompt,
+    messages: input.messages.map(agentMessageFromProto),
+    toolRefs: input.toolRefs.map(agentToolRefFromProto),
+    responseSchema: optionalObjectFromStruct(input.responseSchema),
+    metadata: optionalObjectFromStruct(input.metadata),
+    timeoutSeconds: input.timeoutSeconds,
+    outputDelivery: workflowOutputDeliveryFromProto(input.outputDelivery),
+    modelOptions: optionalObjectFromStruct(input.modelOptions),
+    sessionReadyDelivery: workflowOutputDeliveryFromProto(input.sessionReadyDelivery),
+  };
+}
+
+export function boundWorkflowTargetToProto(
+  input?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined,
+): ProtoBoundWorkflowTarget | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const target = boundWorkflowTarget(input);
+  switch (target.kind.case) {
+    case "plugin":
+      return create(BoundWorkflowTargetSchema, {
+        kind: { case: "plugin", value: boundWorkflowPluginTargetToProto(target.kind.value)! },
+      });
+    case "agent":
+      return create(BoundWorkflowTargetSchema, {
+        kind: { case: "agent", value: boundWorkflowAgentTargetToProto(target.kind.value)! },
+      });
+    default:
+      return create(BoundWorkflowTargetSchema);
+  }
+}
+
+export function boundWorkflowTargetFromProto(
+  input?: ProtoBoundWorkflowTarget | undefined,
+): BoundWorkflowTarget | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  switch (input.kind.case) {
+    case "plugin":
+      return { kind: { case: "plugin", value: boundWorkflowPluginTargetFromProto(input.kind.value)! } };
+    case "agent":
+      return { kind: { case: "agent", value: boundWorkflowAgentTargetFromProto(input.kind.value)! } };
+    default:
+      return { kind: { case: undefined } };
+  }
+}
+
+export function workflowEventToProto(input?: WorkflowEvent | undefined): ProtoWorkflowEvent | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowEventSchema, {
+    id: input.id ?? "",
+    source: input.source ?? "",
+    specVersion: input.specVersion ?? "",
+    type: input.type ?? "",
+    subject: input.subject ?? "",
+    time: optionalTimestamp(input.time),
+    datacontenttype: input.datacontenttype ?? "",
+    data: optionalStruct(input.data),
+    extensions: Object.fromEntries(
+      Object.entries(input.extensions ?? {}).map(([key, value]) => [key, valueFromJson(value)]),
+    ),
+  });
+}
+
+export function workflowEventFromProto(input?: ProtoWorkflowEvent | undefined): WorkflowEvent | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    id: input.id,
+    source: input.source,
+    specVersion: input.specVersion,
+    type: input.type,
+    subject: input.subject,
+    time: optionalDate(input.time),
+    datacontenttype: input.datacontenttype,
+    data: optionalObjectFromStruct(input.data),
+    extensions: Object.fromEntries(
+      Object.entries(input.extensions).map(([key, value]) => [key, jsonFromValue(value) as JsonInput]),
+    ),
+  };
+}
+
+export function workflowSignalToProto(input?: WorkflowSignal | undefined): ProtoWorkflowSignal | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowSignalSchema, {
+    id: input.id ?? "",
+    name: input.name ?? "",
+    payload: optionalStruct(input.payload),
+    metadata: optionalStruct(input.metadata),
+    createdBy: workflowActorToProto(input.createdBy),
+    createdAt: optionalTimestamp(input.createdAt),
+    idempotencyKey: input.idempotencyKey ?? "",
+    sequence: BigInt(input.sequence ?? 0),
+  });
+}
+
+export function workflowSignalFromProto(input?: ProtoWorkflowSignal | undefined): WorkflowSignal | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    id: input.id,
+    name: input.name,
+    payload: optionalObjectFromStruct(input.payload),
+    metadata: optionalObjectFromStruct(input.metadata),
+    createdBy: workflowActorFromProto(input.createdBy),
+    createdAt: optionalDate(input.createdAt),
+    idempotencyKey: input.idempotencyKey,
+    sequence: input.sequence,
+  };
+}
+
+export function workflowScheduleTriggerToProto(
+  input?: WorkflowScheduleTrigger | undefined,
+): ProtoWorkflowScheduleTrigger | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowScheduleTriggerSchema, {
+    scheduleId: input.scheduleId ?? "",
+    scheduledFor: optionalTimestamp(input.scheduledFor),
+  });
+}
+
+export function workflowScheduleTriggerFromProto(
+  input?: ProtoWorkflowScheduleTrigger | undefined,
+): WorkflowScheduleTrigger | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    scheduleId: input.scheduleId,
+    scheduledFor: optionalDate(input.scheduledFor),
+  };
+}
+
+export function workflowEventTriggerInvocationToProto(
+  input?: WorkflowEventTriggerInvocation | undefined,
+): ProtoWorkflowEventTriggerInvocation | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowEventTriggerInvocationSchema, {
+    triggerId: input.triggerId ?? "",
+    event: workflowEventToProto(input.event),
+  });
+}
+
+export function workflowEventTriggerInvocationFromProto(
+  input?: ProtoWorkflowEventTriggerInvocation | undefined,
+): WorkflowEventTriggerInvocation | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    triggerId: input.triggerId,
+    event: workflowEventFromProto(input.event),
+  };
+}
+
+export function workflowRunTriggerToProto(
+  input?: WorkflowRunTrigger | WorkflowRunTriggerInput | undefined,
+): ProtoWorkflowRunTrigger | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const trigger = workflowRunTrigger(input);
+  switch (trigger.kind.case) {
+    case "manual":
+      return create(WorkflowRunTriggerSchema, {
+        kind: { case: "manual", value: create(WorkflowManualTriggerSchema) },
+      });
+    case "schedule":
+      return create(WorkflowRunTriggerSchema, {
+        kind: { case: "schedule", value: workflowScheduleTriggerToProto(trigger.kind.value)! },
+      });
+    case "event":
+      return create(WorkflowRunTriggerSchema, {
+        kind: { case: "event", value: workflowEventTriggerInvocationToProto(trigger.kind.value)! },
+      });
+    default:
+      return create(WorkflowRunTriggerSchema);
+  }
+}
+
+export function workflowRunTriggerFromProto(
+  input?: ProtoWorkflowRunTrigger | undefined,
+): WorkflowRunTrigger | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  switch (input.kind.case) {
+    case "manual":
+      return { kind: { case: "manual", value: {} } };
+    case "schedule":
+      return { kind: { case: "schedule", value: workflowScheduleTriggerFromProto(input.kind.value)! } };
+    case "event":
+      return { kind: { case: "event", value: workflowEventTriggerInvocationFromProto(input.kind.value)! } };
+    default:
+      return { kind: { case: undefined } };
+  }
+}
+
+export function boundWorkflowRunToProto(input: BoundWorkflowRun): ProtoBoundWorkflowRun {
+  return create(BoundWorkflowRunSchema, {
+    id: input.id ?? "",
+    status: input.status ?? WorkflowRunStatus.UNSPECIFIED,
+    target: boundWorkflowTargetToProto(input.target),
+    trigger: workflowRunTriggerToProto(input.trigger),
+    createdAt: optionalTimestamp(input.createdAt),
+    startedAt: optionalTimestamp(input.startedAt),
+    completedAt: optionalTimestamp(input.completedAt),
+    statusMessage: input.statusMessage ?? "",
+    resultBody: input.resultBody ?? "",
+    createdBy: workflowActorToProto(input.createdBy),
+    executionRef: input.executionRef ?? "",
+    workflowKey: input.workflowKey ?? "",
+  });
+}
+
+export function boundWorkflowRunFromProto(input?: ProtoBoundWorkflowRun | undefined): BoundWorkflowRun | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    id: input.id,
+    status: input.status as WorkflowRunStatus,
+    target: boundWorkflowTargetFromProto(input.target),
+    trigger: workflowRunTriggerFromProto(input.trigger),
+    createdAt: optionalDate(input.createdAt),
+    startedAt: optionalDate(input.startedAt),
+    completedAt: optionalDate(input.completedAt),
+    statusMessage: input.statusMessage,
+    resultBody: input.resultBody,
+    createdBy: workflowActorFromProto(input.createdBy),
+    executionRef: input.executionRef,
+    workflowKey: input.workflowKey,
+  };
+}
+
+export function boundWorkflowScheduleToProto(input: BoundWorkflowSchedule): ProtoBoundWorkflowSchedule {
+  return create(BoundWorkflowScheduleSchema, {
+    id: input.id ?? "",
+    cron: input.cron ?? "",
+    timezone: input.timezone ?? "",
+    target: boundWorkflowTargetToProto(input.target),
+    paused: input.paused ?? false,
+    createdAt: optionalTimestamp(input.createdAt),
+    updatedAt: optionalTimestamp(input.updatedAt),
+    nextRunAt: optionalTimestamp(input.nextRunAt),
+    createdBy: workflowActorToProto(input.createdBy),
+    executionRef: input.executionRef ?? "",
+  });
+}
+
+export function boundWorkflowScheduleFromProto(
+  input?: ProtoBoundWorkflowSchedule | undefined,
+): BoundWorkflowSchedule | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    id: input.id,
+    cron: input.cron,
+    timezone: input.timezone,
+    target: boundWorkflowTargetFromProto(input.target),
+    paused: input.paused,
+    createdAt: optionalDate(input.createdAt),
+    updatedAt: optionalDate(input.updatedAt),
+    nextRunAt: optionalDate(input.nextRunAt),
+    createdBy: workflowActorFromProto(input.createdBy),
+    executionRef: input.executionRef,
+  };
+}
+
+export function boundWorkflowEventTriggerToProto(
+  input: BoundWorkflowEventTrigger,
+): ProtoBoundWorkflowEventTrigger {
+  return create(BoundWorkflowEventTriggerSchema, {
+    id: input.id ?? "",
+    match: workflowEventMatchToProto(input.match),
+    target: boundWorkflowTargetToProto(input.target),
+    paused: input.paused ?? false,
+    createdAt: optionalTimestamp(input.createdAt),
+    updatedAt: optionalTimestamp(input.updatedAt),
+    createdBy: workflowActorToProto(input.createdBy),
+    executionRef: input.executionRef ?? "",
+  });
+}
+
+export function boundWorkflowEventTriggerFromProto(
+  input?: ProtoBoundWorkflowEventTrigger | undefined,
+): BoundWorkflowEventTrigger | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    id: input.id,
+    match: workflowEventMatchFromProto(input.match),
+    target: boundWorkflowTargetFromProto(input.target),
+    paused: input.paused,
+    createdAt: optionalDate(input.createdAt),
+    updatedAt: optionalDate(input.updatedAt),
+    createdBy: workflowActorFromProto(input.createdBy),
+    executionRef: input.executionRef,
+  };
+}
+
+export function boundWorkflowDefinitionToProto(input: BoundWorkflowDefinition) {
+  return create(BoundWorkflowDefinitionSchema, {
+    id: input.id ?? "",
+    target: boundWorkflowTargetToProto(input.target),
+    createdBy: workflowActorToProto(input.createdBy),
+    createdAt: optionalTimestamp(input.createdAt),
+  });
+}
+
+export function boundWorkflowDefinitionFromProto(
+  input?: ProtoBoundWorkflowDefinition | undefined,
+): BoundWorkflowDefinition | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    id: input.id,
+    target: boundWorkflowTargetFromProto(input.target),
+    createdBy: workflowActorFromProto(input.createdBy),
+    createdAt: optionalDate(input.createdAt),
+  };
+}
+
+export function workflowExecutionReferenceToProto(
+  input: WorkflowExecutionReference,
+): ProtoWorkflowExecutionReference {
+  return create(WorkflowExecutionReferenceSchema, {
+    id: input.id ?? "",
+    providerName: input.providerName ?? "",
+    target: boundWorkflowTargetToProto(input.target),
+    subjectId: input.subjectId ?? "",
+    credentialSubjectId: input.credentialSubjectId ?? "",
+    permissions: input.permissions?.map(workflowAccessPermissionToProto) ?? [],
+    createdAt: optionalTimestamp(input.createdAt),
+    revokedAt: optionalTimestamp(input.revokedAt),
+    subjectKind: input.subjectKind ?? "",
+    displayName: input.displayName ?? "",
+    authSource: input.authSource ?? "",
+    callerPluginName: input.callerPluginName ?? "",
+    runAs: workflowRunAsSubjectToProto(input.runAs),
+    sourceDefinitionId: input.sourceDefinitionId ?? "",
+  });
+}
+
+export function workflowExecutionReferenceFromProto(
+  input?: ProtoWorkflowExecutionReference | undefined,
+): WorkflowExecutionReference | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    id: input.id,
+    providerName: input.providerName,
+    target: boundWorkflowTargetFromProto(input.target),
+    subjectId: input.subjectId,
+    credentialSubjectId: input.credentialSubjectId,
+    permissions: input.permissions.map(workflowAccessPermissionFromProto),
+    createdAt: optionalDate(input.createdAt),
+    revokedAt: optionalDate(input.revokedAt),
+    subjectKind: input.subjectKind,
+    displayName: input.displayName,
+    authSource: input.authSource,
+    callerPluginName: input.callerPluginName,
+    runAs: workflowRunAsSubjectFromProto(input.runAs),
+    sourceDefinitionId: input.sourceDefinitionId,
+  };
+}
+
+function invokeWorkflowOperationRequestToProto(input: InvokeWorkflowOperationInput) {
+  return create(InvokeWorkflowOperationRequestSchema, {
+    target: boundWorkflowTargetToProto(input.target),
+    runId: input.runId ?? "",
+    trigger: workflowRunTriggerToProto(input.trigger),
+    input: optionalStruct(input.input),
+    metadata: optionalStruct(input.metadata),
+    createdBy: workflowActorToProto(input.createdBy),
+    executionRef: input.executionRef ?? "",
+    signals: input.signals?.map((signal) => workflowSignalToProto(signal)!) ?? [],
+  });
+}
+
+function startWorkflowProviderRunRequestFromProto(
+  input: ProtoStartWorkflowProviderRunRequest,
+): StartWorkflowProviderRunRequest {
+  return {
+    target: boundWorkflowTargetFromProto(input.target),
+    idempotencyKey: input.idempotencyKey,
+    createdBy: workflowActorFromProto(input.createdBy),
+    executionRef: input.executionRef,
+    workflowKey: input.workflowKey,
+  };
+}
+
+function getWorkflowProviderRunRequestFromProto(
+  input: ProtoGetWorkflowProviderRunRequest,
+): GetWorkflowProviderRunRequest {
+  return { runId: input.runId };
+}
+
+function listWorkflowProviderRunsRequestFromProto(
+  _input: ProtoListWorkflowProviderRunsRequest,
+): ListWorkflowProviderRunsRequest {
+  return {};
+}
+
+function cancelWorkflowProviderRunRequestFromProto(
+  input: ProtoCancelWorkflowProviderRunRequest,
+): CancelWorkflowProviderRunRequest {
+  return { runId: input.runId, reason: input.reason };
+}
+
+function upsertWorkflowProviderScheduleRequestFromProto(
+  input: ProtoUpsertWorkflowProviderScheduleRequest,
+): UpsertWorkflowProviderScheduleRequest {
+  return {
+    scheduleId: input.scheduleId,
+    cron: input.cron,
+    timezone: input.timezone,
+    target: boundWorkflowTargetFromProto(input.target),
+    paused: input.paused,
+    requestedBy: workflowActorFromProto(input.requestedBy),
+    executionRef: input.executionRef,
+  };
+}
+
+function getWorkflowProviderScheduleRequestFromProto(
+  input: ProtoGetWorkflowProviderScheduleRequest,
+): GetWorkflowProviderScheduleRequest {
+  return { scheduleId: input.scheduleId };
+}
+
+function listWorkflowProviderSchedulesRequestFromProto(
+  _input: ProtoListWorkflowProviderSchedulesRequest,
+): ListWorkflowProviderSchedulesRequest {
+  return {};
+}
+
+function deleteWorkflowProviderScheduleRequestFromProto(
+  input: ProtoDeleteWorkflowProviderScheduleRequest,
+): DeleteWorkflowProviderScheduleRequest {
+  return { scheduleId: input.scheduleId };
+}
+
+function pauseWorkflowProviderScheduleRequestFromProto(
+  input: ProtoPauseWorkflowProviderScheduleRequest,
+): PauseWorkflowProviderScheduleRequest {
+  return { scheduleId: input.scheduleId };
+}
+
+function resumeWorkflowProviderScheduleRequestFromProto(
+  input: ProtoResumeWorkflowProviderScheduleRequest,
+): ResumeWorkflowProviderScheduleRequest {
+  return { scheduleId: input.scheduleId };
+}
+
+function upsertWorkflowProviderEventTriggerRequestFromProto(
+  input: ProtoUpsertWorkflowProviderEventTriggerRequest,
+): UpsertWorkflowProviderEventTriggerRequest {
+  return {
+    triggerId: input.triggerId,
+    match: workflowEventMatchFromProto(input.match),
+    target: boundWorkflowTargetFromProto(input.target),
+    paused: input.paused,
+    requestedBy: workflowActorFromProto(input.requestedBy),
+    executionRef: input.executionRef,
+  };
+}
+
+function getWorkflowProviderEventTriggerRequestFromProto(
+  input: ProtoGetWorkflowProviderEventTriggerRequest,
+): GetWorkflowProviderEventTriggerRequest {
+  return { triggerId: input.triggerId };
+}
+
+function listWorkflowProviderEventTriggersRequestFromProto(
+  _input: ProtoListWorkflowProviderEventTriggersRequest,
+): ListWorkflowProviderEventTriggersRequest {
+  return {};
+}
+
+function deleteWorkflowProviderEventTriggerRequestFromProto(
+  input: ProtoDeleteWorkflowProviderEventTriggerRequest,
+): DeleteWorkflowProviderEventTriggerRequest {
+  return { triggerId: input.triggerId };
+}
+
+function pauseWorkflowProviderEventTriggerRequestFromProto(
+  input: ProtoPauseWorkflowProviderEventTriggerRequest,
+): PauseWorkflowProviderEventTriggerRequest {
+  return { triggerId: input.triggerId };
+}
+
+function resumeWorkflowProviderEventTriggerRequestFromProto(
+  input: ProtoResumeWorkflowProviderEventTriggerRequest,
+): ResumeWorkflowProviderEventTriggerRequest {
+  return { triggerId: input.triggerId };
+}
+
+function putWorkflowExecutionReferenceRequestFromProto(
+  input: ProtoPutWorkflowExecutionReferenceRequest,
+): PutWorkflowExecutionReferenceRequest {
+  return { reference: workflowExecutionReferenceFromProto(input.reference) };
+}
+
+function getWorkflowExecutionReferenceRequestFromProto(
+  input: ProtoGetWorkflowExecutionReferenceRequest,
+): GetWorkflowExecutionReferenceRequest {
+  return { id: input.id };
+}
+
+function listWorkflowExecutionReferencesRequestFromProto(
+  input: ProtoListWorkflowExecutionReferencesRequest,
+): ListWorkflowExecutionReferencesRequest {
+  return { subjectId: input.subjectId };
+}
+
+function publishWorkflowProviderEventRequestFromProto(
+  input: ProtoPublishWorkflowProviderEventRequest,
+): PublishWorkflowProviderEventRequest {
+  return {
+    pluginName: input.pluginName,
+    event: workflowEventFromProto(input.event),
+    publishedBy: workflowActorFromProto(input.publishedBy),
+  };
+}
+
+export function managedWorkflowScheduleFromProto(input: {
+  providerName: string;
+  schedule?: ProtoBoundWorkflowSchedule | undefined;
+}): ManagedWorkflowSchedule {
+  return {
+    providerName: input.providerName,
+    schedule: boundWorkflowScheduleFromProto(input.schedule),
+  };
+}
+
+export function managedWorkflowEventTriggerFromProto(input: {
+  providerName: string;
+  trigger?: ProtoBoundWorkflowEventTrigger | undefined;
+}): ManagedWorkflowEventTrigger {
+  return {
+    providerName: input.providerName,
+    trigger: boundWorkflowEventTriggerFromProto(input.trigger),
+  };
+}
+
+export function managedWorkflowDefinitionFromProto(input: {
+  providerName: string;
+  definition?: ProtoBoundWorkflowDefinition | undefined;
+}): ManagedWorkflowDefinition {
+  return {
+    providerName: input.providerName,
+    definition: boundWorkflowDefinitionFromProto(input.definition),
+  };
+}
+
+export function managedWorkflowRunFromProto(input: {
+  providerName: string;
+  run?: ProtoBoundWorkflowRun | undefined;
+}): ManagedWorkflowRun {
+  return {
+    providerName: input.providerName,
+    run: boundWorkflowRunFromProto(input.run),
+  };
+}
+
+export function managedWorkflowRunSignalFromProto(input: {
+  providerName: string;
+  run?: ProtoBoundWorkflowRun | undefined;
+  signal?: ProtoWorkflowSignal | undefined;
+  startedRun: boolean;
+  workflowKey: string;
+}): ManagedWorkflowRunSignal {
+  return {
+    providerName: input.providerName,
+    run: boundWorkflowRunFromProto(input.run),
+    signal: workflowSignalFromProto(input.signal),
+    startedRun: input.startedRun,
+    workflowKey: input.workflowKey,
+  };
+}
+
+function cloneWorkflowOutputValueSourceKind(
+  kind: WorkflowOutputValueSourceKind,
+): WorkflowOutputValueSourceKind {
+  switch (kind.case) {
+    case "literal":
+      return { case: "literal", value: kind.value };
+    case "agentOutput":
+    case "signalPayload":
+    case "signalMetadata":
+    case "agentSession":
+      return { case: kind.case, value: kind.value };
+    default:
+      return { case: undefined };
+  }
+}
+
+function valueMapInput(input?: Record<string, JsonInput>): Record<string, JsonInput> {
+  return input === undefined ? {} : { ...input };
+}
+
+function jsonObjectClone(input: JsonObjectInput): JsonObjectInput {
+  return structFromObject(jsonObjectFromStruct(input as JsonObject));
+}
+
+function optionalTimestamp(value?: Date | undefined) {
+  return value === undefined ? undefined : timestampFromDate(value);
+}
+
+function optionalDate(timestamp?: Parameters<typeof dateFromTimestamp>[0]) {
+  return timestamp === undefined ? undefined : dateFromTimestamp(timestamp);
 }
 
 function workflowHostTransportOptions(rawTarget: string): {
@@ -1525,158 +2567,6 @@ function workflowHostRelayTokenInterceptor(token: string): Interceptor {
   return (next) => async (req) => {
     req.header.set(WORKFLOW_HOST_RELAY_TOKEN_HEADER, token);
     return next(req);
-  };
-}
-
-/** Builds the Connect service implementation used by the TypeScript runtime. */
-export function createWorkflowProviderService(
-  provider: WorkflowProvider,
-): Partial<ServiceImpl<typeof WorkflowProviderService>> {
-  return {
-    async startRun(request) {
-      return create(
-        BoundWorkflowRunSchema,
-        await invokeWorkflowProvider("start run", () => provider.startRun(request)),
-      );
-    },
-    async getRun(request) {
-      return create(
-        BoundWorkflowRunSchema,
-        await invokeWorkflowProvider("get run", () => provider.getRun(request)),
-      );
-    },
-    async listRuns(request) {
-      return create(ListWorkflowProviderRunsResponseSchema, {
-        runs: await invokeWorkflowProvider("list runs", () =>
-          provider.listRuns(request),
-        ),
-      });
-    },
-    async cancelRun(request) {
-      return create(
-        BoundWorkflowRunSchema,
-        await invokeWorkflowProvider("cancel run", () => provider.cancelRun(request)),
-      );
-    },
-    async upsertSchedule(request) {
-      return create(
-        BoundWorkflowScheduleSchema,
-        await invokeWorkflowProvider("upsert schedule", () =>
-          provider.upsertSchedule(request),
-        ),
-      );
-    },
-    async getSchedule(request) {
-      return create(
-        BoundWorkflowScheduleSchema,
-        await invokeWorkflowProvider("get schedule", () =>
-          provider.getSchedule(request),
-        ),
-      );
-    },
-    async listSchedules(request) {
-      return create(ListWorkflowProviderSchedulesResponseSchema, {
-        schedules: await invokeWorkflowProvider("list schedules", () =>
-          provider.listSchedules(request),
-        ),
-      });
-    },
-    async deleteSchedule(request) {
-      await invokeWorkflowProvider("delete schedule", () =>
-        provider.deleteSchedule(request),
-      );
-      return create(EmptySchema, {});
-    },
-    async pauseSchedule(request) {
-      return create(
-        BoundWorkflowScheduleSchema,
-        await invokeWorkflowProvider("pause schedule", () =>
-          provider.pauseSchedule(request),
-        ),
-      );
-    },
-    async resumeSchedule(request) {
-      return create(
-        BoundWorkflowScheduleSchema,
-        await invokeWorkflowProvider("resume schedule", () =>
-          provider.resumeSchedule(request),
-        ),
-      );
-    },
-    async upsertEventTrigger(request) {
-      return create(
-        BoundWorkflowEventTriggerSchema,
-        await invokeWorkflowProvider("upsert event trigger", () =>
-          provider.upsertEventTrigger(request),
-        ),
-      );
-    },
-    async getEventTrigger(request) {
-      return create(
-        BoundWorkflowEventTriggerSchema,
-        await invokeWorkflowProvider("get event trigger", () =>
-          provider.getEventTrigger(request),
-        ),
-      );
-    },
-    async listEventTriggers(request) {
-      return create(ListWorkflowProviderEventTriggersResponseSchema, {
-        triggers: await invokeWorkflowProvider("list event triggers", () =>
-          provider.listEventTriggers(request),
-        ),
-      });
-    },
-    async deleteEventTrigger(request) {
-      await invokeWorkflowProvider("delete event trigger", () =>
-        provider.deleteEventTrigger(request),
-      );
-      return create(EmptySchema, {});
-    },
-    async pauseEventTrigger(request) {
-      return create(
-        BoundWorkflowEventTriggerSchema,
-        await invokeWorkflowProvider("pause event trigger", () =>
-          provider.pauseEventTrigger(request),
-        ),
-      );
-    },
-    async resumeEventTrigger(request) {
-      return create(
-        BoundWorkflowEventTriggerSchema,
-        await invokeWorkflowProvider("resume event trigger", () =>
-          provider.resumeEventTrigger(request),
-        ),
-      );
-    },
-    async putExecutionReference(request) {
-      return create(
-        WorkflowExecutionReferenceSchema,
-        await invokeWorkflowProvider("put execution reference", () =>
-          provider.putExecutionReference(request),
-        ),
-      );
-    },
-    async getExecutionReference(request) {
-      return create(
-        WorkflowExecutionReferenceSchema,
-        await invokeWorkflowProvider("get execution reference", () =>
-          provider.getExecutionReference(request),
-        ),
-      );
-    },
-    async listExecutionReferences(request) {
-      return create(ListWorkflowExecutionReferencesResponseSchema, {
-        references: await invokeWorkflowProvider("list execution references", () =>
-          provider.listExecutionReferences(request),
-        ),
-      });
-    },
-    async publishEvent(request) {
-      await invokeWorkflowProvider("publish event", () =>
-        provider.publishEvent(request),
-      );
-      return create(EmptySchema, {});
-    },
   };
 }
 

@@ -4,15 +4,13 @@ import { expect, test } from "bun:test";
 
 import {
   dateFromTimestamp,
-  timestampFromDate,
-} from "../src/protocol.ts";
-import {
   jsonFromValue,
   jsonObjectFromStruct,
   structFromObject,
   structFromJsonObject,
+  timestampFromDate,
   valueFromJson,
-} from "../src/index.ts";
+} from "../src/protocol.ts";
 import {
   WorkflowEventSchema,
   WorkflowManagerSignalOrStartRunRequestSchema,

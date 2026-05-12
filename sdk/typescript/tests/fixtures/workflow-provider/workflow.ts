@@ -1,9 +1,11 @@
-import { create } from "@bufbuild/protobuf";
-
 import {
-  BoundWorkflowEventTriggerSchema,
-  BoundWorkflowRunSchema,
-  BoundWorkflowScheduleSchema,
+  WorkflowRunStatus,
+  boundWorkflowEventTrigger,
+  boundWorkflowRun,
+  boundWorkflowSchedule,
+  boundWorkflowTarget,
+  defineWorkflowProvider,
+  type BoundWorkflowTarget,
   type DeleteWorkflowProviderEventTriggerRequest,
   type DeleteWorkflowProviderScheduleRequest,
   type GetWorkflowProviderEventTriggerRequest,
@@ -16,10 +18,6 @@ import {
   type StartWorkflowProviderRunRequest,
   type UpsertWorkflowProviderEventTriggerRequest,
   type UpsertWorkflowProviderScheduleRequest,
-  WorkflowRunStatus,
-} from "../../../src/internal/gen/v1/workflow_pb.ts";
-import {
-  defineWorkflowProvider,
   type PublishWorkflowProviderEventRequest,
 } from "../../../src/index.ts";
 
@@ -28,13 +26,8 @@ const schedules = new Map<string, ReturnType<typeof createSchedule>>();
 const triggers = new Map<string, ReturnType<typeof createTrigger>>();
 let publishCount = 0;
 
-function pluginTarget(pluginName: string, operation: string) {
-  return {
-    kind: {
-      case: "plugin" as const,
-      value: { pluginName, operation },
-    },
-  };
+function pluginTarget(pluginName: string, operation: string): BoundWorkflowTarget {
+  return boundWorkflowTarget({ plugin: { pluginName, operation } });
 }
 
 export const provider = defineWorkflowProvider({
@@ -68,7 +61,7 @@ export const provider = defineWorkflowProvider({
   },
   async cancelRun(request) {
     const run = requireRunByID(request.runId);
-    const updated = create(BoundWorkflowRunSchema, {
+    const updated = boundWorkflowRun({
       id: run.id,
       status: WorkflowRunStatus.CANCELED,
       statusMessage: request.reason,
@@ -132,7 +125,7 @@ export const provider = defineWorkflowProvider({
     publishCount += 1;
     const triggerId = publishedTriggerID(request.pluginName);
     const existing = triggers.get(triggerId);
-    const trigger = create(BoundWorkflowEventTriggerSchema, {
+    const trigger = boundWorkflowEventTrigger({
       id: triggerId,
       ...(existing?.match ? { match: existing.match } : {}),
       target: existing?.target ?? pluginTarget(request.pluginName, "published"),
@@ -179,7 +172,7 @@ function updateSchedule(
   if (!schedule) {
     throw new Error(`unknown schedule ${request.scheduleId}`);
   }
-  const updated = create(BoundWorkflowScheduleSchema, {
+  const updated = boundWorkflowSchedule({
     id: schedule.id,
     cron: schedule.cron,
     timezone: schedule.timezone,
@@ -204,7 +197,7 @@ function updateTrigger(
   if (!trigger) {
     throw new Error(`unknown trigger ${request.triggerId}`);
   }
-  const updated = create(BoundWorkflowEventTriggerSchema, {
+  const updated = boundWorkflowEventTrigger({
     id: trigger.id,
     paused,
     ...(trigger.createdBy ? { createdBy: trigger.createdBy } : {}),
@@ -239,7 +232,7 @@ function createRun(
   status: WorkflowRunStatus,
   statusMessage: string,
 ) {
-  return create(BoundWorkflowRunSchema, {
+  return boundWorkflowRun({
     id,
     status,
     statusMessage,
@@ -252,7 +245,7 @@ function createSchedule(
   request: UpsertWorkflowProviderScheduleRequest,
   existing?: { createdBy?: UpsertWorkflowProviderScheduleRequest["requestedBy"] },
 ) {
-  return create(BoundWorkflowScheduleSchema, {
+  return boundWorkflowSchedule({
     id: request.scheduleId,
     cron: request.cron,
     timezone: request.timezone,
@@ -270,7 +263,7 @@ function createTrigger(
   request: UpsertWorkflowProviderEventTriggerRequest,
   existing?: { createdBy?: UpsertWorkflowProviderEventTriggerRequest["requestedBy"] },
 ) {
-  return create(BoundWorkflowEventTriggerSchema, {
+  return boundWorkflowEventTrigger({
     id: request.triggerId,
     paused: request.paused,
     ...(existing?.createdBy

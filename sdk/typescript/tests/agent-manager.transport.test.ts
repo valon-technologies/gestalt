@@ -323,15 +323,15 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
     });
 
     expect(fetchedSession.metadata).toEqual({ source: "transport-test" });
-    expect(listedSessions.sessions.map((entry) => entry.id)).toEqual(["session-1"]);
+    expect(listedSessions.map((entry) => entry.id)).toEqual(["session-1"]);
     expect(updatedSession.clientRef).toBe("cli-session-2");
     expect(updatedSession.state).toBe(AgentSessionState.ARCHIVED);
     expect(turn.id).toBe("turn-1");
     expect(turn.status).toBe(AgentExecutionStatus.WAITING_FOR_INPUT);
     expect(fetchedTurn.statusMessage).toBe("waiting for input");
-    expect(listedTurns.turns.map((entry) => entry.id)).toEqual(["turn-1"]);
-    expect(events.events.map((entry) => entry.type)).toEqual(["turn.started"]);
-    expect(interactions.interactions.map((entry) => entry.id)).toEqual(["interaction-1"]);
+    expect(listedTurns.map((entry) => entry.id)).toEqual(["turn-1"]);
+    expect(events.map((entry) => entry.type)).toEqual(["turn.started"]);
+    expect(interactions.map((entry) => entry.id)).toEqual(["interaction-1"]);
     expect(resolvedInteraction.state).toBe(AgentInteractionState.RESOLVED);
     expect(resolvedInteraction.resolution).toEqual({ approved: true });
     expect(canceledTurn.status).toBe(AgentExecutionStatus.CANCELED);

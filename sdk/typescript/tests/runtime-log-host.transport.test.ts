@@ -72,6 +72,17 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
       observedAt,
       sourceSeq: 7n,
     });
+    await host.appendLogs({
+      logs: [
+        {
+          sessionId: "runtime-session-batch",
+          stream: "stdout",
+          message: "batch line\n",
+          observedAt,
+          sourceSeq: 10n,
+        },
+      ],
+    });
     await host.append({
       stream: "runtime",
       message: "pre-epoch\n",
@@ -80,7 +91,7 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
     });
     const writer = host.writer({
       stream: "stderr",
-      sourceSeqStart: 8n,
+      sourceSeqStart: 10n,
     });
     await new Promise<void>((resolve, reject) => {
       writer.write("stderr line\n", (error) => {
@@ -98,9 +109,11 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
       "relay-token-typescript",
       "relay-token-typescript",
       "relay-token-typescript",
+      "relay-token-typescript",
     ]);
     expect(calls.map((call) => call.sessionId)).toEqual([
       "runtime-session-1",
+      "runtime-session-batch",
       "runtime-session-1",
       "runtime-session-1",
     ]);
@@ -108,14 +121,17 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
     expect(calls[0]?.logs[0]?.message).toBe("runtime boot\n");
     expect(calls[0]?.logs[0]?.sourceSeq).toBe(7n);
     expect(calls[0]?.logs[0]?.observedAt?.seconds).toBe(1777550400n);
-    expect(calls[1]?.logs[0]?.stream).toBe(PluginRuntimeLogStream.RUNTIME);
-    expect(calls[1]?.logs[0]?.message).toBe("pre-epoch\n");
-    expect(calls[1]?.logs[0]?.sourceSeq).toBe(8n);
-    expect(calls[1]?.logs[0]?.observedAt?.seconds).toBe(-1n);
-    expect(calls[1]?.logs[0]?.observedAt?.nanos).toBe(999_000_000);
-    expect(calls[2]?.logs[0]?.stream).toBe(PluginRuntimeLogStream.STDERR);
-    expect(calls[2]?.logs[0]?.message).toBe("stderr line\n");
-    expect(calls[2]?.logs[0]?.sourceSeq).toBe(9n);
+    expect(calls[1]?.logs[0]?.stream).toBe(PluginRuntimeLogStream.STDOUT);
+    expect(calls[1]?.logs[0]?.message).toBe("batch line\n");
+    expect(calls[1]?.logs[0]?.sourceSeq).toBe(10n);
+    expect(calls[2]?.logs[0]?.stream).toBe(PluginRuntimeLogStream.RUNTIME);
+    expect(calls[2]?.logs[0]?.message).toBe("pre-epoch\n");
+    expect(calls[2]?.logs[0]?.sourceSeq).toBe(8n);
+    expect(calls[2]?.logs[0]?.observedAt?.seconds).toBe(-1n);
+    expect(calls[2]?.logs[0]?.observedAt?.nanos).toBe(999_000_000);
+    expect(calls[3]?.logs[0]?.stream).toBe(PluginRuntimeLogStream.STDERR);
+    expect(calls[3]?.logs[0]?.message).toBe("stderr line\n");
+    expect(calls[3]?.logs[0]?.sourceSeq).toBe(11n);
   } finally {
     if (previousSocket === undefined) {
       delete process.env[ENV_RUNTIME_LOG_HOST_SOCKET];

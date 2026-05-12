@@ -37,7 +37,7 @@ test("workflow builders accept native JSON objects and Dates", () => {
   expect(target.kind.value.input).toEqual({ ok: false, count: 0 });
   expect(signal.payload).toEqual({ ok: true, count: 1 });
   expect(signal.sequence).toBe(0n);
-  expect(run.createdAt?.seconds).toBe(1_778_241_600n);
+  expect(run.createdAt?.toISOString()).toBe("2026-05-08T12:00:00.000Z");
 });
 
 test("workflow copy helpers do not alias nested payloads", () => {
@@ -53,7 +53,10 @@ test("workflow copy helpers do not alias nested payloads", () => {
   if (target.kind.case !== "plugin" || copied.kind.case !== "plugin") {
     throw new Error("expected plugin targets");
   }
-  (target.kind.value.input?.nested as { value: string }).value = "changed";
+  const input = target.kind.value.input as { nested: { value: string } };
+  input.nested.value = "changed";
 
-  expect(copied.kind.value.input?.nested).toEqual({ value: "original" });
+  expect((copied.kind.value.input as { nested: unknown }).nested).toEqual({
+    value: "original",
+  });
 });
