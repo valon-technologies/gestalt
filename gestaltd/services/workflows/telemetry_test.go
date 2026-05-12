@@ -443,10 +443,24 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 		t.Fatalf("SignalOrStartRun success: %v", err)
 	}
 	failureKey := "slack:T123:C123:1712161830.000400"
-	provider.signalOrStartErr = status.Error(codes.FailedPrecondition, "provider rejected signal")
+	provider.signalOrStartErr = status.Errorf(codes.FailedPrecondition, "provider echoed %s idem-failure", failureKey)
 	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(token, failureKey, "idem-failure"))
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("SignalOrStartRun failure = %v, want FailedPrecondition", err)
+	}
+	untrustedProviderName := "caller-controlled-provider"
+	_, err = client.SignalOrStartRun(context.Background(), &proto.WorkflowManagerSignalOrStartRunRequest{
+		ProviderName:    untrustedProviderName,
+		WorkflowKey:     "slack:T123:C123:1712161831.000500",
+		IdempotencyKey:  "idem-invalid-target",
+		InvocationToken: token,
+		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
+		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Plugin{
+			Plugin: &proto.BoundWorkflowPluginTarget{Operation: "run"},
+		}},
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("SignalOrStartRun invalid target = %v, want InvalidArgument", err)
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
@@ -459,7 +473,7 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	}
 	failureAttrs := map[string]string{
-		"gestaltd.workflow.provider.name":    "local",
+		"gestaltd.workflow.provider.name":    "unknown",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
 		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindAgent,
@@ -467,9 +481,25 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 		"error.type":                         "grpc.failed_precondition",
 	}
+	untrustedFailureAttrs := map[string]string{
+		"gestaltd.workflow.provider.name":    "unknown",
+		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
+		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindPlugin,
+		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusUnknown,
+		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
+		"error.type":                         "grpc.invalid_argument",
+	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.count", 1, successAttrs)
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.workflows.manager.operation.duration", successAttrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 1, failureAttrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 1, untrustedFailureAttrs)
+	untrustedProviderMetricAttrs := map[string]string{}
+	for key, value := range untrustedFailureAttrs {
+		untrustedProviderMetricAttrs[key] = value
+	}
+	untrustedProviderMetricAttrs["gestaltd.workflow.provider.name"] = untrustedProviderName
+	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", untrustedProviderMetricAttrs)
 	for _, forbidden := range []string{
 		"subject_id",
 		"caller_plugin",
@@ -571,11 +601,15 @@ func assertWorkflowManagerFailureLog(t *testing.T, output, workflowKey string) {
 			"subject_id":          "user:user-123",
 			"subject_kind":        "user",
 			"workflow_key_sha256": expectedHash,
+			"error_type":          "grpc_status",
 			"error_code":          "failed_precondition",
 		} {
 			if got := record[key]; got != want {
 				t.Fatalf("log field %s = %#v, want %q in record %#v", key, got, want, record)
 			}
+		}
+		if _, ok := record["error"]; ok {
+			t.Fatalf("log record includes raw error field %#v", record)
 		}
 		if record["execution_ref_id"] == "" {
 			t.Fatalf("execution_ref_id missing from record %#v", record)

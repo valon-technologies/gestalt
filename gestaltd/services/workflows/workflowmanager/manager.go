@@ -583,7 +583,7 @@ func logWorkflowSignalOrStartFailure(ctx context.Context, p *principal.Principal
 		"subject_id", principalSubjectID(p),
 		"subject_kind", workflowManagerSubjectKind(p),
 		"workflow_key_sha256", workflowManagerSHA256(req.WorkflowKey),
-		"error", err.Error(),
+		"error_type", workflowManagerErrorType(err),
 	}
 	if providerName = strings.TrimSpace(providerName); providerName != "" {
 		attrs = append(attrs, "workflow_provider", providerName)
@@ -632,6 +632,45 @@ func workflowManagerErrorCode(err error) string {
 		return workflowManagerGRPCCodeName(st.Code())
 	}
 	return ""
+}
+
+func workflowManagerErrorType(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, context.Canceled):
+		return "context_canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "context_deadline_exceeded"
+	case errors.Is(err, ErrWorkflowNotConfigured):
+		return "workflow_not_configured"
+	case errors.Is(err, ErrExecutionRefsNotConfigured):
+		return "workflow_execution_refs_not_configured"
+	case errors.Is(err, ErrWorkflowSubjectRequired):
+		return "workflow_subject_required"
+	case errors.Is(err, ErrDuplicateExecutionRefs):
+		return "duplicate_execution_refs"
+	case errors.Is(err, ErrWorkflowEventMatchRequired):
+		return "workflow_event_match_required"
+	case errors.Is(err, ErrWorkflowEventTypeRequired):
+		return "workflow_event_type_required"
+	case errors.Is(err, ErrWorkflowKeyRequired):
+		return "workflow_key_required"
+	case errors.Is(err, ErrWorkflowSignalNameRequired):
+		return "workflow_signal_name_required"
+	case errors.Is(err, invocation.ErrNotAuthenticated):
+		return "not_authenticated"
+	case errors.Is(err, invocation.ErrAuthorizationDenied):
+		return "authorization_denied"
+	case errors.Is(err, invocation.ErrInvalidInvocation):
+		return "invalid_invocation"
+	case errors.Is(err, core.ErrNotFound):
+		return "not_found"
+	}
+	if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
+		return "grpc_status"
+	}
+	return "unknown"
 }
 
 func workflowManagerGRPCCodeName(code codes.Code) string {

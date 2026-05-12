@@ -652,7 +652,6 @@ func workflowManagerSignalOrStartMetricDims(req *proto.WorkflowManagerSignalOrSt
 	targetKind := observability.WorkflowTargetKindUnknown
 	runStatus := observability.WorkflowRunStatusUnknown
 	if req != nil {
-		providerName = strings.TrimSpace(req.GetProviderName())
 		targetKind = workflowProtoTargetKind(req.GetTarget())
 	}
 	if managed != nil {
