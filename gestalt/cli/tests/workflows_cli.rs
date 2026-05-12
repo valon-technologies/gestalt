@@ -36,6 +36,23 @@ const TRIGGER_JSON: &str = r#"{
     "updatedAt":"2026-04-20T00:00:00Z"
 }"#;
 
+const AGENT_TRIGGER_JSON: &str = r#"{
+    "id":"trg-agent",
+    "provider":"local",
+    "match":{"type":"roadmap.item.updated","source":"roadmap","subject":"item"},
+    "target":{
+        "agent":{
+            "provider":"simple",
+            "model":"fast",
+            "prompt":"Summarize the updated roadmap item.",
+            "toolRefs":[{"plugin":"roadmap","operation":"items.get"}]
+        }
+    },
+    "paused":false,
+    "createdAt":"2026-04-20T00:00:00Z",
+    "updatedAt":"2026-04-20T00:00:00Z"
+}"#;
+
 const RUN_JSON: &str = r#"{
     "id":"run-1",
     "provider":"test-provider",
@@ -448,6 +465,69 @@ fn test_cli_creates_event_trigger() {
         .assert()
         .success()
         .stdout(predicate::str::contains("trg-1"));
+}
+
+#[test]
+fn test_cli_creates_event_trigger_from_target_file() {
+    let mut server = Server::new();
+    let _mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/workflow/event-triggers",
+        StatusCode::CREATED
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{
+            "provider":"local",
+            "match":{"type":"roadmap.item.updated","source":"roadmap","subject":"item"},
+            "target":{
+                "agent":{
+                    "provider":"simple",
+                    "model":"fast",
+                    "prompt":"Summarize the updated roadmap item.",
+                    "toolRefs":[{"plugin":"roadmap","operation":"items.get"}]
+                }
+            },
+            "paused":false
+        }"#
+        .to_string(),
+    ))
+    .with_body(AGENT_TRIGGER_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "--format",
+            "json",
+            "workflow",
+            "triggers",
+            "create",
+            "--provider",
+            "local",
+            "--type",
+            "roadmap.item.updated",
+            "--source",
+            "roadmap",
+            "--subject",
+            "item",
+            "--target-file",
+            "-",
+        ])
+        .write_stdin(
+            r#"{
+                "agent": {
+                    "provider": "simple",
+                    "model": "fast",
+                    "prompt": "Summarize the updated roadmap item.",
+                    "toolRefs": [{"plugin": "roadmap", "operation": "items.get"}]
+                }
+            }"#,
+        )
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""id": "trg-agent""#));
 }
 
 #[test]

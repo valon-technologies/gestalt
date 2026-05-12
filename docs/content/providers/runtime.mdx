@@ -2,6 +2,12 @@ import { Callout, Tabs } from 'nextra/components'
 
 # Runtime
 
+<Callout type="warning">
+  Alpha. Runtimes are under active development and not yet stable. Breaking
+  changes may happen between releases without warning. Feedback and bug reports
+  are welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
+</Callout>
+
 Runtime providers manage **where executable plugins, hosted agent providers, and hosted workflow providers run**.
 
 A runtime provider is not the plugin or hosted provider itself, and it is not a
@@ -9,12 +15,6 @@ host provider like authentication, IndexedDB, or workflow. Instead, it is a
 control-plane backend that lets `gestaltd` create a runtime session, prepare
 relay-backed host-service environment variables, start the provider process
 there, and dial the provider back over gRPC.
-
-<Callout type="warning">
-  **Alpha.** Gestalt is under active development. APIs and configuration may
-  change between releases. Feedback and bug reports are welcome via [GitHub
-  Issues](https://github.com/valon-technologies/gestalt/issues).
-</Callout>
 
 ## Scope
 

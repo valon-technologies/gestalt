@@ -2,16 +2,16 @@ import { Callout, Tabs } from 'nextra/components'
 
 # UI
 
+<Callout type="warning">
+  Alpha. UI providers are under active development and not yet stable. Breaking
+  changes may happen between releases without warning. Feedback and bug reports
+  are welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
+</Callout>
+
 UI providers are static asset bundles. Gestalt serves each configured
 bundle either directly from `providers.ui.<name>.path` or via
 `plugins.<name>.ui.path`. The built-in admin UI at `/admin` remains available
 regardless of whether public UI bundles are configured.
-
-<Callout type="warning">
-  **Alpha.** Gestalt is under active development. APIs and configuration may
-  change between releases. Feedback and bug reports are welcome via [GitHub
-  Issues](https://github.com/valon-technologies/gestalt/issues).
-</Callout>
 
 ## How UI providers work
 

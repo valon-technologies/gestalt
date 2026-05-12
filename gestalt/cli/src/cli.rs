@@ -654,6 +654,10 @@ pub struct AgentTurnEventStreamArgs {
 
 #[derive(Args)]
 pub struct WorkflowTriggerCreateArgs {
+    /// Workflow provider backend to store the trigger in
+    #[arg(long)]
+    pub provider: Option<String>,
+
     /// Event type to match exactly
     #[arg(long = "type")]
     pub event_type: String,
@@ -668,11 +672,15 @@ pub struct WorkflowTriggerCreateArgs {
 
     /// Target plugin (e.g. "slack", "github")
     #[arg(long)]
-    pub plugin: String,
+    pub plugin: Option<String>,
 
     /// Target operation (e.g. "chat.postMessage")
     #[arg(long)]
-    pub operation: String,
+    pub operation: Option<String>,
+
+    /// Load the full target JSON object from a file (use "-" for stdin)
+    #[arg(long = "target-file")]
+    pub target_file: Option<String>,
 
     /// Select a named connection
     #[arg(long)]

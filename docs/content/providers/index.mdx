@@ -6,30 +6,21 @@ import { Cards, Tabs } from 'nextra/components'
 
 # Providers
 
-Gestalt loads most integration and platform surfaces as providers instead of
-compiling them into `gestaltd`. Plugins, authentication backends, IndexedDB backends,
-authorization backends, agent backends, workflow backends, runtime backends,
-cache backends, S3 object stores, external secret managers, and public UIs all
-use the same provider model:
-you reference a package in config, the host resolves it, validates it, and
-starts it with the permissions and request context it needs.
+Gestalt loads integrations as providers instead of compiling them into
+`gestaltd`. This follows the [Terraform providers](https://developer.hashicorp.com/terraform/language/providers)
+model.
 
 ## What Providers Do
 
 Each provider adds one kind of capability to Gestalt. Some providers expose
-tools that users and agents can call. Others back platform services such as
-authentication, authorization, storage, workflows, hosted execution, or public
-UI bundles.
+tools that users and agents can call. Others back services such as
+authentication, authorization, and storage.
 
-Every configured provider is resolved from a manifest, validated by `gestaltd`,
-and started or mounted with the request context and permissions it needs. Most
-providers run as child processes and connect back to the host over gRPC on a
-temporary Unix socket. UI providers use the same package model, but they are
-static asset bundles rather than executable processes.
+Every configured provider is resolved from a manifest and validated by
+`gestaltd`.
 
-Each provider kind has its own documentation page. Those pages describe the
-configuration shape, runtime model, SDK examples, and custom provider contract
-for that kind:
+The provider pages describe the configuration shape, runtime model, SDK
+examples, and custom provider contract for that kind:
 
 <Cards num={6} className="provider-kind-cards">
   <Cards.Card title="Authentication" href="/providers/authentication" />
@@ -46,11 +37,7 @@ for that kind:
   <Cards.Card title="Workflow" href="/providers/workflow" />
 </Cards>
 
-For the canonical manifest schema, use
-[Provider Manifests](/reference/plugin-manifests). For the full server and
-provider configuration reference, use [Config File](/reference/config-file).
-
-## Where Providers Come From
+## How to Use Providers
 
 Providers are distributed separately from `gestaltd`. The official registry of
 first-party providers is
@@ -58,65 +45,23 @@ first-party providers is
 first-party packages published from
 [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers).
 
-The following source forms cover published packages, local development, exact
-releases, and pinned repository revisions.
+Provider sources are configured under `plugins.<name>`,
+`providers.<kind>.<name>`, or `runtime.providers.<name>`.
 
 ### Provider packages
 
-Provider packages are the preferred source form for published providers. A
-package source records the package address, optional repository name, and
-optional version constraint. Gestalt resolves the package through a provider
-repository and records the exact selected release in the lockfile.
+Use package sources for published providers. A package source names a package,
+optional repository, and optional version constraint. Gestalt resolves it
+through a provider repository and locks the selected release.
 
-### Provider repositories
-
-A provider repository is a static YAML index. Gestalt fetches the index, picks a
-version, then fetches that version's `provider-release.yaml`. Normal package
-resolution does not call the GitHub Releases API. The default repository is
-named `valon`:
+Provider repositories are static YAML indexes. Gestalt fetches the index,
+selects a version, then fetches its `provider-release.yaml`. The default
+repository is `valon`:
 
 `https://raw.githubusercontent.com/valon-technologies/gestalt-providers/main/provider-index.yaml`
 
-Project config and user-level configuration can add other repositories. Use
-`source.repo` when a package should resolve from a non-default repository, or
-when the same package address exists in more than one repository.
-
-### Local source paths
-
-Local sources point directly at a provider manifest in the same repository or
-filesystem tree as the config, such as `./plugins/my-plugin/manifest.yaml`.
-They are intended for development and testing before a provider is packaged.
-
-### Exact sources
-
-Exact sources point directly at one published release's `provider-release.yaml`.
-Use an exact source for releases outside a provider repository, local release
-metadata files, or private GitHub Release assets. Exact sources do not retain
-repository or version-constraint data, so package upgrade commands cannot move
-them to a new package version.
-
-### Commit-pinned git sources
-
-Git sources point at an external git repository, a full commit SHA, and the
-manifest path inside that checkout. They are useful when you need a reproducible
-provider from a repository revision before it is published through a provider
-index. `artifactMode` controls whether Gestalt builds from source or consumes a
-prebuilt snapshot for that commit. See [Config File](/reference/config-file#pluginssource)
-for the full `source.git` shape.
-
-## How to Use Providers
-
-To use a provider, choose a source form, provide any required provider
-configuration, and bind it where the provider kind expects to be used. Plugin
-providers are configured under `plugins.<name>`. Platform providers are
-configured under `providers.<kind>.<name>` or `runtime.providers.<name>`.
-
-For CLI lifecycle commands, see [Provider Installation](#provider-installation).
-
-### Package source
-
-Package sources keep a package address and optional version constraint in
-configuration:
+Add repositories in project or user config. Use `source.repo` for non-default
+repositories or duplicate package addresses.
 
 ```yaml
 server:
@@ -140,18 +85,18 @@ providers:
   # ...
 ```
 
-### Local source path
+### Local source paths
 
-During development, point at the source tree directly. Gestalt synthesizes the
-executable wrapper and materializes the catalog automatically:
+Local sources point at a provider manifest near the config, such as
+`./plugins/my-plugin/manifest.yaml`. Use them for development and testing before
+packaging. Gestalt synthesizes the executable wrapper and materializes the
+catalog automatically:
 
 ```yaml
 plugins:
   my-plugin:
     source: ./plugins/my-plugin/manifest.yaml
 ```
-
-UI bundles work the same way:
 
 ```yaml
 providers:
@@ -161,17 +106,18 @@ providers:
       path: /dashboard
 ```
 
-### Exact release source
+### Exact sources
 
-If you need to reference one release directly, use the release metadata URL:
+Exact sources point at one release's `provider-release.yaml`. Use them for
+releases outside a provider repository, local release metadata, or private
+GitHub Release assets. They omit repository and version constraints, so package
+upgrade commands cannot move them.
 
 ```yaml
 plugins:
   github:
     source: https://github.com/valon-technologies/gestalt-providers/releases/download/plugins/github/v0.0.1-alpha.1/provider-release.yaml
 ```
-
-UI bundles use the same pattern under `providers.ui.<name>`:
 
 ```yaml
 providers:
@@ -183,8 +129,6 @@ providers:
         brand_name: Acme
 ```
 
-For a GitHub-hosted release asset, use `source.githubRelease`:
-
 ```yaml
 plugins:
   support:
@@ -195,10 +139,13 @@ plugins:
         asset: provider-release.yaml
 ```
 
-### Commit-pinned git source
+### Commit-pinned git sources
 
-Use `source.git` when a provider should come from a specific commit in an
-external repository:
+Git sources point at an external repository, full commit SHA, and manifest path.
+Use them for reproducible provider revisions before provider-index publication.
+`artifactMode` controls whether Gestalt builds from source or uses a prebuilt
+snapshot. See [Config File](/reference/config-file#pluginssource) for the full
+`source.git` shape.
 
 ```yaml
 plugins:
@@ -430,29 +377,11 @@ rejects indexes larger than 10 MiB.
 
 ## How to Develop Providers
 
-Providers are implemented with the Gestalt SDKs and packaged with
-`gestaltd provider release`. The provider pages cover executable and declarative
-plugin providers, custom runtime providers, agent providers, workflow providers,
-and the host providers that back authentication, authorization, cache,
-IndexedDB, S3, secrets, and UI bundles.
+Build providers with the Gestalt SDKs and package them with
+`gestaltd provider release`.
 
-Custom providers use the same packaging and lifecycle model as first-party
-providers. A provider package includes a manifest plus executable code or static
-assets. `gestaltd` resolves the package from a local manifest path or a
-published `provider-release.yaml` metadata URL. Executable providers, including
-runtime providers themselves, start as child processes and connect back to the
-host over gRPC on a temporary Unix socket. Runtime providers may then launch
-hosted plugin processes in a separate session or sandbox and bridge those
-plugins back to the host. UI providers are static asset bundles served under
-configured public path prefixes.
-
-Outbound access is declared in configuration. `allowedHosts` and
-`server.egress` describe the network policy for executable providers, with
-complete enforcement depending on the sandbox runtime in use.
-
-Implementation details for each provider kind live on the matching page under
-this Providers section. Start with the provider type you are building, then use
-the release guidance below when the package is ready to distribute.
+Implementation details live on each provider-kind page. Start with the kind you
+are building, then use the release guidance below when the package is ready.
 
 ### Releasing provider packages
 
@@ -460,12 +389,6 @@ Gestalt uses the same release system for executable provider packages,
 authentication and datastore component packages, and packaged UI bundles. Every
 package is described by a provider manifest file: `manifest.yaml`,
 `manifest.yml`, or `manifest.json`.
-
-### Source manifests vs release manifests
-
-During local development and `gestaltd provider release`, source manifests can
-omit `artifacts` and executable `entrypoints`. Release packaging materializes
-those fields for you.
 
 #### Minimal executable source manifest
 
@@ -637,29 +560,11 @@ Use `gestaltd provider release` to build a provider release and produce release 
 gestaltd provider release --version 0.0.1-alpha.1
 ```
 
-Run this from the provider source directory. It produces release archives and writes a checksums file.
+Run it from the provider source directory. It writes release archives and
+checksums.
 
-Release tags are derived from the package path after the repository. For example, `source: github.com/acme/plugins/catalog/support-api` releases from the tag `plugins/catalog/support-api/v0.1.0`.
-
-For executable Go, Rust, Python, and TypeScript source providers,
-`provider release` materializes the executable catalog automatically and builds
-the host-platform artifact by default. Go, Rust, and TypeScript auth/datastore
-source packages use the same release flow without catalog generation. Pass
-`--platform` with a comma-separated list such as
-`--platform linux/amd64,darwin/arm64` to build explicit targets. Pass `--platform all` in CI release jobs to build the
-full supported platform matrix for source builds.
-
-Executable plugin providers can declare hosted HTTP routes in `spec.http`. See
-[Plugin](/providers/plugins#hosted-http-endpoints) for route and security
-scheme examples.
-
-For non-host Python targets, point Gestalt at a matching interpreter with
-`GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as
-`.venv-<goos>-<goarch>/`.
-
-TypeScript source plugins require Bun for local source execution and
-packaging. The SDK uses Bun's compile flow to build standalone provider
-binaries during release.
+Python source plugins require PyInstaller in the selected Python environment.
+TypeScript source plugins require Bun for local source execution and packaging.
 
 ### Release archive layout
 
