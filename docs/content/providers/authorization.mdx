@@ -10,18 +10,51 @@ Gestalt's model follows the core ideas from
 [Google Zanzibar](https://research.google/pubs/zanzibar-googles-consistent-global-authorization-system/):
 subjects, resources, relations, actions, and relationship tuples.
 
-## Concepts
+## Core Concepts
 
-| Concept | Meaning |
-| --- | --- |
-| Subject | Who is acting, such as `user:alice` or `service_account:deploy-bot` |
-| Resource | What is protected, such as `plugin_static:github` |
-| Relation | A named edge on a resource, such as `viewer` or `admin` |
-| Action | What the subject wants to do, such as `read` or `invoke` |
-| Tuple | A stored grant: `<subject> <relation> <resource>` |
+### Subjects
 
-Relations grant actions through the active authorization model. For example,
-`viewer` on a plugin may grant `read`; `editor` may grant `read` and `invoke`.
+A subject is the caller being checked. Gestalt resolves each request to a
+canonical subject, such as `user:<id>`, `service_account:<id>`, or a system
+subject, then evaluates access for that subject.
+
+### Resources
+
+A resource is what the subject wants to access, e.g.:
+
+- `external_identity:google-123`
+- `managed_subject:deploy-bot`
+
+### Relations
+
+A relation is a named link from a subject to a resource. For example, `triage`
+on a plugin grants triage membership; `admin` on a policy grants admin
+membership.
+
+### Relationship Tuples
+
+A tuple stores one relation:
+
+```
+<subject> <relation> <resource>
+```
+
+Examples:
+
+```
+user:alice viewer plugin_static:github
+user:bob editor plugin_static:github
+```
+
+The configured authorization provider stores these tuples and uses them as the
+source of truth for dynamic access.
+
+### Actions
+
+Relations are memberships; actions are permissions. The authorization model
+defines which actions each relation grants. To answer "can `user:alice` read
+this operation?", the provider checks whether Alice has a relation on the
+resource that grants `read`.
 
 ## Static And Dynamic Grants
 
@@ -30,6 +63,10 @@ change at runtime, and take precedence over provider-backed grants.
 
 Dynamic grants live in the selected authorization provider. Admin APIs can add
 or remove them without restarting `gestaltd`.
+
+If static and dynamic grants both match the same subject and resource, static
+wins. For example, if config grants Alice `admin` on the admin policy, Gestalt
+does not ask the provider for Alice's admin role.
 
 ## Where Gestalt Uses Authorization
 
@@ -117,29 +154,26 @@ client.
         }
         defer authz.Close()
 
-        decision, err := authz.Evaluate(ctx, &gestalt.AccessEvaluationRequest{
-            Subject:  &gestalt.AuthorizationSubject{Type: "subject", Id: userID},
-            Action:   &gestalt.AuthorizationAction{Name: "view"},
-            Resource: &gestalt.AuthorizationResource{Type: "agent_session", Id: "session-1"},
-        })
-        return decision.GetAllowed(), err
+        decision, err := authz.Evaluate(ctx, gestalt.NewAccessEvaluationRequest(
+            gestalt.NewAuthorizationSubject(gestalt.AuthorizationSubjectTypeSubject, userID),
+            gestalt.NewAuthorizationAction(gestalt.AuthorizationAgentSessionActionView),
+            gestalt.NewAgentSessionAuthorizationResource("session-1"),
+        ))
+        return decision.Allowed, err
     }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import Authorization
-    from gestalt.protocol.v1 import authorization_pb2
+    from gestalt import Authorization, AccessEvaluationRequest
+    from gestalt import AuthorizationAction, AuthorizationResource, AuthorizationSubject
 
     def can_view(user_id: str) -> bool:
         decision = Authorization().evaluate(
-            authorization_pb2.AccessEvaluationRequest(
-                subject=authorization_pb2.Subject(type="subject", id=user_id),
-                action=authorization_pb2.Action(name="view"),
-                resource=authorization_pb2.Resource(
-                    type="agent_session",
-                    id="session-1",
-                ),
+            AccessEvaluationRequest(
+                subject=AuthorizationSubject(type="subject", id=user_id),
+                action=AuthorizationAction(name="view"),
+                resource=AuthorizationResource(type="agent_session", id="session-1"),
             )
         )
         return decision.allowed
@@ -154,25 +188,29 @@ client.
 
     async fn can_view(user_id: &str) -> Result<bool, Box<dyn std::error::Error>> {
         let mut authz = Authorization::connect().await?;
-        let decision = authz.evaluate(AccessEvaluationRequest {
-            subject: AuthorizationSubject::new("subject", user_id),
-            action: AuthorizationAction::new("view"),
-            resource: AuthorizationResource::new("agent_session", "session-1"),
-            ..Default::default()
-        }).await?;
+        let decision = authz.evaluate(AccessEvaluationRequest::new(
+            AuthorizationSubject::new("subject", user_id),
+            AuthorizationAction::new("view"),
+            AuthorizationResource::new("agent_session", "session-1"),
+        )).await?;
         Ok(decision.allowed)
     }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { Authorization } from "@valon-technologies/gestalt";
+    import {
+      Authorization,
+      authorizationAction,
+      authorizationResource,
+      authorizationSubject,
+    } from "@valon-technologies/gestalt";
 
     export async function canView(userId: string) {
       const decision = await Authorization().evaluate({
-        subject: { type: "subject", id: userId },
-        action: { name: "view" },
-        resource: { type: "agent_session", id: "session-1" },
+        subject: authorizationSubject("subject", userId),
+        action: authorizationAction("view"),
+        resource: authorizationResource("agent_session", "session-1"),
       });
       return decision.allowed;
     }
@@ -212,8 +250,10 @@ Authoring support is available in Go, Python, Rust, and TypeScript.
     }
 
     func (p *Provider) EvaluateMany(ctx context.Context, req *gestalt.AccessEvaluationsRequest) (*gestalt.AccessEvaluationsResponse, error) {
-        out := &gestalt.AccessEvaluationsResponse{}
-        for range req.GetRequests() {
+        out := &gestalt.AccessEvaluationsResponse{
+            Decisions: make([]*gestalt.AccessDecision, 0, len(req.Requests)),
+        }
+        for range req.Requests {
             out.Decisions = append(out.Decisions, &gestalt.AccessDecision{Allowed: true, ModelId: "model-1"})
         }
         return out, nil
@@ -222,20 +262,24 @@ Authoring support is available in Go, Python, Rust, and TypeScript.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import AuthorizationProvider
-    from gestalt.protocol.v1 import authorization_pb2
+    from gestalt import (
+        AccessDecision,
+        AccessEvaluationsResponse,
+        AuthorizationMetadata,
+        AuthorizationProvider,
+    )
 
     class Provider(AuthorizationProvider):
         def evaluate(self, request):
-            return authorization_pb2.AccessDecision(allowed=True, model_id="model-1")
+            return AccessDecision(allowed=True, model_id="model-1")
 
         def evaluate_many(self, request):
-            return authorization_pb2.AccessEvaluationsResponse(
+            return AccessEvaluationsResponse(
                 decisions=[self.evaluate(item) for item in request.requests]
             )
 
         def get_metadata(self):
-            return authorization_pb2.AuthorizationMetadata(
+            return AuthorizationMetadata(
                 capabilities=["evaluate"],
                 active_model_id="model-1",
             )
