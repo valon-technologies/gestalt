@@ -82,7 +82,7 @@ func writeExternalCredentialsProviderFixture(baseDir string) (string, error) {
 		return "", err
 	}
 
-	if err := os.WriteFile(filepath.Join(fixtureDir, "external_credentials.go"), []byte(testutil.GeneratedExternalCredentialPackageSource()), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(fixtureDir, "externalcredentials.go"), []byte(testutil.GeneratedExternalCredentialPackageSource()), 0o644); err != nil {
 		return "", err
 	}
 
@@ -91,7 +91,7 @@ func writeExternalCredentialsProviderFixture(baseDir string) (string, error) {
 
 func writeDefaultProvidersDir(baseDir, binaryPath string) (string, error) {
 	providersDir := filepath.Join(baseDir, "providers")
-	dir := filepath.Join(providersDir, "external_credentials", "default")
+	dir := filepath.Join(providersDir, "externalcredentials", "default")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

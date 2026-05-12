@@ -20,7 +20,7 @@ func ExternalCredentialsFactory(ctx context.Context, name string, node yaml.Node
 	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindExternalCredentials,
 		Subject:              "external credentials provider",
-		SourceMissingMessage: "no Go external-credentials provider source package found",
+		SourceMissingMessage: "no Go externalcredentials provider source package found",
 		Config:               cfg,
 	})
 	if err != nil {

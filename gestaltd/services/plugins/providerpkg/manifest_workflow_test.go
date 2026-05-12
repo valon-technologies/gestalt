@@ -110,6 +110,35 @@ func TestManifestKindNormalizationDoesNotMutateCallerManifest(t *testing.T) {
 	}
 }
 
+func TestManifestKindCanonicalizesExternalCredentialsAlias(t *testing.T) {
+	t.Parallel()
+
+	manifest := &providermanifestv1.Manifest{
+		Kind:    "external_credentials",
+		Source:  "github.com/acme/providers/externalcredentials/default",
+		Version: "1.0.0",
+	}
+
+	kind, err := ManifestKind(manifest)
+	if err != nil {
+		t.Fatalf("ManifestKind: %v", err)
+	}
+	if kind != providermanifestv1.KindExternalCredentials {
+		t.Fatalf("ManifestKind = %q, want %q", kind, providermanifestv1.KindExternalCredentials)
+	}
+	if manifest.Kind != "external_credentials" {
+		t.Fatalf("ManifestKind mutated manifest kind to %q", manifest.Kind)
+	}
+
+	encoded, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	if !strings.Contains(string(encoded), "kind: externalcredentials") {
+		t.Fatalf("encoded manifest did not normalize kind:\n%s", encoded)
+	}
+}
+
 func TestManifestWorkflow_RoundTripsUIPackage(t *testing.T) {
 	t.Parallel()
 

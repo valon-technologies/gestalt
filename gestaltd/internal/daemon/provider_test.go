@@ -1486,7 +1486,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
 		pluginName: externalCredentialReleasePluginName,
 		schemaPath: externalCredentialReleaseSchemaPath,
-		sourceFile: "external_credentials.go",
+		sourceFile: "externalcredentials.go",
 		sourceCode: testutil.GeneratedExternalCredentialPackageSource(),
 		manifest: &providermanifestv1.Manifest{
 			Kind:   providermanifestv1.KindExternalCredentials,

@@ -17,7 +17,7 @@ const (
 	KindPlugin              = "plugin"
 	KindAuthentication      = "authentication"
 	KindAuthorization       = "authorization"
-	KindExternalCredentials = "external_credentials"
+	KindExternalCredentials = "externalcredentials"
 	KindIndexedDB           = "indexeddb"
 	KindCache               = "cache"
 	KindS3                  = "s3"

@@ -167,7 +167,7 @@ func writeExternalCredentialsProviderFixture(baseDir string) (string, error) {
 		return "", err
 	}
 
-	if err := os.WriteFile(filepath.Join(fixtureDir, "external_credentials.go"), []byte(testutil.GeneratedExternalCredentialPackageSource()), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(fixtureDir, "externalcredentials.go"), []byte(testutil.GeneratedExternalCredentialPackageSource()), 0o644); err != nil {
 		return "", err
 	}
 
@@ -190,7 +190,7 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 		return "", err
 	}
 
-	if err := writeComponentProviderDir(filepath.Join(providersDir, "external_credentials", "default"), externalCredentialsBin, &providermanifestv1.Manifest{
+	if err := writeComponentProviderDir(filepath.Join(providersDir, "externalcredentials", "default"), externalCredentialsBin, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindExternalCredentials,
 		Source:      "github.com/test/providers/external-credentials-default",
 		Version:     "0.0.1-alpha.1",
@@ -199,7 +199,7 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 	}); err != nil {
 		return "", err
 	}
-	if err := writeLocalProviderReleaseMetadata(filepath.Join(providersDir, "external_credentials", "default")); err != nil {
+	if err := writeLocalProviderReleaseMetadata(filepath.Join(providersDir, "externalcredentials", "default")); err != nil {
 		return "", err
 	}
 

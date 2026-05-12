@@ -1963,7 +1963,7 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(indexedDBBinDest)},
 	})
 
-	externalCredentialsDir := filepath.Join(providersDir, "external_credentials", "default")
+	externalCredentialsDir := filepath.Join(providersDir, "externalcredentials", "default")
 	if err := os.MkdirAll(externalCredentialsDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", externalCredentialsDir, err)
 	}

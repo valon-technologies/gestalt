@@ -83,7 +83,7 @@ func TestDefaultLocalSourceConfigIncludesRootUI(t *testing.T) {
 		t.Fatal(`Providers.ExternalCredentials["default"] = nil`)
 		return
 	}
-	wantExternalCredentialsPath := filepath.Join(providersDir, "external_credentials", "default", "manifest.yaml")
+	wantExternalCredentialsPath := filepath.Join(providersDir, "externalcredentials", "default", "manifest.yaml")
 	if got := externalCredentials.SourcePath(); got != wantExternalCredentialsPath {
 		t.Fatalf(`Providers.ExternalCredentials["default"].Source.Path = %q, want %q`, got, wantExternalCredentialsPath)
 	}
