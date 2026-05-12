@@ -6,29 +6,8 @@ Cache providers are plugin-bound utilities for short-lived key/value state.
 They are configured under `providers.cache` and attached to plugins with
 `plugins.<name>.cache`.
 
-Unlike IndexedDB, cache providers are not selected through `server.providers`.
-They are only exposed to plugins that request them.
-
-## How cache providers work
-
-Each entry under `providers.cache` defines a named cache backend. Plugins opt
-into those backends with `plugins.<name>.cache`, which is just a list of named
-bindings. Every binding name must already exist under `providers.cache`, and
-duplicate bindings are rejected during config validation.
-
-In plugin code you usually open a cache by binding name, such as `session` or
-`rate_limit`. If a plugin binds exactly one cache, the SDKs also support the
-default unnamed cache handle, but using the explicit binding name is usually
-clearer.
-
-## First-party cache providers
-
-First-party cache providers live under
-[`valon-technologies/gestalt-providers/cache`](https://github.com/valon-technologies/gestalt-providers/tree/main/cache).
-
-| Provider | Use case |
-| --- | --- |
-| [`github.com/valon-technologies/gestalt-providers/cache/valkey`](https://github.com/valon-technologies/gestalt-providers/tree/main/cache/valkey) | Valkey or Redis-compatible cache backend for short-lived plugin state |
+Cache providers use the same provider-entry plus plugin SDK binding pattern as
+IndexedDB.
 
 ## Configuring `providers.cache`
 
@@ -37,19 +16,17 @@ providers:
   cache:
     session:
       source:
-        package: github.com/valon-technologies/gestalt-providers/cache/valkey
-        version: 0.0.1-alpha.1
+        package: github.com/your-org/gestalt-cache-provider
+        version: 0.0.1
       config:
-        address: ${VALKEY_ADDR}
-        database: 0
+        namespace: session
 
     rate_limit:
       source:
-        package: github.com/valon-technologies/gestalt-providers/cache/valkey
-        version: 0.0.1-alpha.1
+        package: github.com/your-org/gestalt-cache-provider
+        version: 0.0.1
       config:
-        address: ${VALKEY_ADDR}
-        database: 1
+        namespace: rate_limit
 
 plugins:
   search:
@@ -60,9 +37,9 @@ plugins:
 ```
 
 This example binds two caches into the `search` plugin. Both bindings use the
-same provider package, but they point at different logical databases. That is a
-common pattern for keeping session and rate-limit state separate without
-introducing a second cache technology.
+same provider package, but they receive different provider-specific config.
+That is a common pattern for keeping session and rate-limit state separate
+without introducing a second cache technology.
 
 ## Using `Cache` from a plugin
 
@@ -143,17 +120,8 @@ introducing a second cache technology.
 </Tabs>
 
 The host resolves the configured cache bindings and exposes them to the plugin
-through the language SDK. Plugin code does not choose raw Redis or Valkey
-endpoints directly at runtime. It just opens the bound cache by name.
-
-## Operational notes
-
-Cache providers are best for short-lived, non-authoritative state such as
-sessions, idempotency helpers, and rate-limit counters. They remain
-plugin-bound, so they do not participate in the host-wide `server.providers`
-selection model. The exact `config` block depends on the selected provider
-package. For the first-party `cache/valkey` provider, that usually means an
-address plus any backend-specific connection settings.
+through the language SDK. Plugin code does not choose backend endpoints
+directly at runtime. It just opens the bound cache by name.
 
 ## Building your own cache provider
 
@@ -163,32 +131,18 @@ A cache provider manifest declares `kind: cache`:
 
 ```yaml
 kind: cache
-source: github.com/valon-technologies/gestalt-providers/cache/valkey
+source: github.com/your-org/gestalt-cache-provider
 version: 0.0.1
-displayName: Valkey Cache
-description: Cache provider backed by Valkey or Redis.
+displayName: Example Cache
+description: Cache provider backed by your cache service.
 spec:
   configSchemaPath: ./cache_config.json
 ```
 
-### Provider interface
-
-The Cache service includes:
-
-| Method | Purpose |
-| --- | --- |
-| `Get` | Read a value by key |
-| `GetMany` | Read multiple keys in one request |
-| `Set` | Write a value with optional TTL |
-| `SetMany` | Write multiple values with one TTL policy |
-| `Delete` | Remove one key |
-| `DeleteMany` | Remove multiple keys |
-| `Touch` | Refresh TTL for an existing key |
-
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
-    package valkeycache
+    package examplecache
 
     import (
         "context"
@@ -197,29 +151,36 @@ The Cache service includes:
         gestalt "github.com/valon-technologies/gestalt/sdk/go"
     )
 
-    type Provider struct{}
+    type ExampleCache struct{}
 
-    func New() *Provider { return &Provider{} }
+    func New() *ExampleCache { return &ExampleCache{} }
 
-    func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
-        return nil
+    func (p *ExampleCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
+        panic("implement cache get")
     }
 
-    func (p *Provider) Get(ctx context.Context, key string) ([]byte, bool, error) {
-        return nil, false, nil
+    func (p *ExampleCache) GetMany(ctx context.Context, keys []string) (map[string][]byte, error) {
+        panic("implement cache get many")
     }
 
-    func (p *Provider) Set(ctx context.Context, key string, value []byte, opts gestalt.CacheSetOptions) error {
-        _ = opts.TTL
-        return nil
+    func (p *ExampleCache) Set(ctx context.Context, key string, value []byte, opts gestalt.CacheSetOptions) error {
+        panic("implement cache set")
     }
 
-    func (p *Provider) Delete(ctx context.Context, key string) (bool, error) {
-        return false, nil
+    func (p *ExampleCache) SetMany(ctx context.Context, entries []gestalt.CacheEntry, opts gestalt.CacheSetOptions) error {
+        panic("implement cache set many")
     }
 
-    func (p *Provider) Touch(ctx context.Context, key string, ttl time.Duration) (bool, error) {
-        return false, nil
+    func (p *ExampleCache) Delete(ctx context.Context, key string) (bool, error) {
+        panic("implement cache delete")
+    }
+
+    func (p *ExampleCache) DeleteMany(ctx context.Context, keys []string) (int64, error) {
+        panic("implement cache delete many")
+    }
+
+    func (p *ExampleCache) Touch(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+        panic("implement cache touch")
     }
     ```
   </Tabs.Tab>
@@ -227,11 +188,16 @@ The Cache service includes:
     ```python
     import datetime as dt
 
-    from gestalt import CacheProvider
+    from gestalt import CacheEntry, CacheProvider
 
-    class ValkeyCache(CacheProvider):
+    class ExampleCache(CacheProvider):
         def get(self, key: str) -> bytes | None:
-            return None
+            """Read a value by key."""
+            raise NotImplementedError
+
+        def get_many(self, keys: list[str]) -> dict[str, bytes]:
+            """Read multiple keys in one request."""
+            raise NotImplementedError
 
         def set(
             self,
@@ -239,25 +205,46 @@ The Cache service includes:
             value: bytes,
             ttl: dt.timedelta | None = None,
         ) -> None:
-            pass
+            """Write a value with an optional TTL."""
+            raise NotImplementedError
+
+        def set_many(
+            self,
+            entries: list[CacheEntry],
+            ttl: dt.timedelta | None = None,
+        ) -> None:
+            """Write multiple values with one TTL policy."""
+            raise NotImplementedError
 
         def delete(self, key: str) -> bool:
-            return False
+            """Remove one key."""
+            raise NotImplementedError
+
+        def delete_many(self, keys: list[str]) -> int:
+            """Remove multiple keys."""
+            raise NotImplementedError
 
         def touch(self, key: str, ttl: dt.timedelta) -> bool:
-            return False
+            """Refresh TTL for an existing key."""
+            raise NotImplementedError
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
     #[derive(Default)]
-    struct ValkeyCache;
+    struct ExampleCache;
 
     #[gestalt::async_trait]
-    impl gestalt::CacheProvider for ValkeyCache {
+    impl gestalt::CacheProvider for ExampleCache {
         async fn get(&self, key: &str) -> gestalt::Result<Option<Vec<u8>>> {
-            let _ = key;
-            Ok(None)
+            todo!("read a value by key")
+        }
+
+        async fn get_many(
+            &self,
+            keys: &[String],
+        ) -> gestalt::Result<std::collections::BTreeMap<String, Vec<u8>>> {
+            todo!("read multiple keys in one request")
         }
 
         async fn set(
@@ -266,22 +253,31 @@ The Cache service includes:
             value: &[u8],
             options: gestalt::CacheSetOptions,
         ) -> gestalt::Result<()> {
-            let _ = (key, value, options.ttl);
-            Ok(())
+            todo!("write a value with an optional TTL")
+        }
+
+        async fn set_many(
+            &self,
+            entries: &[gestalt::CacheEntry],
+            options: gestalt::CacheSetOptions,
+        ) -> gestalt::Result<()> {
+            todo!("write multiple values with one TTL policy")
         }
 
         async fn delete(&self, key: &str) -> gestalt::Result<bool> {
-            let _ = key;
-            Ok(false)
+            todo!("remove one key")
+        }
+
+        async fn delete_many(&self, keys: &[String]) -> gestalt::Result<i64> {
+            todo!("remove multiple keys")
         }
 
         async fn touch(&self, key: &str, ttl: std::time::Duration) -> gestalt::Result<bool> {
-            let _ = (key, ttl);
-            Ok(false)
+            todo!("refresh TTL for an existing key")
         }
     }
 
-    gestalt::export_cache_provider!(constructor = ValkeyCache::default);
+    gestalt::export_cache_provider!(constructor = ExampleCache::default);
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -290,44 +286,39 @@ The Cache service includes:
 
     export const cache = defineCacheProvider({
       async get(key) {
-        return undefined;
+        throw new Error("read a value by key");
+      },
+
+      async getMany(keys) {
+        throw new Error("read multiple keys in one request");
       },
 
       async set(key, value, options) {
-        void key;
-        void value;
-        void options?.ttlMs;
+        throw new Error("write a value with an optional TTL");
+      },
+
+      async setMany(entries, options) {
+        throw new Error("write multiple values with one TTL policy");
       },
 
       async delete(key) {
-        void key;
-        return false;
+        throw new Error("remove one key");
+      },
+
+      async deleteMany(keys) {
+        throw new Error("remove multiple keys");
       },
 
       async touch(key, ttlMs) {
-        void key;
-        void ttlMs;
-        return false;
+        throw new Error("refresh TTL for an existing key");
       },
     });
     ```
   </Tabs.Tab>
 </Tabs>
 
-Python, Rust, and TypeScript cache providers inherit default implementations
-for `GetMany`, `SetMany`, and `DeleteMany`. Override the batch helpers only
-when the backing cache can do better than repeated single-key calls.
+### Release flow
 
-### Plugin access and release flow
-
-Plugin-side cache usage is documented in
-[Using `Cache` from a plugin](/providers/cache#using-cache-from-a-plugin).
-Provider authors only implement the cache service; Gestalt resolves configured
-bindings and exposes the matching SDK sockets to plugins.
-
-Configure cache providers with the same `providers.cache` and
-`plugins.<name>.cache` shape shown in
-[Configuring `providers.cache`](/providers/cache#configuring-providerscache).
 For packaging, lock/sync, and release behavior, see
 [Releasing provider packages](/providers#releasing-provider-packages).
 

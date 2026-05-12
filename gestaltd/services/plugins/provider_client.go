@@ -169,9 +169,9 @@ func (p *remoteProviderBase) Description() string { return p.description }
 
 func (p *remoteProviderBase) ConnectionMode() core.ConnectionMode {
 	if p.connection == "" {
-		return core.ConnectionModeUser
+		return core.ConnectionModeSubject
 	}
-	return p.connection
+	return core.NormalizeConnectionMode(p.connection)
 }
 
 func (p *remoteProviderBase) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {

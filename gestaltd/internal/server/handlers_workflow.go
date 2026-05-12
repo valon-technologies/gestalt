@@ -296,7 +296,7 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 		Operation:      strings.TrimSpace(plugin.Operation),
 		Connection:     strings.TrimSpace(plugin.Connection),
 		Instance:       strings.TrimSpace(plugin.Instance),
-		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(plugin.CredentialMode))),
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(plugin.CredentialMode)),
 		Input:          maps.Clone(plugin.Input),
 	}
 	return coreworkflow.Target{
@@ -373,11 +373,11 @@ func workflowOutputDeliveryFromRequest(delivery *workflowOutputDeliveryRequest) 
 			Operation:      strings.TrimSpace(delivery.Target.Operation),
 			Connection:     strings.TrimSpace(delivery.Target.Connection),
 			Instance:       strings.TrimSpace(delivery.Target.Instance),
-			CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(delivery.Target.CredentialMode))),
+			CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(delivery.Target.CredentialMode)),
 			Input:          maps.Clone(delivery.Target.Input),
 		},
 		InputBindings:  workflowOutputBindingsFromRequest(delivery.InputBindings),
-		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(delivery.CredentialMode))),
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(delivery.CredentialMode)),
 	}
 }
 

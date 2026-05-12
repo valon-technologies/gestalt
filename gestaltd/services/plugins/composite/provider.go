@@ -66,6 +66,8 @@ var connectionModeRank = map[core.ConnectionMode]int{
 }
 
 func stricterConnectionMode(a, b core.ConnectionMode) core.ConnectionMode {
+	a = core.NormalizeConnectionMode(a)
+	b = core.NormalizeConnectionMode(b)
 	if connectionModeRank[b] > connectionModeRank[a] {
 		return b
 	}

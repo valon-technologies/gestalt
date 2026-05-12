@@ -36,6 +36,7 @@ import type { Schema } from "./schema.ts";
 export type ConnectionMode =
   | "unspecified"
   | "none"
+  | "subject"
   | "user";
 
 /**
@@ -512,6 +513,8 @@ export function connectionModeToProtoValue(mode: ConnectionMode): number {
   switch (mode) {
     case "none":
       return 1;
+    case "subject":
+      return 2;
     case "user":
       return 2;
     case "unspecified":

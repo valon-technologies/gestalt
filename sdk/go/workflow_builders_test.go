@@ -114,7 +114,7 @@ func TestNewBoundWorkflowPluginTargetUsesNativeInput(t *testing.T) {
 			}{Channel: "C123"},
 			Connection:     "workspace",
 			Instance:       "T123",
-			CredentialMode: "user",
+			CredentialMode: "subject",
 		},
 	})
 	if err != nil {

@@ -1333,7 +1333,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 							map[string]any{
 								"plugin":         "roadmap",
 								"operation":      "sync",
-								"credentialMode": "user",
+								"credentialMode": "subject",
 							},
 						},
 					},

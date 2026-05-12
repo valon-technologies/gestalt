@@ -565,7 +565,7 @@ spec:
       connection: mcp
   connections:
     mcp:
-      mode: user
+      mode: subject
       auth:
         type: mcp_oauth
 `)

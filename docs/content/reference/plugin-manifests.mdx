@@ -167,7 +167,7 @@ following fields:
 
 | Field | Type | Purpose |
 | --- | --- | --- |
-| `mode` | string | One of `none` or `user`. |
+| `mode` | string | One of `none` or `subject`. |
 | `auth` | ProviderAuth | Authentication configuration for this connection. |
 | `params` | map[string]ConnectionParam | Connection parameters populated during or after connect. |
 | `discovery` | Discovery | Post-connect discovery configuration. |
@@ -583,7 +583,7 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
           value: primary
       connections:
         default:
-          mode: user
+          mode: subject
           auth:
             type: oauth2
             authorizationUrl: https://accounts.support.example.com/oauth/authorize
@@ -604,7 +604,7 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
             metadata:
               workspace_id: id
         mcp:
-          mode: user
+          mode: subject
           auth:
             type: mcp_oauth
       surfaces:
@@ -658,7 +658,7 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
         ],
         "connections": {
           "default": {
-            "mode": "user",
+            "mode": "subject",
             "auth": {
               "type": "oauth2",
               "authorizationUrl": "https://accounts.support.example.com/oauth/authorize",
@@ -678,7 +678,7 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
             }
           },
           "mcp": {
-            "mode": "user",
+            "mode": "subject",
             "auth": { "type": "mcp_oauth" }
           }
         },

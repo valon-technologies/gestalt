@@ -278,7 +278,7 @@ func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Targ
 		Operation:      plugin.Operation,
 		Connection:     plugin.Connection,
 		Instance:       plugin.Instance,
-		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(plugin.CredentialMode)))),
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(plugin.CredentialMode)),
 		Input:          maps.Clone(plugin.Input),
 	}
 	return coreworkflow.Target{
@@ -343,7 +343,7 @@ func workflowConfigOutputDelivery(delivery *config.WorkflowOutputDeliveryConfig)
 			Instance:   strings.TrimSpace(delivery.Target.Instance),
 			Input:      maps.Clone(delivery.Target.Input),
 		},
-		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.CredentialMode)))),
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(delivery.CredentialMode)),
 		InputBindings:  make([]coreworkflow.OutputBinding, 0, len(delivery.InputBindings)),
 	}
 	for _, binding := range delivery.InputBindings {
@@ -645,7 +645,7 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 }
 
 func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.PluginTarget, hasRunAs bool) error {
-	modeOverride := core.ConnectionMode(strings.ToLower(strings.TrimSpace(string(target.CredentialMode))))
+	modeOverride := core.NormalizeOptionalConnectionMode(target.CredentialMode)
 	switch modeOverride {
 	case "":
 	case core.ConnectionModeNone:

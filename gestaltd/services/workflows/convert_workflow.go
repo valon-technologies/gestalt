@@ -98,7 +98,7 @@ func workflowPluginTargetFromProto(target *proto.BoundWorkflowPluginTarget) core
 		Operation:      strings.TrimSpace(target.GetOperation()),
 		Connection:     strings.TrimSpace(target.GetConnection()),
 		Instance:       strings.TrimSpace(target.GetInstance()),
-		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(target.GetCredentialMode()))),
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(target.GetCredentialMode())),
 		Input:          mapFromStruct(target.GetInput()),
 	}
 }
@@ -200,7 +200,7 @@ func workflowOutputDeliveryFromProto(delivery *proto.WorkflowOutputDelivery) *co
 	}
 	out := &coreworkflow.OutputDelivery{
 		Target:         workflowPluginTargetFromProto(delivery.GetTarget()),
-		CredentialMode: core.ConnectionMode(strings.ToLower(strings.TrimSpace(delivery.GetCredentialMode()))),
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(delivery.GetCredentialMode())),
 	}
 	for _, binding := range delivery.GetInputBindings() {
 		if binding == nil {

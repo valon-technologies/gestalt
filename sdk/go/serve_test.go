@@ -323,7 +323,7 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 					Kind: "user",
 				},
 				Credential: &proto.CredentialContext{
-					Mode: "user",
+					Mode: "subject",
 				},
 				Access: &proto.AccessContext{
 					Policy: "roadmap",
@@ -340,8 +340,8 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 		if resp.GetCatalog() == nil {
 			t.Fatal("expected session catalog")
 		}
-		if resp.GetCatalog().GetDisplayName() != "user:user-123|user|roadmap|viewer|https://gestalt.example.test" {
-			t.Fatalf("DisplayName = %q, want %q", resp.GetCatalog().GetDisplayName(), "user:user-123|user|roadmap|viewer|https://gestalt.example.test")
+		if resp.GetCatalog().GetDisplayName() != "user:user-123|subject|roadmap|viewer|https://gestalt.example.test" {
+			t.Fatalf("DisplayName = %q, want %q", resp.GetCatalog().GetDisplayName(), "user:user-123|subject|roadmap|viewer|https://gestalt.example.test")
 		}
 		if got := resp.GetCatalog().GetOperations()[0].GetAllowedRoles(); len(got) != 1 || got[0] != "viewer" {
 			t.Fatalf("AllowedRoles = %#v, want %#v", got, []string{"viewer"})
@@ -400,7 +400,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "success",
 			router:     stubRouter,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","subject_email":"ada@example.com","agent_subject_id":"user:user-456","agent_external_type":"github_identity","agent_external_id":"user:12345678","credential_mode":"user","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","idempotency_key":"tool-call-123"}`,
+			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","subject_email":"ada@example.com","agent_subject_id":"user:user-456","agent_external_type":"github_identity","agent_external_id":"user:12345678","credential_mode":"subject","credential_subject_id":"user:user-123","access_policy":"roadmap","access_role":"admin","host_base_url":"https://gestalt.example.test","idempotency_key":"tool-call-123"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "test_op",
 				Params: func() *structpb.Struct {
@@ -423,7 +423,7 @@ func TestProviderServerExecute(t *testing.T) {
 						Id:   "user:12345678",
 					},
 					Credential: &proto.CredentialContext{
-						Mode:      "user",
+						Mode:      "subject",
 						SubjectId: "user:user-123",
 					},
 					Access: &proto.AccessContext{

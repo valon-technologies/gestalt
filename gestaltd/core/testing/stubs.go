@@ -252,9 +252,9 @@ func (s *StubIntegration) Description() string { return s.Desc }
 
 func (s *StubIntegration) ConnectionMode() core.ConnectionMode {
 	if s.ConnMode == "" {
-		return core.ConnectionModeUser
+		return core.ConnectionModeSubject
 	}
-	return s.ConnMode
+	return core.NormalizeConnectionMode(s.ConnMode)
 }
 func (s *StubIntegration) AuthTypes() []string { return nil }
 func (s *StubIntegration) ConnectionParamDefs() map[string]core.ConnectionParamDef {

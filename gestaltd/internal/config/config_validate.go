@@ -873,7 +873,7 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 		entry.Invokes[i].Plugin = strings.TrimSpace(entry.Invokes[i].Plugin)
 		entry.Invokes[i].Operation = strings.TrimSpace(entry.Invokes[i].Operation)
 		entry.Invokes[i].Surface = strings.ToLower(strings.TrimSpace(entry.Invokes[i].Surface))
-		entry.Invokes[i].CredentialMode = providermanifestv1.ConnectionMode(strings.ToLower(strings.TrimSpace(string(entry.Invokes[i].CredentialMode))))
+		entry.Invokes[i].CredentialMode = providermanifestv1.NormalizeOptionalConnectionMode(entry.Invokes[i].CredentialMode)
 		switch {
 		case entry.Invokes[i].Plugin == "":
 			return fmt.Errorf("config validation: plugins.%s.invokes[%d].plugin is required", name, i)
@@ -2056,7 +2056,7 @@ func normalizeWorkflowPluginTargetConfig(path string, plugin *WorkflowPluginTarg
 	plugin.Operation = strings.TrimSpace(plugin.Operation)
 	plugin.Connection = strings.TrimSpace(plugin.Connection)
 	plugin.Instance = strings.TrimSpace(plugin.Instance)
-	plugin.CredentialMode = providermanifestv1.ConnectionMode(strings.ToLower(strings.TrimSpace(string(plugin.CredentialMode))))
+	plugin.CredentialMode = providermanifestv1.NormalizeOptionalConnectionMode(plugin.CredentialMode)
 	if plugin.Name == "" {
 		return fmt.Errorf("config validation: %s.name is required", path)
 	}
@@ -2160,7 +2160,7 @@ func normalizeWorkflowOutputDeliveryConfig(path string, delivery *WorkflowOutput
 	if err := normalizeWorkflowPluginTargetConfig(path+".target", &delivery.Target, false); err != nil {
 		return err
 	}
-	delivery.CredentialMode = providermanifestv1.ConnectionMode(strings.ToLower(strings.TrimSpace(string(delivery.CredentialMode))))
+	delivery.CredentialMode = providermanifestv1.NormalizeOptionalConnectionMode(delivery.CredentialMode)
 	switch delivery.CredentialMode {
 	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
 	default:

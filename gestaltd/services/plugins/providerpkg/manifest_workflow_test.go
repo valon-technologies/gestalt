@@ -636,7 +636,7 @@ spec:
   defaultConnection: default
   connections:
     default:
-      mode: user
+      mode: subject
       auth:
         type: oauth2
         authorizationUrl: https://auth.example.com/authorize
@@ -1077,7 +1077,7 @@ spec:
   connections:
     mcp:
       displayName: MCP
-      mode: user
+      mode: subject
       auth:
         type: mcp_oauth
   surfaces:
@@ -1159,7 +1159,7 @@ spec:
       auth:
         type: none
     api:
-      mode: user
+      mode: subject
       auth:
         type: oauth2
         authorizationUrl: https://auth.example.com/authorize

@@ -113,7 +113,7 @@ func (s *externalCredentialProviderServer) ValidateCredentialConfig(ctx context.
 		Provider:         strings.TrimSpace(req.GetProvider()),
 		Connection:       strings.TrimSpace(req.GetConnection()),
 		ConnectionID:     strings.TrimSpace(req.GetConnectionId()),
-		Mode:             core.ConnectionMode(req.GetMode()),
+		Mode:             core.NormalizeConnectionMode(core.ConnectionMode(req.GetMode())),
 		Auth:             externalCredentialAuthConfigFromProto(req.GetAuth()),
 		ConnectionParams: cloneStringMap(req.GetConnectionParams()),
 	})
@@ -131,7 +131,7 @@ func (s *externalCredentialProviderServer) ResolveCredential(ctx context.Context
 		Provider:            strings.TrimSpace(req.GetProvider()),
 		Connection:          strings.TrimSpace(req.GetConnection()),
 		ConnectionID:        strings.TrimSpace(req.GetConnectionId()),
-		Mode:                core.ConnectionMode(req.GetMode()),
+		Mode:                core.NormalizeConnectionMode(core.ConnectionMode(req.GetMode())),
 		CredentialSubjectID: strings.TrimSpace(req.GetCredentialSubjectId()),
 		ActorSubjectID:      strings.TrimSpace(req.GetActorSubjectId()),
 		Instance:            strings.TrimSpace(req.GetInstance()),

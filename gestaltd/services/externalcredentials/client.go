@@ -239,7 +239,7 @@ func validateCredentialConfigToProto(req *core.ValidateExternalCredentialConfigR
 		Provider:         strings.TrimSpace(req.Provider),
 		Connection:       strings.TrimSpace(req.Connection),
 		ConnectionId:     strings.TrimSpace(req.ConnectionID),
-		Mode:             string(req.Mode),
+		Mode:             string(core.NormalizeConnectionMode(req.Mode)),
 		Auth:             externalCredentialAuthConfigToProto(req.Auth),
 		ConnectionParams: cloneStringMap(req.ConnectionParams),
 	}
@@ -253,7 +253,7 @@ func resolveCredentialRequestToProto(req *core.ResolveExternalCredentialRequest)
 		Provider:            strings.TrimSpace(req.Provider),
 		Connection:          strings.TrimSpace(req.Connection),
 		ConnectionId:        strings.TrimSpace(req.ConnectionID),
-		Mode:                string(req.Mode),
+		Mode:                string(core.NormalizeConnectionMode(req.Mode)),
 		CredentialSubjectId: strings.TrimSpace(req.CredentialSubjectID),
 		ActorSubjectId:      strings.TrimSpace(req.ActorSubjectID),
 		Instance:            strings.TrimSpace(req.Instance),

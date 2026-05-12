@@ -89,10 +89,12 @@ func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers
 	return m, nil
 }
 
-func (m *MergedProvider) Name() string                        { return m.catalog.Name }
-func (m *MergedProvider) DisplayName() string                 { return m.catalog.DisplayName }
-func (m *MergedProvider) Description() string                 { return m.catalog.Description }
-func (m *MergedProvider) ConnectionMode() core.ConnectionMode { return m.connMode }
+func (m *MergedProvider) Name() string        { return m.catalog.Name }
+func (m *MergedProvider) DisplayName() string { return m.catalog.DisplayName }
+func (m *MergedProvider) Description() string { return m.catalog.Description }
+func (m *MergedProvider) ConnectionMode() core.ConnectionMode {
+	return core.NormalizeConnectionMode(m.connMode)
+}
 
 func (m *MergedProvider) AuthTypes() []string {
 	for _, provider := range m.owned {

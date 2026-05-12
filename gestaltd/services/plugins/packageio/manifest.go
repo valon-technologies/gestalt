@@ -592,7 +592,7 @@ func validateHTTPBinding(path string, binding *providermanifestv1.HTTPBinding, s
 		return fmt.Errorf("%s.method %q is not a valid HTTP method", path, binding.Method)
 	}
 	binding.Method = method
-	binding.CredentialMode = providermanifestv1.ConnectionMode(strings.TrimSpace(string(binding.CredentialMode)))
+	binding.CredentialMode = providermanifestv1.NormalizeOptionalConnectionMode(binding.CredentialMode)
 	switch binding.CredentialMode {
 	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
 	default:
@@ -664,13 +664,11 @@ func validateExecutableProviderMetadata(provider *providermanifestv1.Spec) error
 		if conn.Auth != nil && conn.Auth.Type == providermanifestv1.AuthTypeMCPOAuth && provider.MCPURL() == "" {
 			return fmt.Errorf("provider.connections.%s.auth.type %q requires an MCP surface", name, providermanifestv1.AuthTypeMCPOAuth)
 		}
-		if conn.Mode == "" {
-		} else {
-			switch conn.Mode {
-			case providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
-			default:
-				return fmt.Errorf("unsupported provider.connections.%s.mode %q", name, conn.Mode)
-			}
+		conn.Mode = providermanifestv1.NormalizeOptionalConnectionMode(conn.Mode)
+		switch conn.Mode {
+		case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
+		default:
+			return fmt.Errorf("unsupported provider.connections.%s.mode %q", name, conn.Mode)
 		}
 		if conn.Exposure != "" {
 			return fmt.Errorf("provider.connections.%s.exposure is not supported", name)

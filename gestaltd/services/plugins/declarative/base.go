@@ -84,9 +84,9 @@ func (b *Base) Description() string { return b.IntegrationDesc }
 
 func (b *Base) ConnectionMode() core.ConnectionMode {
 	if b.ConnMode == "" {
-		return core.ConnectionModeUser
+		return core.ConnectionModeSubject
 	}
-	return b.ConnMode
+	return core.NormalizeConnectionMode(b.ConnMode)
 }
 
 func (b *Base) AuthTypes() []string {

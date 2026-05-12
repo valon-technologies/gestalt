@@ -200,19 +200,19 @@ func TestConnectionAuthMetrics(t *testing.T) {
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "start",
-		"gestalt.connection_mode": "user",
+		"gestalt.connection_mode": "subject",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "complete",
-		"gestalt.connection_mode": "user",
+		"gestalt.connection_mode": "subject",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "complete",
-		"gestalt.connection_mode": "user",
+		"gestalt.connection_mode": "subject",
 	})
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.connection.auth.duration", map[string]string{
 		"gestalt.provider": providerName,
@@ -318,13 +318,13 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "refresh",
-		"gestalt.connection_mode": "user",
+		"gestalt.connection_mode": "subject",
 	})
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "refresh",
-		"gestalt.connection_mode": "user",
+		"gestalt.connection_mode": "subject",
 	})
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.connection.auth.duration", map[string]string{
 		"gestalt.provider": providerName,
@@ -335,7 +335,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		"gestalt.provider":            providerName,
 		"gestalt.operation":           "list",
 		"gestalt.transport":           "rest",
-		"gestalt.connection_mode":     "user",
+		"gestalt.connection_mode":     "subject",
 		"gestalt.result_status":       "200",
 		"gestalt.result_status_class": "2xx",
 	})
@@ -343,7 +343,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		"gestalt.provider":            providerName,
 		"gestalt.operation":           "list",
 		"gestalt.transport":           "rest",
-		"gestalt.connection_mode":     "user",
+		"gestalt.connection_mode":     "subject",
 		"gestalt.result_status":       "412",
 		"gestalt.result_status_class": "4xx",
 	})
@@ -351,7 +351,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		"gestalt.provider":            providerName,
 		"gestalt.operation":           "list",
 		"gestalt.transport":           "rest",
-		"gestalt.connection_mode":     "user",
+		"gestalt.connection_mode":     "subject",
 		"gestalt.result_status":       "412",
 		"gestalt.result_status_class": "4xx",
 	})
@@ -500,7 +500,7 @@ func TestManualConnectionMetrics(t *testing.T) {
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "manual",
 		"gestalt.action":          "complete",
-		"gestalt.connection_mode": "user",
+		"gestalt.connection_mode": "subject",
 	})
 }
 
@@ -883,7 +883,7 @@ func TestHTTPDiscoveryMetrics(t *testing.T) {
 	attrs := map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.action":          "list_operations",
-		"gestalt.connection_mode": "user",
+		"gestalt.connection_mode": "subject",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.discovery.count", 1, attrs)
 	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.discovery.error_count", attrs)
@@ -943,7 +943,7 @@ func TestHTTPDiscoveryMetrics_FailureRecordsErrorCount(t *testing.T) {
 	attrs := map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.action":          "list_operations",
-		"gestalt.connection_mode": "user",
+		"gestalt.connection_mode": "subject",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.discovery.count", 1, attrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.discovery.error_count", 1, attrs)
