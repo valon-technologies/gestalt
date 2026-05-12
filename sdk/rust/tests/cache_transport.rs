@@ -14,10 +14,7 @@ use gestalt::proto::v1::{
     CacheSetManyRequest, CacheSetRequest, CacheTouchRequest, CacheTouchResponse,
     ConfigureProviderRequest, ProviderKind,
 };
-use gestalt::{
-    CacheEntry, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET, ENV_CACHE_SOCKET_TOKEN,
-    RuntimeMetadata,
-};
+use gestalt::{CacheEntry, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::{TcpListener, UnixStream};
 use tokio_stream::wrappers::TcpListenerStream;
@@ -26,6 +23,7 @@ use tonic::{Code, Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
 const CACHE_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
+const ENV_CACHE_SOCKET_TOKEN: &str = "GESTALT_CACHE_SOCKET_TOKEN";
 
 #[derive(Default)]
 struct TestCacheProvider {

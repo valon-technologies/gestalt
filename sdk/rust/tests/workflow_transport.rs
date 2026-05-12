@@ -9,13 +9,17 @@ use gestalt::proto::v1::workflow_host_server::{
 };
 use gestalt::proto::v1::workflow_provider_client::WorkflowProviderClient;
 use gestalt::proto::v1::{
-    self as pb, BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowTarget,
-    ConfigureProviderRequest, ProviderKind, PublishWorkflowProviderEventRequest,
-    StartWorkflowProviderRunRequest, WorkflowEvent, WorkflowRunStatus, bound_workflow_target,
+    self as pb, BoundWorkflowPluginTarget as ProtoBoundWorkflowPluginTarget,
+    BoundWorkflowTarget as ProtoBoundWorkflowTarget, ConfigureProviderRequest, ProviderKind,
+    PublishWorkflowProviderEventRequest as ProtoPublishWorkflowProviderEventRequest,
+    StartWorkflowProviderRunRequest as ProtoStartWorkflowProviderRunRequest,
+    WorkflowEvent as ProtoWorkflowEvent, WorkflowRunStatus as ProtoWorkflowRunStatus,
+    bound_workflow_target,
 };
 use gestalt::{
-    BoundWorkflowPluginTargetInput, BoundWorkflowTargetInput, ENV_WORKFLOW_HOST_SOCKET_TOKEN,
-    InvokeWorkflowOperationInput, RuntimeMetadata, WorkflowHost, WorkflowProvider,
+    BoundWorkflowPluginTargetInput, BoundWorkflowRun, BoundWorkflowTargetInput,
+    InvokeWorkflowOperationInput, PublishWorkflowProviderEventRequest, RuntimeMetadata,
+    StartWorkflowProviderRunRequest, WorkflowHost, WorkflowProvider, WorkflowRunStatus,
 };
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::{TcpListener, UnixListener, UnixStream};
@@ -23,6 +27,8 @@ use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
+
+const ENV_WORKFLOW_HOST_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_HOST_SOCKET_TOKEN";
 
 #[derive(Default)]
 struct TestWorkflowProvider {
@@ -68,7 +74,7 @@ impl WorkflowProvider for TestWorkflowProvider {
             .ok_or_else(|| gestalt::Error::bad_request("missing target"))?;
         Ok(BoundWorkflowRun {
             id: request.idempotency_key,
-            status: WorkflowRunStatus::Pending as i32,
+            status: WorkflowRunStatus::Pending,
             target: Some(target),
             ..Default::default()
         })
@@ -84,7 +90,7 @@ impl WorkflowProvider for TestWorkflowProvider {
         self.published_events
             .lock()
             .expect("published_events lock")
-            .push((request.plugin_name, event.r#type));
+            .push((request.plugin_name, event.event_type));
         Ok(())
     }
 }
@@ -170,10 +176,10 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
 
     let mut client = WorkflowProviderClient::new(channel);
     let started = client
-        .start_run(StartWorkflowProviderRunRequest {
-            target: Some(BoundWorkflowTarget {
+        .start_run(ProtoStartWorkflowProviderRunRequest {
+            target: Some(ProtoBoundWorkflowTarget {
                 kind: Some(bound_workflow_target::Kind::Plugin(
-                    BoundWorkflowPluginTarget {
+                    ProtoBoundWorkflowPluginTarget {
                         plugin_name: "demo".to_string(),
                         operation: "refresh".to_string(),
                         input: Some(helpers::struct_from_json(serde_json::json!({
@@ -191,16 +197,16 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
         .into_inner();
     assert_eq!(started.id, "run-42");
     assert_eq!(
-        WorkflowRunStatus::try_from(started.status)
+        ProtoWorkflowRunStatus::try_from(started.status)
             .expect("valid workflow run status")
             .as_str_name(),
         "WORKFLOW_RUN_STATUS_PENDING"
     );
     assert_eq!(
         started.target.expect("target"),
-        BoundWorkflowTarget {
+        ProtoBoundWorkflowTarget {
             kind: Some(bound_workflow_target::Kind::Plugin(
-                BoundWorkflowPluginTarget {
+                ProtoBoundWorkflowPluginTarget {
                     plugin_name: "demo".to_string(),
                     operation: "refresh".to_string(),
                     input: Some(helpers::struct_from_json(serde_json::json!({
@@ -213,9 +219,9 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
     );
 
     client
-        .publish_event(PublishWorkflowProviderEventRequest {
+        .publish_event(ProtoPublishWorkflowProviderEventRequest {
             plugin_name: "demo".to_string(),
-            event: Some(WorkflowEvent {
+            event: Some(ProtoWorkflowEvent {
                 id: "evt_1".to_string(),
                 source: "urn:test".to_string(),
                 spec_version: "1.0".to_string(),

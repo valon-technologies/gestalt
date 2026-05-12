@@ -13,10 +13,7 @@ use gestalt::proto::v1::{
     ExchangeInvocationTokenRequest, ExchangeInvocationTokenResponse, OperationResult,
     PluginInvocationGrant, PluginInvokeGraphQlRequest, PluginInvokeRequest,
 };
-use gestalt::{
-    ENV_PLUGIN_INVOKER_SOCKET, ENV_PLUGIN_INVOKER_SOCKET_TOKEN, InvocationGrant, InvokeOptions,
-    PluginInvoker, Request,
-};
+use gestalt::{ENV_PLUGIN_INVOKER_SOCKET, InvocationGrant, InvokeOptions, PluginInvoker, Request};
 use prost_types::Struct;
 use serde::Serialize;
 use tokio::net::{TcpListener, UnixListener};
@@ -24,6 +21,8 @@ use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
+
+const ENV_PLUGIN_INVOKER_SOCKET_TOKEN: &str = "GESTALT_PLUGIN_INVOKER_SOCKET_TOKEN";
 
 #[derive(Serialize)]
 struct IssueParams {

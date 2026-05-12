@@ -24,8 +24,72 @@ pub const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN: &str = "GESTALT_RUNTIME_LOG_SOCKET_
 pub const ENV_RUNTIME_SESSION_ID: &str = "GESTALT_RUNTIME_SESSION_ID";
 const RUNTIME_LOG_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
-/// Runtime log stream enum generated from the provider protocol.
-pub type RuntimeLogStream = pb::PluginRuntimeLogStream;
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[repr(i32)]
+/// Runtime log stream for plugin-runtime log entries.
+pub enum RuntimeLogStream {
+    #[default]
+    Unspecified = 0,
+    Stdout = 1,
+    Stderr = 2,
+    Runtime = 3,
+}
+
+impl RuntimeLogStream {
+    const fn as_i32(self) -> i32 {
+        self as i32
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+/// One plugin-runtime log entry.
+pub struct PluginRuntimeLogEntry {
+    pub stream: RuntimeLogStream,
+    pub message: String,
+    pub observed_at: SystemTime,
+    pub source_seq: i64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// Request for appending plugin-runtime logs.
+pub struct AppendPluginRuntimeLogsRequest {
+    pub session_id: String,
+    pub logs: Vec<PluginRuntimeLogEntry>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+/// Response returned after appending plugin-runtime logs.
+pub struct AppendPluginRuntimeLogsResponse {
+    pub last_seq: i64,
+}
+
+fn append_logs_request_to_proto(
+    request: AppendPluginRuntimeLogsRequest,
+) -> pb::AppendPluginRuntimeLogsRequest {
+    pb::AppendPluginRuntimeLogsRequest {
+        session_id: request.session_id,
+        logs: request
+            .logs
+            .into_iter()
+            .map(|entry| pb::PluginRuntimeLogEntry {
+                stream: entry.stream.as_i32(),
+                message: entry.message,
+                observed_at: Some(crate::protocol::timestamp_from_system_time(
+                    entry.observed_at,
+                )),
+                source_seq: entry.source_seq,
+            })
+            .collect(),
+    }
+}
+
+fn append_logs_response_from_proto(
+    response: pb::AppendPluginRuntimeLogsResponse,
+) -> AppendPluginRuntimeLogsResponse {
+    AppendPluginRuntimeLogsResponse {
+        last_seq: response.last_seq,
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by [`RuntimeLogHost`].
@@ -88,9 +152,14 @@ impl RuntimeLogHost {
     /// Appends logs using a raw protocol request message.
     pub async fn append_logs(
         &mut self,
-        request: pb::AppendPluginRuntimeLogsRequest,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
-        Ok(self.client.append_logs(request).await?.into_inner())
+        request: AppendPluginRuntimeLogsRequest,
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+        Ok(append_logs_response_from_proto(
+            self.client
+                .append_logs(append_logs_request_to_proto(request))
+                .await?
+                .into_inner(),
+        ))
     }
 
     /// Appends one log entry for an explicit session id.
@@ -99,7 +168,7 @@ impl RuntimeLogHost {
         session_id: impl Into<String>,
         stream: RuntimeLogStream,
         message: impl Into<String>,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.source_seq += 1;
         let source_seq = self.source_seq;
         self.append_entry(session_id, stream, message, None, source_seq)
@@ -111,7 +180,7 @@ impl RuntimeLogHost {
         &mut self,
         stream: RuntimeLogStream,
         message: impl Into<String>,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.append(runtime_session_id()?, stream, message).await
     }
 
@@ -121,16 +190,16 @@ impl RuntimeLogHost {
         session_id: impl Into<String>,
         stream: RuntimeLogStream,
         message: impl Into<String>,
-        observed_at: Option<prost_types::Timestamp>,
+        observed_at: Option<SystemTime>,
         source_seq: i64,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.source_seq = self.source_seq.max(source_seq);
-        self.append_logs(pb::AppendPluginRuntimeLogsRequest {
+        self.append_logs(AppendPluginRuntimeLogsRequest {
             session_id: session_id.into(),
-            logs: vec![pb::PluginRuntimeLogEntry {
-                stream: stream as i32,
+            logs: vec![PluginRuntimeLogEntry {
+                stream,
                 message: message.into(),
-                observed_at: Some(observed_at.unwrap_or_else(timestamp_now)),
+                observed_at: observed_at.unwrap_or_else(SystemTime::now),
                 source_seq,
             }],
         })
@@ -142,9 +211,9 @@ impl RuntimeLogHost {
         &mut self,
         stream: RuntimeLogStream,
         message: impl Into<String>,
-        observed_at: Option<prost_types::Timestamp>,
+        observed_at: Option<SystemTime>,
         source_seq: i64,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.append_entry(
             runtime_session_id()?,
             stream,
@@ -160,7 +229,7 @@ impl RuntimeLogHost {
         &mut self,
         session_id: impl Into<String>,
         message: impl Into<String>,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.append(session_id, RuntimeLogStream::Stdout, message)
             .await
     }
@@ -169,7 +238,7 @@ impl RuntimeLogHost {
     pub async fn append_current_stdout(
         &mut self,
         message: impl Into<String>,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.append_current(RuntimeLogStream::Stdout, message).await
     }
 
@@ -178,7 +247,7 @@ impl RuntimeLogHost {
         &mut self,
         session_id: impl Into<String>,
         message: impl Into<String>,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.append(session_id, RuntimeLogStream::Stderr, message)
             .await
     }
@@ -187,7 +256,7 @@ impl RuntimeLogHost {
     pub async fn append_current_stderr(
         &mut self,
         message: impl Into<String>,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.append_current(RuntimeLogStream::Stderr, message).await
     }
 
@@ -196,7 +265,7 @@ impl RuntimeLogHost {
         &mut self,
         session_id: impl Into<String>,
         message: impl Into<String>,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.append(session_id, RuntimeLogStream::Runtime, message)
             .await
     }
@@ -205,7 +274,7 @@ impl RuntimeLogHost {
     pub async fn append_current_runtime(
         &mut self,
         message: impl Into<String>,
-    ) -> std::result::Result<pb::AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
+    ) -> std::result::Result<AppendPluginRuntimeLogsResponse, RuntimeLogHostError> {
         self.append_current(RuntimeLogStream::Runtime, message)
             .await
     }
@@ -308,8 +377,4 @@ pub fn runtime_session_id() -> std::result::Result<String, RuntimeLogHostError> 
         )));
     }
     Ok(session_id)
-}
-
-fn timestamp_now() -> prost_types::Timestamp {
-    crate::protocol::timestamp_from_system_time(SystemTime::now())
 }

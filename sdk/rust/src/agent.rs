@@ -548,14 +548,14 @@ pub struct AgentToolRefInput {
 }
 
 /// Input for an agent workspace.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AgentWorkspaceInput {
     pub checkouts: Vec<AgentWorkspaceGitCheckoutInput>,
     pub cwd: String,
 }
 
 /// Input for an agent workspace git checkout.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AgentWorkspaceGitCheckoutInput {
     pub url: String,
     pub reference: String,
@@ -924,7 +924,7 @@ pub fn new_agent_tool_ref(input: AgentToolRefInput) -> AgentToolRef {
 }
 
 /// Creates an agent workspace request payload for the manager host service.
-pub fn new_agent_workspace(input: AgentWorkspaceInput) -> pb::AgentWorkspace {
+pub(crate) fn new_agent_workspace(input: AgentWorkspaceInput) -> pb::AgentWorkspace {
     pb::AgentWorkspace {
         checkouts: input
             .checkouts
@@ -1183,10 +1183,6 @@ fn json_from_struct(value: Option<Struct>) -> Option<AgentJson> {
     value.map(|value| protocol::json_from_struct(&value))
 }
 
-fn json_from_value(value: Option<Value>) -> Option<AgentJson> {
-    value.as_ref().map(protocol::json_from_value)
-}
-
 fn struct_from_json(value: Option<AgentJson>) -> ProviderResult<Option<Struct>> {
     value.map(protocol::struct_from_json).transpose()
 }
@@ -1234,7 +1230,7 @@ fn agent_subject_from_proto(value: Option<pb::AgentSubjectContext>) -> Option<Ag
     })
 }
 
-fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef {
+pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef {
     AgentToolRef {
         plugin: value.plugin,
         operation: value.operation,
@@ -1246,7 +1242,7 @@ fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef {
     }
 }
 
-fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
+pub(crate) fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
     pb::AgentToolRef {
         plugin: value.plugin,
         operation: value.operation,
@@ -1258,7 +1254,7 @@ fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
     }
 }
 
-fn message_from_proto(value: pb::AgentMessage) -> AgentMessage {
+pub(crate) fn message_from_proto(value: pb::AgentMessage) -> AgentMessage {
     AgentMessage {
         role: value.role,
         text: value.text,
@@ -1271,7 +1267,7 @@ fn message_from_proto(value: pb::AgentMessage) -> AgentMessage {
     }
 }
 
-fn message_to_proto(value: AgentMessage) -> ProviderResult<pb::AgentMessage> {
+pub(crate) fn message_to_proto(value: AgentMessage) -> ProviderResult<pb::AgentMessage> {
     Ok(pb::AgentMessage {
         role: value.role,
         text: value.text,
@@ -1355,6 +1351,21 @@ fn session_to_proto(value: AgentSession) -> ProviderResult<pb::AgentSession> {
     })
 }
 
+pub(crate) fn session_from_proto(value: pb::AgentSession) -> ProviderResult<AgentSession> {
+    Ok(AgentSession {
+        id: value.id,
+        provider_name: value.provider_name,
+        model: value.model,
+        client_ref: value.client_ref,
+        state: AgentSessionState::try_from(value.state)?,
+        metadata: json_from_struct(value.metadata),
+        created_by: agent_actor_from_proto(value.created_by),
+        created_at: time_from_timestamp(value.created_at)?,
+        updated_at: time_from_timestamp(value.updated_at)?,
+        last_turn_at: time_from_timestamp(value.last_turn_at)?,
+    })
+}
+
 fn turn_to_proto(value: AgentTurn) -> ProviderResult<pb::AgentTurn> {
     Ok(pb::AgentTurn {
         id: value.id,
@@ -1374,6 +1385,25 @@ fn turn_to_proto(value: AgentTurn) -> ProviderResult<pb::AgentTurn> {
         created_at: timestamp_from_time(value.created_at),
         started_at: timestamp_from_time(value.started_at),
         completed_at: timestamp_from_time(value.completed_at),
+        execution_ref: value.execution_ref,
+    })
+}
+
+pub(crate) fn turn_from_proto(value: pb::AgentTurn) -> ProviderResult<AgentTurn> {
+    Ok(AgentTurn {
+        id: value.id,
+        session_id: value.session_id,
+        provider_name: value.provider_name,
+        model: value.model,
+        status: AgentExecutionStatus::try_from(value.status)?,
+        messages: value.messages.into_iter().map(message_from_proto).collect(),
+        output_text: value.output_text,
+        structured_output: json_from_struct(value.structured_output),
+        status_message: value.status_message,
+        created_by: agent_actor_from_proto(value.created_by),
+        created_at: time_from_timestamp(value.created_at)?,
+        started_at: time_from_timestamp(value.started_at)?,
+        completed_at: time_from_timestamp(value.completed_at)?,
         execution_ref: value.execution_ref,
     })
 }
@@ -1409,6 +1439,35 @@ fn event_to_proto(value: AgentTurnEvent) -> ProviderResult<pb::AgentTurnEvent> {
     })
 }
 
+pub(crate) fn event_from_proto(value: pb::AgentTurnEvent) -> ProviderResult<AgentTurnEvent> {
+    Ok(AgentTurnEvent {
+        id: value.id,
+        turn_id: value.turn_id,
+        seq: value.seq,
+        r#type: value.r#type,
+        source: value.source,
+        visibility: value.visibility,
+        data: json_from_struct(value.data),
+        created_at: time_from_timestamp(value.created_at)?,
+        display: value.display.map(|display| AgentTurnDisplay {
+            kind: display.kind,
+            phase: display.phase,
+            text: display.text,
+            label: display.label,
+            r#ref: display.r#ref,
+            parent_ref: display.parent_ref,
+            input: display.input.map(|value| protocol::json_from_value(&value)),
+            output: display
+                .output
+                .map(|value| protocol::json_from_value(&value)),
+            error: display.error.map(|value| protocol::json_from_value(&value)),
+            action: display.action,
+            format: display.format,
+            language: display.language,
+        }),
+    })
+}
+
 fn interaction_to_proto(value: AgentInteraction) -> ProviderResult<pb::AgentInteraction> {
     Ok(pb::AgentInteraction {
         id: value.id,
@@ -1425,80 +1484,13 @@ fn interaction_to_proto(value: AgentInteraction) -> ProviderResult<pb::AgentInte
     })
 }
 
-pub(crate) fn agent_session_from_proto(value: pb::AgentSession) -> ProviderResult<AgentSession> {
-    Ok(AgentSession {
-        id: value.id,
-        provider_name: value.provider_name,
-        model: value.model,
-        client_ref: value.client_ref,
-        state: AgentSessionState::from_i32_lossy(value.state),
-        metadata: json_from_struct(value.metadata),
-        created_by: agent_actor_from_proto(value.created_by),
-        created_at: time_from_timestamp(value.created_at)?,
-        updated_at: time_from_timestamp(value.updated_at)?,
-        last_turn_at: time_from_timestamp(value.last_turn_at)?,
-    })
-}
-
-pub(crate) fn agent_turn_from_proto(value: pb::AgentTurn) -> ProviderResult<AgentTurn> {
-    Ok(AgentTurn {
-        id: value.id,
-        session_id: value.session_id,
-        provider_name: value.provider_name,
-        model: value.model,
-        status: AgentExecutionStatus::from_i32_lossy(value.status),
-        messages: value.messages.into_iter().map(message_from_proto).collect(),
-        output_text: value.output_text,
-        structured_output: json_from_struct(value.structured_output),
-        status_message: value.status_message,
-        created_by: agent_actor_from_proto(value.created_by),
-        created_at: time_from_timestamp(value.created_at)?,
-        started_at: time_from_timestamp(value.started_at)?,
-        completed_at: time_from_timestamp(value.completed_at)?,
-        execution_ref: value.execution_ref,
-    })
-}
-
-pub(crate) fn agent_turn_display_from_proto(value: pb::AgentTurnDisplay) -> AgentTurnDisplay {
-    AgentTurnDisplay {
-        kind: value.kind,
-        phase: value.phase,
-        text: value.text,
-        label: value.label,
-        r#ref: value.r#ref,
-        parent_ref: value.parent_ref,
-        input: json_from_value(value.input),
-        output: json_from_value(value.output),
-        error: json_from_value(value.error),
-        action: value.action,
-        format: value.format,
-        language: value.language,
-    }
-}
-
-pub(crate) fn agent_turn_event_from_proto(
-    value: pb::AgentTurnEvent,
-) -> ProviderResult<AgentTurnEvent> {
-    Ok(AgentTurnEvent {
-        id: value.id,
-        turn_id: value.turn_id,
-        seq: value.seq,
-        r#type: value.r#type,
-        source: value.source,
-        visibility: value.visibility,
-        data: json_from_struct(value.data),
-        created_at: time_from_timestamp(value.created_at)?,
-        display: value.display.map(agent_turn_display_from_proto),
-    })
-}
-
-pub(crate) fn agent_interaction_from_proto(
+pub(crate) fn interaction_from_proto(
     value: pb::AgentInteraction,
 ) -> ProviderResult<AgentInteraction> {
     Ok(AgentInteraction {
         id: value.id,
-        r#type: AgentInteractionType::from_i32_lossy(value.r#type),
-        state: AgentInteractionState::from_i32_lossy(value.state),
+        r#type: AgentInteractionType::try_from(value.r#type)?,
+        state: AgentInteractionState::try_from(value.state)?,
         title: value.title,
         prompt: value.prompt,
         request: json_from_struct(value.request),

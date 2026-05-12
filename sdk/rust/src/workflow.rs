@@ -13,7 +13,11 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
-use crate::agent::{AgentMessageInput, AgentToolRefInput, new_agent_messages, new_agent_tool_refs};
+use crate::agent::{
+    AgentMessage, AgentMessageInput, AgentToolRef, AgentToolRefInput, agent_tool_ref_from_proto,
+    agent_tool_ref_to_proto, message_from_proto, message_to_proto, new_agent_message,
+    new_agent_tool_ref,
+};
 use crate::api::RuntimeMetadata;
 use crate::error::Error;
 use crate::error::Result as ProviderResult;
@@ -30,6 +34,318 @@ pub const ENV_WORKFLOW_HOST_SOCKET: &str = "GESTALT_WORKFLOW_HOST_SOCKET";
 /// Environment variable containing the optional workflow-host relay token.
 pub const ENV_WORKFLOW_HOST_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_HOST_SOCKET_TOKEN";
 const WORKFLOW_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
+
+/// Native JSON object used by authored workflow providers.
+pub type WorkflowJson = serde_json::Value;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[repr(i32)]
+pub enum WorkflowRunStatus {
+    #[default]
+    Unspecified = 0,
+    Pending = 1,
+    Running = 2,
+    Succeeded = 3,
+    Failed = 4,
+    Canceled = 5,
+}
+
+impl WorkflowRunStatus {
+    pub const fn as_i32(self) -> i32 {
+        self as i32
+    }
+
+    pub const fn from_i32_lossy(value: i32) -> Self {
+        match value {
+            1 => Self::Pending,
+            2 => Self::Running,
+            3 => Self::Succeeded,
+            4 => Self::Failed,
+            5 => Self::Canceled,
+            _ => Self::Unspecified,
+        }
+    }
+}
+
+impl TryFrom<i32> for WorkflowRunStatus {
+    type Error = crate::Error;
+
+    fn try_from(value: i32) -> ProviderResult<Self> {
+        match value {
+            0 => Ok(Self::Unspecified),
+            1 => Ok(Self::Pending),
+            2 => Ok(Self::Running),
+            3 => Ok(Self::Succeeded),
+            4 => Ok(Self::Failed),
+            5 => Ok(Self::Canceled),
+            _ => Err(crate::Error::bad_request(format!(
+                "unknown workflow run status {value}"
+            ))),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BoundWorkflowPluginTarget {
+    pub plugin_name: String,
+    pub operation: String,
+    pub input: Option<WorkflowJson>,
+    pub connection: String,
+    pub instance: String,
+    pub credential_mode: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum WorkflowOutputValueSource {
+    #[default]
+    Empty,
+    AgentOutput(String),
+    SignalPayload(String),
+    SignalMetadata(String),
+    Literal(WorkflowJson),
+    AgentSession(String),
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowOutputBinding {
+    pub input_field: String,
+    pub value: Option<WorkflowOutputValueSource>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowOutputDelivery {
+    pub target: Option<BoundWorkflowPluginTarget>,
+    pub input_bindings: Vec<WorkflowOutputBinding>,
+    pub credential_mode: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BoundWorkflowAgentTarget {
+    pub provider_name: String,
+    pub model: String,
+    pub prompt: String,
+    pub messages: Vec<AgentMessage>,
+    pub tool_refs: Vec<AgentToolRef>,
+    pub response_schema: Option<WorkflowJson>,
+    pub metadata: Option<WorkflowJson>,
+    pub timeout_seconds: i32,
+    pub output_delivery: Option<WorkflowOutputDelivery>,
+    pub model_options: Option<WorkflowJson>,
+    pub session_ready_delivery: Option<WorkflowOutputDelivery>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+#[allow(clippy::large_enum_variant)]
+pub enum BoundWorkflowTarget {
+    #[default]
+    Empty,
+    Plugin(BoundWorkflowPluginTarget),
+    Agent(BoundWorkflowAgentTarget),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WorkflowActor {
+    pub subject_id: String,
+    pub subject_kind: String,
+    pub display_name: String,
+    pub auth_source: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WorkflowRunAsSubject {
+    pub subject_id: String,
+    pub subject_kind: String,
+    pub display_name: String,
+    pub auth_source: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WorkflowAccessPermission {
+    pub plugin: String,
+    pub operations: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowEvent {
+    pub id: String,
+    pub source: String,
+    pub spec_version: String,
+    pub event_type: String,
+    pub subject: String,
+    pub time: Option<SystemTime>,
+    pub datacontenttype: String,
+    pub data: Option<WorkflowJson>,
+    pub extensions: BTreeMap<String, WorkflowJson>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WorkflowEventMatch {
+    pub event_type: String,
+    pub source: String,
+    pub subject: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowSignal {
+    pub id: String,
+    pub name: String,
+    pub payload: Option<WorkflowJson>,
+    pub metadata: Option<WorkflowJson>,
+    pub created_by: Option<WorkflowActor>,
+    pub created_at: Option<SystemTime>,
+    pub idempotency_key: String,
+    pub sequence: i64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WorkflowScheduleTrigger {
+    pub schedule_id: String,
+    pub scheduled_for: Option<SystemTime>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowEventTriggerInvocation {
+    pub trigger_id: String,
+    pub event: Option<WorkflowEvent>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum WorkflowRunTrigger {
+    #[default]
+    Empty,
+    Manual,
+    Schedule(WorkflowScheduleTrigger),
+    Event(WorkflowEventTriggerInvocation),
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BoundWorkflowRun {
+    pub id: String,
+    pub status: WorkflowRunStatus,
+    pub target: Option<BoundWorkflowTarget>,
+    pub trigger: Option<WorkflowRunTrigger>,
+    pub created_at: Option<SystemTime>,
+    pub started_at: Option<SystemTime>,
+    pub completed_at: Option<SystemTime>,
+    pub status_message: String,
+    pub result_body: String,
+    pub created_by: Option<WorkflowActor>,
+    pub execution_ref: String,
+    pub workflow_key: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BoundWorkflowSchedule {
+    pub id: String,
+    pub cron: String,
+    pub timezone: String,
+    pub target: Option<BoundWorkflowTarget>,
+    pub paused: bool,
+    pub created_at: Option<SystemTime>,
+    pub updated_at: Option<SystemTime>,
+    pub next_run_at: Option<SystemTime>,
+    pub created_by: Option<WorkflowActor>,
+    pub execution_ref: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BoundWorkflowEventTrigger {
+    pub id: String,
+    pub event_match: Option<WorkflowEventMatch>,
+    pub target: Option<BoundWorkflowTarget>,
+    pub paused: bool,
+    pub created_at: Option<SystemTime>,
+    pub updated_at: Option<SystemTime>,
+    pub created_by: Option<WorkflowActor>,
+    pub execution_ref: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BoundWorkflowDefinition {
+    pub id: String,
+    pub target: Option<BoundWorkflowTarget>,
+    pub created_by: Option<WorkflowActor>,
+    pub created_at: Option<SystemTime>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowExecutionReference {
+    pub id: String,
+    pub provider_name: String,
+    pub target: Option<BoundWorkflowTarget>,
+    pub subject_id: String,
+    pub credential_subject_id: String,
+    pub permissions: Vec<WorkflowAccessPermission>,
+    pub created_at: Option<SystemTime>,
+    pub revoked_at: Option<SystemTime>,
+    pub subject_kind: String,
+    pub display_name: String,
+    pub auth_source: String,
+    pub caller_plugin_name: String,
+    pub run_as: Option<WorkflowRunAsSubject>,
+    pub source_definition_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SignalWorkflowRunResponse {
+    pub run: Option<BoundWorkflowRun>,
+    pub signal: Option<WorkflowSignal>,
+    pub started_run: bool,
+    pub workflow_key: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListWorkflowProviderRunsResponse {
+    pub runs: Vec<BoundWorkflowRun>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListWorkflowProviderSchedulesResponse {
+    pub schedules: Vec<BoundWorkflowSchedule>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListWorkflowProviderEventTriggersResponse {
+    pub triggers: Vec<BoundWorkflowEventTrigger>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ListWorkflowExecutionReferencesResponse {
+    pub references: Vec<WorkflowExecutionReference>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ManagedWorkflowSchedule {
+    pub provider_name: String,
+    pub schedule: Option<BoundWorkflowSchedule>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ManagedWorkflowEventTrigger {
+    pub provider_name: String,
+    pub trigger: Option<BoundWorkflowEventTrigger>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ManagedWorkflowDefinition {
+    pub provider_name: String,
+    pub definition: Option<BoundWorkflowDefinition>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ManagedWorkflowRun {
+    pub provider_name: String,
+    pub run: Option<BoundWorkflowRun>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ManagedWorkflowRunSignal {
+    pub provider_name: String,
+    pub run: Option<BoundWorkflowRun>,
+    pub signal: Option<WorkflowSignal>,
+    pub started_run: bool,
+    pub workflow_key: String,
+}
 
 /// Input for a bound plugin workflow target.
 #[derive(Clone, Debug, Default)]
@@ -90,9 +406,9 @@ pub struct BoundWorkflowAgentTargetInput {
     pub provider_name: String,
     pub model: String,
     pub prompt: String,
-    pub messages: Vec<pb::AgentMessage>,
+    pub messages: Vec<AgentMessage>,
     pub message_inputs: Vec<AgentMessageInput>,
-    pub tool_refs: Vec<pb::AgentToolRef>,
+    pub tool_refs: Vec<AgentToolRef>,
     pub tool_ref_inputs: Vec<AgentToolRefInput>,
     pub response_schema: Option<serde_json::Value>,
     pub metadata: Option<serde_json::Value>,
@@ -253,7 +569,7 @@ pub enum WorkflowRunTriggerInput {
 #[derive(Clone, Debug)]
 pub struct BoundWorkflowRunInput {
     pub id: String,
-    pub status: pb::WorkflowRunStatus,
+    pub status: WorkflowRunStatus,
     pub target: Option<BoundWorkflowTargetInput>,
     pub trigger: Option<WorkflowRunTriggerInput>,
     pub created_at: Option<SystemTime>,
@@ -270,7 +586,7 @@ impl Default for BoundWorkflowRunInput {
     fn default() -> Self {
         Self {
             id: String::new(),
-            status: pb::WorkflowRunStatus::Unspecified,
+            status: WorkflowRunStatus::Unspecified,
             target: None,
             trigger: None,
             created_at: None,
@@ -341,6 +657,134 @@ pub struct WorkflowExecutionReferenceInput {
     pub source_definition_id: String,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StartWorkflowProviderRunRequest {
+    pub target: Option<BoundWorkflowTarget>,
+    pub idempotency_key: String,
+    pub created_by: Option<WorkflowActor>,
+    pub execution_ref: String,
+    pub workflow_key: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GetWorkflowProviderRunRequest {
+    pub run_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ListWorkflowProviderRunsRequest {}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CancelWorkflowProviderRunRequest {
+    pub run_id: String,
+    pub reason: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SignalWorkflowProviderRunRequest {
+    pub run_id: String,
+    pub signal: Option<WorkflowSignal>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SignalOrStartWorkflowProviderRunRequest {
+    pub workflow_key: String,
+    pub target: Option<BoundWorkflowTarget>,
+    pub idempotency_key: String,
+    pub created_by: Option<WorkflowActor>,
+    pub execution_ref: String,
+    pub signal: Option<WorkflowSignal>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UpsertWorkflowProviderScheduleRequest {
+    pub schedule_id: String,
+    pub cron: String,
+    pub timezone: String,
+    pub target: Option<BoundWorkflowTarget>,
+    pub paused: bool,
+    pub requested_by: Option<WorkflowActor>,
+    pub execution_ref: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GetWorkflowProviderScheduleRequest {
+    pub schedule_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ListWorkflowProviderSchedulesRequest {}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeleteWorkflowProviderScheduleRequest {
+    pub schedule_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PauseWorkflowProviderScheduleRequest {
+    pub schedule_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResumeWorkflowProviderScheduleRequest {
+    pub schedule_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UpsertWorkflowProviderEventTriggerRequest {
+    pub trigger_id: String,
+    pub event_match: Option<WorkflowEventMatch>,
+    pub target: Option<BoundWorkflowTarget>,
+    pub paused: bool,
+    pub requested_by: Option<WorkflowActor>,
+    pub execution_ref: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GetWorkflowProviderEventTriggerRequest {
+    pub trigger_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ListWorkflowProviderEventTriggersRequest {}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeleteWorkflowProviderEventTriggerRequest {
+    pub trigger_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PauseWorkflowProviderEventTriggerRequest {
+    pub trigger_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ResumeWorkflowProviderEventTriggerRequest {
+    pub trigger_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PublishWorkflowProviderEventRequest {
+    pub plugin_name: String,
+    pub event: Option<WorkflowEvent>,
+    pub published_by: Option<WorkflowActor>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PutWorkflowExecutionReferenceRequest {
+    pub reference: Option<WorkflowExecutionReference>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GetWorkflowExecutionReferenceRequest {
+    pub id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ListWorkflowExecutionReferencesRequest {
+    pub subject_id: String,
+}
+
 /// Input for invoking a workflow operation through the host service.
 #[derive(Clone, Debug, Default)]
 pub struct InvokeWorkflowOperationInput {
@@ -376,8 +820,8 @@ pub struct InvokeWorkflowOperationResponse {
 }
 
 /// Creates workflow actor metadata.
-pub fn new_workflow_actor(input: WorkflowActorInput) -> pb::WorkflowActor {
-    pb::WorkflowActor {
+pub fn new_workflow_actor(input: WorkflowActorInput) -> WorkflowActor {
+    WorkflowActor {
         subject_id: input.subject_id,
         subject_kind: input.subject_kind,
         display_name: input.display_name,
@@ -386,7 +830,7 @@ pub fn new_workflow_actor(input: WorkflowActorInput) -> pb::WorkflowActor {
 }
 
 /// Returns input copied from workflow actor metadata.
-pub fn workflow_actor_input_from_actor(input: &pb::WorkflowActor) -> WorkflowActorInput {
+pub fn workflow_actor_input_from_actor(input: &WorkflowActor) -> WorkflowActorInput {
     WorkflowActorInput {
         subject_id: input.subject_id.clone(),
         subject_kind: input.subject_kind.clone(),
@@ -395,9 +839,27 @@ pub fn workflow_actor_input_from_actor(input: &pb::WorkflowActor) -> WorkflowAct
     }
 }
 
+fn workflow_actor_to_proto(input: WorkflowActor) -> pb::WorkflowActor {
+    pb::WorkflowActor {
+        subject_id: input.subject_id,
+        subject_kind: input.subject_kind,
+        display_name: input.display_name,
+        auth_source: input.auth_source,
+    }
+}
+
+fn workflow_actor_from_proto(input: pb::WorkflowActor) -> WorkflowActor {
+    WorkflowActor {
+        subject_id: input.subject_id,
+        subject_kind: input.subject_kind,
+        display_name: input.display_name,
+        auth_source: input.auth_source,
+    }
+}
+
 /// Creates workflow run-as metadata.
-pub fn new_workflow_run_as_subject(input: WorkflowRunAsSubjectInput) -> pb::WorkflowRunAsSubject {
-    pb::WorkflowRunAsSubject {
+pub fn new_workflow_run_as_subject(input: WorkflowRunAsSubjectInput) -> WorkflowRunAsSubject {
+    WorkflowRunAsSubject {
         subject_id: input.subject_id,
         subject_kind: input.subject_kind,
         display_name: input.display_name,
@@ -407,7 +869,7 @@ pub fn new_workflow_run_as_subject(input: WorkflowRunAsSubjectInput) -> pb::Work
 
 /// Returns input copied from workflow run-as metadata.
 pub fn workflow_run_as_subject_input_from_subject(
-    input: &pb::WorkflowRunAsSubject,
+    input: &WorkflowRunAsSubject,
 ) -> WorkflowRunAsSubjectInput {
     WorkflowRunAsSubjectInput {
         subject_id: input.subject_id.clone(),
@@ -417,11 +879,29 @@ pub fn workflow_run_as_subject_input_from_subject(
     }
 }
 
+fn workflow_run_as_subject_to_proto(input: WorkflowRunAsSubject) -> pb::WorkflowRunAsSubject {
+    pb::WorkflowRunAsSubject {
+        subject_id: input.subject_id,
+        subject_kind: input.subject_kind,
+        display_name: input.display_name,
+        auth_source: input.auth_source,
+    }
+}
+
+fn workflow_run_as_subject_from_proto(input: pb::WorkflowRunAsSubject) -> WorkflowRunAsSubject {
+    WorkflowRunAsSubject {
+        subject_id: input.subject_id,
+        subject_kind: input.subject_kind,
+        display_name: input.display_name,
+        auth_source: input.auth_source,
+    }
+}
+
 /// Creates an execution-reference permission.
 pub fn new_workflow_access_permission(
     input: WorkflowAccessPermissionInput,
-) -> pb::WorkflowAccessPermission {
-    pb::WorkflowAccessPermission {
+) -> WorkflowAccessPermission {
+    WorkflowAccessPermission {
         plugin: input.plugin,
         operations: input.operations,
     }
@@ -429,7 +909,7 @@ pub fn new_workflow_access_permission(
 
 /// Returns input copied from an execution-reference permission.
 pub fn workflow_access_permission_input_from_permission(
-    input: &pb::WorkflowAccessPermission,
+    input: &WorkflowAccessPermission,
 ) -> WorkflowAccessPermissionInput {
     WorkflowAccessPermissionInput {
         plugin: input.plugin.clone(),
@@ -437,10 +917,28 @@ pub fn workflow_access_permission_input_from_permission(
     }
 }
 
+fn workflow_access_permission_to_proto(
+    input: WorkflowAccessPermission,
+) -> pb::WorkflowAccessPermission {
+    pb::WorkflowAccessPermission {
+        plugin: input.plugin,
+        operations: input.operations,
+    }
+}
+
+fn workflow_access_permission_from_proto(
+    input: pb::WorkflowAccessPermission,
+) -> WorkflowAccessPermission {
+    WorkflowAccessPermission {
+        plugin: input.plugin,
+        operations: input.operations,
+    }
+}
+
 /// Creates workflow event-match fields.
-pub fn new_workflow_event_match(input: WorkflowEventMatchInput) -> pb::WorkflowEventMatch {
-    pb::WorkflowEventMatch {
-        r#type: input.event_type,
+pub fn new_workflow_event_match(input: WorkflowEventMatchInput) -> WorkflowEventMatch {
+    WorkflowEventMatch {
+        event_type: input.event_type,
         source: input.source,
         subject: input.subject,
     }
@@ -448,61 +946,113 @@ pub fn new_workflow_event_match(input: WorkflowEventMatchInput) -> pb::WorkflowE
 
 /// Returns input copied from workflow event-match fields.
 pub fn workflow_event_match_input_from_match(
-    input: &pb::WorkflowEventMatch,
+    input: &WorkflowEventMatch,
 ) -> WorkflowEventMatchInput {
     WorkflowEventMatchInput {
-        event_type: input.r#type.clone(),
+        event_type: input.event_type.clone(),
         source: input.source.clone(),
         subject: input.subject.clone(),
+    }
+}
+
+pub(crate) fn workflow_event_match_to_proto(input: WorkflowEventMatch) -> pb::WorkflowEventMatch {
+    pb::WorkflowEventMatch {
+        r#type: input.event_type,
+        source: input.source,
+        subject: input.subject,
+    }
+}
+
+fn workflow_event_match_from_proto(input: pb::WorkflowEventMatch) -> WorkflowEventMatch {
+    WorkflowEventMatch {
+        event_type: input.r#type,
+        source: input.source,
+        subject: input.subject,
     }
 }
 
 /// Creates a workflow output value source.
 pub fn new_workflow_output_value_source(
     input: WorkflowOutputValueSourceInput,
-) -> pb::WorkflowOutputValueSource {
-    use pb::workflow_output_value_source::Kind;
-    let kind = match input {
-        WorkflowOutputValueSourceInput::Empty => None,
-        WorkflowOutputValueSourceInput::AgentOutput(value) => Some(Kind::AgentOutput(value)),
-        WorkflowOutputValueSourceInput::SignalPayload(value) => Some(Kind::SignalPayload(value)),
-        WorkflowOutputValueSourceInput::SignalMetadata(value) => Some(Kind::SignalMetadata(value)),
-        WorkflowOutputValueSourceInput::Literal(value) => {
-            Some(Kind::Literal(protocol::value_from_json(value)))
+) -> WorkflowOutputValueSource {
+    match input {
+        WorkflowOutputValueSourceInput::Empty => WorkflowOutputValueSource::Empty,
+        WorkflowOutputValueSourceInput::AgentOutput(value) => {
+            WorkflowOutputValueSource::AgentOutput(value)
         }
-        WorkflowOutputValueSourceInput::AgentSession(value) => Some(Kind::AgentSession(value)),
-    };
-    pb::WorkflowOutputValueSource { kind }
+        WorkflowOutputValueSourceInput::SignalPayload(value) => {
+            WorkflowOutputValueSource::SignalPayload(value)
+        }
+        WorkflowOutputValueSourceInput::SignalMetadata(value) => {
+            WorkflowOutputValueSource::SignalMetadata(value)
+        }
+        WorkflowOutputValueSourceInput::Literal(value) => WorkflowOutputValueSource::Literal(value),
+        WorkflowOutputValueSourceInput::AgentSession(value) => {
+            WorkflowOutputValueSource::AgentSession(value)
+        }
+    }
 }
 
 /// Returns input copied from a workflow output value source.
 pub fn workflow_output_value_source_input_from_source(
-    input: &pb::WorkflowOutputValueSource,
+    input: &WorkflowOutputValueSource,
 ) -> WorkflowOutputValueSourceInput {
-    use pb::workflow_output_value_source::Kind;
-    match &input.kind {
-        None => WorkflowOutputValueSourceInput::Empty,
-        Some(Kind::AgentOutput(value)) => {
+    match input {
+        WorkflowOutputValueSource::Empty => WorkflowOutputValueSourceInput::Empty,
+        WorkflowOutputValueSource::AgentOutput(value) => {
             WorkflowOutputValueSourceInput::AgentOutput(value.clone())
         }
-        Some(Kind::SignalPayload(value)) => {
+        WorkflowOutputValueSource::SignalPayload(value) => {
             WorkflowOutputValueSourceInput::SignalPayload(value.clone())
         }
-        Some(Kind::SignalMetadata(value)) => {
+        WorkflowOutputValueSource::SignalMetadata(value) => {
             WorkflowOutputValueSourceInput::SignalMetadata(value.clone())
         }
-        Some(Kind::Literal(value)) => {
-            WorkflowOutputValueSourceInput::Literal(protocol::json_from_value(value))
+        WorkflowOutputValueSource::Literal(value) => {
+            WorkflowOutputValueSourceInput::Literal(value.clone())
         }
-        Some(Kind::AgentSession(value)) => {
+        WorkflowOutputValueSource::AgentSession(value) => {
             WorkflowOutputValueSourceInput::AgentSession(value.clone())
         }
     }
 }
 
+fn workflow_output_value_source_to_proto(
+    input: WorkflowOutputValueSource,
+) -> pb::WorkflowOutputValueSource {
+    use pb::workflow_output_value_source::Kind;
+    let kind = match input {
+        WorkflowOutputValueSource::Empty => None,
+        WorkflowOutputValueSource::AgentOutput(value) => Some(Kind::AgentOutput(value)),
+        WorkflowOutputValueSource::SignalPayload(value) => Some(Kind::SignalPayload(value)),
+        WorkflowOutputValueSource::SignalMetadata(value) => Some(Kind::SignalMetadata(value)),
+        WorkflowOutputValueSource::Literal(value) => {
+            Some(Kind::Literal(protocol::value_from_json(value)))
+        }
+        WorkflowOutputValueSource::AgentSession(value) => Some(Kind::AgentSession(value)),
+    };
+    pb::WorkflowOutputValueSource { kind }
+}
+
+fn workflow_output_value_source_from_proto(
+    input: pb::WorkflowOutputValueSource,
+) -> WorkflowOutputValueSource {
+    use pb::workflow_output_value_source::Kind;
+    match input.kind {
+        None => WorkflowOutputValueSource::Empty,
+        Some(Kind::AgentOutput(value)) => WorkflowOutputValueSource::AgentOutput(value),
+        Some(Kind::SignalPayload(value)) => WorkflowOutputValueSource::SignalPayload(value),
+        Some(Kind::SignalMetadata(value)) => WorkflowOutputValueSource::SignalMetadata(value),
+        Some(Kind::Literal(value)) => {
+            WorkflowOutputValueSource::Literal(protocol::json_from_value(&value))
+        }
+        Some(Kind::AgentSession(value)) => WorkflowOutputValueSource::AgentSession(value),
+    }
+}
+
 /// Creates a workflow output binding.
-pub fn new_workflow_output_binding(input: WorkflowOutputBindingInput) -> pb::WorkflowOutputBinding {
-    pb::WorkflowOutputBinding {
+pub fn new_workflow_output_binding(input: WorkflowOutputBindingInput) -> WorkflowOutputBinding {
+    WorkflowOutputBinding {
         input_field: input.input_field,
         value: input.value.map(new_workflow_output_value_source),
     }
@@ -510,7 +1060,7 @@ pub fn new_workflow_output_binding(input: WorkflowOutputBindingInput) -> pb::Wor
 
 /// Returns input copied from a workflow output binding.
 pub fn workflow_output_binding_input_from_binding(
-    input: &pb::WorkflowOutputBinding,
+    input: &WorkflowOutputBinding,
 ) -> WorkflowOutputBindingInput {
     WorkflowOutputBindingInput {
         input_field: input.input_field.clone(),
@@ -521,11 +1071,25 @@ pub fn workflow_output_binding_input_from_binding(
     }
 }
 
+fn workflow_output_binding_to_proto(input: WorkflowOutputBinding) -> pb::WorkflowOutputBinding {
+    pb::WorkflowOutputBinding {
+        input_field: input.input_field,
+        value: input.value.map(workflow_output_value_source_to_proto),
+    }
+}
+
+fn workflow_output_binding_from_proto(input: pb::WorkflowOutputBinding) -> WorkflowOutputBinding {
+    WorkflowOutputBinding {
+        input_field: input.input_field,
+        value: input.value.map(workflow_output_value_source_from_proto),
+    }
+}
+
 /// Creates a workflow output delivery.
 pub fn new_workflow_output_delivery(
     input: WorkflowOutputDeliveryInput,
-) -> ProviderResult<pb::WorkflowOutputDelivery> {
-    Ok(pb::WorkflowOutputDelivery {
+) -> ProviderResult<WorkflowOutputDelivery> {
+    Ok(WorkflowOutputDelivery {
         target: input
             .target
             .map(new_bound_workflow_plugin_target)
@@ -541,7 +1105,7 @@ pub fn new_workflow_output_delivery(
 
 /// Returns input copied from a workflow output delivery.
 pub fn workflow_output_delivery_input_from_delivery(
-    input: &pb::WorkflowOutputDelivery,
+    input: &WorkflowOutputDelivery,
 ) -> ProviderResult<WorkflowOutputDeliveryInput> {
     Ok(WorkflowOutputDeliveryInput {
         target: input
@@ -558,9 +1122,70 @@ pub fn workflow_output_delivery_input_from_delivery(
     })
 }
 
+fn workflow_output_delivery_to_proto(
+    input: WorkflowOutputDelivery,
+) -> ProviderResult<pb::WorkflowOutputDelivery> {
+    Ok(pb::WorkflowOutputDelivery {
+        target: input
+            .target
+            .map(bound_workflow_plugin_target_to_proto)
+            .transpose()?,
+        input_bindings: input
+            .input_bindings
+            .into_iter()
+            .map(workflow_output_binding_to_proto)
+            .collect(),
+        credential_mode: input.credential_mode,
+    })
+}
+
+fn workflow_output_delivery_from_proto(
+    input: pb::WorkflowOutputDelivery,
+) -> ProviderResult<WorkflowOutputDelivery> {
+    Ok(WorkflowOutputDelivery {
+        target: input
+            .target
+            .map(bound_workflow_plugin_target_from_proto)
+            .transpose()?,
+        input_bindings: input
+            .input_bindings
+            .into_iter()
+            .map(workflow_output_binding_from_proto)
+            .collect(),
+        credential_mode: input.credential_mode,
+    })
+}
+
 /// Creates a bound plugin workflow target.
 pub fn new_bound_workflow_plugin_target(
     input: BoundWorkflowPluginTargetInput,
+) -> ProviderResult<BoundWorkflowPluginTarget> {
+    Ok(BoundWorkflowPluginTarget {
+        plugin_name: input.plugin_name,
+        operation: input.operation,
+        input: input.input,
+        connection: input.connection,
+        instance: input.instance,
+        credential_mode: input.credential_mode,
+    })
+}
+
+/// Returns input copied from a bound plugin workflow target.
+pub fn bound_workflow_plugin_target_input_from_target(
+    input: &BoundWorkflowPluginTarget,
+) -> ProviderResult<BoundWorkflowPluginTargetInput> {
+    Ok(BoundWorkflowPluginTargetInput {
+        plugin_name: input.plugin_name.clone(),
+        operation: input.operation.clone(),
+        input: input.input.clone(),
+        connection: input.connection.clone(),
+        instance: input.instance.clone(),
+        credential_mode: input.credential_mode.clone(),
+    })
+}
+
+fn bound_workflow_plugin_target_to_proto(
+    input: BoundWorkflowPluginTarget,
 ) -> ProviderResult<pb::BoundWorkflowPluginTarget> {
     Ok(pb::BoundWorkflowPluginTarget {
         plugin_name: input.plugin_name,
@@ -572,48 +1197,47 @@ pub fn new_bound_workflow_plugin_target(
     })
 }
 
-/// Returns input copied from a bound plugin workflow target.
-pub fn bound_workflow_plugin_target_input_from_target(
-    input: &pb::BoundWorkflowPluginTarget,
-) -> ProviderResult<BoundWorkflowPluginTargetInput> {
-    Ok(BoundWorkflowPluginTargetInput {
-        plugin_name: input.plugin_name.clone(),
-        operation: input.operation.clone(),
+fn bound_workflow_plugin_target_from_proto(
+    input: pb::BoundWorkflowPluginTarget,
+) -> ProviderResult<BoundWorkflowPluginTarget> {
+    Ok(BoundWorkflowPluginTarget {
+        plugin_name: input.plugin_name,
+        operation: input.operation,
         input: input.input.as_ref().map(protocol::json_from_struct),
-        connection: input.connection.clone(),
-        instance: input.instance.clone(),
-        credential_mode: input.credential_mode.clone(),
+        connection: input.connection,
+        instance: input.instance,
+        credential_mode: input.credential_mode,
     })
 }
 
 /// Creates a bound agent workflow target.
 pub fn new_bound_workflow_agent_target(
     input: BoundWorkflowAgentTargetInput,
-) -> ProviderResult<pb::BoundWorkflowAgentTarget> {
+) -> ProviderResult<BoundWorkflowAgentTarget> {
     let mut messages = input.messages;
-    messages.extend(new_agent_messages(input.message_inputs)?);
+    messages.extend(
+        input
+            .message_inputs
+            .into_iter()
+            .map(new_agent_message)
+            .collect::<ProviderResult<Vec<_>>>()?,
+    );
     let mut tool_refs = input.tool_refs;
-    tool_refs.extend(new_agent_tool_refs(input.tool_ref_inputs));
-    Ok(pb::BoundWorkflowAgentTarget {
+    tool_refs.extend(input.tool_ref_inputs.into_iter().map(new_agent_tool_ref));
+    Ok(BoundWorkflowAgentTarget {
         provider_name: input.provider_name,
         model: input.model,
         prompt: input.prompt,
         messages,
         tool_refs,
-        response_schema: input
-            .response_schema
-            .map(protocol::struct_from_json)
-            .transpose()?,
-        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
+        response_schema: input.response_schema,
+        metadata: input.metadata,
         timeout_seconds: input.timeout_seconds,
         output_delivery: input
             .output_delivery
             .map(new_workflow_output_delivery)
             .transpose()?,
-        model_options: input
-            .model_options
-            .map(protocol::struct_from_json)
-            .transpose()?,
+        model_options: input.model_options,
         session_ready_delivery: input
             .session_ready_delivery
             .map(new_workflow_output_delivery)
@@ -623,7 +1247,7 @@ pub fn new_bound_workflow_agent_target(
 
 /// Returns input copied from a bound agent workflow target.
 pub fn bound_workflow_agent_target_input_from_target(
-    input: &pb::BoundWorkflowAgentTarget,
+    input: &BoundWorkflowAgentTarget,
 ) -> ProviderResult<BoundWorkflowAgentTargetInput> {
     Ok(BoundWorkflowAgentTargetInput {
         provider_name: input.provider_name.clone(),
@@ -633,18 +1257,15 @@ pub fn bound_workflow_agent_target_input_from_target(
         message_inputs: Vec::new(),
         tool_refs: input.tool_refs.clone(),
         tool_ref_inputs: Vec::new(),
-        response_schema: input
-            .response_schema
-            .as_ref()
-            .map(protocol::json_from_struct),
-        metadata: input.metadata.as_ref().map(protocol::json_from_struct),
+        response_schema: input.response_schema.clone(),
+        metadata: input.metadata.clone(),
         timeout_seconds: input.timeout_seconds,
         output_delivery: input
             .output_delivery
             .as_ref()
             .map(workflow_output_delivery_input_from_delivery)
             .transpose()?,
-        model_options: input.model_options.as_ref().map(protocol::json_from_struct),
+        model_options: input.model_options.clone(),
         session_ready_delivery: input
             .session_ready_delivery
             .as_ref()
@@ -653,48 +1274,176 @@ pub fn bound_workflow_agent_target_input_from_target(
     })
 }
 
+fn bound_workflow_agent_target_to_proto(
+    input: BoundWorkflowAgentTarget,
+) -> ProviderResult<pb::BoundWorkflowAgentTarget> {
+    Ok(pb::BoundWorkflowAgentTarget {
+        provider_name: input.provider_name,
+        model: input.model,
+        prompt: input.prompt,
+        messages: input
+            .messages
+            .into_iter()
+            .map(message_to_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
+        tool_refs: input
+            .tool_refs
+            .into_iter()
+            .map(agent_tool_ref_to_proto)
+            .collect(),
+        response_schema: input
+            .response_schema
+            .map(protocol::struct_from_json)
+            .transpose()?,
+        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
+        timeout_seconds: input.timeout_seconds,
+        output_delivery: input
+            .output_delivery
+            .map(workflow_output_delivery_to_proto)
+            .transpose()?,
+        model_options: input
+            .model_options
+            .map(protocol::struct_from_json)
+            .transpose()?,
+        session_ready_delivery: input
+            .session_ready_delivery
+            .map(workflow_output_delivery_to_proto)
+            .transpose()?,
+    })
+}
+
+fn bound_workflow_agent_target_from_proto(
+    input: pb::BoundWorkflowAgentTarget,
+) -> ProviderResult<BoundWorkflowAgentTarget> {
+    Ok(BoundWorkflowAgentTarget {
+        provider_name: input.provider_name,
+        model: input.model,
+        prompt: input.prompt,
+        messages: input.messages.into_iter().map(message_from_proto).collect(),
+        tool_refs: input
+            .tool_refs
+            .into_iter()
+            .map(agent_tool_ref_from_proto)
+            .collect(),
+        response_schema: input
+            .response_schema
+            .as_ref()
+            .map(protocol::json_from_struct),
+        metadata: input.metadata.as_ref().map(protocol::json_from_struct),
+        timeout_seconds: input.timeout_seconds,
+        output_delivery: input
+            .output_delivery
+            .map(workflow_output_delivery_from_proto)
+            .transpose()?,
+        model_options: input.model_options.as_ref().map(protocol::json_from_struct),
+        session_ready_delivery: input
+            .session_ready_delivery
+            .map(workflow_output_delivery_from_proto)
+            .transpose()?,
+    })
+}
+
 /// Creates a bound workflow target.
 pub fn new_bound_workflow_target(
     input: BoundWorkflowTargetInput,
+) -> ProviderResult<BoundWorkflowTarget> {
+    match input {
+        BoundWorkflowTargetInput::Empty => Ok(BoundWorkflowTarget::Empty),
+        BoundWorkflowTargetInput::Plugin(input) => Ok(BoundWorkflowTarget::Plugin(
+            new_bound_workflow_plugin_target(input)?,
+        )),
+        BoundWorkflowTargetInput::Agent(input) => Ok(BoundWorkflowTarget::Agent(
+            new_bound_workflow_agent_target(input)?,
+        )),
+    }
+}
+
+/// Returns input copied from a bound workflow target.
+pub fn bound_workflow_target_input_from_target(
+    input: &BoundWorkflowTarget,
+) -> ProviderResult<BoundWorkflowTargetInput> {
+    match input {
+        BoundWorkflowTarget::Empty => Ok(BoundWorkflowTargetInput::Empty),
+        BoundWorkflowTarget::Plugin(value) => Ok(BoundWorkflowTargetInput::Plugin(
+            bound_workflow_plugin_target_input_from_target(value)?,
+        )),
+        BoundWorkflowTarget::Agent(value) => Ok(BoundWorkflowTargetInput::Agent(
+            bound_workflow_agent_target_input_from_target(value)?,
+        )),
+    }
+}
+
+pub(crate) fn bound_workflow_target_to_proto(
+    input: BoundWorkflowTarget,
 ) -> ProviderResult<pb::BoundWorkflowTarget> {
     use pb::bound_workflow_target::Kind;
     let kind = match input {
-        BoundWorkflowTargetInput::Empty => None,
-        BoundWorkflowTargetInput::Plugin(input) => {
-            Some(Kind::Plugin(new_bound_workflow_plugin_target(input)?))
+        BoundWorkflowTarget::Empty => None,
+        BoundWorkflowTarget::Plugin(input) => {
+            Some(Kind::Plugin(bound_workflow_plugin_target_to_proto(input)?))
         }
-        BoundWorkflowTargetInput::Agent(input) => {
-            Some(Kind::Agent(new_bound_workflow_agent_target(input)?))
+        BoundWorkflowTarget::Agent(input) => {
+            Some(Kind::Agent(bound_workflow_agent_target_to_proto(input)?))
         }
     };
     Ok(pb::BoundWorkflowTarget { kind })
 }
 
-/// Returns input copied from a bound workflow target.
-pub fn bound_workflow_target_input_from_target(
-    input: &pb::BoundWorkflowTarget,
-) -> ProviderResult<BoundWorkflowTargetInput> {
+fn bound_workflow_target_from_proto(
+    input: pb::BoundWorkflowTarget,
+) -> ProviderResult<BoundWorkflowTarget> {
     use pb::bound_workflow_target::Kind;
-    match &input.kind {
-        None => Ok(BoundWorkflowTargetInput::Empty),
-        Some(Kind::Plugin(value)) => Ok(BoundWorkflowTargetInput::Plugin(
-            bound_workflow_plugin_target_input_from_target(value)?,
+    match input.kind {
+        None => Ok(BoundWorkflowTarget::Empty),
+        Some(Kind::Plugin(value)) => Ok(BoundWorkflowTarget::Plugin(
+            bound_workflow_plugin_target_from_proto(value)?,
         )),
-        Some(Kind::Agent(value)) => Ok(BoundWorkflowTargetInput::Agent(
-            bound_workflow_agent_target_input_from_target(value)?,
+        Some(Kind::Agent(value)) => Ok(BoundWorkflowTarget::Agent(
+            bound_workflow_agent_target_from_proto(value)?,
         )),
     }
 }
 
 /// Returns a deep copy of a bound workflow target.
 pub fn new_bound_workflow_target_from_target(
-    input: &pb::BoundWorkflowTarget,
-) -> ProviderResult<pb::BoundWorkflowTarget> {
-    new_bound_workflow_target(bound_workflow_target_input_from_target(input)?)
+    input: &BoundWorkflowTarget,
+) -> ProviderResult<BoundWorkflowTarget> {
+    Ok(input.clone())
 }
 
 /// Creates a workflow event.
-pub fn new_workflow_event(input: WorkflowEventInput) -> ProviderResult<pb::WorkflowEvent> {
+pub fn new_workflow_event(input: WorkflowEventInput) -> ProviderResult<WorkflowEvent> {
+    Ok(WorkflowEvent {
+        id: input.id,
+        source: input.source,
+        spec_version: input.spec_version,
+        event_type: input.event_type,
+        subject: input.subject,
+        time: input.time,
+        datacontenttype: input.datacontenttype,
+        data: input.data,
+        extensions: input.extensions,
+    })
+}
+
+/// Returns input copied from a workflow event.
+pub fn workflow_event_input_from_event(
+    input: &WorkflowEvent,
+) -> ProviderResult<WorkflowEventInput> {
+    Ok(WorkflowEventInput {
+        id: input.id.clone(),
+        source: input.source.clone(),
+        spec_version: input.spec_version.clone(),
+        event_type: input.event_type.clone(),
+        subject: input.subject.clone(),
+        time: input.time,
+        datacontenttype: input.datacontenttype.clone(),
+        data: input.data.clone(),
+        extensions: input.extensions.clone(),
+    })
+}
+
+pub(crate) fn workflow_event_to_proto(input: WorkflowEvent) -> ProviderResult<pb::WorkflowEvent> {
     Ok(pb::WorkflowEvent {
         id: input.id,
         source: input.source,
@@ -712,22 +1461,19 @@ pub fn new_workflow_event(input: WorkflowEventInput) -> ProviderResult<pb::Workf
     })
 }
 
-/// Returns input copied from a workflow event.
-pub fn workflow_event_input_from_event(
-    input: &pb::WorkflowEvent,
-) -> ProviderResult<WorkflowEventInput> {
-    Ok(WorkflowEventInput {
-        id: input.id.clone(),
-        source: input.source.clone(),
-        spec_version: input.spec_version.clone(),
-        event_type: input.r#type.clone(),
-        subject: input.subject.clone(),
+pub(crate) fn workflow_event_from_proto(input: pb::WorkflowEvent) -> ProviderResult<WorkflowEvent> {
+    Ok(WorkflowEvent {
+        id: input.id,
+        source: input.source,
+        spec_version: input.spec_version,
+        event_type: input.r#type,
+        subject: input.subject,
         time: input
             .time
             .as_ref()
             .map(protocol::system_time_from_timestamp)
             .transpose()?,
-        datacontenttype: input.datacontenttype.clone(),
+        datacontenttype: input.datacontenttype,
         data: input.data.as_ref().map(protocol::json_from_struct),
         extensions: input
             .extensions
@@ -738,21 +1484,19 @@ pub fn workflow_event_input_from_event(
 }
 
 /// Returns a deep copy of a workflow event.
-pub fn new_workflow_event_from_event(
-    input: &pb::WorkflowEvent,
-) -> ProviderResult<pb::WorkflowEvent> {
-    new_workflow_event(workflow_event_input_from_event(input)?)
+pub fn new_workflow_event_from_event(input: &WorkflowEvent) -> ProviderResult<WorkflowEvent> {
+    Ok(input.clone())
 }
 
 /// Creates a workflow signal.
-pub fn new_workflow_signal(input: WorkflowSignalInput) -> ProviderResult<pb::WorkflowSignal> {
-    Ok(pb::WorkflowSignal {
+pub fn new_workflow_signal(input: WorkflowSignalInput) -> ProviderResult<WorkflowSignal> {
+    Ok(WorkflowSignal {
         id: input.id,
         name: input.name,
-        payload: input.payload.map(protocol::struct_from_json).transpose()?,
-        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
+        payload: input.payload,
+        metadata: input.metadata,
         created_by: input.created_by.map(new_workflow_actor),
-        created_at: input.created_at.map(protocol::timestamp_from_system_time),
+        created_at: input.created_at,
         idempotency_key: input.idempotency_key,
         sequence: input.sequence,
     })
@@ -760,37 +1504,74 @@ pub fn new_workflow_signal(input: WorkflowSignalInput) -> ProviderResult<pb::Wor
 
 /// Returns input copied from a workflow signal.
 pub fn workflow_signal_input_from_signal(
-    input: &pb::WorkflowSignal,
+    input: &WorkflowSignal,
 ) -> ProviderResult<WorkflowSignalInput> {
     Ok(WorkflowSignalInput {
         id: input.id.clone(),
         name: input.name.clone(),
-        payload: input.payload.as_ref().map(protocol::json_from_struct),
-        metadata: input.metadata.as_ref().map(protocol::json_from_struct),
+        payload: input.payload.clone(),
+        metadata: input.metadata.clone(),
         created_by: input
             .created_by
             .as_ref()
             .map(workflow_actor_input_from_actor),
-        created_at: input
-            .created_at
-            .as_ref()
-            .map(protocol::system_time_from_timestamp)
-            .transpose()?,
+        created_at: input.created_at,
         idempotency_key: input.idempotency_key.clone(),
         sequence: input.sequence,
     })
 }
 
-/// Returns a deep copy of a workflow signal.
-pub fn new_workflow_signal_from_signal(
-    input: &pb::WorkflowSignal,
+pub(crate) fn workflow_signal_to_proto(
+    input: WorkflowSignal,
 ) -> ProviderResult<pb::WorkflowSignal> {
-    new_workflow_signal(workflow_signal_input_from_signal(input)?)
+    Ok(pb::WorkflowSignal {
+        id: input.id,
+        name: input.name,
+        payload: input.payload.map(protocol::struct_from_json).transpose()?,
+        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
+        created_by: input.created_by.map(workflow_actor_to_proto),
+        created_at: input.created_at.map(protocol::timestamp_from_system_time),
+        idempotency_key: input.idempotency_key,
+        sequence: input.sequence,
+    })
+}
+
+pub(crate) fn workflow_signal_from_proto(
+    input: pb::WorkflowSignal,
+) -> ProviderResult<WorkflowSignal> {
+    Ok(WorkflowSignal {
+        id: input.id,
+        name: input.name,
+        payload: input.payload.as_ref().map(protocol::json_from_struct),
+        metadata: input.metadata.as_ref().map(protocol::json_from_struct),
+        created_by: input.created_by.map(workflow_actor_from_proto),
+        created_at: input
+            .created_at
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()?,
+        idempotency_key: input.idempotency_key,
+        sequence: input.sequence,
+    })
+}
+
+/// Returns a deep copy of a workflow signal.
+pub fn new_workflow_signal_from_signal(input: &WorkflowSignal) -> ProviderResult<WorkflowSignal> {
+    Ok(input.clone())
 }
 
 /// Creates a workflow schedule trigger.
 pub fn new_workflow_schedule_trigger(
     input: WorkflowScheduleTriggerInput,
+) -> WorkflowScheduleTrigger {
+    WorkflowScheduleTrigger {
+        schedule_id: input.schedule_id,
+        scheduled_for: input.scheduled_for,
+    }
+}
+
+fn workflow_schedule_trigger_to_proto(
+    input: WorkflowScheduleTrigger,
 ) -> pb::WorkflowScheduleTrigger {
     pb::WorkflowScheduleTrigger {
         schedule_id: input.schedule_id,
@@ -800,53 +1581,77 @@ pub fn new_workflow_schedule_trigger(
     }
 }
 
+fn workflow_schedule_trigger_from_proto(
+    input: pb::WorkflowScheduleTrigger,
+) -> ProviderResult<WorkflowScheduleTrigger> {
+    Ok(WorkflowScheduleTrigger {
+        schedule_id: input.schedule_id,
+        scheduled_for: input
+            .scheduled_for
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()?,
+    })
+}
+
 /// Creates a workflow event-trigger invocation.
 pub fn new_workflow_event_trigger_invocation(
     input: WorkflowEventTriggerInvocationInput,
+) -> ProviderResult<WorkflowEventTriggerInvocation> {
+    Ok(WorkflowEventTriggerInvocation {
+        trigger_id: input.trigger_id,
+        event: input.event.map(new_workflow_event).transpose()?,
+    })
+}
+
+fn workflow_event_trigger_invocation_to_proto(
+    input: WorkflowEventTriggerInvocation,
 ) -> ProviderResult<pb::WorkflowEventTriggerInvocation> {
     Ok(pb::WorkflowEventTriggerInvocation {
         trigger_id: input.trigger_id,
-        event: input.event.map(new_workflow_event).transpose()?,
+        event: input.event.map(workflow_event_to_proto).transpose()?,
+    })
+}
+
+fn workflow_event_trigger_invocation_from_proto(
+    input: pb::WorkflowEventTriggerInvocation,
+) -> ProviderResult<WorkflowEventTriggerInvocation> {
+    Ok(WorkflowEventTriggerInvocation {
+        trigger_id: input.trigger_id,
+        event: input.event.map(workflow_event_from_proto).transpose()?,
     })
 }
 
 /// Creates a workflow run trigger.
 pub fn new_workflow_run_trigger(
     input: WorkflowRunTriggerInput,
-) -> ProviderResult<pb::WorkflowRunTrigger> {
-    use pb::workflow_run_trigger::Kind;
-    let kind = match input {
-        WorkflowRunTriggerInput::Empty => None,
-        WorkflowRunTriggerInput::Manual => Some(Kind::Manual(pb::WorkflowManualTrigger {})),
-        WorkflowRunTriggerInput::Schedule(input) => {
-            Some(Kind::Schedule(new_workflow_schedule_trigger(input)))
-        }
-        WorkflowRunTriggerInput::Event(input) => {
-            Some(Kind::Event(new_workflow_event_trigger_invocation(input)?))
-        }
-    };
-    Ok(pb::WorkflowRunTrigger { kind })
+) -> ProviderResult<WorkflowRunTrigger> {
+    match input {
+        WorkflowRunTriggerInput::Empty => Ok(WorkflowRunTrigger::Empty),
+        WorkflowRunTriggerInput::Manual => Ok(WorkflowRunTrigger::Manual),
+        WorkflowRunTriggerInput::Schedule(input) => Ok(WorkflowRunTrigger::Schedule(
+            new_workflow_schedule_trigger(input),
+        )),
+        WorkflowRunTriggerInput::Event(input) => Ok(WorkflowRunTrigger::Event(
+            new_workflow_event_trigger_invocation(input)?,
+        )),
+    }
 }
 
 /// Returns input copied from a workflow run trigger.
 pub fn workflow_run_trigger_input_from_trigger(
-    input: &pb::WorkflowRunTrigger,
+    input: &WorkflowRunTrigger,
 ) -> ProviderResult<WorkflowRunTriggerInput> {
-    use pb::workflow_run_trigger::Kind;
-    match &input.kind {
-        None => Ok(WorkflowRunTriggerInput::Empty),
-        Some(Kind::Manual(_)) => Ok(WorkflowRunTriggerInput::Manual),
-        Some(Kind::Schedule(value)) => Ok(WorkflowRunTriggerInput::Schedule(
+    match input {
+        WorkflowRunTrigger::Empty => Ok(WorkflowRunTriggerInput::Empty),
+        WorkflowRunTrigger::Manual => Ok(WorkflowRunTriggerInput::Manual),
+        WorkflowRunTrigger::Schedule(value) => Ok(WorkflowRunTriggerInput::Schedule(
             WorkflowScheduleTriggerInput {
                 schedule_id: value.schedule_id.clone(),
-                scheduled_for: value
-                    .scheduled_for
-                    .as_ref()
-                    .map(protocol::system_time_from_timestamp)
-                    .transpose()?,
+                scheduled_for: value.scheduled_for,
             },
         )),
-        Some(Kind::Event(value)) => Ok(WorkflowRunTriggerInput::Event(
+        WorkflowRunTrigger::Event(value) => Ok(WorkflowRunTriggerInput::Event(
             WorkflowEventTriggerInvocationInput {
                 trigger_id: value.trigger_id.clone(),
                 event: value
@@ -859,25 +1664,56 @@ pub fn workflow_run_trigger_input_from_trigger(
     }
 }
 
+fn workflow_run_trigger_to_proto(
+    input: WorkflowRunTrigger,
+) -> ProviderResult<pb::WorkflowRunTrigger> {
+    use pb::workflow_run_trigger::Kind;
+    let kind = match input {
+        WorkflowRunTrigger::Empty => None,
+        WorkflowRunTrigger::Manual => Some(Kind::Manual(pb::WorkflowManualTrigger {})),
+        WorkflowRunTrigger::Schedule(input) => {
+            Some(Kind::Schedule(workflow_schedule_trigger_to_proto(input)))
+        }
+        WorkflowRunTrigger::Event(input) => Some(Kind::Event(
+            workflow_event_trigger_invocation_to_proto(input)?,
+        )),
+    };
+    Ok(pb::WorkflowRunTrigger { kind })
+}
+
+fn workflow_run_trigger_from_proto(
+    input: pb::WorkflowRunTrigger,
+) -> ProviderResult<WorkflowRunTrigger> {
+    use pb::workflow_run_trigger::Kind;
+    match input.kind {
+        None => Ok(WorkflowRunTrigger::Empty),
+        Some(Kind::Manual(_)) => Ok(WorkflowRunTrigger::Manual),
+        Some(Kind::Schedule(value)) => Ok(WorkflowRunTrigger::Schedule(
+            workflow_schedule_trigger_from_proto(value)?,
+        )),
+        Some(Kind::Event(value)) => Ok(WorkflowRunTrigger::Event(
+            workflow_event_trigger_invocation_from_proto(value)?,
+        )),
+    }
+}
+
 /// Returns a deep copy of a workflow run trigger.
 pub fn new_workflow_run_trigger_from_trigger(
-    input: &pb::WorkflowRunTrigger,
-) -> ProviderResult<pb::WorkflowRunTrigger> {
-    new_workflow_run_trigger(workflow_run_trigger_input_from_trigger(input)?)
+    input: &WorkflowRunTrigger,
+) -> ProviderResult<WorkflowRunTrigger> {
+    Ok(input.clone())
 }
 
 /// Creates a workflow-provider run.
-pub fn new_bound_workflow_run(
-    input: BoundWorkflowRunInput,
-) -> ProviderResult<pb::BoundWorkflowRun> {
-    Ok(pb::BoundWorkflowRun {
+pub fn new_bound_workflow_run(input: BoundWorkflowRunInput) -> ProviderResult<BoundWorkflowRun> {
+    Ok(BoundWorkflowRun {
         id: input.id,
-        status: input.status as i32,
+        status: input.status,
         target: input.target.map(new_bound_workflow_target).transpose()?,
         trigger: input.trigger.map(new_workflow_run_trigger).transpose()?,
-        created_at: input.created_at.map(protocol::timestamp_from_system_time),
-        started_at: input.started_at.map(protocol::timestamp_from_system_time),
-        completed_at: input.completed_at.map(protocol::timestamp_from_system_time),
+        created_at: input.created_at,
+        started_at: input.started_at,
+        completed_at: input.completed_at,
         status_message: input.status_message,
         result_body: input.result_body,
         created_by: input.created_by.map(new_workflow_actor),
@@ -888,13 +1724,11 @@ pub fn new_bound_workflow_run(
 
 /// Returns input copied from a workflow-provider run.
 pub fn bound_workflow_run_input_from_run(
-    input: &pb::BoundWorkflowRun,
+    input: &BoundWorkflowRun,
 ) -> ProviderResult<BoundWorkflowRunInput> {
     Ok(BoundWorkflowRunInput {
         id: input.id.clone(),
-        status: pb::WorkflowRunStatus::try_from(input.status).map_err(|_| {
-            Error::bad_request(format!("unknown workflow run status {}", input.status))
-        })?,
+        status: input.status,
         target: input
             .target
             .as_ref()
@@ -904,6 +1738,59 @@ pub fn bound_workflow_run_input_from_run(
             .trigger
             .as_ref()
             .map(workflow_run_trigger_input_from_trigger)
+            .transpose()?,
+        created_at: input.created_at,
+        started_at: input.started_at,
+        completed_at: input.completed_at,
+        status_message: input.status_message.clone(),
+        result_body: input.result_body.clone(),
+        created_by: input
+            .created_by
+            .as_ref()
+            .map(workflow_actor_input_from_actor),
+        execution_ref: input.execution_ref.clone(),
+        workflow_key: input.workflow_key.clone(),
+    })
+}
+
+pub(crate) fn bound_workflow_run_to_proto(
+    input: BoundWorkflowRun,
+) -> ProviderResult<pb::BoundWorkflowRun> {
+    Ok(pb::BoundWorkflowRun {
+        id: input.id,
+        status: input.status.as_i32(),
+        target: input
+            .target
+            .map(bound_workflow_target_to_proto)
+            .transpose()?,
+        trigger: input
+            .trigger
+            .map(workflow_run_trigger_to_proto)
+            .transpose()?,
+        created_at: input.created_at.map(protocol::timestamp_from_system_time),
+        started_at: input.started_at.map(protocol::timestamp_from_system_time),
+        completed_at: input.completed_at.map(protocol::timestamp_from_system_time),
+        status_message: input.status_message,
+        result_body: input.result_body,
+        created_by: input.created_by.map(workflow_actor_to_proto),
+        execution_ref: input.execution_ref,
+        workflow_key: input.workflow_key,
+    })
+}
+
+pub(crate) fn bound_workflow_run_from_proto(
+    input: pb::BoundWorkflowRun,
+) -> ProviderResult<BoundWorkflowRun> {
+    Ok(BoundWorkflowRun {
+        id: input.id,
+        status: WorkflowRunStatus::try_from(input.status)?,
+        target: input
+            .target
+            .map(bound_workflow_target_from_proto)
+            .transpose()?,
+        trigger: input
+            .trigger
+            .map(workflow_run_trigger_from_proto)
             .transpose()?,
         created_at: input
             .created_at
@@ -920,27 +1807,24 @@ pub fn bound_workflow_run_input_from_run(
             .as_ref()
             .map(protocol::system_time_from_timestamp)
             .transpose()?,
-        status_message: input.status_message.clone(),
-        result_body: input.result_body.clone(),
-        created_by: input
-            .created_by
-            .as_ref()
-            .map(workflow_actor_input_from_actor),
-        execution_ref: input.execution_ref.clone(),
-        workflow_key: input.workflow_key.clone(),
+        status_message: input.status_message,
+        result_body: input.result_body,
+        created_by: input.created_by.map(workflow_actor_from_proto),
+        execution_ref: input.execution_ref,
+        workflow_key: input.workflow_key,
     })
 }
 
 /// Returns a deep copy of a workflow-provider run.
 pub fn new_bound_workflow_run_from_run(
-    input: &pb::BoundWorkflowRun,
-) -> ProviderResult<pb::BoundWorkflowRun> {
-    new_bound_workflow_run(bound_workflow_run_input_from_run(input)?)
+    input: &BoundWorkflowRun,
+) -> ProviderResult<BoundWorkflowRun> {
+    Ok(input.clone())
 }
 
 /// Returns input copied from a workflow-provider definition.
 pub fn bound_workflow_definition_input_from_definition(
-    input: &pb::BoundWorkflowDefinition,
+    input: &BoundWorkflowDefinition,
 ) -> ProviderResult<BoundWorkflowDefinitionInput> {
     Ok(BoundWorkflowDefinitionInput {
         id: input.id.clone(),
@@ -953,27 +1837,23 @@ pub fn bound_workflow_definition_input_from_definition(
             .created_by
             .as_ref()
             .map(workflow_actor_input_from_actor),
-        created_at: input
-            .created_at
-            .as_ref()
-            .map(protocol::system_time_from_timestamp)
-            .transpose()?,
+        created_at: input.created_at,
     })
 }
 
 /// Creates a workflow-provider schedule.
 pub fn new_bound_workflow_schedule(
     input: BoundWorkflowScheduleInput,
-) -> ProviderResult<pb::BoundWorkflowSchedule> {
-    Ok(pb::BoundWorkflowSchedule {
+) -> ProviderResult<BoundWorkflowSchedule> {
+    Ok(BoundWorkflowSchedule {
         id: input.id,
         cron: input.cron,
         timezone: input.timezone,
         target: input.target.map(new_bound_workflow_target).transpose()?,
         paused: input.paused,
-        created_at: input.created_at.map(protocol::timestamp_from_system_time),
-        updated_at: input.updated_at.map(protocol::timestamp_from_system_time),
-        next_run_at: input.next_run_at.map(protocol::timestamp_from_system_time),
+        created_at: input.created_at,
+        updated_at: input.updated_at,
+        next_run_at: input.next_run_at,
         created_by: input.created_by.map(new_workflow_actor),
         execution_ref: input.execution_ref,
     })
@@ -981,7 +1861,7 @@ pub fn new_bound_workflow_schedule(
 
 /// Returns input copied from a workflow-provider schedule.
 pub fn bound_workflow_schedule_input_from_schedule(
-    input: &pb::BoundWorkflowSchedule,
+    input: &BoundWorkflowSchedule,
 ) -> ProviderResult<BoundWorkflowScheduleInput> {
     Ok(BoundWorkflowScheduleInput {
         id: input.id.clone(),
@@ -991,6 +1871,49 @@ pub fn bound_workflow_schedule_input_from_schedule(
             .target
             .as_ref()
             .map(bound_workflow_target_input_from_target)
+            .transpose()?,
+        paused: input.paused,
+        created_at: input.created_at,
+        updated_at: input.updated_at,
+        next_run_at: input.next_run_at,
+        created_by: input
+            .created_by
+            .as_ref()
+            .map(workflow_actor_input_from_actor),
+        execution_ref: input.execution_ref.clone(),
+    })
+}
+
+pub(crate) fn bound_workflow_schedule_to_proto(
+    input: BoundWorkflowSchedule,
+) -> ProviderResult<pb::BoundWorkflowSchedule> {
+    Ok(pb::BoundWorkflowSchedule {
+        id: input.id,
+        cron: input.cron,
+        timezone: input.timezone,
+        target: input
+            .target
+            .map(bound_workflow_target_to_proto)
+            .transpose()?,
+        paused: input.paused,
+        created_at: input.created_at.map(protocol::timestamp_from_system_time),
+        updated_at: input.updated_at.map(protocol::timestamp_from_system_time),
+        next_run_at: input.next_run_at.map(protocol::timestamp_from_system_time),
+        created_by: input.created_by.map(workflow_actor_to_proto),
+        execution_ref: input.execution_ref,
+    })
+}
+
+pub(crate) fn bound_workflow_schedule_from_proto(
+    input: pb::BoundWorkflowSchedule,
+) -> ProviderResult<BoundWorkflowSchedule> {
+    Ok(BoundWorkflowSchedule {
+        id: input.id,
+        cron: input.cron,
+        timezone: input.timezone,
+        target: input
+            .target
+            .map(bound_workflow_target_from_proto)
             .transpose()?,
         paused: input.paused,
         created_at: input
@@ -1008,6 +1931,52 @@ pub fn bound_workflow_schedule_input_from_schedule(
             .as_ref()
             .map(protocol::system_time_from_timestamp)
             .transpose()?,
+        created_by: input.created_by.map(workflow_actor_from_proto),
+        execution_ref: input.execution_ref,
+    })
+}
+
+/// Returns a deep copy of a workflow-provider schedule.
+pub fn new_bound_workflow_schedule_from_schedule(
+    input: &BoundWorkflowSchedule,
+) -> ProviderResult<BoundWorkflowSchedule> {
+    Ok(input.clone())
+}
+
+/// Creates a workflow-provider event trigger.
+pub fn new_bound_workflow_event_trigger(
+    input: BoundWorkflowEventTriggerInput,
+) -> ProviderResult<BoundWorkflowEventTrigger> {
+    Ok(BoundWorkflowEventTrigger {
+        id: input.id,
+        event_match: input.event_match.map(new_workflow_event_match),
+        target: input.target.map(new_bound_workflow_target).transpose()?,
+        paused: input.paused,
+        created_at: input.created_at,
+        updated_at: input.updated_at,
+        created_by: input.created_by.map(new_workflow_actor),
+        execution_ref: input.execution_ref,
+    })
+}
+
+/// Returns input copied from a workflow-provider event trigger.
+pub fn bound_workflow_event_trigger_input_from_trigger(
+    input: &BoundWorkflowEventTrigger,
+) -> ProviderResult<BoundWorkflowEventTriggerInput> {
+    Ok(BoundWorkflowEventTriggerInput {
+        id: input.id.clone(),
+        event_match: input
+            .event_match
+            .as_ref()
+            .map(workflow_event_match_input_from_match),
+        target: input
+            .target
+            .as_ref()
+            .map(bound_workflow_target_input_from_target)
+            .transpose()?,
+        paused: input.paused,
+        created_at: input.created_at,
+        updated_at: input.updated_at,
         created_by: input
             .created_by
             .as_ref()
@@ -1016,43 +1985,33 @@ pub fn bound_workflow_schedule_input_from_schedule(
     })
 }
 
-/// Returns a deep copy of a workflow-provider schedule.
-pub fn new_bound_workflow_schedule_from_schedule(
-    input: &pb::BoundWorkflowSchedule,
-) -> ProviderResult<pb::BoundWorkflowSchedule> {
-    new_bound_workflow_schedule(bound_workflow_schedule_input_from_schedule(input)?)
-}
-
-/// Creates a workflow-provider event trigger.
-pub fn new_bound_workflow_event_trigger(
-    input: BoundWorkflowEventTriggerInput,
+pub(crate) fn bound_workflow_event_trigger_to_proto(
+    input: BoundWorkflowEventTrigger,
 ) -> ProviderResult<pb::BoundWorkflowEventTrigger> {
     Ok(pb::BoundWorkflowEventTrigger {
         id: input.id,
-        r#match: input.event_match.map(new_workflow_event_match),
-        target: input.target.map(new_bound_workflow_target).transpose()?,
+        r#match: input.event_match.map(workflow_event_match_to_proto),
+        target: input
+            .target
+            .map(bound_workflow_target_to_proto)
+            .transpose()?,
         paused: input.paused,
         created_at: input.created_at.map(protocol::timestamp_from_system_time),
         updated_at: input.updated_at.map(protocol::timestamp_from_system_time),
-        created_by: input.created_by.map(new_workflow_actor),
+        created_by: input.created_by.map(workflow_actor_to_proto),
         execution_ref: input.execution_ref,
     })
 }
 
-/// Returns input copied from a workflow-provider event trigger.
-pub fn bound_workflow_event_trigger_input_from_trigger(
-    input: &pb::BoundWorkflowEventTrigger,
-) -> ProviderResult<BoundWorkflowEventTriggerInput> {
-    Ok(BoundWorkflowEventTriggerInput {
-        id: input.id.clone(),
-        event_match: input
-            .r#match
-            .as_ref()
-            .map(workflow_event_match_input_from_match),
+pub(crate) fn bound_workflow_event_trigger_from_proto(
+    input: pb::BoundWorkflowEventTrigger,
+) -> ProviderResult<BoundWorkflowEventTrigger> {
+    Ok(BoundWorkflowEventTrigger {
+        id: input.id,
+        event_match: input.r#match.map(workflow_event_match_from_proto),
         target: input
             .target
-            .as_ref()
-            .map(bound_workflow_target_input_from_target)
+            .map(bound_workflow_target_from_proto)
             .transpose()?,
         paused: input.paused,
         created_at: input
@@ -1065,26 +2024,41 @@ pub fn bound_workflow_event_trigger_input_from_trigger(
             .as_ref()
             .map(protocol::system_time_from_timestamp)
             .transpose()?,
-        created_by: input
-            .created_by
-            .as_ref()
-            .map(workflow_actor_input_from_actor),
-        execution_ref: input.execution_ref.clone(),
+        created_by: input.created_by.map(workflow_actor_from_proto),
+        execution_ref: input.execution_ref,
     })
 }
 
 /// Returns a deep copy of a workflow-provider event trigger.
 pub fn new_bound_workflow_event_trigger_from_trigger(
-    input: &pb::BoundWorkflowEventTrigger,
-) -> ProviderResult<pb::BoundWorkflowEventTrigger> {
-    new_bound_workflow_event_trigger(bound_workflow_event_trigger_input_from_trigger(input)?)
+    input: &BoundWorkflowEventTrigger,
+) -> ProviderResult<BoundWorkflowEventTrigger> {
+    Ok(input.clone())
+}
+
+pub(crate) fn bound_workflow_definition_from_proto(
+    input: pb::BoundWorkflowDefinition,
+) -> ProviderResult<BoundWorkflowDefinition> {
+    Ok(BoundWorkflowDefinition {
+        id: input.id,
+        target: input
+            .target
+            .map(bound_workflow_target_from_proto)
+            .transpose()?,
+        created_by: input.created_by.map(workflow_actor_from_proto),
+        created_at: input
+            .created_at
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()?,
+    })
 }
 
 /// Creates a workflow execution reference.
 pub fn new_workflow_execution_reference(
     input: WorkflowExecutionReferenceInput,
-) -> ProviderResult<pb::WorkflowExecutionReference> {
-    Ok(pb::WorkflowExecutionReference {
+) -> ProviderResult<WorkflowExecutionReference> {
+    Ok(WorkflowExecutionReference {
         id: input.id,
         provider_name: input.provider_name,
         target: input.target.map(new_bound_workflow_target).transpose()?,
@@ -1095,8 +2069,8 @@ pub fn new_workflow_execution_reference(
             .into_iter()
             .map(new_workflow_access_permission)
             .collect(),
-        created_at: input.created_at.map(protocol::timestamp_from_system_time),
-        revoked_at: input.revoked_at.map(protocol::timestamp_from_system_time),
+        created_at: input.created_at,
+        revoked_at: input.revoked_at,
         subject_kind: input.subject_kind,
         display_name: input.display_name,
         auth_source: input.auth_source,
@@ -1108,7 +2082,7 @@ pub fn new_workflow_execution_reference(
 
 /// Returns input copied from a workflow execution reference.
 pub fn workflow_execution_reference_input_from_reference(
-    input: &pb::WorkflowExecutionReference,
+    input: &WorkflowExecutionReference,
 ) -> ProviderResult<WorkflowExecutionReferenceInput> {
     Ok(WorkflowExecutionReferenceInput {
         id: input.id.clone(),
@@ -1125,16 +2099,8 @@ pub fn workflow_execution_reference_input_from_reference(
             .iter()
             .map(workflow_access_permission_input_from_permission)
             .collect(),
-        created_at: input
-            .created_at
-            .as_ref()
-            .map(protocol::system_time_from_timestamp)
-            .transpose()?,
-        revoked_at: input
-            .revoked_at
-            .as_ref()
-            .map(protocol::system_time_from_timestamp)
-            .transpose()?,
+        created_at: input.created_at,
+        revoked_at: input.revoked_at,
         subject_kind: input.subject_kind.clone(),
         display_name: input.display_name.clone(),
         auth_source: input.auth_source.clone(),
@@ -1147,28 +2113,106 @@ pub fn workflow_execution_reference_input_from_reference(
     })
 }
 
+pub(crate) fn workflow_execution_reference_to_proto(
+    input: WorkflowExecutionReference,
+) -> ProviderResult<pb::WorkflowExecutionReference> {
+    Ok(pb::WorkflowExecutionReference {
+        id: input.id,
+        provider_name: input.provider_name,
+        target: input
+            .target
+            .map(bound_workflow_target_to_proto)
+            .transpose()?,
+        subject_id: input.subject_id,
+        credential_subject_id: input.credential_subject_id,
+        permissions: input
+            .permissions
+            .into_iter()
+            .map(workflow_access_permission_to_proto)
+            .collect(),
+        created_at: input.created_at.map(protocol::timestamp_from_system_time),
+        revoked_at: input.revoked_at.map(protocol::timestamp_from_system_time),
+        subject_kind: input.subject_kind,
+        display_name: input.display_name,
+        auth_source: input.auth_source,
+        caller_plugin_name: input.caller_plugin_name,
+        run_as: input.run_as.map(workflow_run_as_subject_to_proto),
+        source_definition_id: input.source_definition_id,
+    })
+}
+
+pub(crate) fn workflow_execution_reference_from_proto(
+    input: pb::WorkflowExecutionReference,
+) -> ProviderResult<WorkflowExecutionReference> {
+    Ok(WorkflowExecutionReference {
+        id: input.id,
+        provider_name: input.provider_name,
+        target: input
+            .target
+            .map(bound_workflow_target_from_proto)
+            .transpose()?,
+        subject_id: input.subject_id,
+        credential_subject_id: input.credential_subject_id,
+        permissions: input
+            .permissions
+            .into_iter()
+            .map(workflow_access_permission_from_proto)
+            .collect(),
+        created_at: input
+            .created_at
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()?,
+        revoked_at: input
+            .revoked_at
+            .as_ref()
+            .map(protocol::system_time_from_timestamp)
+            .transpose()?,
+        subject_kind: input.subject_kind,
+        display_name: input.display_name,
+        auth_source: input.auth_source,
+        caller_plugin_name: input.caller_plugin_name,
+        run_as: input.run_as.map(workflow_run_as_subject_from_proto),
+        source_definition_id: input.source_definition_id,
+    })
+}
+
 /// Returns a deep copy of a workflow execution reference.
 pub fn new_workflow_execution_reference_from_reference(
-    input: &pb::WorkflowExecutionReference,
-) -> ProviderResult<pb::WorkflowExecutionReference> {
-    new_workflow_execution_reference(workflow_execution_reference_input_from_reference(input)?)
+    input: &WorkflowExecutionReference,
+) -> ProviderResult<WorkflowExecutionReference> {
+    Ok(input.clone())
 }
 
 fn invoke_workflow_operation_request_from_input(
     input: InvokeWorkflowOperationInput,
 ) -> ProviderResult<pb::InvokeWorkflowOperationRequest> {
     Ok(pb::InvokeWorkflowOperationRequest {
-        target: input.target.map(new_bound_workflow_target).transpose()?,
+        target: input
+            .target
+            .map(new_bound_workflow_target)
+            .transpose()?
+            .map(bound_workflow_target_to_proto)
+            .transpose()?,
         run_id: input.run_id,
-        trigger: input.trigger.map(new_workflow_run_trigger).transpose()?,
+        trigger: input
+            .trigger
+            .map(new_workflow_run_trigger)
+            .transpose()?
+            .map(workflow_run_trigger_to_proto)
+            .transpose()?,
         input: input.input.map(protocol::struct_from_json).transpose()?,
         metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
-        created_by: input.created_by.map(new_workflow_actor),
+        created_by: input
+            .created_by
+            .map(new_workflow_actor)
+            .map(workflow_actor_to_proto),
         execution_ref: input.execution_ref,
         signals: input
             .signals
             .into_iter()
             .map(new_workflow_signal)
+            .map(|signal| signal.and_then(workflow_signal_to_proto))
             .collect::<ProviderResult<Vec<_>>>()?,
     })
 }
@@ -1180,6 +2224,180 @@ fn invoke_workflow_operation_response_from_proto(
         status: response.status,
         body: response.body,
     }
+}
+
+fn start_workflow_provider_run_request_from_proto(
+    request: pb::StartWorkflowProviderRunRequest,
+) -> ProviderResult<StartWorkflowProviderRunRequest> {
+    Ok(StartWorkflowProviderRunRequest {
+        target: request
+            .target
+            .map(bound_workflow_target_from_proto)
+            .transpose()?,
+        idempotency_key: request.idempotency_key,
+        created_by: request.created_by.map(workflow_actor_from_proto),
+        execution_ref: request.execution_ref,
+        workflow_key: request.workflow_key,
+    })
+}
+
+fn signal_workflow_run_response_to_proto(
+    response: SignalWorkflowRunResponse,
+) -> ProviderResult<pb::SignalWorkflowRunResponse> {
+    Ok(pb::SignalWorkflowRunResponse {
+        run: response.run.map(bound_workflow_run_to_proto).transpose()?,
+        signal: response.signal.map(workflow_signal_to_proto).transpose()?,
+        started_run: response.started_run,
+        workflow_key: response.workflow_key,
+    })
+}
+
+fn list_runs_response_to_proto(
+    response: ListWorkflowProviderRunsResponse,
+) -> ProviderResult<pb::ListWorkflowProviderRunsResponse> {
+    Ok(pb::ListWorkflowProviderRunsResponse {
+        runs: response
+            .runs
+            .into_iter()
+            .map(bound_workflow_run_to_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
+    })
+}
+
+fn upsert_schedule_request_from_proto(
+    request: pb::UpsertWorkflowProviderScheduleRequest,
+) -> ProviderResult<UpsertWorkflowProviderScheduleRequest> {
+    Ok(UpsertWorkflowProviderScheduleRequest {
+        schedule_id: request.schedule_id,
+        cron: request.cron,
+        timezone: request.timezone,
+        target: request
+            .target
+            .map(bound_workflow_target_from_proto)
+            .transpose()?,
+        paused: request.paused,
+        requested_by: request.requested_by.map(workflow_actor_from_proto),
+        execution_ref: request.execution_ref,
+    })
+}
+
+fn list_schedules_response_to_proto(
+    response: ListWorkflowProviderSchedulesResponse,
+) -> ProviderResult<pb::ListWorkflowProviderSchedulesResponse> {
+    Ok(pb::ListWorkflowProviderSchedulesResponse {
+        schedules: response
+            .schedules
+            .into_iter()
+            .map(bound_workflow_schedule_to_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
+    })
+}
+
+fn upsert_event_trigger_request_from_proto(
+    request: pb::UpsertWorkflowProviderEventTriggerRequest,
+) -> ProviderResult<UpsertWorkflowProviderEventTriggerRequest> {
+    Ok(UpsertWorkflowProviderEventTriggerRequest {
+        trigger_id: request.trigger_id,
+        event_match: request.r#match.map(workflow_event_match_from_proto),
+        target: request
+            .target
+            .map(bound_workflow_target_from_proto)
+            .transpose()?,
+        paused: request.paused,
+        requested_by: request.requested_by.map(workflow_actor_from_proto),
+        execution_ref: request.execution_ref,
+    })
+}
+
+fn list_event_triggers_response_to_proto(
+    response: ListWorkflowProviderEventTriggersResponse,
+) -> ProviderResult<pb::ListWorkflowProviderEventTriggersResponse> {
+    Ok(pb::ListWorkflowProviderEventTriggersResponse {
+        triggers: response
+            .triggers
+            .into_iter()
+            .map(bound_workflow_event_trigger_to_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
+    })
+}
+
+fn publish_event_request_from_proto(
+    request: pb::PublishWorkflowProviderEventRequest,
+) -> ProviderResult<PublishWorkflowProviderEventRequest> {
+    Ok(PublishWorkflowProviderEventRequest {
+        plugin_name: request.plugin_name,
+        event: request.event.map(workflow_event_from_proto).transpose()?,
+        published_by: request.published_by.map(workflow_actor_from_proto),
+    })
+}
+
+fn list_execution_references_response_to_proto(
+    response: ListWorkflowExecutionReferencesResponse,
+) -> ProviderResult<pb::ListWorkflowExecutionReferencesResponse> {
+    Ok(pb::ListWorkflowExecutionReferencesResponse {
+        references: response
+            .references
+            .into_iter()
+            .map(workflow_execution_reference_to_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
+    })
+}
+
+pub(crate) fn managed_workflow_schedule_from_proto(
+    input: pb::ManagedWorkflowSchedule,
+) -> ProviderResult<ManagedWorkflowSchedule> {
+    Ok(ManagedWorkflowSchedule {
+        provider_name: input.provider_name,
+        schedule: input
+            .schedule
+            .map(bound_workflow_schedule_from_proto)
+            .transpose()?,
+    })
+}
+
+pub(crate) fn managed_workflow_event_trigger_from_proto(
+    input: pb::ManagedWorkflowEventTrigger,
+) -> ProviderResult<ManagedWorkflowEventTrigger> {
+    Ok(ManagedWorkflowEventTrigger {
+        provider_name: input.provider_name,
+        trigger: input
+            .trigger
+            .map(bound_workflow_event_trigger_from_proto)
+            .transpose()?,
+    })
+}
+
+pub(crate) fn managed_workflow_definition_from_proto(
+    input: pb::ManagedWorkflowDefinition,
+) -> ProviderResult<ManagedWorkflowDefinition> {
+    Ok(ManagedWorkflowDefinition {
+        provider_name: input.provider_name,
+        definition: input
+            .definition
+            .map(bound_workflow_definition_from_proto)
+            .transpose()?,
+    })
+}
+
+pub(crate) fn managed_workflow_run_from_proto(
+    input: pb::ManagedWorkflowRun,
+) -> ProviderResult<ManagedWorkflowRun> {
+    Ok(ManagedWorkflowRun {
+        provider_name: input.provider_name,
+        run: input.run.map(bound_workflow_run_from_proto).transpose()?,
+    })
+}
+
+pub(crate) fn managed_workflow_run_signal_from_proto(
+    input: pb::ManagedWorkflowRunSignal,
+) -> ProviderResult<ManagedWorkflowRunSignal> {
+    Ok(ManagedWorkflowRunSignal {
+        provider_name: input.provider_name,
+        run: input.run.map(bound_workflow_run_from_proto).transpose()?,
+        signal: input.signal.map(workflow_signal_from_proto).transpose()?,
+        started_run: input.started_run,
+        workflow_key: input.workflow_key,
+    })
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -1380,8 +2598,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Starts or idempotently returns a workflow run.
     async fn start_run(
         &self,
-        _request: pb::StartWorkflowProviderRunRequest,
-    ) -> ProviderResult<pb::BoundWorkflowRun> {
+        _request: StartWorkflowProviderRunRequest,
+    ) -> ProviderResult<BoundWorkflowRun> {
         Err(crate::Error::unimplemented(
             "workflow start run is not implemented",
         ))
@@ -1390,8 +2608,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Returns one workflow run by ID.
     async fn get_run(
         &self,
-        _request: pb::GetWorkflowProviderRunRequest,
-    ) -> ProviderResult<pb::BoundWorkflowRun> {
+        _request: GetWorkflowProviderRunRequest,
+    ) -> ProviderResult<BoundWorkflowRun> {
         Err(crate::Error::unimplemented(
             "workflow get run is not implemented",
         ))
@@ -1400,8 +2618,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Lists workflow runs visible to the request subject.
     async fn list_runs(
         &self,
-        _request: pb::ListWorkflowProviderRunsRequest,
-    ) -> ProviderResult<pb::ListWorkflowProviderRunsResponse> {
+        _request: ListWorkflowProviderRunsRequest,
+    ) -> ProviderResult<ListWorkflowProviderRunsResponse> {
         Err(crate::Error::unimplemented(
             "workflow list runs is not implemented",
         ))
@@ -1410,8 +2628,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Requests cancellation of a pending or running workflow run.
     async fn cancel_run(
         &self,
-        _request: pb::CancelWorkflowProviderRunRequest,
-    ) -> ProviderResult<pb::BoundWorkflowRun> {
+        _request: CancelWorkflowProviderRunRequest,
+    ) -> ProviderResult<BoundWorkflowRun> {
         Err(crate::Error::unimplemented(
             "workflow cancel run is not implemented",
         ))
@@ -1420,8 +2638,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Delivers a signal to an existing workflow run.
     async fn signal_run(
         &self,
-        _request: pb::SignalWorkflowProviderRunRequest,
-    ) -> ProviderResult<pb::SignalWorkflowRunResponse> {
+        _request: SignalWorkflowProviderRunRequest,
+    ) -> ProviderResult<SignalWorkflowRunResponse> {
         Err(crate::Error::unimplemented(
             "workflow signal run is not implemented",
         ))
@@ -1430,8 +2648,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Delivers a signal or starts a run when no target run exists.
     async fn signal_or_start_run(
         &self,
-        _request: pb::SignalOrStartWorkflowProviderRunRequest,
-    ) -> ProviderResult<pb::SignalWorkflowRunResponse> {
+        _request: SignalOrStartWorkflowProviderRunRequest,
+    ) -> ProviderResult<SignalWorkflowRunResponse> {
         Err(crate::Error::unimplemented(
             "workflow signal or start run is not implemented",
         ))
@@ -1440,8 +2658,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Creates or updates a workflow schedule.
     async fn upsert_schedule(
         &self,
-        _request: pb::UpsertWorkflowProviderScheduleRequest,
-    ) -> ProviderResult<pb::BoundWorkflowSchedule> {
+        _request: UpsertWorkflowProviderScheduleRequest,
+    ) -> ProviderResult<BoundWorkflowSchedule> {
         Err(crate::Error::unimplemented(
             "workflow upsert schedule is not implemented",
         ))
@@ -1450,8 +2668,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Returns one workflow schedule by ID.
     async fn get_schedule(
         &self,
-        _request: pb::GetWorkflowProviderScheduleRequest,
-    ) -> ProviderResult<pb::BoundWorkflowSchedule> {
+        _request: GetWorkflowProviderScheduleRequest,
+    ) -> ProviderResult<BoundWorkflowSchedule> {
         Err(crate::Error::unimplemented(
             "workflow get schedule is not implemented",
         ))
@@ -1460,8 +2678,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Lists workflow schedules visible to the request subject.
     async fn list_schedules(
         &self,
-        _request: pb::ListWorkflowProviderSchedulesRequest,
-    ) -> ProviderResult<pb::ListWorkflowProviderSchedulesResponse> {
+        _request: ListWorkflowProviderSchedulesRequest,
+    ) -> ProviderResult<ListWorkflowProviderSchedulesResponse> {
         Err(crate::Error::unimplemented(
             "workflow list schedules is not implemented",
         ))
@@ -1470,7 +2688,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Deletes a workflow schedule.
     async fn delete_schedule(
         &self,
-        _request: pb::DeleteWorkflowProviderScheduleRequest,
+        _request: DeleteWorkflowProviderScheduleRequest,
     ) -> ProviderResult<()> {
         Err(crate::Error::unimplemented(
             "workflow delete schedule is not implemented",
@@ -1480,8 +2698,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Pauses a workflow schedule without deleting it.
     async fn pause_schedule(
         &self,
-        _request: pb::PauseWorkflowProviderScheduleRequest,
-    ) -> ProviderResult<pb::BoundWorkflowSchedule> {
+        _request: PauseWorkflowProviderScheduleRequest,
+    ) -> ProviderResult<BoundWorkflowSchedule> {
         Err(crate::Error::unimplemented(
             "workflow pause schedule is not implemented",
         ))
@@ -1490,8 +2708,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Resumes a paused workflow schedule.
     async fn resume_schedule(
         &self,
-        _request: pb::ResumeWorkflowProviderScheduleRequest,
-    ) -> ProviderResult<pb::BoundWorkflowSchedule> {
+        _request: ResumeWorkflowProviderScheduleRequest,
+    ) -> ProviderResult<BoundWorkflowSchedule> {
         Err(crate::Error::unimplemented(
             "workflow resume schedule is not implemented",
         ))
@@ -1500,8 +2718,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Creates or updates a workflow event trigger.
     async fn upsert_event_trigger(
         &self,
-        _request: pb::UpsertWorkflowProviderEventTriggerRequest,
-    ) -> ProviderResult<pb::BoundWorkflowEventTrigger> {
+        _request: UpsertWorkflowProviderEventTriggerRequest,
+    ) -> ProviderResult<BoundWorkflowEventTrigger> {
         Err(crate::Error::unimplemented(
             "workflow upsert event trigger is not implemented",
         ))
@@ -1510,8 +2728,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Returns one workflow event trigger by ID.
     async fn get_event_trigger(
         &self,
-        _request: pb::GetWorkflowProviderEventTriggerRequest,
-    ) -> ProviderResult<pb::BoundWorkflowEventTrigger> {
+        _request: GetWorkflowProviderEventTriggerRequest,
+    ) -> ProviderResult<BoundWorkflowEventTrigger> {
         Err(crate::Error::unimplemented(
             "workflow get event trigger is not implemented",
         ))
@@ -1520,8 +2738,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Lists workflow event triggers visible to the request subject.
     async fn list_event_triggers(
         &self,
-        _request: pb::ListWorkflowProviderEventTriggersRequest,
-    ) -> ProviderResult<pb::ListWorkflowProviderEventTriggersResponse> {
+        _request: ListWorkflowProviderEventTriggersRequest,
+    ) -> ProviderResult<ListWorkflowProviderEventTriggersResponse> {
         Err(crate::Error::unimplemented(
             "workflow list event triggers is not implemented",
         ))
@@ -1530,7 +2748,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Deletes a workflow event trigger.
     async fn delete_event_trigger(
         &self,
-        _request: pb::DeleteWorkflowProviderEventTriggerRequest,
+        _request: DeleteWorkflowProviderEventTriggerRequest,
     ) -> ProviderResult<()> {
         Err(crate::Error::unimplemented(
             "workflow delete event trigger is not implemented",
@@ -1540,8 +2758,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Pauses a workflow event trigger without deleting it.
     async fn pause_event_trigger(
         &self,
-        _request: pb::PauseWorkflowProviderEventTriggerRequest,
-    ) -> ProviderResult<pb::BoundWorkflowEventTrigger> {
+        _request: PauseWorkflowProviderEventTriggerRequest,
+    ) -> ProviderResult<BoundWorkflowEventTrigger> {
         Err(crate::Error::unimplemented(
             "workflow pause event trigger is not implemented",
         ))
@@ -1550,8 +2768,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Resumes a paused workflow event trigger.
     async fn resume_event_trigger(
         &self,
-        _request: pb::ResumeWorkflowProviderEventTriggerRequest,
-    ) -> ProviderResult<pb::BoundWorkflowEventTrigger> {
+        _request: ResumeWorkflowProviderEventTriggerRequest,
+    ) -> ProviderResult<BoundWorkflowEventTrigger> {
         Err(crate::Error::unimplemented(
             "workflow resume event trigger is not implemented",
         ))
@@ -1560,7 +2778,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Publishes a workflow event for trigger matching.
     async fn publish_event(
         &self,
-        _request: pb::PublishWorkflowProviderEventRequest,
+        _request: PublishWorkflowProviderEventRequest,
     ) -> ProviderResult<()> {
         Err(crate::Error::unimplemented(
             "workflow publish event is not implemented",
@@ -1570,8 +2788,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Stores or updates a workflow execution reference.
     async fn put_execution_reference(
         &self,
-        _request: pb::PutWorkflowExecutionReferenceRequest,
-    ) -> ProviderResult<pb::WorkflowExecutionReference> {
+        _request: PutWorkflowExecutionReferenceRequest,
+    ) -> ProviderResult<WorkflowExecutionReference> {
         Err(crate::Error::unimplemented(
             "workflow put execution reference is not implemented",
         ))
@@ -1580,8 +2798,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Returns one workflow execution reference.
     async fn get_execution_reference(
         &self,
-        _request: pb::GetWorkflowExecutionReferenceRequest,
-    ) -> ProviderResult<pb::WorkflowExecutionReference> {
+        _request: GetWorkflowExecutionReferenceRequest,
+    ) -> ProviderResult<WorkflowExecutionReference> {
         Err(crate::Error::unimplemented(
             "workflow get execution reference is not implemented",
         ))
@@ -1590,8 +2808,8 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     /// Lists workflow execution references for a scope.
     async fn list_execution_references(
         &self,
-        _request: pb::ListWorkflowExecutionReferencesRequest,
-    ) -> ProviderResult<pb::ListWorkflowExecutionReferencesResponse> {
+        _request: ListWorkflowExecutionReferencesRequest,
+    ) -> ProviderResult<ListWorkflowExecutionReferencesResponse> {
         Err(crate::Error::unimplemented(
             "workflow list execution references is not implemented",
         ))
@@ -1620,10 +2838,16 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowRun>, Status> {
         let run = self
             .provider
-            .start_run(request.into_inner())
+            .start_run(
+                start_workflow_provider_run_request_from_proto(request.into_inner())
+                    .map_err(|error| rpc_status("workflow start run", error))?,
+            )
             .await
             .map_err(|error| rpc_status("workflow start run", error))?;
-        Ok(GrpcResponse::new(run))
+        Ok(GrpcResponse::new(
+            bound_workflow_run_to_proto(run)
+                .map_err(|error| rpc_status("workflow start run", error))?,
+        ))
     }
 
     async fn get_run(
@@ -1632,10 +2856,18 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowRun>, Status> {
         let run = self
             .provider
-            .get_run(request.into_inner())
+            .get_run({
+                let request = request.into_inner();
+                GetWorkflowProviderRunRequest {
+                    run_id: request.run_id,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow get run", error))?;
-        Ok(GrpcResponse::new(run))
+        Ok(GrpcResponse::new(
+            bound_workflow_run_to_proto(run)
+                .map_err(|error| rpc_status("workflow get run", error))?,
+        ))
     }
 
     async fn list_runs(
@@ -1644,10 +2876,16 @@ where
     ) -> std::result::Result<GrpcResponse<pb::ListWorkflowProviderRunsResponse>, Status> {
         let response = self
             .provider
-            .list_runs(request.into_inner())
+            .list_runs({
+                let _request = request.into_inner();
+                ListWorkflowProviderRunsRequest {}
+            })
             .await
             .map_err(|error| rpc_status("workflow list runs", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(
+            list_runs_response_to_proto(response)
+                .map_err(|error| rpc_status("workflow list runs", error))?,
+        ))
     }
 
     async fn cancel_run(
@@ -1656,10 +2894,19 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowRun>, Status> {
         let run = self
             .provider
-            .cancel_run(request.into_inner())
+            .cancel_run({
+                let request = request.into_inner();
+                CancelWorkflowProviderRunRequest {
+                    run_id: request.run_id,
+                    reason: request.reason,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow cancel run", error))?;
-        Ok(GrpcResponse::new(run))
+        Ok(GrpcResponse::new(
+            bound_workflow_run_to_proto(run)
+                .map_err(|error| rpc_status("workflow cancel run", error))?,
+        ))
     }
 
     async fn signal_run(
@@ -1668,10 +2915,23 @@ where
     ) -> std::result::Result<GrpcResponse<pb::SignalWorkflowRunResponse>, Status> {
         let response = self
             .provider
-            .signal_run(request.into_inner())
+            .signal_run({
+                let request = request.into_inner();
+                SignalWorkflowProviderRunRequest {
+                    run_id: request.run_id,
+                    signal: request
+                        .signal
+                        .map(workflow_signal_from_proto)
+                        .transpose()
+                        .map_err(|error| rpc_status("workflow signal run", error))?,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow signal run", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(
+            signal_workflow_run_response_to_proto(response)
+                .map_err(|error| rpc_status("workflow signal run", error))?,
+        ))
     }
 
     async fn signal_or_start_run(
@@ -1680,10 +2940,31 @@ where
     ) -> std::result::Result<GrpcResponse<pb::SignalWorkflowRunResponse>, Status> {
         let response = self
             .provider
-            .signal_or_start_run(request.into_inner())
+            .signal_or_start_run({
+                let request = request.into_inner();
+                SignalOrStartWorkflowProviderRunRequest {
+                    workflow_key: request.workflow_key,
+                    target: request
+                        .target
+                        .map(bound_workflow_target_from_proto)
+                        .transpose()
+                        .map_err(|error| rpc_status("workflow signal or start run", error))?,
+                    idempotency_key: request.idempotency_key,
+                    created_by: request.created_by.map(workflow_actor_from_proto),
+                    execution_ref: request.execution_ref,
+                    signal: request
+                        .signal
+                        .map(workflow_signal_from_proto)
+                        .transpose()
+                        .map_err(|error| rpc_status("workflow signal or start run", error))?,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow signal or start run", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(
+            signal_workflow_run_response_to_proto(response)
+                .map_err(|error| rpc_status("workflow signal or start run", error))?,
+        ))
     }
 
     async fn upsert_schedule(
@@ -1692,10 +2973,16 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowSchedule>, Status> {
         let schedule = self
             .provider
-            .upsert_schedule(request.into_inner())
+            .upsert_schedule(
+                upsert_schedule_request_from_proto(request.into_inner())
+                    .map_err(|error| rpc_status("workflow upsert schedule", error))?,
+            )
             .await
             .map_err(|error| rpc_status("workflow upsert schedule", error))?;
-        Ok(GrpcResponse::new(schedule))
+        Ok(GrpcResponse::new(
+            bound_workflow_schedule_to_proto(schedule)
+                .map_err(|error| rpc_status("workflow upsert schedule", error))?,
+        ))
     }
 
     async fn get_schedule(
@@ -1704,10 +2991,18 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowSchedule>, Status> {
         let schedule = self
             .provider
-            .get_schedule(request.into_inner())
+            .get_schedule({
+                let request = request.into_inner();
+                GetWorkflowProviderScheduleRequest {
+                    schedule_id: request.schedule_id,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow get schedule", error))?;
-        Ok(GrpcResponse::new(schedule))
+        Ok(GrpcResponse::new(
+            bound_workflow_schedule_to_proto(schedule)
+                .map_err(|error| rpc_status("workflow get schedule", error))?,
+        ))
     }
 
     async fn list_schedules(
@@ -1716,10 +3011,16 @@ where
     ) -> std::result::Result<GrpcResponse<pb::ListWorkflowProviderSchedulesResponse>, Status> {
         let response = self
             .provider
-            .list_schedules(request.into_inner())
+            .list_schedules({
+                let _request = request.into_inner();
+                ListWorkflowProviderSchedulesRequest {}
+            })
             .await
             .map_err(|error| rpc_status("workflow list schedules", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(
+            list_schedules_response_to_proto(response)
+                .map_err(|error| rpc_status("workflow list schedules", error))?,
+        ))
     }
 
     async fn delete_schedule(
@@ -1727,7 +3028,12 @@ where
         request: GrpcRequest<pb::DeleteWorkflowProviderScheduleRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         self.provider
-            .delete_schedule(request.into_inner())
+            .delete_schedule({
+                let request = request.into_inner();
+                DeleteWorkflowProviderScheduleRequest {
+                    schedule_id: request.schedule_id,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow delete schedule", error))?;
         Ok(GrpcResponse::new(()))
@@ -1739,10 +3045,18 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowSchedule>, Status> {
         let schedule = self
             .provider
-            .pause_schedule(request.into_inner())
+            .pause_schedule({
+                let request = request.into_inner();
+                PauseWorkflowProviderScheduleRequest {
+                    schedule_id: request.schedule_id,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow pause schedule", error))?;
-        Ok(GrpcResponse::new(schedule))
+        Ok(GrpcResponse::new(
+            bound_workflow_schedule_to_proto(schedule)
+                .map_err(|error| rpc_status("workflow pause schedule", error))?,
+        ))
     }
 
     async fn resume_schedule(
@@ -1751,10 +3065,18 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowSchedule>, Status> {
         let schedule = self
             .provider
-            .resume_schedule(request.into_inner())
+            .resume_schedule({
+                let request = request.into_inner();
+                ResumeWorkflowProviderScheduleRequest {
+                    schedule_id: request.schedule_id,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow resume schedule", error))?;
-        Ok(GrpcResponse::new(schedule))
+        Ok(GrpcResponse::new(
+            bound_workflow_schedule_to_proto(schedule)
+                .map_err(|error| rpc_status("workflow resume schedule", error))?,
+        ))
     }
 
     async fn upsert_event_trigger(
@@ -1763,10 +3085,16 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowEventTrigger>, Status> {
         let trigger = self
             .provider
-            .upsert_event_trigger(request.into_inner())
+            .upsert_event_trigger(
+                upsert_event_trigger_request_from_proto(request.into_inner())
+                    .map_err(|error| rpc_status("workflow upsert event trigger", error))?,
+            )
             .await
             .map_err(|error| rpc_status("workflow upsert event trigger", error))?;
-        Ok(GrpcResponse::new(trigger))
+        Ok(GrpcResponse::new(
+            bound_workflow_event_trigger_to_proto(trigger)
+                .map_err(|error| rpc_status("workflow upsert event trigger", error))?,
+        ))
     }
 
     async fn get_event_trigger(
@@ -1775,10 +3103,18 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowEventTrigger>, Status> {
         let trigger = self
             .provider
-            .get_event_trigger(request.into_inner())
+            .get_event_trigger({
+                let request = request.into_inner();
+                GetWorkflowProviderEventTriggerRequest {
+                    trigger_id: request.trigger_id,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow get event trigger", error))?;
-        Ok(GrpcResponse::new(trigger))
+        Ok(GrpcResponse::new(
+            bound_workflow_event_trigger_to_proto(trigger)
+                .map_err(|error| rpc_status("workflow get event trigger", error))?,
+        ))
     }
 
     async fn list_event_triggers(
@@ -1788,10 +3124,16 @@ where
     {
         let response = self
             .provider
-            .list_event_triggers(request.into_inner())
+            .list_event_triggers({
+                let _request = request.into_inner();
+                ListWorkflowProviderEventTriggersRequest {}
+            })
             .await
             .map_err(|error| rpc_status("workflow list event triggers", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(
+            list_event_triggers_response_to_proto(response)
+                .map_err(|error| rpc_status("workflow list event triggers", error))?,
+        ))
     }
 
     async fn delete_event_trigger(
@@ -1799,7 +3141,12 @@ where
         request: GrpcRequest<pb::DeleteWorkflowProviderEventTriggerRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         self.provider
-            .delete_event_trigger(request.into_inner())
+            .delete_event_trigger({
+                let request = request.into_inner();
+                DeleteWorkflowProviderEventTriggerRequest {
+                    trigger_id: request.trigger_id,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow delete event trigger", error))?;
         Ok(GrpcResponse::new(()))
@@ -1811,10 +3158,18 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowEventTrigger>, Status> {
         let trigger = self
             .provider
-            .pause_event_trigger(request.into_inner())
+            .pause_event_trigger({
+                let request = request.into_inner();
+                PauseWorkflowProviderEventTriggerRequest {
+                    trigger_id: request.trigger_id,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow pause event trigger", error))?;
-        Ok(GrpcResponse::new(trigger))
+        Ok(GrpcResponse::new(
+            bound_workflow_event_trigger_to_proto(trigger)
+                .map_err(|error| rpc_status("workflow pause event trigger", error))?,
+        ))
     }
 
     async fn resume_event_trigger(
@@ -1823,10 +3178,18 @@ where
     ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowEventTrigger>, Status> {
         let trigger = self
             .provider
-            .resume_event_trigger(request.into_inner())
+            .resume_event_trigger({
+                let request = request.into_inner();
+                ResumeWorkflowProviderEventTriggerRequest {
+                    trigger_id: request.trigger_id,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow resume event trigger", error))?;
-        Ok(GrpcResponse::new(trigger))
+        Ok(GrpcResponse::new(
+            bound_workflow_event_trigger_to_proto(trigger)
+                .map_err(|error| rpc_status("workflow resume event trigger", error))?,
+        ))
     }
 
     async fn publish_event(
@@ -1834,7 +3197,10 @@ where
         request: GrpcRequest<pb::PublishWorkflowProviderEventRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         self.provider
-            .publish_event(request.into_inner())
+            .publish_event(
+                publish_event_request_from_proto(request.into_inner())
+                    .map_err(|error| rpc_status("workflow publish event", error))?,
+            )
             .await
             .map_err(|error| rpc_status("workflow publish event", error))?;
         Ok(GrpcResponse::new(()))
@@ -1846,10 +3212,22 @@ where
     ) -> std::result::Result<GrpcResponse<pb::WorkflowExecutionReference>, Status> {
         let reference = self
             .provider
-            .put_execution_reference(request.into_inner())
+            .put_execution_reference({
+                let request = request.into_inner();
+                PutWorkflowExecutionReferenceRequest {
+                    reference: request
+                        .reference
+                        .map(workflow_execution_reference_from_proto)
+                        .transpose()
+                        .map_err(|error| rpc_status("workflow put execution reference", error))?,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow put execution reference", error))?;
-        Ok(GrpcResponse::new(reference))
+        Ok(GrpcResponse::new(
+            workflow_execution_reference_to_proto(reference)
+                .map_err(|error| rpc_status("workflow put execution reference", error))?,
+        ))
     }
 
     async fn get_execution_reference(
@@ -1858,10 +3236,16 @@ where
     ) -> std::result::Result<GrpcResponse<pb::WorkflowExecutionReference>, Status> {
         let reference = self
             .provider
-            .get_execution_reference(request.into_inner())
+            .get_execution_reference({
+                let request = request.into_inner();
+                GetWorkflowExecutionReferenceRequest { id: request.id }
+            })
             .await
             .map_err(|error| rpc_status("workflow get execution reference", error))?;
-        Ok(GrpcResponse::new(reference))
+        Ok(GrpcResponse::new(
+            workflow_execution_reference_to_proto(reference)
+                .map_err(|error| rpc_status("workflow get execution reference", error))?,
+        ))
     }
 
     async fn list_execution_references(
@@ -1871,9 +3255,17 @@ where
     {
         let response = self
             .provider
-            .list_execution_references(request.into_inner())
+            .list_execution_references({
+                let request = request.into_inner();
+                ListWorkflowExecutionReferencesRequest {
+                    subject_id: request.subject_id,
+                }
+            })
             .await
             .map_err(|error| rpc_status("workflow list execution references", error))?;
-        Ok(GrpcResponse::new(response))
+        Ok(GrpcResponse::new(
+            list_execution_references_response_to_proto(response)
+                .map_err(|error| rpc_status("workflow list execution references", error))?,
+        ))
     }
 }

@@ -17,7 +17,7 @@ type IndexedDbTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 /// Default Unix-socket environment variable used by [`IndexedDB::connect`].
 pub const ENV_INDEXEDDB_SOCKET: &str = "GESTALT_INDEXEDDB_SOCKET";
 /// Suffix added to named IndexedDB socket variables for relay-token variables.
-pub const ENV_INDEXEDDB_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
+const ENV_INDEXEDDB_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
 const INDEXEDDB_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 const CURSOR_CHANNEL_BUFFER: usize = 1;
