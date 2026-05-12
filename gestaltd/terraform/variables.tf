@@ -15,6 +15,18 @@ variable "artifact_registry_repository_id" {
   default     = "gestaltd-charts"
 }
 
+variable "ci_binary_bucket_name" {
+  description = "GCS bucket name for immutable gestaltd CI binary artifacts."
+  type        = string
+  default     = "gitlab-peach-street-gestaltd-ci-artifacts"
+}
+
+variable "ci_binary_bucket_location" {
+  description = "GCS location for immutable gestaltd CI binary artifacts."
+  type        = string
+  default     = "US"
+}
+
 variable "gestaltd_chart_reader_service_accounts" {
   description = "Service account emails allowed to read gestaltd Helm charts from Artifact Registry."
   type        = set(string)
@@ -34,6 +46,12 @@ variable "chart_publisher_service_account_id" {
   description = "Service account ID used by GitHub Actions to publish gestaltd charts."
   type        = string
   default     = "gestaltd-chart-publisher"
+}
+
+variable "ci_binary_publisher_service_account_id" {
+  description = "Service account ID used by GitHub Actions to publish gestaltd CI binary artifacts."
+  type        = string
+  default     = "gestaltd-ci-binary-publisher"
 }
 
 variable "github_actions_workload_identity_pool_id" {
@@ -58,6 +76,12 @@ variable "github_ref_prefix" {
   description = "Git ref prefix allowed to publish gestaltd charts."
   type        = string
   default     = "refs/tags/gestaltd/v"
+}
+
+variable "ci_binary_github_ref" {
+  description = "Exact Git ref allowed to publish gestaltd CI binary artifacts."
+  type        = string
+  default     = "refs/heads/main"
 }
 
 variable "labels" {

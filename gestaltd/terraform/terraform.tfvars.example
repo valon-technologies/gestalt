@@ -2,3 +2,4 @@ project_id = "<gestaltd artifact GCP project ID>"
 region     = "us-east1"
 
 artifact_registry_repository_id = "gestaltd-charts"
+ci_binary_bucket_name           = "<project>-gestaltd-ci-artifacts"
