@@ -113,6 +113,26 @@ resource "google_compute_backend_bucket" "sdk_api_docs" {
 resource "google_compute_url_map" "docs" {
   name            = "${var.resource_prefix}-url-map"
   default_service = google_compute_backend_service.docs.id
+
+  host_rule {
+    hosts        = ["*"]
+    path_matcher = "docs"
+  }
+
+  path_matcher {
+    name            = "docs"
+    default_service = google_compute_backend_service.docs.id
+
+    path_rule {
+      paths = [
+        "/api/python",
+        "/api/python/*",
+        "/api/typescript",
+        "/api/typescript/*",
+      ]
+      service = google_compute_backend_bucket.sdk_api_docs.id
+    }
+  }
 }
 
 resource "google_compute_managed_ssl_certificate" "docs" {
