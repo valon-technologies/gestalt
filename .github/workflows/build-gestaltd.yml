@@ -382,10 +382,14 @@ jobs:
         env:
           GESTALTD_CI_ARTIFACT_BUCKET: ${{ vars.GESTALTD_CI_ARTIFACT_BUCKET }}
           GESTALTD_CI_ARTIFACT_BASE_URL: ${{ vars.GESTALTD_CI_ARTIFACT_BASE_URL }}
+          GESTALTD_CI_GCP_SERVICE_ACCOUNT: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
+          GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
         run: |
           set -euo pipefail
           : "${GESTALTD_CI_ARTIFACT_BUCKET:?GESTALTD_CI_ARTIFACT_BUCKET repository variable is required}"
           : "${GESTALTD_CI_ARTIFACT_BASE_URL:?GESTALTD_CI_ARTIFACT_BASE_URL repository variable is required}"
+          : "${GESTALTD_CI_GCP_SERVICE_ACCOUNT:?GESTALTD_CI_GCP_SERVICE_ACCOUNT repository variable is required}"
+          : "${GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER:?GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER repository variable is required}"
 
       - name: Build CI artifact
         env:
@@ -399,7 +403,7 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
-          workload_identity_provider: ${{ vars.GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          workload_identity_provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
           token_format: access_token
 
@@ -454,10 +458,14 @@ jobs:
         env:
           GESTALTD_CI_ARTIFACT_BUCKET: ${{ vars.GESTALTD_CI_ARTIFACT_BUCKET }}
           GESTALTD_CI_ARTIFACT_BASE_URL: ${{ vars.GESTALTD_CI_ARTIFACT_BASE_URL }}
+          GESTALTD_CI_GCP_SERVICE_ACCOUNT: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
+          GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
         run: |
           set -euo pipefail
           : "${GESTALTD_CI_ARTIFACT_BUCKET:?GESTALTD_CI_ARTIFACT_BUCKET repository variable is required}"
           : "${GESTALTD_CI_ARTIFACT_BASE_URL:?GESTALTD_CI_ARTIFACT_BASE_URL repository variable is required}"
+          : "${GESTALTD_CI_GCP_SERVICE_ACCOUNT:?GESTALTD_CI_GCP_SERVICE_ACCOUNT repository variable is required}"
+          : "${GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER:?GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER repository variable is required}"
 
       - name: Build CI artifact
         env:
@@ -471,7 +479,7 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
-          workload_identity_provider: ${{ vars.GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          workload_identity_provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
           token_format: access_token
 

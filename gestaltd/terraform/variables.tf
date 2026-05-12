@@ -66,6 +66,12 @@ variable "gestaltd_github_actions_provider_id" {
   default     = "gestaltd"
 }
 
+variable "gestaltd_ci_binary_github_actions_provider_id" {
+  description = "Workload Identity Pool provider ID for the gestaltd CI binary artifact workflow."
+  type        = string
+  default     = "gestaltd-ci-binary"
+}
+
 variable "github_repository" {
   description = "GitHub repository allowed to publish gestaltd charts."
   type        = string
