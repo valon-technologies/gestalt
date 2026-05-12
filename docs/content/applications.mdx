@@ -38,12 +38,9 @@ workspace-review/
     provider.ts
   ui/
     manifest.yaml
+    package.json
     src/
       app.tsx
-    out/
-      index.html
-      app.js
-      styles.css
 ```
 
 The plugin manifest owns the operations and points at the sibling UI bundle.
@@ -66,12 +63,11 @@ spec:
     path: ../ui/manifest.yaml
 ```
 
-The UI bundle is static assets. Its `assetRoot` points at built browser files,
-not at the frontend source tree. The directory name is not special; `out`,
-`dist`, or `build` all work as long as the directory contains static assets
-such as `index.html`, JavaScript, CSS, and images. Route rules are required
-when the mounted plugin binds an `authorizationPolicy`. For UI package details,
-see [Providers > UI](/providers/ui).
+The UI bundle produces static assets. A source UI manifest can declare a
+`build` command and `output` directory, so the generated `out/` or `dist/`
+directory does not need to be checked in. Route rules are required when the
+mounted plugin binds an `authorizationPolicy`. For UI package details, see
+[Providers > UI](/providers/ui).
 
 ```yaml
 kind: ui
@@ -79,8 +75,16 @@ source: github.com/acme/ui/workspace-review
 version: 0.1.0
 displayName: Workspace Review UI
 description: Browser UI for workspace review.
+build:
+  command:
+    - npm
+    - run
+    - build
+  output: out
+  inputs:
+    - package.json
+    - src
 spec:
-  assetRoot: out
   routes:
     - path: /
       allowedRoles: [viewer, admin]

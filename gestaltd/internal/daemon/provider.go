@@ -562,11 +562,12 @@ func releaseIncludesBuiltPluginArtifact(archives []releaseArchive) bool {
 	return false
 }
 func validateReleaseOutputDir(manifest *providermanifestv1.Manifest, sourceDir, outputDir string) error {
-	if manifest == nil || manifest.Spec == nil || manifest.Spec.AssetRoot == "" {
+	assetRootValue := providerpkg.EffectiveUIAssetRoot(manifest)
+	if manifest == nil || assetRootValue == "" {
 		return nil
 	}
 
-	assetRoot, err := normalizeReleasePath(manifest.Spec.AssetRoot)
+	assetRoot, err := normalizeReleasePath(assetRootValue)
 	if err != nil {
 		return err
 	}
@@ -588,7 +589,7 @@ func validateReleaseOutputDir(manifest *providermanifestv1.Manifest, sourceDir, 
 		return fmt.Errorf("compare output dir to ui asset_root: %w", err)
 	}
 	if insideAssetRoot {
-		return fmt.Errorf("--output %q must not be inside ui.asset_root %q", outputDir, manifest.Spec.AssetRoot)
+		return fmt.Errorf("--output %q must not be inside ui asset root %q", outputDir, assetRootValue)
 	}
 
 	return nil

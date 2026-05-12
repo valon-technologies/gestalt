@@ -1359,9 +1359,9 @@ bundled for the local provider session automatically. Raw GraphQL surfaces are
 not tunneled in v1.
 
 For TypeScript plugins, `provider dev` runs `bun install` automatically when the
-plugin has a `package.json` but no `node_modules`. Source UI release builds use
-the same dependency bootstrap for Bun-managed build workdirs before
-`release.build.command` when dependencies are missing. Keep
+plugin has a `package.json` but no `node_modules`. Source UI builds use the
+same dependency bootstrap for Bun-managed build workdirs before `build.command`
+or legacy `release.build.command` when dependencies are missing. Keep
 `@valon-technologies/gestalt` current enough for the host-service features your
 plugin uses; for example, remote IndexedDB host-service calls require an SDK
 version with `tls://` host-service transport support.

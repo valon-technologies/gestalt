@@ -159,6 +159,20 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 	if err != nil {
 		return err
 	}
+	if manifest.Build != nil {
+		if !sourceMode {
+			return fmt.Errorf("build metadata is only allowed in source ui manifests")
+		}
+		if kind != providermanifestv1.KindUI {
+			return fmt.Errorf("build metadata is only supported for ui manifests")
+		}
+		if manifest.Release != nil && manifest.Release.Build != nil {
+			return fmt.Errorf("build and release.build may not both be set")
+		}
+		if err := validateSourceBuild(manifest.Build); err != nil {
+			return err
+		}
+	}
 
 	allowsSourceEntrypointOmission := sourceMode && manifest.Entrypoint == nil
 
@@ -241,14 +255,38 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if manifest.Entrypoint != nil {
 			return fmt.Errorf("ui manifests may not define entrypoints")
 		}
-		if spec == nil || spec.AssetRoot == "" {
+		assetRoot := ""
+		if spec != nil {
+			assetRoot = spec.AssetRoot
+		}
+		buildOutput := ""
+		if manifest.Build != nil {
+			buildOutput = manifest.Build.Output
+		}
+		if sourceMode {
+			if assetRoot == "" && buildOutput == "" {
+				return fmt.Errorf("spec.assetRoot or build.output is required for source ui manifests")
+			}
+		} else if assetRoot == "" {
 			return fmt.Errorf("spec.assetRoot is required for ui manifests")
 		}
-		if err := validateRelativePackagePath(spec.AssetRoot, "spec.assetRoot"); err != nil {
-			return err
+		if assetRoot != "" {
+			if err := validateRelativePackagePath(assetRoot, "spec.assetRoot"); err != nil {
+				return err
+			}
 		}
-		if err := validateUIRoutes(spec.Routes); err != nil {
-			return err
+		if buildOutput != "" {
+			if err := validateRelativePackagePath(buildOutput, "build.output"); err != nil {
+				return err
+			}
+		}
+		if assetRoot != "" && buildOutput != "" && assetRoot != buildOutput {
+			return fmt.Errorf("build.output %q must match spec.assetRoot %q", buildOutput, assetRoot)
+		}
+		if spec != nil {
+			if err := validateUIRoutes(spec.Routes); err != nil {
+				return err
+			}
 		}
 	default:
 		return fmt.Errorf("unsupported manifest kind %q", kind)
@@ -390,12 +428,32 @@ func validateRelativePackagePath(value, label string) error {
 	return nil
 }
 
+func validateRelativeSourcePath(value, label string) error {
+	if value == "" {
+		return fmt.Errorf("%s is required", label)
+	}
+	if strings.HasPrefix(value, "/") {
+		return fmt.Errorf("%s must be relative", label)
+	}
+	cleaned := path.Clean(value)
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("%s must stay within the package", label)
+	}
+	if strings.Contains(value, "\\") {
+		return fmt.Errorf("%s must use forward slashes", label)
+	}
+	if cleaned != value {
+		return fmt.Errorf("%s must be normalized", label)
+	}
+	return nil
+}
+
 func validateReleaseMetadata(release *providermanifestv1.ReleaseMetadata) error {
 	if release == nil || release.Build == nil {
 		return nil
 	}
 	if release.Build.Workdir != "" {
-		if err := validateRelativePackagePath(release.Build.Workdir, "release.build.workdir"); err != nil {
+		if err := validateRelativeSourcePath(release.Build.Workdir, "release.build.workdir"); err != nil {
 			return err
 		}
 	}
@@ -408,6 +466,53 @@ func validateReleaseMetadata(release *providermanifestv1.ReleaseMetadata) error 
 		}
 	}
 	return nil
+}
+
+func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
+	if build == nil {
+		return nil
+	}
+	if build.Workdir != "" {
+		if err := validateRelativeSourcePath(build.Workdir, "build.workdir"); err != nil {
+			return err
+		}
+	}
+	if len(build.Command) == 0 {
+		return fmt.Errorf("build.command is required")
+	}
+	for i, arg := range build.Command {
+		if strings.TrimSpace(arg) == "" {
+			return fmt.Errorf("build.command[%d] is required", i)
+		}
+	}
+	if build.Output != "" {
+		if err := validateRelativePackagePath(build.Output, "build.output"); err != nil {
+			return err
+		}
+	}
+	for i, input := range build.Inputs {
+		label := fmt.Sprintf("build.inputs[%d]", i)
+		if strings.ContainsAny(input, "*?[") {
+			return fmt.Errorf("%s does not support glob syntax", label)
+		}
+		if err := validateRelativeSourcePath(input, label); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func EffectiveUIAssetRoot(manifest *providermanifestv1.Manifest) string {
+	if manifest == nil {
+		return ""
+	}
+	if manifest.Spec != nil && manifest.Spec.AssetRoot != "" {
+		return manifest.Spec.AssetRoot
+	}
+	if manifest.Build != nil {
+		return manifest.Build.Output
+	}
+	return ""
 }
 
 func validateProviderAuth(path string, auth *providermanifestv1.ProviderAuth) error {

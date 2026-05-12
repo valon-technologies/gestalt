@@ -46,6 +46,9 @@
     "release": {
       "$ref": "#/$defs/release"
     },
+    "build": {
+      "$ref": "#/$defs/sourceBuild"
+    },
     "artifacts": {
       "type": "array",
       "items": {
@@ -83,6 +86,38 @@
         "command": {
           "type": "array",
           "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "sourceBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "workdir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputs": {
+          "type": "array",
           "items": {
             "type": "string",
             "minLength": 1

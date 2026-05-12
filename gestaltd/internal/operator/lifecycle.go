@@ -1649,7 +1649,13 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 	}
 	if entry.HasLocalSource() {
 		input.Path = fingerprintLocalSourcePath(entry.SourcePath(), configDir)
-		digest, err := fingerprintLocalSourceDigest(entry.SourcePath())
+		var digest string
+		var err error
+		if strings.HasPrefix(name, "ui:") {
+			digest, err = fingerprintLocalUISourceDigest(entry.SourcePath())
+		} else {
+			digest, err = fingerprintLocalSourceDigest(entry.SourcePath())
+		}
 		if err != nil {
 			return "", err
 		}
@@ -1797,6 +1803,155 @@ func fingerprintLocalSourceDigest(sourcePath string) (string, error) {
 		return "", err
 	}
 	return providerpkg.DirectoryDigest(sourceDir, manifestPath, manifest)
+}
+
+func fingerprintLocalUISourceDigest(sourcePath string) (string, error) {
+	manifestPath := sourcePath
+	sourceDir := sourcePath
+
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return "", err
+	}
+	if info.IsDir() {
+		manifestPath, err = providerpkg.FindManifestFile(sourcePath)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		sourceDir = filepath.Dir(sourcePath)
+	}
+
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return "", err
+	}
+	kind, err := providerpkg.ManifestKind(manifest)
+	if err != nil {
+		return "", err
+	}
+	build := providerpkg.EffectiveSourceBuild(manifest)
+	if kind != providermanifestv1.KindUI || build == nil {
+		return providerpkg.DirectoryDigest(sourceDir, manifestPath, manifest)
+	}
+	return fingerprintLocalUIBuildInputs(sourceDir, manifestPath, manifest, build)
+}
+
+func fingerprintLocalUIBuildInputs(sourceDir, manifestPath string, manifest *providermanifestv1.Manifest, build *providerpkg.ResolvedSourceBuild) (string, error) {
+	var digests []string
+	seen := map[string]struct{}{}
+
+	addFile := func(path string) error {
+		rel, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if _, ok := seen[rel]; ok {
+			return nil
+		}
+		seen[rel] = struct{}{}
+		sum, err := providerpkg.FileSHA256(path)
+		if err != nil {
+			return err
+		}
+		digests = append(digests, rel+"="+sum)
+		return nil
+	}
+
+	if err := addFile(manifestPath); err != nil {
+		return "", fmt.Errorf("digest manifest: %w", err)
+	}
+
+	assetRoot := providerpkg.EffectiveUIAssetRoot(manifest)
+	outputAbs := ""
+	if assetRoot != "" {
+		outputAbs = filepath.Clean(filepath.Join(sourceDir, filepath.FromSlash(assetRoot)))
+	}
+	excludedDirs := map[string]struct{}{
+		".git":         {},
+		".gestaltd":    {},
+		"node_modules": {},
+	}
+	shouldSkip := func(path string, d os.DirEntry) bool {
+		cleanPath := filepath.Clean(path)
+		if outputAbs != "" && pathWithinRoot(outputAbs, cleanPath) {
+			return true
+		}
+		if d.IsDir() {
+			_, excluded := excludedDirs[d.Name()]
+			return excluded
+		}
+		return false
+	}
+	walkInput := func(inputAbs string) error {
+		return filepath.WalkDir(inputAbs, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if shouldSkip(path, d) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if err := addFile(path); err != nil {
+				return fmt.Errorf("digest input %s: %w", path, err)
+			}
+			return nil
+		})
+	}
+
+	inputs := append([]string(nil), build.Inputs...)
+	if len(inputs) == 0 {
+		workdir := "."
+		if strings.TrimSpace(build.Workdir) != "" {
+			workdir = build.Workdir
+		}
+		inputs = []string{workdir}
+	}
+	for _, input := range inputs {
+		inputAbs := filepath.Clean(filepath.Join(sourceDir, filepath.FromSlash(input)))
+		info, err := os.Stat(inputAbs)
+		if err != nil {
+			return "", fmt.Errorf("stat build input %q: %w", input, err)
+		}
+		if shouldSkip(inputAbs, dirEntryFromFileInfo(info)) {
+			continue
+		}
+		if !info.IsDir() {
+			if err := addFile(inputAbs); err != nil {
+				return "", fmt.Errorf("digest build input %q: %w", input, err)
+			}
+			continue
+		}
+		if err := walkInput(inputAbs); err != nil {
+			return "", fmt.Errorf("digest build input %q: %w", input, err)
+		}
+	}
+
+	slices.Sort(digests)
+	combined := sha256.Sum256([]byte(strings.Join(digests, "\n")))
+	return hex.EncodeToString(combined[:]), nil
+}
+
+type fileInfoDirEntry struct {
+	os.FileInfo
+}
+
+func (d fileInfoDirEntry) Type() os.FileMode {
+	return d.FileInfo.Mode().Type()
+}
+
+func (d fileInfoDirEntry) Info() (os.FileInfo, error) {
+	return d.FileInfo, nil
+}
+
+func dirEntryFromFileInfo(info os.FileInfo) os.DirEntry {
+	return fileInfoDirEntry{FileInfo: info}
 }
 
 func fingerprintLocalReleaseMetadataDigest(sourcePath string) (string, error) {

@@ -143,9 +143,9 @@ plugins:
 
 Git sources point at an external repository, full commit SHA, and manifest path.
 Use them for reproducible provider revisions before provider-index publication.
-`artifactMode` controls whether Gestalt builds from source or uses a prebuilt
-snapshot. See [Config File](/reference/config-file#pluginssource) for the full
-`source.git` shape.
+`materialization` controls whether Gestalt prepares from source or uses a
+prebuilt snapshot. See [Config File](/reference/config-file#pluginssource) for
+the full `source.git` shape.
 
 ```yaml
 plugins:
@@ -155,7 +155,7 @@ plugins:
         repo: https://github.com/acme/gestalt-providers.git
         ref: 60fa7e0521eeedea8b28abdd9b43284e9ea246e2
         path: plugins/support/manifest.yaml
-        artifactMode: source
+        materialization: source
 ```
 
 ## Provider Installation
@@ -495,27 +495,39 @@ packaging.
   </Tabs.Tab>
 </Tabs>
 
-#### Source release builds
+#### Source UI builds
 
-Source manifests may optionally define a `release.build` command. Gestalt runs
-it before source-manifest preparation, which lets UI packages generate
-static assets and lets provider/authentication/datastore packages generate support files
-such as config schemas before packaging.
+Source UI manifests may define top-level `build`. Gestalt runs it before
+source-manifest preparation, which lets UI packages generate static assets
+without checking built files into source control. The environment running
+`gestaltd lock`, `gestaltd sync --locked`, provider dev, or
+`gestaltd provider release` must have the command's build tools available.
+`gestaltd serve --locked` only serves prepared static assets.
 
 ```yaml
 kind: ui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.2.0
-release:
-  build:
-    workdir: ui
-    command:
-      - npm
-      - run
-      - build
+build:
+  workdir: ui
+  command:
+    - npm
+    - run
+    - build
+  output: ui/out
+  inputs:
+    - ui/package.json
+    - ui/src
 spec:
-  assetRoot: ui/out
+  routes:
+    - path: /
+      allowedRoles: [viewer, admin]
 ```
+
+Released UI packages still contain a concrete `spec.assetRoot`; Gestalt adds it
+to the prepared manifest from `build.output` and strips build metadata.
+`release.build` remains supported as a legacy source build hook, but new UI
+manifests should use top-level `build` and must not set both.
 
 #### Release manifest for an executable provider
 

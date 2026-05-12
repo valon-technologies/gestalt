@@ -111,6 +111,86 @@ plugins:
 	}
 }
 
+func TestLifecycleGitSourceUIBuildLockSyncContract(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("source UI build fixture uses POSIX shell")
+	}
+
+	dir := t.TempDir()
+	repoDir := filepath.Join(dir, "providers")
+	const packageSource = "github.com/acme/providers/ui/roadmap"
+	writeSourceUITree(t, filepath.Join(repoDir, "ui", "roadmap"), packageSource, "1.2.3")
+	runGitTestCommand(t, repoDir, "init")
+	runGitTestCommand(t, repoDir, "config", "user.email", "test@example.com")
+	runGitTestCommand(t, repoDir, "config", "user.name", "Test")
+	runGitTestCommand(t, repoDir, "add", ".")
+	runGitTestCommand(t, repoDir, "commit", "-m", "ui")
+	ref := strings.TrimSpace(runGitTestOutput(t, repoDir, "rev-parse", "HEAD"))
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v5
+%s
+  ui:
+    roadmap:
+      source:
+        git:
+          repo: file://%s
+          ref: %s
+          path: ui/roadmap/manifest.yaml
+          materialization: source
+      path: /roadmap
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(repoDir), ref, filepath.ToSlash(artifactsDir))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	entry := lock.UIs["roadmap"]
+	if entry.SourceRef == nil {
+		t.Fatal("sourceRef missing")
+	}
+	if entry.SourceRef.Materialization != gitMaterializationSource {
+		t.Fatalf("sourceRef materialization = %q", entry.SourceRef.Materialization)
+	}
+	preparedIndex := filepath.Join(artifactsDir, ".gestaltd", "ui", "roadmap", "dist", "index.html")
+	if err := os.RemoveAll(filepath.Join(artifactsDir, ".gestaltd", "ui", "roadmap")); err != nil {
+		t.Fatalf("remove prepared ui: %v", err)
+	}
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePaths after removing prepared ui: %v", err)
+	}
+	if _, err := os.Stat(preparedIndex); err != nil {
+		t.Fatalf("prepared ui index not restored: %v", err)
+	}
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	ui := cfg.Providers.UI["roadmap"]
+	if ui == nil || ui.ResolvedManifest == nil {
+		t.Fatalf("ui resolved manifest = %+v", ui)
+	}
+	if ui.ResolvedManifest.Build != nil {
+		t.Fatalf("prepared ui manifest retained build metadata: %+v", ui.ResolvedManifest.Build)
+	}
+	if got, want := filepath.ToSlash(ui.ResolvedAssetRoot), filepath.ToSlash(filepath.Join(artifactsDir, ".gestaltd", "ui", "roadmap", "dist")); got != want {
+		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, want)
+	}
+}
+
 func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	t.Parallel()
 
@@ -372,6 +452,33 @@ func writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent s
 	}
 	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), data, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
+	}
+}
+
+func writeSourceUITree(t *testing.T, dir, source, version string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir source ui dir: %v", err)
+	}
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindUI,
+		Source:  source,
+		Version: version,
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Output:  "dist",
+			Inputs:  []string{"build.sh"},
+		},
+	}
+	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("encode ui manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "manifest.yaml"), data, 0o644); err != nil {
+		t.Fatalf("write ui manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
+		t.Fatalf("write ui build script: %v", err)
 	}
 }
 

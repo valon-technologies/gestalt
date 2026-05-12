@@ -996,10 +996,11 @@ func sourceUIHandler(manifestPath string) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read ui manifest after release build: %w", err)
 	}
-	if manifest.Spec == nil || strings.TrimSpace(manifest.Spec.AssetRoot) == "" {
-		return nil, fmt.Errorf("ui manifest %q missing spec.assetRoot", manifestPath)
+	assetRootValue := providerpkg.EffectiveUIAssetRoot(manifest)
+	if strings.TrimSpace(assetRootValue) == "" {
+		return nil, fmt.Errorf("ui manifest %q missing spec.assetRoot or build.output", manifestPath)
 	}
-	assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Spec.AssetRoot))
+	assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(assetRootValue))
 	if _, err := os.Stat(assetRoot); err != nil {
 		return nil, fmt.Errorf("ui asset root not found at %s: %w", assetRoot, err)
 	}
