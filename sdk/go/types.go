@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 	"time"
-
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
 
 // ProviderKind identifies the protocol surface a provider implements.
@@ -91,7 +89,7 @@ type WarningsProvider interface {
 // SessionCatalogProvider is implemented by integration providers that derive
 // additional operations from the current request context.
 type SessionCatalogProvider interface {
-	CatalogForRequest(ctx context.Context, token string) (*proto.Catalog, error)
+	CatalogForRequest(ctx context.Context, token string) (*Catalog, error)
 }
 
 // ConnectedToken is the normalized connection payload passed into post-connect

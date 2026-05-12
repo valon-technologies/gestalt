@@ -6,19 +6,22 @@ import (
 	"fmt"
 	"os"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v3"
 )
 
-func writeCatalogYAML(cat *proto.Catalog, path string) error {
+func writeCatalogYAML(cat *Catalog, path string) error {
 	if cat == nil {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("remove catalog %q: %w", path, err)
 		}
 		return nil
 	}
-	jsonData, err := protojson.MarshalOptions{UseProtoNames: false, EmitDefaultValues: false}.Marshal(cat)
+	pbCat, err := catalogToProto(cat)
+	if err != nil {
+		return fmt.Errorf("convert catalog: %w", err)
+	}
+	jsonData, err := protojson.MarshalOptions{UseProtoNames: false, EmitDefaultValues: false}.Marshal(pbCat)
 	if err != nil {
 		return fmt.Errorf("marshal catalog: %w", err)
 	}

@@ -16,6 +16,16 @@ export interface CatalogParameter {
 }
 
 /**
+ * Optional host hints attached to a catalog operation.
+ */
+export interface OperationAnnotations {
+  readOnlyHint?: boolean;
+  idempotentHint?: boolean;
+  destructiveHint?: boolean;
+  openWorldHint?: boolean;
+}
+
+/**
  * JSON-schema-like description used in provider catalogs.
  */
 export interface CatalogSchema {
@@ -38,9 +48,12 @@ export interface CatalogOperation {
   parameters?: CatalogParameter[];
   inputSchema?: CatalogSchema;
   outputSchema?: CatalogSchema;
+  annotations?: OperationAnnotations;
+  requiredScopes?: string[];
   tags?: string[];
   readOnly?: boolean;
   visible?: boolean;
+  transport?: string;
   allowedRoles?: string[];
 }
 
@@ -182,6 +195,12 @@ function toCatalogJsonObject(
       if (operation.outputSchema !== undefined) {
         serialized.outputSchema = operation.outputSchema;
       }
+      if (operation.annotations !== undefined) {
+        serialized.annotations = operation.annotations;
+      }
+      if (operation.requiredScopes && operation.requiredScopes.length > 0) {
+        serialized.requiredScopes = operation.requiredScopes;
+      }
       if (operation.tags && operation.tags.length > 0) {
         serialized.tags = operation.tags;
       }
@@ -190,6 +209,9 @@ function toCatalogJsonObject(
       }
       if (operation.visible !== undefined) {
         serialized.visible = operation.visible;
+      }
+      if (operation.transport) {
+        serialized.transport = operation.transport;
       }
       if (operation.allowedRoles && operation.allowedRoles.length > 0) {
         serialized.allowedRoles = operation.allowedRoles;

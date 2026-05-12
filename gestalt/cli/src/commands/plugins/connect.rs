@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::api::{ApiClient, ApiError};
+use crate::api::{ApiClient, ApiError, encode_path_segment};
 use crate::interactive::{InputPrompt, PromptOption, prompt_input, prompt_select};
 use crate::output;
 
@@ -267,17 +267,115 @@ pub fn connect_with_browser_opener<F>(
 where
     F: FnOnce(&str) -> Result<()>,
 {
-    let integration = fetch_plugin(client, name)?;
+    connect_with_scope_and_browser_opener(
+        client,
+        ConnectScope::User,
+        name,
+        connection,
+        instance,
+        open_browser,
+    )
+}
+
+pub fn connect_managed_subject(
+    client: &ApiClient,
+    subject_id: &str,
+    name: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+) -> Result<()> {
+    connect_managed_subject_with_browser_opener(
+        client,
+        subject_id,
+        name,
+        connection,
+        instance,
+        |url| open::that(url).map(|_| ()).map_err(Into::into),
+    )
+}
+
+pub fn connect_managed_subject_with_browser_opener<F>(
+    client: &ApiClient,
+    subject_id: &str,
+    name: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+    open_browser: F,
+) -> Result<()>
+where
+    F: FnOnce(&str) -> Result<()>,
+{
+    connect_with_scope_and_browser_opener(
+        client,
+        ConnectScope::ManagedSubject { subject_id },
+        name,
+        connection,
+        instance,
+        open_browser,
+    )
+}
+
+fn connect_with_scope_and_browser_opener<F>(
+    client: &ApiClient,
+    scope: ConnectScope<'_>,
+    name: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+    open_browser: F,
+) -> Result<()>
+where
+    F: FnOnce(&str) -> Result<()>,
+{
+    let integration = fetch_plugin(client, scope, name)?;
     let flow = ResolvedConnectFlow::resolve(&integration, connection)?;
 
     match flow.mode {
-        ConnectMode::OAuth => start_oauth(client, &flow, instance, open_browser),
-        ConnectMode::Manual => connect_manual(client, &flow, instance),
+        ConnectMode::OAuth => start_oauth(client, scope, &flow, instance, open_browser),
+        ConnectMode::Manual => connect_manual(client, scope, &flow, instance),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConnectScope<'a> {
+    User,
+    ManagedSubject { subject_id: &'a str },
+}
+
+impl ConnectScope<'_> {
+    fn integrations_path(self) -> String {
+        match self {
+            Self::User => "/api/v1/integrations".to_string(),
+            Self::ManagedSubject { subject_id } => format!(
+                "/api/v1/authorization/subjects/{}/integrations",
+                encode_path_segment(subject_id)
+            ),
+        }
+    }
+
+    fn start_oauth_path(self) -> String {
+        match self {
+            Self::User => "/api/v1/auth/start-oauth".to_string(),
+            Self::ManagedSubject { subject_id } => format!(
+                "/api/v1/authorization/subjects/{}/auth/start-oauth",
+                encode_path_segment(subject_id)
+            ),
+        }
+    }
+
+    fn connect_manual_path(self) -> String {
+        match self {
+            Self::User => "/api/v1/auth/connect-manual".to_string(),
+            Self::ManagedSubject { subject_id } => format!(
+                "/api/v1/authorization/subjects/{}/auth/connect-manual",
+                encode_path_segment(subject_id)
+            ),
+        }
     }
 }
 
 fn start_oauth<F>(
     client: &ApiClient,
+    scope: ConnectScope<'_>,
     flow: &ResolvedConnectFlow<'_>,
     instance: Option<&str>,
     open_browser: F,
@@ -288,7 +386,7 @@ where
     let connection_params = prompt_connection_params(flow.connection_param_defs())?;
     let resp = client
         .post(
-            "/api/v1/auth/start-oauth",
+            &scope.start_oauth_path(),
             &StartOAuthRequest {
                 integration: flow.integration_name(),
                 connection: flow.connection_name(),
@@ -314,6 +412,7 @@ where
 
 fn connect_manual(
     client: &ApiClient,
+    scope: ConnectScope<'_>,
     flow: &ResolvedConnectFlow<'_>,
     instance: Option<&str>,
 ) -> Result<()> {
@@ -333,7 +432,7 @@ fn connect_manual(
     let response: ConnectManualResponse = serde_json::from_value(
         client
             .post(
-                "/api/v1/auth/connect-manual",
+                &scope.connect_manual_path(),
                 &ConnectManualRequest {
                     integration: flow.integration_name(),
                     credentials: credentials.request(),
@@ -422,10 +521,14 @@ fn complete_pending_selection(
     Ok(())
 }
 
-fn fetch_plugin(client: &ApiClient, name: &str) -> Result<IntegrationInfo> {
+fn fetch_plugin(
+    client: &ApiClient,
+    scope: ConnectScope<'_>,
+    name: &str,
+) -> Result<IntegrationInfo> {
     let plugins: Vec<IntegrationInfo> = serde_json::from_value(
         client
-            .get("/api/v1/integrations")
+            .get(&scope.integrations_path())
             .context("failed to load plugins")?,
     )
     .context("failed to parse plugins")?;

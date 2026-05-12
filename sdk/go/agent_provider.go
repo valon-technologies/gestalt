@@ -469,24 +469,6 @@ type ResolvedAgentConnection struct {
 }
 
 type (
-	AgentManagerCreateSessionRequest      = proto.AgentManagerCreateSessionRequest
-	AgentManagerGetSessionRequest         = proto.AgentManagerGetSessionRequest
-	AgentManagerListSessionsRequest       = proto.AgentManagerListSessionsRequest
-	AgentManagerListSessionsResponse      = proto.AgentManagerListSessionsResponse
-	AgentManagerUpdateSessionRequest      = proto.AgentManagerUpdateSessionRequest
-	AgentManagerCreateTurnRequest         = proto.AgentManagerCreateTurnRequest
-	AgentManagerGetTurnRequest            = proto.AgentManagerGetTurnRequest
-	AgentManagerListTurnsRequest          = proto.AgentManagerListTurnsRequest
-	AgentManagerListTurnsResponse         = proto.AgentManagerListTurnsResponse
-	AgentManagerCancelTurnRequest         = proto.AgentManagerCancelTurnRequest
-	AgentManagerListTurnEventsRequest     = proto.AgentManagerListTurnEventsRequest
-	AgentManagerListTurnEventsResponse    = proto.AgentManagerListTurnEventsResponse
-	AgentManagerListInteractionsRequest   = proto.AgentManagerListInteractionsRequest
-	AgentManagerListInteractionsResponse  = proto.AgentManagerListInteractionsResponse
-	AgentManagerResolveInteractionRequest = proto.AgentManagerResolveInteractionRequest
-)
-
-type (
 	// AgentMessagePartType identifies the payload kind in an agent message part.
 	AgentMessagePartType  int32
 	AgentToolSourceMode   int32

@@ -148,7 +148,12 @@ still honor each event's `visibility`.
 
 ### Managed Subjects
 
-Managed subjects are service-account identities for release bots, service accounts, and shared automation. Their canonical subject ID is always `service_account:<id>`, and their upstream credentials and subject-owned API tokens use that same subject ID. These management routes require a browser session or an unscoped user-owned API token; scoped API tokens and subject-owned API tokens cannot manage managed subjects.
+Managed subjects are the API representation of
+[service accounts](/service-accounts). Their canonical subject ID is always
+`service_account:<id>`, and their upstream credentials and subject-owned API
+tokens use that same subject ID. These management routes require a browser
+session or an unscoped user-owned API token; scoped API tokens and subject-owned
+API tokens cannot manage managed subjects.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -163,6 +168,9 @@ Managed subjects are service-account identities for release bots, service accoun
 | `GET` | `/api/v1/authorization/subjects/{subjectID}/grants` | List plugin authorization grants for the managed subject. |
 | `PUT` | `/api/v1/authorization/subjects/{subjectID}/grants/{plugin}` | Grant a plugin role to the managed subject. Requires managed subject `admin` and the caller must already hold the requested plugin role, or plugin `admin`. |
 | `DELETE` | `/api/v1/authorization/subjects/{subjectID}/grants/{plugin}` | Remove a plugin authorization grant from the managed subject. Requires managed subject `admin`. |
+| `GET` | `/api/v1/authorization/subjects/{subjectID}/external-identities` | List external identities the managed subject may assume. Requires managed subject `admin`. |
+| `PUT` | `/api/v1/authorization/subjects/{subjectID}/external-identities` | Grant an external identity assumption relationship. Body includes `type` and `id`. Requires managed subject `admin`. |
+| `DELETE` | `/api/v1/authorization/subjects/{subjectID}/external-identities` | Remove an external identity assumption relationship. Body includes `type` and `id`. Requires managed subject `admin`. |
 | `GET` | `/api/v1/authorization/subjects/{subjectID}/integrations` | List plugins with connection state resolved against the managed subject's credential subject. Requires managed subject `viewer`. |
 | `POST` | `/api/v1/authorization/subjects/{subjectID}/auth/start-oauth` | Start a plugin OAuth flow that stores credentials on the managed subject. Requires managed subject `editor`. |
 | `POST` | `/api/v1/authorization/subjects/{subjectID}/auth/connect-manual` | Submit manual plugin credentials for the managed subject. Requires managed subject `editor`. |
@@ -174,6 +182,9 @@ Managed subjects are service-account identities for release bots, service accoun
 
 The authorization provider stores managed-subject management as relationships on the `managed_subject` resource type. Plugin runtime access is separate: a managed subject can only invoke a plugin after it has an explicit plugin grant, which is stored as the same provider-backed dynamic plugin relationship used by the admin authorization API. Policy `default: allow` applies to user callers, not to managed subjects. Credential connection management is also subject-scoped: OAuth, manual credentials, pending connection selection, and disconnects store or remove credentials under the managed subject's canonical subject ID.
 
+For the conceptual model and setup flow, see
+[Service Accounts](/service-accounts).
+
 ### Operator Surfaces
 
 | Method | Path | Purpose |
@@ -181,6 +192,9 @@ The authorization provider stores managed-subject management as relationships on
 | `GET` | `/metrics` | Prometheus scrape endpoint for emitted metrics. Requires Gestalt authentication only when served on the public listener. The recommended production pattern is to move it to `server.management` and protect that listener at the network or proxy layer. |
 | `GET` | `/admin/api/v1/runtime/providers` | List configured runtime providers. When support inspection succeeds, loaded providers include a derived `profile` with `advertised` behavior reported by the runtime and `effective` behavior resolved for this host deployment. `sessionCount` is present when session inspection also succeeds, and `error` explains any current inspection failure. |
 | `GET` | `/admin/api/v1/runtime/providers/{provider}/sessions` | List active sessions for one runtime provider, including session `id`, lifecycle `state`, and the hosted `plugin` when known. |
+| `GET` | `/admin/api/v1/authorization/provider` | Inspect the configured authorization provider, capabilities, and active model. |
+| `GET` | `/admin/api/v1/authorization/models` | List authorization provider models. Supports `pageSize` and `pageToken`. |
+| `GET` | `/admin/api/v1/authorization/relationships` | List authorization provider relationships for debugging. Supports `modelId`, subject, relation, resource, `pageSize`, and `pageToken` filters. |
 | `GET` | `/admin/api/v1/authorization/plugins` | List plugins that declare `authorizationPolicy`, including the bound policy name and mounted UI path when present. |
 | `GET` | `/admin/api/v1/authorization/plugins/{plugin}/members` | List merged static and dynamic subject membership rows for one plugin. Rows include `source`, `effective`, `mutable`, and selector metadata. |
 | `PUT` | `/admin/api/v1/authorization/plugins/{plugin}/members` | Upsert one dynamic subject membership row for a plugin by canonical `subjectId` or by user-only `email` alias and role. Rejects subjects who already have static authorization on that plugin. |

@@ -107,6 +107,7 @@ export {
   type CatalogOperation,
   type CatalogParameter,
   type CatalogSchema,
+  type OperationAnnotations,
 } from "../../../../src/catalog.ts";
 export {
   PluginInvoker,

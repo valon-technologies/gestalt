@@ -50,6 +50,10 @@ fn run() -> anyhow::Result<()> {
                 TokenCommands::Revoke { id } => commands::tokens::revoke(&client, &id, format),
             }
         }
+        Commands::Authorization { command } => {
+            let client = ApiClient::from_env(url)?;
+            commands::authorization::dispatch(&client, command, format)
+        }
         Commands::Workflow { command } => {
             let client = ApiClient::from_env(url)?;
             match command {

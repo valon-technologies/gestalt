@@ -11,6 +11,8 @@ import (
 func operatorLifecycle() *operator.Lifecycle {
 	return operator.NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, buildFactories())
+	}).WithSourceAuthSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, buildFactories())
 	})
 }
 

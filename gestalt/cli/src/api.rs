@@ -56,6 +56,19 @@ pub fn normalize_url(url: &str) -> String {
     }
 }
 
+pub fn encode_path_segment(value: &str) -> String {
+    let mut out = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(char::from(byte));
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
 pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
     match find_configured_url(url_override)? {
         Some(url) => Ok(url),
@@ -370,6 +383,13 @@ impl ApiClient {
 
     pub fn delete(&self, path: &str) -> Result<serde_json::Value> {
         self.send(Method::DELETE, path)
+    }
+
+    pub fn delete_json<T>(&self, path: &str, body: &T) -> Result<serde_json::Value>
+    where
+        T: Serialize + ?Sized,
+    {
+        self.send_json(Method::DELETE, path, body)
     }
 
     pub fn create_api_token(&self, name: &str) -> Result<serde_json::Value> {

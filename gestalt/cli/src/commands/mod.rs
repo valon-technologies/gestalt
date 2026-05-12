@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod auth;
+pub mod authorization;
 pub mod config;
 pub mod describe;
 pub mod init;
