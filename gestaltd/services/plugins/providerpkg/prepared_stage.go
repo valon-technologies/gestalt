@@ -290,6 +290,15 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 	}
 	manifest.Version = version
 	manifest.Release = nil
+	if manifest.Kind == providermanifestv1.KindUI {
+		if assetRoot := EffectiveUIAssetRoot(srcManifest); assetRoot != "" {
+			if manifest.Spec == nil {
+				manifest.Spec = &providermanifestv1.Spec{}
+			}
+			manifest.Spec.AssetRoot = assetRoot
+		}
+	}
+	manifest.Build = nil
 
 	for i, artifact := range srcManifest.Artifacts {
 		digest, err := FileSHA256(filepath.Join(sourceDir, filepath.FromSlash(artifact.Path)))
@@ -312,6 +321,7 @@ func buildPreparedInstallManifest(srcManifest *providermanifestv1.Manifest, vers
 	}
 	manifest.Version = version
 	manifest.Release = nil
+	manifest.Build = nil
 	manifest.Artifacts = []providermanifestv1.Artifact{
 		{OS: goos, Arch: goarch, Path: binaryName, SHA256: digest},
 	}

@@ -1230,8 +1230,8 @@ source:
 upgrade behavior.
 
 For commit-pinned first-party development, use a git source. `ref` must be a
-full commit SHA. `artifactMode: source` fetches and builds from the git source
-when prepared artifacts are missing:
+full commit SHA. `materialization: source` fetches and prepares from the git
+source when prepared artifacts are missing:
 
 ```yaml
 source:
@@ -1239,11 +1239,12 @@ source:
     repo: https://github.com/acme/gestalt-providers.git
     ref: 60fa7e0521eeedea8b28abdd9b43284e9ea246e2
     path: plugins/github/manifest.yaml
-    artifactMode: source
+    materialization: source
 ```
 
 To consume prebuilt snapshots, set `artifactRepository` and an explicit
-`artifactMode`. `require` never falls back to git or provider indexes:
+`materialization: snapshot`. Snapshot materialization never falls back to git
+or provider indexes:
 
 ```yaml
 providerSnapshotRepositories:
@@ -1258,7 +1259,7 @@ plugins:
         ref: 60fa7e0521eeedea8b28abdd9b43284e9ea246e2
         path: plugins/github/manifest.yaml
         artifactRepository: acme
-        artifactMode: require
+        materialization: snapshot
 ```
 
 For exact published releases, point at a `provider-release.yaml` URL:

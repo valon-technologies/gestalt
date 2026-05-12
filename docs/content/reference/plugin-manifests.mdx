@@ -496,10 +496,14 @@ artifacts:
 ## UI Metadata
 
 The `spec` block for a `kind: ui` manifest describes a static UI package.
+Source UI manifests can either point at checked-in static assets with
+`spec.assetRoot` or declare top-level `build.output` to generate those assets
+during preparation. Released and prepared UI manifests always contain
+`spec.assetRoot` and do not contain top-level `build`.
 
 | Field       | Type         | Required | Purpose                                                                                                                     |
 | ----------- | ------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `assetRoot` | string       | yes      | Directory containing the built static assets.                                                                               |
+| `assetRoot` | string       | released: yes; source: when `build.output` is absent | Directory containing the built static assets.                                                                               |
 | `routes`    | UIRoute[] | no       | Optional route-level authorization rules used when a deployment binds this UI to `providers.ui.<name>.authorizationPolicy`. |
 
 Each `spec.routes` entry declares a mounted path and the allowed human roles for that path. Path matching is exact or longest-prefix with a terminal `/*`. When a deployment sets `authorizationPolicy`, route definitions must have non-empty `allowedRoles`, and the manifest must include a route that covers `/`.
@@ -514,14 +518,33 @@ kind: ui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.0.0
 displayName: Custom UI
+build:
+  workdir: ui
+  command:
+    - npm
+    - run
+    - build
+  output: ui/out
+  inputs:
+    - ui/package.json
+    - ui/src
 spec:
-  assetRoot: ui/out
   routes:
     - path: /
       allowedRoles: [viewer, admin]
     - path: /admin/*
       allowedRoles: [admin]
 ```
+
+Top-level `build` is source-only and currently supported for `kind: ui`
+manifests.
+
+| Build field | Type     | Required | Purpose                                                                                           |
+| ----------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `command`   | string[] | yes      | Command argv to run before preparing the static assets.                                           |
+| `workdir`   | string   | no       | Manifest-relative directory where `command` runs. Defaults to the manifest directory.             |
+| `output`    | string   | source UI: yes when `spec.assetRoot` is absent | Manifest-relative directory containing generated static assets. Must match `spec.assetRoot` when both are set. |
+| `inputs`    | string[] | no       | Literal manifest-relative files or directories used to fingerprint local source UI builds. Glob syntax is not supported. |
 
 ## Artifacts
 
@@ -820,25 +843,34 @@ authoring flow.
   </Tabs.Tab>
 </Tabs>
 
-Release-only build steps can be declared in source manifests with `release.build`.
-Gestalt runs that command before source-manifest preparation, which lets
-packages generate support files or UI bundles without checking built artifacts
-into source control.
+Source UI build steps should be declared with top-level `build`. Gestalt runs
+that command before source-manifest preparation during lock, sync, dev, and
+release packaging. This lets UI packages generate static bundles without
+checking built artifacts into source control.
 
 ```yaml
 kind: ui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.0.0
-release:
-  build:
-    workdir: ui
-    command:
-      - npm
-      - run
-      - build
+build:
+  workdir: ui
+  command:
+    - npm
+    - run
+    - build
+  output: ui/out
+  inputs:
+    - ui/package.json
+    - ui/src
 spec:
-  assetRoot: ui/out
+  routes:
+    - path: /
+      allowedRoles: [viewer, admin]
 ```
+
+`release.build` remains supported as a legacy build hook for source manifests,
+but new UI manifests should prefer top-level `build`. A manifest may not set
+both `build` and `release.build`.
 
 ## Release
 

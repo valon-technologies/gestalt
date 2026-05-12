@@ -69,6 +69,7 @@ type Manifest struct {
 	Description string           `json:"description,omitempty" yaml:"description,omitempty"`
 	IconFile    string           `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
 	Release     *ReleaseMetadata `json:"release,omitempty" yaml:"release,omitempty"`
+	Build       *SourceBuild     `json:"build,omitempty" yaml:"build,omitempty"`
 	Artifacts   []Artifact       `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
 	Entrypoint  *Entrypoint      `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
 	Spec        *Spec            `json:"spec,omitempty" yaml:"spec,omitempty"`
@@ -81,6 +82,13 @@ type ReleaseMetadata struct {
 type ReleaseBuild struct {
 	Workdir string   `json:"workdir,omitempty" yaml:"workdir,omitempty"`
 	Command []string `json:"command" yaml:"command"`
+}
+
+type SourceBuild struct {
+	Workdir string   `json:"workdir,omitempty" yaml:"workdir,omitempty"`
+	Command []string `json:"command" yaml:"command"`
+	Output  string   `json:"output,omitempty" yaml:"output,omitempty"`
+	Inputs  []string `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 }
 
 // Spec is a union type validated per kind. For auth/datastore/secrets only

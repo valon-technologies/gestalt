@@ -433,6 +433,125 @@ spec:
 	}
 }
 
+func TestManifestWorkflow_SourceUIBuildValidation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		manifest   string
+		readSource bool
+		wantErr    string
+	}{
+		{
+			name: "source ui may use build output without asset root",
+			manifest: `
+kind: ui
+source: github.com/acme/plugins/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+  output: dist
+`,
+			readSource: true,
+		},
+		{
+			name: "released ui rejects build metadata",
+			manifest: `
+kind: ui
+source: github.com/acme/plugins/released-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+  output: dist
+spec:
+  assetRoot: dist
+`,
+			wantErr: "build metadata is only allowed in source ui manifests",
+		},
+		{
+			name: "source ui rejects build and release build together",
+			manifest: `
+kind: ui
+source: github.com/acme/plugins/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+  output: dist
+release:
+  build:
+    command: [npm, run, build]
+spec:
+  assetRoot: dist
+`,
+			readSource: true,
+			wantErr:    "build and release.build may not both be set",
+		},
+		{
+			name: "source ui rejects mismatched build output",
+			manifest: `
+kind: ui
+source: github.com/acme/plugins/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+  output: dist
+spec:
+  assetRoot: out
+`,
+			readSource: true,
+			wantErr:    "build.output \"dist\" must match spec.assetRoot \"out\"",
+		},
+		{
+			name: "source ui rejects input globs",
+			manifest: `
+kind: ui
+source: github.com/acme/plugins/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+  output: dist
+  inputs:
+    - src/**
+`,
+			readSource: true,
+			wantErr:    "build.inputs[0] does not support glob syntax",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(tc.manifest))
+
+			var manifest *providermanifestv1.Manifest
+			var err error
+			if tc.readSource {
+				_, manifest, err = ReadSourceManifestFile(manifestPath)
+			} else {
+				_, manifest, err = ReadManifestFile(manifestPath)
+			}
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error = %v, want %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("read manifest: %v", err)
+			}
+			if got := EffectiveUIAssetRoot(manifest); got != "dist" {
+				t.Fatalf("EffectiveUIAssetRoot = %q, want dist", got)
+			}
+		})
+	}
+}
+
 func TestManifestWorkflow_AcceptsPluginRouteAuthReference(t *testing.T) {
 	t.Parallel()
 

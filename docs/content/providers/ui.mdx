@@ -133,6 +133,11 @@ That writes `gestalt.lock.json` and prepares the bundle under `.gestaltd/`.
 Afterward, `gestaltd serve --locked` serves the prepared assets from the
 configured path prefix.
 
+When a source UI manifest declares `build`, `gestaltd lock` and
+`gestaltd sync --locked` may need the build tool named by `build.command`
+available in the preparation environment. `gestaltd serve --locked` does not
+run UI builds; it serves only the prepared static assets.
+
 ## The admin UI
 
 The built-in admin UI is always served at `/admin`, regardless of whether
@@ -153,8 +158,11 @@ the built-in admin UI continue using the server-wide auth provider.
 
 ### Manifest
 
-The UI manifest declares `spec.assetRoot`, which points to the directory
-containing built static assets. The source field identifies the provider in the
+Released UI manifests declare `spec.assetRoot`, which points to the directory
+containing built static assets. Source UI manifests may declare either
+`spec.assetRoot` when the static assets are checked in, or top-level `build`
+with `output` when Gestalt should generate the static assets during lock, sync,
+dev, or release preparation. The source field identifies the provider in the
 registry.
 
 ```yaml
@@ -163,13 +171,18 @@ source: github.com/valon-technologies/gestalt-providers/ui/default
 version: 0.0.1
 displayName: Default UI
 description: Default Gestalt UI bundle.
-release:
-  build:
-    command:
-      - sh
-      - ./build.sh
+build:
+  workdir: app
+  command:
+    - npm
+    - run
+    - build
+  output: app/out
+  inputs:
+    - app/package.json
+    - app/package-lock.json
+    - app/src
 spec:
-  assetRoot: out
   routes:
     - path: /
       allowedRoles: [viewer, admin]
@@ -177,17 +190,21 @@ spec:
       allowedRoles: [admin]
 ```
 
-The `assetRoot` path is relative to the manifest file. It should contain the
-output of your frontend build, typically an `index.html` and accompanying JS,
-CSS, and image files. The directory does not need to be named `out`; common
-names include `out`, `dist`, and `build`.
+`build.output` and `spec.assetRoot` paths are relative to the manifest file.
+They identify the directory containing static output, typically an `index.html`
+and accompanying JS, CSS, and image files. The directory does not need to be
+named `out`; common names include `out`, `dist`, and `build`.
+
+For source manifests, `spec.assetRoot` is optional when `build.output` is set.
+For released or prepared manifests, `spec.assetRoot` is required and Gestalt
+strips the top-level `build` block after generating the assets. If a source
+manifest sets both `spec.assetRoot` and `build.output`, the values must match.
 
 Gestalt serves and packages static assets rather than frontend source files
-because it does not own each project's frontend build lifecycle. Frameworks,
-package managers, build commands, and environment handling vary by project, so
-production serving stays deterministic and framework-agnostic. If the frontend
-needs a build step, declare it with `release.build` and write the result into
-`assetRoot`.
+because `serve --locked` is runtime-agnostic. Frameworks, package managers,
+build commands, and environment handling vary by project, so production serving
+stays deterministic after `lock` and `sync --locked` have prepared the static
+asset root.
 
 `spec.routes` is optional unless a deployment binds the UI to
 `providers.ui.<name>.authorizationPolicy`. In that case, Gestalt uses these
@@ -197,32 +214,52 @@ declare non-empty `allowedRoles`.
 
 ### Build step
 
-If your UI needs a build step before packaging, use `release.build` to run it
-automatically during `gestaltd provider release`. This runs before
-source-manifest preparation, so the built assets are included in the release
-archive.
+If your source UI needs a build step, use top-level `build`. Gestalt runs the
+command before source-manifest preparation for local paths, git source
+materialization, provider dev, and `gestaltd provider release`. The deployer
+does not need to check in the generated `out/` or `dist/` directory, but the
+environment doing lock or sync must have the tools required by
+`build.command`.
 
-The Default UI uses a shell script that runs `npm ci && npm run build` to produce the static output:
+The Default UI can use npm to produce static output:
 
 ```yaml
 kind: ui
 source: github.com/valon-technologies/gestalt-providers/ui/default
 version: 0.0.1
-release:
-  build:
-    command:
-      - npm
-      - run
-      - build
+build:
+  workdir: app
+  command:
+    - npm
+    - run
+    - build
+  output: app/out
+  inputs:
+    - app/package.json
+    - app/package-lock.json
+    - app/src
 spec:
-  assetRoot: out
+  routes:
+    - path: /
+      allowedRoles: [viewer, admin]
 ```
 
-The command runs relative to the manifest directory. After the build completes,
-Gestalt packages everything under `assetRoot` into the release archive. You can
-use any build tool here -- `npm run build`, `vite build`, `next build && next
-export` -- as long as it writes output to the directory specified in
-`assetRoot`.
+`command` is an argv array, not a shell string. It runs in `build.workdir`
+relative to the manifest directory, or in the manifest directory when
+`workdir` is omitted. `output` is manifest-relative, not workdir-relative.
+`inputs` is optional and contains literal manifest-relative files or
+directories. Gestalt uses it to fingerprint local source UI builds while
+excluding the output directory, `.git`, `.gestaltd`, and `node_modules`.
+Glob syntax is not supported in `inputs`.
+
+After the build completes, Gestalt prepares or packages everything under
+`build.output`. You can use any build tool here -- `npm run build`,
+`vite build`, or `next build` configured for static export -- as long as it
+writes static files to the declared output directory.
+
+`release.build` remains supported as a legacy build hook for source manifests,
+but new UI manifests should prefer top-level `build`. A manifest may not set
+both `build` and `release.build`.
 
 ### Deploying the bundle
 

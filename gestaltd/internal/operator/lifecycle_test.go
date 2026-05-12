@@ -1269,6 +1269,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedUIWithoutLockfile(t *testing
 		wantPolicy   string
 		ownedUIPath  string
 		uiManifest   string
+		sourceBuild  bool
 		wantErr      string
 	}{
 		{
@@ -1281,6 +1282,18 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedUIWithoutLockfile(t *testing
 `,
 			uiKey:    "roadmap",
 			wantPath: "/create-customer-roadmap-review",
+		},
+		{
+			name: "direct mounted source-built ui",
+			uiConfigYAML: `  ui:
+    roadmap:
+      source:
+        path: ./ui/manifest.yaml
+      path: /create-customer-roadmap-review
+`,
+			uiKey:       "roadmap",
+			wantPath:    "/create-customer-roadmap-review",
+			sourceBuild: true,
 		},
 		{
 			name: "plugin ui object binds explicit ui",
@@ -1331,6 +1344,20 @@ plugins:
 			wantPath:    "/create-customer-roadmap-review",
 			wantPolicy:  "roadmap_policy",
 			ownedUIPath: "../ui/manifest.yaml",
+		},
+		{
+			name: "plugin owned source-built ui via plugin ui path",
+			uiConfigYAML: `plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+      ui:
+        path: /create-customer-roadmap-review
+`,
+			uiKey:       "roadmap",
+			wantPath:    "/create-customer-roadmap-review",
+			ownedUIPath: "../ui/manifest.yaml",
+			sourceBuild: true,
 		},
 		{
 			name: "plugin owned ui via plugin ui path with noncanonical manifest filename",
@@ -1392,16 +1419,35 @@ plugins:
 
 			dir := t.TempDir()
 			uiDir := filepath.Join(dir, "ui")
-			if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
-				t.Fatalf("MkdirAll ui dist: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
-				t.Fatalf("WriteFile index.html: %v", err)
+			if err := os.MkdirAll(uiDir, 0o755); err != nil {
+				t.Fatalf("MkdirAll ui dir: %v", err)
 			}
 			manifestName := cmp.Or(tc.uiManifest, "manifest.yaml")
 			manifestPath := filepath.Join(uiDir, manifestName)
-			spec := &providermanifestv1.Spec{AssetRoot: "dist"}
+			var spec *providermanifestv1.Spec
+			var build *providermanifestv1.SourceBuild
+			if tc.sourceBuild {
+				build = &providermanifestv1.SourceBuild{
+					Command: []string{"sh", "./build.sh"},
+					Output:  "dist",
+					Inputs:  []string{"build.sh"},
+				}
+				if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
+					t.Fatalf("WriteFile build.sh: %v", err)
+				}
+			} else {
+				if err := os.MkdirAll(filepath.Join(uiDir, "dist"), 0o755); err != nil {
+					t.Fatalf("MkdirAll ui dist: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
+					t.Fatalf("WriteFile index.html: %v", err)
+				}
+				spec = &providermanifestv1.Spec{AssetRoot: "dist"}
+			}
 			if tc.wantPolicy != "" {
+				if spec == nil {
+					spec = &providermanifestv1.Spec{}
+				}
 				spec.Routes = []providermanifestv1.UIRoute{
 					{Path: "/", AllowedRoles: []string{"viewer"}},
 				}
@@ -1411,6 +1457,7 @@ plugins:
 				Source:      "github.com/testowner/web/roadmap",
 				Version:     "0.0.1-alpha.1",
 				DisplayName: "Roadmap UI",
+				Build:       build,
 				Spec:        spec,
 			}, providerpkg.ManifestFormatYAML)
 			if err != nil {
