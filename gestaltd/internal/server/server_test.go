@@ -15350,6 +15350,65 @@ func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
 	}
 }
 
+func TestLoginCallbackForCLIWithRequestCallbackProviderUsesPrefixedState(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	u := seedUser(t, svc, "request@example.com")
+	auth := &stubRequestCallbackAuth{
+		wantCallbackState: "cli:54305:test-state",
+		email:             "request@example.com",
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = auth
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	body := bytes.NewBufferString(`{"state":"test-state","callbackPort":54305}`)
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+	if auth.capturedState != auth.wantCallbackState {
+		t.Fatalf("login state = %q, want %q", auth.capturedState, auth.wantCallbackState)
+	}
+
+	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state&cli=1")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["id"] == "" {
+		t.Fatal("expected id in CLI login response")
+	}
+	if result["token"] == "" {
+		t.Fatal("expected token in CLI login response")
+	}
+
+	tokens, err := svc.APITokens.ListAPITokens(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("list api tokens: %v", err)
+	}
+	if len(tokens) == 0 {
+		t.Fatal("expected API token to be stored")
+	}
+}
+
 func TestLoginCallbackStateMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -22505,6 +22564,36 @@ func (s *stubHostIssuedSessionAuth) ValidateToken(_ context.Context, token strin
 
 func (s *stubHostIssuedSessionAuth) SessionTokenTTL() time.Duration {
 	return time.Hour
+}
+
+type stubRequestCallbackAuth struct {
+	coretesting.StubAuthProvider
+	capturedState     string
+	wantCallbackState string
+	email             string
+}
+
+func (s *stubRequestCallbackAuth) Name() string {
+	return "request-callback"
+}
+
+func (s *stubRequestCallbackAuth) LoginURL(state string) (string, error) {
+	s.capturedState = state
+	return "https://idp.example.test/login?state=" + url.QueryEscape(state), nil
+}
+
+func (s *stubRequestCallbackAuth) HandleCallbackRequest(_ context.Context, query url.Values) (*core.UserIdentity, string, error) {
+	if query.Get("code") != "good-code" {
+		return nil, "", fmt.Errorf("unexpected code %q", query.Get("code"))
+	}
+	if query.Get("state") != s.wantCallbackState {
+		return nil, "", fmt.Errorf("missing verifier for state %q", query.Get("state"))
+	}
+	email := s.email
+	if email == "" {
+		email = "request@example.com"
+	}
+	return &core.UserIdentity{Email: email, DisplayName: "Request Callback"}, query.Get("state"), nil
 }
 
 func TestCookieAuth(t *testing.T) {

@@ -418,14 +418,19 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 
 	var identity *core.UserIdentity
 	var originalState string
+	callbackQuery := r.URL.Query()
+	providerCallbackState := stateForProviderCallback(loginState.State, callbackQuery.Get("state"))
 
 	if handler, ok := auth.provider.(RequestCallbackHandler); ok {
-		identity, originalState, err = handler.HandleCallbackRequest(r.Context(), r.URL.Query())
+		if providerCallbackState != callbackQuery.Get("state") {
+			callbackQuery = cloneCallbackQuery(callbackQuery)
+			callbackQuery.Set("state", providerCallbackState)
+		}
+		identity, originalState, err = handler.HandleCallbackRequest(r.Context(), callbackQuery)
 	} else if stateful, ok := auth.provider.(StatefulCallbackHandler); ok {
-		state := r.URL.Query().Get("state")
-		identity, originalState, err = stateful.HandleCallbackWithState(r.Context(), code, state)
+		identity, originalState, err = stateful.HandleCallbackWithState(r.Context(), code, providerCallbackState)
 	} else {
-		originalState = r.URL.Query().Get("state")
+		originalState = callbackQuery.Get("state")
 		identity, err = auth.provider.HandleCallback(r.Context(), code)
 	}
 	if err != nil {
@@ -537,6 +542,24 @@ func loginStatesMatch(expectedState, originalState string) bool {
 		return true
 	}
 	return false
+}
+
+func stateForProviderCallback(expectedState, callbackState string) string {
+	if rawState, ok := stripCLIStatePrefix(expectedState); ok && rawState == callbackState {
+		return expectedState
+	}
+	return callbackState
+}
+
+func cloneCallbackQuery(values url.Values) url.Values {
+	if len(values) == 0 {
+		return url.Values{}
+	}
+	cloned := make(url.Values, len(values))
+	for key, candidates := range values {
+		cloned[key] = append([]string(nil), candidates...)
+	}
+	return cloned
 }
 
 func stripCLIStatePrefix(state string) (string, bool) {
