@@ -805,11 +805,6 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 		"gestalt.result_status":       "200",
 		"gestalt.result_status_class": "2xx",
 	}
-	rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
-		return hasInt64SumMetric(rm, "gestaltd.operation.count", 1, attrs)
-	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 1, attrs)
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.operation.duration", attrs)
 	httpAttrs := map[string]string{
 		"http.route":                  "/api/v1/" + providerName + "/delivery",
 		"gestaltd.provider.name":      providerName,
@@ -817,6 +812,13 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 		"gestaltd.invocation.surface": "http_binding",
 		"gestaltd.http.binding.name":  "delivery",
 	}
+	rm := collectMetricsUntil(t, metrics, func(rm metricdata.ResourceMetrics) bool {
+		return hasInt64SumMetric(rm, "gestaltd.operation.count", 1, attrs) &&
+			metrictest.HasFloat64Histogram(rm, "gestaltd.operation.duration", attrs) &&
+			metrictest.HasFloat64Histogram(rm, "http.server.request.duration", httpAttrs)
+	})
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 1, attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.operation.duration", attrs)
 	metrictest.RequireFloat64Histogram(t, rm, "http.server.request.duration", httpAttrs)
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", httpAttrs, "gestalt.provider")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "http.server.request.duration", httpAttrs, "gestalt.operation")
