@@ -214,12 +214,13 @@ func workflowErrorType(err error) string {
 		return "context.deadline_exceeded"
 	}
 	if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
-		return "grpc." + workflowGRPCCodeName(st.Code())
+		return "grpc." + WorkflowGRPCCodeName(st.Code())
 	}
 	return "unknown"
 }
 
-func workflowGRPCCodeName(code codes.Code) string {
+// WorkflowGRPCCodeName returns the normalized gRPC status code name used by workflow telemetry.
+func WorkflowGRPCCodeName(code codes.Code) string {
 	switch code {
 	case codes.Canceled:
 		return "canceled"

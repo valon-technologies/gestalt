@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowprincipal"
 	"google.golang.org/grpc/codes"
@@ -629,7 +630,7 @@ func workflowManagerErrorCode(err error) string {
 		return ""
 	}
 	if st, ok := status.FromError(err); ok && st.Code() != codes.OK {
-		return workflowManagerGRPCCodeName(st.Code())
+		return observability.WorkflowGRPCCodeName(st.Code())
 	}
 	return ""
 }
@@ -671,22 +672,6 @@ func workflowManagerErrorType(err error) string {
 		return "grpc_status"
 	}
 	return "unknown"
-}
-
-func workflowManagerGRPCCodeName(code codes.Code) string {
-	value := code.String()
-	var b strings.Builder
-	for i := 0; i < len(value); i++ {
-		ch := value[i]
-		if ch >= 'A' && ch <= 'Z' {
-			if i > 0 {
-				b.WriteByte('_')
-			}
-			ch += 'a' - 'A'
-		}
-		b.WriteByte(ch)
-	}
-	return b.String()
 }
 
 func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, providerSelection string, event coreworkflow.Event) (coreworkflow.Event, error) {
