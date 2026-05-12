@@ -46,6 +46,7 @@ import {
   CatalogSchema as ProtoCatalogSchema,
   ConnectionMode as ProviderConnectionMode,
   GetSessionCatalogResponseSchema,
+  OperationAnnotationsSchema as ProtoOperationAnnotationsSchema,
   PostConnectResponseSchema,
   ResolveHTTPSubjectResponseSchema,
   OperationResultSchema,
@@ -93,6 +94,7 @@ import {
 import { CacheProvider, isCacheProvider } from "./cache.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
+import { valueFromJson, type JsonInput } from "./protocol.ts";
 import {
   HTTPSubjectResolutionError,
   type HTTPSubjectRequest,
@@ -1022,8 +1024,20 @@ function catalogToProto(catalog: Catalog | Record<string, unknown>) {
         method: op.method,
         title: op.title ?? "",
         description: op.description ?? "",
+        inputSchema: catalogSchemaToWire(op.inputSchema),
+        outputSchema: catalogSchemaToWire(op.outputSchema),
+        annotations: op.annotations
+          ? create(ProtoOperationAnnotationsSchema, {
+              readOnlyHint: op.annotations.readOnlyHint,
+              idempotentHint: op.annotations.idempotentHint,
+              destructiveHint: op.annotations.destructiveHint,
+              openWorldHint: op.annotations.openWorldHint,
+            })
+          : undefined,
+        requiredScopes: op.requiredScopes ?? [],
         tags: op.tags ?? [],
         readOnly: op.readOnly ?? false,
+        transport: op.transport ?? "",
         allowedRoles: op.allowedRoles ?? [],
         parameters: (op.parameters ?? []).map((p) =>
           create(ProtoCatalogParameterSchema, {
@@ -1031,6 +1045,9 @@ function catalogToProto(catalog: Catalog | Record<string, unknown>) {
             type: p.type,
             description: p.description ?? "",
             required: p.required ?? false,
+            default: p.default !== undefined
+              ? valueFromJson(p.default as JsonInput)
+              : undefined,
           }),
         ),
       });
@@ -1040,6 +1057,16 @@ function catalogToProto(catalog: Catalog | Record<string, unknown>) {
       return protoOp;
     }),
   });
+}
+
+function catalogSchemaToWire(schema: unknown): string {
+  if (schema === undefined || schema === null) {
+    return "";
+  }
+  if (typeof schema === "string") {
+    return schema;
+  }
+  return JSON.stringify(schema);
 }
 
 function authenticatedUserToProto(user: AuthenticatedUser) {

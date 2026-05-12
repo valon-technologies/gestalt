@@ -1084,49 +1084,73 @@ def _record_to_dict(record: Any) -> dict[str, Any]:
 
 
 def indexeddb_record_to_proto(record: dict[str, Any]) -> Any:
-    """Convert a Python IndexedDB record to the datastore protocol shape."""
+    """Convert a Python IndexedDB record to the datastore protocol shape.
+
+    Deprecated: use the native IndexedDB SDK methods instead of wire helpers.
+    """
 
     return _dict_to_record(record)
 
 
 def indexeddb_record_from_proto(record: Any) -> dict[str, Any]:
-    """Convert a datastore protocol record to a Python IndexedDB record."""
+    """Convert a datastore protocol record to a Python IndexedDB record.
+
+    Deprecated: use the native IndexedDB SDK methods instead of wire helpers.
+    """
 
     return _record_to_dict(record)
 
 
 def indexeddb_typed_value_from_python(value: Any) -> Any:
-    """Convert a Python IndexedDB value to the datastore typed-value shape."""
+    """Convert a Python IndexedDB value to the datastore typed-value shape.
+
+    Deprecated: use the native IndexedDB SDK methods instead of wire helpers.
+    """
 
     return _to_typed_value(value)
 
 
 def indexeddb_typed_value_to_python(value: Any) -> Any:
-    """Convert a datastore typed value to a Python IndexedDB value."""
+    """Convert a datastore typed value to a Python IndexedDB value.
+
+    Deprecated: use the native IndexedDB SDK methods instead of wire helpers.
+    """
 
     return _typed_value_to_python(value)
 
 
 def indexeddb_key_value_from_python(value: Any) -> Any:
-    """Convert a Python IndexedDB key value to the datastore key-value shape."""
+    """Convert a Python IndexedDB key value to the datastore key-value shape.
+
+    Deprecated: use the native IndexedDB SDK methods instead of wire helpers.
+    """
 
     return _python_to_key_value(value)
 
 
 def indexeddb_key_value_to_python(value: Any) -> Any:
-    """Convert a datastore cursor key part to a Python IndexedDB key value."""
+    """Convert a datastore cursor key part to a Python IndexedDB key value.
+
+    Deprecated: use the native IndexedDB SDK methods instead of wire helpers.
+    """
 
     return _key_value_to_python(value)
 
 
 def indexeddb_cursor_key_to_proto(key: Any, *, index_cursor: bool = False) -> list[Any]:
-    """Convert a primary-key or index-key cursor target to protocol key parts."""
+    """Convert a primary-key or index-key cursor target to protocol key parts.
+
+    Deprecated: use the native IndexedDB SDK methods instead of wire helpers.
+    """
 
     return _cursor_key_to_proto(key, index_cursor)
 
 
 def indexeddb_key_range_to_proto(key_range: KeyRange | None) -> Any:
-    """Convert a public ``KeyRange`` to the datastore protocol shape."""
+    """Convert a public ``KeyRange`` to the datastore protocol shape.
+
+    Deprecated: use the native IndexedDB SDK methods instead of wire helpers.
+    """
 
     return _kr_to_proto(key_range)
 

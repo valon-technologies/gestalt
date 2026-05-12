@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { create, toJson } from "@bufbuild/protobuf";
-import { EmptySchema } from "@bufbuild/protobuf/wkt";
+import { EmptySchema, ValueSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
@@ -607,10 +607,19 @@ test("integration provider service exposes metadata, configure, execute, and ses
   expect(
     metadata.staticCatalog?.operations?.some((op: any) => op.id === "hello"),
   ).toBe(true);
-  expect(
-    metadata.staticCatalog?.operations?.find((op: any) => op.id === "hello")
-      ?.allowedRoles,
-  ).toEqual(["viewer", "admin"]);
+  const helloOperation = metadata.staticCatalog?.operations?.find(
+    (op: any) => op.id === "hello",
+  );
+  expect(helloOperation?.allowedRoles).toEqual(["viewer", "admin"]);
+  const inputSchema = JSON.parse(helloOperation?.inputSchema ?? "{}");
+  expect(inputSchema.properties.name.default).toBe("World");
+  expect(inputSchema.properties.name.description).toBe("Name to greet");
+  const outputSchema = JSON.parse(helloOperation?.outputSchema ?? "{}");
+  expect(outputSchema.properties.message.type).toBe("string");
+  const nameParameter = helloOperation?.parameters?.find(
+    (parameter: any) => parameter.name === "name",
+  );
+  expect(toJson(ValueSchema, nameParameter?.default as any)).toBe("World");
 
   await expectConnectCode(
     (service.startProvider as any)(

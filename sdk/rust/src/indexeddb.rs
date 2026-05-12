@@ -1426,42 +1426,49 @@ fn unexpected_transaction_result() -> IndexedDBError {
 }
 
 #[doc(hidden)]
+#[deprecated(note = "use the native IndexedDB SDK methods instead of wire helpers")]
 /// Converts a JSON-backed record into the generated IndexedDB protocol shape.
 pub fn json_record_to_proto(record: Record) -> crate::proto::v1::Record {
     record_to_pb_record(record)
 }
 
 #[doc(hidden)]
+#[deprecated(note = "use the native IndexedDB SDK methods instead of wire helpers")]
 /// Converts a generated IndexedDB record into the JSON-backed SDK shape.
 pub fn json_record_from_proto(record: &crate::proto::v1::Record) -> Record {
     pb_record_to_record(record)
 }
 
 #[doc(hidden)]
+#[deprecated(note = "use the native IndexedDB SDK methods instead of wire helpers")]
 /// Converts a JSON value into the generated IndexedDB typed-value shape.
 pub fn json_typed_value_to_proto(value: &serde_json::Value) -> crate::proto::v1::TypedValue {
     json_to_typed_value(value)
 }
 
 #[doc(hidden)]
+#[deprecated(note = "use the native IndexedDB SDK methods instead of wire helpers")]
 /// Converts a generated IndexedDB typed value into its JSON representation.
 pub fn json_typed_value_from_proto(value: &crate::proto::v1::TypedValue) -> serde_json::Value {
     typed_value_to_json(value)
 }
 
 #[doc(hidden)]
+#[deprecated(note = "use the native IndexedDB SDK methods instead of wire helpers")]
 /// Converts a JSON key value into the generated IndexedDB key-value shape.
 pub fn json_key_value_to_proto(value: &serde_json::Value) -> crate::proto::v1::KeyValue {
     json_to_key_value(value)
 }
 
 #[doc(hidden)]
+#[deprecated(note = "use the native IndexedDB SDK methods instead of wire helpers")]
 /// Converts a generated IndexedDB key value into its JSON representation.
 pub fn json_key_value_from_proto(value: &crate::proto::v1::KeyValue) -> serde_json::Value {
     key_value_to_json(value)
 }
 
 #[doc(hidden)]
+#[deprecated(note = "use the native IndexedDB SDK methods instead of wire helpers")]
 /// Converts a JSON cursor key into the generated IndexedDB key tuple shape.
 pub fn json_cursor_key_to_proto(
     key: &serde_json::Value,
@@ -1471,6 +1478,7 @@ pub fn json_cursor_key_to_proto(
 }
 
 #[doc(hidden)]
+#[deprecated(note = "use the native IndexedDB SDK methods instead of wire helpers")]
 /// Converts a JSON-backed key range into the generated IndexedDB protocol shape.
 pub fn json_key_range_to_proto(range: KeyRange) -> crate::proto::v1::KeyRange {
     key_range_to_pb(range)

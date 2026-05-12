@@ -89,6 +89,9 @@ type ListAgentManagerInteractionsResponse struct {
 	Interactions []AgentInteraction
 }
 
+// NewAgentManagerCreateSessionRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.CreateSession with AgentManagerCreateSessionInput.
 func NewAgentManagerCreateSessionRequest(input AgentManagerCreateSessionInput) (*proto.AgentManagerCreateSessionRequest, error) {
 	metadata, err := StructFromAny(input.Metadata)
 	if err != nil {
@@ -108,10 +111,16 @@ func NewAgentManagerCreateSessionRequest(input AgentManagerCreateSessionInput) (
 	}, nil
 }
 
+// NewAgentManagerGetSessionRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.GetSession with AgentManagerGetSessionInput.
 func NewAgentManagerGetSessionRequest(input AgentManagerGetSessionInput) *proto.AgentManagerGetSessionRequest {
 	return &proto.AgentManagerGetSessionRequest{SessionId: input.SessionID}
 }
 
+// NewAgentManagerListSessionsRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.ListSessions with AgentManagerListSessionsInput.
 func NewAgentManagerListSessionsRequest(input AgentManagerListSessionsInput) *proto.AgentManagerListSessionsRequest {
 	return &proto.AgentManagerListSessionsRequest{
 		ProviderName: input.ProviderName,
@@ -121,6 +130,9 @@ func NewAgentManagerListSessionsRequest(input AgentManagerListSessionsInput) *pr
 	}
 }
 
+// NewAgentManagerUpdateSessionRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.UpdateSession with AgentManagerUpdateSessionInput.
 func NewAgentManagerUpdateSessionRequest(input AgentManagerUpdateSessionInput) (*proto.AgentManagerUpdateSessionRequest, error) {
 	metadata, err := StructFromAny(input.Metadata)
 	if err != nil {
@@ -134,6 +146,9 @@ func NewAgentManagerUpdateSessionRequest(input AgentManagerUpdateSessionInput) (
 	}, nil
 }
 
+// NewAgentManagerCreateTurnRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.CreateTurn with AgentManagerCreateTurnInput.
 func NewAgentManagerCreateTurnRequest(input AgentManagerCreateTurnInput) (*proto.AgentManagerCreateTurnRequest, error) {
 	nativeMessages, err := agentMessagesFromInputs(input.Messages)
 	if err != nil {
@@ -168,10 +183,16 @@ func NewAgentManagerCreateTurnRequest(input AgentManagerCreateTurnInput) (*proto
 	}, nil
 }
 
+// NewAgentManagerGetTurnRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.GetTurn with AgentManagerGetTurnInput.
 func NewAgentManagerGetTurnRequest(input AgentManagerGetTurnInput) *proto.AgentManagerGetTurnRequest {
 	return &proto.AgentManagerGetTurnRequest{TurnId: input.TurnID}
 }
 
+// NewAgentManagerListTurnsRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.ListTurns with AgentManagerListTurnsInput.
 func NewAgentManagerListTurnsRequest(input AgentManagerListTurnsInput) *proto.AgentManagerListTurnsRequest {
 	return &proto.AgentManagerListTurnsRequest{
 		SessionId:   input.SessionID,
@@ -181,6 +202,9 @@ func NewAgentManagerListTurnsRequest(input AgentManagerListTurnsInput) *proto.Ag
 	}
 }
 
+// NewAgentManagerCancelTurnRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.CancelTurn with AgentManagerCancelTurnInput.
 func NewAgentManagerCancelTurnRequest(input AgentManagerCancelTurnInput) *proto.AgentManagerCancelTurnRequest {
 	return &proto.AgentManagerCancelTurnRequest{
 		TurnId: input.TurnID,
@@ -188,6 +212,9 @@ func NewAgentManagerCancelTurnRequest(input AgentManagerCancelTurnInput) *proto.
 	}
 }
 
+// NewAgentManagerListTurnEventsRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.ListTurnEvents with AgentManagerListTurnEventsInput.
 func NewAgentManagerListTurnEventsRequest(input AgentManagerListTurnEventsInput) *proto.AgentManagerListTurnEventsRequest {
 	return &proto.AgentManagerListTurnEventsRequest{
 		TurnId:   input.TurnID,
@@ -196,10 +223,16 @@ func NewAgentManagerListTurnEventsRequest(input AgentManagerListTurnEventsInput)
 	}
 }
 
+// NewAgentManagerListInteractionsRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.ListInteractions with AgentManagerListInteractionsInput.
 func NewAgentManagerListInteractionsRequest(input AgentManagerListInteractionsInput) *proto.AgentManagerListInteractionsRequest {
 	return &proto.AgentManagerListInteractionsRequest{TurnId: input.TurnID}
 }
 
+// NewAgentManagerResolveInteractionRequest converts native input to the generated wire request.
+//
+// Deprecated: use AgentManagerClient.ResolveInteraction with AgentManagerResolveInteractionInput.
 func NewAgentManagerResolveInteractionRequest(input AgentManagerResolveInteractionInput) (*proto.AgentManagerResolveInteractionRequest, error) {
 	resolution, err := StructFromAny(input.Resolution)
 	if err != nil {

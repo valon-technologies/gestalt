@@ -7,12 +7,53 @@ use serde_json::{Value as JsonValue, json};
 use crate::error::{Error, Result};
 use crate::generated::v1;
 
-/// Generated catalog schema used by the provider runtime.
-pub type Catalog = v1::Catalog;
-/// Generated catalog operation schema.
-pub type CatalogOperation = v1::CatalogOperation;
-/// Generated catalog parameter schema.
-pub type CatalogParameter = v1::CatalogParameter;
+/// Catalog schema used by the provider runtime.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Catalog {
+    pub name: String,
+    pub display_name: String,
+    pub description: String,
+    pub icon_svg: String,
+    pub operations: Vec<CatalogOperation>,
+}
+
+/// One operation exposed by a catalog.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CatalogOperation {
+    pub id: String,
+    pub method: String,
+    pub title: String,
+    pub description: String,
+    pub input_schema: String,
+    pub output_schema: String,
+    pub annotations: Option<OperationAnnotations>,
+    pub parameters: Vec<CatalogParameter>,
+    pub required_scopes: Vec<String>,
+    pub tags: Vec<String>,
+    pub read_only: bool,
+    pub visible: Option<bool>,
+    pub transport: String,
+    pub allowed_roles: Vec<String>,
+}
+
+/// One input parameter surfaced in a generated catalog operation.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CatalogParameter {
+    pub name: String,
+    pub r#type: String,
+    pub description: String,
+    pub required: bool,
+    pub default: Option<JsonValue>,
+}
+
+/// Optional host hints attached to a catalog operation.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct OperationAnnotations {
+    pub read_only_hint: Option<bool>,
+    pub idempotent_hint: Option<bool>,
+    pub destructive_hint: Option<bool>,
+    pub open_world_hint: Option<bool>,
+}
 
 impl Catalog {
     /// Returns a copy of the catalog with a non-empty name override applied.
@@ -36,6 +77,58 @@ pub fn write_catalog(catalog: &Catalog, path: impl AsRef<Path>) -> Result<()> {
     let json = serde_json::to_string_pretty(&catalog_to_json_value(catalog))?;
     std::fs::write(path, json)?;
     Ok(())
+}
+
+pub(crate) fn catalog_to_proto(catalog: &Catalog) -> v1::Catalog {
+    v1::Catalog {
+        name: catalog.name.clone(),
+        display_name: catalog.display_name.clone(),
+        description: catalog.description.clone(),
+        icon_svg: catalog.icon_svg.clone(),
+        operations: catalog.operations.iter().map(operation_to_proto).collect(),
+    }
+}
+
+fn operation_to_proto(operation: &CatalogOperation) -> v1::CatalogOperation {
+    v1::CatalogOperation {
+        id: operation.id.clone(),
+        method: operation.method.clone(),
+        title: operation.title.clone(),
+        description: operation.description.clone(),
+        input_schema: operation.input_schema.clone(),
+        output_schema: operation.output_schema.clone(),
+        annotations: operation.annotations.as_ref().map(annotations_to_proto),
+        parameters: operation
+            .parameters
+            .iter()
+            .map(parameter_to_proto)
+            .collect(),
+        required_scopes: operation.required_scopes.clone(),
+        tags: operation.tags.clone(),
+        read_only: operation.read_only,
+        visible: operation.visible,
+        transport: operation.transport.clone(),
+        allowed_roles: operation.allowed_roles.clone(),
+    }
+}
+
+fn annotations_to_proto(annotations: &OperationAnnotations) -> v1::OperationAnnotations {
+    v1::OperationAnnotations {
+        read_only_hint: annotations.read_only_hint,
+        idempotent_hint: annotations.idempotent_hint,
+        destructive_hint: annotations.destructive_hint,
+        open_world_hint: annotations.open_world_hint,
+    }
+}
+
+fn parameter_to_proto(parameter: &CatalogParameter) -> v1::CatalogParameter {
+    v1::CatalogParameter {
+        name: parameter.name.clone(),
+        r#type: parameter.r#type.clone(),
+        description: parameter.description.clone(),
+        required: parameter.required,
+        default: parameter.default.as_ref().map(json_value_to_proto_value),
+    }
 }
 
 fn catalog_to_json_value(catalog: &Catalog) -> JsonValue {
@@ -112,8 +205,7 @@ fn operation_to_json_value(op: &CatalogOperation) -> JsonValue {
                     m.insert("required".to_owned(), json!(true));
                 }
                 if let Some(ref default) = p.default {
-                    let val = proto_value_to_json(default.clone());
-                    m.insert("default".to_owned(), val);
+                    m.insert("default".to_owned(), default.clone());
                 }
                 JsonValue::Object(m)
             })
@@ -174,7 +266,7 @@ pub(crate) fn schema_parameters(schema: &JsonValue) -> Vec<CatalogParameter> {
                 .trim()
                 .to_owned(),
             required: required.contains(name),
-            default: property.get("default").map(json_value_to_proto_value),
+            default: property.get("default").cloned(),
         })
         .collect()
 }

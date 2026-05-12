@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
@@ -57,7 +56,7 @@ func TestRouterCatalogParameterTypes(t *testing.T) {
 	}
 
 	params := catalog.Operations[0].Parameters
-	index := make(map[string]*proto.CatalogParameter, len(params))
+	index := make(map[string]*gestalt.CatalogParameter, len(params))
 	for _, p := range params {
 		index[p.GetName()] = p
 	}

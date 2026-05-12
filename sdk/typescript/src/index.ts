@@ -136,6 +136,7 @@ export {
   type CatalogOperation,
   type CatalogParameter,
   type CatalogSchema,
+  type OperationAnnotations,
 } from "./catalog.ts";
 export {
   buildProviderBinary,

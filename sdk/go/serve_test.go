@@ -10,11 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	protoutil "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -137,7 +136,7 @@ func (p *startableStubProvider) Configure(_ context.Context, name string, config
 
 type sessionCatalogStubProvider struct {
 	stubProvider
-	sessionCatalog *proto.Catalog
+	sessionCatalog *gestalt.Catalog
 }
 
 type postConnectStubProvider struct {
@@ -153,8 +152,8 @@ type rejectHTTPSubjectProvider struct {
 	stubProvider
 }
 
-func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ string) (*proto.Catalog, error) {
-	cat := protoutil.Clone(p.sessionCatalog).(*proto.Catalog)
+func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ string) (*gestalt.Catalog, error) {
+	cat := cloneTestCatalog(p.sessionCatalog)
 	if cat != nil {
 		subject := gestalt.SubjectFromContext(ctx)
 		credential := gestalt.CredentialFromContext(ctx)
@@ -163,6 +162,81 @@ func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ st
 		cat.DisplayName = subject.ID + "|" + credential.Mode + "|" + access.Policy + "|" + access.Role + "|" + host.PublicBaseURL
 	}
 	return cat, nil
+}
+
+func cloneTestCatalog(src *gestalt.Catalog) *gestalt.Catalog {
+	if src == nil {
+		return nil
+	}
+	out := &gestalt.Catalog{
+		Name:        src.Name,
+		DisplayName: src.DisplayName,
+		Description: src.Description,
+		IconSvg:     src.IconSvg,
+		Operations:  make([]*gestalt.CatalogOperation, 0, len(src.Operations)),
+	}
+	for _, op := range src.Operations {
+		if op == nil {
+			out.Operations = append(out.Operations, nil)
+			continue
+		}
+		out.Operations = append(out.Operations, &gestalt.CatalogOperation{
+			Id:             op.Id,
+			Method:         op.Method,
+			Title:          op.Title,
+			Description:    op.Description,
+			InputSchema:    op.InputSchema,
+			OutputSchema:   op.OutputSchema,
+			Annotations:    cloneTestOperationAnnotations(op.Annotations),
+			Parameters:     cloneTestCatalogParameters(op.Parameters),
+			RequiredScopes: append([]string(nil), op.RequiredScopes...),
+			Tags:           append([]string(nil), op.Tags...),
+			ReadOnly:       op.ReadOnly,
+			Visible:        cloneTestBool(op.Visible),
+			Transport:      op.Transport,
+			AllowedRoles:   append([]string(nil), op.AllowedRoles...),
+		})
+	}
+	return out
+}
+
+func cloneTestOperationAnnotations(src *gestalt.OperationAnnotations) *gestalt.OperationAnnotations {
+	if src == nil {
+		return nil
+	}
+	return &gestalt.OperationAnnotations{
+		ReadOnlyHint:    cloneTestBool(src.ReadOnlyHint),
+		IdempotentHint:  cloneTestBool(src.IdempotentHint),
+		DestructiveHint: cloneTestBool(src.DestructiveHint),
+		OpenWorldHint:   cloneTestBool(src.OpenWorldHint),
+	}
+}
+
+func cloneTestCatalogParameters(src []*gestalt.CatalogParameter) []*gestalt.CatalogParameter {
+	out := make([]*gestalt.CatalogParameter, 0, len(src))
+	for _, param := range src {
+		if param == nil {
+			out = append(out, nil)
+			continue
+		}
+		out = append(out, &gestalt.CatalogParameter{
+			Name:        param.Name,
+			Type:        param.Type,
+			Description: param.Description,
+			Required:    param.Required,
+			Default:     param.Default,
+			HasDefault:  param.HasDefault,
+		})
+	}
+	return out
+}
+
+func cloneTestBool(src *bool) *bool {
+	if src == nil {
+		return nil
+	}
+	value := *src
+	return &value
 }
 
 func (p *postConnectStubProvider) PostConnect(_ context.Context, token *gestalt.ConnectedToken) (map[string]string, error) {
@@ -217,9 +291,9 @@ func TestProviderServerGetMetadata(t *testing.T) {
 
 	t.Run("session catalog provider", func(t *testing.T) {
 		client := newIntegrationProviderClient(t, &sessionCatalogStubProvider{
-			sessionCatalog: &proto.Catalog{
+			sessionCatalog: &gestalt.Catalog{
 				Name: "test-provider",
-				Operations: []*proto.CatalogOperation{
+				Operations: []*gestalt.CatalogOperation{
 					{Id: "session_op", Method: http.MethodGet, AllowedRoles: []string{"viewer"}},
 				},
 			},
@@ -307,10 +381,20 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 
 	t.Run("supported", func(t *testing.T) {
 		prov := &sessionCatalogStubProvider{
-			sessionCatalog: &proto.Catalog{
+			sessionCatalog: &gestalt.Catalog{
 				Name: "test-provider",
-				Operations: []*proto.CatalogOperation{
-					{Id: "session_op", Method: http.MethodPost, AllowedRoles: []string{"viewer"}},
+				Operations: []*gestalt.CatalogOperation{
+					{
+						Id:           "session_op",
+						Method:       http.MethodPost,
+						InputSchema:  `{"type":"object","properties":{"count":{"type":"integer","default":5}}}`,
+						OutputSchema: `{"type":"object","properties":{"ok":{"type":"boolean"}}}`,
+						Parameters: []*gestalt.CatalogParameter{
+							{Name: "count", Type: "integer", Default: float64(5), HasDefault: true},
+							{Name: "optional", Type: "object", HasDefault: true},
+						},
+						AllowedRoles: []string{"viewer"},
+					},
 				},
 			},
 		}
@@ -345,6 +429,16 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 		}
 		if got := resp.GetCatalog().GetOperations()[0].GetAllowedRoles(); len(got) != 1 || got[0] != "viewer" {
 			t.Fatalf("AllowedRoles = %#v, want %#v", got, []string{"viewer"})
+		}
+		op := resp.GetCatalog().GetOperations()[0]
+		if op.GetInputSchema() == "" || op.GetOutputSchema() == "" {
+			t.Fatalf("schemas were not preserved: input=%q output=%q", op.GetInputSchema(), op.GetOutputSchema())
+		}
+		if got := op.GetParameters()[0].GetDefault().GetNumberValue(); got != 5 {
+			t.Fatalf("parameter default = %v, want 5", got)
+		}
+		if got := op.GetParameters()[1].GetDefault().GetNullValue(); got != structpb.NullValue_NULL_VALUE {
+			t.Fatalf("null parameter default = %v, want NULL_VALUE", got)
 		}
 	})
 

@@ -23,28 +23,28 @@ func (s *authServer) BeginLogin(ctx context.Context, req *proto.BeginLoginReques
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	resp, err := s.auth.BeginLogin(ctx, req)
+	resp, err := s.auth.BeginLogin(ctx, beginLoginRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("begin login", err)
 	}
 	if resp == nil {
 		return nil, status.Error(codes.Internal, "authentication provider returned nil response")
 	}
-	return resp, nil
+	return beginLoginResponseToProto(resp), nil
 }
 
 func (s *authServer) CompleteLogin(ctx context.Context, req *proto.CompleteLoginRequest) (*proto.AuthenticatedUser, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	user, err := s.auth.CompleteLogin(ctx, req)
+	user, err := s.auth.CompleteLogin(ctx, completeLoginRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("complete login", err)
 	}
 	if user == nil {
 		return nil, status.Error(codes.Internal, "authentication provider returned nil user")
 	}
-	return user, nil
+	return authenticatedUserToProto(user), nil
 }
 
 func (s *authServer) ValidateExternalToken(ctx context.Context, req *proto.ValidateExternalTokenRequest) (*proto.AuthenticatedUser, error) {
@@ -62,7 +62,7 @@ func (s *authServer) ValidateExternalToken(ctx context.Context, req *proto.Valid
 	if user == nil {
 		return nil, status.Error(codes.NotFound, "token not recognized")
 	}
-	return user, nil
+	return authenticatedUserToProto(user), nil
 }
 
 func (s *authServer) GetSessionSettings(context.Context, *emptypb.Empty) (*proto.AuthSessionSettings, error) {
