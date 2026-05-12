@@ -75,6 +75,32 @@ export const provider = defineWorkflowProvider({
     runs.set(updated.id, updated);
     return updated;
   },
+  async signalRun(request) {
+    const run = requireRunByID(request.runId);
+    return {
+      run,
+      signal: request.signal,
+      startedRun: false,
+      workflowKey: run.workflowKey,
+    };
+  },
+  async signalOrStartRun(request) {
+    const run = boundWorkflowRun({
+      id: `${request.workflowKey || "workflow"}:${runs.size + 1}`,
+      status: WorkflowRunStatus.PENDING,
+      target: request.target,
+      createdBy: request.createdBy,
+      executionRef: request.executionRef,
+      workflowKey: request.workflowKey,
+    });
+    runs.set(run.id, run);
+    return {
+      run,
+      signal: request.signal,
+      startedRun: true,
+      workflowKey: request.workflowKey,
+    };
+  },
   async upsertSchedule(request) {
     const existing = schedules.get(scheduleKey(request));
     const schedule = createSchedule(request, existing);

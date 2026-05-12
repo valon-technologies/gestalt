@@ -790,14 +790,10 @@ The full protocol includes:
 | `PutExecutionReference` / `GetExecutionReference` / `ListExecutionReferences` | Persist delayed-execution identity and permission records |
 | `PublishEvent` | Deliver an event into the provider |
 
-Go exposes the complete workflow provider service through native request and
-response input types. Rust exposes the complete generated workflow provider
-service. Python currently registers run, signal, schedule, trigger, and publish
-methods through the SDK runtime. TypeScript currently exposes the core run,
-schedule, trigger, and publish methods through `defineWorkflowProvider`. If you
-need signal or execution-reference methods before the handwritten TypeScript
-and Python helpers grow those methods, implement that provider in Go or Rust,
-or serve the generated protocol directly.
+Go, Python, Rust, and TypeScript expose the workflow provider service through
+SDK-owned request and response types. The SDK runtime owns the wire transport
+conversion, so provider code should model runs, schedules, triggers, signals,
+and execution references with the language-native structures shown below.
 
 The examples below show the core authored shape. Production workflow providers
 should persist returned IDs, timestamps, status, execution references, and
@@ -814,7 +810,9 @@ signal sequence numbers exactly as stored.
         gestalt "github.com/valon-technologies/gestalt/sdk/go"
     )
 
-    type Provider struct{}
+    type Provider struct {
+        gestalt.UnimplementedWorkflowProvider
+    }
 
     func New() *Provider { return &Provider{} }
 
@@ -844,6 +842,26 @@ signal sequence numbers exactly as stored.
         return &gestalt.BoundWorkflowRunInput{
             ID:     req.RunID,
             Status: gestalt.WorkflowRunStatusValueCanceled,
+        }, nil
+    }
+
+    func (p *Provider) SignalRun(_ context.Context, req *gestalt.SignalWorkflowProviderRunRequest) (*gestalt.SignalWorkflowRunResponse, error) {
+        return &gestalt.SignalWorkflowRunResponse{
+            Run:    &gestalt.BoundWorkflowRunInput{ID: req.RunID},
+            Signal: req.Signal,
+        }, nil
+    }
+
+    func (p *Provider) SignalOrStartRun(_ context.Context, req *gestalt.SignalOrStartWorkflowProviderRunRequest) (*gestalt.SignalWorkflowRunResponse, error) {
+        return &gestalt.SignalWorkflowRunResponse{
+            Run: &gestalt.BoundWorkflowRunInput{
+                ID:     req.WorkflowKey + ":run-1",
+                Status: gestalt.WorkflowRunStatusValuePending,
+                Target: req.Target,
+            },
+            Signal:      req.Signal,
+            StartedRun:  true,
+            WorkflowKey: req.WorkflowKey,
         }, nil
     }
 
@@ -914,19 +932,26 @@ signal sequence numbers exactly as stored.
   <Tabs.Tab>
     ```python
     from gestalt import (
-        WorkflowProvider,
         BoundWorkflowRunInput,
-        WORKFLOW_RUN_STATUS_PENDING,
+        BoundWorkflowScheduleInput,
+        CancelWorkflowProviderRunRequest,
+        GetWorkflowProviderRunRequest,
         ListWorkflowProviderRunsResponse,
         WORKFLOW_RUN_STATUS_CANCELED,
-        BoundWorkflowScheduleInput,
+        WORKFLOW_RUN_STATUS_PENDING,
+        SignalOrStartWorkflowProviderRunRequest,
+        SignalWorkflowProviderRunRequest,
+        SignalWorkflowRunResponse,
+        StartWorkflowProviderRunRequest,
+        UpsertWorkflowProviderScheduleRequest,
+        WorkflowProvider,
     )
 
     class ExampleWorkflow(WorkflowProvider):
         def configure(self, name: str, config: dict) -> None:
             pass
 
-        def start_run(self, request):
+        def start_run(self, request: StartWorkflowProviderRunRequest) -> BoundWorkflowRunInput:
             plugin = request.target.plugin if request.target else None
             return BoundWorkflowRunInput(
                 id=f"{plugin.plugin_name if plugin else 'workflow'}:run-1",
@@ -934,19 +959,46 @@ signal sequence numbers exactly as stored.
                 target=request.target,
             )
 
-        def get_run(self, request):
+        def get_run(self, request: GetWorkflowProviderRunRequest) -> BoundWorkflowRunInput:
             return BoundWorkflowRunInput(id=request.run_id)
 
-        def list_runs(self, request):
+        def list_runs(self, request) -> ListWorkflowProviderRunsResponse:
             return ListWorkflowProviderRunsResponse(runs=[])
 
-        def cancel_run(self, request):
+        def cancel_run(self, request: CancelWorkflowProviderRunRequest) -> BoundWorkflowRunInput:
             return BoundWorkflowRunInput(
                 id=request.run_id,
                 status=WORKFLOW_RUN_STATUS_CANCELED,
             )
 
-        def upsert_schedule(self, request):
+        def signal_run(self, request: SignalWorkflowProviderRunRequest) -> SignalWorkflowRunResponse:
+            return SignalWorkflowRunResponse(
+                run=BoundWorkflowRunInput(id=request.run_id),
+                signal=request.signal,
+            )
+
+        def signal_or_start_run(
+            self, request: SignalOrStartWorkflowProviderRunRequest
+        ) -> SignalWorkflowRunResponse:
+            run = self.start_run(
+                StartWorkflowProviderRunRequest(
+                    target=request.target,
+                    idempotency_key=request.idempotency_key,
+                    created_by=request.created_by,
+                    execution_ref=request.execution_ref,
+                    workflow_key=request.workflow_key,
+                )
+            )
+            return SignalWorkflowRunResponse(
+                run=run,
+                signal=request.signal,
+                started_run=True,
+                workflow_key=request.workflow_key,
+            )
+
+        def upsert_schedule(
+            self, request: UpsertWorkflowProviderScheduleRequest
+        ) -> BoundWorkflowScheduleInput:
             return BoundWorkflowScheduleInput(
                 id=request.schedule_id,
                 cron=request.cron,
@@ -969,16 +1021,14 @@ signal sequence numbers exactly as stored.
             let plugin_name = req
                 .target
                 .as_ref()
-                .and_then(|target| match target.kind.as_ref() {
-                    Some(gestalt::bound_workflow_target::Kind::Plugin(plugin)) => {
-                        Some(plugin.plugin_name.clone())
-                    }
+                .and_then(|target| match target {
+                    gestalt::BoundWorkflowTarget::Plugin(plugin) => Some(plugin.plugin_name.clone()),
                     _ => None,
                 })
                 .unwrap_or_else(|| "workflow".into());
             Ok(gestalt::BoundWorkflowRun {
                 id: format!("{plugin_name}:run-1"),
-                status: gestalt::WorkflowRunStatus::Pending as i32,
+                status: gestalt::WorkflowRunStatus::Pending,
                 target: req.target,
                 ..Default::default()
             })
@@ -1007,7 +1057,21 @@ signal sequence numbers exactly as stored.
         ) -> gestalt::Result<gestalt::BoundWorkflowRun> {
             Ok(gestalt::BoundWorkflowRun {
                 id: req.run_id,
-                status: gestalt::WorkflowRunStatus::Canceled as i32,
+                status: gestalt::WorkflowRunStatus::Canceled,
+                ..Default::default()
+            })
+        }
+
+        async fn signal_run(
+            &self,
+            request: gestalt::SignalWorkflowProviderRunRequest,
+        ) -> gestalt::Result<gestalt::SignalWorkflowRunResponse> {
+            Ok(gestalt::SignalWorkflowRunResponse {
+                run: Some(gestalt::BoundWorkflowRun {
+                    id: request.run_id,
+                    ..Default::default()
+                }),
+                signal: request.signal,
                 ..Default::default()
             })
         }
@@ -1034,16 +1098,29 @@ signal sequence numbers exactly as stored.
       async configure(_name, _config) {},
 
       async startRun(request) {
+        const pluginName =
+          request.target?.kind.case === "plugin"
+            ? request.target.kind.value.pluginName
+            : "workflow";
         return {
-          id: `${request.target?.plugin?.pluginName ?? "workflow"}:run-1`,
+          id: `${pluginName}:run-1`,
           status: WorkflowRunStatus.PENDING,
           target: request.target,
+          statusMessage: "",
+          resultBody: "",
+          executionRef: request.executionRef,
+          workflowKey: request.workflowKey,
         };
       },
 
       async getRun(request) {
         return {
           id: request.runId,
+          status: WorkflowRunStatus.RUNNING,
+          statusMessage: "",
+          resultBody: "",
+          executionRef: "",
+          workflowKey: "",
         };
       },
 
@@ -1055,6 +1132,43 @@ signal sequence numbers exactly as stored.
         return {
           id: request.runId,
           status: WorkflowRunStatus.CANCELED,
+          statusMessage: request.reason,
+          resultBody: "",
+          executionRef: "",
+          workflowKey: "",
+        };
+      },
+
+      async signalRun(request) {
+        return {
+          run: {
+            id: request.runId,
+            status: WorkflowRunStatus.RUNNING,
+            statusMessage: "",
+            resultBody: "",
+            executionRef: "",
+            workflowKey: "",
+          },
+          signal: request.signal,
+          startedRun: false,
+          workflowKey: "",
+        };
+      },
+
+      async signalOrStartRun(request) {
+        return {
+          run: {
+            id: `${request.workflowKey || "workflow"}:run-1`,
+            status: WorkflowRunStatus.PENDING,
+            target: request.target,
+            statusMessage: "",
+            resultBody: "",
+            executionRef: request.executionRef,
+            workflowKey: request.workflowKey,
+          },
+          signal: request.signal,
+          startedRun: true,
+          workflowKey: request.workflowKey,
         };
       },
 
@@ -1062,13 +1176,15 @@ signal sequence numbers exactly as stored.
         return {
           id: request.scheduleId,
           cron: request.cron,
+          timezone: request.timezone,
           target: request.target,
           paused: request.paused,
+          executionRef: request.executionRef,
         };
       },
 
       async getSchedule(request) {
-        return { id: request.scheduleId };
+        return { id: request.scheduleId, cron: "", timezone: "", paused: false, executionRef: "" };
       },
 
       async listSchedules(_request) {
@@ -1078,11 +1194,11 @@ signal sequence numbers exactly as stored.
       async deleteSchedule(_request) {},
 
       async pauseSchedule(request) {
-        return { id: request.scheduleId, paused: true };
+        return { id: request.scheduleId, cron: "", timezone: "", paused: true, executionRef: "" };
       },
 
       async resumeSchedule(request) {
-        return { id: request.scheduleId, paused: false };
+        return { id: request.scheduleId, cron: "", timezone: "", paused: false, executionRef: "" };
       },
 
       async upsertEventTrigger(request) {
@@ -1091,11 +1207,12 @@ signal sequence numbers exactly as stored.
           match: request.match,
           target: request.target,
           paused: request.paused,
+          executionRef: request.executionRef,
         };
       },
 
       async getEventTrigger(request) {
-        return { id: request.triggerId };
+        return { id: request.triggerId, paused: false, executionRef: "" };
       },
 
       async listEventTriggers(_request) {
@@ -1105,11 +1222,11 @@ signal sequence numbers exactly as stored.
       async deleteEventTrigger(_request) {},
 
       async pauseEventTrigger(request) {
-        return { id: request.triggerId, paused: true };
+        return { id: request.triggerId, paused: true, executionRef: "" };
       },
 
       async resumeEventTrigger(request) {
-        return { id: request.triggerId, paused: false };
+        return { id: request.triggerId, paused: false, executionRef: "" };
       },
 
       async publishEvent(_request) {},

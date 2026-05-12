@@ -23,8 +23,8 @@ type WorkflowHostClient struct {
 
 var sharedWorkflowHostTransport sharedManagerTransport[proto.WorkflowHostClient]
 
-// InvokeWorkflowOperationInput contains native Go values for invoking a
-// workflow operation through the host service.
+// InvokeWorkflowOperationInput requests invoking a workflow operation through
+// the host service.
 type InvokeWorkflowOperationInput struct {
 	Target       *BoundWorkflowTargetInput
 	RunID        string
@@ -36,8 +36,7 @@ type InvokeWorkflowOperationInput struct {
 	Signals      []WorkflowSignalInput
 }
 
-// InvokeWorkflowOperationResponse is the native response returned by
-// WorkflowHostClient.InvokeOperation.
+// InvokeWorkflowOperationResponse is returned by WorkflowHostClient.InvokeOperation.
 type InvokeWorkflowOperationResponse struct {
 	Status int32
 	Body   string
