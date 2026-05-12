@@ -114,7 +114,7 @@ func ManifestKind(manifest *providermanifestv1.Manifest) (string, error) {
 	}
 	kind := providermanifestv1.NormalizeKind(manifest.Kind)
 	if !validManifestKinds[manifest.Kind] && !validManifestKinds[kind] {
-		return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, authentication, authorization, external_credentials, indexeddb, cache, s3, workflow, agent, secrets, runtime, or ui", manifest.Kind)
+		return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, authentication, authorization, externalcredentials, indexeddb, cache, s3, workflow, agent, secrets, runtime, or ui", manifest.Kind)
 	}
 	return kind, nil
 }

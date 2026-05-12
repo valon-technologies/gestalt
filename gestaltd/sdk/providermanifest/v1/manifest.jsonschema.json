@@ -15,6 +15,7 @@
         "plugin",
         "auth",
         "authorization",
+        "externalcredentials",
         "indexeddb",
         "cache",
         "s3",

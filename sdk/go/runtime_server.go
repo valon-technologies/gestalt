@@ -104,7 +104,7 @@ func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 		return proto.ProviderKind_PROVIDER_KIND_WORKFLOW
 	case ProviderKindAgent:
 		return proto.ProviderKind_PROVIDER_KIND_AGENT
-	case ProviderKindExternalCredential:
+	case ProviderKindExternalCredential, ProviderKindExternalCredentialLegacy:
 		return proto.ProviderKind_PROVIDER_KIND_EXTERNAL_CREDENTIAL
 	case ProviderKindRuntime:
 		return proto.ProviderKind_PROVIDER_KIND_RUNTIME
