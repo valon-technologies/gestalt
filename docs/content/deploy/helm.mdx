@@ -1,8 +1,8 @@
 # Helm
 
-`gestaltd` publishes a Helm chart for deploying the daemon to Kubernetes.
+`gestaltd` publishes an OCI Helm chart for Kubernetes deployments.
 
-## Install The Chart
+## Install the chart
 
 ```sh
 helm upgrade --install gestaltd \
@@ -12,101 +12,26 @@ helm upgrade --install gestaltd \
   -f values.yaml
 ```
 
-Provide a `values.yaml` file that sets the required datastore and server
-settings, and auth settings when you enable platform login, along with the
-matching `extraEnv` entries.
+The default chart profile is for local or disposable testing only:
 
-The default chart profile is intentionally minimal:
-
-- platform authentication omitted
-- SQLite on a PVC mounted at `/data`
-- a static dev-only `server.encryptionKey`
+- platform authentication is omitted
+- SQLite uses a PVC mounted at `/data`
+- `server.encryptionKey` is a static dev-only value
 - one replica
 - no ingress
 
-That profile is suitable for local development and trusted internal clusters.
-It is not a production-ready security posture. Override `config.server.encryptionKey`
-before any shared, persistent, or production deployment.
+Before any shared or production deployment, set a real encryption key,
+configure authentication, use a networked datastore, and set `server.baseUrl`
+to the public HTTPS URL.
 
-## Production Install Pattern
+## Production values
 
-For production, override the default authentication and datastore settings and provide
-the required environment variables through `extraEnv`. Prefer enabling the
-separate management listener and internal management Service so `/admin` and
-`/metrics` do not share the public listener.
-
-```yaml
-config:
-  server:
-    baseUrl: "${GESTALT_BASE_URL}"
-    encryptionKey: "${GESTALT_ENCRYPTION_KEY}"
-    providers:
-      auth: oidc
-      indexeddb: main
-  providers:
-      auth:
-        oidc:
-          source:
-            package: github.com/valon-technologies/gestalt-providers/auth/oidc
-            version: 0.0.1-alpha.1
-        config:
-          issuerUrl: "${OIDC_ISSUER_URL}"
-          clientId: "${OIDC_CLIENT_ID}"
-          clientSecret: "${OIDC_CLIENT_SECRET}"
-      indexeddb:
-        main:
-          source:
-            package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-            version: 0.0.1-alpha.1
-        config:
-          dsn: "${DATABASE_URL}"
-
-extraEnv:
-  - name: GESTALT_BASE_URL
-    value: "https://gestalt.example.com"
-  - name: GESTALT_ENCRYPTION_KEY
-    valueFrom:
-      secretKeyRef:
-        name: gestaltd-secrets
-        key: encryption-key
-  - name: DATABASE_URL
-    valueFrom:
-      secretKeyRef:
-        name: gestaltd-secrets
-        key: database-url
-
-preparation:
-  enabled: true
-```
-
-Apply that with:
-
-```sh
-helm upgrade --install gestaltd \
-  oci://ghcr.io/valon-technologies/charts/gestaltd \
-  --namespace gestalt \
-  --set image.tag=<version> \
-  -f values-production.yaml
-```
-
-## Important Chart Values
-
-| Value | Purpose |
-| --- | --- |
-| `config` | Rendered as `/etc/gestaltd/config.yaml`. |
-| `extraEnv` | Environment variables used by `${VAR}` placeholders in `config`. |
-| `persistence` | PVC settings for SQLite or other local state. |
-| `preparation.enabled` | Runs `gestaltd lock` and `gestaltd sync --locked` in init containers before the main server starts. Use it when the chart should prepare locked state for published provider packages or packaged UI bundles. |
-| `lockedServe.enabled` | Adds `--locked` to the main container without enabling the chart preparation container. Use it when lock state and prepared artifacts are baked into the image or mounted by external automation. |
-| `ingress` | Standard ingress settings. |
-| `ingress.hosts[].paths` | Per-host ingress paths and path types. |
-| `managementService` | Optional internal Service for a separate management listener. |
-
-## Example Values
+This example uses OIDC authentication, a networked RelationalDB datastore, and
+an internal management listener for `/admin` and `/metrics`:
 
 ```yaml
 service:
-  type: LoadBalancer
+  type: ClusterIP
   port: 8080
 
 managementService:
@@ -124,24 +49,23 @@ config:
     baseUrl: "${GESTALT_BASE_URL}"
     encryptionKey: "${GESTALT_ENCRYPTION_KEY}"
     providers:
-      auth: oidc
+      authentication: oidc
       indexeddb: main
   providers:
-      auth:
-        oidc:
-          source:
-            package: github.com/valon-technologies/gestalt-providers/auth/oidc
-            version: 0.0.1-alpha.1
+    authentication:
+      oidc:
+        source:
+          package: github.com/valon-technologies/gestalt-providers/auth/oidc
+          version: 0.0.1-alpha.1
         config:
           issuerUrl: "${OIDC_ISSUER_URL}"
           clientId: "${OIDC_CLIENT_ID}"
           clientSecret: "${OIDC_CLIENT_SECRET}"
-          redirectUrl: "${OIDC_REDIRECT_URL}"
-      indexeddb:
-        main:
-          source:
-            package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-            version: 0.0.1-alpha.1
+    indexeddb:
+      main:
+        source:
+          package: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+          version: 0.0.1-alpha.1
         config:
           dsn: "${DATABASE_URL}"
 
@@ -165,8 +89,6 @@ extraEnv:
       secretKeyRef:
         name: gestaltd-secrets
         key: oidc-client-secret
-  - name: OIDC_REDIRECT_URL
-    value: "https://gestalt.example.com/api/v1/auth/login/callback"
   - name: DATABASE_URL
     valueFrom:
       secretKeyRef:
@@ -177,27 +99,54 @@ preparation:
   enabled: true
 ```
 
-This configuration keeps the public UI and API on port `8080` while exposing
-`/admin` and `/metrics` only through the internal `gestaltd-management` Service
-on port `9090`. If operators need browser access to `/admin`, place an
-internal-only ingress, VPN, or identity-aware proxy in front of that management
-Service rather than exposing it on the public ingress.
+Apply the values file with:
 
-## When to enable `preparation`
+```sh
+helm upgrade --install gestaltd \
+  oci://ghcr.io/valon-technologies/charts/gestaltd \
+  --namespace gestalt \
+  --set image.tag=<version> \
+  -f values-production.yaml
+```
 
-Enable the preparation init containers when your config uses published package sources or metadata URLs under `plugins.*.source`, `providers.authentication.*.source`, `providers.indexeddb.*.source`, or `providers.ui.*.source` and you want that state prepared before the main container starts. The chart runs:
+Keep the management Service internal. If operators need browser access to
+`/admin`, put an internal-only ingress, VPN, or identity-aware proxy in front
+of the management Service.
 
-`/gestaltd lock --config /etc/gestaltd-config/config.yaml --lockfile /etc/gestaltd-state/gestalt.lock.json`
+If you protect `/admin` with `server.admin.authorizationPolicy` on a split
+public/management deployment, also set `config.server.management.baseUrl`.
 
-followed by:
+## Important values
 
-`/gestaltd sync --locked --config /etc/gestaltd-config/config.yaml --lockfile /etc/gestaltd-state/gestalt.lock.json --artifacts-dir /etc/gestaltd-state/artifacts`
+| Value | Purpose |
+| --- | --- |
+| `config` | Rendered as `/etc/gestaltd/config.yaml`. |
+| `extraEnv` | Environment variables used by `${VAR}` placeholders in `config`. |
+| `persistence` | PVC settings for SQLite or other local state. |
+| `preparation.enabled` | Runs `gestaltd lock` and `gestaltd sync --locked` in init containers before the main server starts. |
+| `lockedServe.enabled` | Adds `--locked` to the main container without running the chart preparation containers. |
+| `ingress` | Public ingress settings. |
+| `managementService` | Optional internal Service for the management listener. |
 
-The main container then starts in locked mode against the prepared state.
+## Lock state
 
-If you prepare lock state outside the chart, leave `preparation.enabled: false`
-and set `lockedServe.enabled: true` so the main container still starts with
-`serve --locked`.
+Enable `preparation.enabled` when the chart should prepare locked state from
+published provider packages or packaged UI bundles. The chart runs:
 
-See [Configuration](/reference/configuration) for how the lockfile and prepared artifacts
-fit together.
+```sh
+/gestaltd lock \
+  --config /etc/gestaltd-config/config.yaml \
+  --lockfile /etc/gestaltd-state/gestalt.lock.json
+
+/gestaltd sync --locked \
+  --config /etc/gestaltd-config/config.yaml \
+  --lockfile /etc/gestaltd-state/gestalt.lock.json \
+  --artifacts-dir /etc/gestaltd-state/artifacts
+```
+
+For strict reproducibility, prepare lock state outside the chart, set
+`preparation.enabled: false`, set `lockedServe.enabled: true`, and bake or
+mount `gestalt.lock.json` and the prepared artifacts before startup.
+
+See [Configuration](/reference/configuration) for the lockfile and prepared
+artifact model.
