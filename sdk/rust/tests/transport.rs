@@ -5,8 +5,9 @@ use std::sync::{Arc, Mutex};
 
 use gestalt::proto::v1::integration_provider_client::IntegrationProviderClient;
 use gestalt::proto::v1::{
-    AccessContext, CredentialContext, ExecuteRequest, GetSessionCatalogRequest, HostContext,
-    PostConnectRequest, RequestContext, StartProviderRequest, SubjectContext,
+    AccessContext, CredentialContext, ExecuteRequest, ExternalIdentityContext,
+    GetSessionCatalogRequest, HostContext, HttpSubjectRequest, PostConnectRequest, RequestContext,
+    ResolveHttpSubjectRequest, StartProviderRequest, StringList, SubjectContext,
 };
 use gestalt::{Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok};
 use hyper_util::rt::tokio::TokioIo;
@@ -80,7 +81,90 @@ impl Provider for TestProvider {
             }],
         }))
     }
+
+    async fn resolve_http_subject(
+        &self,
+        request: gestalt::HTTPSubjectRequest,
+        context: &Request,
+    ) -> gestalt::Result<Option<gestalt::Subject>> {
+        match request.binding.as_str() {
+            "command" => {
+                let team_id = request
+                    .params
+                    .get("team_id")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                let user_id = request
+                    .params
+                    .get("user_id")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                Ok(Some(gestalt::Subject {
+                    id: format!("slack:{team_id}:{user_id}"),
+                    kind: "user".to_string(),
+                    display_name: format!(
+                        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+                        request.method.as_str(),
+                        request.path.as_str(),
+                        request.content_type.as_str(),
+                        request
+                            .headers
+                            .get("x-slack-signature")
+                            .and_then(|values| values.first())
+                            .map(String::as_str)
+                            .unwrap_or_default(),
+                        request
+                            .query
+                            .get("trace")
+                            .and_then(|values| values.first())
+                            .map(String::as_str)
+                            .unwrap_or_default(),
+                        String::from_utf8_lossy(&request.raw_body),
+                        request.security_scheme.as_str(),
+                        request.verified_subject.as_str(),
+                        request
+                            .verified_claims
+                            .get("team")
+                            .map(String::as_str)
+                            .unwrap_or_default(),
+                        context.subject.email.as_str(),
+                        context.agent_subject.email.as_str(),
+                        context.external_identity.id.as_str(),
+                        context.agent_external_identity.id.as_str(),
+                        context.credential.mode.as_str(),
+                        context.access.role.as_str(),
+                        context.host.public_base_url.as_str(),
+                    ),
+                    auth_source: context
+                        .workflow
+                        .get("runId")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    ..Default::default()
+                }))
+            }
+            "none" => Ok(None),
+            "reject" => Err(gestalt::Error::permission_denied("unmapped slack subject")),
+            "boom" => Err(gestalt::Error::new("boom")),
+            "defaults" => Ok(Some(gestalt::Subject {
+                id: format!(
+                    "defaults:{}:{}",
+                    request.binding.as_str(),
+                    context.subject.id.as_str()
+                ),
+                kind: "system".to_string(),
+                ..Default::default()
+            })),
+            _ => Ok(None),
+        }
+    }
 }
+
+struct PlainProvider;
+
+#[async_trait]
+impl Provider for PlainProvider {}
 
 #[derive(serde::Deserialize, schemars::JsonSchema)]
 struct Input {
@@ -359,11 +443,207 @@ async fn serves_provider_requests_over_unix_socket() {
         "acme|user:user-123|ada@example.com|user|viewer|https://gestalt.example.test|schedule"
     );
 
+    let resolved = client
+        .resolve_http_subject(ResolveHttpSubjectRequest {
+            request: Some(HttpSubjectRequest {
+                binding: "command".to_string(),
+                method: "POST".to_string(),
+                path: "/api/v1/slack/commands/support".to_string(),
+                content_type: "application/x-www-form-urlencoded".to_string(),
+                headers: [(
+                    "x-slack-signature".to_string(),
+                    StringList {
+                        values: vec!["v0=abc123".to_string()],
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                query: [(
+                    "trace".to_string(),
+                    StringList {
+                        values: vec!["trace-123".to_string()],
+                    },
+                )]
+                .into_iter()
+                .collect(),
+                params: Some(helpers::struct_from_json(serde_json::json!({
+                    "team_id": "T123",
+                    "user_id": "U456"
+                }))),
+                raw_body: b"team_id=T123&user_id=U456".to_vec(),
+                security_scheme: "slack_signed".to_string(),
+                verified_subject: "slack-app".to_string(),
+                verified_claims: [("team".to_string(), "T123".to_string())]
+                    .into_iter()
+                    .collect(),
+            }),
+            context: Some(RequestContext {
+                subject: Some(SubjectContext {
+                    id: "user:user-123".to_string(),
+                    kind: "user".to_string(),
+                    email: "ada@example.com".to_string(),
+                    ..Default::default()
+                }),
+                agent_subject: Some(SubjectContext {
+                    id: "user:user-456".to_string(),
+                    kind: "user".to_string(),
+                    email: "grace@example.com".to_string(),
+                    ..Default::default()
+                }),
+                external_identity: Some(ExternalIdentityContext {
+                    r#type: "slack".to_string(),
+                    id: "external-ada".to_string(),
+                }),
+                agent_external_identity: Some(ExternalIdentityContext {
+                    r#type: "slack".to_string(),
+                    id: "external-grace".to_string(),
+                }),
+                credential: Some(CredentialContext {
+                    mode: "subject".to_string(),
+                    ..Default::default()
+                }),
+                access: Some(AccessContext {
+                    policy: "sample_policy".to_string(),
+                    role: "admin".to_string(),
+                }),
+                workflow: Some(helpers::struct_from_json(serde_json::json!({
+                    "runId": "run-123"
+                }))),
+                host: Some(HostContext {
+                    public_base_url: "https://gestalt.example.test".to_string(),
+                }),
+            }),
+        })
+        .await
+        .expect("resolve http subject")
+        .into_inner();
+    let subject = resolved.subject.expect("resolved subject");
+    assert_eq!(subject.id, "slack:T123:U456");
+    assert_eq!(subject.kind, "user");
+    assert_eq!(
+        subject.display_name,
+        "POST|/api/v1/slack/commands/support|application/x-www-form-urlencoded|v0=abc123|trace-123|team_id=T123&user_id=U456|slack_signed|slack-app|T123|ada@example.com|grace@example.com|external-ada|external-grace|subject|admin|https://gestalt.example.test"
+    );
+    assert_eq!(subject.auth_source, "run-123");
+
+    let fallback = client
+        .resolve_http_subject(ResolveHttpSubjectRequest {
+            request: Some(HttpSubjectRequest {
+                binding: "none".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("resolve http subject fallback")
+        .into_inner();
+    assert!(fallback.subject.is_none());
+    assert_eq!(fallback.reject_status, 0);
+
+    let rejection = client
+        .resolve_http_subject(ResolveHttpSubjectRequest {
+            request: Some(HttpSubjectRequest {
+                binding: "reject".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("resolve http subject rejection")
+        .into_inner();
+    assert_eq!(rejection.reject_status, 403);
+    assert_eq!(rejection.reject_message, "unmapped slack subject");
+
+    let err = client
+        .resolve_http_subject(ResolveHttpSubjectRequest {
+            request: Some(HttpSubjectRequest {
+                binding: "boom".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect_err("resolve http subject should return gRPC error");
+    assert_eq!(err.code(), Code::Unknown);
+    assert_eq!(err.message(), "resolve http subject: boom");
+
+    let defaults = client
+        .resolve_http_subject(ResolveHttpSubjectRequest {
+            request: Some(HttpSubjectRequest {
+                binding: "defaults".to_string(),
+                ..Default::default()
+            }),
+            context: None,
+        })
+        .await
+        .expect("resolve http subject with default context")
+        .into_inner();
+    assert_eq!(
+        defaults.subject.expect("default subject").id,
+        "defaults:defaults:"
+    );
+
+    let missing = client
+        .resolve_http_subject(ResolveHttpSubjectRequest {
+            request: None,
+            context: None,
+        })
+        .await
+        .expect("resolve http subject with missing request")
+        .into_inner();
+    assert!(missing.subject.is_none());
+
     let err = client
         .post_connect(PostConnectRequest::default())
         .await
         .expect_err("post connect should be unimplemented");
     assert_eq!(err.code(), Code::Unimplemented);
+
+    serve_task.abort();
+    let _ = serve_task.await;
+}
+
+#[tokio::test]
+async fn default_http_subject_resolver_returns_empty_response() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("rust-http-subject.sock");
+    let _socket_guard = helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
+
+    let serve_task = tokio::spawn(async move {
+        gestalt::runtime::serve_provider(Arc::new(PlainProvider), Router::new())
+            .await
+            .expect("serve provider");
+    });
+
+    helpers::wait_for_socket(&socket).await;
+
+    let channel = Endpoint::try_from("http://[::]:50051")
+        .expect("endpoint")
+        .connect_with_connector(service_fn({
+            let socket = socket.clone();
+            move |_| {
+                let socket = socket.clone();
+                async move { UnixStream::connect(socket).await.map(TokioIo::new) }
+            }
+        }))
+        .await
+        .expect("connect channel");
+    let mut client = IntegrationProviderClient::new(channel);
+
+    let response = client
+        .resolve_http_subject(ResolveHttpSubjectRequest {
+            request: Some(HttpSubjectRequest {
+                binding: "command".to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("resolve http subject")
+        .into_inner();
+    assert!(response.subject.is_none());
+    assert_eq!(response.reject_status, 0);
+    assert_eq!(response.reject_message, "");
 
     serve_task.abort();
     let _ = serve_task.await;
