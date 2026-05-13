@@ -11,7 +11,6 @@ import (
 	"syscall"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 )
 
 func main() {
@@ -31,7 +30,7 @@ func run() error {
 
 	switch os.Args[1] {
 	case "provider":
-		return serveProxyProvider(ctx, newProxyProvider(&echoProvider{}))
+		return gestalt.ServeProvider(ctx, newProxyProvider(&echoProvider{}), proxyRouter)
 	default:
 		return fmt.Errorf("unknown mode %q", os.Args[1])
 	}
@@ -45,25 +44,6 @@ func (p *echoProvider) Configure(context.Context, string, map[string]any) error 
 func (p *echoProvider) Name() string                                            { return "echo" }
 func (p *echoProvider) DisplayName() string                                     { return "Echo" }
 func (p *echoProvider) Description() string                                     { return "Echoes back the input parameters" }
-func (p *echoProvider) ConnectionMode() proto.ConnectionMode {
-	return proto.ConnectionMode_CONNECTION_MODE_NONE
-}
-func (p *echoProvider) AuthTypes() []string { return nil }
-func (p *echoProvider) Catalog() *proto.Catalog {
-	return &proto.Catalog{
-		Name:        p.Name(),
-		DisplayName: p.DisplayName(),
-		Description: p.Description(),
-		Operations: []*proto.CatalogOperation{
-			{
-				Id:          "echo",
-				Description: "Echo back input params as JSON",
-				Method:      http.MethodPost,
-				Transport:   transportPlugin,
-			},
-		},
-	}
-}
 
 func (p *echoProvider) Execute(_ context.Context, operation string, params map[string]any, _ string) (*gestalt.OperationResult, error) {
 	if operation != "echo" {

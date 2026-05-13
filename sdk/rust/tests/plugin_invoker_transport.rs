@@ -1,3 +1,6 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
 #[allow(dead_code)]
 mod helpers;
 
@@ -6,10 +9,10 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use gestalt::proto::v1::plugin_invoker_server::{
+use generated::v1::plugin_invoker_server::{
     PluginInvoker as ProtoPluginInvoker, PluginInvokerServer,
 };
-use gestalt::proto::v1::{
+use generated::v1::{
     ExchangeInvocationTokenRequest, ExchangeInvocationTokenResponse, OperationResult,
     PluginInvocationGrant, PluginInvokeGraphQlRequest, PluginInvokeRequest,
 };

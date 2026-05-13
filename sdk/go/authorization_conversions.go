@@ -10,7 +10,7 @@ func protoAuthorizationSubject(value *AuthorizationSubject) (*proto.Subject, err
 	if value == nil {
 		return nil, nil
 	}
-	properties, err := StructFromAny(value.Properties)
+	properties, err := structFromAny(value.Properties)
 	if err != nil {
 		return nil, fmt.Errorf("subject properties: %w", err)
 	}
@@ -28,7 +28,7 @@ func authorizationSubjectFromProto(value *proto.Subject) *AuthorizationSubject {
 	return &AuthorizationSubject{
 		Type:       value.GetType(),
 		Id:         value.GetId(),
-		Properties: MapFromStruct(value.GetProperties()),
+		Properties: mapFromStruct(value.GetProperties()),
 	}
 }
 
@@ -36,7 +36,7 @@ func protoAuthorizationResource(value *AuthorizationResource) (*proto.Resource, 
 	if value == nil {
 		return nil, nil
 	}
-	properties, err := StructFromAny(value.Properties)
+	properties, err := structFromAny(value.Properties)
 	if err != nil {
 		return nil, fmt.Errorf("resource properties: %w", err)
 	}
@@ -54,7 +54,7 @@ func authorizationResourceFromProto(value *proto.Resource) *AuthorizationResourc
 	return &AuthorizationResource{
 		Type:       value.GetType(),
 		Id:         value.GetId(),
-		Properties: MapFromStruct(value.GetProperties()),
+		Properties: mapFromStruct(value.GetProperties()),
 	}
 }
 
@@ -133,7 +133,7 @@ func protoAuthorizationAction(value *AuthorizationAction) (*proto.Action, error)
 	if value == nil {
 		return nil, nil
 	}
-	properties, err := StructFromAny(value.Properties)
+	properties, err := structFromAny(value.Properties)
 	if err != nil {
 		return nil, fmt.Errorf("action properties: %w", err)
 	}
@@ -146,7 +146,7 @@ func authorizationActionFromProto(value *proto.Action) *AuthorizationAction {
 	}
 	return &AuthorizationAction{
 		Name:       value.GetName(),
-		Properties: MapFromStruct(value.GetProperties()),
+		Properties: mapFromStruct(value.GetProperties()),
 	}
 }
 
@@ -166,7 +166,7 @@ func protoAccessEvaluationRequest(value *AccessEvaluationRequest) (*proto.Access
 	if err != nil {
 		return nil, err
 	}
-	context, err := StructFromAny(value.Context)
+	context, err := structFromAny(value.Context)
 	if err != nil {
 		return nil, fmt.Errorf("context: %w", err)
 	}
@@ -186,7 +186,7 @@ func accessEvaluationRequestFromProto(value *proto.AccessEvaluationRequest) *Acc
 		Subject:  authorizationSubjectFromProto(value.GetSubject()),
 		Action:   authorizationActionFromProto(value.GetAction()),
 		Resource: authorizationResourceFromProto(value.GetResource()),
-		Context:  MapFromStruct(value.GetContext()),
+		Context:  mapFromStruct(value.GetContext()),
 	}
 }
 
@@ -194,7 +194,7 @@ func protoAccessDecision(value *AccessDecision) (*proto.AccessDecision, error) {
 	if value == nil {
 		return nil, nil
 	}
-	context, err := StructFromAny(value.Context)
+	context, err := structFromAny(value.Context)
 	if err != nil {
 		return nil, fmt.Errorf("decision context: %w", err)
 	}
@@ -211,7 +211,7 @@ func accessDecisionFromProto(value *proto.AccessDecision) *AccessDecision {
 	}
 	return &AccessDecision{
 		Allowed: value.GetAllowed(),
-		Context: MapFromStruct(value.GetContext()),
+		Context: mapFromStruct(value.GetContext()),
 		ModelId: value.GetModelId(),
 	}
 }
@@ -284,7 +284,7 @@ func protoResourceSearchRequest(value *ResourceSearchRequest) (*proto.ResourceSe
 	if err != nil {
 		return nil, err
 	}
-	context, err := StructFromAny(value.Context)
+	context, err := structFromAny(value.Context)
 	if err != nil {
 		return nil, fmt.Errorf("context: %w", err)
 	}
@@ -306,7 +306,7 @@ func resourceSearchRequestFromProto(value *proto.ResourceSearchRequest) *Resourc
 		Subject:      authorizationSubjectFromProto(value.GetSubject()),
 		Action:       authorizationActionFromProto(value.GetAction()),
 		ResourceType: value.GetResourceType(),
-		Context:      MapFromStruct(value.GetContext()),
+		Context:      mapFromStruct(value.GetContext()),
 		PageSize:     value.GetPageSize(),
 		PageToken:    value.GetPageToken(),
 	}
@@ -360,7 +360,7 @@ func protoSubjectSearchRequest(value *SubjectSearchRequest) (*proto.SubjectSearc
 	if err != nil {
 		return nil, err
 	}
-	context, err := StructFromAny(value.Context)
+	context, err := structFromAny(value.Context)
 	if err != nil {
 		return nil, fmt.Errorf("context: %w", err)
 	}
@@ -382,7 +382,7 @@ func subjectSearchRequestFromProto(value *proto.SubjectSearchRequest) *SubjectSe
 		Resource:    authorizationResourceFromProto(value.GetResource()),
 		Action:      authorizationActionFromProto(value.GetAction()),
 		SubjectType: value.GetSubjectType(),
-		Context:     MapFromStruct(value.GetContext()),
+		Context:     mapFromStruct(value.GetContext()),
 		PageSize:    value.GetPageSize(),
 		PageToken:   value.GetPageToken(),
 	}
@@ -436,7 +436,7 @@ func protoEffectiveSubjectSearchRequest(value *EffectiveSubjectSearchRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	context, err := StructFromAny(value.Context)
+	context, err := structFromAny(value.Context)
 	if err != nil {
 		return nil, fmt.Errorf("context: %w", err)
 	}
@@ -456,7 +456,7 @@ func effectiveSubjectSearchRequestFromProto(value *proto.EffectiveSubjectSearchR
 	return &EffectiveSubjectSearchRequest{
 		Resource:  authorizationResourceFromProto(value.GetResource()),
 		Action:    authorizationActionFromProto(value.GetAction()),
-		Context:   MapFromStruct(value.GetContext()),
+		Context:   mapFromStruct(value.GetContext()),
 		PageSize:  value.GetPageSize(),
 		PageToken: value.GetPageToken(),
 	}
@@ -512,7 +512,7 @@ func protoActionSearchRequest(value *ActionSearchRequest) (*proto.ActionSearchRe
 	if err != nil {
 		return nil, err
 	}
-	context, err := StructFromAny(value.Context)
+	context, err := structFromAny(value.Context)
 	if err != nil {
 		return nil, fmt.Errorf("context: %w", err)
 	}
@@ -532,7 +532,7 @@ func actionSearchRequestFromProto(value *proto.ActionSearchRequest) *ActionSearc
 	return &ActionSearchRequest{
 		Subject:   authorizationSubjectFromProto(value.GetSubject()),
 		Resource:  authorizationResourceFromProto(value.GetResource()),
-		Context:   MapFromStruct(value.GetContext()),
+		Context:   mapFromStruct(value.GetContext()),
 		PageSize:  value.GetPageSize(),
 		PageToken: value.GetPageToken(),
 	}
@@ -606,7 +606,7 @@ func protoRelationship(value *Relationship) (*proto.Relationship, error) {
 	if err != nil {
 		return nil, err
 	}
-	properties, err := StructFromAny(value.Properties)
+	properties, err := structFromAny(value.Properties)
 	if err != nil {
 		return nil, fmt.Errorf("relationship properties: %w", err)
 	}
@@ -631,7 +631,7 @@ func relationshipFromProto(value *proto.Relationship) *Relationship {
 		Subject:    authorizationSubjectFromProto(value.GetSubject()),
 		Relation:   value.GetRelation(),
 		Resource:   authorizationResourceFromProto(value.GetResource()),
-		Properties: MapFromStruct(value.GetProperties()),
+		Properties: mapFromStruct(value.GetProperties()),
 		Target:     authorizationRelationshipTargetFromProto(value.GetTarget()),
 	}
 }
@@ -1160,7 +1160,7 @@ func protoExpandRequest(value *ExpandRequest) (*proto.ExpandRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	context, err := StructFromAny(value.Context)
+	context, err := structFromAny(value.Context)
 	if err != nil {
 		return nil, fmt.Errorf("context: %w", err)
 	}
@@ -1180,7 +1180,7 @@ func expandRequestFromProto(value *proto.ExpandRequest) *ExpandRequest {
 	return &ExpandRequest{
 		Resource: authorizationResourceFromProto(value.GetResource()),
 		Relation: value.GetRelation(),
-		Context:  MapFromStruct(value.GetContext()),
+		Context:  mapFromStruct(value.GetContext()),
 		MaxDepth: value.GetMaxDepth(),
 		ModelId:  value.GetModelId(),
 	}

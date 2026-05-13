@@ -1,18 +1,26 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
 #[allow(dead_code)]
 mod helpers;
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use gestalt::proto::v1::integration_provider_server::IntegrationProvider;
-use gestalt::proto::v1::{
+use generated::v1::integration_provider_client::IntegrationProviderClient;
+use generated::v1::{
     CredentialContext, ExecuteRequest, RequestContext, StartProviderRequest, SubjectContext,
 };
+use hyper_util::rt::tokio::TokioIo;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
+use tokio::net::UnixStream;
 use tonic::Request as GrpcRequest;
 use tonic::codegen::async_trait;
+use tonic::transport::{Channel, Endpoint};
+use tower::service_fn;
 
 use gestalt::{Operation, Provider, Request, Response, Router, ok};
 
@@ -45,6 +53,18 @@ fn test_router() -> gestalt::Result<gestalt::Router<TestProvider>> {
 }
 
 gestalt::export_provider!(constructor = TestProvider::default, router = test_router);
+
+async fn integration_client(socket: PathBuf) -> IntegrationProviderClient<Channel> {
+    let channel = Endpoint::try_from("http://[::]:50051")
+        .expect("endpoint")
+        .connect_with_connector(service_fn(move |_| {
+            let socket = socket.clone();
+            async move { UnixStream::connect(socket).await.map(TokioIo::new) }
+        }))
+        .await
+        .expect("connect channel");
+    IntegrationProviderClient::new(channel)
+}
 
 #[tokio::test]
 async fn executes_registered_operation() {
@@ -259,10 +279,23 @@ fn error_test_router() -> gestalt::Result<gestalt::Router<ErrorTestProvider>> {
 
 #[tokio::test]
 async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("grr.sock");
+    let _socket_guard = helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
+
     let provider = Arc::new(ErrorTestProvider::default());
-    let server =
-        gestalt::ProviderServer::new(Arc::clone(&provider), error_test_router().expect("router"));
-    server
+    let router = error_test_router().expect("router");
+    let serve_provider = Arc::clone(&provider);
+    let serve_task = tokio::spawn(async move {
+        gestalt::runtime::serve_provider(serve_provider, router)
+            .await
+            .expect("serve provider");
+    });
+
+    helpers::wait_for_socket(&socket).await;
+    let mut client = integration_client(socket.clone()).await;
+
+    client
         .start_provider(GrpcRequest::new(StartProviderRequest {
             name: "test".to_owned(),
             config: Some(helpers::struct_from_json(json!({ "greeting": "Hi" }))),
@@ -271,7 +304,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .await
         .expect("start provider");
 
-    let success = server
+    let success = client
         .execute(GrpcRequest::new(ExecuteRequest {
             operation: "greet".to_owned(),
             params: Some(helpers::struct_from_json(json!({ "name": "Ada" }))),
@@ -312,7 +345,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"user","idempotency_key":"tool-call-123"}"#
     );
 
-    let unknown = server
+    let unknown = client
         .execute(GrpcRequest::new(ExecuteRequest {
             operation: "missing".to_owned(),
             ..ExecuteRequest::default()
@@ -323,7 +356,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert_eq!(unknown.status, 404);
     assert_eq!(unknown.body, r#"{"error":"unknown operation"}"#);
 
-    let decode = server
+    let decode = client
         .execute(GrpcRequest::new(ExecuteRequest {
             operation: "greet".to_owned(),
             params: Some(helpers::struct_from_json(json!({ "name": 7 }))),
@@ -336,7 +369,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert!(decode.body.contains("decode params for"));
     assert!(decode.body.contains("greet"));
 
-    let handler_error = server
+    let handler_error = client
         .execute(GrpcRequest::new(ExecuteRequest {
             operation: "error".to_owned(),
             ..ExecuteRequest::default()
@@ -347,7 +380,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert_eq!(handler_error.status, 500);
     assert_eq!(handler_error.body, r#"{"error":"boom"}"#);
 
-    let implicit_handler_error = server
+    let implicit_handler_error = client
         .execute(GrpcRequest::new(ExecuteRequest {
             operation: "implicit_error".to_owned(),
             ..ExecuteRequest::default()
@@ -358,7 +391,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert_eq!(implicit_handler_error.status, 500);
     assert_eq!(implicit_handler_error.body, r#"{"error":"internal error"}"#);
 
-    let not_found = server
+    let not_found = client
         .execute(GrpcRequest::new(ExecuteRequest {
             operation: "not_found".to_owned(),
             ..ExecuteRequest::default()
@@ -369,7 +402,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert_eq!(not_found.status, 404);
     assert_eq!(not_found.body, r#"{"error":"record not found"}"#);
 
-    let explicit_500 = server
+    let explicit_500 = client
         .execute(GrpcRequest::new(ExecuteRequest {
             operation: "explicit_500".to_owned(),
             ..ExecuteRequest::default()
@@ -380,7 +413,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert_eq!(explicit_500.status, 500);
     assert_eq!(explicit_500.body, r#"{"error":"service unavailable"}"#);
 
-    let panic = server
+    let panic = client
         .execute(GrpcRequest::new(ExecuteRequest {
             operation: "panic".to_owned(),
             ..ExecuteRequest::default()
@@ -390,16 +423,30 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .into_inner();
     assert_eq!(panic.status, 500);
     assert_eq!(panic.body, r#"{"error":"internal error"}"#);
+
+    serve_task.abort();
+    let _ = serve_task.await;
 }
 
 #[tokio::test]
 async fn lifecycle_rpcs_sanitize_hidden_internal_errors() {
-    let server = gestalt::ProviderServer::new(
-        Arc::new(HiddenLifecycleProvider),
-        gestalt::Router::<HiddenLifecycleProvider>::new(),
-    );
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("grl.sock");
+    let _socket_guard = helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
 
-    let configure_error = server
+    let serve_task = tokio::spawn(async move {
+        gestalt::runtime::serve_provider(
+            Arc::new(HiddenLifecycleProvider),
+            gestalt::Router::<HiddenLifecycleProvider>::new(),
+        )
+        .await
+        .expect("serve provider");
+    });
+
+    helpers::wait_for_socket(&socket).await;
+    let mut client = integration_client(socket.clone()).await;
+
+    let configure_error = client
         .start_provider(GrpcRequest::new(StartProviderRequest {
             name: "broken".to_owned(),
             config: None,
@@ -413,12 +460,15 @@ async fn lifecycle_rpcs_sanitize_hidden_internal_errors() {
         "configure provider: internal error"
     );
 
-    let catalog_error = server
+    let catalog_error = client
         .get_session_catalog(GrpcRequest::new(
-            gestalt::proto::v1::GetSessionCatalogRequest::default(),
+            generated::v1::GetSessionCatalogRequest::default(),
         ))
         .await
         .expect_err("get session catalog should fail");
     assert_eq!(catalog_error.code(), tonic::Code::Unknown);
     assert_eq!(catalog_error.message(), "session catalog: internal error");
+
+    serve_task.abort();
+    let _ = serve_task.await;
 }

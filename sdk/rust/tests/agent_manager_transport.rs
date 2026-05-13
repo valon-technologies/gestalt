@@ -1,13 +1,18 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
+mod support_protocol;
+
 #[allow(dead_code)]
 mod helpers;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use gestalt::proto::v1::agent_manager_host_server::{
+use generated::v1::agent_manager_host_server::{
     AgentManagerHost as ProtoAgentManagerHost, AgentManagerHostServer,
 };
-use gestalt::proto::v1::{
+use generated::v1::{
     AgentExecutionStatus, AgentInteraction, AgentInteractionState as ProtoAgentInteractionState,
     AgentInteractionType, AgentManagerCancelTurnRequest, AgentManagerCreateSessionRequest,
     AgentManagerCreateTurnRequest, AgentManagerGetSessionRequest, AgentManagerGetTurnRequest,
@@ -724,7 +729,7 @@ async fn agent_manager_create_turn_accepts_native_values() {
     assert_eq!(request.messages[0].role, "user");
     assert_eq!(request.messages[0].text, "Summarize this");
     assert_eq!(
-        gestalt::protocol::json_from_struct(request.messages[0].metadata.as_ref().unwrap()),
+        support_protocol::json_from_struct(request.messages[0].metadata.as_ref().unwrap()),
         serde_json::json!({ "source": "native" })
     );
     assert_eq!(request.messages[0].parts.len(), 1);
@@ -738,15 +743,15 @@ async fn agent_manager_create_turn_accepts_native_values() {
     assert_eq!(request.tool_refs[0].operation, "issues.get");
     assert_eq!(request.tool_refs[0].connection, "default");
     assert_eq!(
-        gestalt::protocol::json_from_struct(request.response_schema.as_ref().unwrap()),
+        support_protocol::json_from_struct(request.response_schema.as_ref().unwrap()),
         serde_json::json!({ "type": "object" })
     );
     assert_eq!(
-        gestalt::protocol::json_from_struct(request.metadata.as_ref().unwrap()),
+        support_protocol::json_from_struct(request.metadata.as_ref().unwrap()),
         serde_json::json!({ "request": "native" })
     );
     assert_eq!(
-        gestalt::protocol::json_from_struct(request.model_options.as_ref().unwrap()),
+        support_protocol::json_from_struct(request.model_options.as_ref().unwrap()),
         serde_json::json!({ "temperature": 0.0 })
     );
 

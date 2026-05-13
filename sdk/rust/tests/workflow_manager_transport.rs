@@ -1,13 +1,18 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
+mod support_protocol;
+
 #[allow(dead_code)]
 mod helpers;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use gestalt::proto::v1::workflow_manager_host_server::{
+use generated::v1::workflow_manager_host_server::{
     WorkflowManagerHost as ProtoWorkflowManagerHost, WorkflowManagerHostServer,
 };
-use gestalt::proto::v1::{
+use generated::v1::{
     AgentMessagePartType, BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowRun,
     BoundWorkflowSchedule, ManagedWorkflowDefinition, ManagedWorkflowEventTrigger,
     ManagedWorkflowRun, ManagedWorkflowRunSignal, ManagedWorkflowSchedule,
@@ -1106,7 +1111,7 @@ async fn workflow_manager_signal_or_start_accepts_native_values() {
     let signal = request.signal.as_ref().expect("signal");
     assert_eq!(signal.name, "slack.event");
     assert_eq!(
-        gestalt::protocol::json_from_struct(signal.payload.as_ref().unwrap()),
+        support_protocol::json_from_struct(signal.payload.as_ref().unwrap()),
         serde_json::json!({ "channel": "C123" })
     );
 

@@ -31,10 +31,10 @@ check_files() {
 
 case "$mode" in
   python)
-    check_files 'gestalt\.protocol\.v1|gestalt\.testing|_pb2|pb2_grpc|protobuf|generated (protobuf|protocol|modules)|interoperability fixtures|ENV_[A-Z0-9_]*SOCKET(_TOKEN)?|_modules/|View Source|proto_dict|indexeddb_.*_proto' "$root"
+    check_files 'gestalt\.protocol|gestalt\.testing|_pb2|pb2_grpc|protobuf|generated (protobuf|protocol|modules)|interoperability fixtures|ENV_[A-Z0-9_]*SOCKET(_TOKEN)?|_modules/|View Source|proto_dict|indexeddb_.*_proto' "$root"
     ;;
   typescript)
-    check_files 'protocol/v1|protobuf|generated (schemas|protocol|modules)|Regenerating protobuf|buf generate|ENV_[A-Z0-9_]*SOCKET(_TOKEN)?|Defined in |buildProviderBinary|parseRuntimeArgs|runBundledProvider|loadProviderFromTarget|parseProviderTarget' "$root"
+    check_files '@valon-technologies/gestalt/protocol|@valon-technologies/gestalt/test/agent-contract|protocol/v1|protobuf|generated (schemas|protocol|modules)|Regenerating protobuf|buf generate|ENV_[A-Z0-9_]*SOCKET(_TOKEN)?|Defined in |buildProviderBinary|parseRuntimeArgs|runBundledProvider|loadProviderFromTarget|parseProviderTarget' "$root"
     ;;
   rust)
     files=()
@@ -44,10 +44,10 @@ case "$mode" in
       echo "No rustdoc root files found under $root" >&2
       exit 1
     fi
-    check_files 'proto::v1|sdk/proto|src/generated|Codegen strategy|protobuf|generated protocol|gRPC bindings|ENV_[A-Z0-9_]*SOCKET_TOKEN' "${files[@]}"
+    check_files 'gestalt::proto|gestalt::protocol|proto::v1|sdk/proto|src/generated|Codegen strategy|protobuf|generated protocol|gRPC bindings|ENV_[A-Z0-9_]*SOCKET_TOKEN' "${files[@]}"
     ;;
   docs)
-    check_files 'Recommended path|Use a Gestalt SDK when|/reference/sdk/(python|typescript|go|rust)|generated oneof|protobuf|protocol-backed' "$root"
+    check_files 'Recommended path|Use a Gestalt SDK when|/reference/sdk/(python|typescript|go|rust)|generated oneof|protobuf|protocol-backed|StructFromAny|StructFromMap|MapFromStruct|ValueFromAny|AnyFromValue|ValuesFromMap|MapFromValues' "$root"
     ;;
   *)
     echo "unknown SDK docs leak check mode: $mode" >&2

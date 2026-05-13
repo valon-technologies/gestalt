@@ -1,15 +1,18 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
 #[allow(dead_code)]
 mod helpers;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use gestalt::proto::v1::authorization_provider_client::AuthorizationProviderClient as ProtoAuthorizationClient;
-use gestalt::proto::v1::authorization_provider_server::{
+use generated::v1::authorization_provider_client::AuthorizationProviderClient as ProtoAuthorizationClient;
+use generated::v1::authorization_provider_server::{
     AuthorizationProvider as ProtoAuthorizationProvider, AuthorizationProviderServer,
 };
-use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
-use gestalt::proto::v1::{
+use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
+use generated::v1::{
     AccessDecision as ProtoAccessDecision, AccessEvaluationRequest as ProtoAccessEvaluationRequest,
     AccessEvaluationsRequest as ProtoAccessEvaluationsRequest,
     AccessEvaluationsResponse as ProtoAccessEvaluationsResponse, Action as ProtoAction,

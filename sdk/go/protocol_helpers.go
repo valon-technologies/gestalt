@@ -12,22 +12,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Struct aliases google.protobuf.Struct for low-level protocol interop.
-type Struct = structpb.Struct
-
-// Value aliases google.protobuf.Value for low-level protocol interop.
-type Value = structpb.Value
-
-// Timestamp aliases google.protobuf.Timestamp for low-level protocol interop.
-type Timestamp = timestamppb.Timestamp
-
 var (
 	jsonMarshalerType = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
 	timeType          = reflect.TypeOf(time.Time{})
 )
 
-// StructFromMap converts a Go map into a protobuf Struct.
-func StructFromMap(value map[string]any) (*structpb.Struct, error) {
+// structFromMap converts a Go map into a protobuf Struct.
+func structFromMap(value map[string]any) (*structpb.Struct, error) {
 	if value == nil {
 		value = map[string]any{}
 	}
@@ -41,14 +32,14 @@ func StructFromMap(value map[string]any) (*structpb.Struct, error) {
 	return structpb.NewStruct(normalized)
 }
 
-// StructFromAny converts a JSON-compatible object into an optional protobuf Struct.
+// structFromAny converts a JSON-compatible object into an optional protobuf Struct.
 //
 // The input may be nil, a string-keyed map, a struct, or a pointer to one of
 // those. Struct fields use their exported field names unless a json tag
 // supplies a name; json:"-" skips the field and omitempty skips zero values.
 // Anonymous embedded fields must have an explicit json tag name; embedded
 // fields are not flattened.
-func StructFromAny(value any) (*structpb.Struct, error) {
+func structFromAny(value any) (*structpb.Struct, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -62,16 +53,16 @@ func StructFromAny(value any) (*structpb.Struct, error) {
 	return structpb.NewStruct(normalized)
 }
 
-// MapFromStruct converts a protobuf Struct into its Go map representation.
-func MapFromStruct(value *structpb.Struct) map[string]any {
+// mapFromStruct converts a protobuf Struct into its Go map representation.
+func mapFromStruct(value *structpb.Struct) map[string]any {
 	if value == nil {
 		return nil
 	}
 	return value.AsMap()
 }
 
-// ValueFromAny converts a Go JSON-compatible value into a protobuf Value.
-func ValueFromAny(value any) (*structpb.Value, error) {
+// valueFromAny converts a Go JSON-compatible value into a protobuf Value.
+func valueFromAny(value any) (*structpb.Value, error) {
 	normalized, err := normalizeJSONValue(reflect.ValueOf(value), "value", map[uintptr]string{})
 	if err != nil {
 		return nil, err
@@ -79,22 +70,22 @@ func ValueFromAny(value any) (*structpb.Value, error) {
 	return structpb.NewValue(normalized)
 }
 
-// AnyFromValue converts a protobuf Value into its Go representation.
-func AnyFromValue(value *structpb.Value) any {
+// anyFromValue converts a protobuf Value into its Go representation.
+func anyFromValue(value *structpb.Value) any {
 	if value == nil {
 		return nil
 	}
 	return value.AsInterface()
 }
 
-// ValuesFromMap converts a JSON-compatible map into protobuf Value entries.
-func ValuesFromMap(values map[string]any) (map[string]*structpb.Value, error) {
+// valuesFromMap converts a JSON-compatible map into protobuf Value entries.
+func valuesFromMap(values map[string]any) (map[string]*structpb.Value, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
 	out := make(map[string]*structpb.Value, len(values))
 	for key, value := range values {
-		pbValue, err := ValueFromAny(value)
+		pbValue, err := valueFromAny(value)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", key, err)
 		}
@@ -103,8 +94,8 @@ func ValuesFromMap(values map[string]any) (map[string]*structpb.Value, error) {
 	return out, nil
 }
 
-// MapFromValues converts protobuf Value entries into their Go representation.
-func MapFromValues(values map[string]*structpb.Value) map[string]any {
+// mapFromValues converts protobuf Value entries into their Go representation.
+func mapFromValues(values map[string]*structpb.Value) map[string]any {
 	if len(values) == 0 {
 		return nil
 	}

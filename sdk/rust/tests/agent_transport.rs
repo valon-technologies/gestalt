@@ -1,3 +1,8 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
+mod support_protocol;
+
 #[allow(dead_code)]
 mod helpers;
 
@@ -5,12 +10,12 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use gestalt::proto::v1::agent_host_server::{
+use generated::v1::agent_host_server::{
     AgentHost as AgentHostRpc, AgentHostServer as AgentHostGrpcServer,
 };
-use gestalt::proto::v1::agent_provider_client::AgentProviderClient;
-use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
-use gestalt::proto::v1::{self as pb, ConfigureProviderRequest, ProviderKind};
+use generated::v1::agent_provider_client::AgentProviderClient;
+use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
+use generated::v1::{self as pb, ConfigureProviderRequest, ProviderKind};
 use gestalt::{
     AgentExecutionStatus, AgentHost, AgentHostExecuteToolInput, AgentHostListToolsInput,
     AgentHostResolveConnectionInput, AgentInteraction, AgentInteractionState, AgentInteractionType,
@@ -424,7 +429,7 @@ impl AgentHostRpc for TestAgentHostService {
                 arguments: request
                     .arguments
                     .as_ref()
-                    .map(gestalt::protocol::json_from_struct),
+                    .map(support_protocol::json_from_struct),
                 run_grant: request.run_grant.clone(),
                 idempotency_key: request.idempotency_key.clone(),
             });

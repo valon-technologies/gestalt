@@ -60,8 +60,7 @@ The top-level `gestalt` package exposes the supported authoring API:
   host-service provider runtimes.
 - `Cache`, `IndexedDB`, `S3`, `WorkflowHost`, `WorkflowManager`, `AgentHost`,
   `AgentManager`, and `PluginInvoker` for calling sibling host services.
-- `gestalt.protocol` for explicit protobuf JSON helpers and generated v1
-  protocol modules, and `gestalt.testing` for protocol fixture helpers.
+- `gestalt.testing` for native fixture helpers used by SDK transport tests.
 - `gestalt.telemetry` for provider-authored GenAI spans and metrics.
 
 The SDK also exposes authored provider models for authentication, workflow,

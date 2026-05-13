@@ -3,7 +3,7 @@ package gestalt
 import (
 	"fmt"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/sdk/go/internal/indexeddbcodec"
 )
 

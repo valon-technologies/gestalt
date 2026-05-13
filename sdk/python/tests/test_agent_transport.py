@@ -60,14 +60,12 @@ from gestalt import (
     agent_message_from_dict,
     agent_message_part_from_dict,
     agent_message_to_dict,
-    protocol,
 )
-from gestalt.protocol import v1 as protocol_v1
+from gestalt._gen.v1 import agent_pb2 as _agent_pb2
+from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
+from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
+from gestalt._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
 from gestalt.testing import agent_message_from_proto_dict, agent_message_to_proto_dict
-from gestalt.testing import agent_pb2 as _agent_pb2
-from gestalt.testing import agent_pb2_grpc as _agent_pb2_grpc
-from gestalt.testing import runtime_pb2 as _runtime_pb2
-from gestalt.testing import runtime_pb2_grpc as _runtime_pb2_grpc
 
 agent_pb2: Any = _agent_pb2
 agent_pb2_grpc: Any = _agent_pb2_grpc
@@ -717,11 +715,7 @@ class AgentTransportTests(unittest.TestCase):
         _manager_requests.clear()
         _manager_relay_tokens.clear()
 
-    def test_protocol_package_reexports_generated_modules(self) -> None:
-        from gestalt._gen.v1 import agent_pb2 as private_agent_pb2
-
-        self.assertIs(protocol.v1.agent_pb2, private_agent_pb2)
-        self.assertIs(protocol_v1.agent_pb2, private_agent_pb2)
+    def test_private_generated_stubs_are_packaged(self) -> None:
         self.assertTrue(resources.files("gestalt").joinpath("py.typed").is_file())
         self.assertTrue(
             resources.files("gestalt").joinpath("_gen/v1/agent_pb2.pyi").is_file()

@@ -99,7 +99,7 @@ func (c *WorkflowHostClient) InvokeOperation(ctx context.Context, input InvokeWo
 func invokeWorkflowOperationInputToProto(input InvokeWorkflowOperationInput) (*proto.InvokeWorkflowOperationRequest, error) {
 	var target *proto.BoundWorkflowTarget
 	if input.Target != nil {
-		value, err := NewBoundWorkflowTarget(*input.Target)
+		value, err := boundWorkflowTargetToProto(*input.Target)
 		if err != nil {
 			return nil, err
 		}
@@ -107,23 +107,23 @@ func invokeWorkflowOperationInputToProto(input InvokeWorkflowOperationInput) (*p
 	}
 	var trigger *proto.WorkflowRunTrigger
 	if input.Trigger != nil {
-		value, err := NewWorkflowRunTrigger(*input.Trigger)
+		value, err := workflowRunTriggerToProto(*input.Trigger)
 		if err != nil {
 			return nil, err
 		}
 		trigger = value
 	}
-	body, err := StructFromAny(input.Input)
+	body, err := structFromAny(input.Input)
 	if err != nil {
 		return nil, err
 	}
-	metadata, err := StructFromAny(input.Metadata)
+	metadata, err := structFromAny(input.Metadata)
 	if err != nil {
 		return nil, err
 	}
 	signals := make([]*proto.WorkflowSignal, 0, len(input.Signals))
 	for _, signalInput := range input.Signals {
-		signal, err := NewWorkflowSignal(signalInput)
+		signal, err := workflowSignalToProto(signalInput)
 		if err != nil {
 			return nil, err
 		}

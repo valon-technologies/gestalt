@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
@@ -201,10 +201,10 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 	if harness.requests[0].GetIdempotencyKey() != "issue-42-create" {
 		t.Fatalf("idempotency key = %q, want issue-42-create", harness.requests[0].GetIdempotencyKey())
 	}
-	if got := gestalt.MapFromStruct(harness.requests[0].GetParams()); got["issue_number"] != float64(42) {
+	if got := harness.requests[0].GetParams().AsMap(); got["issue_number"] != float64(42) {
 		t.Fatalf("invoke params = %#v, want issue_number=42", got)
 	}
-	if got := gestalt.MapFromStruct(harness.requests[1].GetParams()); len(got) != 1 || got["issue_number"] != float64(43) {
+	if got := harness.requests[1].GetParams().AsMap(); len(got) != 1 || got["issue_number"] != float64(43) {
 		t.Fatalf("omitempty invoke params = %#v, want only issue_number=43", got)
 	}
 	if len(harness.graphQL) != 1 {

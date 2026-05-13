@@ -1,10 +1,13 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
 #[allow(dead_code)]
 mod helpers;
 
 use std::sync::{Arc, Mutex};
 
-use gestalt::proto::v1::integration_provider_client::IntegrationProviderClient;
-use gestalt::proto::v1::{
+use generated::v1::integration_provider_client::IntegrationProviderClient;
+use generated::v1::{
     AccessContext, CredentialContext, ExecuteRequest, ExternalIdentityContext,
     GetSessionCatalogRequest, HostContext, HttpSubjectRequest, PostConnectRequest, RequestContext,
     ResolveHttpSubjectRequest, StartProviderRequest, StringList, SubjectContext,

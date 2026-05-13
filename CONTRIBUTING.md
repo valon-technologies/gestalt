@@ -16,7 +16,6 @@ Thanks for contributing. Before opening a PR, run the checks that match the part
 | `gestalt` | Rust CLI client. |
 | `sdk/go` | Go SDK. |
 | `sdk/go/internal/gen/v1` | SDK-local generated Go protobuf bindings used by SDK internals. |
-| `sdk/go/gen/v1` | Public Go compatibility aliases for low-level protocol users. |
 | `sdk/python` | Python SDK. |
 | `sdk/rust` | Rust SDK. |
 | `sdk/typescript` | TypeScript SDK. |
@@ -88,14 +87,13 @@ cd sdk/go
 go test ./...
 ```
 
-After changing `sdk/proto`, regenerate and check the Go SDK bindings and public alias layer:
+After changing `sdk/proto`, regenerate and check the Go SDK bindings:
 
 ```sh
 cd sdk/proto
 buf generate --template buf.go.sdk.gen.yaml
 cd ../..
-go run ./sdk/go/gen/v1/generate_aliases.go ./sdk/go/internal/gen/v1 ./sdk/go/gen/v1/aliases.go
-git diff --exit-code -- sdk/go/internal/gen/v1/*.pb.go sdk/go/internal/gen/v1/*_grpc.pb.go sdk/go/gen/v1/aliases.go
+git diff --exit-code -- sdk/go/internal/gen/v1/*.pb.go sdk/go/internal/gen/v1/*_grpc.pb.go
 ```
 
 ### Python SDK

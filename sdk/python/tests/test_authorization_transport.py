@@ -15,7 +15,7 @@ from gestalt import (
     AuthorizationProvider,
     _runtime,
 )
-from gestalt.testing import (
+from gestalt._gen.v1 import (
     authorization_pb2,
     authorization_pb2_grpc,
     runtime_pb2,

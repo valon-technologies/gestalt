@@ -1,10 +1,6 @@
 package gestalt
 
-import (
-	"context"
-
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-)
+import "context"
 
 // StartWorkflowProviderRunRequest requests a new or idempotent workflow run.
 type StartWorkflowProviderRunRequest struct {
@@ -359,15 +355,15 @@ func (UnimplementedWorkflowProvider) PublishEvent(context.Context, *PublishWorkf
 }
 
 // WorkflowRunStatus identifies the lifecycle state of a workflow run.
-type WorkflowRunStatus = proto.WorkflowRunStatus
+type WorkflowRunStatus int32
 
 // Workflow run status value constants provide stable SDK names for common
 // generated enum values without colliding with workflow telemetry dimensions.
 const (
-	WorkflowRunStatusValueUnspecified = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_UNSPECIFIED
-	WorkflowRunStatusValuePending     = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING
-	WorkflowRunStatusValueRunning     = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING
-	WorkflowRunStatusValueSucceeded   = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_SUCCEEDED
-	WorkflowRunStatusValueFailed      = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_FAILED
-	WorkflowRunStatusValueCanceled    = proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED
+	WorkflowRunStatusValueUnspecified WorkflowRunStatus = iota
+	WorkflowRunStatusValuePending
+	WorkflowRunStatusValueRunning
+	WorkflowRunStatusValueSucceeded
+	WorkflowRunStatusValueFailed
+	WorkflowRunStatusValueCanceled
 )

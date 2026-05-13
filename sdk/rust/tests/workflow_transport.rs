@@ -1,14 +1,17 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
 #[allow(dead_code)]
 mod helpers;
 
 use std::sync::{Arc, Mutex};
 
-use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
-use gestalt::proto::v1::workflow_host_server::{
+use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
+use generated::v1::workflow_host_server::{
     WorkflowHost as WorkflowHostRpc, WorkflowHostServer as WorkflowHostGrpcServer,
 };
-use gestalt::proto::v1::workflow_provider_client::WorkflowProviderClient;
-use gestalt::proto::v1::{
+use generated::v1::workflow_provider_client::WorkflowProviderClient;
+use generated::v1::{
     self as pb, BoundWorkflowPluginTarget as ProtoBoundWorkflowPluginTarget,
     BoundWorkflowTarget as ProtoBoundWorkflowTarget, ConfigureProviderRequest, ProviderKind,
     PublishWorkflowProviderEventRequest as ProtoPublishWorkflowProviderEventRequest,

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -15,7 +16,7 @@ func agentMessageFromProto(value *proto.AgentMessage) AgentMessage {
 		Role:     value.GetRole(),
 		Text:     value.GetText(),
 		Parts:    agentMessagePartsFromProto(value.GetParts()),
-		Metadata: MapFromStruct(value.GetMetadata()),
+		Metadata: mapFromStruct(value.GetMetadata()),
 	}
 }
 
@@ -43,7 +44,7 @@ func agentMessagePtrsFromProto(values []*proto.AgentMessage) []*AgentMessage {
 }
 
 func agentMessageToProto(value AgentMessage) (*proto.AgentMessage, error) {
-	metadata, err := StructFromAny(value.Metadata)
+	metadata, err := structFromAny(value.Metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +93,7 @@ func agentMessagePartFromProto(value *proto.AgentMessagePart) AgentMessagePart {
 	return AgentMessagePart{
 		Type:       AgentMessagePartType(value.GetType()),
 		Text:       value.GetText(),
-		JSON:       MapFromStruct(value.GetJson()),
+		JSON:       mapFromStruct(value.GetJson()),
 		ToolCall:   agentMessagePartToolCallFromProto(value.GetToolCall()),
 		ToolResult: agentMessagePartToolResultFromProto(value.GetToolResult()),
 		ImageRef:   agentMessagePartImageRefFromProto(value.GetImageRef()),
@@ -119,7 +120,7 @@ func agentMessagePartToProto(value AgentMessagePart) (*proto.AgentMessagePart, e
 	if partType == AgentMessagePartTypeUnspecified {
 		partType = inferAgentMessagePartType(value)
 	}
-	jsonValue, err := StructFromAny(value.JSON)
+	jsonValue, err := structFromAny(value.JSON)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +149,7 @@ func agentMessagePartToolCallFromProto(value *proto.AgentMessagePartToolCall) *A
 	return &AgentMessagePartToolCall{
 		ID:        value.GetId(),
 		ToolID:    value.GetToolId(),
-		Arguments: MapFromStruct(value.GetArguments()),
+		Arguments: mapFromStruct(value.GetArguments()),
 	}
 }
 
@@ -156,7 +157,7 @@ func agentMessagePartToolCallToProto(value *AgentMessagePartToolCall) (*proto.Ag
 	if value == nil {
 		return nil, nil
 	}
-	arguments, err := StructFromAny(value.Arguments)
+	arguments, err := structFromAny(value.Arguments)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +176,7 @@ func agentMessagePartToolResultFromProto(value *proto.AgentMessagePartToolResult
 		ToolCallID: value.GetToolCallId(),
 		Status:     value.GetStatus(),
 		Content:    value.GetContent(),
-		Output:     MapFromStruct(value.GetOutput()),
+		Output:     mapFromStruct(value.GetOutput()),
 	}
 }
 
@@ -183,7 +184,7 @@ func agentMessagePartToolResultToProto(value *AgentMessagePartToolResult) (*prot
 	if value == nil {
 		return nil, nil
 	}
-	output, err := StructFromAny(value.Output)
+	output, err := structFromAny(value.Output)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +271,7 @@ func resolvedAgentToolFromProto(value *proto.ResolvedAgentTool) ResolvedAgentToo
 		ID:               value.GetId(),
 		Name:             value.GetName(),
 		Description:      value.GetDescription(),
-		ParametersSchema: MapFromStruct(value.GetParametersSchema()),
+		ParametersSchema: mapFromStruct(value.GetParametersSchema()),
 	}
 }
 
@@ -387,7 +388,7 @@ func agentSessionToProto(value *AgentSession) (*proto.AgentSession, error) {
 	if value == nil {
 		return nil, nil
 	}
-	metadata, err := StructFromAny(value.Metadata)
+	metadata, err := structFromAny(value.Metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +431,7 @@ func agentSessionFromProto(value *proto.AgentSession) *AgentSession {
 		Model:        value.GetModel(),
 		ClientRef:    value.GetClientRef(),
 		State:        AgentSessionState(value.GetState()),
-		Metadata:     MapFromStruct(value.GetMetadata()),
+		Metadata:     mapFromStruct(value.GetMetadata()),
 		CreatedBy:    agentActorFromProto(value.GetCreatedBy()),
 		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
@@ -469,7 +470,7 @@ func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSe
 		IdempotencyKey:    req.GetIdempotencyKey(),
 		Model:             req.GetModel(),
 		ClientRef:         req.GetClientRef(),
-		Metadata:          MapFromStruct(req.GetMetadata()),
+		Metadata:          mapFromStruct(req.GetMetadata()),
 		CreatedBy:         agentActorFromProto(req.GetCreatedBy()),
 		Subject:           agentSubjectContextFromProto(req.GetSubject()),
 		SessionStart:      agentSessionStartConfigFromProto(req.GetSessionStart()),
@@ -555,7 +556,7 @@ func updateAgentProviderSessionRequestFromProto(req *proto.UpdateAgentProviderSe
 		SessionID: req.GetSessionId(),
 		ClientRef: req.GetClientRef(),
 		State:     AgentSessionState(req.GetState()),
-		Metadata:  MapFromStruct(req.GetMetadata()),
+		Metadata:  mapFromStruct(req.GetMetadata()),
 		Subject:   agentSubjectContextFromProto(req.GetSubject()),
 	}
 }
@@ -568,7 +569,7 @@ func agentTurnToProto(value *AgentTurn) (*proto.AgentTurn, error) {
 	if err != nil {
 		return nil, err
 	}
-	structuredOutput, err := StructFromAny(value.StructuredOutput)
+	structuredOutput, err := structFromAny(value.StructuredOutput)
 	if err != nil {
 		return nil, err
 	}
@@ -617,7 +618,7 @@ func agentTurnFromProto(value *proto.AgentTurn) *AgentTurn {
 		Status:           AgentExecutionStatus(value.GetStatus()),
 		Messages:         agentMessagesFromProto(value.GetMessages()),
 		OutputText:       value.GetOutputText(),
-		StructuredOutput: MapFromStruct(value.GetStructuredOutput()),
+		StructuredOutput: mapFromStruct(value.GetStructuredOutput()),
 		StatusMessage:    value.GetStatusMessage(),
 		CreatedBy:        agentActorFromProto(value.GetCreatedBy()),
 		CreatedAt:        timeFromTimestamp(value.GetCreatedAt()),
@@ -660,14 +661,14 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		Model:          req.GetModel(),
 		Messages:       agentMessagesFromProto(req.GetMessages()),
 		Tools:          resolvedAgentToolsFromProto(req.GetTools()),
-		ResponseSchema: MapFromStruct(req.GetResponseSchema()),
-		Metadata:       MapFromStruct(req.GetMetadata()),
+		ResponseSchema: mapFromStruct(req.GetResponseSchema()),
+		Metadata:       mapFromStruct(req.GetMetadata()),
 		CreatedBy:      agentActorFromProto(req.GetCreatedBy()),
 		ExecutionRef:   req.GetExecutionRef(),
 		ToolRefs:       agentToolRefsFromProto(req.GetToolRefs()),
 		ToolSource:     AgentToolSourceMode(req.GetToolSource()),
 		Subject:        agentSubjectContextFromProto(req.GetSubject()),
-		ModelOptions:   MapFromStruct(req.GetModelOptions()),
+		ModelOptions:   mapFromStruct(req.GetModelOptions()),
 		RunGrant:       req.GetRunGrant(),
 	}
 }
@@ -719,7 +720,7 @@ func cancelAgentProviderTurnRequestFromProto(req *proto.CancelAgentProviderTurnR
 }
 
 func agentTurnEventToProto(value AgentTurnEvent) (*proto.AgentTurnEvent, error) {
-	data, err := StructFromAny(value.Data)
+	data, err := structFromAny(value.Data)
 	if err != nil {
 		return nil, err
 	}
@@ -766,9 +767,9 @@ func agentTurnDisplayFromProto(value *proto.AgentTurnDisplay) *AgentTurnDisplay 
 		Label:     value.GetLabel(),
 		Ref:       value.GetRef(),
 		ParentRef: value.GetParentRef(),
-		Input:     AnyFromValue(value.GetInput()),
-		Output:    AnyFromValue(value.GetOutput()),
-		Error:     AnyFromValue(value.GetError()),
+		Input:     anyFromValue(value.GetInput()),
+		Output:    anyFromValue(value.GetOutput()),
+		Error:     anyFromValue(value.GetError()),
 		Action:    value.GetAction(),
 		Format:    value.GetFormat(),
 		Language:  value.GetLanguage(),
@@ -786,7 +787,7 @@ func agentTurnEventFromProto(value *proto.AgentTurnEvent) AgentTurnEvent {
 		Type:       value.GetType(),
 		Source:     value.GetSource(),
 		Visibility: value.GetVisibility(),
-		Data:       MapFromStruct(value.GetData()),
+		Data:       mapFromStruct(value.GetData()),
 		CreatedAt:  timeFromTimestamp(value.GetCreatedAt()),
 		Display:    agentTurnDisplayFromProto(value.GetDisplay()),
 	}
@@ -892,11 +893,11 @@ func agentInteractionToProto(value *AgentInteraction) (*proto.AgentInteraction, 
 	if value == nil {
 		return nil, nil
 	}
-	request, err := StructFromAny(value.Request)
+	request, err := structFromAny(value.Request)
 	if err != nil {
 		return nil, err
 	}
-	resolution, err := StructFromAny(value.Resolution)
+	resolution, err := structFromAny(value.Resolution)
 	if err != nil {
 		return nil, err
 	}
@@ -940,8 +941,8 @@ func agentInteractionFromProto(value *proto.AgentInteraction) *AgentInteraction 
 		State:      AgentInteractionState(value.GetState()),
 		Title:      value.GetTitle(),
 		Prompt:     value.GetPrompt(),
-		Request:    MapFromStruct(value.GetRequest()),
-		Resolution: MapFromStruct(value.GetResolution()),
+		Request:    mapFromStruct(value.GetRequest()),
+		Resolution: mapFromStruct(value.GetResolution()),
 		CreatedAt:  timeFromTimestamp(value.GetCreatedAt()),
 		ResolvedAt: timePtrFromTimestampUnchecked(value.GetResolvedAt()),
 		TurnID:     value.GetTurnId(),
@@ -988,7 +989,7 @@ func resolveAgentProviderInteractionRequestFromProto(req *proto.ResolveAgentProv
 	}
 	return &ResolveAgentProviderInteractionRequest{
 		InteractionID: req.GetInteractionId(),
-		Resolution:    MapFromStruct(req.GetResolution()),
+		Resolution:    mapFromStruct(req.GetResolution()),
 		Subject:       agentSubjectContextFromProto(req.GetSubject()),
 	}
 }
@@ -1082,11 +1083,11 @@ func timePtrFromTimestampUnchecked(value *timestamppb.Timestamp) *time.Time {
 	return &out
 }
 
-func optionalValueFromAny(value any) (*Value, error) {
+func optionalValueFromAny(value any) (*structpb.Value, error) {
 	if value == nil {
 		return nil, nil
 	}
-	return ValueFromAny(value)
+	return valueFromAny(value)
 }
 
 func cloneAgentStringMap(value map[string]string) map[string]string {

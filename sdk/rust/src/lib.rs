@@ -17,8 +17,7 @@ mod generated;
 pub mod indexeddb;
 mod invoker;
 mod plugin_runtime;
-/// Low-level wire-format conversion helpers for structured values.
-pub mod protocol;
+mod protocol;
 mod provider_server;
 mod router;
 mod rpc_status;
@@ -34,12 +33,6 @@ mod secrets_server;
 pub mod telemetry;
 mod workflow;
 mod workflow_manager;
-
-/// Low-level provider wire bindings.
-#[doc(hidden)]
-pub mod proto {
-    pub use crate::generated::v1;
-}
 
 pub use agent::{
     AgentActor, AgentExecutionStatus, AgentHost, AgentHostError, AgentHostExecuteToolInput,

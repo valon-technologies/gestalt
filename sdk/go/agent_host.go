@@ -7,6 +7,7 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // EnvAgentHostSocket names the environment variable containing the agent-host
@@ -83,10 +84,10 @@ func (c *AgentHostClient) Close() error {
 
 // ExecuteTool executes a host tool using plain Go request fields.
 func (c *AgentHostClient) ExecuteTool(ctx context.Context, input AgentHostExecuteToolInput) (*ExecuteAgentToolResponse, error) {
-	var arguments *Struct
+	var arguments *structpb.Struct
 	if input.Arguments != nil {
 		var err error
-		arguments, err = StructFromAny(input.Arguments)
+		arguments, err = structFromAny(input.Arguments)
 		if err != nil {
 			return nil, err
 		}

@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,24 +14,10 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	gproto "google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
-
-const transportPlugin = "plugin"
 
 type executableProvider interface {
 	Configure(context.Context, string, map[string]any) error
-	Name() string
-	DisplayName() string
-	Description() string
-	ConnectionMode() proto.ConnectionMode
-	AuthTypes() []string
-	Catalog() *proto.Catalog
 	Execute(context.Context, string, map[string]any, string) (*gestalt.OperationResult, error)
 }
 
@@ -40,95 +25,6 @@ type invocationTokenContextKey struct{}
 
 type proxyProvider struct {
 	inner executableProvider
-}
-
-type proxyProviderServer struct {
-	proto.UnimplementedIntegrationProviderServer
-	provider *proxyProvider
-}
-
-func serveProxyProvider(ctx context.Context, provider *proxyProvider) error {
-	socket := strings.TrimSpace(os.Getenv(proto.EnvProviderSocket))
-	if socket == "" {
-		return errors.New(proto.EnvProviderSocket + " is required")
-	}
-	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	lis, err := net.Listen("unix", socket)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = lis.Close()
-		_ = os.Remove(socket)
-	}()
-
-	srv := grpc.NewServer()
-	proto.RegisterIntegrationProviderServer(srv, &proxyProviderServer{provider: provider})
-
-	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
-		<-ctx.Done()
-		srv.GracefulStop()
-	}()
-	err = srv.Serve(lis)
-	if ctx.Err() != nil {
-		<-stopped
-		return nil
-	}
-	return err
-}
-
-func (s *proxyProviderServer) StartProvider(ctx context.Context, req *proto.StartProviderRequest) (*proto.StartProviderResponse, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	config := map[string]any{}
-	if req.GetConfig() != nil {
-		config = req.GetConfig().AsMap()
-	}
-	if err := s.provider.inner.Configure(ctx, req.GetName(), config); err != nil {
-		return nil, status.Errorf(codes.Unknown, "configure provider: %v", err)
-	}
-	return &proto.StartProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
-}
-
-func (s *proxyProviderServer) GetMetadata(context.Context, *emptypb.Empty) (*proto.ProviderMetadata, error) {
-	return &proto.ProviderMetadata{
-		Name:               s.provider.Name(),
-		DisplayName:        s.provider.DisplayName(),
-		Description:        s.provider.Description(),
-		ConnectionMode:     s.provider.ConnectionMode(),
-		AuthTypes:          s.provider.AuthTypes(),
-		StaticCatalog:      s.provider.Catalog(),
-		MinProtocolVersion: proto.CurrentProtocolVersion,
-		MaxProtocolVersion: proto.CurrentProtocolVersion,
-	}, nil
-}
-
-func (s *proxyProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest) (*proto.OperationResult, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	ctx = withInvocationToken(ctx, req.GetInvocationToken())
-	params := map[string]any{}
-	if req.GetParams() != nil {
-		params = req.GetParams().AsMap()
-	}
-	result, err := s.provider.Execute(ctx, req.GetOperation(), params, req.GetToken())
-	if err != nil {
-		return nil, status.Errorf(codes.Unknown, "execute: %v", err)
-	}
-	if result == nil {
-		return &proto.OperationResult{Status: http.StatusInternalServerError, Body: "nil operation result"}, nil
-	}
-	return &proto.OperationResult{Status: int32(result.Status), Body: result.Body}, nil
-}
-
-func (s *proxyProviderServer) ResolveHTTPSubject(context.Context, *proto.ResolveHTTPSubjectRequest) (*proto.ResolveHTTPSubjectResponse, error) {
-	return &proto.ResolveHTTPSubjectResponse{}, nil
 }
 
 func withInvocationToken(ctx context.Context, token string) context.Context {
@@ -232,114 +128,106 @@ type publishWorkflowEventInput struct {
 	InvocationToken string         `json:"invocation_token,omitempty"`
 }
 
+type echoInput struct {
+	Message string `json:"message,omitempty"`
+	Echo    string `json:"echo,omitempty"`
+}
+
+type readEnvInput struct {
+	Name string `json:"name" required:"true"`
+}
+
+type readFileInput struct {
+	Path string `json:"path" required:"true"`
+}
+
+type makeHTTPRequestInput struct {
+	URL string `json:"url" required:"true"`
+}
+
+type indexedDBRoundtripInput struct {
+	Binding string `json:"binding,omitempty"`
+	Store   string `json:"store" required:"true"`
+	ID      string `json:"id" required:"true"`
+	Value   string `json:"value" required:"true"`
+}
+
+type s3RoundtripInput struct {
+	Binding string `json:"binding,omitempty"`
+	Bucket  string `json:"bucket" required:"true"`
+	Key     string `json:"key" required:"true"`
+	Value   string `json:"value" required:"true"`
+}
+
+var proxyRouter = gestalt.MustRouter(
+	proxyOperation[echoInput]("echo", http.MethodPost),
+	proxyOperation[readEnvInput]("read_env", http.MethodGet),
+	proxyOperation[readFileInput]("read_file", http.MethodGet),
+	proxyOperation[makeHTTPRequestInput]("make_http_request", http.MethodGet),
+	proxyOperation[invokePluginInput]("invoke_plugin", http.MethodPost),
+	proxyOperation[invokePluginGraphQLInput]("invoke_plugin_graphql", http.MethodPost),
+	proxyOperation[createWorkflowScheduleInput]("create_workflow_schedule", http.MethodPost),
+	proxyOperation[getWorkflowScheduleInput]("get_workflow_schedule", http.MethodGet),
+	proxyOperation[updateWorkflowScheduleInput]("update_workflow_schedule", http.MethodPost),
+	proxyOperation[getWorkflowScheduleInput]("delete_workflow_schedule", http.MethodPost),
+	proxyOperation[getWorkflowScheduleInput]("pause_workflow_schedule", http.MethodPost),
+	proxyOperation[getWorkflowScheduleInput]("resume_workflow_schedule", http.MethodPost),
+	proxyOperation[createWorkflowTriggerInput]("create_workflow_trigger", http.MethodPost),
+	proxyOperation[getWorkflowTriggerInput]("get_workflow_trigger", http.MethodGet),
+	proxyOperation[updateWorkflowTriggerInput]("update_workflow_trigger", http.MethodPost),
+	proxyOperation[getWorkflowTriggerInput]("delete_workflow_trigger", http.MethodPost),
+	proxyOperation[getWorkflowTriggerInput]("pause_workflow_trigger", http.MethodPost),
+	proxyOperation[getWorkflowTriggerInput]("resume_workflow_trigger", http.MethodPost),
+	proxyOperation[publishWorkflowEventInput]("publish_workflow_event", http.MethodPost),
+	proxyOperation[indexedDBRoundtripInput]("indexeddb_roundtrip", http.MethodPost),
+	proxyOperation[s3RoundtripInput]("s3_roundtrip", http.MethodPost),
+)
+
+func proxyOperation[In any](id, method string) gestalt.Registration[proxyProvider] {
+	return gestalt.Register(
+		gestalt.Operation[In, json.RawMessage]{ID: id, Method: method},
+		func(p *proxyProvider, ctx context.Context, input In, req gestalt.Request) (gestalt.Response[json.RawMessage], error) {
+			params, err := inputParams(input)
+			if err != nil {
+				return gestalt.Response[json.RawMessage]{}, err
+			}
+			result, err := p.Execute(withInvocationToken(ctx, req.InvocationToken()), id, params, req.Token)
+			if err != nil {
+				return gestalt.Response[json.RawMessage]{}, err
+			}
+			if result == nil {
+				return gestalt.Response[json.RawMessage]{
+					Status: http.StatusInternalServerError,
+					Body:   json.RawMessage(`{"error":"nil operation result"}`),
+				}, nil
+			}
+			body := json.RawMessage(result.Body)
+			if len(body) == 0 {
+				body = json.RawMessage(`null`)
+			}
+			return gestalt.Response[json.RawMessage]{Status: result.Status, Body: body}, nil
+		},
+	)
+}
+
+func inputParams(input any) (map[string]any, error) {
+	data, err := json.Marshal(input)
+	if err != nil {
+		return nil, err
+	}
+	params := map[string]any{}
+	if err := json.Unmarshal(data, &params); err != nil {
+		return nil, err
+	}
+	return params, nil
+}
+
 func newProxyProvider(inner executableProvider) *proxyProvider {
 	return &proxyProvider{inner: inner}
 }
 
-func (p *proxyProvider) Name() string                         { return p.inner.Name() }
-func (p *proxyProvider) DisplayName() string                  { return p.inner.DisplayName() }
-func (p *proxyProvider) Description() string                  { return p.inner.Description() }
-func (p *proxyProvider) ConnectionMode() proto.ConnectionMode { return p.inner.ConnectionMode() }
-func (p *proxyProvider) AuthTypes() []string                  { return p.inner.AuthTypes() }
-func (p *proxyProvider) Catalog() *proto.Catalog {
-	var cat *proto.Catalog
-	if inner := p.inner.Catalog(); inner != nil {
-		cat = gproto.Clone(inner).(*proto.Catalog)
-	} else {
-		cat = &proto.Catalog{
-			Name:        p.Name(),
-			DisplayName: p.DisplayName(),
-			Description: p.Description(),
-		}
-	}
-	cat.Operations = append(cat.Operations,
-		&proto.CatalogOperation{
-			Id:        "read_env",
-			Method:    http.MethodGet,
-			Transport: transportPlugin,
-			Parameters: []*proto.CatalogParameter{
-				{Name: "name", Type: "string", Required: true},
-			},
-		},
-		&proto.CatalogOperation{
-			Id:        "read_file",
-			Method:    http.MethodGet,
-			Transport: transportPlugin,
-			Parameters: []*proto.CatalogParameter{
-				{Name: "path", Type: "string", Required: true},
-			},
-		},
-		&proto.CatalogOperation{
-			Id:        "make_http_request",
-			Method:    http.MethodGet,
-			Transport: transportPlugin,
-			Parameters: []*proto.CatalogParameter{
-				{Name: "url", Type: "string", Required: true},
-			},
-		},
-		&proto.CatalogOperation{
-			Id:        "invoke_plugin",
-			Method:    http.MethodPost,
-			Transport: transportPlugin,
-			Parameters: []*proto.CatalogParameter{
-				{Name: "plugin", Type: "string", Description: "Target plugin name", Required: true},
-				{Name: "operation", Type: "string", Description: "Target operation id", Required: true},
-				{Name: "connection", Type: "string", Description: "Optional connection override"},
-				{Name: "instance", Type: "string", Description: "Optional target instance override"},
-				{Name: "invocation_token", Type: "string", Description: "Optional invocation token override for token propagation tests"},
-				{Name: "params", Type: "object", Description: "Nested params forwarded to the target operation"},
-			},
-		},
-		&proto.CatalogOperation{
-			Id:        "invoke_plugin_graphql",
-			Method:    http.MethodPost,
-			Transport: transportPlugin,
-			Parameters: []*proto.CatalogParameter{
-				{Name: "plugin", Type: "string", Description: "Target plugin name", Required: true},
-				{Name: "document", Type: "string", Description: "GraphQL document forwarded to the target plugin", Required: true},
-				{Name: "connection", Type: "string", Description: "Optional connection override"},
-				{Name: "instance", Type: "string", Description: "Optional target instance override"},
-				{Name: "invocation_token", Type: "string", Description: "Optional invocation token override for token propagation tests"},
-				{Name: "variables", Type: "object", Description: "Variables forwarded to the target GraphQL surface"},
-			},
-		},
-		&proto.CatalogOperation{Id: "create_workflow_schedule", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "get_workflow_schedule", Method: http.MethodGet, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "update_workflow_schedule", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "delete_workflow_schedule", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "pause_workflow_schedule", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "resume_workflow_schedule", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "create_workflow_trigger", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "get_workflow_trigger", Method: http.MethodGet, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "update_workflow_trigger", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "delete_workflow_trigger", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "pause_workflow_trigger", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "resume_workflow_trigger", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{Id: "publish_workflow_event", Method: http.MethodPost, Transport: transportPlugin},
-		&proto.CatalogOperation{
-			Id:        "indexeddb_roundtrip",
-			Method:    http.MethodPost,
-			Transport: transportPlugin,
-			Parameters: []*proto.CatalogParameter{
-				{Name: "binding", Type: "string"},
-				{Name: "store", Type: "string", Required: true},
-				{Name: "id", Type: "string", Required: true},
-				{Name: "value", Type: "string", Required: true},
-			},
-		},
-		&proto.CatalogOperation{
-			Id:        "s3_roundtrip",
-			Method:    http.MethodPost,
-			Transport: transportPlugin,
-			Parameters: []*proto.CatalogParameter{
-				{Name: "binding", Type: "string"},
-				{Name: "bucket", Type: "string", Required: true},
-				{Name: "key", Type: "string", Required: true},
-				{Name: "value", Type: "string", Required: true},
-			},
-		},
-	)
-	return cat
+func (p *proxyProvider) Configure(ctx context.Context, name string, config map[string]any) error {
+	return p.inner.Configure(ctx, name, config)
 }
 
 func (p *proxyProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*gestalt.OperationResult, error) {

@@ -384,14 +384,14 @@ func newOptionalWorkflowSignal(input *WorkflowSignal) (*proto.WorkflowSignal, er
 	if input == nil {
 		return nil, nil
 	}
-	return NewWorkflowSignal(*input)
+	return workflowSignalToProto(*input)
 }
 
 func newOptionalWorkflowEvent(input *WorkflowEvent) (*proto.WorkflowEvent, error) {
 	if input == nil {
 		return nil, nil
 	}
-	return NewWorkflowEvent(*input)
+	return workflowEventToProto(*input)
 }
 
 func workflowManagerBoundRunFromProto(value *proto.BoundWorkflowRun) (*WorkflowManagerBoundRun, error) {
@@ -408,7 +408,7 @@ func workflowManagerBoundRunFromProto(value *proto.BoundWorkflowRun) (*WorkflowM
 	}
 	var trigger *WorkflowRunTrigger
 	if value.GetTrigger() != nil {
-		input, err := WorkflowRunTriggerFromTrigger(value.GetTrigger())
+		input, err := workflowRunTriggerFromProto(value.GetTrigger())
 		if err != nil {
 			return nil, err
 		}
@@ -416,7 +416,7 @@ func workflowManagerBoundRunFromProto(value *proto.BoundWorkflowRun) (*WorkflowM
 	}
 	return &WorkflowManagerBoundRun{
 		ID:            value.GetId(),
-		Status:        value.GetStatus(),
+		Status:        WorkflowRunStatus(value.GetStatus()),
 		Target:        workflowTargetInputPtrFromTarget(value.GetTarget()),
 		Trigger:       trigger,
 		CreatedAt:     timeFromTimestamp(value.GetCreatedAt()),
@@ -501,7 +501,7 @@ func workflowManagerRunSignalFromProto(value *proto.ManagedWorkflowRunSignal) (*
 	}
 	var signal *WorkflowSignal
 	if value.GetSignal() != nil {
-		input := WorkflowSignalFromSignal(value.GetSignal())
+		input := workflowSignalFromProto(value.GetSignal())
 		signal = &input
 	}
 	return &WorkflowManagerRunSignal{

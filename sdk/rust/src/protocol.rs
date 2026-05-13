@@ -22,16 +22,6 @@ pub fn struct_from_json(value: serde_json::Value) -> Result<Struct> {
     }
 }
 
-/// Serializes a JSON object-like value into a protobuf `Struct`.
-pub fn struct_from_serializable<T: Serialize>(value: T) -> Result<Struct> {
-    struct_from_json(json_from_serializable(value)?)
-}
-
-/// Serializes an optional JSON object-like value into an optional protobuf `Struct`.
-pub fn optional_struct_from_serializable<T: Serialize>(value: Option<T>) -> Result<Option<Struct>> {
-    value.map(struct_from_serializable).transpose()
-}
-
 /// Serializes a value into `serde_json::Value` for protocol conversion.
 pub fn json_from_serializable<T: Serialize>(value: T) -> Result<serde_json::Value> {
     json_value_from_serializable(value)

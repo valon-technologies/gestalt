@@ -1,4 +1,4 @@
-"""Testing helpers for protocol-level Gestalt provider fixtures."""
+"""Testing helpers for native Gestalt provider fixtures."""
 
 from __future__ import annotations
 
@@ -8,58 +8,10 @@ from .._agent import (
     agent_messages_from_proto_dicts,
     agent_messages_to_proto_dicts,
 )
-from ..protocol import v1
-from ..protocol.v1 import (
-    agent_pb2,
-    agent_pb2_grpc,
-    authentication_pb2,
-    authentication_pb2_grpc,
-    authorization_pb2,
-    authorization_pb2_grpc,
-    cache_pb2,
-    cache_pb2_grpc,
-    datastore_pb2,
-    datastore_pb2_grpc,
-    plugin_pb2,
-    plugin_pb2_grpc,
-    pluginruntime_pb2,
-    pluginruntime_pb2_grpc,
-    runtime_pb2,
-    runtime_pb2_grpc,
-    s3_pb2,
-    s3_pb2_grpc,
-    secrets_pb2,
-    secrets_pb2_grpc,
-    workflow_pb2,
-    workflow_pb2_grpc,
-)
 
 __all__ = [
-    "v1",
-    "agent_pb2",
-    "agent_pb2_grpc",
     "agent_message_from_proto_dict",
     "agent_message_to_proto_dict",
     "agent_messages_from_proto_dicts",
     "agent_messages_to_proto_dicts",
-    "authentication_pb2",
-    "authentication_pb2_grpc",
-    "authorization_pb2",
-    "authorization_pb2_grpc",
-    "cache_pb2",
-    "cache_pb2_grpc",
-    "datastore_pb2",
-    "datastore_pb2_grpc",
-    "plugin_pb2",
-    "plugin_pb2_grpc",
-    "pluginruntime_pb2",
-    "pluginruntime_pb2_grpc",
-    "runtime_pb2",
-    "runtime_pb2_grpc",
-    "s3_pb2",
-    "s3_pb2_grpc",
-    "secrets_pb2",
-    "secrets_pb2_grpc",
-    "workflow_pb2",
-    "workflow_pb2_grpc",
 ]
