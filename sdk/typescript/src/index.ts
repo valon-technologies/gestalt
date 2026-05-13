@@ -240,8 +240,6 @@ export {
 export {
   type ConnectedToken,
   PluginProvider,
-  connectionModeToProtoValue,
-  connectionParamToProto,
   definePlugin,
   isPluginProvider,
   operation,

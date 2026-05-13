@@ -103,8 +103,8 @@ import {
 import {
   type ConnectedToken,
   PluginProvider,
-  connectionModeToProtoValue,
-  connectionParamToProto,
+  encodeConnectionMode,
+  encodeConnectionParam,
   isPluginProvider,
 } from "./plugin.ts";
 import {
@@ -542,14 +542,14 @@ export function createProviderService(
           name: provider.name,
           displayName: provider.displayName,
           description: provider.description,
-          connectionMode: connectionModeToProtoValue(
+          connectionMode: encodeConnectionMode(
             provider.connectionMode,
           ) as ProviderConnectionMode,
           authTypes: [...provider.authTypes],
           connectionParams: Object.fromEntries(
             Object.entries(provider.connectionParams).map(([key, value]) => [
               key,
-              connectionParamToProto(value),
+              encodeConnectionParam(value),
             ]),
           ),
           staticCatalog: catalogToProto(provider.staticCatalog()),
