@@ -71,8 +71,8 @@ pub use agent_manager::{
     AgentManagerResolveInteraction, AgentManagerUpdateSession, ENV_AGENT_MANAGER_SOCKET,
 };
 pub use api::{
-    Access, Credential, ExternalIdentity, HTTPSubjectRequest, Host, Provider, Request, Response,
-    RuntimeMetadata, Subject, ok,
+    Access, ConnectedToken, Credential, ExternalIdentity, HTTPSubjectRequest, Host, Provider,
+    Request, Response, RuntimeMetadata, Subject, ok,
 };
 pub use auth::{
     AuthSessionSettings, AuthenticatedUser, AuthenticationProvider, BeginLoginRequest,
