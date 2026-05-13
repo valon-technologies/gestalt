@@ -155,8 +155,8 @@ resource "google_service_account" "chart_publisher" {
 resource "google_service_account" "ci_image_publisher" {
   project      = var.project_id
   account_id   = var.ci_image_publisher_service_account_id
-  display_name = "gestaltd CI image publisher"
-  description  = "Publishes immutable gestaltd CI images to Artifact Registry from GitHub Actions."
+  display_name = "gestaltd CI binary publisher"
+  description  = "Publishes immutable gestaltd CI binary artifacts to GCS from GitHub Actions."
 
   depends_on = [
     google_project_service.required,
