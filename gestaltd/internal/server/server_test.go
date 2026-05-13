@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"net"
 	"net/http"
@@ -17009,6 +17010,8 @@ func TestExecuteOperation_POST(t *testing.T) {
 
 func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing.T) {
 	t.Setenv("REQUEST_SIGNING_SECRET", "super-secret")
+	logs := &serverTestLogBuffer{}
+	installServerTestLogger(t, logs)
 
 	type bindingInvocation struct {
 		Params   map[string]any
@@ -17028,7 +17031,7 @@ func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing
 					Params:   cloneAnyMapForTest(params),
 					Workflow: invocation.WorkflowContextFromContext(ctx),
 				}
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				return &core.OperationResult{Status: http.StatusBadGateway, Body: `{"error":"downstream"}`}, nil
 			},
 		},
 		ops: []core.Operation{{Name: "handle_command", Method: http.MethodPost}},
@@ -17133,6 +17136,20 @@ func TestHostedHTTPBinding_HMACAckDispatchesOperationAndRejectsReplay(t *testing
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for async http binding dispatch")
+	}
+
+	record := waitForServerStructuredLogRecord(t, logs, "http binding async operation returned non-2xx result")
+	assertServerStructuredLogField(t, record, "plugin", "signed")
+	assertServerStructuredLogField(t, record, "binding", "command")
+	assertServerStructuredLogField(t, record, "operation", "handle_command")
+	assertServerStructuredLogField(t, record, "result_status_class", "5xx")
+	if got := record["result_status"]; got != float64(http.StatusBadGateway) {
+		t.Fatalf("result_status = %v, want %d", got, http.StatusBadGateway)
+	}
+	for _, field := range []string{"result_body", "result_body_bytes", "result_body_truncated", "result_body_sha256"} {
+		if _, ok := record[field]; ok {
+			t.Fatalf("unexpected %q field in structured log", field)
+		}
 	}
 
 	resp, err = http.DefaultClient.Do(makeRequest())
@@ -18802,6 +18819,60 @@ func httpBindingTestSignature(secret, payload string) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	_, _ = mac.Write([]byte(payload))
 	return "v0=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+type serverTestLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *serverTestLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *serverTestLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func installServerTestLogger(t *testing.T, logs *serverTestLogBuffer) {
+	t.Helper()
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+}
+
+func waitForServerStructuredLogRecord(t *testing.T, logs *serverTestLogBuffer, msg string) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			var record map[string]any
+			if err := json.Unmarshal([]byte(line), &record); err != nil {
+				t.Fatalf("log line is not valid JSON: %q: %v", line, err)
+			}
+			if record["msg"] == msg {
+				return record
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("did not find structured log %q; output:\n%s", msg, logs.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func assertServerStructuredLogField(t *testing.T, record map[string]any, field string, want string) {
+	t.Helper()
+	if got := record[field]; got != want {
+		t.Fatalf("%s = %v, want %s", field, got, want)
+	}
 }
 
 func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {

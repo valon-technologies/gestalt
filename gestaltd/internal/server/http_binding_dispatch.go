@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"log/slog"
+	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -80,10 +82,26 @@ func (s *Server) dispatchHTTPBindingAsync(binding MountedHTTPBinding, p *princip
 	go func() {
 		ctx := metricutil.WithMeterProvider(context.Background(), s.meterProvider)
 		ctx = invocation.WithRequestMeta(ctx, requestMeta)
-		if _, err := s.httpBindingOperationInvocation(ctx, binding, p, verified, parsed); err != nil {
-			slog.Error("http binding async operation failed", "plugin", binding.PluginName, "binding", binding.Name, "operation", binding.Target, "error", err)
+		result, err := s.httpBindingOperationInvocation(ctx, binding, p, verified, parsed)
+		if err != nil {
+			slog.ErrorContext(ctx, "http binding async operation failed", "plugin", binding.PluginName, "binding", binding.Name, "operation", binding.Target, "error", err)
+			return
 		}
+		logHTTPBindingAsyncResult(ctx, binding, result)
 	}()
+}
+
+func logHTTPBindingAsyncResult(ctx context.Context, binding MountedHTTPBinding, result *core.OperationResult) {
+	if result == nil || result.Status < 100 || result.Status > 599 || result.Status >= http.StatusOK && result.Status < http.StatusMultipleChoices {
+		return
+	}
+	slog.WarnContext(ctx, "http binding async operation returned non-2xx result",
+		"plugin", binding.PluginName,
+		"binding", binding.Name,
+		"operation", binding.Target,
+		"result_status", result.Status,
+		"result_status_class", strconv.Itoa(result.Status/100)+"xx",
+	)
 }
 
 func cloneAnyMap(src map[string]any) map[string]any {
