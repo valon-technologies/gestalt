@@ -43,7 +43,9 @@ func (s *Server) publishWorkflowEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	event, err := s.workflowSchedules.PublishEvent(r.Context(), p, "", workflowEventFromPublishRequest(req))
+	event, err := s.workflowSchedules.PublishEvent(r.Context(), p, workflowmanager.EventPublish{
+		Event: workflowEventFromPublishRequest(req),
+	})
 	if err != nil {
 		s.writeWorkflowPublishEventError(w, r, err)
 		return

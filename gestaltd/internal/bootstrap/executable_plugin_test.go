@@ -1774,15 +1774,16 @@ func (m *stubWorkflowManager) SignalOrStartRun(context.Context, *principal.Princ
 	return nil, core.ErrNotFound
 }
 
-func (m *stubWorkflowManager) PublishEvent(_ context.Context, p *principal.Principal, providerName string, event coreworkflow.Event) (coreworkflow.Event, error) {
+func (m *stubWorkflowManager) PublishEvent(_ context.Context, p *principal.Principal, req workflowmanager.EventPublish) (coreworkflow.Event, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
+	event := req.Event
 	if strings.TrimSpace(event.ID) == "" {
 		event.ID = fmt.Sprintf("evt-%d", len(m.publishedEvents)+1)
 	}
 	m.publishedEvents = append(m.publishedEvents, cloneWorkflowEvent(event))
-	m.publishedProviderNames = append(m.publishedProviderNames, providerName)
+	m.publishedProviderNames = append(m.publishedProviderNames, req.ProviderName)
 	return cloneWorkflowEvent(event), nil
 }
 
