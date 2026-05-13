@@ -144,6 +144,7 @@ async function main() {
     );
     await runPagefind(outDir);
     await assertNoVersionedApiLinks(outDir);
+    await assertNoAbsoluteSdkApiLinks(outDir);
     await assertNoUnversionedDocLinks(outDir);
     await assertFlightPayloadsUseUnprefixedInternalLinks(outDir);
   } finally {
@@ -471,9 +472,11 @@ async function copyRootOutputs(rootOut, finalOut) {
 
 async function rewriteVersionedPaths(root, prefix) {
   const files = await walk(root);
-  for (const file of files.filter((candidate) => candidate.endsWith(".html"))) {
+  for (const file of files.filter((candidate) => /\.(html|txt)$/.test(candidate))) {
     const original = await readFile(file, "utf8");
-    const rewritten = rewriteHtmlDocumentPaths(original, prefix);
+    const rewritten = file.endsWith(".html")
+      ? rewriteHtmlDocumentPaths(original, prefix)
+      : rewriteSdkApiLinks(original);
     if (rewritten !== original) {
       await writeFile(file, rewritten);
     }
@@ -481,7 +484,7 @@ async function rewriteVersionedPaths(root, prefix) {
 }
 
 function rewriteHtmlDocumentPaths(html, prefix) {
-  return rewriteNonScriptHtml(html, (chunk) =>
+  const rewrittenVisibleLinks = rewriteNonScriptHtml(html, (chunk) =>
     chunk.replace(
       /\b(href|src|action)=(["'])\/([^"'\s>]*)/g,
       (match, attr, quote, rest) => {
@@ -496,6 +499,19 @@ function rewriteHtmlDocumentPaths(html, prefix) {
       },
     ),
   );
+  return rewriteSdkApiLinks(rewrittenVisibleLinks);
+}
+
+function rewriteSdkApiLinks(value) {
+  return value
+    .replace(
+      /https?:\/\/[^"'<>\s\\]+(\/api\/(?:python|typescript)\/index\.html)/g,
+      "$1",
+    )
+    .replace(
+      /https?:\\\/\\\/[^"'<>\\\s]+(\\\/api\\\/(?:python|typescript)\\\/index\.html)/g,
+      "$1",
+    );
 }
 
 function rewriteNonScriptHtml(html, rewriteChunk) {
@@ -558,6 +574,27 @@ async function assertNoVersionedApiLinks(finalOut) {
   if (bad.length > 0) {
     throw new Error(
       `versioned docs contain version-prefixed SDK API links:\n${bad.join("\n")}`,
+    );
+  }
+}
+
+async function assertNoAbsoluteSdkApiLinks(finalOut) {
+  const files = await walk(finalOut);
+  const bad = [];
+  const patterns = [
+    /https?:\/\/[^"'<>\s\\]+\/api\/(?:python|typescript)\/index\.html/g,
+    /https?:\\\/\\\/[^"'<>\\\s]+\\\/api\\\/(?:python|typescript)\\\/index\.html/g,
+  ];
+  for (const file of files.filter((candidate) => /\.(html|txt)$/.test(candidate))) {
+    const body = await readFile(file, "utf8");
+    const matches = patterns.flatMap((pattern) => body.match(pattern) ?? []);
+    if (matches.length > 0) {
+      bad.push(`${path.relative(finalOut, file)}: ${matches.slice(0, 5).join(", ")}`);
+    }
+  }
+  if (bad.length > 0) {
+    throw new Error(
+      `versioned docs contain absolute SDK API links:\n${bad.join("\n")}`,
     );
   }
 }
