@@ -69,7 +69,7 @@ func (c *WorkflowManagerClient) StartRun(ctx context.Context, input WorkflowMana
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := NewWorkflowManagerStartRunRequest(input)
+	req, err := newWorkflowManagerStartRunRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (c *WorkflowManagerClient) SignalRun(ctx context.Context, input WorkflowMan
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := NewWorkflowManagerSignalRunRequest(input)
+	req, err := newWorkflowManagerSignalRunRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (c *WorkflowManagerClient) SignalOrStartRun(ctx context.Context, input Work
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := NewWorkflowManagerSignalOrStartRunRequest(input)
+	req, err := newWorkflowManagerSignalOrStartRunRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func (c *WorkflowManagerClient) CreateDefinition(ctx context.Context, input Work
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := NewWorkflowManagerCreateDefinitionRequest(input)
+	req, err := newWorkflowManagerCreateDefinitionRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (c *WorkflowManagerClient) GetDefinition(ctx context.Context, input Workflo
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := NewWorkflowManagerGetDefinitionRequest(input)
+	req := newWorkflowManagerGetDefinitionRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.GetDefinition(ctx, req)
 	if err != nil {
@@ -160,7 +160,7 @@ func (c *WorkflowManagerClient) UpdateDefinition(ctx context.Context, input Work
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := NewWorkflowManagerUpdateDefinitionRequest(input)
+	req, err := newWorkflowManagerUpdateDefinitionRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func (c *WorkflowManagerClient) DeleteDefinition(ctx context.Context, input Work
 	if c == nil || c.client == nil {
 		return fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := NewWorkflowManagerDeleteDefinitionRequest(input)
+	req := newWorkflowManagerDeleteDefinitionRequest(input)
 	req.InvocationToken = c.invocationToken
 	_, err := c.client.DeleteDefinition(ctx, req)
 	return err
@@ -188,7 +188,7 @@ func (c *WorkflowManagerClient) CreateSchedule(ctx context.Context, input Workfl
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := NewWorkflowManagerCreateScheduleRequest(input)
+	req, err := newWorkflowManagerCreateScheduleRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func (c *WorkflowManagerClient) GetSchedule(ctx context.Context, input WorkflowM
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := NewWorkflowManagerGetScheduleRequest(input)
+	req := newWorkflowManagerGetScheduleRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.GetSchedule(ctx, req)
 	if err != nil {
@@ -222,7 +222,7 @@ func (c *WorkflowManagerClient) UpdateSchedule(ctx context.Context, input Workfl
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := NewWorkflowManagerUpdateScheduleRequest(input)
+	req, err := newWorkflowManagerUpdateScheduleRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -239,7 +239,7 @@ func (c *WorkflowManagerClient) DeleteSchedule(ctx context.Context, input Workfl
 	if c == nil || c.client == nil {
 		return fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := NewWorkflowManagerDeleteScheduleRequest(input)
+	req := newWorkflowManagerDeleteScheduleRequest(input)
 	req.InvocationToken = c.invocationToken
 	_, err := c.client.DeleteSchedule(ctx, req)
 	return err
@@ -250,7 +250,7 @@ func (c *WorkflowManagerClient) PauseSchedule(ctx context.Context, input Workflo
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := NewWorkflowManagerPauseScheduleRequest(input)
+	req := newWorkflowManagerPauseScheduleRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.PauseSchedule(ctx, req)
 	if err != nil {
@@ -264,7 +264,7 @@ func (c *WorkflowManagerClient) ResumeSchedule(ctx context.Context, input Workfl
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := NewWorkflowManagerResumeScheduleRequest(input)
+	req := newWorkflowManagerResumeScheduleRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.ResumeSchedule(ctx, req)
 	if err != nil {
@@ -278,7 +278,7 @@ func (c *WorkflowManagerClient) CreateTrigger(ctx context.Context, input Workflo
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := NewWorkflowManagerCreateEventTriggerRequest(input)
+	req, err := newWorkflowManagerCreateEventTriggerRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +298,7 @@ func (c *WorkflowManagerClient) GetTrigger(ctx context.Context, input WorkflowMa
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := NewWorkflowManagerGetEventTriggerRequest(input)
+	req := newWorkflowManagerGetEventTriggerRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.GetEventTrigger(ctx, req)
 	if err != nil {
@@ -312,7 +312,7 @@ func (c *WorkflowManagerClient) UpdateTrigger(ctx context.Context, input Workflo
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := NewWorkflowManagerUpdateEventTriggerRequest(input)
+	req, err := newWorkflowManagerUpdateEventTriggerRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +329,7 @@ func (c *WorkflowManagerClient) DeleteTrigger(ctx context.Context, input Workflo
 	if c == nil || c.client == nil {
 		return fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := NewWorkflowManagerDeleteEventTriggerRequest(input)
+	req := newWorkflowManagerDeleteEventTriggerRequest(input)
 	req.InvocationToken = c.invocationToken
 	_, err := c.client.DeleteEventTrigger(ctx, req)
 	return err
@@ -340,7 +340,7 @@ func (c *WorkflowManagerClient) PauseTrigger(ctx context.Context, input Workflow
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := NewWorkflowManagerPauseEventTriggerRequest(input)
+	req := newWorkflowManagerPauseEventTriggerRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.PauseEventTrigger(ctx, req)
 	if err != nil {
@@ -354,7 +354,7 @@ func (c *WorkflowManagerClient) ResumeTrigger(ctx context.Context, input Workflo
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := NewWorkflowManagerResumeEventTriggerRequest(input)
+	req := newWorkflowManagerResumeEventTriggerRequest(input)
 	req.InvocationToken = c.invocationToken
 	resp, err := c.client.ResumeEventTrigger(ctx, req)
 	if err != nil {
@@ -368,7 +368,7 @@ func (c *WorkflowManagerClient) PublishEvent(ctx context.Context, input Workflow
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := NewWorkflowManagerPublishEventRequest(input)
+	req, err := newWorkflowManagerPublishEventRequest(input)
 	if err != nil {
 		return nil, err
 	}

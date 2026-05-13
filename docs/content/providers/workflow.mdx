@@ -494,9 +494,9 @@ definition do not silently change existing automation.
         }
         defer workflows.Close()
 
-        published, err := workflows.PublishEvent(ctx, gestalt.WorkflowManagerPublishEventInput{
+        published, err := workflows.PublishEvent(ctx, gestalt.WorkflowManagerPublishEvent{
             ProviderName: "local",
-            Event: &gestalt.WorkflowEventInput{
+            Event: &gestalt.WorkflowEvent{
                 Type:            "slack.event.received",
                 Source:          "slack",
                 Subject:         "route:knowledge-ingest",
@@ -513,7 +513,7 @@ definition do not silently change existing automation.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import Request, WorkflowEventInput, WorkflowManagerPublishEventInput
+    from gestalt import Request, WorkflowEvent, WorkflowManagerPublishEvent
 
     def publish_slack_event(
         request: Request,
@@ -521,9 +521,9 @@ definition do not silently change existing automation.
     ) -> str:
         with request.workflow_manager() as workflows:
             published = workflows.publish_event(
-                WorkflowManagerPublishEventInput(
+                WorkflowManagerPublishEvent(
                     provider_name="local",
-                    event=WorkflowEventInput(
+                    event=WorkflowEvent(
                         type="slack.event.received",
                         source="slack",
                         subject="route:knowledge-ingest",
@@ -538,7 +538,7 @@ definition do not silently change existing automation.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    use gestalt::{WorkflowEventInput, WorkflowManagerPublishEventInput};
+    use gestalt::{WorkflowEvent, WorkflowManagerPublishEvent};
     use serde_json::json;
 
     async fn publish_slack_event(
@@ -547,9 +547,9 @@ definition do not silently change existing automation.
     ) -> Result<String, Box<dyn std::error::Error>> {
         let mut workflows = request.workflow_manager().await?;
         let event = workflows
-            .publish_event(WorkflowManagerPublishEventInput {
+            .publish_event(WorkflowManagerPublishEvent {
                 provider_name: "local".to_string(),
-                event: Some(WorkflowEventInput {
+                event: Some(WorkflowEvent {
                     event_type: "slack.event.received".to_string(),
                     source: "slack".to_string(),
                     subject: "route:knowledge-ingest".to_string(),
@@ -820,16 +820,16 @@ signal sequence numbers exactly as stored.
         return nil
     }
 
-    func (p *Provider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
-        return &gestalt.BoundWorkflowRunInput{
+    func (p *Provider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
+        return &gestalt.BoundWorkflowRun{
             ID:     "workflow:run-1",
             Status: gestalt.WorkflowRunStatusValuePending,
             Target: req.Target,
         }, nil
     }
 
-    func (p *Provider) GetRun(_ context.Context, req *gestalt.GetWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
-        return &gestalt.BoundWorkflowRunInput{
+    func (p *Provider) GetRun(_ context.Context, req *gestalt.GetWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
+        return &gestalt.BoundWorkflowRun{
             ID: req.RunID,
         }, nil
     }
@@ -838,8 +838,8 @@ signal sequence numbers exactly as stored.
         return &gestalt.ListWorkflowProviderRunsResponse{}, nil
     }
 
-    func (p *Provider) CancelRun(_ context.Context, req *gestalt.CancelWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
-        return &gestalt.BoundWorkflowRunInput{
+    func (p *Provider) CancelRun(_ context.Context, req *gestalt.CancelWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
+        return &gestalt.BoundWorkflowRun{
             ID:     req.RunID,
             Status: gestalt.WorkflowRunStatusValueCanceled,
         }, nil
@@ -847,14 +847,14 @@ signal sequence numbers exactly as stored.
 
     func (p *Provider) SignalRun(_ context.Context, req *gestalt.SignalWorkflowProviderRunRequest) (*gestalt.SignalWorkflowRunResponse, error) {
         return &gestalt.SignalWorkflowRunResponse{
-            Run:    &gestalt.BoundWorkflowRunInput{ID: req.RunID},
+            Run:    &gestalt.BoundWorkflowRun{ID: req.RunID},
             Signal: req.Signal,
         }, nil
     }
 
     func (p *Provider) SignalOrStartRun(_ context.Context, req *gestalt.SignalOrStartWorkflowProviderRunRequest) (*gestalt.SignalWorkflowRunResponse, error) {
         return &gestalt.SignalWorkflowRunResponse{
-            Run: &gestalt.BoundWorkflowRunInput{
+            Run: &gestalt.BoundWorkflowRun{
                 ID:     req.WorkflowKey + ":run-1",
                 Status: gestalt.WorkflowRunStatusValuePending,
                 Target: req.Target,
@@ -865,8 +865,8 @@ signal sequence numbers exactly as stored.
         }, nil
     }
 
-    func (p *Provider) UpsertSchedule(_ context.Context, req *gestalt.UpsertWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
-        return &gestalt.BoundWorkflowScheduleInput{
+    func (p *Provider) UpsertSchedule(_ context.Context, req *gestalt.UpsertWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
+        return &gestalt.BoundWorkflowSchedule{
             ID:     req.ScheduleID,
             Cron:   req.Cron,
             Target: req.Target,
@@ -874,8 +874,8 @@ signal sequence numbers exactly as stored.
         }, nil
     }
 
-    func (p *Provider) GetSchedule(_ context.Context, req *gestalt.GetWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
-        return &gestalt.BoundWorkflowScheduleInput{ID: req.ScheduleID}, nil
+    func (p *Provider) GetSchedule(_ context.Context, req *gestalt.GetWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
+        return &gestalt.BoundWorkflowSchedule{ID: req.ScheduleID}, nil
     }
 
     func (p *Provider) ListSchedules(context.Context, *gestalt.ListWorkflowProviderSchedulesRequest) (*gestalt.ListWorkflowProviderSchedulesResponse, error) {
@@ -886,16 +886,16 @@ signal sequence numbers exactly as stored.
         return nil
     }
 
-    func (p *Provider) PauseSchedule(_ context.Context, req *gestalt.PauseWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
-        return &gestalt.BoundWorkflowScheduleInput{ID: req.ScheduleID, Paused: true}, nil
+    func (p *Provider) PauseSchedule(_ context.Context, req *gestalt.PauseWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
+        return &gestalt.BoundWorkflowSchedule{ID: req.ScheduleID, Paused: true}, nil
     }
 
-    func (p *Provider) ResumeSchedule(_ context.Context, req *gestalt.ResumeWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
-        return &gestalt.BoundWorkflowScheduleInput{ID: req.ScheduleID, Paused: false}, nil
+    func (p *Provider) ResumeSchedule(_ context.Context, req *gestalt.ResumeWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
+        return &gestalt.BoundWorkflowSchedule{ID: req.ScheduleID, Paused: false}, nil
     }
 
-    func (p *Provider) UpsertEventTrigger(_ context.Context, req *gestalt.UpsertWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
-        return &gestalt.BoundWorkflowEventTriggerInput{
+    func (p *Provider) UpsertEventTrigger(_ context.Context, req *gestalt.UpsertWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
+        return &gestalt.BoundWorkflowEventTrigger{
             ID:     req.TriggerID,
             Match:  req.Match,
             Target: req.Target,
@@ -903,8 +903,8 @@ signal sequence numbers exactly as stored.
         }, nil
     }
 
-    func (p *Provider) GetEventTrigger(_ context.Context, req *gestalt.GetWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
-        return &gestalt.BoundWorkflowEventTriggerInput{ID: req.TriggerID}, nil
+    func (p *Provider) GetEventTrigger(_ context.Context, req *gestalt.GetWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
+        return &gestalt.BoundWorkflowEventTrigger{ID: req.TriggerID}, nil
     }
 
     func (p *Provider) ListEventTriggers(context.Context, *gestalt.ListWorkflowProviderEventTriggersRequest) (*gestalt.ListWorkflowProviderEventTriggersResponse, error) {
@@ -915,12 +915,12 @@ signal sequence numbers exactly as stored.
         return nil
     }
 
-    func (p *Provider) PauseEventTrigger(_ context.Context, req *gestalt.PauseWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
-        return &gestalt.BoundWorkflowEventTriggerInput{ID: req.TriggerID, Paused: true}, nil
+    func (p *Provider) PauseEventTrigger(_ context.Context, req *gestalt.PauseWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
+        return &gestalt.BoundWorkflowEventTrigger{ID: req.TriggerID, Paused: true}, nil
     }
 
-    func (p *Provider) ResumeEventTrigger(_ context.Context, req *gestalt.ResumeWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
-        return &gestalt.BoundWorkflowEventTriggerInput{ID: req.TriggerID, Paused: false}, nil
+    func (p *Provider) ResumeEventTrigger(_ context.Context, req *gestalt.ResumeWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
+        return &gestalt.BoundWorkflowEventTrigger{ID: req.TriggerID, Paused: false}, nil
     }
 
     func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) error {
@@ -932,8 +932,8 @@ signal sequence numbers exactly as stored.
   <Tabs.Tab>
     ```python
     from gestalt import (
-        BoundWorkflowRunInput,
-        BoundWorkflowScheduleInput,
+        BoundWorkflowRun,
+        BoundWorkflowSchedule,
         CancelWorkflowProviderRunRequest,
         GetWorkflowProviderRunRequest,
         ListWorkflowProviderRunsResponse,
@@ -951,29 +951,29 @@ signal sequence numbers exactly as stored.
         def configure(self, name: str, config: dict) -> None:
             pass
 
-        def start_run(self, request: StartWorkflowProviderRunRequest) -> BoundWorkflowRunInput:
+        def start_run(self, request: StartWorkflowProviderRunRequest) -> BoundWorkflowRun:
             plugin = request.target.plugin if request.target else None
-            return BoundWorkflowRunInput(
+            return BoundWorkflowRun(
                 id=f"{plugin.plugin_name if plugin else 'workflow'}:run-1",
                 status=WORKFLOW_RUN_STATUS_PENDING,
                 target=request.target,
             )
 
-        def get_run(self, request: GetWorkflowProviderRunRequest) -> BoundWorkflowRunInput:
-            return BoundWorkflowRunInput(id=request.run_id)
+        def get_run(self, request: GetWorkflowProviderRunRequest) -> BoundWorkflowRun:
+            return BoundWorkflowRun(id=request.run_id)
 
         def list_runs(self, request) -> ListWorkflowProviderRunsResponse:
             return ListWorkflowProviderRunsResponse(runs=[])
 
-        def cancel_run(self, request: CancelWorkflowProviderRunRequest) -> BoundWorkflowRunInput:
-            return BoundWorkflowRunInput(
+        def cancel_run(self, request: CancelWorkflowProviderRunRequest) -> BoundWorkflowRun:
+            return BoundWorkflowRun(
                 id=request.run_id,
                 status=WORKFLOW_RUN_STATUS_CANCELED,
             )
 
         def signal_run(self, request: SignalWorkflowProviderRunRequest) -> SignalWorkflowRunResponse:
             return SignalWorkflowRunResponse(
-                run=BoundWorkflowRunInput(id=request.run_id),
+                run=BoundWorkflowRun(id=request.run_id),
                 signal=request.signal,
             )
 
@@ -998,8 +998,8 @@ signal sequence numbers exactly as stored.
 
         def upsert_schedule(
             self, request: UpsertWorkflowProviderScheduleRequest
-        ) -> BoundWorkflowScheduleInput:
-            return BoundWorkflowScheduleInput(
+        ) -> BoundWorkflowSchedule:
+            return BoundWorkflowSchedule(
                 id=request.schedule_id,
                 cron=request.cron,
                 target=request.target,
@@ -1277,8 +1277,8 @@ invoke target plugin operations.
     defer host.Close()
 
     resp, err := host.InvokeOperation(ctx, gestalt.InvokeWorkflowOperationInput{
-        Target: &gestalt.BoundWorkflowTargetInput{
-            Plugin: &gestalt.BoundWorkflowPluginTargetInput{
+        Target: &gestalt.BoundWorkflowTarget{
+            Plugin: &gestalt.BoundWorkflowPluginTarget{
                 PluginName: "roadmap",
                 Operation:  "sync_items",
             },
@@ -1292,15 +1292,15 @@ invoke target plugin operations.
     from gestalt import (
         WorkflowHost,
         InvokeWorkflowOperationInput,
-        BoundWorkflowTargetInput,
-        BoundWorkflowPluginTargetInput,
+        BoundWorkflowTarget,
+        BoundWorkflowPluginTarget,
     )
 
     with WorkflowHost() as host:
         resp = host.invoke_operation(
             InvokeWorkflowOperationInput(
-                target=BoundWorkflowTargetInput(
-                    plugin=BoundWorkflowPluginTargetInput(
+                target=BoundWorkflowTarget(
+                    plugin=BoundWorkflowPluginTarget(
                         plugin_name="roadmap",
                         operation="sync_items",
                     ),
@@ -1315,8 +1315,8 @@ invoke target plugin operations.
     let mut host = gestalt::WorkflowHost::connect().await?;
     let resp = host
         .invoke_operation(gestalt::InvokeWorkflowOperationInput {
-            target: Some(gestalt::BoundWorkflowTargetInput::Plugin(
-                gestalt::BoundWorkflowPluginTargetInput {
+            target: Some(gestalt::BoundWorkflowTarget::Plugin(
+                gestalt::BoundWorkflowPluginTarget {
                     plugin_name: "roadmap".into(),
                     operation: "sync_items".into(),
                     ..Default::default()

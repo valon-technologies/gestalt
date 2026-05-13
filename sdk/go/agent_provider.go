@@ -152,17 +152,6 @@ type AgentSubjectContext struct {
 	AuthSource          string
 }
 
-type AgentProtocolWorkspace struct {
-	Checkouts []AgentProtocolWorkspaceGitCheckout
-	Cwd       string
-}
-
-type AgentProtocolWorkspaceGitCheckout struct {
-	URL  string
-	Ref  string
-	Path string
-}
-
 type AgentPreparedWorkspace struct {
 	Root string
 	Cwd  string

@@ -96,7 +96,7 @@ func newAgentManagerCreateSessionRequest(input AgentManagerCreateSession) (*prot
 	}
 	var workspace *proto.AgentWorkspace
 	if input.Workspace != nil {
-		workspace = agentProtocolWorkspaceToProto(NewAgentWorkspace(*input.Workspace))
+		workspace = agentWorkspaceToProto(input.Workspace)
 	}
 	return &proto.AgentManagerCreateSessionRequest{
 		ProviderName:   input.ProviderName,
@@ -135,11 +135,7 @@ func newAgentManagerUpdateSessionRequest(input AgentManagerUpdateSession) (*prot
 }
 
 func newAgentManagerCreateTurnRequest(input AgentManagerCreateTurn) (*proto.AgentManagerCreateTurnRequest, error) {
-	nativeMessages, err := agentMessagesFromInputs(input.Messages)
-	if err != nil {
-		return nil, err
-	}
-	messages, err := agentMessagePtrsToProto(nativeMessages)
+	messages, err := agentMessagesToProto(input.Messages)
 	if err != nil {
 		return nil, err
 	}

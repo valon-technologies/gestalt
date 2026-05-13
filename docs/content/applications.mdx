@@ -332,8 +332,8 @@ details. Those come from the deployment bindings.
       if err != nil {
         return gestalt.Response[NightlyReportOutput]{}, err
       }
-      _, err = workflows.PublishEvent(ctx, gestalt.WorkflowManagerPublishEventInput{
-        Event: &gestalt.WorkflowEventInput{
+      _, err = workflows.PublishEvent(ctx, gestalt.WorkflowManagerPublishEvent{
+        Event: &gestalt.WorkflowEvent{
           Type:            "workspace_review.report.generated",
           Source:          "workspace_review",
           Subject:         "nightly",
@@ -378,8 +378,8 @@ details. Those come from the deployment bindings.
         WriteOptions,
         PresignOptions,
         PresignMethod,
-        WorkflowEventInput,
-        WorkflowManagerPublishEventInput,
+        WorkflowEvent,
+        WorkflowManagerPublishEvent,
     )
 
     plugin = Plugin("workspace_review")
@@ -436,8 +436,8 @@ details. Those come from the deployment bindings.
 
         with request.workflow_manager() as workflows:
             workflows.publish_event(
-                WorkflowManagerPublishEventInput(
-                    event=WorkflowEventInput(
+                WorkflowManagerPublishEvent(
+                    event=WorkflowEvent(
                         type="workspace_review.report.generated",
                         source="workspace_review",
                         subject="nightly",
@@ -457,8 +457,8 @@ details. Those come from the deployment bindings.
     use std::collections::BTreeMap;
 
     use gestalt::{
-        IndexedDB, PresignMethod, PresignOptions, S3, WorkflowEventInput,
-        WorkflowManagerPublishEventInput,
+        IndexedDB, PresignMethod, PresignOptions, S3, WorkflowEvent,
+        WorkflowManagerPublishEvent,
     };
     use serde::{Deserialize, Serialize};
     use serde_json::json;
@@ -540,8 +540,8 @@ details. Those come from the deployment bindings.
 
         let mut workflows = request.workflow_manager().await?;
         workflows
-            .publish_event(WorkflowManagerPublishEventInput {
-                event: Some(WorkflowEventInput {
+            .publish_event(WorkflowManagerPublishEvent {
+                event: Some(WorkflowEvent {
                     event_type: "workspace_review.report.generated".to_string(),
                     source: "workspace_review".to_string(),
                     subject: "nightly".to_string(),
