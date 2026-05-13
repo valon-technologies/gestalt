@@ -2,7 +2,8 @@
 asIndexPage: true
 ---
 
-import { Callout, Cards, Tabs } from 'nextra/components'
+import { Cards, Tabs } from 'nextra/components'
+import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 
 # Providers
 
@@ -160,12 +161,9 @@ plugins:
 
 ## Provider Installation
 
-<Callout type="warning">
-  The `gestaltd provider` commands are under active development and are not yet
-  stable. Breaking changes may happen between releases without warning.
-  Feedback and bug reports are welcome via
-  [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
-</Callout>
+<ActiveDevelopmentCallout verb="are">
+  The <code>gestaltd provider</code> commands
+</ActiveDevelopmentCallout>
 
 Use the provider CLI to add, inspect, lock, sync, upgrade, and remove configured
 providers. Mutating commands accept one `--config` path and update the lockfile

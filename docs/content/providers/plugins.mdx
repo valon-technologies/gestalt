@@ -1,4 +1,5 @@
-import { Callout, Tabs } from 'nextra/components'
+import { Tabs } from 'nextra/components'
+import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 
 # Plugins
 
@@ -12,7 +13,7 @@ and MCP exposure.
 A plugin package includes a manifest that defines metadata, connections, and
 optional passthrough API surfaces. Plugins can be
 [executable](#defining-operations), [declarative](#declarative-plugins), or
-both.
+[both](#hybrid-providers).
 Plugins support:
 
 > REST/OpenAPI, GraphQL, MCP and executable custom-defined code
@@ -97,10 +98,7 @@ plugins:
 
 ### `allowedHosts`
 
-<Callout type="warning">
-  `allowedHosts` is under active development and is not yet stable. Breaking
-  changes may happen between releases without warning.
-</Callout>
+<ActiveDevelopmentCallout><code>allowedHosts</code></ActiveDevelopmentCallout>
 
 Use `egress.allowedHosts` when a plugin needs explicit outbound access:
 
@@ -869,6 +867,17 @@ parameters or request body fields.
 
 You can also declare OpenAPI, GraphQL, and MCP surfaces using `spec.surfaces.openapi`, `spec.surfaces.graphql`, and `spec.surfaces.mcp`. See [Provider Manifests](/reference/plugin-manifests) for the full surface schema.
 
+#### Hybrid providers
+
+A plugin can combine declarative passthrough surfaces with executable
+operations. The host forwards declarative operations directly to the upstream
+API, while executable operations run in the provider process. Both appear in the
+same catalog.
+
+Do not define the same operation ID in more than one surface. If two surfaces
+expose the same ID, provider validation fails. Use `allowedOperations` to filter
+or alias collisions when needed.
+
 ### Operation ID conventions
 
 Operation IDs should use period-separated hierarchical names. The Slack plugin uses `conversations.list`, `conversations.history`, `chat.postMessage`, and `users.info`.
@@ -1067,19 +1076,8 @@ metadata; Gestalt already stores access and refresh tokens separately.
 
 ### Testing locally
 
-Use the provider-local commands when you are iterating on a source plugin.
-`gestaltd provider dev` and `gestaltd provider validate` synthesize a local
-Gestalt config around the target plugin instead of requiring a hand-written
-temp config. If the plugin manifest declares `spec.ui.path`, Gestalt mounts
-that owned UI automatically. For the common `plugin/` + sibling `ui/` layout,
-the local commands also detect `../ui/manifest.yaml` and wire it in
-automatically during local development.
-
-When no config file supplies an explicit `plugins.<name>.ui.path`, the inferred
-local UI path comes from the manifest `source` slug. For example,
-`github.com/acme/tools/plugins/vm-style-guide` mounts at `/vm-style-guide`.
-The plugin key remains API-safe, so the same plugin may still be addressed as
-`vm_style_guide` in local integration APIs.
+Use `gestaltd provider validate` and `gestaltd provider dev` when iterating on
+source plugins.
 
 Validate the plugin in isolation:
 
@@ -1114,6 +1112,8 @@ entries. That makes it possible to boot some supporting providers while
 suppressing others for a local session.
 
 #### Attaching local code to a remote server
+
+<ActiveDevelopmentCallout changeNote="Behavior, authorization requirements, and attach-session semantics may change between releases without warning.">Remote provider dev</ActiveDevelopmentCallout>
 
 Use remote provider dev when you want a remote Gestalt instance to handle auth,
 authorization, connections, secrets, and host services, but route a selected
@@ -1169,14 +1169,6 @@ Once the local server is running, invoke an operation:
 ```sh
 gestalt plugin invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1712161829.000300
 ```
-
-### Hybrid providers
-
-A manifest can define passthrough surfaces alongside executable operations. The passthrough surfaces are forwarded by the host directly to the upstream API, while the executable operations are handled by the provider process.
-
-The first-party Slack plugin is a hybrid provider. It declares 14 REST operations in its manifest (such as `chat.postMessage`, `conversations.list`, and `users.info`) that Gestalt forwards directly to the Slack API. On top of those, it defines 3 executable operations (such as `conversations.getMessage`) that add custom logic like URL parsing and multi-API orchestration. Both sets of operations appear in the same catalog.
-
-Do not define the same operation ID in both a passthrough surface and an executable operation. If two surfaces expose the same ID, the provider fails validation at startup. Use `allowedOperations` to filter or alias collisions when needed.
 
 ## What to read next
 
