@@ -507,9 +507,9 @@ function errorResult(status: number, message: string): OperationResult {
 }
 
 /**
- * Converts a connection mode into the shared protocol enum value.
+ * Encodes a connection mode for provider metadata.
  */
-export function connectionModeToProtoValue(mode: ConnectionMode): number {
+export function encodeConnectionMode(mode: ConnectionMode): number {
   switch (mode) {
     case "none":
       return 1;
@@ -524,9 +524,9 @@ export function connectionModeToProtoValue(mode: ConnectionMode): number {
 }
 
 /**
- * Converts a connection parameter definition into protocol wire metadata.
+ * Encodes a connection parameter definition for provider metadata.
  */
-export function connectionParamToProto(value: ConnectionParamDefinition): {
+export function encodeConnectionParam(value: ConnectionParamDefinition): {
   required?: boolean;
   description?: string;
   defaultValue?: string;
