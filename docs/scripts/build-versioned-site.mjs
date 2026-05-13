@@ -20,6 +20,20 @@ const docsRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(docsRoot, "..");
 const defaultOut = path.join(docsRoot, "out");
 const developmentPathPrefix = "/dev";
+const globalPrefixes = [
+  "/api/",
+  "/admin",
+  "/favicon.svg",
+  "/fonts/",
+  "/install-gestalt.sh",
+  "/install-gestaltd.sh",
+  "/install.sh",
+  "/mcp",
+  "/registry",
+  "/versions.json",
+  "/_pagefind/",
+];
+const unversionedApiPathPattern = /^\/(?:dev|latest|versions\/v[^/]+)(\/api\/.*)$/;
 
 const options = parseArgs(process.argv.slice(2));
 const outDir = path.resolve(docsRoot, options.out ?? defaultOut);
@@ -129,6 +143,7 @@ async function main() {
       `${JSON.stringify(manifest, null, 2)}\n`,
     );
     await runPagefind(outDir);
+    await assertNoVersionedApiLinks(outDir);
     await assertNoUnversionedDocLinks(outDir);
     await assertFlightPayloadsUseUnprefixedInternalLinks(outDir);
   } finally {
@@ -471,6 +486,10 @@ function rewriteHtmlDocumentPaths(html, prefix) {
       /\b(href|src|action)=(["'])\/([^"'\s>]*)/g,
       (match, attr, quote, rest) => {
         const absolute = `/${rest}`;
+        const unversioned = unversionedApiPath(absolute);
+        if (unversioned) {
+          return `${attr}=${quote}${unversioned}`;
+        }
         return shouldPrefixPath(absolute, prefix)
           ? `${attr}=${quote}${prefix}${absolute}`
           : match;
@@ -490,6 +509,10 @@ function rewriteNonScriptHtml(html, rewriteChunk) {
   }
   rewritten += rewriteChunk(html.slice(lastIndex));
   return rewritten;
+}
+
+function unversionedApiPath(value) {
+  return value.match(unversionedApiPathPattern)?.[1] ?? "";
 }
 
 function shouldPrefixPath(value, prefix) {
@@ -513,23 +536,30 @@ function shouldPrefixPath(value, prefix) {
   ) {
     return false;
   }
-  const globalPrefixes = [
-    "/api/",
-    "/admin",
-    "/favicon.svg",
-    "/fonts/",
-    "/install-gestalt.sh",
-    "/install-gestaltd.sh",
-    "/install.sh",
-    "/mcp",
-    "/registry",
-    "/versions.json",
-    "/_pagefind/",
-  ];
   return !globalPrefixes.some(
     (globalPrefix) =>
       pathname === globalPrefix || pathname.startsWith(globalPrefix),
   );
+}
+
+async function assertNoVersionedApiLinks(finalOut) {
+  const files = await walk(finalOut);
+  const bad = [];
+  const pattern =
+    /\b(?:href|src|action)=["']\/(?:dev|latest|versions\/v[^/]+)\/api\//g;
+  for (const file of files.filter((candidate) => candidate.endsWith(".html"))) {
+    const body = await readFile(file, "utf8");
+    const visibleHtml = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+    const matches = visibleHtml.match(pattern) ?? [];
+    if (matches.length > 0) {
+      bad.push(`${path.relative(finalOut, file)}: ${matches.slice(0, 5).join(", ")}`);
+    }
+  }
+  if (bad.length > 0) {
+    throw new Error(
+      `versioned docs contain version-prefixed SDK API links:\n${bad.join("\n")}`,
+    );
+  }
 }
 
 async function assertNoUnversionedDocLinks(finalOut) {

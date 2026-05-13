@@ -67,6 +67,10 @@ server {
         return 301 $1/;
     }
 
+    location ~ ^/(dev|latest|versions/v[^/]+)(/api/.*)$ {
+        return 301 $2;
+    }
+
     location ~ ^(/(dev|latest)/.+)/$ {
         return 301 $1;
     }

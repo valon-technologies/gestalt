@@ -198,6 +198,16 @@ try {
     host: "gestaltd.ai",
     location: `${exactVersionPrefix}/reference/cli`,
   });
+  await assertRedirect({
+    url: `${baseUrl}/latest/api/python/index.html`,
+    host: "gestaltd.ai",
+    location: "/api/python/index.html",
+  });
+  await assertRedirect({
+    url: `${baseUrl}${exactVersionPrefix}/api/typescript/index.html`,
+    host: "gestaltd.ai",
+    location: "/api/typescript/index.html",
+  });
   await assertResponse({
     url: `${baseUrl}/versions/v9.9.9/`,
     host: "gestaltd.ai",
@@ -283,6 +293,12 @@ async function serveDocsHost(pathname, response) {
   const versionWithoutSlash = pathname.match(/^\/versions\/v[^/]+$/);
   if (versionWithoutSlash) {
     return redirect(response, `${pathname}/`);
+  }
+  const versionedApiPath = pathname.match(
+    /^\/(?:dev|latest|versions\/v[^/]+)(\/api\/.*)$/,
+  );
+  if (versionedApiPath) {
+    return redirect(response, versionedApiPath[1]);
   }
   const docsPageWithSlash = pathname.match(/^(\/(?:dev|latest)\/.+)\/$/);
   if (docsPageWithSlash) {
