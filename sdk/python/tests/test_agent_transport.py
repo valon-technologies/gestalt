@@ -65,7 +65,6 @@ from gestalt._gen.v1 import agent_pb2 as _agent_pb2
 from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
 from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
-from gestalt.testing import agent_message_from_proto_dict, agent_message_to_proto_dict
 
 agent_pb2: Any = _agent_pb2
 agent_pb2_grpc: Any = _agent_pb2_grpc
@@ -855,7 +854,7 @@ class AgentTransportTests(unittest.TestCase):
         )
         self.assertEqual(direct_part.tool_call.id, "call-2")
 
-    def test_agent_message_proto_dict_helpers_preserve_protobuf_json_shape(
+    def test_agent_message_dict_helpers_preserve_native_shape(
         self,
     ) -> None:
         message = AgentMessage(
@@ -869,7 +868,7 @@ class AgentTransportTests(unittest.TestCase):
             ],
         )
 
-        raw = agent_message_to_proto_dict(message)
+        raw = agent_message_to_dict(message)
 
         self.assertEqual(
             raw,
@@ -877,17 +876,14 @@ class AgentTransportTests(unittest.TestCase):
                 "role": "assistant",
                 "parts": [
                     {
-                        "type": "AGENT_MESSAGE_PART_TYPE_TEXT",
+                        "type": agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
                         "text": "hello",
                     },
                 ],
                 "metadata": {"tenant": "acme"},
             },
         )
-        self.assertEqual(
-            agent_message_to_proto_dict(agent_message_from_proto_dict(raw)),
-            raw,
-        )
+        self.assertEqual(agent_message_to_dict(agent_message_from_dict(raw)), raw)
 
     def test_agent_runtime_and_server_roundtrip(self) -> None:
         channel = grpc.insecure_channel(f"unix:{_runtime_socket}")
