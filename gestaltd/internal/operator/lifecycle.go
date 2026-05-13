@@ -786,11 +786,17 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 			return scratchCfg, nil
 		}
 	}
-	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, lock, artifactModeMaterialize, configSecretResolutionSourceAuth); err != nil {
+	resolveSourceAuth, err := staticValidationNeedsSourceAuthSecrets(paths, cfg, lock, platform)
+	if err != nil {
 		return nil, err
 	}
-	if err := l.resolveConfigSecretsForMode(context.Background(), cfg, configSecretResolutionSourceAuth); err != nil {
-		return nil, err
+	if resolveSourceAuth {
+		if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, lock, artifactModeMaterialize, configSecretResolutionSourceAuth); err != nil {
+			return nil, err
+		}
+		if err := l.resolveConfigSecretsForMode(context.Background(), cfg, configSecretResolutionSourceAuth); err != nil {
+			return nil, err
+		}
 	}
 	if err := l.applyStaticValidationProviders(context.Background(), paths, lock, cfg, platform); err != nil {
 		return nil, err
@@ -3390,6 +3396,106 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 		return err
 	}
 	return bind(install.manifestPath, install.manifest)
+}
+
+func staticValidationNeedsSourceAuthSecrets(paths lifecyclePaths, cfg *config.Config, lock *Lockfile, platform string) (bool, error) {
+	if cfg == nil {
+		return false, nil
+	}
+	check := func(lockEntries map[string]LockEntry, kind, name string, provider *config.ProviderEntry, ui bool) (bool, error) {
+		return staticValidationEntryNeedsSourceAuthSecret(paths, lockEntries, kind, name, provider, platform, ui)
+	}
+	for name, entry := range cfg.Plugins {
+		needs, err := check(lockEntriesForProviderKind(lock, providermanifestv1.KindPlugin), providermanifestv1.KindPlugin, name, entry, false)
+		if needs || err != nil {
+			return needs, err
+		}
+	}
+	for _, collection := range hostProviderCollections(cfg) {
+		kind := providerManifestKind(collection.kind)
+		lockEntries := lockEntriesForKind(lock, collection.kind)
+		for name, entry := range collection.entries {
+			needs, err := check(lockEntries, kind, name, entry, false)
+			if needs || err != nil {
+				return needs, err
+			}
+		}
+	}
+	for name, entry := range cfg.Runtime.Providers {
+		if entry == nil {
+			continue
+		}
+		needs, err := check(lockEntriesForProviderKind(lock, providermanifestv1.KindRuntime), providermanifestv1.KindRuntime, name, &entry.ProviderEntry, false)
+		if needs || err != nil {
+			return needs, err
+		}
+	}
+	for name, entry := range cfg.Providers.IndexedDB {
+		needs, err := check(lockEntriesForProviderKind(lock, providermanifestv1.KindIndexedDB), providermanifestv1.KindIndexedDB, name, entry, false)
+		if needs || err != nil {
+			return needs, err
+		}
+	}
+	for name, entry := range cfg.Providers.S3 {
+		needs, err := check(lockEntriesForProviderKind(lock, providermanifestv1.KindS3), providermanifestv1.KindS3, name, entry, false)
+		if needs || err != nil {
+			return needs, err
+		}
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil {
+			continue
+		}
+		needs, err := check(lockEntriesForProviderKind(lock, providermanifestv1.KindUI), providermanifestv1.KindUI, name, &entry.ProviderEntry, true)
+		if needs || err != nil {
+			return needs, err
+		}
+	}
+	return false, nil
+}
+
+func staticValidationEntryNeedsSourceAuthSecret(paths lifecyclePaths, lockEntries map[string]LockEntry, kind, name string, provider *config.ProviderEntry, platform string, ui bool) (bool, error) {
+	usesSecret, err := providerSourceAuthUsesSecretRef(provider)
+	if err != nil || !usesSecret {
+		return false, err
+	}
+	if provider == nil || !sourceBacked(provider) || provider.HasLocalSource() {
+		return false, nil
+	}
+	var entry LockEntry
+	found := false
+	if lockEntries != nil {
+		entry, found = lockEntries[name]
+	}
+	if !found {
+		return false, nil
+	}
+	if ui {
+		if !uiLockEntryMetadataMatches(paths, name, provider, entry, true) {
+			return false, nil
+		}
+	} else if !lockEntryMetadataMatches(paths, kind, name, provider, entry, true) {
+		return false, nil
+	}
+	if entry.StaticManifest != nil && !staticManifestReferencesPackageFiles(entry.StaticManifest) {
+		return false, nil
+	}
+	if provider.HasGitSource() && len(entry.Archives) == 0 {
+		return true, nil
+	}
+	_, _, ok := resolveArchiveForPlatform(entry, platform)
+	return ok, nil
+}
+
+func providerSourceAuthUsesSecretRef(provider *config.ProviderEntry) (bool, error) {
+	if provider == nil || provider.Source.Auth == nil {
+		return false, nil
+	}
+	_, ok, err := config.ParseSecretRefTransport(provider.Source.Auth.Token)
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
 }
 
 type staticArchiveUnavailableError struct {

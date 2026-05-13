@@ -3768,6 +3768,59 @@ func TestLockAndSyncResolveSourceAuthSecretRefs(t *testing.T) {
 	if got := archiveCount.Load() - staticArchiveBefore; got != 1 {
 		t.Fatalf("archive requests during static validation = %d, want 1", got)
 	}
+
+	lockPath := filepath.Join(dir, LockfileName)
+	lock, err := ReadLockfile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	entry := lock.Providers["private"]
+	if entry.StaticManifest == nil || entry.StaticManifest.Spec == nil {
+		t.Fatalf("private static manifest = %#v", entry.StaticManifest)
+	}
+	entry.StaticManifest.Spec.ConfigSchemaPath = ""
+	lock.Providers["private"] = entry
+	if err := WriteLockfile(lockPath, lock); err != nil {
+		t.Fatalf("WriteLockfile: %v", err)
+	}
+
+	var sourceAuthCalls atomic.Int64
+	lcStatic := NewLifecycle().
+		WithSourceAuthSecretResolver(func(context.Context, *config.Config) error {
+			sourceAuthCalls.Add(1)
+			return fmt.Errorf("source auth resolver should not run")
+		}).
+		WithHTTPClient(srv.Client())
+	staticArchiveBefore = archiveCount.Load()
+	if _, err := lcStatic.LoadForStaticValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{}, StaticValidationOptions{}); err != nil {
+		t.Fatalf("LoadForStaticValidationAtPathsWithStatePaths with self-contained metadata: %v", err)
+	}
+	if got := sourceAuthCalls.Load(); got != 0 {
+		t.Fatalf("source auth resolver calls = %d, want 0", got)
+	}
+	if got := archiveCount.Load() - staticArchiveBefore; got != 0 {
+		t.Fatalf("archive requests during self-contained static validation = %d, want 0", got)
+	}
+}
+
+func TestStaticValidationNeedsSourceAuthSecretsSkipsNilRuntimeProviders(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Runtime: config.RuntimeConfig{
+			Providers: map[string]*config.RuntimeProviderEntry{
+				"nil-runtime": nil,
+			},
+		},
+	}
+
+	needs, err := staticValidationNeedsSourceAuthSecrets(lifecyclePaths{}, cfg, newLockfile(), "linux/amd64")
+	if err != nil {
+		t.Fatalf("staticValidationNeedsSourceAuthSecrets: %v", err)
+	}
+	if needs {
+		t.Fatal("staticValidationNeedsSourceAuthSecrets returned true for nil runtime provider")
+	}
 }
 
 func TestLockAndSyncResolveSourceAuthSecretRefsFromPackageSecretsProvider(t *testing.T) {
