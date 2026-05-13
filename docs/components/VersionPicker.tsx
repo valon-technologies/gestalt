@@ -124,7 +124,6 @@ export default function VersionPicker() {
 
   return (
     <label className="docs-version-picker">
-      <span className="docs-version-picker-label">Docs version</span>
       <select
         aria-label="Docs version"
         value={selected}

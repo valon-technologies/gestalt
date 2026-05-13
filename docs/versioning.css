@@ -1,14 +1,9 @@
 .docs-version-picker {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
   min-width: 0;
   color: var(--valon-secondary);
   font-size: 0.875rem;
-}
-
-.docs-version-picker-label {
-  white-space: nowrap;
 }
 
 .docs-version-picker select {
@@ -27,18 +22,6 @@
 }
 
 @media (max-width: 720px) {
-  .docs-version-picker-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
-
   .docs-version-picker select {
     max-width: 9.5rem;
   }
