@@ -193,6 +193,208 @@ server:
 	}
 }
 
+func TestLifecycleLocalSourceLockedExecutionUsesPreparedArtifactsWithoutSourceTree(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("source UI build fixture uses POSIX shell")
+	}
+
+	dir := t.TempDir()
+	const (
+		pluginSource = "github.com/acme/tools/plugins/alpha"
+		uiSource     = "github.com/acme/tools/ui/roadmap"
+		version      = "1.2.3"
+	)
+	pluginDir := filepath.Join(dir, "plugins", "alpha")
+	uiDir := filepath.Join(dir, "ui", "roadmap")
+	writeSourceProviderTree(t, pluginDir, pluginSource, version, "alpha-binary")
+	writeSourceUITree(t, uiDir, uiSource, version)
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v5
+%s  ui:
+    roadmap:
+      source:
+        path: ui/roadmap/manifest.yaml
+      path: /roadmap
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
+  alpha:
+    source:
+      path: plugins/alpha/manifest.yaml
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(artifactsDir))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
+	}
+
+	preparedProvider := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha", "provider")
+	if _, err := os.Stat(preparedProvider); err != nil {
+		t.Fatalf("prepared provider binary missing before source removal: %v", err)
+	}
+	preparedProviderMetadata := filepath.Join(filepath.Dir(preparedProvider), preparedLockMetadataFile)
+	if _, err := os.Stat(preparedProviderMetadata); err != nil {
+		t.Fatalf("prepared provider lock metadata missing before source removal: %v", err)
+	}
+	providerMetadata, err := os.ReadFile(preparedProviderMetadata)
+	if err != nil {
+		t.Fatalf("read prepared provider lock metadata before source removal: %v", err)
+	}
+	preparedUI := filepath.Join(artifactsDir, ".gestaltd", "ui", "roadmap", "dist")
+	if _, err := os.Stat(filepath.Join(preparedUI, "index.html")); err != nil {
+		t.Fatalf("prepared ui asset missing before source removal: %v", err)
+	}
+	preparedUIMetadata := filepath.Join(filepath.Dir(preparedUI), preparedLockMetadataFile)
+	if _, err := os.Stat(preparedUIMetadata); err != nil {
+		t.Fatalf("prepared ui lock metadata missing before source removal: %v", err)
+	}
+	uiMetadata, err := os.ReadFile(preparedUIMetadata)
+	if err != nil {
+		t.Fatalf("read prepared ui lock metadata before source removal: %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "plugins")); err != nil {
+		t.Fatalf("remove plugin source tree: %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "ui")); err != nil {
+		t.Fatalf("remove ui source tree: %v", err)
+	}
+
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true) without local source tree: %v", err)
+	}
+	plugin := cfg.Plugins["alpha"]
+	if plugin == nil || plugin.ResolvedManifest == nil {
+		t.Fatalf("resolved plugin = %+v", plugin)
+	}
+	if got, want := filepath.ToSlash(plugin.Command), filepath.ToSlash(preparedProvider); got != want {
+		t.Fatalf("plugin command = %q, want %q", got, want)
+	}
+	ui := cfg.Providers.UI["roadmap"]
+	if ui == nil || ui.ResolvedManifest == nil {
+		t.Fatalf("resolved ui = %+v", ui)
+	}
+	if got, want := filepath.ToSlash(ui.ResolvedAssetRoot), filepath.ToSlash(preparedUI); got != want {
+		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, want)
+	}
+	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("CheckSyncAtPathsWithStatePaths without local source tree: %v", err)
+	}
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePaths without local source tree: %v", err)
+	}
+	if err := os.Remove(preparedProviderMetadata); err != nil {
+		t.Fatalf("remove prepared provider lock metadata without source tree: %v", err)
+	}
+	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "lockfile is out of date") {
+		t.Fatalf("CheckSyncAtPathsWithStatePaths without source tree or provider metadata error = %v, want stale lockfile", err)
+	}
+	if err := os.WriteFile(preparedProviderMetadata, providerMetadata, 0o644); err != nil {
+		t.Fatalf("restore prepared provider lock metadata without source tree: %v", err)
+	}
+	if err := os.Remove(preparedUIMetadata); err != nil {
+		t.Fatalf("remove prepared ui lock metadata without source tree: %v", err)
+	}
+	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "lockfile is out of date") {
+		t.Fatalf("CheckSyncAtPathsWithStatePaths without source tree or ui metadata error = %v, want stale lockfile", err)
+	}
+	if err := os.WriteFile(preparedUIMetadata, uiMetadata, 0o644); err != nil {
+		t.Fatalf("restore prepared ui lock metadata without source tree: %v", err)
+	}
+
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("restore config after source tree removal: %v", err)
+	}
+	writeSourceProviderTree(t, pluginDir, pluginSource, version, "alpha-binary")
+	writeSourceUITree(t, uiDir, uiSource, version)
+	if err := os.Remove(preparedProviderMetadata); err != nil {
+		t.Fatalf("remove prepared provider lock metadata: %v", err)
+	}
+	if err := os.Remove(preparedUIMetadata); err != nil {
+		t.Fatalf("remove prepared ui lock metadata: %v", err)
+	}
+	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) {
+		t.Fatalf("CheckSyncAtPathsWithStatePaths without prepared lock metadata error = %v, want stale provider artifact", err)
+	}
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePaths backfilling prepared lock metadata: %v", err)
+	}
+	if _, err := os.Stat(preparedProviderMetadata); err != nil {
+		t.Fatalf("prepared provider lock metadata not backfilled: %v", err)
+	}
+	if _, err := os.Stat(preparedUIMetadata); err != nil {
+		t.Fatalf("prepared ui lock metadata not backfilled: %v", err)
+	}
+	if err := os.WriteFile(preparedProvider, []byte("stale-binary"), 0o755); err != nil {
+		t.Fatalf("write stale prepared provider binary: %v", err)
+	}
+	if err := os.WriteFile(preparedProviderMetadata, []byte(`{"inputDigest":"stale","kind":"plugin","name":"alpha"}`+"\n"), 0o644); err != nil {
+		t.Fatalf("write stale prepared provider lock metadata before sync: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(preparedUI, "index.html"), []byte("<html>stale</html>\n"), 0o644); err != nil {
+		t.Fatalf("write stale prepared ui asset: %v", err)
+	}
+	if err := os.WriteFile(preparedUIMetadata, []byte(`{"inputDigest":"stale","kind":"ui","name":"roadmap"}`+"\n"), 0o644); err != nil {
+		t.Fatalf("write stale prepared ui lock metadata before sync: %v", err)
+	}
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePaths re-materializing stale prepared lock metadata: %v", err)
+	}
+	providerData, err := os.ReadFile(preparedProvider)
+	if err != nil {
+		t.Fatalf("read re-materialized prepared provider binary: %v", err)
+	}
+	if string(providerData) != "alpha-binary" {
+		t.Fatalf("prepared provider binary after stale metadata sync = %q, want re-materialized source artifact", string(providerData))
+	}
+	uiData, err := os.ReadFile(filepath.Join(preparedUI, "index.html"))
+	if err != nil {
+		t.Fatalf("read re-materialized prepared ui asset: %v", err)
+	}
+	if string(uiData) != "<html>roadmap</html>\n" {
+		t.Fatalf("prepared ui asset after stale metadata sync = %q, want re-materialized source asset", string(uiData))
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "plugins")); err != nil {
+		t.Fatalf("remove plugin source tree after backfill: %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, "ui")); err != nil {
+		t.Fatalf("remove ui source tree after backfill: %v", err)
+	}
+	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true) after metadata backfill: %v", err)
+	}
+
+	if err := os.WriteFile(preparedProviderMetadata, []byte(`{"inputDigest":"stale","kind":"plugin","name":"alpha"}`+"\n"), 0o644); err != nil {
+		t.Fatalf("write stale prepared provider lock metadata: %v", err)
+	}
+	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil || !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) {
+		t.Fatalf("LoadForExecutionAtPath with stale prepared provider metadata error = %v, want stale provider artifact", err)
+	}
+	if err := os.WriteFile(preparedProviderMetadata, providerMetadata, 0o644); err != nil {
+		t.Fatalf("restore prepared provider lock metadata: %v", err)
+	}
+	if err := os.WriteFile(preparedUIMetadata, []byte(`{"inputDigest":"stale","kind":"ui","name":"roadmap"}`+"\n"), 0o644); err != nil {
+		t.Fatalf("write stale prepared ui lock metadata: %v", err)
+	}
+	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil || !strings.Contains(err.Error(), `prepared artifact for ui "roadmap" is missing or stale`) {
+		t.Fatalf("LoadForExecutionAtPath with stale prepared ui metadata error = %v, want stale ui artifact", err)
+	}
+}
+
 func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	t.Parallel()
 
@@ -927,11 +1129,13 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			wantCurrentArchiveURL := ""
 			wantExtraArchiveURL := ""
 			localCurrentArchivePath := ""
+			localMetadataPath := ""
 			var srv *httptest.Server
 
 			if tc.localSource {
 				metadataRelPath := filepath.ToSlash(filepath.Join("providers", "alpha", "provider-release.yaml"))
 				metadataAbsPath := filepath.Join(dir, filepath.FromSlash(metadataRelPath))
+				localMetadataPath = metadataAbsPath
 				metadataDir := filepath.Dir(metadataAbsPath)
 				if err := os.MkdirAll(metadataDir, 0o755); err != nil {
 					t.Fatalf("create metadata dir: %v", err)
@@ -1302,6 +1506,29 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			executablePath := resolveLockPath(artifactsDir, entry.Executable)
 			if cfg.Plugins["alpha"].Command != executablePath {
 				t.Fatalf("plugin command = %q, want %q", cfg.Plugins["alpha"].Command, executablePath)
+			}
+			if tc.localSource {
+				writeProviderReleaseMetadataFile(t, localMetadataPath, providerReleaseMetadata{
+					Schema:        providerReleaseSchemaName,
+					SchemaVersion: providerReleaseSchemaVersion,
+					Package:       packageSource,
+					Kind:          providermanifestv1.KindPlugin,
+					Version:       "1.2.4",
+					Runtime:       providerReleaseRuntimeExecutable,
+					Artifacts: map[string]providerReleaseArtifact{
+						providerpkg.CurrentPlatformString(): {
+							Path:   wantCurrentArchiveURL,
+							SHA256: wantCurrentSHA,
+						},
+						extraPlatformKey: {
+							Path:   wantExtraArchiveURL,
+							SHA256: wantExtraSHA,
+						},
+					},
+				})
+				if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil || !strings.Contains(err.Error(), `lock entry for provider "alpha" is stale`) {
+					t.Fatalf("LoadForExecutionAtPath after stale local metadata error = %v, want stale lock entry", err)
+				}
 			}
 		})
 	}
