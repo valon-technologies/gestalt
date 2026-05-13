@@ -15,8 +15,6 @@ from ._protocol import (
     JsonObjectInput,
     datetime_from_timestamp,
     has_field,
-    message_from_dict,
-    message_to_dict,
     struct_from_dict,
     struct_to_dict,
     timestamp_from_datetime,
@@ -1659,36 +1657,6 @@ def agent_messages_from_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any
     """Create agent messages from dictionaries."""
 
     return [agent_message_from_dict(message) for message in messages]
-
-
-def agent_message_to_proto_dict(message: Any) -> dict[str, Any]:
-    """Convert an ``AgentMessage`` to protobuf JSON dictionary form."""
-
-    value = message_to_dict(
-        agent_message_to_proto(message),
-        preserving_proto_field_name=True,
-    )
-    if not isinstance(value, dict):
-        raise TypeError("AgentMessage protobuf JSON projection must be an object")
-    return value
-
-
-def agent_message_from_proto_dict(value: Mapping[str, Any]) -> Any:
-    """Create an ``AgentMessage`` from protobuf JSON dictionary form."""
-
-    return agent_message_from_proto(message_from_dict(dict(value), pb.AgentMessage()))
-
-
-def agent_messages_to_proto_dicts(messages: Iterable[Any]) -> list[dict[str, Any]]:
-    """Convert agent protocol messages to protobuf JSON dictionaries."""
-
-    return [agent_message_to_proto_dict(message) for message in messages]
-
-
-def agent_messages_from_proto_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any]:
-    """Create agent protocol messages from protobuf JSON dictionaries."""
-
-    return [agent_message_from_proto_dict(message) for message in messages]
 
 
 class AgentHost:

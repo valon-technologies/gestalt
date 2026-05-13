@@ -5,12 +5,12 @@ from gestalt import testing
 
 
 class ProtocolHelperTests(unittest.TestCase):
-    def test_testing_exports_proto_fixture_helpers(self) -> None:
-        proto_dict = testing.agent_message_to_proto_dict(
+    def test_testing_exports_native_fixture_helpers(self) -> None:
+        message_dict = testing.agent_message_to_dict(
             gestalt.AgentMessage(role="user", text="hi")
         )
 
-        self.assertEqual(proto_dict["role"], "user")
+        self.assertEqual(message_dict["role"], "user")
 
     def test_public_low_level_imports_fail(self) -> None:
         with self.assertRaises(ImportError):
@@ -21,7 +21,6 @@ class ProtocolHelperTests(unittest.TestCase):
             __import__("gestalt.protocol.v1")
         for name in (
             "struct_from_dict",
-            "agent_message_to_proto_dict",
             "indexeddb_record_to_proto",
             "AuthorizationResource",
         ):
