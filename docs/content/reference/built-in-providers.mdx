@@ -7,7 +7,7 @@ powers plugins. The first-party implementations are published from
 [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers)
 and maintained alongside the server.
 
-Two simple secrets providers (`env` and `file`), telemetry, and audit remain built into the binary. Cloud secret backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are available as external providers from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). See [Secrets Providers](/providers/secrets) for the full list and configuration.
+Two simple secrets providers (`env` and `file`), telemetry, and audit remain built into the binary. Cloud secret backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are available as external providers from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). See [Config File](/reference/config-file#providerssecrets) for package names and configuration.
 
 ## Authentication Providers
 
@@ -225,7 +225,7 @@ Two secret managers are compiled into the `gestaltd` binary and resolve structur
 | `env` | Resolves secrets from environment variables. Default when `providers.secrets` is omitted. |
 | `file` | Resolves secrets from files in a configured directory. Works with Kubernetes volume-mounted secrets. |
 
-For cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), see [Secrets Providers](/providers/secrets#available-providers). These use a `source:` config key under `providers.secrets.<name>`.
+For cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), see [Config File](/reference/config-file#providerssecrets). These use a `source:` config key under `providers.secrets.<name>`.
 
 ## Telemetry Providers (built-in)
 
