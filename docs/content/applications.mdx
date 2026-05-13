@@ -817,6 +817,56 @@ authorization rules. Source-built UI packages are the recommended shape for
 new applications; generated static output is prepared by Gestalt and should not
 normally be checked in.
 
+## Configuring Webhooks
+
+Applications can expose product-specific webhooks through the same plugin that
+backs the UI, scheduled work, and host-service bindings. Declare the
+[hosted HTTP route](/providers/plugins#hosted-http-endpoints) in the
+application plugin manifest, and implement `webhooks.github` in the SDK
+language of choice like any other application operation. The following example
+configures the public webhook URL as
+`/api/v1/workspace_review/webhooks/github`.
+
+```yaml
+kind: plugin
+source: github.com/acme/plugins/workspace-review
+version: 0.1.0
+displayName: Workspace Review
+description: Review workspace changes and publish nightly summaries.
+spec:
+  mcp: true
+  connections:
+    default:
+      mode: none
+      auth:
+        type: none
+  securitySchemes:
+    github_webhook:
+      type: hmac
+      secret:
+        env: GITHUB_WEBHOOK_SECRET
+      signatureHeader: X-Hub-Signature-256
+      signaturePrefix: sha256=
+      payloadTemplate: "{raw_body}"
+  http:
+    github_webhook:
+      path: /webhooks/github
+      method: POST
+      credentialMode: none
+      security: github_webhook
+      target: webhooks.github
+      requestBody:
+        required: true
+        content:
+          application/json: {}
+      ack:
+        status: 202
+        body:
+          status: accepted
+  ui:
+    path: ../ui/manifest.yaml
+```
+
 ## Local Development
 
 Run the app locally from the plugin directory with the supporting provider
