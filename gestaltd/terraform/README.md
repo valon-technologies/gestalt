@@ -1,20 +1,23 @@
 # gestaltd Artifact Infrastructure
 
 This Terraform root owns the GCP resources used by `gestaltd` workflows to
-publish Helm charts and immutable CI binary artifacts.
+publish Helm charts and immutable CI images.
 
 It creates:
 
 - deployer IAM grants required by this Terraform root
 - Artifact Registry Docker repository for OCI Helm charts
-- public-read GCS bucket for commit-addressed `gestaltd` CI binary artifacts
+- Artifact Registry Docker repository for commit-addressed `gestaltd` CI images
+- existing GCS bucket retained for legacy CI binary artifacts
 - GitHub Actions Workload Identity Pool and provider
 - chart publisher service account
-- CI binary publisher service account
+- CI image publisher service account
 - Artifact Registry writer access for the publisher service account
-- GCS object-create access for the CI binary publisher service account
+- Artifact Registry writer access for the CI image publisher service account
 - Artifact Registry reader access for configured `valon-tools` Terraform and
   GitHub deploy service accounts
+- Artifact Registry reader access for the `valon-tools` GitHub Actions service
+  account that pulls pinned `gestaltd` CI images during Docker builds
 
 The release workflow consumes the `github_actions_variables` output. Copy those
 values into the `valon-technologies/gestalt` repository variables:
@@ -22,36 +25,39 @@ values into the `valon-technologies/gestalt` repository variables:
 ```text
 GESTALTD_ARTIFACT_REGISTRY_HOST
 GESTALTD_CHART_REPOSITORY
-GESTALTD_CI_ARTIFACT_BASE_URL
-GESTALTD_CI_ARTIFACT_BUCKET
 GESTALTD_CI_GCP_SERVICE_ACCOUNT
 GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER
+GESTALTD_CI_IMAGE_PUBLISH_ENABLED
+GESTALTD_CI_IMAGE_REPOSITORY
 GESTALTD_GCP_SERVICE_ACCOUNT
 GESTALTD_GCP_WORKLOAD_IDENTITY_PROVIDER
 ```
 
-CI binary artifacts are published under:
+CI images are published under immutable tags:
 
 ```text
-${GESTALTD_CI_ARTIFACT_BASE_URL}/<40-character-commit-sha>/gestaltd-linux-x86_64.tar.gz
-${GESTALTD_CI_ARTIFACT_BASE_URL}/<40-character-commit-sha>/gestaltd-linux-x86_64.tar.gz.sha256
-${GESTALTD_CI_ARTIFACT_BASE_URL}/<40-character-commit-sha>/metadata.json
+${GESTALTD_CI_IMAGE_REPOSITORY}:sha-<40-character-commit-sha>
 ```
 
-Consumers should pin full commit SHA paths. Mutable marker files, if added
-later, should remain informational only.
+Consumers should pin full image references with digests:
 
-The `Build Gestaltd` workflow publishes CI binary artifacts after its validation
-jobs pass on `main`. To backfill an older commit, run that workflow manually
-with `gestalt_ref` set to the full commit SHA. Manual backfill runs the
-build/package/upload contract against that resolved SHA and loads the packaging
-script from the current workflow checkout, so older commits can be backfilled
-even if they predate current lint or docs workflow helpers.
+```text
+${GESTALTD_CI_IMAGE_REPOSITORY}:sha-<40-character-commit-sha>@sha256:<manifest-digest>
+```
 
-Set `GESTALTD_CI_ARTIFACT_PUBLISH_ENABLED=true` only after the bucket, publisher
-service account, Workload Identity binding, and repository variables are ready.
-Until then, the publish job is skipped and the existing validation jobs continue
-to run normally.
+The `Build Gestaltd` workflow publishes CI images after its validation jobs pass
+on `main`. To backfill an older commit, run that workflow manually with
+`gestalt_ref` set to the full commit SHA. Manual backfill runs the same
+validation jobs before publishing the image.
+
+Set `GESTALTD_CI_IMAGE_PUBLISH_ENABLED=true` only after the CI image repository,
+publisher service account, Workload Identity binding, reader grants, and
+repository variables are ready. Until then, the publish job is skipped and the
+existing validation jobs continue to run normally.
+
+The legacy GCS CI binary bucket remains managed so Terraform does not destroy
+historical artifacts during this migration. Current workflows do not publish new
+GCS binary artifacts.
 
 `valon-tools` environments should consume the chart repository location as input
 variables instead of creating their own per-environment chart repository.

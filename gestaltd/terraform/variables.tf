@@ -15,14 +15,20 @@ variable "artifact_registry_repository_id" {
   default     = "gestaltd-charts"
 }
 
+variable "ci_image_repository_id" {
+  description = "Artifact Registry repository ID for commit-addressed gestaltd CI images."
+  type        = string
+  default     = "gestaltd-ci"
+}
+
 variable "ci_binary_bucket_name" {
-  description = "GCS bucket name for immutable gestaltd CI binary artifacts."
+  description = "Existing GCS bucket name for legacy gestaltd CI binary artifacts."
   type        = string
   default     = "gitlab-peach-street-gestaltd-ci-artifacts"
 }
 
 variable "ci_binary_bucket_location" {
-  description = "GCS location for immutable gestaltd CI binary artifacts."
+  description = "Existing GCS bucket location for legacy gestaltd CI binary artifacts."
   type        = string
   default     = "US"
 }
@@ -38,6 +44,12 @@ variable "gestaltd_chart_reader_service_accounts" {
   ]
 }
 
+variable "gestaltd_ci_image_reader_service_accounts" {
+  description = "Additional service account emails allowed to read commit-addressed gestaltd CI images from Artifact Registry."
+  type        = set(string)
+  default     = []
+}
+
 variable "deployer_service_account_id" {
   description = "Service account ID used by GitHub Actions to apply this Terraform root."
   type        = string
@@ -50,8 +62,8 @@ variable "chart_publisher_service_account_id" {
   default     = "gestaltd-chart-publisher"
 }
 
-variable "ci_binary_publisher_service_account_id" {
-  description = "Service account ID used by GitHub Actions to publish gestaltd CI binary artifacts."
+variable "ci_image_publisher_service_account_id" {
+  description = "Existing service account ID used by GitHub Actions to publish gestaltd CI images."
   type        = string
   default     = "gestaltd-ci-binary-publisher"
 }
@@ -68,8 +80,8 @@ variable "gestaltd_github_actions_provider_id" {
   default     = "gestaltd"
 }
 
-variable "gestaltd_ci_binary_github_actions_provider_id" {
-  description = "Workload Identity Pool provider ID for the gestaltd CI binary artifact workflow."
+variable "gestaltd_ci_image_github_actions_provider_id" {
+  description = "Existing Workload Identity Pool provider ID for the gestaltd CI image workflow."
   type        = string
   default     = "gestaltd-ci-binary"
 }
@@ -86,8 +98,8 @@ variable "github_ref_prefix" {
   default     = "refs/tags/gestaltd/v"
 }
 
-variable "ci_binary_github_ref" {
-  description = "Exact Git ref allowed to publish gestaltd CI binary artifacts."
+variable "ci_image_github_ref" {
+  description = "Exact Git ref allowed to publish gestaltd CI images."
   type        = string
   default     = "refs/heads/main"
 }

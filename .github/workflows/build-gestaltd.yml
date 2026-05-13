@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       gestalt_ref:
-        description: Optional full commit SHA to validate, build, and publish as a CI artifact.
+        description: Optional full commit SHA to validate, build, and publish as a CI image.
         required: false
         type: string
 
@@ -61,13 +61,12 @@ jobs:
           {
             echo "sha=${sha}"
             echo "publish=${publish}"
-            echo "version=0.0.0-ci.${GITHUB_RUN_NUMBER}+g${sha:0:12}"
+            echo "version=0.0.0-ci+g${sha:0:12}"
           } >> "${GITHUB_OUTPUT}"
 
   lint:
     name: Go Lint & Vet
     needs: resolve-ref
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.gestalt_ref == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -117,7 +116,6 @@ jobs:
   test:
     name: Go Tests
     needs: resolve-ref
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.gestalt_ref == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -144,7 +142,6 @@ jobs:
   coverage:
     name: Go Coverage
     needs: resolve-ref
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.gestalt_ref == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -174,7 +171,7 @@ jobs:
   race:
     name: Go Race Tests
     needs: resolve-ref
-    if: ${{ github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.event.inputs.gestalt_ref == '') }}
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -198,7 +195,6 @@ jobs:
   docs-build:
     name: Docs Build
     needs: resolve-ref
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.gestalt_ref == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -248,7 +244,6 @@ jobs:
   helm-validate:
     name: Helm Chart Validation
     needs: resolve-ref
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.gestalt_ref == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -323,7 +318,6 @@ jobs:
   docker-build:
     name: Docker Image Build
     needs: resolve-ref
-    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.gestalt_ref == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -353,154 +347,142 @@ jobs:
             --tag gestaltd:ci-alpine \
             .
 
-  publish-ci-artifact:
-    name: Publish CI Artifact
+  publish-ci-image:
+    name: Publish CI Image
     needs: [resolve-ref, lint, test, coverage, race, docs-build, helm-validate, docker-build]
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.resolve-ref.outputs.publish == 'true' && vars.GESTALTD_CI_ARTIFACT_PUBLISH_ENABLED == 'true' }}
+    if: ${{ needs.resolve-ref.outputs.publish == 'true' && vars.GESTALTD_CI_IMAGE_PUBLISH_ENABLED == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          path: workflow
-
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
           ref: ${{ needs.resolve-ref.outputs.sha }}
-          path: source
 
-      - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version-file: source/gestaltd/go.mod
-          cache-dependency-path: source/gestaltd/go.sum
-
-      - name: Validate artifact configuration
+      - name: Validate image configuration
         env:
-          GESTALTD_CI_ARTIFACT_BUCKET: ${{ vars.GESTALTD_CI_ARTIFACT_BUCKET }}
-          GESTALTD_CI_ARTIFACT_BASE_URL: ${{ vars.GESTALTD_CI_ARTIFACT_BASE_URL }}
+          GESTALTD_ARTIFACT_REGISTRY_HOST: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
+          GESTALTD_CI_IMAGE_REPOSITORY: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
           GESTALTD_CI_GCP_SERVICE_ACCOUNT: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
           GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
         run: |
           set -euo pipefail
-          : "${GESTALTD_CI_ARTIFACT_BUCKET:?GESTALTD_CI_ARTIFACT_BUCKET repository variable is required}"
-          : "${GESTALTD_CI_ARTIFACT_BASE_URL:?GESTALTD_CI_ARTIFACT_BASE_URL repository variable is required}"
+          : "${GESTALTD_ARTIFACT_REGISTRY_HOST:?GESTALTD_ARTIFACT_REGISTRY_HOST repository variable is required}"
+          : "${GESTALTD_CI_IMAGE_REPOSITORY:?GESTALTD_CI_IMAGE_REPOSITORY repository variable is required}"
           : "${GESTALTD_CI_GCP_SERVICE_ACCOUNT:?GESTALTD_CI_GCP_SERVICE_ACCOUNT repository variable is required}"
           : "${GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER:?GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER repository variable is required}"
 
-      - name: Build CI artifact
-        env:
-          GESTALTD_ARTIFACT_BASE_URL: ${{ vars.GESTALTD_CI_ARTIFACT_BASE_URL }}/${{ needs.resolve-ref.outputs.sha }}
-          GESTALTD_COMMIT: ${{ needs.resolve-ref.outputs.sha }}
-          GESTALTD_OUTPUT_DIR: ${{ github.workspace }}/dist/gestaltd-ci
-          GESTALTD_SOURCE_DIR: ${{ github.workspace }}/source
-          GESTALTD_VERSION: ${{ needs.resolve-ref.outputs.version }}
-        run: workflow/.github/scripts/build-gestaltd-ci-artifact.sh
+      - name: Compute image metadata
+        id: meta
+        run: echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
 
       - name: Authenticate to Google Cloud
+        id: gcp-auth
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
           token_format: access_token
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
+      - name: Authenticate to Artifact Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ${{ vars.GESTALTD_ARTIFACT_REGISTRY_HOST }}
+          username: oauth2accesstoken
+          password: ${{ steps.gcp-auth.outputs.access_token }}
 
-      - name: Upload immutable artifact
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Check for existing CI image
+        id: existing-image
         env:
-          GESTALTD_CI_ARTIFACT_BUCKET: ${{ vars.GESTALTD_CI_ARTIFACT_BUCKET }}
+          GESTALTD_CI_IMAGE_REPOSITORY: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
           GESTALTD_COMMIT: ${{ needs.resolve-ref.outputs.sha }}
         run: |
           set -euo pipefail
+          image="${GESTALTD_CI_IMAGE_REPOSITORY}:sha-${GESTALTD_COMMIT}"
 
-          artifact_prefix="gs://${GESTALTD_CI_ARTIFACT_BUCKET}/github.com/valon-technologies/gestalt/${GESTALTD_COMMIT}"
-          for artifact in \
-            gestaltd-linux-x86_64.tar.gz \
-            gestaltd-linux-x86_64.tar.gz.sha256 \
-            metadata.json
-          do
-            gcloud storage cp \
-              --if-generation-match=0 \
-              "dist/gestaltd-ci/${artifact}" \
-              "${artifact_prefix}/${artifact}"
-          done
+          if digest="$(docker buildx imagetools inspect "${image}" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+            exists="true"
+          else
+            exists="false"
+            digest=""
+          fi
 
-  backfill-ci-artifact:
-    name: Backfill CI Artifact
-    needs: resolve-ref
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.gestalt_ref != '' && vars.GESTALTD_CI_ARTIFACT_PUBLISH_ENABLED == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+          {
+            echo "image=${image}"
+            echo "exists=${exists}"
+            echo "digest=${digest}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build and push CI image
+        id: ci-image
+        if: ${{ steps.existing-image.outputs.exists != 'true' }}
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         with:
-          path: workflow
+          context: .
+          file: gestaltd/Dockerfile
+          target: static
+          push: true
+          platforms: linux/amd64
+          tags: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}:sha-${{ needs.resolve-ref.outputs.sha }}
+          build-args: |
+            GESTALT_VERSION=${{ needs.resolve-ref.outputs.version }}
+            GESTALT_REVISION=${{ needs.resolve-ref.outputs.sha }}
+            GESTALT_CREATED=${{ steps.meta.outputs.created }}
+            GESTALT_SOURCE=https://github.com/${{ github.repository }}
+            GESTALT_DOCUMENTATION=https://gestaltd.ai
+            GESTALT_URL=${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}:sha-${{ needs.resolve-ref.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=min
+          sbom: true
+          provenance: mode=max
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          ref: ${{ needs.resolve-ref.outputs.sha }}
-          path: source
-
-      - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version-file: source/gestaltd/go.mod
-          cache-dependency-path: source/gestaltd/go.sum
-
-      - name: Validate artifact configuration
+      - name: Resolve published image
+        id: published-image
         env:
-          GESTALTD_CI_ARTIFACT_BUCKET: ${{ vars.GESTALTD_CI_ARTIFACT_BUCKET }}
-          GESTALTD_CI_ARTIFACT_BASE_URL: ${{ vars.GESTALTD_CI_ARTIFACT_BASE_URL }}
-          GESTALTD_CI_GCP_SERVICE_ACCOUNT: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
-          GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          EXISTING_DIGEST: ${{ steps.existing-image.outputs.digest }}
+          GESTALTD_CI_IMAGE_REPOSITORY: ${{ vars.GESTALTD_CI_IMAGE_REPOSITORY }}
+          GESTALTD_COMMIT: ${{ needs.resolve-ref.outputs.sha }}
+          PUSHED_DIGEST: ${{ steps.ci-image.outputs.digest }}
         run: |
           set -euo pipefail
-          : "${GESTALTD_CI_ARTIFACT_BUCKET:?GESTALTD_CI_ARTIFACT_BUCKET repository variable is required}"
-          : "${GESTALTD_CI_ARTIFACT_BASE_URL:?GESTALTD_CI_ARTIFACT_BASE_URL repository variable is required}"
-          : "${GESTALTD_CI_GCP_SERVICE_ACCOUNT:?GESTALTD_CI_GCP_SERVICE_ACCOUNT repository variable is required}"
-          : "${GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER:?GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER repository variable is required}"
+          digest="${PUSHED_DIGEST:-${EXISTING_DIGEST}}"
+          : "${digest:?Expected a pushed or existing image digest}"
+          image="${GESTALTD_CI_IMAGE_REPOSITORY}:sha-${GESTALTD_COMMIT}@${digest}"
+          {
+            echo "digest=${digest}"
+            echo "image=${image}"
+          } >> "${GITHUB_OUTPUT}"
 
-      - name: Build CI artifact
+      - name: Smoke test CI image
         env:
-          GESTALTD_ARTIFACT_BASE_URL: ${{ vars.GESTALTD_CI_ARTIFACT_BASE_URL }}/${{ needs.resolve-ref.outputs.sha }}
-          GESTALTD_COMMIT: ${{ needs.resolve-ref.outputs.sha }}
-          GESTALTD_OUTPUT_DIR: ${{ github.workspace }}/dist/gestaltd-ci
-          GESTALTD_SOURCE_DIR: ${{ github.workspace }}/source
+          GESTALTD_CI_IMAGE: ${{ steps.published-image.outputs.image }}
           GESTALTD_VERSION: ${{ needs.resolve-ref.outputs.version }}
-        run: workflow/.github/scripts/build-gestaltd-ci-artifact.sh
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
-        with:
-          workload_identity_provider: ${{ vars.GESTALTD_CI_GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GESTALTD_CI_GCP_SERVICE_ACCOUNT }}
-          token_format: access_token
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
-
-      - name: Upload immutable artifact
-        env:
-          GESTALTD_CI_ARTIFACT_BUCKET: ${{ vars.GESTALTD_CI_ARTIFACT_BUCKET }}
-          GESTALTD_COMMIT: ${{ needs.resolve-ref.outputs.sha }}
         run: |
           set -euo pipefail
+          actual_version="$(docker run --rm "${GESTALTD_CI_IMAGE}" version)"
+          if [[ "${actual_version}" != "${GESTALTD_VERSION}" ]]; then
+            echo "gestaltd version output '${actual_version}' did not match expected '${GESTALTD_VERSION}'." >&2
+            exit 1
+          fi
 
-          artifact_prefix="gs://${GESTALTD_CI_ARTIFACT_BUCKET}/github.com/valon-technologies/gestalt/${GESTALTD_COMMIT}"
-          for artifact in \
-            gestaltd-linux-x86_64.tar.gz \
-            gestaltd-linux-x86_64.tar.gz.sha256 \
-            metadata.json
-          do
-            gcloud storage cp \
-              --if-generation-match=0 \
-              "dist/gestaltd-ci/${artifact}" \
-              "${artifact_prefix}/${artifact}"
-          done
+      - name: Summarize CI image
+        env:
+          GESTALTD_CI_IMAGE: ${{ steps.published-image.outputs.image }}
+          GESTALTD_CI_IMAGE_EXISTS: ${{ steps.existing-image.outputs.exists }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## gestaltd CI image"
+            echo
+            if [[ "${GESTALTD_CI_IMAGE_EXISTS}" == "true" ]]; then
+              echo "Existing immutable image reused."
+              echo
+            fi
+            echo '```text'
+            echo "${GESTALTD_CI_IMAGE}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
