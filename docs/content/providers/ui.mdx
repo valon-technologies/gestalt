@@ -1,70 +1,22 @@
-import { Callout, Tabs } from 'nextra/components'
 import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 
 # UI
 
 <ActiveDevelopmentCallout verb="are">UI providers</ActiveDevelopmentCallout>
 
-UI providers are served as static asset bundles. For new custom UIs, prefer
-checking in the frontend source and declaring a top-level `build` command in the
-UI manifest. Gestalt runs that command during preparation, records the generated
-static output in the prepared manifest, and serves the prepared assets from
-`providers.ui.<name>.path` or `plugins.<name>.ui.path`.
+UI providers mount static asset bundles. They can be configured directly under
+`providers.ui` or attached to an executable plugin as a plugin-backed app. The
+built-in admin UI at `/admin` remains available even when no public UI bundles
+are configured.
 
-Checking in an already-built `out/`, `dist/`, or `build/` directory still works
-for simple prebuilt bundles, but source-built UI packages are the recommended
-authoring model. The built-in admin UI at `/admin` remains available regardless
-of whether public UI bundles are configured.
-
-<Callout type="info">
-  Source-built UI packages are still part of the alpha UI surface. They are the
-  recommended path for new custom UIs, but the ergonomics are not final: today
-  you must declare the build command, output directory, and preparation
-  environment build tools explicitly. Smoother build-tool detection and
-  packaging workflows are on the radar for future releases.
-</Callout>
-
-## How UI providers work
-
-Unlike executable providers, a UI provider is served from a static asset root.
-When a source UI manifest declares `build`, `gestaltd lock`,
-`gestaltd sync --locked`, `gestaltd provider dev`, and
-`gestaltd provider release` run the build command before preparing or packaging
-the assets. Prepared and released UI manifests contain `spec.assetRoot` and do
-not retain the source-only `build` block. `gestaltd serve --locked` does not run
-frontend builds; it only serves the prepared assets from the configured public
-path prefix.
-
-## How UI routes use authorization
-
-UI authorization is route-based. When you bind an `authorizationPolicy` to a UI
-entry, Gestalt authenticates the caller, resolves their role under that policy,
-and compares it to the mounted UI manifest's `spec.routes[].allowedRoles`
-rules before serving the matching route or its static assets.
-
-Plugin-backed mounted UIs inherit more than just a mount path. They also
-inherit the owning plugin's dynamic grants when that plugin declares an
-`authorizationPolicy`, and they inherit the plugin's route-auth provider when
-the plugin declares `auth.provider`. Direct `providers.ui` bundles and the
-built-in admin UI keep using the server-wide auth configuration instead.
-
-## First-party UI bundles
-
-First-party UI bundles live under
-[`valon-technologies/gestalt-providers/web`](https://github.com/valon-technologies/gestalt-providers/tree/main/web).
-
-| Provider |
-| --- |
-| [`github.com/valon-technologies/gestalt-providers/ui/default`](https://github.com/valon-technologies/gestalt-providers/tree/main/ui/default) |
+For new custom UIs, check in the frontend source and dependency lockfile, then
+declare a top-level `build` command in the UI manifest. Gestalt uses that
+command during preparation and release packaging so the deployment serves a
+prepared static asset root instead of rebuilding at runtime.
 
 ## Configuring `providers.ui`
 
-Use `providers.ui` as a map of UI bundles. You can either mount a bundle
-directly from `providers.ui`, or bind it to a plugin-backed app through the
-`plugins` block. Omit `providers.ui` entirely to run headless with no
-public UI bundles.
-
-Point at a local source bundle during development:
+Mount a local UI bundle directly:
 
 ```yaml
 providers:
@@ -75,7 +27,7 @@ providers:
       authorizationPolicy: roadmap_review
 ```
 
-Bind a UI bundle to a plugin-backed app:
+Bind a named UI bundle to a plugin-backed app:
 
 ```yaml
 providers:
@@ -92,7 +44,8 @@ plugins:
     authorizationPolicy: roadmap_review
 ```
 
-Or let the plugin manifest own the UI bundle and keep only the deployment binding in config:
+Or let the plugin manifest own the UI bundle and keep only the deployment mount
+in config:
 
 ```yaml
 plugins:
@@ -116,69 +69,34 @@ spec:
     path: ../ui/manifest.yaml
 ```
 
-Reference a published bundle in production:
+For every config field, see
+[Config File](/reference/config-file#providersui).
 
-```yaml
-providers:
-  ui:
-    console:
-      source:
-        package: github.com/valon-technologies/gestalt-providers/ui/default
-        version: 0.0.1
-      path: /console
-      authorizationPolicy: console
-```
+## Route Authorization
 
-When `authorizationPolicy` is set, Gestalt authenticates the caller, resolves
-their role from `authorization.policies.<policy>`, and checks the UI
-manifest's `spec.routes[].allowedRoles` before serving the route or its
-associated static assets.
+When a mounted UI has an `authorizationPolicy`, Gestalt authenticates the
+caller, resolves their role under that policy, and checks the UI manifest's
+`spec.routes[].allowedRoles` before serving the matching route or its static
+assets.
 
-## Locked deployments
-
-When a published UI bundle is referenced from `providers.ui`, run:
-
-```sh
-gestaltd lock --config ./config.yaml
-gestaltd sync --locked --config ./config.yaml
-```
-
-That writes `gestalt.lock.json` and prepares the bundle under `.gestaltd/`.
-Afterward, `gestaltd serve --locked` serves the prepared assets from the
-configured path prefix.
-
-When a source UI manifest declares `build`, the environment that prepares the
-bundle must have the build tools named by `build.command`. The production
-`serve --locked` environment does not.
-
-| Workflow | Needs frontend build tools? |
-| --- | --- |
-| `gestaltd lock` or `gestaltd sync --locked` against source UI packages | Yes |
-| `gestaltd provider dev` against source UI packages | Yes |
-| `gestaltd provider release` from source UI packages | Yes |
-| `gestaltd sync --locked` for already-released UI packages | No |
-| `gestaltd serve --locked` | No |
-
-## The admin UI
-
-The built-in admin UI is always served at `/admin`, regardless of whether
-custom UI bundles are configured. Mounted bundles own only their configured
-public prefixes.
-
-The built-in shell includes two operator views: the Prometheus metrics
-dashboard and a plugin authorization workspace at `/admin/?tab=members`.
 Plugin-backed mounted UIs inherit the owning plugin's dynamic grants when that
-plugin declares `authorizationPolicy`; direct `providers.ui.<name>.authorizationPolicy`
-bindings remain static-only.
-Plugin-backed mounted UIs also inherit the owning plugin's route-auth provider
-when that plugin declares `auth.provider`; direct `providers.ui` bundles and
-the built-in admin UI continue using the server-wide auth provider.
+plugin declares `authorizationPolicy`. They also inherit the plugin's route-auth
+provider when the plugin declares `auth.provider`. Direct `providers.ui` bundles
+and the built-in admin UI use the server-wide auth configuration.
 
+## The Admin UI
+
+The built-in admin UI is served at `/admin` by default. It includes operator
+views such as the Prometheus metrics dashboard and the plugin authorization
+workspace at `/admin/?tab=members`.
+
+Use `server.admin.authorizationPolicy` to protect `/admin`, or `server.admin.ui`
+to pin `/admin` to a named UI bundle that ships `admin/index.html`. See
+[Config File](/reference/config-file#server) for those settings.
 
 ## Building your own UI bundle
 
-For new UI bundles, check in source files and a dependency lockfile, then ignore
-the generated output directory:
+For source-authored UI bundles, keep generated output out of source control:
 
 ```text
 ui/
@@ -189,36 +107,28 @@ ui/
     app.tsx
 ```
 
-The manifest's top-level `build` block tells Gestalt how to turn that source
-tree into static files. Use `spec.assetRoot` without `build` only when the
-static asset directory is intentionally checked in or generated outside of
-Gestalt's preparation flow.
-
 ### Manifest
 
-Source UI manifests should normally declare top-level `build` with an `output`
-directory. Gestalt uses that output as the asset root during lock, sync, dev, or
-release preparation. Released UI manifests declare `spec.assetRoot`, which
-points to the directory containing built static assets. The source field
-identifies the provider in the registry.
+A UI manifest declares `kind: ui`. Source manifests should normally use
+top-level `build` with an `output` directory. `spec.routes` is optional unless a
+deployment binds the UI to an `authorizationPolicy`.
 
 ```yaml
 kind: ui
-source: github.com/valon-technologies/gestalt-providers/ui/default
+source: github.com/acme/apps/roadmap-ui
 version: 0.0.1
-displayName: Default UI
-description: Default Gestalt UI bundle.
+displayName: Roadmap Review UI
+description: Static UI for roadmap review.
 build:
-  workdir: app
   command:
     - npm
     - run
     - build
-  output: app/out
+  output: dist
   inputs:
-    - app/package.json
-    - app/package-lock.json
-    - app/src
+    - package.json
+    - package-lock.json
+    - src
 spec:
   routes:
     - path: /
@@ -227,101 +137,20 @@ spec:
       allowedRoles: [admin]
 ```
 
-`build.output` and `spec.assetRoot` paths are relative to the manifest file.
-They identify the directory containing static output, typically an `index.html`
-and accompanying JS, CSS, and image files. The directory does not need to be
-named `out`; common names include `out`, `dist`, and `build`.
+`build.command` is an argv array. `build.output` is manifest-relative and points
+at the generated static files, commonly `out`, `dist`, or `build`. Frameworks
+that require a server at runtime are not compatible with UI bundles because
+Gestalt serves static assets only.
 
-For source manifests, `spec.assetRoot` is optional when `build.output` is set.
-For released or prepared manifests, `spec.assetRoot` is required and Gestalt
-strips the top-level `build` block after generating the assets. If a source
-manifest sets both `spec.assetRoot` and `build.output`, the values must match.
-
-Gestalt builds from frontend source when `build` is present, but it still serves
-and packages static assets rather than serving `src/` directly. Frameworks,
-package managers, build commands, and environment handling vary by project, so
-production serving stays deterministic after `lock` and `sync --locked` have
-prepared the static asset root.
-
-`spec.routes` is optional unless a deployment binds the UI to
-`providers.ui.<name>.authorizationPolicy`. In that case, Gestalt uses these
-route rules to enforce role-based access before serving the mounted route or
-its static assets. At least one route must cover `/`, and every route must
-declare non-empty `allowedRoles`.
-
-### Build step
-
-Use top-level `build` for source-authored UIs. Gestalt runs the command before
-source-manifest preparation for local paths, git source materialization,
-provider dev, and `gestaltd provider release`. The deployer does not need to
-check in the generated `out/` or `dist/` directory, but the environment doing
-lock, sync, dev, or release preparation must have the tools required by
-`build.command`.
-
-The Default UI can use npm to produce static output:
-
-```yaml
-kind: ui
-source: github.com/valon-technologies/gestalt-providers/ui/default
-version: 0.0.1
-build:
-  workdir: app
-  command:
-    - npm
-    - run
-    - build
-  output: app/out
-  inputs:
-    - app/package.json
-    - app/package-lock.json
-    - app/src
-spec:
-  routes:
-    - path: /
-      allowedRoles: [viewer, admin]
-```
-
-`command` is an argv array, not a shell string. It runs in `build.workdir`
-relative to the manifest directory, or in the manifest directory when
-`workdir` is omitted. `output` is manifest-relative, not workdir-relative.
-`inputs` is optional and contains literal manifest-relative files or
-directories. Gestalt uses it to fingerprint local source UI builds while
-excluding the output directory, `.git`, `.gestaltd`, and `node_modules`.
-Glob syntax is not supported in `inputs`. Include the files and directories
-that affect the build, such as `package.json`, the package manager lockfile,
-`src`, and `public`.
-
-After the build completes, Gestalt prepares or packages everything under
-`build.output`. You can use any build tool here -- `npm run build`,
-`vite build`, or `next build` configured for static export -- as long as it
-writes static files to the declared output directory.
-
-For Vite and similar React single-page apps, point `build.output` at the
-configured `build.outDir`, commonly `dist`. For Next.js, configure static export
-with `output: 'export'` so `next build` writes static files, commonly to `out`.
-Next.js features that require a server are not compatible with Gestalt UI
-bundles because Gestalt serves static assets only.
-
-`release.build` remains supported as a legacy build hook for source manifests,
-but new UI manifests should prefer top-level `build`. A manifest may not set
-both `build` and `release.build`.
-
-### Deploying the bundle
-
-Mount custom UI bundles with the same `providers.ui` and plugin-backed `ui`
-bindings shown in
-[Configuring `providers.ui`](/providers/ui#configuring-providersui). Locked
-deployment behavior is documented in
-[Locked deployments](/providers/ui#locked-deployments), and the built-in admin
-UI behavior is documented in [The admin UI](/providers/ui#the-admin-ui).
-
-UI bundles use the common provider package release system. See
-[Releasing provider packages](/providers#releasing-provider-packages) for
-release archives, tag resolution, prepared state, and published
-`provider-release.yaml` URLs.
+For the full UI manifest schema, see
+[Plugin Manifests](/reference/plugin-manifests#ui-metadata). For source UI
+build and release behavior, see
+[Source UI builds](/providers#source-ui-builds) and
+[Releasing provider packages](/providers#releasing-provider-packages).
 
 ## What to read next
 
-- [Configuration](/reference/configuration): `providers.ui`, `plugins.<name>.ui.path`, and headless deployments
-- [Client UI](/client/web): what the default client exposes
+- [Applications](/applications): recommended plugin plus sibling UI layout
+- [Config File](/reference/config-file#providersui): exact `providers.ui` fields
+- [Plugin Manifests](/reference/plugin-manifests#ui-metadata): UI manifest schema
 - [Authorization](/providers/authorization): route and role semantics
