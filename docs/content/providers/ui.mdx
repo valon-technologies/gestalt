@@ -1,12 +1,9 @@
 import { Callout, Tabs } from 'nextra/components'
+import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 
 # UI
 
-<Callout type="warning">
-  Alpha. UI providers are under active development and not yet stable. Breaking
-  changes may happen between releases without warning. Feedback and bug reports
-  are welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
-</Callout>
+<ActiveDevelopmentCallout verb="are">UI providers</ActiveDevelopmentCallout>
 
 UI providers are served as static asset bundles. For new custom UIs, prefer
 checking in the frontend source and declaring a top-level `build` command in the
