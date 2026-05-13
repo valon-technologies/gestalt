@@ -10,7 +10,7 @@ import (
 func TestNewBoundWorkflowRunUsesNativeTimes(t *testing.T) {
 	createdAt := time.Date(2026, 5, 8, 12, 0, 0, 123_000_000, time.UTC)
 	startedAt := createdAt.Add(time.Minute)
-	run, err := gestalt.NewBoundWorkflowRun(gestalt.BoundWorkflowRunInput{
+	run, err := gestalt.NewBoundWorkflowRun(gestalt.BoundWorkflowRun{
 		ID:        "run-1",
 		Status:    gestalt.WorkflowRunStatusValueRunning,
 		CreatedAt: createdAt,
@@ -35,7 +35,7 @@ func TestNewBoundWorkflowRunUsesNativeTimes(t *testing.T) {
 }
 
 func TestWorkflowNativeBuildersOmitZeroTimes(t *testing.T) {
-	run, err := gestalt.NewBoundWorkflowRun(gestalt.BoundWorkflowRunInput{})
+	run, err := gestalt.NewBoundWorkflowRun(gestalt.BoundWorkflowRun{})
 	if err != nil {
 		t.Fatalf("NewBoundWorkflowRun: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestWorkflowNativeBuildersOmitZeroTimes(t *testing.T) {
 		t.Fatalf("created_at = %#v, want nil", run.GetCreatedAt())
 	}
 
-	schedule, err := gestalt.NewBoundWorkflowSchedule(gestalt.BoundWorkflowScheduleInput{})
+	schedule, err := gestalt.NewBoundWorkflowSchedule(gestalt.BoundWorkflowSchedule{})
 	if err != nil {
 		t.Fatalf("NewBoundWorkflowSchedule: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestWorkflowNativeBuildersOmitZeroTimes(t *testing.T) {
 
 func TestNewWorkflowSignalUsesNativePayloadsAndTime(t *testing.T) {
 	createdAt := time.Date(2026, 5, 8, 13, 0, 0, 0, time.UTC)
-	signal, err := gestalt.NewWorkflowSignal(gestalt.WorkflowSignalInput{
+	signal, err := gestalt.NewWorkflowSignal(gestalt.WorkflowSignal{
 		ID:      "signal-1",
 		Name:    "changed",
 		Payload: map[string]any{"count": 2},
@@ -79,7 +79,7 @@ func TestNewWorkflowSignalUsesNativePayloadsAndTime(t *testing.T) {
 
 func TestNewWorkflowEventUsesNativeDataExtensionsAndTime(t *testing.T) {
 	eventTime := time.Date(2026, 5, 8, 14, 0, 0, 0, time.UTC)
-	event, err := gestalt.NewWorkflowEvent(gestalt.WorkflowEventInput{
+	event, err := gestalt.NewWorkflowEvent(gestalt.WorkflowEvent{
 		ID:              "event-1",
 		Source:          "provider",
 		SpecVersion:     "1.0",
@@ -104,9 +104,9 @@ func TestNewWorkflowEventUsesNativeDataExtensionsAndTime(t *testing.T) {
 	}
 }
 
-func TestNewBoundWorkflowPluginTargetUsesNativeInput(t *testing.T) {
-	target, err := gestalt.NewBoundWorkflowTarget(gestalt.BoundWorkflowTargetInput{
-		Plugin: &gestalt.BoundWorkflowPluginTargetInput{
+func TestNewBoundWorkflowPluginTargetUsesNativeValues(t *testing.T) {
+	target, err := gestalt.NewBoundWorkflowTarget(gestalt.BoundWorkflowTarget{
+		Plugin: &gestalt.BoundWorkflowPluginTarget{
 			PluginName: "slack",
 			Operation:  "chat.postMessage",
 			Input: struct {
@@ -130,41 +130,41 @@ func TestNewBoundWorkflowPluginTargetUsesNativeInput(t *testing.T) {
 }
 
 func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
-	target, err := gestalt.NewBoundWorkflowTarget(gestalt.BoundWorkflowTargetInput{
-		Agent: &gestalt.BoundWorkflowAgentTargetInput{
+	target, err := gestalt.NewBoundWorkflowTarget(gestalt.BoundWorkflowTarget{
+		Agent: &gestalt.BoundWorkflowAgentTarget{
 			ProviderName: "agent",
 			Model:        "gpt-5.5",
 			Prompt:       "Summarize",
-			Messages: []*gestalt.AgentMessage{
+			Messages: []gestalt.AgentMessage{
 				{Role: "user", Parts: []gestalt.AgentMessagePart{{Type: gestalt.AgentMessagePartTypeText, Text: "hello"}}},
 			},
-			ToolRefs:       []*gestalt.AgentToolRef{{Plugin: "search", Operation: "query"}},
+			ToolRefs:       []gestalt.AgentToolRef{{Plugin: "search", Operation: "query"}},
 			ResponseSchema: map[string]any{"type": "object"},
 			Metadata:       map[string]any{"source": "test"},
 			TimeoutSeconds: 30,
-			OutputDelivery: &gestalt.WorkflowOutputDeliveryInput{
-				Target: &gestalt.BoundWorkflowPluginTargetInput{
+			OutputDelivery: &gestalt.WorkflowOutputDelivery{
+				Target: &gestalt.BoundWorkflowPluginTarget{
 					PluginName: "slack",
 					Operation:  "chat.postMessage",
 					Input:      map[string]any{"channel": "C123"},
 				},
-				InputBindings: []gestalt.WorkflowOutputBindingInput{
+				InputBindings: []gestalt.WorkflowOutputBinding{
 					{
 						InputField: "text",
-						Value:      &gestalt.WorkflowOutputValueSourceInput{AgentOutput: "text"},
+						Value:      &gestalt.WorkflowOutputValueSource{AgentOutput: "text"},
 					},
 				},
 			},
-			SessionReadyDelivery: &gestalt.WorkflowOutputDeliveryInput{
-				Target: &gestalt.BoundWorkflowPluginTargetInput{
+			SessionReadyDelivery: &gestalt.WorkflowOutputDelivery{
+				Target: &gestalt.BoundWorkflowPluginTarget{
 					PluginName: "slack",
 					Operation:  "chat.postMessage",
 					Input:      map[string]any{"channel": "C123"},
 				},
-				InputBindings: []gestalt.WorkflowOutputBindingInput{
+				InputBindings: []gestalt.WorkflowOutputBinding{
 					{
 						InputField: "session_id",
-						Value:      &gestalt.WorkflowOutputValueSourceInput{AgentSession: "id"},
+						Value:      &gestalt.WorkflowOutputValueSource{AgentSession: "id"},
 					},
 				},
 			},
@@ -188,9 +188,9 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 	}
 }
 
-func TestBoundWorkflowTargetInputFromTargetDoesNotAliasJSONFields(t *testing.T) {
-	original, err := gestalt.NewBoundWorkflowTarget(gestalt.BoundWorkflowTargetInput{
-		Plugin: &gestalt.BoundWorkflowPluginTargetInput{
+func TestBoundWorkflowTargetFromTargetDoesNotAliasJSONFields(t *testing.T) {
+	original, err := gestalt.NewBoundWorkflowTarget(gestalt.BoundWorkflowTarget{
+		Plugin: &gestalt.BoundWorkflowPluginTarget{
 			PluginName: "slack",
 			Operation:  "chat.postMessage",
 			Input:      map[string]any{"channel": "C123"},
@@ -199,7 +199,7 @@ func TestBoundWorkflowTargetInputFromTargetDoesNotAliasJSONFields(t *testing.T) 
 	if err != nil {
 		t.Fatalf("NewBoundWorkflowTarget(original): %v", err)
 	}
-	roundTrip, err := gestalt.NewBoundWorkflowTarget(gestalt.BoundWorkflowTargetInputFromTarget(original))
+	roundTrip, err := gestalt.NewBoundWorkflowTarget(gestalt.BoundWorkflowTargetFromTarget(original))
 	if err != nil {
 		t.Fatalf("NewBoundWorkflowTarget(roundTrip): %v", err)
 	}
@@ -215,19 +215,19 @@ func TestBoundWorkflowTargetInputFromTargetDoesNotAliasJSONFields(t *testing.T) 
 
 func TestWorkflowRunFromRunDoesNotAliasNestedFields(t *testing.T) {
 	triggeredAt := time.Date(2026, 5, 8, 14, 0, 0, 0, time.UTC)
-	run, err := gestalt.NewBoundWorkflowRun(gestalt.BoundWorkflowRunInput{
+	run, err := gestalt.NewBoundWorkflowRun(gestalt.BoundWorkflowRun{
 		ID: "run-1",
-		Target: &gestalt.BoundWorkflowTargetInput{
-			Plugin: &gestalt.BoundWorkflowPluginTargetInput{
+		Target: &gestalt.BoundWorkflowTarget{
+			Plugin: &gestalt.BoundWorkflowPluginTarget{
 				PluginName: "slack",
 				Operation:  "chat.postMessage",
 				Input:      map[string]any{"channel": "C123"},
 			},
 		},
-		Trigger: &gestalt.WorkflowRunTriggerInput{
-			Event: &gestalt.WorkflowEventTriggerInvocationInput{
+		Trigger: &gestalt.WorkflowRunTrigger{
+			Event: &gestalt.WorkflowEventTriggerInvocation{
 				TriggerID: "trigger-1",
-				Event: &gestalt.WorkflowEventInput{
+				Event: &gestalt.WorkflowEvent{
 					ID:          "event-1",
 					Source:      "github",
 					SpecVersion: "1.0",
@@ -264,17 +264,17 @@ func TestWorkflowRunFromRunDoesNotAliasNestedFields(t *testing.T) {
 }
 
 func TestWorkflowExecutionReferenceFromReferenceDoesNotAliasNestedFields(t *testing.T) {
-	ref, err := gestalt.NewWorkflowExecutionReference(gestalt.WorkflowExecutionReferenceInput{
+	ref, err := gestalt.NewWorkflowExecutionReference(gestalt.WorkflowExecutionReference{
 		ID: "ref-1",
-		Target: &gestalt.BoundWorkflowTargetInput{
-			Plugin: &gestalt.BoundWorkflowPluginTargetInput{
+		Target: &gestalt.BoundWorkflowTarget{
+			Plugin: &gestalt.BoundWorkflowPluginTarget{
 				PluginName: "slack",
 				Operation:  "chat.postMessage",
 				Input:      map[string]any{"channel": "C123"},
 			},
 		},
-		Permissions: []gestalt.WorkflowAccessPermissionInput{{Plugin: "slack", Operations: []string{"chat.postMessage"}}},
-		RunAs:       &gestalt.WorkflowRunAsSubjectInput{SubjectID: "service_account:slack"},
+		Permissions: []gestalt.WorkflowAccessPermission{{Plugin: "slack", Operations: []string{"chat.postMessage"}}},
+		RunAs:       &gestalt.WorkflowRunAsSubject{SubjectID: "service_account:slack"},
 	})
 	if err != nil {
 		t.Fatalf("NewWorkflowExecutionReference: %v", err)

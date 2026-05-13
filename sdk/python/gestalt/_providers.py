@@ -84,9 +84,9 @@ if TYPE_CHECKING:
         StopPluginRuntimeSessionRequest,
     )
     from ._workflow import (
-        BoundWorkflowEventTriggerInput,
-        BoundWorkflowRunInput,
-        BoundWorkflowScheduleInput,
+        BoundWorkflowEventTrigger,
+        BoundWorkflowRun,
+        BoundWorkflowSchedule,
         CancelWorkflowProviderRunRequest,
         DeleteWorkflowProviderEventTriggerRequest,
         DeleteWorkflowProviderScheduleRequest,
@@ -114,7 +114,7 @@ if TYPE_CHECKING:
         StartWorkflowProviderRunRequest,
         UpsertWorkflowProviderEventTriggerRequest,
         UpsertWorkflowProviderScheduleRequest,
-        WorkflowExecutionReferenceInput,
+        WorkflowExecutionReference,
     )
 
 else:
@@ -579,10 +579,10 @@ class WorkflowProvider(PluginProvider):
     def start_run(
         self,
         request: StartWorkflowProviderRunRequest,
-    ) -> BoundWorkflowRunInput:
+    ) -> BoundWorkflowRun:
         self._unimplemented("start_run")
 
-    def get_run(self, request: GetWorkflowProviderRunRequest) -> BoundWorkflowRunInput:
+    def get_run(self, request: GetWorkflowProviderRunRequest) -> BoundWorkflowRun:
         self._unimplemented("get_run")
 
     def list_runs(
@@ -594,7 +594,7 @@ class WorkflowProvider(PluginProvider):
     def cancel_run(
         self,
         request: CancelWorkflowProviderRunRequest,
-    ) -> BoundWorkflowRunInput:
+    ) -> BoundWorkflowRun:
         self._unimplemented("cancel_run")
 
     def signal_run(
@@ -612,13 +612,13 @@ class WorkflowProvider(PluginProvider):
     def upsert_schedule(
         self,
         request: UpsertWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowScheduleInput:
+    ) -> BoundWorkflowSchedule:
         self._unimplemented("upsert_schedule")
 
     def get_schedule(
         self,
         request: GetWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowScheduleInput:
+    ) -> BoundWorkflowSchedule:
         self._unimplemented("get_schedule")
 
     def list_schedules(
@@ -633,25 +633,25 @@ class WorkflowProvider(PluginProvider):
     def pause_schedule(
         self,
         request: PauseWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowScheduleInput:
+    ) -> BoundWorkflowSchedule:
         self._unimplemented("pause_schedule")
 
     def resume_schedule(
         self,
         request: ResumeWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowScheduleInput:
+    ) -> BoundWorkflowSchedule:
         self._unimplemented("resume_schedule")
 
     def upsert_event_trigger(
         self,
         request: UpsertWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTriggerInput:
+    ) -> BoundWorkflowEventTrigger:
         self._unimplemented("upsert_event_trigger")
 
     def get_event_trigger(
         self,
         request: GetWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTriggerInput:
+    ) -> BoundWorkflowEventTrigger:
         self._unimplemented("get_event_trigger")
 
     def list_event_triggers(
@@ -669,25 +669,25 @@ class WorkflowProvider(PluginProvider):
     def pause_event_trigger(
         self,
         request: PauseWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTriggerInput:
+    ) -> BoundWorkflowEventTrigger:
         self._unimplemented("pause_event_trigger")
 
     def resume_event_trigger(
         self,
         request: ResumeWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTriggerInput:
+    ) -> BoundWorkflowEventTrigger:
         self._unimplemented("resume_event_trigger")
 
     def put_execution_reference(
         self,
         request: PutWorkflowExecutionReferenceRequest,
-    ) -> WorkflowExecutionReferenceInput:
+    ) -> WorkflowExecutionReference:
         self._unimplemented("put_execution_reference")
 
     def get_execution_reference(
         self,
         request: GetWorkflowExecutionReferenceRequest,
-    ) -> WorkflowExecutionReferenceInput:
+    ) -> WorkflowExecutionReference:
         self._unimplemented("get_execution_reference")
 
     def list_execution_references(

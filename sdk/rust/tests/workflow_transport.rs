@@ -17,9 +17,9 @@ use gestalt::proto::v1::{
     bound_workflow_target,
 };
 use gestalt::{
-    BoundWorkflowPluginTargetInput, BoundWorkflowRun, BoundWorkflowTargetInput,
-    InvokeWorkflowOperationInput, PublishWorkflowProviderEventRequest, RuntimeMetadata,
-    StartWorkflowProviderRunRequest, WorkflowHost, WorkflowProvider, WorkflowRunStatus,
+    BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowTarget, InvokeWorkflowOperationInput,
+    PublishWorkflowProviderEventRequest, RuntimeMetadata, StartWorkflowProviderRunRequest,
+    WorkflowHost, WorkflowProvider, WorkflowRunStatus,
 };
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::{TcpListener, UnixListener, UnixStream};
@@ -279,13 +279,11 @@ async fn workflow_host_client_round_trip_over_unix_socket() {
         .expect("connect workflow host");
     let invoked = host
         .invoke_operation(InvokeWorkflowOperationInput {
-            target: Some(BoundWorkflowTargetInput::Plugin(
-                BoundWorkflowPluginTargetInput {
-                    plugin_name: "demo".to_string(),
-                    operation: "sync".to_string(),
-                    ..Default::default()
-                },
-            )),
+            target: Some(BoundWorkflowTarget::Plugin(BoundWorkflowPluginTarget {
+                plugin_name: "demo".to_string(),
+                operation: "sync".to_string(),
+                ..Default::default()
+            })),
             run_id: "run-42".to_string(),
             ..Default::default()
         })
@@ -326,13 +324,11 @@ async fn workflow_host_client_round_trip_over_tcp_and_sends_relay_token() {
         .expect("connect workflow host");
     let invoked = host
         .invoke_operation(InvokeWorkflowOperationInput {
-            target: Some(BoundWorkflowTargetInput::Plugin(
-                BoundWorkflowPluginTargetInput {
-                    plugin_name: "demo".to_string(),
-                    operation: "sync".to_string(),
-                    ..Default::default()
-                },
-            )),
+            target: Some(BoundWorkflowTarget::Plugin(BoundWorkflowPluginTarget {
+                plugin_name: "demo".to_string(),
+                operation: "sync".to_string(),
+                ..Default::default()
+            })),
             run_id: "run-42".to_string(),
             ..Default::default()
         })

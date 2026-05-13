@@ -121,9 +121,9 @@ The crate exposes higher-level authoring APIs:
   `AgentManager`, and `PluginInvoker` call sibling host services.
 - `RuntimeMetadata` lets provider runtimes describe their display metadata and
   version.
-- Workflow builder inputs such as `BoundWorkflowPluginTargetInput`,
-  `BoundWorkflowAgentTargetInput`, `WorkflowSignalInput`, and
-  `BoundWorkflowRunInput` model provider-owned workflow state.
+- Workflow builder inputs such as `BoundWorkflowPluginTarget`,
+  `BoundWorkflowAgentTarget`, `WorkflowSignal`, and
+  `BoundWorkflowRun` model provider-owned workflow state.
 
 ## Package layout
 

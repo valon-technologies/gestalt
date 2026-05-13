@@ -16,7 +16,7 @@ class WorkflowHelperTests(unittest.TestCase):
         created_at = dt.datetime(2026, 5, 8, 12, 0, tzinfo=dt.timezone.utc)
 
         target = gestalt.bound_workflow_target(
-            plugin=gestalt.BoundWorkflowPluginTargetInput(
+            plugin=gestalt.BoundWorkflowPluginTarget(
                 plugin_name="plugin",
                 operation="run",
                 input=Payload(ok=False, count=0),
@@ -33,7 +33,7 @@ class WorkflowHelperTests(unittest.TestCase):
             status=gestalt.WORKFLOW_RUN_STATUS_PENDING,
             target=target,
             created_at=created_at,
-            trigger=gestalt.WorkflowRunTriggerInput(manual=True),
+            trigger=gestalt.WorkflowRunTrigger(manual=True),
         )
 
         self.assertEqual(target.plugin.plugin_name, "plugin")
@@ -45,7 +45,7 @@ class WorkflowHelperTests(unittest.TestCase):
 
     def test_copy_helpers_do_not_alias_nested_payloads(self) -> None:
         target = gestalt.bound_workflow_target(
-            plugin=gestalt.BoundWorkflowPluginTargetInput(
+            plugin=gestalt.BoundWorkflowPluginTarget(
                 plugin_name="plugin",
                 operation="run",
                 input={"nested": {"value": "original"}},

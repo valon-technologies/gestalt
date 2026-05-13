@@ -41,7 +41,7 @@ export const provider = defineWorkflowProvider({
   },
   async startRun(request) {
     const plugin =
-      request.target?.kind.case === "plugin"
+      request.target?.kind?.case === "plugin"
         ? request.target.kind.value
         : undefined;
     const run = createRun(
@@ -50,7 +50,7 @@ export const provider = defineWorkflowProvider({
       WorkflowRunStatus.PENDING,
       request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",
     );
-    runs.set(run.id, run);
+    runs.set(run.id ?? "", run);
     return run;
   },
   async getRun(request) {
@@ -72,7 +72,7 @@ export const provider = defineWorkflowProvider({
       ...(run.completedAt ? { completedAt: run.completedAt } : {}),
       ...(run.resultBody ? { resultBody: run.resultBody } : {}),
     });
-    runs.set(updated.id, updated);
+    runs.set(updated.id ?? "", updated);
     return updated;
   },
   async signalRun(request) {
@@ -81,7 +81,7 @@ export const provider = defineWorkflowProvider({
       run,
       signal: request.signal,
       startedRun: false,
-      workflowKey: run.workflowKey,
+      workflowKey: run.workflowKey ?? "",
     };
   },
   async signalOrStartRun(request) {
@@ -93,12 +93,12 @@ export const provider = defineWorkflowProvider({
       executionRef: request.executionRef,
       workflowKey: request.workflowKey,
     });
-    runs.set(run.id, run);
+    runs.set(run.id ?? "", run);
     return {
       run,
       signal: request.signal,
       startedRun: true,
-      workflowKey: request.workflowKey,
+      workflowKey: request.workflowKey ?? "",
     };
   },
   async upsertSchedule(request) {

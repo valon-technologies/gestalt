@@ -63,8 +63,8 @@ _MISSING = object()
 
 
 @_dataclasses.dataclass(slots=True)
-class BoundWorkflowPluginTargetInput:
-    """Input for a bound plugin workflow target."""
+class BoundWorkflowPluginTarget:
+    """Native data for a bound plugin workflow target."""
 
     plugin_name: str = ""
     operation: str = ""
@@ -75,8 +75,8 @@ class BoundWorkflowPluginTargetInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowOutputValueSourceInput:
-    """Input for a workflow output value source."""
+class WorkflowOutputValueSource:
+    """Native data for a workflow output value source."""
 
     agent_output: str | None = None
     signal_payload: str | None = None
@@ -86,16 +86,16 @@ class WorkflowOutputValueSourceInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowOutputBindingInput:
-    """Input for one workflow output binding."""
+class WorkflowOutputBinding:
+    """Native data for one workflow output binding."""
 
     input_field: str = ""
     value: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowOutputDeliveryInput:
-    """Input for a workflow output delivery."""
+class WorkflowOutputDelivery:
+    """Native data for a workflow output delivery."""
 
     target: Any | None = None
     input_bindings: Sequence[Any] | None = None
@@ -103,8 +103,8 @@ class WorkflowOutputDeliveryInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class BoundWorkflowAgentTargetInput:
-    """Input for a bound agent workflow target."""
+class BoundWorkflowAgentTarget:
+    """Native data for a bound agent workflow target."""
 
     provider_name: str = ""
     model: str = ""
@@ -120,16 +120,16 @@ class BoundWorkflowAgentTargetInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class BoundWorkflowTargetInput:
-    """Input for a bound workflow target."""
+class BoundWorkflowTarget:
+    """Native data for a bound workflow target."""
 
     plugin: Any | None = None
     agent: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowActorInput:
-    """Input for a workflow actor."""
+class WorkflowActor:
+    """Native data for a workflow actor."""
 
     subject_id: str = ""
     subject_kind: str = ""
@@ -138,8 +138,8 @@ class WorkflowActorInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowEventInput:
-    """Input for a workflow event."""
+class WorkflowEvent:
+    """Native data for a workflow event."""
 
     id: str = ""
     source: str = ""
@@ -152,12 +152,12 @@ class WorkflowEventInput:
     extensions: Mapping[str, Any] | None = None
 
 
-WorkflowManagerPublishedEvent = WorkflowEventInput
+WorkflowManagerPublishedEvent = WorkflowEvent
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowEventMatchInput:
-    """Input for workflow event matching fields."""
+class WorkflowEventMatch:
+    """Native data for workflow event matching fields."""
 
     type: str = ""
     source: str = ""
@@ -165,8 +165,8 @@ class WorkflowEventMatchInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowSignalInput:
-    """Input for a workflow signal."""
+class WorkflowSignal:
+    """Native data for a workflow signal."""
 
     id: str = ""
     name: str = ""
@@ -179,24 +179,24 @@ class WorkflowSignalInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowScheduleTriggerInput:
-    """Input for a schedule-triggered workflow run."""
+class WorkflowScheduleTrigger:
+    """Native data for a schedule-triggered workflow run."""
 
     schedule_id: str = ""
     scheduled_for: _dt.datetime | Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowEventTriggerInvocationInput:
-    """Input for an event-triggered workflow run."""
+class WorkflowEventTriggerInvocation:
+    """Native data for an event-triggered workflow run."""
 
     trigger_id: str = ""
     event: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowRunTriggerInput:
-    """Input for a workflow run trigger."""
+class WorkflowRunTrigger:
+    """Native data for a workflow run trigger."""
 
     manual: bool = False
     schedule: Any | None = None
@@ -204,8 +204,8 @@ class WorkflowRunTriggerInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class BoundWorkflowRunInput:
-    """Input for a workflow-provider run."""
+class BoundWorkflowRun:
+    """Native data for a workflow-provider run."""
 
     id: str = ""
     status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
@@ -222,8 +222,8 @@ class BoundWorkflowRunInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class BoundWorkflowDefinitionInput:
-    """Input copied from a workflow-provider definition."""
+class BoundWorkflowDefinition:
+    """Native data copied from a workflow-provider definition."""
 
     id: str = ""
     target: Any | None = None
@@ -232,8 +232,8 @@ class BoundWorkflowDefinitionInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class BoundWorkflowScheduleInput:
-    """Input for a workflow-provider schedule."""
+class BoundWorkflowSchedule:
+    """Native data for a workflow-provider schedule."""
 
     id: str = ""
     cron: str = ""
@@ -248,8 +248,8 @@ class BoundWorkflowScheduleInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class BoundWorkflowEventTriggerInput:
-    """Input for a workflow-provider event trigger."""
+class BoundWorkflowEventTrigger:
+    """Native data for a workflow-provider event trigger."""
 
     id: str = ""
     match: Any | None = None
@@ -262,16 +262,16 @@ class BoundWorkflowEventTriggerInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowAccessPermissionInput:
-    """Input for an execution-reference permission."""
+class WorkflowAccessPermission:
+    """Native data for an execution-reference permission."""
 
     plugin: str = ""
     operations: Sequence[str] | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowRunAsSubjectInput:
-    """Input for a workflow run-as subject."""
+class WorkflowRunAsSubject:
+    """Native data for a workflow run-as subject."""
 
     subject_id: str = ""
     subject_kind: str = ""
@@ -280,8 +280,8 @@ class WorkflowRunAsSubjectInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowExecutionReferenceInput:
-    """Input for a workflow execution reference."""
+class WorkflowExecutionReference:
+    """Native data for a workflow execution reference."""
 
     id: str = ""
     provider_name: str = ""
@@ -300,7 +300,7 @@ class WorkflowExecutionReferenceInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerStartRunInput:
+class WorkflowManagerStartRun:
     provider_name: str = ""
     target: Any | None = None
     idempotency_key: str = ""
@@ -309,13 +309,13 @@ class WorkflowManagerStartRunInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerSignalRunInput:
+class WorkflowManagerSignalRun:
     run_id: str = ""
     signal: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerSignalOrStartRunInput:
+class WorkflowManagerSignalOrStartRun:
     provider_name: str = ""
     workflow_key: str = ""
     target: Any | None = None
@@ -325,31 +325,31 @@ class WorkflowManagerSignalOrStartRunInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerCreateDefinitionInput:
+class WorkflowManagerCreateDefinition:
     provider_name: str = ""
     target: Any | None = None
     idempotency_key: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerGetDefinitionInput:
+class WorkflowManagerGetDefinition:
     definition_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerUpdateDefinitionInput:
+class WorkflowManagerUpdateDefinition:
     definition_id: str = ""
     provider_name: str = ""
     target: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerDeleteDefinitionInput:
+class WorkflowManagerDeleteDefinition:
     definition_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerCreateScheduleInput:
+class WorkflowManagerCreateSchedule:
     provider_name: str = ""
     cron: str = ""
     timezone: str = ""
@@ -360,12 +360,12 @@ class WorkflowManagerCreateScheduleInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerGetScheduleInput:
+class WorkflowManagerGetSchedule:
     schedule_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerUpdateScheduleInput:
+class WorkflowManagerUpdateSchedule:
     schedule_id: str = ""
     provider_name: str = ""
     cron: str = ""
@@ -376,22 +376,22 @@ class WorkflowManagerUpdateScheduleInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerDeleteScheduleInput:
+class WorkflowManagerDeleteSchedule:
     schedule_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerPauseScheduleInput:
+class WorkflowManagerPauseSchedule:
     schedule_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerResumeScheduleInput:
+class WorkflowManagerResumeSchedule:
     schedule_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerCreateEventTriggerInput:
+class WorkflowManagerCreateEventTrigger:
     provider_name: str = ""
     match: Any | None = None
     target: Any | None = None
@@ -401,12 +401,12 @@ class WorkflowManagerCreateEventTriggerInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerGetEventTriggerInput:
+class WorkflowManagerGetEventTrigger:
     trigger_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerUpdateEventTriggerInput:
+class WorkflowManagerUpdateEventTrigger:
     trigger_id: str = ""
     provider_name: str = ""
     match: Any | None = None
@@ -416,22 +416,22 @@ class WorkflowManagerUpdateEventTriggerInput:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerDeleteEventTriggerInput:
+class WorkflowManagerDeleteEventTrigger:
     trigger_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerPauseEventTriggerInput:
+class WorkflowManagerPauseEventTrigger:
     trigger_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerResumeEventTriggerInput:
+class WorkflowManagerResumeEventTrigger:
     trigger_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerPublishEventInput:
+class WorkflowManagerPublishEvent:
     provider_name: str = ""
     event: Any | None = None
 
@@ -496,7 +496,7 @@ class WorkflowManagerRun:
 class WorkflowManagerRunSignal:
     provider_name: str = ""
     run: WorkflowManagerBoundRun | None = None
-    signal: WorkflowSignalInput | None = None
+    signal: WorkflowSignal | None = None
     started_run: bool = False
     workflow_key: str = ""
 
@@ -521,7 +521,7 @@ class WorkflowManagerEventTrigger:
 
 @_dataclasses.dataclass(slots=True)
 class InvokeWorkflowOperationInput:
-    """Input for invoking a workflow operation through the host."""
+    """Native data for invoking a workflow operation through the host."""
 
     target: Any | None = None
     run_id: str = ""
@@ -617,12 +617,12 @@ def workflow_actor(value: Any | None = None, **kwargs: Any) -> Any:
     )
 
 
-def workflow_actor_input_from_actor(value: Any | None) -> WorkflowActorInput | None:
+def workflow_actor_input_from_actor(value: Any | None) -> WorkflowActor | None:
     """Return input copied from a workflow actor."""
 
     if value is None:
         return None
-    return WorkflowActorInput(
+    return WorkflowActor(
         subject_id=value.subject_id,
         subject_kind=value.subject_kind,
         display_name=value.display_name,
@@ -646,12 +646,12 @@ def workflow_run_as_subject(value: Any | None = None, **kwargs: Any) -> Any:
 
 def workflow_run_as_subject_input_from_subject(
     value: Any | None,
-) -> WorkflowRunAsSubjectInput | None:
+) -> WorkflowRunAsSubject | None:
     """Return input copied from a workflow run-as subject."""
 
     if value is None:
         return None
-    return WorkflowRunAsSubjectInput(
+    return WorkflowRunAsSubject(
         subject_id=value.subject_id,
         subject_kind=value.subject_kind,
         display_name=value.display_name,
@@ -673,10 +673,10 @@ def workflow_access_permission(value: Any | None = None, **kwargs: Any) -> Any:
 
 def workflow_access_permission_input_from_permission(
     value: Any,
-) -> WorkflowAccessPermissionInput:
+) -> WorkflowAccessPermission:
     """Return input copied from an execution-reference permission."""
 
-    return WorkflowAccessPermissionInput(
+    return WorkflowAccessPermission(
         plugin=value.plugin,
         operations=list(value.operations),
     )
@@ -697,12 +697,12 @@ def workflow_event_match(value: Any | None = None, **kwargs: Any) -> Any:
 
 def workflow_event_match_input_from_match(
     value: Any | None,
-) -> WorkflowEventMatchInput | None:
+) -> WorkflowEventMatch | None:
     """Return input copied from workflow event-match fields."""
 
     if value is None:
         return None
-    return WorkflowEventMatchInput(
+    return WorkflowEventMatch(
         type=value.type, source=value.source, subject=value.subject
     )
 
@@ -735,23 +735,23 @@ def workflow_output_value_source(value: Any | None = None, **kwargs: Any) -> Any
 
 def workflow_output_value_source_input_from_source(
     value: Any | None,
-) -> WorkflowOutputValueSourceInput | None:
+) -> WorkflowOutputValueSource | None:
     """Return input copied from a workflow output value source."""
 
     if value is None:
         return None
     kind = which_oneof(value, "kind")
     if kind == "agent_output":
-        return WorkflowOutputValueSourceInput(agent_output=value.agent_output)
+        return WorkflowOutputValueSource(agent_output=value.agent_output)
     if kind == "signal_payload":
-        return WorkflowOutputValueSourceInput(signal_payload=value.signal_payload)
+        return WorkflowOutputValueSource(signal_payload=value.signal_payload)
     if kind == "signal_metadata":
-        return WorkflowOutputValueSourceInput(signal_metadata=value.signal_metadata)
+        return WorkflowOutputValueSource(signal_metadata=value.signal_metadata)
     if kind == "agent_session":
-        return WorkflowOutputValueSourceInput(agent_session=value.agent_session)
+        return WorkflowOutputValueSource(agent_session=value.agent_session)
     if kind == "literal":
-        return WorkflowOutputValueSourceInput(literal=value_to_json(value.literal))
-    return WorkflowOutputValueSourceInput()
+        return WorkflowOutputValueSource(literal=value_to_json(value.literal))
+    return WorkflowOutputValueSource()
 
 
 def workflow_output_binding(value: Any | None = None, **kwargs: Any) -> Any:
@@ -769,10 +769,10 @@ def workflow_output_binding(value: Any | None = None, **kwargs: Any) -> Any:
 
 def workflow_output_binding_input_from_binding(
     value: Any,
-) -> WorkflowOutputBindingInput:
+) -> WorkflowOutputBinding:
     """Return input copied from a workflow output binding."""
 
-    return WorkflowOutputBindingInput(
+    return WorkflowOutputBinding(
         input_field=value.input_field,
         value=workflow_output_value_source_input_from_source(value.value)
         if has_field(value, "value")
@@ -798,12 +798,12 @@ def workflow_output_delivery(value: Any | None = None, **kwargs: Any) -> Any:
 
 def workflow_output_delivery_input_from_delivery(
     value: Any | None,
-) -> WorkflowOutputDeliveryInput | None:
+) -> WorkflowOutputDelivery | None:
     """Return input copied from a workflow output delivery."""
 
     if value is None:
         return None
-    return WorkflowOutputDeliveryInput(
+    return WorkflowOutputDelivery(
         target=bound_workflow_plugin_target_input_from_target(value.target)
         if has_field(value, "target")
         else None,
@@ -833,12 +833,12 @@ def bound_workflow_plugin_target(value: Any | None = None, **kwargs: Any) -> Any
 
 def bound_workflow_plugin_target_input_from_target(
     value: Any | None,
-) -> BoundWorkflowPluginTargetInput | None:
+) -> BoundWorkflowPluginTarget | None:
     """Return input copied from a bound plugin workflow target."""
 
     if value is None:
         return None
-    return BoundWorkflowPluginTargetInput(
+    return BoundWorkflowPluginTarget(
         plugin_name=value.plugin_name,
         operation=value.operation,
         input=struct_to_dict(value.input) if has_field(value, "input") else None,
@@ -877,12 +877,12 @@ def bound_workflow_agent_target(value: Any | None = None, **kwargs: Any) -> Any:
 
 def bound_workflow_agent_target_input_from_target(
     value: Any | None,
-) -> BoundWorkflowAgentTargetInput | None:
+) -> BoundWorkflowAgentTarget | None:
     """Return input copied from a bound agent workflow target."""
 
     if value is None:
         return None
-    return BoundWorkflowAgentTargetInput(
+    return BoundWorkflowAgentTarget(
         provider_name=value.provider_name,
         model=value.model,
         prompt=value.prompt,
@@ -930,21 +930,21 @@ def bound_workflow_target(value: Any | None = None, **kwargs: Any) -> Any:
 
 def bound_workflow_target_input_from_target(
     value: Any | None,
-) -> BoundWorkflowTargetInput | None:
+) -> BoundWorkflowTarget | None:
     """Return input copied from a bound workflow target."""
 
     if value is None:
         return None
     kind = which_oneof(value, "kind")
     if kind == "plugin":
-        return BoundWorkflowTargetInput(
+        return BoundWorkflowTarget(
             plugin=bound_workflow_plugin_target_input_from_target(value.plugin)
         )
     if kind == "agent":
-        return BoundWorkflowTargetInput(
+        return BoundWorkflowTarget(
             agent=bound_workflow_agent_target_input_from_target(value.agent)
         )
-    return BoundWorkflowTargetInput()
+    return BoundWorkflowTarget()
 
 
 def bound_workflow_target_from_target(value: Any | None) -> Any | None:
@@ -975,12 +975,12 @@ def workflow_event(value: Any | None = None, **kwargs: Any) -> Any:
     return event
 
 
-def workflow_event_input_from_event(value: Any | None) -> WorkflowEventInput | None:
+def workflow_event_input_from_event(value: Any | None) -> WorkflowEvent | None:
     """Return input copied from a workflow event."""
 
     if value is None:
         return None
-    return WorkflowEventInput(
+    return WorkflowEvent(
         id=value.id,
         source=value.source,
         spec_version=value.spec_version,
@@ -1019,12 +1019,12 @@ def workflow_signal(value: Any | None = None, **kwargs: Any) -> Any:
     )
 
 
-def workflow_signal_input_from_signal(value: Any | None) -> WorkflowSignalInput | None:
+def workflow_signal_input_from_signal(value: Any | None) -> WorkflowSignal | None:
     """Return input copied from a workflow signal."""
 
     if value is None:
         return None
-    return WorkflowSignalInput(
+    return WorkflowSignal(
         id=value.id,
         name=value.name,
         payload=struct_to_dict(value.payload) if has_field(value, "payload") else None,
@@ -1101,31 +1101,31 @@ def workflow_run_trigger(value: Any | None = None, **kwargs: Any) -> Any:
 
 def workflow_run_trigger_input_from_trigger(
     value: Any | None,
-) -> WorkflowRunTriggerInput | None:
+) -> WorkflowRunTrigger | None:
     """Return input copied from a workflow run trigger."""
 
     if value is None:
         return None
     kind = which_oneof(value, "kind")
     if kind == "manual":
-        return WorkflowRunTriggerInput(manual=True)
+        return WorkflowRunTrigger(manual=True)
     if kind == "schedule":
-        return WorkflowRunTriggerInput(
-            schedule=WorkflowScheduleTriggerInput(
+        return WorkflowRunTrigger(
+            schedule=WorkflowScheduleTrigger(
                 schedule_id=value.schedule.schedule_id,
                 scheduled_for=_timestamp_to_datetime(value.schedule, "scheduled_for"),
             )
         )
     if kind == "event":
-        return WorkflowRunTriggerInput(
-            event=WorkflowEventTriggerInvocationInput(
+        return WorkflowRunTrigger(
+            event=WorkflowEventTriggerInvocation(
                 trigger_id=value.event.trigger_id,
                 event=workflow_event_input_from_event(value.event.event)
                 if has_field(value.event, "event")
                 else None,
             )
         )
-    return WorkflowRunTriggerInput()
+    return WorkflowRunTrigger()
 
 
 def workflow_run_trigger_from_trigger(value: Any | None) -> Any | None:
@@ -1381,12 +1381,12 @@ def bound_workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
 
 def bound_workflow_run_input_from_run(
     value: Any | None,
-) -> BoundWorkflowRunInput | None:
+) -> BoundWorkflowRun | None:
     """Return input copied from a workflow-provider run."""
 
     if value is None:
         return None
-    return BoundWorkflowRunInput(
+    return BoundWorkflowRun(
         id=value.id,
         status=value.status,
         target=bound_workflow_target_input_from_target(value.target)
@@ -1417,12 +1417,12 @@ def bound_workflow_run_from_run(value: Any | None) -> Any | None:
 
 def bound_workflow_definition_input_from_definition(
     value: Any | None,
-) -> BoundWorkflowDefinitionInput | None:
+) -> BoundWorkflowDefinition | None:
     """Return input copied from a workflow-provider definition."""
 
     if value is None:
         return None
-    return BoundWorkflowDefinitionInput(
+    return BoundWorkflowDefinition(
         id=value.id,
         target=bound_workflow_target_input_from_target(value.target)
         if has_field(value, "target")
@@ -1502,12 +1502,12 @@ def bound_workflow_schedule(value: Any | None = None, **kwargs: Any) -> Any:
 
 def bound_workflow_schedule_input_from_schedule(
     value: Any | None,
-) -> BoundWorkflowScheduleInput | None:
+) -> BoundWorkflowSchedule | None:
     """Return input copied from a workflow-provider schedule."""
 
     if value is None:
         return None
-    return BoundWorkflowScheduleInput(
+    return BoundWorkflowSchedule(
         id=value.id,
         cron=value.cron,
         timezone=value.timezone,
@@ -1578,12 +1578,12 @@ def bound_workflow_event_trigger(value: Any | None = None, **kwargs: Any) -> Any
 
 def bound_workflow_event_trigger_input_from_trigger(
     value: Any | None,
-) -> BoundWorkflowEventTriggerInput | None:
+) -> BoundWorkflowEventTrigger | None:
     """Return input copied from a workflow-provider event trigger."""
 
     if value is None:
         return None
-    return BoundWorkflowEventTriggerInput(
+    return BoundWorkflowEventTrigger(
         id=value.id,
         match=workflow_event_match_input_from_match(value.match)
         if has_field(value, "match")
@@ -1715,12 +1715,12 @@ def workflow_execution_reference(value: Any | None = None, **kwargs: Any) -> Any
 
 def workflow_execution_reference_input_from_reference(
     value: Any | None,
-) -> WorkflowExecutionReferenceInput | None:
+) -> WorkflowExecutionReference | None:
     """Return input copied from a workflow execution reference."""
 
     if value is None:
         return None
-    return WorkflowExecutionReferenceInput(
+    return WorkflowExecutionReference(
         id=value.id,
         provider_name=value.provider_name,
         target=bound_workflow_target_input_from_target(value.target)
@@ -1750,108 +1750,6 @@ def workflow_execution_reference_from_reference(value: Any | None) -> Any | None
 
     data = workflow_execution_reference_input_from_reference(value)
     return workflow_execution_reference(data) if data is not None else None
-
-
-def BoundWorkflowTarget(*args: Any, **kwargs: Any) -> Any:
-    """Create a bound workflow target value."""
-
-    return pb.BoundWorkflowTarget(*args, **kwargs)
-
-
-def BoundWorkflowPluginTarget(*args: Any, **kwargs: Any) -> Any:
-    """Create a bound plugin workflow target value."""
-
-    return pb.BoundWorkflowPluginTarget(*args, **kwargs)
-
-
-def BoundWorkflowAgentTarget(*args: Any, **kwargs: Any) -> Any:
-    """Create a bound agent workflow target value."""
-
-    return pb.BoundWorkflowAgentTarget(*args, **kwargs)
-
-
-def WorkflowOutputDelivery(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow output delivery value."""
-
-    return pb.WorkflowOutputDelivery(*args, **kwargs)
-
-
-def WorkflowOutputBinding(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow output binding value."""
-
-    return pb.WorkflowOutputBinding(*args, **kwargs)
-
-
-def WorkflowOutputValueSource(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow output value source."""
-
-    return pb.WorkflowOutputValueSource(*args, **kwargs)
-
-
-def WorkflowActor(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow actor value."""
-
-    return pb.WorkflowActor(*args, **kwargs)
-
-
-def WorkflowSignal(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow signal value."""
-
-    return pb.WorkflowSignal(*args, **kwargs)
-
-
-def WorkflowEvent(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow event value."""
-
-    return pb.WorkflowEvent(*args, **kwargs)
-
-
-def WorkflowEventMatch(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow event-match value."""
-
-    return pb.WorkflowEventMatch(*args, **kwargs)
-
-
-def WorkflowRunTrigger(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow run-trigger value."""
-
-    return pb.WorkflowRunTrigger(*args, **kwargs)
-
-
-def BoundWorkflowRun(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider run value."""
-
-    return pb.BoundWorkflowRun(*args, **kwargs)
-
-
-def BoundWorkflowSchedule(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider schedule value."""
-
-    return pb.BoundWorkflowSchedule(*args, **kwargs)
-
-
-def BoundWorkflowEventTrigger(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-provider event trigger value."""
-
-    return pb.BoundWorkflowEventTrigger(*args, **kwargs)
-
-
-def BoundWorkflowDefinition(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow definition value."""
-
-    return pb.BoundWorkflowDefinition(*args, **kwargs)
-
-
-def WorkflowAccessPermission(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow execution-reference access permission."""
-
-    return pb.WorkflowAccessPermission(*args, **kwargs)
-
-
-def WorkflowExecutionReference(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow execution reference."""
-
-    return pb.WorkflowExecutionReference(*args, **kwargs)
 
 
 @_dataclasses.dataclass(slots=True)
@@ -2333,126 +2231,6 @@ def publish_workflow_provider_event_request_from_proto(
         if has_field(value, "published_by")
         else None,
     )
-
-
-def WorkflowManagerStartRunRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager start-run request."""
-
-    return pb.WorkflowManagerStartRunRequest(*args, **kwargs)
-
-
-def WorkflowManagerSignalRunRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager signal-run request."""
-
-    return pb.WorkflowManagerSignalRunRequest(*args, **kwargs)
-
-
-def WorkflowManagerSignalOrStartRunRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager signal-or-start-run request."""
-
-    return pb.WorkflowManagerSignalOrStartRunRequest(*args, **kwargs)
-
-
-def WorkflowManagerCreateDefinitionRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager create-definition request."""
-
-    return pb.WorkflowManagerCreateDefinitionRequest(*args, **kwargs)
-
-
-def WorkflowManagerGetDefinitionRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager get-definition request."""
-
-    return pb.WorkflowManagerGetDefinitionRequest(*args, **kwargs)
-
-
-def WorkflowManagerUpdateDefinitionRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager update-definition request."""
-
-    return pb.WorkflowManagerUpdateDefinitionRequest(*args, **kwargs)
-
-
-def WorkflowManagerDeleteDefinitionRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager delete-definition request."""
-
-    return pb.WorkflowManagerDeleteDefinitionRequest(*args, **kwargs)
-
-
-def WorkflowManagerCreateScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager create-schedule request."""
-
-    return pb.WorkflowManagerCreateScheduleRequest(*args, **kwargs)
-
-
-def WorkflowManagerGetScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager get-schedule request."""
-
-    return pb.WorkflowManagerGetScheduleRequest(*args, **kwargs)
-
-
-def WorkflowManagerUpdateScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager update-schedule request."""
-
-    return pb.WorkflowManagerUpdateScheduleRequest(*args, **kwargs)
-
-
-def WorkflowManagerDeleteScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager delete-schedule request."""
-
-    return pb.WorkflowManagerDeleteScheduleRequest(*args, **kwargs)
-
-
-def WorkflowManagerPauseScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager pause-schedule request."""
-
-    return pb.WorkflowManagerPauseScheduleRequest(*args, **kwargs)
-
-
-def WorkflowManagerResumeScheduleRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager resume-schedule request."""
-
-    return pb.WorkflowManagerResumeScheduleRequest(*args, **kwargs)
-
-
-def WorkflowManagerCreateEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager create-event-trigger request."""
-
-    return pb.WorkflowManagerCreateEventTriggerRequest(*args, **kwargs)
-
-
-def WorkflowManagerGetEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager get-event-trigger request."""
-
-    return pb.WorkflowManagerGetEventTriggerRequest(*args, **kwargs)
-
-
-def WorkflowManagerUpdateEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager update-event-trigger request."""
-
-    return pb.WorkflowManagerUpdateEventTriggerRequest(*args, **kwargs)
-
-
-def WorkflowManagerDeleteEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager delete-event-trigger request."""
-
-    return pb.WorkflowManagerDeleteEventTriggerRequest(*args, **kwargs)
-
-
-def WorkflowManagerPauseEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager pause-event-trigger request."""
-
-    return pb.WorkflowManagerPauseEventTriggerRequest(*args, **kwargs)
-
-
-def WorkflowManagerResumeEventTriggerRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager resume-event-trigger request."""
-
-    return pb.WorkflowManagerResumeEventTriggerRequest(*args, **kwargs)
-
-
-def WorkflowManagerPublishEventRequest(*args: Any, **kwargs: Any) -> Any:
-    """Create a workflow-manager publish-event request."""
-
-    return pb.WorkflowManagerPublishEventRequest(*args, **kwargs)
 
 
 def workflow_run_status_name(status: int) -> str:

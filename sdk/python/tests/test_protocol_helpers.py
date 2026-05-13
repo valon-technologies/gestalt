@@ -39,7 +39,6 @@ class ProtocolHelperTests(unittest.TestCase):
             "agent_message_to_proto_dict",
             "indexeddb_record_to_proto",
             "AuthorizationResource",
-            "BoundWorkflowRun",
         ):
             with self.subTest(name=name):
                 with self.assertRaises(ImportError):

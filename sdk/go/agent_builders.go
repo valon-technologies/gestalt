@@ -2,78 +2,8 @@ package gestalt
 
 import "fmt"
 
-// AgentMessageInput contains fields for constructing an AgentMessage.
-type AgentMessageInput struct {
-	Role     string
-	Text     string
-	Parts    []AgentMessagePartInput
-	Metadata any
-}
-
-// AgentMessagePartInput contains fields for constructing an
-// AgentMessagePart. When Type is unspecified, the builder infers it from the
-// first payload field that is set.
-type AgentMessagePartInput struct {
-	Type       AgentMessagePartType
-	Text       string
-	JSON       any
-	ToolCall   *AgentMessagePartToolCallInput
-	ToolResult *AgentMessagePartToolResultInput
-	ImageRef   *AgentMessagePartImageRefInput
-}
-
-// AgentMessagePartToolCallInput contains fields for an agent tool
-// call message part.
-type AgentMessagePartToolCallInput struct {
-	ID        string
-	ToolID    string
-	Arguments any
-}
-
-// AgentMessagePartToolResultInput contains fields for an agent tool
-// result message part.
-type AgentMessagePartToolResultInput struct {
-	ToolCallID string
-	Status     int32
-	Content    string
-	Output     any
-}
-
-// AgentMessagePartImageRefInput contains fields for an image
-// reference message part.
-type AgentMessagePartImageRefInput struct {
-	URI      string
-	MimeType string
-}
-
-// AgentToolRefInput contains fields for constructing an AgentToolRef.
-type AgentToolRefInput struct {
-	Plugin      string
-	Operation   string
-	Connection  string
-	Instance    string
-	Title       string
-	Description string
-	System      string
-}
-
-// AgentWorkspaceInput contains fields for constructing an
-// AgentWorkspace.
-type AgentWorkspaceInput struct {
-	Checkouts []AgentWorkspaceGitCheckoutInput
-	CWD       string
-}
-
-// AgentWorkspaceGitCheckoutInput contains fields for constructing an
-// AgentWorkspaceGitCheckout.
-type AgentWorkspaceGitCheckoutInput struct {
-	URL  string
-	Ref  string
-	Path string
-}
-
 // NewAgentMessage creates an agent message.
-func NewAgentMessage(input AgentMessageInput) (*AgentMessage, error) {
+func NewAgentMessage(input AgentMessage) (*AgentMessage, error) {
 	metadata, err := agentMapFromAny(input.Metadata)
 	if err != nil {
 		return nil, err
@@ -90,17 +20,17 @@ func NewAgentMessage(input AgentMessageInput) (*AgentMessage, error) {
 	}, nil
 }
 
-// AgentMessageInputFromMessage converts an existing protocol message into
+// AgentMessageFromMessage converts an existing protocol message into
 // builder input.
-func AgentMessageInputFromMessage(value *AgentMessage) (AgentMessageInput, error) {
+func AgentMessageFromMessage(value *AgentMessage) (AgentMessage, error) {
 	if value == nil {
-		return AgentMessageInput{}, nil
+		return AgentMessage{}, nil
 	}
 	parts, err := agentMessagePartInputsFromParts(value.Parts)
 	if err != nil {
-		return AgentMessageInput{}, err
+		return AgentMessage{}, err
 	}
-	return AgentMessageInput{
+	return AgentMessage{
 		Role:     value.Role,
 		Text:     value.Text,
 		Parts:    parts,
@@ -109,7 +39,7 @@ func AgentMessageInputFromMessage(value *AgentMessage) (AgentMessageInput, error
 }
 
 // NewAgentMessagePart creates an agent message part.
-func NewAgentMessagePart(input AgentMessagePartInput) (*AgentMessagePart, error) {
+func NewAgentMessagePart(input AgentMessagePart) (*AgentMessagePart, error) {
 	partType := input.Type
 	if partType == AgentMessagePartTypeUnspecified {
 		partType = inferAgentMessagePartType(input)
@@ -136,12 +66,12 @@ func NewAgentMessagePart(input AgentMessagePartInput) (*AgentMessagePart, error)
 	}, nil
 }
 
-// AgentMessagePartInputFromPart converts an existing protocol part into builder input.
-func AgentMessagePartInputFromPart(value *AgentMessagePart) (AgentMessagePartInput, error) {
+// AgentMessagePartFromPart converts an existing protocol part into builder input.
+func AgentMessagePartFromPart(value *AgentMessagePart) (AgentMessagePart, error) {
 	if value == nil {
-		return AgentMessagePartInput{}, nil
+		return AgentMessagePart{}, nil
 	}
-	return AgentMessagePartInput{
+	return AgentMessagePart{
 		Type:       value.Type,
 		Text:       value.Text,
 		JSON:       value.JSON,
@@ -152,7 +82,7 @@ func AgentMessagePartInputFromPart(value *AgentMessagePart) (AgentMessagePartInp
 }
 
 // NewAgentMessagePartToolCall creates a tool-call payload.
-func NewAgentMessagePartToolCall(input AgentMessagePartToolCallInput) (*AgentMessagePartToolCall, error) {
+func NewAgentMessagePartToolCall(input AgentMessagePartToolCall) (*AgentMessagePartToolCall, error) {
 	arguments, err := agentMapFromAny(input.Arguments)
 	if err != nil {
 		return nil, err
@@ -165,7 +95,7 @@ func NewAgentMessagePartToolCall(input AgentMessagePartToolCallInput) (*AgentMes
 }
 
 // NewAgentMessagePartToolResult creates a tool-result payload.
-func NewAgentMessagePartToolResult(input AgentMessagePartToolResultInput) (*AgentMessagePartToolResult, error) {
+func NewAgentMessagePartToolResult(input AgentMessagePartToolResult) (*AgentMessagePartToolResult, error) {
 	output, err := agentMapFromAny(input.Output)
 	if err != nil {
 		return nil, err
@@ -179,7 +109,7 @@ func NewAgentMessagePartToolResult(input AgentMessagePartToolResultInput) (*Agen
 }
 
 // NewAgentMessagePartImageRef creates an image-reference payload.
-func NewAgentMessagePartImageRef(input AgentMessagePartImageRefInput) *AgentMessagePartImageRef {
+func NewAgentMessagePartImageRef(input AgentMessagePartImageRef) *AgentMessagePartImageRef {
 	return &AgentMessagePartImageRef{
 		URI:      input.URI,
 		MimeType: input.MimeType,
@@ -187,7 +117,7 @@ func NewAgentMessagePartImageRef(input AgentMessagePartImageRefInput) *AgentMess
 }
 
 // NewAgentToolRef creates an agent tool reference.
-func NewAgentToolRef(input AgentToolRefInput) *AgentToolRef {
+func NewAgentToolRef(input AgentToolRef) *AgentToolRef {
 	return &AgentToolRef{
 		Plugin:      input.Plugin,
 		Operation:   input.Operation,
@@ -199,12 +129,12 @@ func NewAgentToolRef(input AgentToolRefInput) *AgentToolRef {
 	}
 }
 
-// AgentToolRefInputFromRef converts an existing protocol tool ref into builder input.
-func AgentToolRefInputFromRef(value *AgentToolRef) AgentToolRefInput {
+// AgentToolRefFromRef converts an existing protocol tool ref into builder input.
+func AgentToolRefFromRef(value *AgentToolRef) AgentToolRef {
 	if value == nil {
-		return AgentToolRefInput{}
+		return AgentToolRef{}
 	}
-	return AgentToolRefInput{
+	return AgentToolRef{
 		Plugin:      value.Plugin,
 		Operation:   value.Operation,
 		Connection:  value.Connection,
@@ -216,7 +146,7 @@ func AgentToolRefInputFromRef(value *AgentToolRef) AgentToolRefInput {
 }
 
 // NewAgentWorkspace creates an agent workspace.
-func NewAgentWorkspace(input AgentWorkspaceInput) *AgentProtocolWorkspace {
+func NewAgentWorkspace(input AgentWorkspace) *AgentProtocolWorkspace {
 	checkouts := make([]AgentProtocolWorkspaceGitCheckout, 0, len(input.Checkouts))
 	for _, checkout := range input.Checkouts {
 		checkouts = append(checkouts, AgentProtocolWorkspaceGitCheckout{
@@ -231,7 +161,7 @@ func NewAgentWorkspace(input AgentWorkspaceInput) *AgentProtocolWorkspace {
 	}
 }
 
-func agentMessagesFromInputs(values []AgentMessageInput) ([]*AgentMessage, error) {
+func agentMessagesFromInputs(values []AgentMessage) ([]*AgentMessage, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -246,13 +176,13 @@ func agentMessagesFromInputs(values []AgentMessageInput) ([]*AgentMessage, error
 	return out, nil
 }
 
-func agentMessageInputsFromMessages(values []*AgentMessage) ([]AgentMessageInput, error) {
+func agentMessageInputsFromMessages(values []*AgentMessage) ([]AgentMessage, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
-	out := make([]AgentMessageInput, 0, len(values))
+	out := make([]AgentMessage, 0, len(values))
 	for index, value := range values {
-		input, err := AgentMessageInputFromMessage(value)
+		input, err := AgentMessageFromMessage(value)
 		if err != nil {
 			return nil, fmt.Errorf("messages[%d]: %w", index, err)
 		}
@@ -261,7 +191,20 @@ func agentMessageInputsFromMessages(values []*AgentMessage) ([]AgentMessageInput
 	return out, nil
 }
 
-func agentMessagePartsFromInputs(values []AgentMessagePartInput) ([]AgentMessagePart, error) {
+func agentMessagesFromPtrs(values []*AgentMessage) []AgentMessage {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]AgentMessage, 0, len(values))
+	for _, value := range values {
+		if value != nil {
+			out = append(out, *value)
+		}
+	}
+	return out
+}
+
+func agentMessagePartsFromInputs(values []AgentMessagePart) ([]AgentMessagePart, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -276,13 +219,13 @@ func agentMessagePartsFromInputs(values []AgentMessagePartInput) ([]AgentMessage
 	return out, nil
 }
 
-func agentMessagePartInputsFromParts(values []AgentMessagePart) ([]AgentMessagePartInput, error) {
+func agentMessagePartInputsFromParts(values []AgentMessagePart) ([]AgentMessagePart, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
-	out := make([]AgentMessagePartInput, 0, len(values))
+	out := make([]AgentMessagePart, 0, len(values))
 	for index, value := range values {
-		input, err := AgentMessagePartInputFromPart(&value)
+		input, err := AgentMessagePartFromPart(&value)
 		if err != nil {
 			return nil, fmt.Errorf("parts[%d]: %w", index, err)
 		}
@@ -291,7 +234,7 @@ func agentMessagePartInputsFromParts(values []AgentMessagePart) ([]AgentMessageP
 	return out, nil
 }
 
-func agentToolRefsFromInputs(values []AgentToolRefInput) []*AgentToolRef {
+func agentToolRefsFromInputs(values []AgentToolRef) []*AgentToolRef {
 	if len(values) == 0 {
 		return nil
 	}
@@ -302,7 +245,20 @@ func agentToolRefsFromInputs(values []AgentToolRefInput) []*AgentToolRef {
 	return out
 }
 
-func inferAgentMessagePartType(input AgentMessagePartInput) AgentMessagePartType {
+func agentToolRefsFromPtrs(values []*AgentToolRef) []AgentToolRef {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]AgentToolRef, 0, len(values))
+	for _, value := range values {
+		if value != nil {
+			out = append(out, *value)
+		}
+	}
+	return out
+}
+
+func inferAgentMessagePartType(input AgentMessagePart) AgentMessagePartType {
 	switch {
 	case input.ToolCall != nil:
 		return AgentMessagePartTypeToolCall
@@ -319,43 +275,43 @@ func inferAgentMessagePartType(input AgentMessagePartInput) AgentMessagePartType
 	}
 }
 
-func newOptionalAgentToolCall(input *AgentMessagePartToolCallInput) (*AgentMessagePartToolCall, error) {
+func newOptionalAgentToolCall(input *AgentMessagePartToolCall) (*AgentMessagePartToolCall, error) {
 	if input == nil {
 		return nil, nil
 	}
 	return NewAgentMessagePartToolCall(*input)
 }
 
-func newOptionalAgentToolResult(input *AgentMessagePartToolResultInput) (*AgentMessagePartToolResult, error) {
+func newOptionalAgentToolResult(input *AgentMessagePartToolResult) (*AgentMessagePartToolResult, error) {
 	if input == nil {
 		return nil, nil
 	}
 	return NewAgentMessagePartToolResult(*input)
 }
 
-func newOptionalAgentImageRef(input *AgentMessagePartImageRefInput) *AgentMessagePartImageRef {
+func newOptionalAgentImageRef(input *AgentMessagePartImageRef) *AgentMessagePartImageRef {
 	if input == nil {
 		return nil
 	}
 	return NewAgentMessagePartImageRef(*input)
 }
 
-func agentToolCallInputPtrFromCall(value *AgentMessagePartToolCall) *AgentMessagePartToolCallInput {
+func agentToolCallInputPtrFromCall(value *AgentMessagePartToolCall) *AgentMessagePartToolCall {
 	if value == nil {
 		return nil
 	}
-	return &AgentMessagePartToolCallInput{
+	return &AgentMessagePartToolCall{
 		ID:        value.ID,
 		ToolID:    value.ToolID,
 		Arguments: value.Arguments,
 	}
 }
 
-func agentToolResultInputPtrFromResult(value *AgentMessagePartToolResult) *AgentMessagePartToolResultInput {
+func agentToolResultInputPtrFromResult(value *AgentMessagePartToolResult) *AgentMessagePartToolResult {
 	if value == nil {
 		return nil
 	}
-	return &AgentMessagePartToolResultInput{
+	return &AgentMessagePartToolResult{
 		ToolCallID: value.ToolCallID,
 		Status:     value.Status,
 		Content:    value.Content,
@@ -363,11 +319,11 @@ func agentToolResultInputPtrFromResult(value *AgentMessagePartToolResult) *Agent
 	}
 }
 
-func agentImageRefInputPtrFromRef(value *AgentMessagePartImageRef) *AgentMessagePartImageRefInput {
+func agentImageRefInputPtrFromRef(value *AgentMessagePartImageRef) *AgentMessagePartImageRef {
 	if value == nil {
 		return nil
 	}
-	return &AgentMessagePartImageRefInput{
+	return &AgentMessagePartImageRef{
 		URI:      value.URI,
 		MimeType: value.MimeType,
 	}

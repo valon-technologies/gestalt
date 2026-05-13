@@ -12,14 +12,14 @@ use crate::generated::v1::{
     workflow_manager_host_client::WorkflowManagerHostClient as ProtoWorkflowManagerHostClient,
 };
 use crate::workflow::{
-    BoundWorkflowTargetInput, ManagedWorkflowDefinition, ManagedWorkflowEventTrigger,
+    BoundWorkflowTarget, ManagedWorkflowDefinition, ManagedWorkflowEventTrigger,
     ManagedWorkflowRun, ManagedWorkflowRunSignal, ManagedWorkflowSchedule, WorkflowEvent,
-    WorkflowEventInput, WorkflowEventMatchInput, WorkflowSignalInput,
-    bound_workflow_target_to_proto, managed_workflow_definition_from_proto,
-    managed_workflow_event_trigger_from_proto, managed_workflow_run_from_proto,
-    managed_workflow_run_signal_from_proto, managed_workflow_schedule_from_proto,
-    new_bound_workflow_target, new_workflow_event, new_workflow_event_match, new_workflow_signal,
-    workflow_event_match_to_proto, workflow_event_to_proto, workflow_signal_to_proto,
+    WorkflowEventMatch, WorkflowSignal, bound_workflow_target_to_proto,
+    managed_workflow_definition_from_proto, managed_workflow_event_trigger_from_proto,
+    managed_workflow_run_from_proto, managed_workflow_run_signal_from_proto,
+    managed_workflow_schedule_from_proto, new_bound_workflow_target, new_workflow_event,
+    new_workflow_event_match, new_workflow_signal, workflow_event_match_to_proto,
+    workflow_event_to_proto, workflow_signal_to_proto,
 };
 
 type WorkflowManagerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
@@ -51,144 +51,144 @@ pub enum WorkflowManagerError {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerStartRunInput {
+pub struct WorkflowManagerStartRun {
     pub provider_name: String,
-    pub target: Option<BoundWorkflowTargetInput>,
+    pub target: Option<BoundWorkflowTarget>,
     pub idempotency_key: String,
     pub workflow_key: String,
     pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerSignalRunInput {
+pub struct WorkflowManagerSignalRun {
     pub run_id: String,
-    pub signal: Option<WorkflowSignalInput>,
+    pub signal: Option<WorkflowSignal>,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerSignalOrStartRunInput {
+pub struct WorkflowManagerSignalOrStartRun {
     pub provider_name: String,
     pub workflow_key: String,
-    pub target: Option<BoundWorkflowTargetInput>,
+    pub target: Option<BoundWorkflowTarget>,
     pub idempotency_key: String,
-    pub signal: Option<WorkflowSignalInput>,
+    pub signal: Option<WorkflowSignal>,
     pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerCreateDefinitionInput {
+pub struct WorkflowManagerCreateDefinition {
     pub provider_name: String,
-    pub target: Option<BoundWorkflowTargetInput>,
+    pub target: Option<BoundWorkflowTarget>,
     pub idempotency_key: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerGetDefinitionInput {
+pub struct WorkflowManagerGetDefinition {
     pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerUpdateDefinitionInput {
+pub struct WorkflowManagerUpdateDefinition {
     pub definition_id: String,
     pub provider_name: String,
-    pub target: Option<BoundWorkflowTargetInput>,
+    pub target: Option<BoundWorkflowTarget>,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerDeleteDefinitionInput {
+pub struct WorkflowManagerDeleteDefinition {
     pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerCreateScheduleInput {
+pub struct WorkflowManagerCreateSchedule {
     pub provider_name: String,
     pub cron: String,
     pub timezone: String,
-    pub target: Option<BoundWorkflowTargetInput>,
+    pub target: Option<BoundWorkflowTarget>,
     pub paused: bool,
     pub idempotency_key: String,
     pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerGetScheduleInput {
+pub struct WorkflowManagerGetSchedule {
     pub schedule_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerUpdateScheduleInput {
+pub struct WorkflowManagerUpdateSchedule {
     pub schedule_id: String,
     pub provider_name: String,
     pub cron: String,
     pub timezone: String,
-    pub target: Option<BoundWorkflowTargetInput>,
+    pub target: Option<BoundWorkflowTarget>,
     pub paused: bool,
     pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerDeleteScheduleInput {
+pub struct WorkflowManagerDeleteSchedule {
     pub schedule_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerPauseScheduleInput {
+pub struct WorkflowManagerPauseSchedule {
     pub schedule_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerResumeScheduleInput {
+pub struct WorkflowManagerResumeSchedule {
     pub schedule_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerCreateEventTriggerInput {
+pub struct WorkflowManagerCreateEventTrigger {
     pub provider_name: String,
-    pub event_match: Option<WorkflowEventMatchInput>,
-    pub target: Option<BoundWorkflowTargetInput>,
+    pub event_match: Option<WorkflowEventMatch>,
+    pub target: Option<BoundWorkflowTarget>,
     pub paused: bool,
     pub idempotency_key: String,
     pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerGetEventTriggerInput {
+pub struct WorkflowManagerGetEventTrigger {
     pub trigger_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerUpdateEventTriggerInput {
+pub struct WorkflowManagerUpdateEventTrigger {
     pub trigger_id: String,
     pub provider_name: String,
-    pub event_match: Option<WorkflowEventMatchInput>,
-    pub target: Option<BoundWorkflowTargetInput>,
+    pub event_match: Option<WorkflowEventMatch>,
+    pub target: Option<BoundWorkflowTarget>,
     pub paused: bool,
     pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerDeleteEventTriggerInput {
+pub struct WorkflowManagerDeleteEventTrigger {
     pub trigger_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerPauseEventTriggerInput {
+pub struct WorkflowManagerPauseEventTrigger {
     pub trigger_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerResumeEventTriggerInput {
+pub struct WorkflowManagerResumeEventTrigger {
     pub trigger_id: String,
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct WorkflowManagerPublishEventInput {
+pub struct WorkflowManagerPublishEvent {
     pub provider_name: String,
-    pub event: Option<WorkflowEventInput>,
+    pub event: Option<WorkflowEvent>,
 }
 
 pub(crate) fn new_workflow_manager_start_run_request(
-    input: WorkflowManagerStartRunInput,
+    input: WorkflowManagerStartRun,
 ) -> crate::Result<pb::WorkflowManagerStartRunRequest> {
     Ok(pb::WorkflowManagerStartRunRequest {
         provider_name: input.provider_name,
@@ -206,7 +206,7 @@ pub(crate) fn new_workflow_manager_start_run_request(
 }
 
 pub(crate) fn new_workflow_manager_signal_run_request(
-    input: WorkflowManagerSignalRunInput,
+    input: WorkflowManagerSignalRun,
 ) -> crate::Result<pb::WorkflowManagerSignalRunRequest> {
     Ok(pb::WorkflowManagerSignalRunRequest {
         run_id: input.run_id,
@@ -221,7 +221,7 @@ pub(crate) fn new_workflow_manager_signal_run_request(
 }
 
 pub(crate) fn new_workflow_manager_signal_or_start_run_request(
-    input: WorkflowManagerSignalOrStartRunInput,
+    input: WorkflowManagerSignalOrStartRun,
 ) -> crate::Result<pb::WorkflowManagerSignalOrStartRunRequest> {
     Ok(pb::WorkflowManagerSignalOrStartRunRequest {
         provider_name: input.provider_name,
@@ -245,7 +245,7 @@ pub(crate) fn new_workflow_manager_signal_or_start_run_request(
 }
 
 pub(crate) fn new_workflow_manager_create_definition_request(
-    input: WorkflowManagerCreateDefinitionInput,
+    input: WorkflowManagerCreateDefinition,
 ) -> crate::Result<pb::WorkflowManagerCreateDefinitionRequest> {
     Ok(pb::WorkflowManagerCreateDefinitionRequest {
         provider_name: input.provider_name,
@@ -261,7 +261,7 @@ pub(crate) fn new_workflow_manager_create_definition_request(
 }
 
 pub(crate) fn new_workflow_manager_get_definition_request(
-    input: WorkflowManagerGetDefinitionInput,
+    input: WorkflowManagerGetDefinition,
 ) -> pb::WorkflowManagerGetDefinitionRequest {
     pb::WorkflowManagerGetDefinitionRequest {
         definition_id: input.definition_id,
@@ -270,7 +270,7 @@ pub(crate) fn new_workflow_manager_get_definition_request(
 }
 
 pub(crate) fn new_workflow_manager_update_definition_request(
-    input: WorkflowManagerUpdateDefinitionInput,
+    input: WorkflowManagerUpdateDefinition,
 ) -> crate::Result<pb::WorkflowManagerUpdateDefinitionRequest> {
     Ok(pb::WorkflowManagerUpdateDefinitionRequest {
         definition_id: input.definition_id,
@@ -286,7 +286,7 @@ pub(crate) fn new_workflow_manager_update_definition_request(
 }
 
 pub(crate) fn new_workflow_manager_delete_definition_request(
-    input: WorkflowManagerDeleteDefinitionInput,
+    input: WorkflowManagerDeleteDefinition,
 ) -> pb::WorkflowManagerDeleteDefinitionRequest {
     pb::WorkflowManagerDeleteDefinitionRequest {
         definition_id: input.definition_id,
@@ -295,7 +295,7 @@ pub(crate) fn new_workflow_manager_delete_definition_request(
 }
 
 pub(crate) fn new_workflow_manager_create_schedule_request(
-    input: WorkflowManagerCreateScheduleInput,
+    input: WorkflowManagerCreateSchedule,
 ) -> crate::Result<pb::WorkflowManagerCreateScheduleRequest> {
     Ok(pb::WorkflowManagerCreateScheduleRequest {
         provider_name: input.provider_name,
@@ -315,7 +315,7 @@ pub(crate) fn new_workflow_manager_create_schedule_request(
 }
 
 pub(crate) fn new_workflow_manager_get_schedule_request(
-    input: WorkflowManagerGetScheduleInput,
+    input: WorkflowManagerGetSchedule,
 ) -> pb::WorkflowManagerGetScheduleRequest {
     pb::WorkflowManagerGetScheduleRequest {
         schedule_id: input.schedule_id,
@@ -324,7 +324,7 @@ pub(crate) fn new_workflow_manager_get_schedule_request(
 }
 
 pub(crate) fn new_workflow_manager_update_schedule_request(
-    input: WorkflowManagerUpdateScheduleInput,
+    input: WorkflowManagerUpdateSchedule,
 ) -> crate::Result<pb::WorkflowManagerUpdateScheduleRequest> {
     Ok(pb::WorkflowManagerUpdateScheduleRequest {
         schedule_id: input.schedule_id,
@@ -344,7 +344,7 @@ pub(crate) fn new_workflow_manager_update_schedule_request(
 }
 
 pub(crate) fn new_workflow_manager_delete_schedule_request(
-    input: WorkflowManagerDeleteScheduleInput,
+    input: WorkflowManagerDeleteSchedule,
 ) -> pb::WorkflowManagerDeleteScheduleRequest {
     pb::WorkflowManagerDeleteScheduleRequest {
         schedule_id: input.schedule_id,
@@ -353,7 +353,7 @@ pub(crate) fn new_workflow_manager_delete_schedule_request(
 }
 
 pub(crate) fn new_workflow_manager_pause_schedule_request(
-    input: WorkflowManagerPauseScheduleInput,
+    input: WorkflowManagerPauseSchedule,
 ) -> pb::WorkflowManagerPauseScheduleRequest {
     pb::WorkflowManagerPauseScheduleRequest {
         schedule_id: input.schedule_id,
@@ -362,7 +362,7 @@ pub(crate) fn new_workflow_manager_pause_schedule_request(
 }
 
 pub(crate) fn new_workflow_manager_resume_schedule_request(
-    input: WorkflowManagerResumeScheduleInput,
+    input: WorkflowManagerResumeSchedule,
 ) -> pb::WorkflowManagerResumeScheduleRequest {
     pb::WorkflowManagerResumeScheduleRequest {
         schedule_id: input.schedule_id,
@@ -371,7 +371,7 @@ pub(crate) fn new_workflow_manager_resume_schedule_request(
 }
 
 pub(crate) fn new_workflow_manager_create_event_trigger_request(
-    input: WorkflowManagerCreateEventTriggerInput,
+    input: WorkflowManagerCreateEventTrigger,
 ) -> crate::Result<pb::WorkflowManagerCreateEventTriggerRequest> {
     Ok(pb::WorkflowManagerCreateEventTriggerRequest {
         provider_name: input.provider_name,
@@ -393,7 +393,7 @@ pub(crate) fn new_workflow_manager_create_event_trigger_request(
 }
 
 pub(crate) fn new_workflow_manager_get_event_trigger_request(
-    input: WorkflowManagerGetEventTriggerInput,
+    input: WorkflowManagerGetEventTrigger,
 ) -> pb::WorkflowManagerGetEventTriggerRequest {
     pb::WorkflowManagerGetEventTriggerRequest {
         trigger_id: input.trigger_id,
@@ -402,7 +402,7 @@ pub(crate) fn new_workflow_manager_get_event_trigger_request(
 }
 
 pub(crate) fn new_workflow_manager_update_event_trigger_request(
-    input: WorkflowManagerUpdateEventTriggerInput,
+    input: WorkflowManagerUpdateEventTrigger,
 ) -> crate::Result<pb::WorkflowManagerUpdateEventTriggerRequest> {
     Ok(pb::WorkflowManagerUpdateEventTriggerRequest {
         trigger_id: input.trigger_id,
@@ -424,7 +424,7 @@ pub(crate) fn new_workflow_manager_update_event_trigger_request(
 }
 
 pub(crate) fn new_workflow_manager_delete_event_trigger_request(
-    input: WorkflowManagerDeleteEventTriggerInput,
+    input: WorkflowManagerDeleteEventTrigger,
 ) -> pb::WorkflowManagerDeleteEventTriggerRequest {
     pb::WorkflowManagerDeleteEventTriggerRequest {
         trigger_id: input.trigger_id,
@@ -433,7 +433,7 @@ pub(crate) fn new_workflow_manager_delete_event_trigger_request(
 }
 
 pub(crate) fn new_workflow_manager_pause_event_trigger_request(
-    input: WorkflowManagerPauseEventTriggerInput,
+    input: WorkflowManagerPauseEventTrigger,
 ) -> pb::WorkflowManagerPauseEventTriggerRequest {
     pb::WorkflowManagerPauseEventTriggerRequest {
         trigger_id: input.trigger_id,
@@ -442,7 +442,7 @@ pub(crate) fn new_workflow_manager_pause_event_trigger_request(
 }
 
 pub(crate) fn new_workflow_manager_resume_event_trigger_request(
-    input: WorkflowManagerResumeEventTriggerInput,
+    input: WorkflowManagerResumeEventTrigger,
 ) -> pb::WorkflowManagerResumeEventTriggerRequest {
     pb::WorkflowManagerResumeEventTriggerRequest {
         trigger_id: input.trigger_id,
@@ -451,7 +451,7 @@ pub(crate) fn new_workflow_manager_resume_event_trigger_request(
 }
 
 pub(crate) fn new_workflow_manager_publish_event_request(
-    input: WorkflowManagerPublishEventInput,
+    input: WorkflowManagerPublishEvent,
 ) -> crate::Result<pb::WorkflowManagerPublishEventRequest> {
     Ok(pb::WorkflowManagerPublishEventRequest {
         event: input
@@ -529,7 +529,7 @@ impl WorkflowManager {
     /// Creates a reusable workflow definition.
     pub async fn create_definition(
         &mut self,
-        input: WorkflowManagerCreateDefinitionInput,
+        input: WorkflowManagerCreateDefinition,
     ) -> std::result::Result<ManagedWorkflowDefinition, WorkflowManagerError> {
         let mut request = new_workflow_manager_create_definition_request(input)?;
         request.invocation_token = self.invocation_token.clone();
@@ -544,7 +544,7 @@ impl WorkflowManager {
     /// Fetches one workflow definition.
     pub async fn get_definition(
         &mut self,
-        input: WorkflowManagerGetDefinitionInput,
+        input: WorkflowManagerGetDefinition,
     ) -> std::result::Result<ManagedWorkflowDefinition, WorkflowManagerError> {
         let mut request = new_workflow_manager_get_definition_request(input);
         request.invocation_token = self.invocation_token.clone();
@@ -556,7 +556,7 @@ impl WorkflowManager {
     /// Updates a workflow definition.
     pub async fn update_definition(
         &mut self,
-        input: WorkflowManagerUpdateDefinitionInput,
+        input: WorkflowManagerUpdateDefinition,
     ) -> std::result::Result<ManagedWorkflowDefinition, WorkflowManagerError> {
         let mut request = new_workflow_manager_update_definition_request(input)?;
         request.invocation_token = self.invocation_token.clone();
@@ -568,7 +568,7 @@ impl WorkflowManager {
     /// Deletes a workflow definition.
     pub async fn delete_definition(
         &mut self,
-        input: WorkflowManagerDeleteDefinitionInput,
+        input: WorkflowManagerDeleteDefinition,
     ) -> std::result::Result<(), WorkflowManagerError> {
         let mut request = new_workflow_manager_delete_definition_request(input);
         request.invocation_token = self.invocation_token.clone();
@@ -579,7 +579,7 @@ impl WorkflowManager {
     /// Creates a workflow schedule.
     pub async fn create_schedule(
         &mut self,
-        input: WorkflowManagerCreateScheduleInput,
+        input: WorkflowManagerCreateSchedule,
     ) -> std::result::Result<ManagedWorkflowSchedule, WorkflowManagerError> {
         let mut request = new_workflow_manager_create_schedule_request(input)?;
         request.invocation_token = self.invocation_token.clone();
@@ -594,7 +594,7 @@ impl WorkflowManager {
     /// Starts a workflow run.
     pub async fn start_run(
         &mut self,
-        input: WorkflowManagerStartRunInput,
+        input: WorkflowManagerStartRun,
     ) -> std::result::Result<ManagedWorkflowRun, WorkflowManagerError> {
         let mut request = new_workflow_manager_start_run_request(input)?;
         request.invocation_token = self.invocation_token.clone();
@@ -609,7 +609,7 @@ impl WorkflowManager {
     /// Signals an existing workflow run.
     pub async fn signal_run(
         &mut self,
-        input: WorkflowManagerSignalRunInput,
+        input: WorkflowManagerSignalRun,
     ) -> std::result::Result<ManagedWorkflowRunSignal, WorkflowManagerError> {
         let mut request = new_workflow_manager_signal_run_request(input)?;
         request.invocation_token = self.invocation_token.clone();
@@ -621,7 +621,7 @@ impl WorkflowManager {
     /// Signals a run or starts it when no matching run exists.
     pub async fn signal_or_start_run(
         &mut self,
-        input: WorkflowManagerSignalOrStartRunInput,
+        input: WorkflowManagerSignalOrStartRun,
     ) -> std::result::Result<ManagedWorkflowRunSignal, WorkflowManagerError> {
         let mut request = new_workflow_manager_signal_or_start_run_request(input)?;
         request.invocation_token = self.invocation_token.clone();
@@ -636,7 +636,7 @@ impl WorkflowManager {
     /// Fetches one workflow schedule.
     pub async fn get_schedule(
         &mut self,
-        input: WorkflowManagerGetScheduleInput,
+        input: WorkflowManagerGetSchedule,
     ) -> std::result::Result<ManagedWorkflowSchedule, WorkflowManagerError> {
         let mut request = new_workflow_manager_get_schedule_request(input);
         request.invocation_token = self.invocation_token.clone();
@@ -648,7 +648,7 @@ impl WorkflowManager {
     /// Updates a workflow schedule.
     pub async fn update_schedule(
         &mut self,
-        input: WorkflowManagerUpdateScheduleInput,
+        input: WorkflowManagerUpdateSchedule,
     ) -> std::result::Result<ManagedWorkflowSchedule, WorkflowManagerError> {
         let mut request = new_workflow_manager_update_schedule_request(input)?;
         request.invocation_token = self.invocation_token.clone();
@@ -660,7 +660,7 @@ impl WorkflowManager {
     /// Deletes a workflow schedule.
     pub async fn delete_schedule(
         &mut self,
-        input: WorkflowManagerDeleteScheduleInput,
+        input: WorkflowManagerDeleteSchedule,
     ) -> std::result::Result<(), WorkflowManagerError> {
         let mut request = new_workflow_manager_delete_schedule_request(input);
         request.invocation_token = self.invocation_token.clone();
@@ -671,7 +671,7 @@ impl WorkflowManager {
     /// Pauses a workflow schedule.
     pub async fn pause_schedule(
         &mut self,
-        input: WorkflowManagerPauseScheduleInput,
+        input: WorkflowManagerPauseSchedule,
     ) -> std::result::Result<ManagedWorkflowSchedule, WorkflowManagerError> {
         let mut request = new_workflow_manager_pause_schedule_request(input);
         request.invocation_token = self.invocation_token.clone();
@@ -683,7 +683,7 @@ impl WorkflowManager {
     /// Resumes a workflow schedule.
     pub async fn resume_schedule(
         &mut self,
-        input: WorkflowManagerResumeScheduleInput,
+        input: WorkflowManagerResumeSchedule,
     ) -> std::result::Result<ManagedWorkflowSchedule, WorkflowManagerError> {
         let mut request = new_workflow_manager_resume_schedule_request(input);
         request.invocation_token = self.invocation_token.clone();
@@ -695,7 +695,7 @@ impl WorkflowManager {
     /// Creates an event trigger.
     pub async fn create_trigger(
         &mut self,
-        input: WorkflowManagerCreateEventTriggerInput,
+        input: WorkflowManagerCreateEventTrigger,
     ) -> std::result::Result<ManagedWorkflowEventTrigger, WorkflowManagerError> {
         let mut request = new_workflow_manager_create_event_trigger_request(input)?;
         request.invocation_token = self.invocation_token.clone();
@@ -713,7 +713,7 @@ impl WorkflowManager {
     /// Fetches one event trigger.
     pub async fn get_trigger(
         &mut self,
-        input: WorkflowManagerGetEventTriggerInput,
+        input: WorkflowManagerGetEventTrigger,
     ) -> std::result::Result<ManagedWorkflowEventTrigger, WorkflowManagerError> {
         let mut request = new_workflow_manager_get_event_trigger_request(input);
         request.invocation_token = self.invocation_token.clone();
@@ -725,7 +725,7 @@ impl WorkflowManager {
     /// Updates an event trigger.
     pub async fn update_trigger(
         &mut self,
-        input: WorkflowManagerUpdateEventTriggerInput,
+        input: WorkflowManagerUpdateEventTrigger,
     ) -> std::result::Result<ManagedWorkflowEventTrigger, WorkflowManagerError> {
         let mut request = new_workflow_manager_update_event_trigger_request(input)?;
         request.invocation_token = self.invocation_token.clone();
@@ -740,7 +740,7 @@ impl WorkflowManager {
     /// Deletes an event trigger.
     pub async fn delete_trigger(
         &mut self,
-        input: WorkflowManagerDeleteEventTriggerInput,
+        input: WorkflowManagerDeleteEventTrigger,
     ) -> std::result::Result<(), WorkflowManagerError> {
         let mut request = new_workflow_manager_delete_event_trigger_request(input);
         request.invocation_token = self.invocation_token.clone();
@@ -751,7 +751,7 @@ impl WorkflowManager {
     /// Pauses an event trigger.
     pub async fn pause_trigger(
         &mut self,
-        input: WorkflowManagerPauseEventTriggerInput,
+        input: WorkflowManagerPauseEventTrigger,
     ) -> std::result::Result<ManagedWorkflowEventTrigger, WorkflowManagerError> {
         let mut request = new_workflow_manager_pause_event_trigger_request(input);
         request.invocation_token = self.invocation_token.clone();
@@ -763,7 +763,7 @@ impl WorkflowManager {
     /// Resumes an event trigger.
     pub async fn resume_trigger(
         &mut self,
-        input: WorkflowManagerResumeEventTriggerInput,
+        input: WorkflowManagerResumeEventTrigger,
     ) -> std::result::Result<ManagedWorkflowEventTrigger, WorkflowManagerError> {
         let mut request = new_workflow_manager_resume_event_trigger_request(input);
         request.invocation_token = self.invocation_token.clone();
@@ -778,7 +778,7 @@ impl WorkflowManager {
     /// Publishes an event into the workflow manager.
     pub async fn publish_event(
         &mut self,
-        input: WorkflowManagerPublishEventInput,
+        input: WorkflowManagerPublishEvent,
     ) -> std::result::Result<WorkflowEvent, WorkflowManagerError> {
         let mut request = new_workflow_manager_publish_event_request(input)?;
         request.invocation_token = self.invocation_token.clone();

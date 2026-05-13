@@ -4,9 +4,9 @@ use serde::Serialize;
 use serde_json::json;
 
 use gestalt::{
-    BoundWorkflowPluginTargetInput, BoundWorkflowRunInput, BoundWorkflowTargetInput,
-    WorkflowRunStatus, WorkflowRunTriggerInput, WorkflowSignalInput, new_bound_workflow_run,
-    new_bound_workflow_target, new_bound_workflow_target_from_target, new_workflow_signal,
+    BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowTarget, WorkflowRunStatus,
+    WorkflowRunTrigger, WorkflowSignal, new_bound_workflow_run, new_bound_workflow_target,
+    new_bound_workflow_target_from_target, new_workflow_signal,
 };
 
 #[derive(Serialize)]
@@ -18,7 +18,7 @@ struct Payload {
 #[test]
 fn workflow_builders_accept_serde_values_and_system_time() -> gestalt::Result<()> {
     let created_at = UNIX_EPOCH + Duration::from_secs(1_778_241_600);
-    let plugin = BoundWorkflowPluginTargetInput {
+    let plugin = BoundWorkflowPluginTarget {
         plugin_name: "plugin".to_string(),
         operation: "run".to_string(),
         ..Default::default()
@@ -27,9 +27,9 @@ fn workflow_builders_accept_serde_values_and_system_time() -> gestalt::Result<()
         ok: false,
         count: 0,
     })?;
-    let target = new_bound_workflow_target(BoundWorkflowTargetInput::Plugin(plugin))?;
+    let target = new_bound_workflow_target(BoundWorkflowTarget::Plugin(plugin))?;
     let signal = new_workflow_signal(
-        WorkflowSignalInput {
+        WorkflowSignal {
             name: "ready".to_string(),
             created_at: Some(created_at),
             sequence: 0,
@@ -37,13 +37,13 @@ fn workflow_builders_accept_serde_values_and_system_time() -> gestalt::Result<()
         }
         .with_payload(Payload { ok: true, count: 1 })?,
     )?;
-    let run = new_bound_workflow_run(BoundWorkflowRunInput {
+    let run = new_bound_workflow_run(BoundWorkflowRun {
         id: "run-1".to_string(),
         status: WorkflowRunStatus::Pending,
-        target: Some(BoundWorkflowTargetInput::Plugin(
+        target: Some(BoundWorkflowTarget::Plugin(
             gestalt::bound_workflow_plugin_target_input_from_target(plugin_target(&target)?)?,
         )),
-        trigger: Some(WorkflowRunTriggerInput::Manual),
+        trigger: Some(WorkflowRunTrigger::Manual),
         created_at: Some(created_at),
         ..Default::default()
     })?;
@@ -61,13 +61,13 @@ fn workflow_builders_accept_serde_values_and_system_time() -> gestalt::Result<()
 
 #[test]
 fn workflow_copy_helpers_do_not_alias_nested_payloads() -> gestalt::Result<()> {
-    let plugin = BoundWorkflowPluginTargetInput {
+    let plugin = BoundWorkflowPluginTarget {
         plugin_name: "plugin".to_string(),
         operation: "run".to_string(),
         ..Default::default()
     }
     .with_input(serde_json::json!({"nested": {"value": "original"}}))?;
-    let mut target = new_bound_workflow_target(BoundWorkflowTargetInput::Plugin(plugin))?;
+    let mut target = new_bound_workflow_target(BoundWorkflowTarget::Plugin(plugin))?;
     let copied = new_bound_workflow_target_from_target(&target)?;
 
     let plugin = plugin_target_mut(&mut target)?;

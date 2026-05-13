@@ -237,9 +237,9 @@ func signalWorkflowProviderRunRequestFromProto(req *proto.SignalWorkflowProvider
 	if req == nil {
 		return &SignalWorkflowProviderRunRequest{}
 	}
-	var signal *WorkflowSignalInput
+	var signal *WorkflowSignal
 	if req.GetSignal() != nil {
-		input := WorkflowSignalInputFromSignal(req.GetSignal())
+		input := WorkflowSignalFromSignal(req.GetSignal())
 		signal = &input
 	}
 	return &SignalWorkflowProviderRunRequest{
@@ -252,9 +252,9 @@ func signalOrStartWorkflowProviderRunRequestFromProto(req *proto.SignalOrStartWo
 	if req == nil {
 		return &SignalOrStartWorkflowProviderRunRequest{}
 	}
-	var signal *WorkflowSignalInput
+	var signal *WorkflowSignal
 	if req.GetSignal() != nil {
-		input := WorkflowSignalInputFromSignal(req.GetSignal())
+		input := WorkflowSignalFromSignal(req.GetSignal())
 		signal = &input
 	}
 	return &SignalOrStartWorkflowProviderRunRequest{
@@ -300,9 +300,9 @@ func publishWorkflowProviderEventRequestFromProto(req *proto.PublishWorkflowProv
 	if req == nil {
 		return &PublishWorkflowProviderEventRequest{}
 	}
-	var event *WorkflowEventInput
+	var event *WorkflowEvent
 	if req.GetEvent() != nil {
-		input := WorkflowEventInputFromEvent(req.GetEvent())
+		input := WorkflowEventFromEvent(req.GetEvent())
 		event = &input
 	}
 	return &PublishWorkflowProviderEventRequest{
@@ -312,14 +312,14 @@ func publishWorkflowProviderEventRequestFromProto(req *proto.PublishWorkflowProv
 	}
 }
 
-func workflowRunInputToProto(input *BoundWorkflowRunInput) (*proto.BoundWorkflowRun, error) {
+func workflowRunInputToProto(input *BoundWorkflowRun) (*proto.BoundWorkflowRun, error) {
 	if input == nil {
 		return nil, nil
 	}
 	return NewBoundWorkflowRun(*input)
 }
 
-func workflowRunInputsToProto(values []BoundWorkflowRunInput) ([]*proto.BoundWorkflowRun, error) {
+func workflowRunInputsToProto(values []BoundWorkflowRun) ([]*proto.BoundWorkflowRun, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -334,14 +334,14 @@ func workflowRunInputsToProto(values []BoundWorkflowRunInput) ([]*proto.BoundWor
 	return out, nil
 }
 
-func workflowScheduleInputToProto(input *BoundWorkflowScheduleInput) (*proto.BoundWorkflowSchedule, error) {
+func workflowScheduleInputToProto(input *BoundWorkflowSchedule) (*proto.BoundWorkflowSchedule, error) {
 	if input == nil {
 		return nil, nil
 	}
 	return NewBoundWorkflowSchedule(*input)
 }
 
-func workflowScheduleInputsToProto(values []BoundWorkflowScheduleInput) ([]*proto.BoundWorkflowSchedule, error) {
+func workflowScheduleInputsToProto(values []BoundWorkflowSchedule) ([]*proto.BoundWorkflowSchedule, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -356,14 +356,14 @@ func workflowScheduleInputsToProto(values []BoundWorkflowScheduleInput) ([]*prot
 	return out, nil
 }
 
-func workflowEventTriggerInputToProto(input *BoundWorkflowEventTriggerInput) (*proto.BoundWorkflowEventTrigger, error) {
+func workflowEventTriggerInputToProto(input *BoundWorkflowEventTrigger) (*proto.BoundWorkflowEventTrigger, error) {
 	if input == nil {
 		return nil, nil
 	}
 	return NewBoundWorkflowEventTrigger(*input)
 }
 
-func workflowEventTriggerInputsToProto(values []BoundWorkflowEventTriggerInput) ([]*proto.BoundWorkflowEventTrigger, error) {
+func workflowEventTriggerInputsToProto(values []BoundWorkflowEventTrigger) ([]*proto.BoundWorkflowEventTrigger, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -378,25 +378,25 @@ func workflowEventTriggerInputsToProto(values []BoundWorkflowEventTriggerInput) 
 	return out, nil
 }
 
-func workflowExecutionReferenceInputPtrFromReference(value *proto.WorkflowExecutionReference) (*WorkflowExecutionReferenceInput, error) {
+func workflowExecutionReferenceInputPtrFromReference(value *proto.WorkflowExecutionReference) (*WorkflowExecutionReference, error) {
 	if value == nil {
 		return nil, nil
 	}
-	input, err := WorkflowExecutionReferenceInputFromReference(value)
+	input, err := WorkflowExecutionReferenceFromReference(value)
 	if err != nil {
 		return nil, err
 	}
 	return &input, nil
 }
 
-func workflowExecutionReferenceInputToProto(input *WorkflowExecutionReferenceInput) (*proto.WorkflowExecutionReference, error) {
+func workflowExecutionReferenceInputToProto(input *WorkflowExecutionReference) (*proto.WorkflowExecutionReference, error) {
 	if input == nil {
 		return nil, nil
 	}
 	return NewWorkflowExecutionReference(*input)
 }
 
-func workflowExecutionReferenceInputsToProto(values []WorkflowExecutionReferenceInput) ([]*proto.WorkflowExecutionReference, error) {
+func workflowExecutionReferenceInputsToProto(values []WorkflowExecutionReference) ([]*proto.WorkflowExecutionReference, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -411,7 +411,7 @@ func workflowExecutionReferenceInputsToProto(values []WorkflowExecutionReference
 	return out, nil
 }
 
-func workflowSignalInputToProto(input *WorkflowSignalInput) (*proto.WorkflowSignal, error) {
+func workflowSignalInputToProto(input *WorkflowSignal) (*proto.WorkflowSignal, error) {
 	if input == nil {
 		return nil, nil
 	}

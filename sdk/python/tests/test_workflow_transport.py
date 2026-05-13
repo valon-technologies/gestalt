@@ -15,15 +15,15 @@ from gestalt import (
     ENV_WORKFLOW_HOST_SOCKET,
     ENV_WORKFLOW_MANAGER_SOCKET,
     ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
-    BoundWorkflowPluginTargetInput,
-    BoundWorkflowTargetInput,
+    BoundWorkflowPluginTarget,
+    BoundWorkflowTarget,
     Request,
-    WorkflowEventInput,
+    WorkflowEvent,
     WorkflowHost,
     WorkflowManager,
-    WorkflowManagerCreateDefinitionInput,
-    WorkflowManagerCreateScheduleInput,
-    WorkflowManagerPublishEventInput,
+    WorkflowManagerCreateDefinition,
+    WorkflowManagerCreateSchedule,
+    WorkflowManagerPublishEvent,
 )
 from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
 from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
@@ -236,10 +236,10 @@ class WorkflowTransportTests(unittest.TestCase):
 
         with request.workflow_manager() as manager:
             created_definition = manager.create_definition(
-                WorkflowManagerCreateDefinitionInput(
+                WorkflowManagerCreateDefinition(
                     provider_name="managed",
-                    target=BoundWorkflowTargetInput(
-                        plugin=BoundWorkflowPluginTargetInput(
+                    target=BoundWorkflowTarget(
+                        plugin=BoundWorkflowPluginTarget(
                             plugin_name="demo",
                             operation="sync",
                         ),
@@ -247,16 +247,16 @@ class WorkflowTransportTests(unittest.TestCase):
                 )
             )
             created = manager.create_schedule(
-                WorkflowManagerCreateScheduleInput(
+                WorkflowManagerCreateSchedule(
                     provider_name="managed",
                     cron="*/5 * * * *",
                     timezone="UTC",
                 )
             )
             published = manager.publish_event(
-                WorkflowManagerPublishEventInput(
+                WorkflowManagerPublishEvent(
                     provider_name="managed",
-                    event=WorkflowEventInput(
+                    event=WorkflowEvent(
                         source="github",
                         type="github.app.webhook",
                         subject="installation:99",

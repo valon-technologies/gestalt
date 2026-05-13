@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use tonic::codegen::async_trait;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::agent::{AgentPreparedWorkspace, AgentWorkspaceInput};
+use crate::agent::{AgentPreparedWorkspace, AgentWorkspace};
 use crate::api::RuntimeMetadata;
 use crate::error::Result as ProviderResult;
 use crate::generated::v1::{self as pb};
@@ -96,7 +96,7 @@ pub struct StopPluginRuntimeSessionRequest {
 pub struct PreparePluginRuntimeWorkspaceRequest {
     pub session_id: String,
     pub agent_session_id: String,
-    pub workspace: Option<AgentWorkspaceInput>,
+    pub workspace: Option<AgentWorkspace>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -191,11 +191,11 @@ fn prepare_workspace_request_from_proto(
     PreparePluginRuntimeWorkspaceRequest {
         session_id: value.session_id,
         agent_session_id: value.agent_session_id,
-        workspace: value.workspace.map(|workspace| AgentWorkspaceInput {
+        workspace: value.workspace.map(|workspace| AgentWorkspace {
             checkouts: workspace
                 .checkouts
                 .into_iter()
-                .map(|checkout| crate::agent::AgentWorkspaceGitCheckoutInput {
+                .map(|checkout| crate::agent::AgentWorkspaceGitCheckout {
                     url: checkout.url,
                     reference: checkout.r#ref,
                     path: checkout.path,

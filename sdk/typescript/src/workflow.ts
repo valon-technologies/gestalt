@@ -142,7 +142,6 @@ export interface BoundWorkflowPluginTarget {
   instance?: string | undefined;
   credentialMode?: string | undefined;
 }
-export type BoundWorkflowPluginTargetInput = BoundWorkflowPluginTarget;
 
 export type WorkflowOutputValueSourceKind =
   | { case: "agentOutput"; value: string }
@@ -153,10 +152,6 @@ export type WorkflowOutputValueSourceKind =
   | { case: undefined; value?: undefined };
 
 export interface WorkflowOutputValueSource {
-  kind: WorkflowOutputValueSourceKind;
-}
-
-export interface WorkflowOutputValueSourceInput {
   agentOutput?: string | undefined;
   signalPayload?: string | undefined;
   signalMetadata?: string | undefined;
@@ -167,16 +162,14 @@ export interface WorkflowOutputValueSourceInput {
 
 export interface WorkflowOutputBinding {
   inputField?: string | undefined;
-  value?: WorkflowOutputValueSource | WorkflowOutputValueSourceInput | undefined;
+  value?: WorkflowOutputValueSource | undefined;
 }
-export type WorkflowOutputBindingInput = WorkflowOutputBinding;
 
 export interface WorkflowOutputDelivery {
   target?: BoundWorkflowPluginTarget | undefined;
   inputBindings?: readonly WorkflowOutputBinding[] | undefined;
   credentialMode?: string | undefined;
 }
-export type WorkflowOutputDeliveryInput = WorkflowOutputDelivery;
 
 export interface BoundWorkflowAgentTarget {
   providerName?: string | undefined;
@@ -191,7 +184,6 @@ export interface BoundWorkflowAgentTarget {
   modelOptions?: JsonObjectInput | undefined;
   sessionReadyDelivery?: WorkflowOutputDelivery | undefined;
 }
-export type BoundWorkflowAgentTargetInput = BoundWorkflowAgentTarget;
 
 export type BoundWorkflowTargetKind =
   | { case: "plugin"; value: BoundWorkflowPluginTarget }
@@ -199,10 +191,6 @@ export type BoundWorkflowTargetKind =
   | { case: undefined; value?: undefined };
 
 export interface BoundWorkflowTarget {
-  kind: BoundWorkflowTargetKind;
-}
-
-export interface BoundWorkflowTargetInput {
   plugin?: BoundWorkflowPluginTarget | undefined;
   agent?: BoundWorkflowAgentTarget | undefined;
   kind?: BoundWorkflowTargetKind | undefined;
@@ -214,7 +202,6 @@ export interface WorkflowActor {
   displayName?: string | undefined;
   authSource?: string | undefined;
 }
-export type WorkflowActorInput = WorkflowActor;
 
 export interface WorkflowRunAsSubject {
   subjectId?: string | undefined;
@@ -222,13 +209,11 @@ export interface WorkflowRunAsSubject {
   displayName?: string | undefined;
   authSource?: string | undefined;
 }
-export type WorkflowRunAsSubjectInput = WorkflowRunAsSubject;
 
 export interface WorkflowAccessPermission {
   plugin?: string | undefined;
   operations?: readonly string[] | undefined;
 }
-export type WorkflowAccessPermissionInput = WorkflowAccessPermission;
 
 export interface WorkflowEvent {
   id?: string | undefined;
@@ -241,14 +226,12 @@ export interface WorkflowEvent {
   data?: JsonObjectInput | undefined;
   extensions?: Record<string, JsonInput> | undefined;
 }
-export type WorkflowEventInput = WorkflowEvent;
 
 export interface WorkflowEventMatch {
   type?: string | undefined;
   source?: string | undefined;
   subject?: string | undefined;
 }
-export type WorkflowEventMatchInput = WorkflowEventMatch;
 
 export interface WorkflowSignal {
   id?: string | undefined;
@@ -260,19 +243,16 @@ export interface WorkflowSignal {
   idempotencyKey?: string | undefined;
   sequence?: bigint | number | undefined;
 }
-export type WorkflowSignalInput = WorkflowSignal;
 
 export interface WorkflowScheduleTrigger {
   scheduleId?: string | undefined;
   scheduledFor?: Date | undefined;
 }
-export type WorkflowScheduleTriggerInput = WorkflowScheduleTrigger;
 
 export interface WorkflowEventTriggerInvocation {
   triggerId?: string | undefined;
   event?: WorkflowEvent | undefined;
 }
-export type WorkflowEventTriggerInvocationInput = WorkflowEventTriggerInvocation;
 
 export type WorkflowRunTriggerKind =
   | { case: "manual"; value?: Record<string, never> }
@@ -281,10 +261,6 @@ export type WorkflowRunTriggerKind =
   | { case: undefined; value?: undefined };
 
 export interface WorkflowRunTrigger {
-  kind: WorkflowRunTriggerKind;
-}
-
-export interface WorkflowRunTriggerInput {
   manual?: boolean | undefined;
   schedule?: WorkflowScheduleTrigger | undefined;
   event?: WorkflowEventTriggerInvocation | undefined;
@@ -292,123 +268,65 @@ export interface WorkflowRunTriggerInput {
 }
 
 export interface BoundWorkflowRun {
-  id: string;
-  status: WorkflowRunStatus;
+  id?: string | undefined;
+  status?: WorkflowRunStatus | undefined;
   target?: BoundWorkflowTarget | undefined;
   trigger?: WorkflowRunTrigger | undefined;
   createdAt?: Date | undefined;
   startedAt?: Date | undefined;
   completedAt?: Date | undefined;
-  statusMessage: string;
-  resultBody: string;
-  createdBy?: WorkflowActor | undefined;
-  executionRef: string;
-  workflowKey: string;
-}
-export interface BoundWorkflowRunInput {
-  id?: string | undefined;
-  status?: WorkflowRunStatus | undefined;
-  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
-  trigger?: WorkflowRunTrigger | WorkflowRunTriggerInput | undefined;
-  createdAt?: Date | undefined;
-  startedAt?: Date | undefined;
-  completedAt?: Date | undefined;
   statusMessage?: string | undefined;
   resultBody?: string | undefined;
-  createdBy?: WorkflowActor | WorkflowActorInput | undefined;
+  createdBy?: WorkflowActor | undefined;
   executionRef?: string | undefined;
   workflowKey?: string | undefined;
 }
 
 export interface BoundWorkflowSchedule {
-  id: string;
-  cron: string;
-  timezone: string;
-  target?: BoundWorkflowTarget | undefined;
-  paused: boolean;
-  createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
-  nextRunAt?: Date | undefined;
-  createdBy?: WorkflowActor | undefined;
-  executionRef: string;
-}
-export interface BoundWorkflowScheduleInput {
   id?: string | undefined;
   cron?: string | undefined;
   timezone?: string | undefined;
-  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
+  target?: BoundWorkflowTarget | undefined;
   paused?: boolean | undefined;
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
   nextRunAt?: Date | undefined;
-  createdBy?: WorkflowActor | WorkflowActorInput | undefined;
+  createdBy?: WorkflowActor | undefined;
   executionRef?: string | undefined;
 }
 
 export interface BoundWorkflowEventTrigger {
-  id: string;
+  id?: string | undefined;
   match?: WorkflowEventMatch | undefined;
   target?: BoundWorkflowTarget | undefined;
-  paused: boolean;
-  createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
-  createdBy?: WorkflowActor | undefined;
-  executionRef: string;
-}
-export interface BoundWorkflowEventTriggerInput {
-  id?: string | undefined;
-  match?: WorkflowEventMatch | WorkflowEventMatchInput | undefined;
-  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
   paused?: boolean | undefined;
   createdAt?: Date | undefined;
   updatedAt?: Date | undefined;
-  createdBy?: WorkflowActor | WorkflowActorInput | undefined;
+  createdBy?: WorkflowActor | undefined;
   executionRef?: string | undefined;
 }
 
 export interface BoundWorkflowDefinition {
-  id: string;
+  id?: string | undefined;
   target?: BoundWorkflowTarget | undefined;
   createdBy?: WorkflowActor | undefined;
   createdAt?: Date | undefined;
 }
-export interface BoundWorkflowDefinitionInput {
-  id?: string | undefined;
-  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
-  createdBy?: WorkflowActor | WorkflowActorInput | undefined;
-  createdAt?: Date | undefined;
-}
 
 export interface WorkflowExecutionReference {
-  id: string;
-  providerName: string;
-  target?: BoundWorkflowTarget | undefined;
-  subjectId: string;
-  credentialSubjectId: string;
-  permissions: readonly WorkflowAccessPermission[];
-  createdAt?: Date | undefined;
-  revokedAt?: Date | undefined;
-  subjectKind: string;
-  displayName: string;
-  authSource: string;
-  callerPluginName: string;
-  runAs?: WorkflowRunAsSubject | undefined;
-  sourceDefinitionId: string;
-}
-export interface WorkflowExecutionReferenceInput {
   id?: string | undefined;
   providerName?: string | undefined;
-  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
+  target?: BoundWorkflowTarget | undefined;
   subjectId?: string | undefined;
   credentialSubjectId?: string | undefined;
-  permissions?: readonly (WorkflowAccessPermission | WorkflowAccessPermissionInput)[] | undefined;
+  permissions?: readonly WorkflowAccessPermission[] | undefined;
   createdAt?: Date | undefined;
   revokedAt?: Date | undefined;
   subjectKind?: string | undefined;
   displayName?: string | undefined;
   authSource?: string | undefined;
   callerPluginName?: string | undefined;
-  runAs?: WorkflowRunAsSubject | WorkflowRunAsSubjectInput | undefined;
+  runAs?: WorkflowRunAsSubject | undefined;
   sourceDefinitionId?: string | undefined;
 }
 
@@ -527,9 +445,9 @@ export interface PublishWorkflowProviderEventRequest {
 
 /** Native input for invoking a workflow operation through the host service. */
 export interface InvokeWorkflowOperationInput {
-  target?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined;
+  target?: BoundWorkflowTarget | BoundWorkflowTarget | undefined;
   runId?: string | undefined;
-  trigger?: WorkflowRunTrigger | WorkflowRunTriggerInput | undefined;
+  trigger?: WorkflowRunTrigger | WorkflowRunTrigger | undefined;
   input?: JsonObjectInput | undefined;
   metadata?: JsonObjectInput | undefined;
   createdBy?: WorkflowActor | undefined;
@@ -572,7 +490,7 @@ export interface ManagedWorkflowRunSignal {
 }
 
 /** Creates workflow actor metadata from native input. */
-export function workflowActor(input: WorkflowActorInput = {}): WorkflowActor {
+export function workflowActor(input: WorkflowActor = {}): WorkflowActor {
   return {
     subjectId: input.subjectId ?? "",
     subjectKind: input.subjectKind ?? "",
@@ -582,13 +500,13 @@ export function workflowActor(input: WorkflowActorInput = {}): WorkflowActor {
 }
 
 /** Returns native input copied from workflow actor metadata. */
-export function workflowActorInputFromActor(input?: WorkflowActor): WorkflowActorInput | undefined {
+export function workflowActorInputFromActor(input?: WorkflowActor): WorkflowActor | undefined {
   return input === undefined ? undefined : { ...input };
 }
 
 /** Creates workflow run-as metadata from native input. */
 export function workflowRunAsSubject(
-  input: WorkflowRunAsSubjectInput = {},
+  input: WorkflowRunAsSubject = {},
 ): WorkflowRunAsSubject {
   return {
     subjectId: input.subjectId ?? "",
@@ -601,13 +519,13 @@ export function workflowRunAsSubject(
 /** Returns native input copied from workflow run-as metadata. */
 export function workflowRunAsSubjectInputFromSubject(
   input?: WorkflowRunAsSubject,
-): WorkflowRunAsSubjectInput | undefined {
+): WorkflowRunAsSubject | undefined {
   return input === undefined ? undefined : { ...input };
 }
 
 /** Creates an execution-reference permission from native input. */
 export function workflowAccessPermission(
-  input: WorkflowAccessPermissionInput = {},
+  input: WorkflowAccessPermission = {},
 ): WorkflowAccessPermission {
   return {
     plugin: input.plugin ?? "",
@@ -618,7 +536,7 @@ export function workflowAccessPermission(
 /** Returns native input copied from an execution-reference permission. */
 export function workflowAccessPermissionInputFromPermission(
   input: WorkflowAccessPermission,
-): WorkflowAccessPermissionInput {
+): WorkflowAccessPermission {
   return {
     plugin: input.plugin,
     operations: [...(input.operations ?? [])],
@@ -627,7 +545,7 @@ export function workflowAccessPermissionInputFromPermission(
 
 /** Creates workflow event-match fields from native input. */
 export function workflowEventMatch(
-  input: WorkflowEventMatchInput = {},
+  input: WorkflowEventMatch = {},
 ): WorkflowEventMatch {
   return {
     type: input.type ?? "",
@@ -639,18 +557,18 @@ export function workflowEventMatch(
 /** Returns native input copied from workflow event-match fields. */
 export function workflowEventMatchInputFromMatch(
   input?: WorkflowEventMatch,
-): WorkflowEventMatchInput | undefined {
+): WorkflowEventMatch | undefined {
   return input === undefined ? undefined : { ...input };
 }
 
 /** Creates a workflow output value source from native input. */
 export function workflowOutputValueSource(
-  input: WorkflowOutputValueSourceInput | WorkflowOutputValueSource = {},
+  input: WorkflowOutputValueSource | WorkflowOutputValueSource = {},
 ): WorkflowOutputValueSource {
   if ("kind" in input && input.kind !== undefined) {
     return { kind: cloneWorkflowOutputValueSourceKind(input.kind) };
   }
-  const sourceInput = input as WorkflowOutputValueSourceInput;
+  const sourceInput = input as WorkflowOutputValueSource;
   const selected = [
     sourceInput.agentOutput === undefined ? undefined : "agentOutput",
     sourceInput.signalPayload === undefined ? undefined : "signalPayload",
@@ -681,21 +599,22 @@ export function workflowOutputValueSource(
 /** Returns native input copied from a workflow output value source. */
 export function workflowOutputValueSourceInputFromSource(
   input?: WorkflowOutputValueSource,
-): WorkflowOutputValueSourceInput | undefined {
+): WorkflowOutputValueSource | undefined {
   if (input === undefined) {
     return undefined;
   }
-  switch (input.kind.case) {
+  const kind = input.kind;
+  switch (kind?.case) {
     case "agentOutput":
-      return { agentOutput: input.kind.value };
+      return { agentOutput: kind.value };
     case "signalPayload":
-      return { signalPayload: input.kind.value };
+      return { signalPayload: kind.value };
     case "signalMetadata":
-      return { signalMetadata: input.kind.value };
+      return { signalMetadata: kind.value };
     case "agentSession":
-      return { agentSession: input.kind.value };
+      return { agentSession: kind.value };
     case "literal":
-      return { literal: input.kind.value };
+      return { literal: kind.value };
     default:
       return {};
   }
@@ -703,7 +622,7 @@ export function workflowOutputValueSourceInputFromSource(
 
 /** Creates a workflow output binding from native input. */
 export function workflowOutputBinding(
-  input: WorkflowOutputBindingInput = {},
+  input: WorkflowOutputBinding = {},
 ): WorkflowOutputBinding {
   return {
     inputField: input.inputField ?? "",
@@ -714,7 +633,7 @@ export function workflowOutputBinding(
 /** Returns native input copied from a workflow output binding. */
 export function workflowOutputBindingInputFromBinding(
   input: WorkflowOutputBinding,
-): WorkflowOutputBindingInput {
+): WorkflowOutputBinding {
   return {
     inputField: input.inputField,
     value: input.value === undefined
@@ -725,7 +644,7 @@ export function workflowOutputBindingInputFromBinding(
 
 /** Creates a workflow output delivery from native input. */
 export function workflowOutputDelivery(
-  input: WorkflowOutputDeliveryInput = {},
+  input: WorkflowOutputDelivery = {},
 ): WorkflowOutputDelivery {
   return {
     target: input.target === undefined ? undefined : boundWorkflowPluginTarget(input.target),
@@ -737,7 +656,7 @@ export function workflowOutputDelivery(
 /** Returns native input copied from a workflow output delivery. */
 export function workflowOutputDeliveryInputFromDelivery(
   input?: WorkflowOutputDelivery,
-): WorkflowOutputDeliveryInput | undefined {
+): WorkflowOutputDelivery | undefined {
   if (input === undefined) {
     return undefined;
   }
@@ -750,7 +669,7 @@ export function workflowOutputDeliveryInputFromDelivery(
 
 /** Creates a bound plugin workflow target from native input. */
 export function boundWorkflowPluginTarget(
-  input: BoundWorkflowPluginTargetInput = {},
+  input: BoundWorkflowPluginTarget = {},
 ): BoundWorkflowPluginTarget {
   return {
     pluginName: input.pluginName ?? "",
@@ -765,7 +684,7 @@ export function boundWorkflowPluginTarget(
 /** Returns native input copied from a bound plugin workflow target. */
 export function boundWorkflowPluginTargetInputFromTarget(
   input?: BoundWorkflowPluginTarget,
-): BoundWorkflowPluginTargetInput | undefined {
+): BoundWorkflowPluginTarget | undefined {
   if (input === undefined) {
     return undefined;
   }
@@ -781,7 +700,7 @@ export function boundWorkflowPluginTargetInputFromTarget(
 
 /** Creates a bound agent workflow target from native input. */
 export function boundWorkflowAgentTarget(
-  input: BoundWorkflowAgentTargetInput = {},
+  input: BoundWorkflowAgentTarget = {},
 ): BoundWorkflowAgentTarget {
   return {
     providerName: input.providerName ?? "",
@@ -803,7 +722,7 @@ export function boundWorkflowAgentTarget(
 /** Returns native input copied from a bound agent workflow target. */
 export function boundWorkflowAgentTargetInputFromTarget(
   input?: BoundWorkflowAgentTarget,
-): BoundWorkflowAgentTargetInput | undefined {
+): BoundWorkflowAgentTarget | undefined {
   if (input === undefined) {
     return undefined;
   }
@@ -824,12 +743,12 @@ export function boundWorkflowAgentTargetInputFromTarget(
 
 /** Creates a bound workflow target from native input. */
 export function boundWorkflowTarget(
-  input: BoundWorkflowTargetInput | BoundWorkflowTarget = {},
+  input: BoundWorkflowTarget | BoundWorkflowTarget = {},
 ): BoundWorkflowTarget {
   if ("kind" in input && input.kind !== undefined) {
     return boundWorkflowTargetFromTarget({ kind: input.kind });
   }
-  const targetInput = input as BoundWorkflowTargetInput;
+  const targetInput = input as BoundWorkflowTarget;
   if (targetInput.plugin !== undefined && targetInput.agent !== undefined) {
     throw new Error("bound workflow target must set either plugin or agent");
   }
@@ -845,15 +764,16 @@ export function boundWorkflowTarget(
 /** Returns native input copied from a bound workflow target. */
 export function boundWorkflowTargetInputFromTarget(
   input?: BoundWorkflowTarget,
-): BoundWorkflowTargetInput | undefined {
+): BoundWorkflowTarget | undefined {
   if (input === undefined) {
     return undefined;
   }
-  switch (input.kind.case) {
+  const kind = input.kind;
+  switch (kind?.case) {
     case "plugin":
-      return { plugin: boundWorkflowPluginTargetInputFromTarget(input.kind.value) };
+      return { plugin: boundWorkflowPluginTargetInputFromTarget(kind.value) };
     case "agent":
-      return { agent: boundWorkflowAgentTargetInputFromTarget(input.kind.value) };
+      return { agent: boundWorkflowAgentTargetInputFromTarget(kind.value) };
     default:
       return {};
   }
@@ -865,7 +785,7 @@ export function boundWorkflowTargetFromTarget(input: BoundWorkflowTarget): Bound
 }
 
 /** Creates a workflow event from native input. */
-export function workflowEvent(input: WorkflowEventInput = {}): WorkflowEvent {
+export function workflowEvent(input: WorkflowEvent = {}): WorkflowEvent {
   return {
     id: input.id ?? "",
     source: input.source ?? "",
@@ -880,7 +800,7 @@ export function workflowEvent(input: WorkflowEventInput = {}): WorkflowEvent {
 }
 
 /** Returns native input copied from a workflow event. */
-export function workflowEventInputFromEvent(input?: WorkflowEvent): WorkflowEventInput | undefined {
+export function workflowEventInputFromEvent(input?: WorkflowEvent): WorkflowEvent | undefined {
   if (input === undefined) {
     return undefined;
   }
@@ -903,7 +823,7 @@ export function workflowEventFromEvent(input: WorkflowEvent): WorkflowEvent {
 }
 
 /** Creates a workflow signal from native input. */
-export function workflowSignal(input: WorkflowSignalInput = {}): WorkflowSignal {
+export function workflowSignal(input: WorkflowSignal = {}): WorkflowSignal {
   return {
     id: input.id ?? "",
     name: input.name ?? "",
@@ -917,7 +837,7 @@ export function workflowSignal(input: WorkflowSignalInput = {}): WorkflowSignal 
 }
 
 /** Returns native input copied from a workflow signal. */
-export function workflowSignalInputFromSignal(input?: WorkflowSignal): WorkflowSignalInput | undefined {
+export function workflowSignalInputFromSignal(input?: WorkflowSignal): WorkflowSignal | undefined {
   if (input === undefined) {
     return undefined;
   }
@@ -940,7 +860,7 @@ export function workflowSignalFromSignal(input: WorkflowSignal): WorkflowSignal 
 
 /** Creates a workflow schedule trigger from native input. */
 export function workflowScheduleTrigger(
-  input: WorkflowScheduleTriggerInput = {},
+  input: WorkflowScheduleTrigger = {},
 ): WorkflowScheduleTrigger {
   return {
     scheduleId: input.scheduleId ?? "",
@@ -950,7 +870,7 @@ export function workflowScheduleTrigger(
 
 /** Creates a workflow event-trigger invocation from native input. */
 export function workflowEventTriggerInvocation(
-  input: WorkflowEventTriggerInvocationInput = {},
+  input: WorkflowEventTriggerInvocation = {},
 ): WorkflowEventTriggerInvocation {
   return {
     triggerId: input.triggerId ?? "",
@@ -960,12 +880,12 @@ export function workflowEventTriggerInvocation(
 
 /** Creates a workflow run trigger from native input. */
 export function workflowRunTrigger(
-  input: WorkflowRunTriggerInput | WorkflowRunTrigger = {},
+  input: WorkflowRunTrigger | WorkflowRunTrigger = {},
 ): WorkflowRunTrigger {
   if ("kind" in input && input.kind !== undefined) {
     return workflowRunTriggerFromTrigger({ kind: input.kind });
   }
-  const triggerInput = input as WorkflowRunTriggerInput;
+  const triggerInput = input as WorkflowRunTrigger;
   const selected = [
     triggerInput.manual === true ? "manual" : undefined,
     triggerInput.schedule === undefined ? undefined : "schedule",
@@ -990,20 +910,21 @@ export function workflowRunTrigger(
 /** Returns native input copied from a workflow run trigger. */
 export function workflowRunTriggerInputFromTrigger(
   input?: WorkflowRunTrigger,
-): WorkflowRunTriggerInput | undefined {
+): WorkflowRunTrigger | undefined {
   if (input === undefined) {
     return undefined;
   }
-  switch (input.kind.case) {
+  const kind = input.kind;
+  switch (kind?.case) {
     case "manual":
       return { manual: true };
     case "schedule":
-      return { schedule: { ...input.kind.value } };
+      return { schedule: { ...kind.value } };
     case "event":
       return {
         event: {
-          triggerId: input.kind.value.triggerId,
-          event: workflowEventInputFromEvent(input.kind.value.event),
+          triggerId: kind.value.triggerId,
+          event: workflowEventInputFromEvent(kind.value.event),
         },
       };
     default:
@@ -1017,7 +938,7 @@ export function workflowRunTriggerFromTrigger(input: WorkflowRunTrigger): Workfl
 }
 
 /** Creates a workflow-provider run from native input. */
-export function boundWorkflowRun(input: BoundWorkflowRunInput = {}): BoundWorkflowRun {
+export function boundWorkflowRun(input: BoundWorkflowRun = {}): BoundWorkflowRun {
   return {
     id: input.id ?? "",
     status: input.status ?? WorkflowRunStatus.UNSPECIFIED,
@@ -1035,7 +956,7 @@ export function boundWorkflowRun(input: BoundWorkflowRunInput = {}): BoundWorkfl
 }
 
 /** Returns native input copied from a workflow-provider run. */
-export function boundWorkflowRunInputFromRun(input?: BoundWorkflowRun): BoundWorkflowRunInput | undefined {
+export function boundWorkflowRunInputFromRun(input?: BoundWorkflowRun): BoundWorkflowRun | undefined {
   if (input === undefined) {
     return undefined;
   }
@@ -1058,7 +979,7 @@ export function boundWorkflowRunFromRun(input: BoundWorkflowRun): BoundWorkflowR
 
 /** Creates a workflow-provider schedule from native input. */
 export function boundWorkflowSchedule(
-  input: BoundWorkflowScheduleInput = {},
+  input: BoundWorkflowSchedule = {},
 ): BoundWorkflowSchedule {
   return {
     id: input.id ?? "",
@@ -1077,7 +998,7 @@ export function boundWorkflowSchedule(
 /** Returns native input copied from a workflow-provider schedule. */
 export function boundWorkflowScheduleInputFromSchedule(
   input?: BoundWorkflowSchedule,
-): BoundWorkflowScheduleInput | undefined {
+): BoundWorkflowSchedule | undefined {
   if (input === undefined) {
     return undefined;
   }
@@ -1097,7 +1018,7 @@ export function boundWorkflowScheduleFromSchedule(
 
 /** Creates a workflow-provider event trigger from native input. */
 export function boundWorkflowEventTrigger(
-  input: BoundWorkflowEventTriggerInput = {},
+  input: BoundWorkflowEventTrigger = {},
 ): BoundWorkflowEventTrigger {
   return {
     id: input.id ?? "",
@@ -1114,7 +1035,7 @@ export function boundWorkflowEventTrigger(
 /** Returns native input copied from a workflow-provider event trigger. */
 export function boundWorkflowEventTriggerInputFromTrigger(
   input?: BoundWorkflowEventTrigger,
-): BoundWorkflowEventTriggerInput | undefined {
+): BoundWorkflowEventTrigger | undefined {
   if (input === undefined) {
     return undefined;
   }
@@ -1135,7 +1056,7 @@ export function boundWorkflowEventTriggerFromTrigger(
 
 /** Creates a workflow execution reference from native input. */
 export function workflowExecutionReference(
-  input: WorkflowExecutionReferenceInput = {},
+  input: WorkflowExecutionReference = {},
 ): WorkflowExecutionReference {
   return {
     id: input.id ?? "",
@@ -1158,7 +1079,7 @@ export function workflowExecutionReference(
 /** Returns native input copied from a workflow execution reference. */
 export function workflowExecutionReferenceInputFromReference(
   input?: WorkflowExecutionReference,
-): WorkflowExecutionReferenceInput | undefined {
+): WorkflowExecutionReference | undefined {
   if (input === undefined) {
     return undefined;
   }
@@ -1799,32 +1720,33 @@ export function workflowEventMatchFromProto(
 }
 
 export function workflowOutputValueSourceToProto(
-  input?: WorkflowOutputValueSource | WorkflowOutputValueSourceInput | undefined,
+  input?: WorkflowOutputValueSource | WorkflowOutputValueSource | undefined,
 ): ProtoWorkflowOutputValueSource | undefined {
   if (input === undefined) {
     return undefined;
   }
   const source = workflowOutputValueSource(input);
-  switch (source.kind.case) {
+  const kind = source.kind;
+  switch (kind?.case) {
     case "agentOutput":
       return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "agentOutput", value: source.kind.value },
+        kind: { case: "agentOutput", value: kind.value },
       });
     case "signalPayload":
       return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "signalPayload", value: source.kind.value },
+        kind: { case: "signalPayload", value: kind.value },
       });
     case "signalMetadata":
       return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "signalMetadata", value: source.kind.value },
+        kind: { case: "signalMetadata", value: kind.value },
       });
     case "agentSession":
       return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "agentSession", value: source.kind.value },
+        kind: { case: "agentSession", value: kind.value },
       });
     case "literal":
       return create(WorkflowOutputValueSourceSchema, {
-        kind: { case: "literal", value: valueFromJson(source.kind.value) },
+        kind: { case: "literal", value: valueFromJson(kind.value) },
       });
     default:
       return create(WorkflowOutputValueSourceSchema);
@@ -1970,20 +1892,21 @@ export function boundWorkflowAgentTargetFromProto(
 }
 
 export function boundWorkflowTargetToProto(
-  input?: BoundWorkflowTarget | BoundWorkflowTargetInput | undefined,
+  input?: BoundWorkflowTarget | BoundWorkflowTarget | undefined,
 ): ProtoBoundWorkflowTarget | undefined {
   if (input === undefined) {
     return undefined;
   }
   const target = boundWorkflowTarget(input);
-  switch (target.kind.case) {
+  const kind = target.kind;
+  switch (kind?.case) {
     case "plugin":
       return create(BoundWorkflowTargetSchema, {
-        kind: { case: "plugin", value: boundWorkflowPluginTargetToProto(target.kind.value)! },
+        kind: { case: "plugin", value: boundWorkflowPluginTargetToProto(kind.value)! },
       });
     case "agent":
       return create(BoundWorkflowTargetSchema, {
-        kind: { case: "agent", value: boundWorkflowAgentTargetToProto(target.kind.value)! },
+        kind: { case: "agent", value: boundWorkflowAgentTargetToProto(kind.value)! },
       });
     default:
       return create(BoundWorkflowTargetSchema);
@@ -2125,24 +2048,25 @@ export function workflowEventTriggerInvocationFromProto(
 }
 
 export function workflowRunTriggerToProto(
-  input?: WorkflowRunTrigger | WorkflowRunTriggerInput | undefined,
+  input?: WorkflowRunTrigger | WorkflowRunTrigger | undefined,
 ): ProtoWorkflowRunTrigger | undefined {
   if (input === undefined) {
     return undefined;
   }
   const trigger = workflowRunTrigger(input);
-  switch (trigger.kind.case) {
+  const kind = trigger.kind;
+  switch (kind?.case) {
     case "manual":
       return create(WorkflowRunTriggerSchema, {
         kind: { case: "manual", value: create(WorkflowManualTriggerSchema) },
       });
     case "schedule":
       return create(WorkflowRunTriggerSchema, {
-        kind: { case: "schedule", value: workflowScheduleTriggerToProto(trigger.kind.value)! },
+        kind: { case: "schedule", value: workflowScheduleTriggerToProto(kind.value)! },
       });
     case "event":
       return create(WorkflowRunTriggerSchema, {
-        kind: { case: "event", value: workflowEventTriggerInvocationToProto(trigger.kind.value)! },
+        kind: { case: "event", value: workflowEventTriggerInvocationToProto(kind.value)! },
       });
     default:
       return create(WorkflowRunTriggerSchema);

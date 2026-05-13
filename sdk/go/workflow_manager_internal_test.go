@@ -76,14 +76,14 @@ func TestWorkflowManagerFromContextDefaultsRunIdempotencyKey(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	started, err := client.StartRun(context.Background(), WorkflowManagerStartRunInput{
+	started, err := client.StartRun(context.Background(), WorkflowManagerStartRun{
 		ProviderName: "basic",
 		WorkflowKey:  "workflow-key-1",
 	})
 	if err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
-	signaled, err := client.SignalOrStartRun(context.Background(), WorkflowManagerSignalOrStartRunInput{
+	signaled, err := client.SignalOrStartRun(context.Background(), WorkflowManagerSignalOrStartRun{
 		ProviderName: "basic",
 		WorkflowKey:  "workflow-key-1",
 	})

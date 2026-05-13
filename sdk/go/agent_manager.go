@@ -59,7 +59,7 @@ func (c *AgentManagerClient) Close() error {
 }
 
 // CreateSession creates an agent session.
-func (c *AgentManagerClient) CreateSession(ctx context.Context, input AgentManagerCreateSessionInput) (*AgentSession, error) {
+func (c *AgentManagerClient) CreateSession(ctx context.Context, input AgentManagerCreateSession) (*AgentSession, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -76,7 +76,7 @@ func (c *AgentManagerClient) CreateSession(ctx context.Context, input AgentManag
 }
 
 // GetSession fetches one agent session.
-func (c *AgentManagerClient) GetSession(ctx context.Context, input AgentManagerGetSessionInput) (*AgentSession, error) {
+func (c *AgentManagerClient) GetSession(ctx context.Context, input AgentManagerGetSession) (*AgentSession, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -90,7 +90,7 @@ func (c *AgentManagerClient) GetSession(ctx context.Context, input AgentManagerG
 }
 
 // ListSessions lists agent sessions visible to the invocation token.
-func (c *AgentManagerClient) ListSessions(ctx context.Context, input AgentManagerListSessionsInput) (*ListAgentManagerSessionsResponse, error) {
+func (c *AgentManagerClient) ListSessions(ctx context.Context, input AgentManagerListSessions) (*ListAgentManagerSessionsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -104,7 +104,7 @@ func (c *AgentManagerClient) ListSessions(ctx context.Context, input AgentManage
 }
 
 // UpdateSession updates mutable fields on an agent session.
-func (c *AgentManagerClient) UpdateSession(ctx context.Context, input AgentManagerUpdateSessionInput) (*AgentSession, error) {
+func (c *AgentManagerClient) UpdateSession(ctx context.Context, input AgentManagerUpdateSession) (*AgentSession, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -121,7 +121,7 @@ func (c *AgentManagerClient) UpdateSession(ctx context.Context, input AgentManag
 }
 
 // CreateTurn creates an agent turn.
-func (c *AgentManagerClient) CreateTurn(ctx context.Context, input AgentManagerCreateTurnInput) (*AgentTurn, error) {
+func (c *AgentManagerClient) CreateTurn(ctx context.Context, input AgentManagerCreateTurn) (*AgentTurn, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -138,7 +138,7 @@ func (c *AgentManagerClient) CreateTurn(ctx context.Context, input AgentManagerC
 }
 
 // GetTurn fetches one agent turn.
-func (c *AgentManagerClient) GetTurn(ctx context.Context, input AgentManagerGetTurnInput) (*AgentTurn, error) {
+func (c *AgentManagerClient) GetTurn(ctx context.Context, input AgentManagerGetTurn) (*AgentTurn, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -152,7 +152,7 @@ func (c *AgentManagerClient) GetTurn(ctx context.Context, input AgentManagerGetT
 }
 
 // ListTurns lists turns for an agent session.
-func (c *AgentManagerClient) ListTurns(ctx context.Context, input AgentManagerListTurnsInput) (*ListAgentManagerTurnsResponse, error) {
+func (c *AgentManagerClient) ListTurns(ctx context.Context, input AgentManagerListTurns) (*ListAgentManagerTurnsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -166,7 +166,7 @@ func (c *AgentManagerClient) ListTurns(ctx context.Context, input AgentManagerLi
 }
 
 // CancelTurn cancels an in-progress agent turn.
-func (c *AgentManagerClient) CancelTurn(ctx context.Context, input AgentManagerCancelTurnInput) (*AgentTurn, error) {
+func (c *AgentManagerClient) CancelTurn(ctx context.Context, input AgentManagerCancelTurn) (*AgentTurn, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -180,7 +180,7 @@ func (c *AgentManagerClient) CancelTurn(ctx context.Context, input AgentManagerC
 }
 
 // ListTurnEvents lists events emitted for an agent turn.
-func (c *AgentManagerClient) ListTurnEvents(ctx context.Context, input AgentManagerListTurnEventsInput) (*ListAgentManagerTurnEventsResponse, error) {
+func (c *AgentManagerClient) ListTurnEvents(ctx context.Context, input AgentManagerListTurnEvents) (*ListAgentManagerTurnEventsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -194,7 +194,7 @@ func (c *AgentManagerClient) ListTurnEvents(ctx context.Context, input AgentMana
 }
 
 // ListInteractions lists pending or completed agent interactions.
-func (c *AgentManagerClient) ListInteractions(ctx context.Context, input AgentManagerListInteractionsInput) (*ListAgentManagerInteractionsResponse, error) {
+func (c *AgentManagerClient) ListInteractions(ctx context.Context, input AgentManagerListInteractions) (*ListAgentManagerInteractionsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}
@@ -208,7 +208,7 @@ func (c *AgentManagerClient) ListInteractions(ctx context.Context, input AgentMa
 }
 
 // ResolveInteraction resolves an agent interaction with a host response.
-func (c *AgentManagerClient) ResolveInteraction(ctx context.Context, input AgentManagerResolveInteractionInput) (*AgentInteraction, error) {
+func (c *AgentManagerClient) ResolveInteraction(ctx context.Context, input AgentManagerResolveInteraction) (*AgentInteraction, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("agent manager: client is not initialized")
 	}

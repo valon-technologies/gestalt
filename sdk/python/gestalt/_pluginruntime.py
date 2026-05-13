@@ -114,7 +114,7 @@ class PreparePluginRuntimeWorkspaceRequest:
 
     session_id: str = ""
     agent_session_id: str = ""
-    workspace: _agent_native.AgentWorkspaceInput | Mapping[str, Any] | None = None
+    workspace: _agent_native.AgentWorkspace | Mapping[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -361,10 +361,10 @@ def hosted_plugin_to_proto(value: Any) -> Any:
     )
 
 
-def agent_workspace_input_from_proto(value: Any) -> _agent_native.AgentWorkspaceInput:
-    return _agent_native.AgentWorkspaceInput(
+def agent_workspace_input_from_proto(value: Any) -> _agent_native.AgentWorkspace:
+    return _agent_native.AgentWorkspace(
         checkouts=[
-            _agent_native.AgentWorkspaceGitCheckoutInput(
+            _agent_native.AgentWorkspaceGitCheckout(
                 url=checkout.url,
                 ref=checkout.ref,
                 path=checkout.path,

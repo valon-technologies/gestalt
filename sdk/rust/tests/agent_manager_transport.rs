@@ -20,13 +20,12 @@ use gestalt::proto::v1::{
     AgentToolSourceMode as ProtoAgentToolSourceMode, AgentTurn, AgentTurnEvent,
 };
 use gestalt::{
-    AgentInteractionState, AgentManager, AgentManagerCancelTurnInput,
-    AgentManagerCreateSessionInput, AgentManagerCreateTurnInput, AgentManagerGetSessionInput,
-    AgentManagerGetTurnInput, AgentManagerListInteractionsInput, AgentManagerListSessionsInput,
-    AgentManagerListTurnEventsInput, AgentManagerListTurnsInput,
-    AgentManagerResolveInteractionInput, AgentManagerUpdateSessionInput, AgentMessageInput,
-    AgentMessagePartInput, AgentMessagePartType as NativeAgentMessagePartType, AgentSessionState,
-    AgentToolRefInput, AgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET, Request,
+    AgentInteractionState, AgentManager, AgentManagerCancelTurn, AgentManagerCreateSession,
+    AgentManagerCreateTurn, AgentManagerGetSession, AgentManagerGetTurn,
+    AgentManagerListInteractions, AgentManagerListSessions, AgentManagerListTurnEvents,
+    AgentManagerListTurns, AgentManagerResolveInteraction, AgentManagerUpdateSession, AgentMessage,
+    AgentMessagePart, AgentMessagePartType as NativeAgentMessagePartType, AgentSessionState,
+    AgentToolRef, AgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET, Request,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -395,7 +394,7 @@ async fn agent_manager_connects_over_tcp_and_sends_relay_token() {
         .await
         .expect("connect agent manager");
     let created = manager
-        .create_session(AgentManagerCreateSessionInput {
+        .create_session(AgentManagerCreateSession {
             provider_name: "openai".to_string(),
             model: "gpt-5.1".to_string(),
             client_ref: "cli-session-1".to_string(),
@@ -439,7 +438,7 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .await
         .expect("connect agent manager");
     let created_session = manager
-        .create_session(AgentManagerCreateSessionInput {
+        .create_session(AgentManagerCreateSession {
             provider_name: "openai".to_string(),
             model: "gpt-5.1".to_string(),
             client_ref: "cli-session-1".to_string(),
@@ -448,20 +447,20 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .await
         .expect("create session");
     let fetched_session = manager
-        .get_session(AgentManagerGetSessionInput {
+        .get_session(AgentManagerGetSession {
             session_id: "session-managed-1".to_string(),
         })
         .await
         .expect("get session");
     let listed_sessions = manager
-        .list_sessions(AgentManagerListSessionsInput {
+        .list_sessions(AgentManagerListSessions {
             provider_name: "openai".to_string(),
             ..Default::default()
         })
         .await
         .expect("list sessions");
     let updated_session = manager
-        .update_session(AgentManagerUpdateSessionInput {
+        .update_session(AgentManagerUpdateSession {
             session_id: "session-managed-1".to_string(),
             client_ref: "cli-session-2".to_string(),
             state: AgentSessionState::Archived,
@@ -470,14 +469,14 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .await
         .expect("update session");
     let created_turn = manager
-        .create_turn(AgentManagerCreateTurnInput {
+        .create_turn(AgentManagerCreateTurn {
             session_id: "session-managed-1".to_string(),
             model: "gpt-5.1".to_string(),
-            messages: vec![AgentMessageInput {
+            messages: vec![AgentMessage {
                 role: "user".to_string(),
                 text: "Summarize this".to_string(),
-                parts: vec![AgentMessagePartInput {
-                    part_type: NativeAgentMessagePartType::Text,
+                parts: vec![AgentMessagePart {
+                    r#type: NativeAgentMessagePartType::Text,
                     text: "Summarize this".to_string(),
                     ..Default::default()
                 }],
@@ -489,27 +488,27 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .await
         .expect("create turn");
     let fetched_turn = manager
-        .get_turn(AgentManagerGetTurnInput {
+        .get_turn(AgentManagerGetTurn {
             turn_id: "turn-managed-1".to_string(),
         })
         .await
         .expect("get turn");
     let listed_turns = manager
-        .list_turns(AgentManagerListTurnsInput {
+        .list_turns(AgentManagerListTurns {
             session_id: "session-managed-1".to_string(),
             ..Default::default()
         })
         .await
         .expect("list turns");
     let canceled_turn = manager
-        .cancel_turn(AgentManagerCancelTurnInput {
+        .cancel_turn(AgentManagerCancelTurn {
             turn_id: "turn-managed-1".to_string(),
             reason: "user canceled".to_string(),
         })
         .await
         .expect("cancel turn");
     let turn_events = manager
-        .list_turn_events(AgentManagerListTurnEventsInput {
+        .list_turn_events(AgentManagerListTurnEvents {
             turn_id: "turn-managed-1".to_string(),
             after_seq: 0,
             limit: 10,
@@ -517,13 +516,13 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
         .await
         .expect("list turn events");
     let interactions = manager
-        .list_interactions(AgentManagerListInteractionsInput {
+        .list_interactions(AgentManagerListInteractions {
             turn_id: "turn-managed-1".to_string(),
         })
         .await
         .expect("list interactions");
     let resolved = manager
-        .resolve_interaction(AgentManagerResolveInteractionInput {
+        .resolve_interaction(AgentManagerResolveInteraction {
             turn_id: "turn-managed-1".to_string(),
             interaction_id: "interaction-1".to_string(),
             resolution: Some(serde_json::json!({
@@ -678,19 +677,19 @@ async fn agent_manager_create_turn_accepts_native_values() {
         .await
         .expect("connect agent manager");
     let created_turn = manager
-        .create_turn(AgentManagerCreateTurnInput {
+        .create_turn(AgentManagerCreateTurn {
             session_id: "session-managed-1".to_string(),
             model: "gpt-5.1".to_string(),
-            messages: vec![AgentMessageInput {
+            messages: vec![AgentMessage {
                 role: "user".to_string(),
                 text: "Summarize this".to_string(),
-                parts: vec![AgentMessagePartInput {
+                parts: vec![AgentMessagePart {
                     text: "Summarize this".to_string(),
                     ..Default::default()
                 }],
                 metadata: Some(serde_json::json!({ "source": "native" })),
             }],
-            tool_refs: vec![AgentToolRefInput {
+            tool_refs: vec![AgentToolRef {
                 plugin: "github".to_string(),
                 operation: "issues.get".to_string(),
                 connection: "default".to_string(),
@@ -781,7 +780,7 @@ async fn request_agent_manager_uses_embedded_invocation_token() {
         .await
         .expect("request agent manager");
     let response = manager
-        .get_session(AgentManagerGetSessionInput {
+        .get_session(AgentManagerGetSession {
             session_id: "session-managed-1".to_string(),
         })
         .await

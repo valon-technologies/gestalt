@@ -78,70 +78,20 @@ JsonObject: TypeAlias = dict[str, Any]
 
 
 @dataclass(slots=True)
-class AgentMessageInput:
-    role: str = ""
-    text: str = ""
-    parts: Sequence[Any] | None = None
-    metadata: Any | None = None
-
-
-@dataclass(slots=True)
-class AgentMessagePartInput:
-    type: int = AGENT_MESSAGE_PART_TYPE_UNSPECIFIED
-    text: str = ""
-    json: Any | None = None
-    tool_call: Any | None = None
-    tool_result: Any | None = None
-    image_ref: Any | None = None
-
-
-@dataclass(slots=True)
-class AgentMessagePartToolCallInput:
-    id: str = ""
-    tool_id: str = ""
-    arguments: Any | None = None
-
-
-@dataclass(slots=True)
-class AgentMessagePartToolResultInput:
-    tool_call_id: str = ""
-    status: int = 0
-    content: str = ""
-    output: Any | None = None
-
-
-@dataclass(slots=True)
-class AgentMessagePartImageRefInput:
-    uri: str = ""
-    mime_type: str = ""
-
-
-@dataclass(slots=True)
-class AgentToolRefInput:
-    plugin: str = ""
-    operation: str = ""
-    connection: str = ""
-    instance: str = ""
-    title: str = ""
-    description: str = ""
-    system: str = ""
-
-
-@dataclass(slots=True)
-class AgentWorkspaceGitCheckoutInput:
+class AgentWorkspaceGitCheckout:
     url: str = ""
     ref: str = ""
     path: str = ""
 
 
 @dataclass(slots=True)
-class AgentWorkspaceInput:
+class AgentWorkspace:
     checkouts: Sequence[Any] | None = None
     cwd: str = ""
 
 
 @dataclass(slots=True)
-class AgentManagerCreateSessionInput:
+class AgentManagerCreateSession:
     provider_name: str = ""
     model: str = ""
     client_ref: str = ""
@@ -151,12 +101,12 @@ class AgentManagerCreateSessionInput:
 
 
 @dataclass(slots=True)
-class AgentManagerGetSessionInput:
+class AgentManagerGetSession:
     session_id: str = ""
 
 
 @dataclass(slots=True)
-class AgentManagerListSessionsInput:
+class AgentManagerListSessions:
     provider_name: str = ""
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
     limit: int = 0
@@ -164,7 +114,7 @@ class AgentManagerListSessionsInput:
 
 
 @dataclass(slots=True)
-class AgentManagerUpdateSessionInput:
+class AgentManagerUpdateSession:
     session_id: str = ""
     client_ref: str = ""
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
@@ -172,7 +122,7 @@ class AgentManagerUpdateSessionInput:
 
 
 @dataclass(slots=True)
-class AgentManagerCreateTurnInput:
+class AgentManagerCreateTurn:
     session_id: str = ""
     model: str = ""
     messages: Sequence[Any] | None = None
@@ -185,12 +135,12 @@ class AgentManagerCreateTurnInput:
 
 
 @dataclass(slots=True)
-class AgentManagerGetTurnInput:
+class AgentManagerGetTurn:
     turn_id: str = ""
 
 
 @dataclass(slots=True)
-class AgentManagerListTurnsInput:
+class AgentManagerListTurns:
     session_id: str = ""
     status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
     limit: int = 0
@@ -198,25 +148,25 @@ class AgentManagerListTurnsInput:
 
 
 @dataclass(slots=True)
-class AgentManagerCancelTurnInput:
+class AgentManagerCancelTurn:
     turn_id: str = ""
     reason: str = ""
 
 
 @dataclass(slots=True)
-class AgentManagerListTurnEventsInput:
+class AgentManagerListTurnEvents:
     turn_id: str = ""
     after_seq: int = 0
     limit: int = 0
 
 
 @dataclass(slots=True)
-class AgentManagerListInteractionsInput:
+class AgentManagerListInteractions:
     turn_id: str = ""
 
 
 @dataclass(slots=True)
-class AgentManagerResolveInteractionInput:
+class AgentManagerResolveInteraction:
     turn_id: str = ""
     interaction_id: str = ""
     resolution: Any | None = None

@@ -402,28 +402,28 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *Provider) StartRun(context.Context, *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
-	return &gestalt.BoundWorkflowRunInput{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
+func (p *Provider) StartRun(context.Context, *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
+	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
 }
 
-func (p *Provider) GetRun(context.Context, *gestalt.GetWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
-	return &gestalt.BoundWorkflowRunInput{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
+func (p *Provider) GetRun(context.Context, *gestalt.GetWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
+	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
 }
 
 func (p *Provider) ListRuns(context.Context, *gestalt.ListWorkflowProviderRunsRequest) (*gestalt.ListWorkflowProviderRunsResponse, error) {
 	return &gestalt.ListWorkflowProviderRunsResponse{}, nil
 }
 
-func (p *Provider) CancelRun(context.Context, *gestalt.CancelWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
-	return &gestalt.BoundWorkflowRunInput{ID: "generated-run", Status: gestalt.WorkflowRunStatusValueCanceled}, nil
+func (p *Provider) CancelRun(context.Context, *gestalt.CancelWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
+	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValueCanceled}, nil
 }
 
-func (p *Provider) UpsertSchedule(context.Context, *gestalt.UpsertWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
-	return &gestalt.BoundWorkflowScheduleInput{ID: "generated-schedule"}, nil
+func (p *Provider) UpsertSchedule(context.Context, *gestalt.UpsertWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
+	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
 }
 
-func (p *Provider) GetSchedule(context.Context, *gestalt.GetWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
-	return &gestalt.BoundWorkflowScheduleInput{ID: "generated-schedule"}, nil
+func (p *Provider) GetSchedule(context.Context, *gestalt.GetWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
+	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
 }
 
 func (p *Provider) ListSchedules(context.Context, *gestalt.ListWorkflowProviderSchedulesRequest) (*gestalt.ListWorkflowProviderSchedulesResponse, error) {
@@ -434,20 +434,20 @@ func (p *Provider) DeleteSchedule(context.Context, *gestalt.DeleteWorkflowProvid
 	return nil
 }
 
-func (p *Provider) PauseSchedule(context.Context, *gestalt.PauseWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
-	return &gestalt.BoundWorkflowScheduleInput{ID: "generated-schedule", Paused: true}, nil
+func (p *Provider) PauseSchedule(context.Context, *gestalt.PauseWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
+	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule", Paused: true}, nil
 }
 
-func (p *Provider) ResumeSchedule(context.Context, *gestalt.ResumeWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowScheduleInput, error) {
-	return &gestalt.BoundWorkflowScheduleInput{ID: "generated-schedule"}, nil
+func (p *Provider) ResumeSchedule(context.Context, *gestalt.ResumeWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
+	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
 }
 
-func (p *Provider) UpsertEventTrigger(context.Context, *gestalt.UpsertWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
-	return &gestalt.BoundWorkflowEventTriggerInput{ID: "generated-trigger"}, nil
+func (p *Provider) UpsertEventTrigger(context.Context, *gestalt.UpsertWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
+	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
 }
 
-func (p *Provider) GetEventTrigger(context.Context, *gestalt.GetWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
-	return &gestalt.BoundWorkflowEventTriggerInput{ID: "generated-trigger"}, nil
+func (p *Provider) GetEventTrigger(context.Context, *gestalt.GetWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
+	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
 }
 
 func (p *Provider) ListEventTriggers(context.Context, *gestalt.ListWorkflowProviderEventTriggersRequest) (*gestalt.ListWorkflowProviderEventTriggersResponse, error) {
@@ -458,12 +458,12 @@ func (p *Provider) DeleteEventTrigger(context.Context, *gestalt.DeleteWorkflowPr
 	return nil
 }
 
-func (p *Provider) PauseEventTrigger(context.Context, *gestalt.PauseWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
-	return &gestalt.BoundWorkflowEventTriggerInput{ID: "generated-trigger", Paused: true}, nil
+func (p *Provider) PauseEventTrigger(context.Context, *gestalt.PauseWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
+	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger", Paused: true}, nil
 }
 
-func (p *Provider) ResumeEventTrigger(context.Context, *gestalt.ResumeWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTriggerInput, error) {
-	return &gestalt.BoundWorkflowEventTriggerInput{ID: "generated-trigger"}, nil
+func (p *Provider) ResumeEventTrigger(context.Context, *gestalt.ResumeWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
+	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
 }
 
 func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) error {

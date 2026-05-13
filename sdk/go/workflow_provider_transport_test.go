@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -32,8 +32,8 @@ func (p *fullWorkflowProvider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *fullWorkflowProvider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRunInput, error) {
-	return &gestalt.BoundWorkflowRunInput{
+func (p *fullWorkflowProvider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
+	return &gestalt.BoundWorkflowRun{
 		ID:     req.IdempotencyKey,
 		Status: gestalt.WorkflowRunStatusValuePending,
 		Target: req.Target,
