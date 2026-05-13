@@ -10,8 +10,9 @@ and MCP exposure.
 ## How plugin providers work
 
 A plugin package includes a manifest that defines metadata, connections, and
-optional passthrough API surfaces. Some plugins are fully executable, some are
-fully declarative, and some are hybrid packages that combine both models.
+optional passthrough API surfaces. Plugins can be
+[executable](#defining-operations), [declarative](#declarative-plugins), or
+both.
 Plugins support:
 
 > REST/OpenAPI, GraphQL, MCP and executable custom-defined code
@@ -851,8 +852,6 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
-    Implement the `SessionCatalogProvider` interface on your provider:
-
     ```go
     func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*gestalt.Catalog, error) {
         return &gestalt.Catalog{
@@ -870,8 +869,6 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Register a dynamic session catalog with `@session_catalog`:
-
     ```python
     from gestalt import (
         session_catalog,
@@ -896,8 +893,6 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Return a request-scoped catalog from the provider:
-
     ```rust
     #[gestalt::async_trait]
     impl gestalt::Provider for Provider {
@@ -925,8 +920,6 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Export a `sessionCatalog` function from your plugin provider definition:
-
     ```typescript
     export const plugin = definePlugin({
       sessionCatalog(request) {
@@ -958,8 +951,6 @@ metadata; Gestalt already stores access and refresh tokens separately.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
-    Implement the `PostConnectCapable` interface on your provider:
-
     ```go
     import (
       "context"
@@ -984,8 +975,6 @@ metadata; Gestalt already stores access and refresh tokens separately.
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Register a post-connect hook with `@post_connect`:
-
     ```python
     from gestalt import post_connect, ConnectedToken
 
@@ -1005,8 +994,6 @@ metadata; Gestalt already stores access and refresh tokens separately.
     your provider needs to derive connection metadata during the connect flow.
   </Tabs.Tab>
   <Tabs.Tab>
-    Provide a `postConnect` handler in the plugin definition:
-
     ```typescript
     import { definePlugin } from "@valon-technologies/gestalt";
 
