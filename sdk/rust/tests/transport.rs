@@ -1,3 +1,6 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
 #[allow(dead_code)]
 mod helpers;
 
@@ -5,8 +8,8 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gestalt::proto::v1::integration_provider_client::IntegrationProviderClient;
-use gestalt::proto::v1::{
+use generated::v1::integration_provider_client::IntegrationProviderClient;
+use generated::v1::{
     AccessContext, CredentialContext, ExecuteRequest, ExternalIdentityContext,
     GetSessionCatalogRequest, HostContext, HttpSubjectRequest, PostConnectCredential,
     PostConnectRequest, RequestContext, ResolveHttpSubjectRequest, StartProviderRequest,

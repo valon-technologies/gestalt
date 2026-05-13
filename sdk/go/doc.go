@@ -58,18 +58,16 @@
 // [SecretsProvider], [WorkflowProvider], [AgentProvider], and
 // [PluginRuntimeProvider].
 //
-// Workflow and agent helpers include [NewBoundWorkflowTarget],
-// [NewWorkflowSignal], [NewBoundWorkflowRun], [NewWorkflowExecutionReference],
-// [NewAgentMessage], and [NewAgentToolRef]. These constructors keep native Go
-// values at provider boundaries.
+// Workflow and agent helpers include [NewAgentMessage] and [NewAgentToolRef].
+// Workflow structs use native Go values at provider boundaries; SDK adapters
+// own transport conversion.
 //
 // Host-service clients include [CacheClient], [IndexedDBClient], [S3Client],
 // [WorkflowHostClient], [WorkflowManagerClient], [AgentHostClient],
 // [AgentManagerClient], [AuthorizationClient], and [InvokerClient].
 //
 // Runtime and telemetry helpers include [ServeProvider], [ProviderMetadata],
-// [StructFromAny], [TelemetryInstrumentationName], and the provider telemetry
-// helpers.
+// [TelemetryInstrumentationName], and the provider telemetry helpers.
 //
 // # Catalog metadata
 //
@@ -92,17 +90,9 @@
 // AgentManagerClient, AuthorizationClient, and InvokerClient.
 //
 // AgentHostClient includes plain Go helper methods such as ExecuteToolForTurn,
-// ListToolsForTurn, and ResolveConnectionForTurn. SDK constructors such as
-// NewBoundWorkflowRun, NewWorkflowSignal, NewAuthorizationModelRef, and the
-// external credential request/response structs accept native time.Time values
-// and JSON-compatible maps or structs, so provider code can keep transport
-// serialization at the SDK boundary. Provider-facing APIs should accept native
-// Go values and keep transport details inside SDK adapters. StructFromAny
-// accepts structs, string-keyed map aliases, and pointers to either form; it
-// rejects time.Time, json.Marshaler values, non-string map keys, cycles, and
-// non-finite numbers in generic structured payloads. Embedded struct fields are
-// not flattened like encoding/json; anonymous embedded fields must have an
-// explicit json tag name.
+// ListToolsForTurn, and ResolveConnectionForTurn. Native SDK structs accept
+// time.Time values and JSON-compatible maps or structs, so provider code can
+// keep transport serialization at the SDK boundary.
 //
 // See https://gestaltd.ai/reference/sdk for the SDK overview.
 // See https://gestaltd.ai/providers/plugins for the typed plugin authoring flow.

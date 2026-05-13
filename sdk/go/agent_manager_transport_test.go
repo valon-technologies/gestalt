@@ -206,13 +206,13 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 	if got.GetMessages()[0].GetParts()[0].GetType() != proto.AgentMessagePartType_AGENT_MESSAGE_PART_TYPE_TEXT {
 		t.Fatalf("message part type = %s, want text", got.GetMessages()[0].GetParts()[0].GetType())
 	}
-	if metadata := gestalt.MapFromStruct(got.GetMessages()[0].GetMetadata()); metadata["source"] != "native" {
+	if metadata := got.GetMessages()[0].GetMetadata().AsMap(); metadata["source"] != "native" {
 		t.Fatalf("message metadata = %#v", metadata)
 	}
 	if got.GetToolRefs()[0].GetPlugin() != "github" || got.GetToolRefs()[0].GetConnection() != "default" {
 		t.Fatalf("tool refs = %#v", got.GetToolRefs())
 	}
-	if schema := gestalt.MapFromStruct(got.GetResponseSchema()); schema["type"] != "object" {
+	if schema := got.GetResponseSchema().AsMap(); schema["type"] != "object" {
 		t.Fatalf("response schema = %#v", schema)
 	}
 }

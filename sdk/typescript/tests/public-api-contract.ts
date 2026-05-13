@@ -8,17 +8,6 @@ import {
   type RuntimeLogAppendResponse,
   type WorkflowEvent,
 } from "@valon-technologies/gestalt";
-import {
-  StructSchema,
-  structFromObject,
-  timestampFromDate,
-  valueFromJson,
-  type Struct,
-} from "@valon-technologies/gestalt/protocol";
-import {
-  AccessEvaluationRequestSchema,
-  type AccessEvaluationRequest,
-} from "@valon-technologies/gestalt/protocol/v1";
 
 // @ts-expect-error Root package must not expose protocol helper schemas.
 import { StructSchema as RootStructSchema } from "@valon-technologies/gestalt";
@@ -34,6 +23,12 @@ import { AppendPluginRuntimeLogsRequestSchema as RootAppendPluginRuntimeLogsRequ
 import { PluginRuntimeLogStream as RootPluginRuntimeLogStream } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose protobuf message helper types.
 import type { MessageInitShape } from "@valon-technologies/gestalt";
+// @ts-expect-error Protocol helper subpath is not public.
+import type { Struct as ProtocolStruct } from "@valon-technologies/gestalt/protocol";
+// @ts-expect-error Generated protocol subpath is not public.
+import type { AccessEvaluationRequest as ProtocolRequest } from "@valon-technologies/gestalt/protocol/v1";
+// @ts-expect-error Generated agent contract helpers are not public.
+import type { agentContractSchemas } from "@valon-technologies/gestalt/test/agent-contract";
 
 const evaluateInput: AuthorizationEvaluateInput = {
   subject: { type: "user", id: "user-1" },
@@ -46,9 +41,6 @@ const workspace: AgentManagerWorkspace = {
   cwd: "/workspace",
   checkouts: [{ url: "https://example.test/repo.git", ref: "main" }],
 };
-const struct = structFromObject({ ok: true });
-type StructMessage = Struct;
-type ProtocolRequest = AccessEvaluationRequest;
 const egressMode: PluginRuntimeEgressMode = PluginRuntimeEgressMode.NONE;
 
 void Authorization;
@@ -59,10 +51,6 @@ void appendResponse;
 void event;
 void workspace;
 void egressMode;
-void StructSchema;
-void struct;
-void (undefined as unknown as StructMessage);
-void timestampFromDate(new Date(0));
-void valueFromJson("ok");
-void AccessEvaluationRequestSchema;
+void (undefined as unknown as ProtocolStruct);
 void (undefined as unknown as ProtocolRequest);
+void (undefined as unknown as typeof agentContractSchemas);

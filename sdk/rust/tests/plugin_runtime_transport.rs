@@ -1,3 +1,6 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
 #[allow(dead_code)]
 mod helpers;
 
@@ -6,9 +9,9 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, UNIX_EPOCH};
 
-use gestalt::proto::v1::plugin_runtime_provider_client::PluginRuntimeProviderClient;
-use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
-use gestalt::proto::v1::{
+use generated::v1::plugin_runtime_provider_client::PluginRuntimeProviderClient;
+use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
+use generated::v1::{
     AgentWorkspace, AgentWorkspaceGitCheckout, ConfigureProviderRequest,
     GetPluginRuntimeSessionRequest as ProtoGetPluginRuntimeSessionRequest,
     ListPluginRuntimeSessionsRequest as ProtoListPluginRuntimeSessionsRequest,
@@ -279,7 +282,7 @@ async fn plugin_runtime_provider_transport_uses_native_trait_types() {
     assert_eq!(listed.sessions.len(), 1);
 
     let prepared = client
-        .prepare_workspace(gestalt::proto::v1::PreparePluginRuntimeWorkspaceRequest {
+        .prepare_workspace(generated::v1::PreparePluginRuntimeWorkspaceRequest {
             session_id: "session-1".to_string(),
             agent_session_id: "agent-session-1".to_string(),
             workspace: Some(AgentWorkspace {

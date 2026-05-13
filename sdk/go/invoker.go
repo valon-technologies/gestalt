@@ -237,7 +237,7 @@ func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, pa
 	if params == nil {
 		params = map[string]any{}
 	}
-	msg, err := StructFromAny(params)
+	msg, err := structFromAny(params)
 	if err != nil {
 		return nil, fmt.Errorf("plugin invoker: encode params: %w", err)
 	}
@@ -280,7 +280,7 @@ func (c *InvokerClient) InvokeGraphQL(ctx context.Context, plugin, document stri
 	var msg *structpb.Struct
 	var err error
 	if variables != nil {
-		msg, err = StructFromAny(variables)
+		msg, err = structFromAny(variables)
 		if err != nil {
 			return nil, fmt.Errorf("plugin invoker: encode variables: %w", err)
 		}

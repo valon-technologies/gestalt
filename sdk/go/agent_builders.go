@@ -299,9 +299,9 @@ func agentImageRefInputPtrFromRef(value *AgentMessagePartImageRef) *AgentMessage
 }
 
 func agentMapFromAny(value any) (map[string]any, error) {
-	structValue, err := StructFromAny(value)
+	structValue, err := structFromAny(value)
 	if err != nil {
 		return nil, err
 	}
-	return MapFromStruct(structValue), nil
+	return mapFromStruct(structValue), nil
 }

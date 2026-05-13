@@ -1,6 +1,6 @@
 package gestalt
 
-import proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+import proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 
 type AgentManagerCreateSession struct {
 	ProviderName   string
@@ -90,7 +90,7 @@ type ListAgentManagerInteractionsResponse struct {
 }
 
 func newAgentManagerCreateSessionRequest(input AgentManagerCreateSession) (*proto.AgentManagerCreateSessionRequest, error) {
-	metadata, err := StructFromAny(input.Metadata)
+	metadata, err := structFromAny(input.Metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func newAgentManagerListSessionsRequest(input AgentManagerListSessions) *proto.A
 }
 
 func newAgentManagerUpdateSessionRequest(input AgentManagerUpdateSession) (*proto.AgentManagerUpdateSessionRequest, error) {
-	metadata, err := StructFromAny(input.Metadata)
+	metadata, err := structFromAny(input.Metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -139,15 +139,15 @@ func newAgentManagerCreateTurnRequest(input AgentManagerCreateTurn) (*proto.Agen
 	if err != nil {
 		return nil, err
 	}
-	responseSchema, err := StructFromAny(input.ResponseSchema)
+	responseSchema, err := structFromAny(input.ResponseSchema)
 	if err != nil {
 		return nil, err
 	}
-	metadata, err := StructFromAny(input.Metadata)
+	metadata, err := structFromAny(input.Metadata)
 	if err != nil {
 		return nil, err
 	}
-	modelOptions, err := StructFromAny(input.ModelOptions)
+	modelOptions, err := structFromAny(input.ModelOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func newAgentManagerListInteractionsRequest(input AgentManagerListInteractions) 
 }
 
 func newAgentManagerResolveInteractionRequest(input AgentManagerResolveInteraction) (*proto.AgentManagerResolveInteractionRequest, error) {
-	resolution, err := StructFromAny(input.Resolution)
+	resolution, err := structFromAny(input.Resolution)
 	if err != nil {
 		return nil, err
 	}

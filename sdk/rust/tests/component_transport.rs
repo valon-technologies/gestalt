@@ -1,3 +1,6 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
 #[allow(dead_code)]
 mod helpers;
 
@@ -6,10 +9,10 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use gestalt::proto::v1::authentication_provider_client::AuthenticationProviderClient;
-use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
-use gestalt::proto::v1::s3_client::S3Client;
-use gestalt::proto::v1::{
+use generated::v1::authentication_provider_client::AuthenticationProviderClient;
+use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
+use generated::v1::s3_client::S3Client;
+use generated::v1::{
     BeginLoginRequest as ProtoBeginLoginRequest, CompleteLoginRequest as ProtoCompleteLoginRequest,
     ConfigureProviderRequest, HeadObjectRequest as ProtoHeadObjectRequest,
     ListObjectsRequest as ProtoListObjectsRequest, ProviderKind,
@@ -473,15 +476,15 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
     };
     s3.write_object(stream_iter(vec![
         ProtoWriteObjectRequest {
-            msg: Some(gestalt::proto::v1::write_object_request::Msg::Open(
-                gestalt::proto::v1::WriteObjectOpen {
+            msg: Some(generated::v1::write_object_request::Msg::Open(
+                generated::v1::WriteObjectOpen {
                     r#ref: Some(reference.clone()),
-                    ..gestalt::proto::v1::WriteObjectOpen::default()
+                    ..generated::v1::WriteObjectOpen::default()
                 },
             )),
         },
         ProtoWriteObjectRequest {
-            msg: Some(gestalt::proto::v1::write_object_request::Msg::Data(
+            msg: Some(generated::v1::write_object_request::Msg::Data(
                 b"hello".to_vec(),
             )),
         },
@@ -528,7 +531,7 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
         .expect("meta frame");
     assert!(matches!(
         first.result,
-        Some(gestalt::proto::v1::read_object_chunk::Result::Meta(_))
+        Some(generated::v1::read_object_chunk::Result::Meta(_))
     ));
     let second = stream
         .message()
@@ -539,7 +542,7 @@ async fn serves_s3_provider_and_runtime_over_unix_socket() {
         second
             .result
             .and_then(|result| match result {
-                gestalt::proto::v1::read_object_chunk::Result::Data(data) => Some(data),
+                generated::v1::read_object_chunk::Result::Data(data) => Some(data),
                 _ => None,
             })
             .expect("data payload"),

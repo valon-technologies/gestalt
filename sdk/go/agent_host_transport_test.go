@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	gproto "google.golang.org/protobuf/proto"
@@ -154,7 +154,7 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	if harness.toolRequests[0].GetSessionId() != "session-1" || harness.toolRequests[0].GetTurnId() != "turn-1" || harness.toolRequests[0].GetToolCallId() != "call-1" || harness.toolRequests[0].GetToolId() != "tool-1" || harness.toolRequests[0].GetRunGrant() != "run-grant-1" || harness.toolRequests[0].GetIdempotencyKey() != "tool-call-key-1" {
 		t.Fatalf("tool request = %#v", harness.toolRequests[0])
 	}
-	if got := gestalt.MapFromStruct(harness.toolRequests[0].GetArguments()); got["query"] != "Ada Lovelace" {
+	if got := harness.toolRequests[0].GetArguments().AsMap(); got["query"] != "Ada Lovelace" {
 		t.Fatalf("tool request arguments = %#v", got)
 	}
 	if len(harness.listRequests) != 1 {

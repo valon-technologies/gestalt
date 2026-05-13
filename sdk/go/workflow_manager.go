@@ -377,6 +377,6 @@ func (c *WorkflowManagerClient) PublishEvent(ctx context.Context, input Workflow
 	if err != nil {
 		return nil, err
 	}
-	event := WorkflowEventFromEvent(resp)
+	event := workflowEventFromProto(resp)
 	return &event, nil
 }

@@ -9022,12 +9022,16 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 				t.Fatalf("logical backing store should contain task: %v", err)
 			}
 
-			if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+			blockedResult, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
 				"store": "events",
 				"id":    "evt-1",
 				"value": "blocked",
-			}, ""); err == nil {
-				t.Fatal("indexeddb_roundtrip on disallowed object store should fail")
+			}, "")
+			if err != nil {
+				t.Fatalf("Execute indexeddb_roundtrip on disallowed object store: %v", err)
+			}
+			if blockedResult == nil || blockedResult.Status < 400 {
+				t.Fatalf("indexeddb_roundtrip on disallowed object store status = %#v, want error status", blockedResult)
 			}
 			if runtimeProvider != nil {
 				startRequests := runtimeProvider.startPluginRequestsCopy()

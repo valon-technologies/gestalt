@@ -1,3 +1,6 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
 #[allow(dead_code)]
 mod helpers;
 
@@ -6,9 +9,9 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use gestalt::proto::v1::cache_server::{Cache as ProtoCache, CacheServer};
-use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
-use gestalt::proto::v1::{
+use generated::v1::cache_server::{Cache as ProtoCache, CacheServer};
+use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
+use generated::v1::{
     CacheDeleteManyRequest, CacheDeleteManyResponse, CacheDeleteRequest, CacheDeleteResponse,
     CacheGetManyRequest, CacheGetManyResponse, CacheGetRequest, CacheGetResponse, CacheResult,
     CacheSetManyRequest, CacheSetRequest, CacheTouchRequest, CacheTouchResponse,

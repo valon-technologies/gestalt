@@ -149,10 +149,6 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	}
 	defer func() { _ = client.Close() }()
 
-	signalExtensions, err := gestalt.ValuesFromMap(map[string]any{"attempt": 1})
-	if err != nil {
-		t.Fatalf("ValuesFromMap: %v", err)
-	}
 	createdAtValue := time.Date(1969, 12, 31, 23, 59, 59, 999_000_000, time.UTC)
 	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRun{
 		ProviderName: "local",
@@ -192,12 +188,8 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	if got.GetWorkflowKey() != "slack:T123:C123:1700000000.000001" || got.GetSignal().GetName() != "slack.message" {
 		t.Fatalf("signal request = %+v", got)
 	}
-	if payload := gestalt.MapFromStruct(got.GetSignal().GetPayload()); payload["ok"] != true {
+	if payload := got.GetSignal().GetPayload().AsMap(); payload["ok"] != true {
 		t.Fatalf("signal payload = %#v", payload)
-	}
-	event := &proto.WorkflowEvent{Extensions: signalExtensions}
-	if extensions := gestalt.MapFromValues(event.GetExtensions()); extensions["attempt"] != float64(1) {
-		t.Fatalf("signal extensions = %#v", extensions)
 	}
 	roundTripCreatedAt := got.GetSignal().GetCreatedAt()
 	if roundTripCreatedAt == nil {
@@ -208,21 +200,6 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	}
 	if !roundTripCreatedAt.AsTime().Equal(createdAtValue) {
 		t.Fatalf("created_at = %v, want %v", roundTripCreatedAt.AsTime(), createdAtValue)
-	}
-	if value, err := gestalt.StructFromAny(nil); err != nil || value != nil {
-		t.Fatalf("StructFromAny(nil) = %#v, %v; want nil, nil", value, err)
-	}
-	if value, err := gestalt.StructFromAny(map[string]any{}); err != nil || value == nil || len(value.GetFields()) != 0 {
-		t.Fatalf("StructFromAny(empty map) = %#v, %v; want empty struct, nil", value, err)
-	}
-	if value, err := gestalt.StructFromAny([]string{"bad"}); err == nil || value != nil {
-		t.Fatalf("StructFromAny(non-map) = %#v, %v; want nil error", value, err)
-	}
-	if value, err := gestalt.ValuesFromMap(nil); err != nil || value != nil {
-		t.Fatalf("ValuesFromMap(nil) = %#v, %v; want nil, nil", value, err)
-	}
-	if value := gestalt.MapFromValues(nil); value != nil {
-		t.Fatalf("MapFromValues(nil) = %#v, want nil", value)
 	}
 	if err := (&timestamppb.Timestamp{Nanos: -1}).CheckValid(); err == nil {
 		t.Fatal("invalid timestamp CheckValid() = nil, want error")
@@ -293,7 +270,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
 	if got.GetTarget().GetAgent().GetMessages()[0].GetText() != "Respond in thread." {
 		t.Fatalf("agent messages = %#v", got.GetTarget().GetAgent().GetMessages())
 	}
-	if payload := gestalt.MapFromStruct(got.GetSignal().GetPayload()); payload["ok"] != true {
+	if payload := got.GetSignal().GetPayload().AsMap(); payload["ok"] != true {
 		t.Fatalf("signal payload = %#v", payload)
 	}
 	if !got.GetSignal().GetCreatedAt().AsTime().Equal(createdAt) {

@@ -239,7 +239,7 @@ func signalWorkflowProviderRunRequestFromProto(req *proto.SignalWorkflowProvider
 	}
 	var signal *WorkflowSignal
 	if req.GetSignal() != nil {
-		input := WorkflowSignalFromSignal(req.GetSignal())
+		input := workflowSignalFromProto(req.GetSignal())
 		signal = &input
 	}
 	return &SignalWorkflowProviderRunRequest{
@@ -254,7 +254,7 @@ func signalOrStartWorkflowProviderRunRequestFromProto(req *proto.SignalOrStartWo
 	}
 	var signal *WorkflowSignal
 	if req.GetSignal() != nil {
-		input := WorkflowSignalFromSignal(req.GetSignal())
+		input := workflowSignalFromProto(req.GetSignal())
 		signal = &input
 	}
 	return &SignalOrStartWorkflowProviderRunRequest{
@@ -302,7 +302,7 @@ func publishWorkflowProviderEventRequestFromProto(req *proto.PublishWorkflowProv
 	}
 	var event *WorkflowEvent
 	if req.GetEvent() != nil {
-		input := WorkflowEventFromEvent(req.GetEvent())
+		input := workflowEventFromProto(req.GetEvent())
 		event = &input
 	}
 	return &PublishWorkflowProviderEventRequest{
@@ -316,7 +316,7 @@ func workflowRunInputToProto(input *BoundWorkflowRun) (*proto.BoundWorkflowRun, 
 	if input == nil {
 		return nil, nil
 	}
-	return NewBoundWorkflowRun(*input)
+	return boundWorkflowRunToProto(*input)
 }
 
 func workflowRunInputsToProto(values []BoundWorkflowRun) ([]*proto.BoundWorkflowRun, error) {
@@ -325,7 +325,7 @@ func workflowRunInputsToProto(values []BoundWorkflowRun) ([]*proto.BoundWorkflow
 	}
 	out := make([]*proto.BoundWorkflowRun, 0, len(values))
 	for _, value := range values {
-		run, err := NewBoundWorkflowRun(value)
+		run, err := boundWorkflowRunToProto(value)
 		if err != nil {
 			return nil, err
 		}
@@ -338,7 +338,7 @@ func workflowScheduleInputToProto(input *BoundWorkflowSchedule) (*proto.BoundWor
 	if input == nil {
 		return nil, nil
 	}
-	return NewBoundWorkflowSchedule(*input)
+	return boundWorkflowScheduleToProto(*input)
 }
 
 func workflowScheduleInputsToProto(values []BoundWorkflowSchedule) ([]*proto.BoundWorkflowSchedule, error) {
@@ -347,7 +347,7 @@ func workflowScheduleInputsToProto(values []BoundWorkflowSchedule) ([]*proto.Bou
 	}
 	out := make([]*proto.BoundWorkflowSchedule, 0, len(values))
 	for _, value := range values {
-		schedule, err := NewBoundWorkflowSchedule(value)
+		schedule, err := boundWorkflowScheduleToProto(value)
 		if err != nil {
 			return nil, err
 		}
@@ -360,7 +360,7 @@ func workflowEventTriggerInputToProto(input *BoundWorkflowEventTrigger) (*proto.
 	if input == nil {
 		return nil, nil
 	}
-	return NewBoundWorkflowEventTrigger(*input)
+	return boundWorkflowEventTriggerToProto(*input)
 }
 
 func workflowEventTriggerInputsToProto(values []BoundWorkflowEventTrigger) ([]*proto.BoundWorkflowEventTrigger, error) {
@@ -369,7 +369,7 @@ func workflowEventTriggerInputsToProto(values []BoundWorkflowEventTrigger) ([]*p
 	}
 	out := make([]*proto.BoundWorkflowEventTrigger, 0, len(values))
 	for _, value := range values {
-		trigger, err := NewBoundWorkflowEventTrigger(value)
+		trigger, err := boundWorkflowEventTriggerToProto(value)
 		if err != nil {
 			return nil, err
 		}
@@ -382,7 +382,7 @@ func workflowExecutionReferenceInputPtrFromReference(value *proto.WorkflowExecut
 	if value == nil {
 		return nil, nil
 	}
-	input, err := WorkflowExecutionReferenceFromReference(value)
+	input, err := workflowExecutionReferenceFromProto(value)
 	if err != nil {
 		return nil, err
 	}
@@ -393,7 +393,7 @@ func workflowExecutionReferenceInputToProto(input *WorkflowExecutionReference) (
 	if input == nil {
 		return nil, nil
 	}
-	return NewWorkflowExecutionReference(*input)
+	return workflowExecutionReferenceToProto(*input)
 }
 
 func workflowExecutionReferenceInputsToProto(values []WorkflowExecutionReference) ([]*proto.WorkflowExecutionReference, error) {
@@ -402,7 +402,7 @@ func workflowExecutionReferenceInputsToProto(values []WorkflowExecutionReference
 	}
 	out := make([]*proto.WorkflowExecutionReference, 0, len(values))
 	for _, value := range values {
-		ref, err := NewWorkflowExecutionReference(value)
+		ref, err := workflowExecutionReferenceToProto(value)
 		if err != nil {
 			return nil, err
 		}
@@ -415,7 +415,7 @@ func workflowSignalInputToProto(input *WorkflowSignal) (*proto.WorkflowSignal, e
 	if input == nil {
 		return nil, nil
 	}
-	return NewWorkflowSignal(*input)
+	return workflowSignalToProto(*input)
 }
 
 func signalWorkflowRunResponseToProto(resp *SignalWorkflowRunResponse) (*proto.SignalWorkflowRunResponse, error) {

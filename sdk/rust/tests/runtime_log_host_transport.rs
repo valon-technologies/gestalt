@@ -1,3 +1,6 @@
+#[path = "../src/generated.rs"]
+mod generated;
+
 #[allow(dead_code)]
 mod helpers;
 
@@ -5,10 +8,10 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use gestalt::proto::v1::plugin_runtime_log_host_server::{
+use generated::v1::plugin_runtime_log_host_server::{
     PluginRuntimeLogHost as ProtoPluginRuntimeLogHost, PluginRuntimeLogHostServer,
 };
-use gestalt::proto::v1::{
+use generated::v1::{
     AppendPluginRuntimeLogsRequest, AppendPluginRuntimeLogsResponse, PluginRuntimeLogStream,
 };
 use gestalt::{
