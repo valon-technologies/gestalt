@@ -31,12 +31,8 @@ When you need production controls, add them through the [provider](https://gesta
 - **Authentication and Authorization as primitives.** [Authentication](https://gestaltd.ai/providers/authentication) flows, [credential storage](https://gestaltd.ai/providers/external-credentials), encryption at rest, token refresh, and [RBAC](https://gestaltd.ai/providers/authorization) run on infrastructure you control.
 - **Declarative configuration.** A single YAML config defines tools, auth flows, connections, agents, workflows, and schedules.
 - **Observability and audit logging.** [OpenTelemetry](https://opentelemetry.io/) compatible [observability](https://gestaltd.ai/observability) and [audit logging](https://gestaltd.ai/audit-logging).
-- **Runtimes.** [Runtimes](https://gestaltd.ai/providers/runtime) provide agent and code sandboxing.*
-- **Workflows and agents.** [Workflows](https://gestaltd.ai/providers/workflow) and [agents](https://gestaltd.ai/providers/agent) run with durable state, retries, and delegated invocations.†
-
-\* Runtimes are an alpha feature, and not yet stable.
-
-† Workflows and agents are both alpha features, and not yet stable.
+- **Runtimes.** [Runtimes](https://gestaltd.ai/providers/runtime) provide agent and code sandboxing.<sup><a href="#runtimes-alpha-note">*</a></sup>
+- **Workflows and agents.** [Workflows](https://gestaltd.ai/providers/workflow) and [agents](https://gestaltd.ai/providers/agent) run with durable state, retries, and delegated invocations.<sup><a href="#workflows-agents-alpha-note">†</a></sup>
 
 ## What Gestalt Is Not
 
@@ -87,3 +83,8 @@ For the full walkthrough, see [Getting Started](https://gestaltd.ai/getting-star
 | [`gestalt`](./gestalt) | Rust CLI client for setup, auth, plugin invocation, workflow and agent runs, and token management. |
 | [`sdk`](./sdk) | Go, Python, Rust, and TypeScript SDKs plus shared protocol definitions. |
 | [`docs`](./docs) | Source for the public documentation site at [gestaltd.ai](https://gestaltd.ai). |
+
+## Footnotes
+
+<div id="runtimes-alpha-note"><sup>*</sup> Runtimes are an alpha feature, and not yet stable.</div>
+<div id="workflows-agents-alpha-note"><sup>†</sup> Workflows and agents are both alpha features, and not yet stable.</div>
