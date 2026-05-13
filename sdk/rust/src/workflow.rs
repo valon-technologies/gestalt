@@ -728,22 +728,7 @@ fn workflow_event_match_from_proto(input: pb::WorkflowEventMatch) -> WorkflowEve
 pub fn new_workflow_output_value_source(
     input: WorkflowOutputValueSource,
 ) -> WorkflowOutputValueSource {
-    match input {
-        WorkflowOutputValueSource::Empty => WorkflowOutputValueSource::Empty,
-        WorkflowOutputValueSource::AgentOutput(value) => {
-            WorkflowOutputValueSource::AgentOutput(value)
-        }
-        WorkflowOutputValueSource::SignalPayload(value) => {
-            WorkflowOutputValueSource::SignalPayload(value)
-        }
-        WorkflowOutputValueSource::SignalMetadata(value) => {
-            WorkflowOutputValueSource::SignalMetadata(value)
-        }
-        WorkflowOutputValueSource::Literal(value) => WorkflowOutputValueSource::Literal(value),
-        WorkflowOutputValueSource::AgentSession(value) => {
-            WorkflowOutputValueSource::AgentSession(value)
-        }
-    }
+    input
 }
 
 /// Returns input copied from a workflow output value source.
