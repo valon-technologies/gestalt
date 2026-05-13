@@ -9,7 +9,14 @@ from typing import Any
 import grpc
 from google.protobuf import message as _message
 
-from ._agent import agent_message_from_dict, agent_tool_ref_from_dict
+from ._agent import (
+    agent_message_from_dict,
+    agent_message_from_proto,
+    agent_message_to_proto,
+    agent_tool_ref_from_dict,
+    agent_tool_ref_from_proto,
+    agent_tool_ref_to_proto,
+)
 from ._gen.v1 import agent_pb2 as _agent_pb
 from ._gen.v1 import workflow_pb2 as _pb
 from ._gen.v1 import workflow_pb2_grpc as _pb_grpc
@@ -579,27 +586,59 @@ def _timestamp_to_datetime(value: Any, field: str) -> _dt.datetime | None:
     )
 
 
-def _message_list(values: Sequence[Any] | None, message_type: type[Any]) -> list[Any]:
+def _message_mapping(item: Any) -> dict[str, Any]:
+    mapping = _dataclass_mapping(item)
+    if mapping is not None:
+        return dict(mapping)
+    if not isinstance(item, Mapping):
+        raise TypeError(
+            f"expected protobuf message, mapping, or dataclass, got {type(item).__name__}"
+        )
+    return dict(item)
+
+
+def _message_proto_list(
+    values: Sequence[Any] | None, message_type: type[Any]
+) -> list[Any]:
     if values is None:
         return []
     output = []
     for item in values:
         if isinstance(item, _message.Message):
             output.append(_copy(item))
+        elif message_type is _agent_pb.AgentMessage:
+            output.append(agent_message_to_proto(item))
+        elif message_type is _agent_pb.AgentToolRef:
+            converted = agent_tool_ref_to_proto(item)
+            if converted is None:
+                raise TypeError("AgentToolRef item cannot be None")
+            output.append(converted)
         else:
-            mapping = _dataclass_mapping(item)
-            if mapping is None:
-                if not isinstance(item, Mapping):
-                    raise TypeError(
-                        f"expected protobuf message, mapping, or dataclass, got {type(item).__name__}"
-                    )
-                mapping = dict(item)
-            if message_type is _agent_pb.AgentMessage:
-                output.append(agent_message_from_dict(mapping))
-            elif message_type is _agent_pb.AgentToolRef:
-                output.append(agent_tool_ref_from_dict(mapping))
-            else:
-                output.append(message_type(**mapping))
+            output.append(message_type(**_message_mapping(item)))
+    return output
+
+
+def _agent_message_input_list(values: Sequence[Any] | None) -> list[Any]:
+    if values is None:
+        return []
+    output = []
+    for item in values:
+        if isinstance(item, _agent_pb.AgentMessage):
+            output.append(agent_message_from_proto(item))
+        else:
+            output.append(agent_message_from_dict(item))
+    return output
+
+
+def _agent_tool_ref_input_list(values: Sequence[Any] | None) -> list[Any]:
+    if values is None:
+        return []
+    output = []
+    for item in values:
+        if isinstance(item, _agent_pb.AgentToolRef):
+            output.append(agent_tool_ref_from_proto(item))
+        else:
+            output.append(agent_tool_ref_from_dict(item))
     return output
 
 
@@ -860,8 +899,8 @@ def bound_workflow_agent_target(value: Any | None = None, **kwargs: Any) -> Any:
         provider_name=data.get("provider_name", ""),
         model=data.get("model", ""),
         prompt=data.get("prompt", ""),
-        messages=_message_list(data.get("messages"), _agent_pb.AgentMessage),
-        tool_refs=_message_list(data.get("tool_refs"), _agent_pb.AgentToolRef),
+        messages=_message_proto_list(data.get("messages"), _agent_pb.AgentMessage),
+        tool_refs=_message_proto_list(data.get("tool_refs"), _agent_pb.AgentToolRef),
         response_schema=_optional_struct(data.get("response_schema")),
         metadata=_optional_struct(data.get("metadata")),
         timeout_seconds=data.get("timeout_seconds", 0),
@@ -886,8 +925,8 @@ def bound_workflow_agent_target_input_from_target(
         provider_name=value.provider_name,
         model=value.model,
         prompt=value.prompt,
-        messages=_message_list(value.messages, _agent_pb.AgentMessage),
-        tool_refs=_message_list(value.tool_refs, _agent_pb.AgentToolRef),
+        messages=_agent_message_input_list(value.messages),
+        tool_refs=_agent_tool_ref_input_list(value.tool_refs),
         response_schema=struct_to_dict(value.response_schema)
         if has_field(value, "response_schema")
         else None,
