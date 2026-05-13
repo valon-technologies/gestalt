@@ -384,10 +384,6 @@ func NewLocalReleaseMetadataSource(rawPath string) ProviderSource {
 	return ProviderSource{metadataPath: strings.TrimSpace(rawPath)}
 }
 
-func NewGitSource(src GitSourceDef) ProviderSource {
-	return ProviderSource{Git: cloneGitSourceDef(&src)}
-}
-
 func cloneSourceAuthDef(src *SourceAuthDef) *SourceAuthDef {
 	if src == nil {
 		return nil
