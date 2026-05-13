@@ -60,6 +60,53 @@ class WorkflowHelperTests(unittest.TestCase):
             "original",
         )
 
+    def test_native_agent_target_messages_build_proto(self) -> None:
+        target = gestalt.bound_workflow_agent_target(
+            gestalt.BoundWorkflowAgentTarget(
+                provider_name="claude",
+                messages=[
+                    gestalt.AgentMessage(
+                        role="system",
+                        text="Watch the alerts channel.",
+                    )
+                ],
+                tool_refs=[
+                    gestalt.AgentToolRef(
+                        plugin="github",
+                        operation="search/code",
+                    )
+                ],
+            )
+        )
+
+        self.assertEqual(target.provider_name, "claude")
+        self.assertEqual(target.messages[0].role, "system")
+        self.assertEqual(target.messages[0].text, "Watch the alerts channel.")
+        self.assertEqual(target.tool_refs[0].plugin, "github")
+        self.assertEqual(target.tool_refs[0].operation, "search/code")
+
+    def test_agent_target_copy_returns_native_messages(self) -> None:
+        target = gestalt.bound_workflow_agent_target(
+            messages=[
+                gestalt.AgentMessage(
+                    role="system",
+                    text="Watch the alerts channel.",
+                )
+            ],
+            tool_refs=[
+                gestalt.AgentToolRef(
+                    plugin="github",
+                    operation="search/code",
+                )
+            ],
+        )
+        copied = gestalt.bound_workflow_agent_target_input_from_target(target)
+
+        self.assertIsInstance(copied.messages[0], gestalt.AgentMessage)
+        self.assertEqual(copied.messages[0].text, "Watch the alerts channel.")
+        self.assertIsInstance(copied.tool_refs[0], gestalt.AgentToolRef)
+        self.assertEqual(copied.tool_refs[0].plugin, "github")
+
 
 if __name__ == "__main__":
     unittest.main()
