@@ -397,6 +397,7 @@ func New(cfg Config) (*Server, error) {
 		Agent:             cfg.Agent,
 		AgentManager:      cfg.AgentManager,
 		Invoker:           cfg.Invoker,
+		Audit:             cfg.AuditSink,
 		Authorizer:        cfg.Authorizer,
 		DefaultConnection: cfg.DefaultConnection,
 		CatalogConnection: cfg.CatalogConnection,

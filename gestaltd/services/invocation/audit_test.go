@@ -24,15 +24,21 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 
 	eventTime := time.Date(2026, 3, 15, 12, 30, 0, 0, time.UTC)
 	entry := core.AuditEntry{
-		Timestamp:   eventTime,
-		RequestID:   "req-abc-123",
-		Source:      "binding:test-hook",
-		SubjectID:   principal.UserSubjectID("user-42"),
-		SubjectKind: string(principal.KindUser),
-		Provider:    "alpha",
-		Operation:   "fetch",
-		Depth:       1,
-		Allowed:     true,
+		Timestamp:               eventTime,
+		RequestID:               "req-abc-123",
+		Source:                  "binding:test-hook",
+		SubjectID:               principal.UserSubjectID("user-42"),
+		SubjectKind:             string(principal.KindUser),
+		Provider:                "alpha",
+		Operation:               "fetch",
+		Depth:                   1,
+		Allowed:                 true,
+		WorkflowKeySHA256:       "workflow-key-hash",
+		CallerPlugin:            "slack",
+		WorkflowTargetKind:      "plugin",
+		WorkflowTargetComponent: "plugin_target",
+		WorkflowTargetProvider:  "github",
+		WorkflowTargetOperation: "reviewPullRequest",
 	}
 
 	sink.Log(context.Background(), entry)
@@ -81,6 +87,24 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 	}
 	if record["allowed"] != true {
 		t.Errorf("expected allowed=true, got %v", record["allowed"])
+	}
+	if record["workflow_key_sha256"] != "workflow-key-hash" {
+		t.Errorf("expected workflow_key_sha256=workflow-key-hash, got %v", record["workflow_key_sha256"])
+	}
+	if record["caller_plugin"] != "slack" {
+		t.Errorf("expected caller_plugin=slack, got %v", record["caller_plugin"])
+	}
+	if record["workflow_target_kind"] != "plugin" {
+		t.Errorf("expected workflow_target_kind=plugin, got %v", record["workflow_target_kind"])
+	}
+	if record["workflow_target_component"] != "plugin_target" {
+		t.Errorf("expected workflow_target_component=plugin_target, got %v", record["workflow_target_component"])
+	}
+	if record["workflow_target_provider"] != "github" {
+		t.Errorf("expected workflow_target_provider=github, got %v", record["workflow_target_provider"])
+	}
+	if record["workflow_target_operation"] != "reviewPullRequest" {
+		t.Errorf("expected workflow_target_operation=reviewPullRequest, got %v", record["workflow_target_operation"])
 	}
 	if _, hasError := record["error"]; hasError {
 		t.Errorf("expected no error field for allowed entry, got %v", record["error"])

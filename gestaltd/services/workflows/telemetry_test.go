@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -17,7 +18,9 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
@@ -391,10 +394,22 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 	t.Cleanup(func() { slog.SetDefault(prevLogger) })
 
 	provider := newWorkflowManagerTelemetryProvider()
+	var auditBuf bytes.Buffer
+	authz, err := authorization.New(authorization.StaticConfig{
+		Policies: map[string]authorization.StaticSubjectPolicy{
+			"deny": {Default: "deny"},
+		},
+		ProviderPolicies: map[string]string{"datadog": "deny"},
+	})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
 	manager := workflowmanager.New(workflowmanager.Config{
 		Workflow:     workflowManagerTelemetryControl{provider: provider},
 		Agent:        workflowManagerTelemetryAgentControl{},
 		AgentManager: workflowManagerTelemetryAgentManager{},
+		Audit:        invocation.NewSlogAuditSink(&auditBuf),
+		Authorizer:   authz,
 	})
 	tokens, err := NewInvocationTokenManager([]byte("workflow-manager-telemetry-test-secret"))
 	if err != nil {
@@ -413,6 +428,41 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 	)
 	if err != nil {
 		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
+	}
+	principalDeniedToken, err := tokens.MintRootTokenWithWorkflowGrants(
+		principal.WithPrincipal(context.Background(), &principal.Principal{
+			SubjectID: "user:restricted",
+			UserID:    "restricted",
+			Kind:      principal.KindUser,
+			Source:    principal.SourceSession,
+			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
+				{Plugin: "simple"},
+			}),
+		}),
+		"slack",
+		nil,
+		workflowgrants.Grants{workflowgrants.OperationRunsSignalOrStart: {}},
+	)
+	if err != nil {
+		t.Fatalf("MintRootTokenWithWorkflowGrants(principal denied): %v", err)
+	}
+	authorizerDeniedToken, err := tokens.MintRootTokenWithWorkflowGrants(
+		principal.WithPrincipal(context.Background(), &principal.Principal{
+			SubjectID: "user:authorizer-denied",
+			UserID:    "authorizer-denied",
+			Kind:      principal.KindUser,
+			Source:    principal.SourceSession,
+			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
+				{Plugin: "simple"},
+				{Plugin: "datadog", Operations: []string{"listAlerts"}},
+			}),
+		}),
+		"slack",
+		nil,
+		workflowgrants.Grants{workflowgrants.OperationRunsSignalOrStart: {}},
+	)
+	if err != nil {
+		t.Fatalf("MintRootTokenWithWorkflowGrants(authorizer denied): %v", err)
 	}
 
 	lis := bufconn.Listen(1024 * 1024)
@@ -462,6 +512,49 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("SignalOrStartRun invalid target = %v, want InvalidArgument", err)
 	}
+	principalDeniedKey := "slack:T123:C123:1712161832.000600"
+	_, err = client.SignalOrStartRun(context.Background(), &proto.WorkflowManagerSignalOrStartRunRequest{
+		ProviderName:    "local",
+		WorkflowKey:     principalDeniedKey,
+		IdempotencyKey:  "idem-principal-denied",
+		InvocationToken: principalDeniedToken,
+		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
+		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Agent{
+			Agent: &proto.BoundWorkflowAgentTarget{
+				ProviderName: "simple",
+				Prompt:       "handle the Slack message",
+				ToolRefs: []*proto.AgentToolRef{
+					{Plugin: "github", Operation: "reviewPullRequest"},
+				},
+			},
+		}},
+	})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("SignalOrStartRun principal denied = %v, want NotFound", err)
+	}
+	authorizerDeniedKey := "slack:T123:C123:1712161833.000700"
+	_, err = client.SignalOrStartRun(context.Background(), &proto.WorkflowManagerSignalOrStartRunRequest{
+		ProviderName:    "local",
+		WorkflowKey:     authorizerDeniedKey,
+		IdempotencyKey:  "idem-authorizer-denied",
+		InvocationToken: authorizerDeniedToken,
+		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
+		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Agent{
+			Agent: &proto.BoundWorkflowAgentTarget{
+				ProviderName: "simple",
+				Prompt:       "handle the Slack message",
+				ToolRefs: []*proto.AgentToolRef{
+					{Plugin: "datadog", Operation: "listAlerts"},
+				},
+			},
+		}},
+	})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("SignalOrStartRun authorizer denied = %v, want NotFound", err)
+	}
+	if got := provider.signalOrStartCalls.Load(); got != 2 {
+		t.Fatalf("provider SignalOrStartRun calls = %d, want 2", got)
+	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	successAttrs := map[string]string{
@@ -490,10 +583,20 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 		"error.type":                         "grpc.invalid_argument",
 	}
+	notFoundFailureAttrs := map[string]string{
+		"gestaltd.workflow.provider.name":    "unknown",
+		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
+		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindAgent,
+		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusUnknown,
+		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
+		"error.type":                         "grpc.not_found",
+	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.count", 1, successAttrs)
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.workflows.manager.operation.duration", successAttrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 1, failureAttrs)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 1, untrustedFailureAttrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.workflows.manager.operation.error_count", 2, notFoundFailureAttrs)
 	untrustedProviderMetricAttrs := map[string]string{}
 	for key, value := range untrustedFailureAttrs {
 		untrustedProviderMetricAttrs[key] = value
@@ -512,13 +615,128 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 	}
 
 	logOutput := logBuf.String()
-	if strings.Contains(logOutput, failureKey) {
-		t.Fatalf("manager log contains raw workflow key %q", failureKey)
+	for _, forbidden := range []string{failureKey, principalDeniedKey, authorizerDeniedKey} {
+		if strings.Contains(logOutput, forbidden) {
+			t.Fatalf("manager log contains raw workflow key %q", forbidden)
+		}
 	}
-	if strings.Contains(logOutput, "idem-failure") {
-		t.Fatal("manager log contains raw idempotency key")
+	for _, forbidden := range []string{"idem-failure", "idem-principal-denied", "idem-authorizer-denied"} {
+		if strings.Contains(logOutput, forbidden) {
+			t.Fatalf("manager log contains raw idempotency key %q", forbidden)
+		}
 	}
-	assertWorkflowManagerFailureLog(t, logOutput, failureKey)
+	assertWorkflowManagerFailureLog(t, logOutput, failureKey, "provider_signal_or_start", map[string]any{
+		"level":          "WARN",
+		"request_id_set": true,
+		"error_type":     "grpc_status",
+		"error_code":     "failed_precondition",
+	})
+	assertWorkflowManagerFailureLog(t, logOutput, principalDeniedKey, "authorize_target", map[string]any{
+		"level":                     "WARN",
+		"request_id_set":            true,
+		"error_type":                "not_found",
+		"workflow_target_component": "agent_tool_ref",
+		"authorization_decision":    "workflow_target_principal_operation_permission_denied",
+	})
+	assertWorkflowManagerFailureLog(t, logOutput, authorizerDeniedKey, "authorize_target", map[string]any{
+		"level":                     "WARN",
+		"request_id_set":            true,
+		"error_type":                "not_found",
+		"workflow_target_component": "agent_tool_ref",
+		"authorization_decision":    "workflow_target_authorizer_provider_denied",
+	})
+	assertWorkflowManagerFailureLogsOmitFields(t, logOutput,
+		"provider_selection",
+		"workflow_provider",
+		"target_kind",
+		"caller_plugin",
+		"subject_id",
+		"subject_kind",
+		"execution_ref_id",
+		"target_authorization_provider",
+		"target_authorization_operation",
+		"target_authorization_tool_ref_index",
+	)
+
+	auditOutput := auditBuf.String()
+	for _, forbidden := range []string{failureKey, principalDeniedKey, authorizerDeniedKey, "idem-failure", "idem-principal-denied", "idem-authorizer-denied", "provider echoed"} {
+		if strings.Contains(auditOutput, forbidden) {
+			t.Fatalf("workflow audit contains raw sensitive value %q", forbidden)
+		}
+	}
+	assertWorkflowAuditLog(t, auditOutput, successKey, map[string]any{
+		"level":                "INFO",
+		"request_id_set":       true,
+		"source":               "workflow_manager",
+		"provider":             "local",
+		"operation":            "workflow.run.signal_or_start",
+		"target_kind":          "workflow_run",
+		"target_id":            "run-signal-started",
+		"allowed":              true,
+		"caller_plugin":        "slack",
+		"subject_id":           "user:user-123",
+		"subject_kind":         "user",
+		"workflow_target_kind": "agent",
+	})
+	assertWorkflowAuditLog(t, auditOutput, failureKey, map[string]any{
+		"level":                "WARN",
+		"request_id_set":       true,
+		"source":               "workflow_manager",
+		"provider":             "local",
+		"operation":            "workflow.run.signal_or_start",
+		"target_kind":          "workflow_run",
+		"allowed":              false,
+		"error":                "grpc_status",
+		"caller_plugin":        "slack",
+		"subject_id":           "user:user-123",
+		"subject_kind":         "user",
+		"workflow_target_kind": "agent",
+	})
+	assertWorkflowAuditLog(t, auditOutput, principalDeniedKey, map[string]any{
+		"level":                     "WARN",
+		"request_id_set":            true,
+		"source":                    "workflow_manager",
+		"provider":                  "local",
+		"operation":                 "workflow.run.signal_or_start",
+		"target_kind":               "workflow_run",
+		"allowed":                   false,
+		"error":                     "not_found",
+		"authorization_decision":    "workflow_target_principal_operation_permission_denied",
+		"caller_plugin":             "slack",
+		"subject_id":                "user:restricted",
+		"subject_kind":              "user",
+		"workflow_target_kind":      "agent",
+		"workflow_target_component": "agent_tool_ref",
+		"workflow_target_provider":  "github",
+		"workflow_target_operation": "reviewPullRequest",
+	})
+	assertWorkflowAuditLog(t, auditOutput, authorizerDeniedKey, map[string]any{
+		"level":                     "WARN",
+		"request_id_set":            true,
+		"source":                    "workflow_manager",
+		"provider":                  "local",
+		"operation":                 "workflow.run.signal_or_start",
+		"target_kind":               "workflow_run",
+		"allowed":                   false,
+		"error":                     "not_found",
+		"authorization_decision":    "workflow_target_authorizer_provider_denied",
+		"caller_plugin":             "slack",
+		"subject_id":                "user:authorizer-denied",
+		"subject_kind":              "user",
+		"workflow_target_kind":      "agent",
+		"workflow_target_component": "agent_tool_ref",
+		"workflow_target_provider":  "datadog",
+		"workflow_target_operation": "listAlerts",
+	})
+	assertWorkflowAuditLogsOmitFields(t, auditOutput,
+		"idempotency_key",
+		"result_body",
+		"result_body_bytes",
+		"result_body_truncated",
+		"result_body_sha256",
+		"workflow_target_tool_ref_index",
+		"target_authorization_tool_ref_index",
+	)
 }
 
 func newTelemetryRemoteWorkflow(t *testing.T) coreworkflow.Provider {
@@ -576,7 +794,7 @@ func workflowManagerTelemetrySignalOrStartRequest(token, workflowKey, idempotenc
 	}
 }
 
-func assertWorkflowManagerFailureLog(t *testing.T, output, workflowKey string) {
+func assertWorkflowManagerFailureLog(t *testing.T, output, workflowKey, phase string, want map[string]any) {
 	t.Helper()
 
 	expectedHash := workflowManagerTelemetrySHA256(workflowKey)
@@ -591,32 +809,132 @@ func assertWorkflowManagerFailureLog(t *testing.T, output, workflowKey string) {
 		if record["msg"] != "workflow manager signal-or-start failed" {
 			continue
 		}
-		for key, want := range map[string]string{
-			"level":               "WARN",
-			"phase":               "provider_signal_or_start",
-			"provider_selection":  "local",
-			"workflow_provider":   "local",
-			"target_kind":         "agent",
-			"caller_plugin":       "slack",
-			"subject_id":          "user:user-123",
-			"subject_kind":        "user",
-			"workflow_key_sha256": expectedHash,
-			"error_type":          "grpc_status",
-			"error_code":          "failed_precondition",
-		} {
-			if got := record[key]; got != want {
-				t.Fatalf("log field %s = %#v, want %q in record %#v", key, got, want, record)
-			}
+		if record["workflow_key_sha256"] != expectedHash || record["phase"] != phase {
+			continue
 		}
 		if _, ok := record["error"]; ok {
 			t.Fatalf("log record includes raw error field %#v", record)
 		}
-		if record["execution_ref_id"] == "" {
-			t.Fatalf("execution_ref_id missing from record %#v", record)
+		assertWorkflowManagerLogField(t, record, "workflow_key_sha256", expectedHash)
+		assertWorkflowManagerLogField(t, record, "phase", phase)
+		for key, value := range want {
+			if key == "execution_ref_id_set" {
+				if value == true && !workflowManagerLogStringPresent(record, "execution_ref_id") {
+					t.Fatalf("execution_ref_id missing from record %#v", record)
+				}
+				continue
+			}
+			if key == "request_id_set" {
+				if value == true && !workflowManagerLogStringPresent(record, "request_id") {
+					t.Fatalf("request_id missing from record %#v", record)
+				}
+				continue
+			}
+			assertWorkflowManagerLogField(t, record, key, value)
 		}
 		return
 	}
-	t.Fatalf("workflow manager failure log not found in %q", output)
+	t.Fatalf("workflow manager failure log for key %q phase %q not found in %q", workflowKey, phase, output)
+}
+
+func assertWorkflowManagerFailureLogsOmitFields(t *testing.T, output string, fields ...string) {
+	t.Helper()
+
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("log line is not valid JSON: %q: %v", line, err)
+		}
+		if record["msg"] != "workflow manager signal-or-start failed" {
+			continue
+		}
+		for _, field := range fields {
+			if _, ok := record[field]; ok {
+				t.Fatalf("workflow manager failure log includes %s in record %#v", field, record)
+			}
+		}
+	}
+}
+
+func assertWorkflowAuditLog(t *testing.T, output, workflowKey string, want map[string]any) {
+	t.Helper()
+
+	expectedHash := workflowManagerTelemetrySHA256(workflowKey)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("audit line is not valid JSON: %q: %v", line, err)
+		}
+		if record["log.type"] != "audit" || record["workflow_key_sha256"] != expectedHash {
+			continue
+		}
+		assertWorkflowManagerLogField(t, record, "workflow_key_sha256", expectedHash)
+		for key, value := range want {
+			if key == "request_id_set" {
+				if value == true && !workflowManagerLogStringPresent(record, "request_id") {
+					t.Fatalf("request_id missing from audit record %#v", record)
+				}
+				continue
+			}
+			assertWorkflowManagerLogField(t, record, key, value)
+		}
+		return
+	}
+	t.Fatalf("workflow audit for key %q not found in %q", workflowKey, output)
+}
+
+func assertWorkflowAuditLogsOmitFields(t *testing.T, output string, fields ...string) {
+	t.Helper()
+
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("audit line is not valid JSON: %q: %v", line, err)
+		}
+		if record["log.type"] != "audit" {
+			continue
+		}
+		for _, field := range fields {
+			if _, ok := record[field]; ok {
+				t.Fatalf("workflow audit includes %s in record %#v", field, record)
+			}
+		}
+	}
+}
+
+func workflowManagerLogStringPresent(record map[string]any, key string) bool {
+	value, ok := record[key].(string)
+	return ok && value != ""
+}
+
+func assertWorkflowManagerLogField(t *testing.T, record map[string]any, key string, want any) {
+	t.Helper()
+
+	got := record[key]
+	switch want := want.(type) {
+	case string:
+		if got != want {
+			t.Fatalf("log field %s = %#v, want %q in record %#v", key, got, want, record)
+		}
+	case int:
+		number, ok := got.(float64)
+		if !ok || number != float64(want) {
+			t.Fatalf("log field %s = %#v, want %d in record %#v", key, got, want, record)
+		}
+	default:
+		if got != want {
+			t.Fatalf("log field %s = %#v, want %#v in record %#v", key, got, want, record)
+		}
+	}
 }
 
 func workflowManagerTelemetrySHA256(value string) string {
@@ -660,8 +978,9 @@ type workflowManagerTelemetryAgentManager struct {
 
 type workflowManagerTelemetryProvider struct {
 	coreworkflow.Provider
-	refs             map[string]*coreworkflow.ExecutionReference
-	signalOrStartErr error
+	refs               map[string]*coreworkflow.ExecutionReference
+	signalOrStartCalls atomic.Int64
+	signalOrStartErr   error
 }
 
 func newWorkflowManagerTelemetryProvider() *workflowManagerTelemetryProvider {
@@ -669,6 +988,7 @@ func newWorkflowManagerTelemetryProvider() *workflowManagerTelemetryProvider {
 }
 
 func (p *workflowManagerTelemetryProvider) SignalOrStartRun(_ context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
+	p.signalOrStartCalls.Add(1)
 	if p.signalOrStartErr != nil {
 		return nil, p.signalOrStartErr
 	}
