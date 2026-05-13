@@ -36,6 +36,26 @@ function suffixForPath(pathname: string, prefixes: string[]) {
   return suffix || "/";
 }
 
+function selectedValue(
+  prefix: string,
+  visibleVersions: Array<Pick<DocsVersion, "pathPrefix">>,
+  routeVersions: Array<Pick<DocsVersion, "pathPrefix" | "tag">>,
+  latest: Pick<DocsVersion, "pathPrefix" | "tag"> | null,
+) {
+  if (!prefix) {
+    return optionValue(visibleVersions[0]);
+  }
+
+  const currentRoute = routeVersions.find(
+    (version) => optionValue(version) === prefix,
+  );
+  if (currentRoute?.tag && currentRoute.tag === latest?.tag) {
+    return optionValue(latest);
+  }
+
+  return prefix;
+}
+
 export default function VersionPicker() {
   const [manifest, setManifest] = useState<VersionsManifest | null>(null);
 
@@ -58,28 +78,49 @@ export default function VersionPicker() {
     };
   }, []);
 
-  const versions = useMemo(() => {
+  const { routeVersions, visibleVersions } = useMemo(() => {
     if (!manifest) {
-      return [{ label: currentLabel, pathPrefix: currentPrefix || "/" }];
+      const fallback = [
+        { label: currentLabel, pathPrefix: currentPrefix || "/", tag: "" },
+      ];
+      return { routeVersions: fallback, visibleVersions: fallback };
     }
-    return [
-      {
-        ...manifest.latest,
-        label: `${manifest.latest.label} (${manifest.latest.version})`,
-      },
-      ...(manifest.development
-        ? [
-            {
-              ...manifest.development,
-              label: `${manifest.development.label} (${manifest.development.version})`,
-            },
-          ]
-        : []),
-      ...manifest.versions,
-    ];
+
+    const development = manifest.development
+      ? [
+          {
+            ...manifest.development,
+            label: `${manifest.development.label} (${manifest.development.version})`,
+          },
+        ]
+      : [];
+    const latest = {
+      ...manifest.latest,
+      label: manifest.latest.version,
+    };
+
+    return {
+      routeVersions: [
+        manifest.latest,
+        ...(manifest.development ? [manifest.development] : []),
+        ...manifest.versions,
+      ],
+      visibleVersions: [
+        latest,
+        ...development,
+        ...manifest.versions.filter(
+          (version) => version.tag !== manifest.latest.tag,
+        ),
+      ],
+    };
   }, [manifest]);
 
-  const selected = currentPrefix || optionValue(versions[0]);
+  const selected = selectedValue(
+    currentPrefix,
+    visibleVersions,
+    routeVersions,
+    manifest?.latest ?? null,
+  );
 
   return (
     <label className="docs-version-picker">
@@ -89,7 +130,7 @@ export default function VersionPicker() {
         value={selected}
         onChange={(event) => {
           const nextPrefix = event.target.value;
-          const prefixes = versions
+          const prefixes = routeVersions
             .map((version) => optionValue(version))
             .filter((prefix) => prefix !== "/");
           const suffix = suffixForPath(window.location.pathname, prefixes);
@@ -99,7 +140,7 @@ export default function VersionPicker() {
           );
         }}
       >
-        {versions.map((version) => (
+        {visibleVersions.map((version) => (
           <option key={version.pathPrefix} value={optionValue(version)}>
             {version.label}
           </option>
