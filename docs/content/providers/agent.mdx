@@ -8,68 +8,35 @@ import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 Gestalt agent providers expose one portable session-and-turn interface for
 agent backends such as Claude Code, Codex, Cursor, or custom harnesses.
 
+## Mental model
+
+Agent providers back global sessions and turns. A caller creates a session,
+then creates turns inside that session with messages, optional tools, and
+optional structured-output requirements. The provider owns the backend-specific
+model or harness work; Gestalt owns provider selection, authorization, tool
+scope, and the common HTTP, CLI, workflow, and SDK surfaces.
+
+Agent provider selection is global, not plugin-scoped. A session request can
+choose a provider explicitly, or inherit the sole/default `providers.agent`
+entry when that field is omitted.
+
 ## Configuring `providers.agent`
 
-Configure agent providers under `providers.agent`:
+Configure at least one entry under `providers.agent`. Agent providers back
+global sessions and turns. Configure the provider once, then reference it from
+the CLI, HTTP API, workflow `target.agent` blocks, or plugin-facing
+`AgentManager`.
 
-```yaml
-providers:
-  agent:
-    simple:
-      source: ./providers/agent/simple/manifest.yaml
-      default: true
-      config:
-        defaultModel: fast
-        aliases:
-          fast: openai/gpt-4.1-mini
-          deep: openai/gpt-5.5
-        maxSteps: 8
-        timeoutSeconds: 120
-```
+If you configure exactly one agent provider, or mark one as `default: true`,
+then session requests may omit `provider`.
 
-The `config` block is provider-specific. If the provider stores sessions,
-turns, memory, or other durable records, bind it to an IndexedDB provider:
+The `config` block is provider-specific. Durable providers can bind a host
+IndexedDB provider; hosted providers can attach a runtime; session start hooks
+can run provider-owned setup before a session starts. For package names,
+provider fields, IndexedDB bindings, hosted runtime placement, local harnesses,
+and session start hooks, see [Config File](/reference/config-file#providersagent).
 
-```yaml
-providers:
-  indexeddb:
-    main:
-      source: ./providers/indexeddb/relationaldb/manifest.yaml
-      config:
-        dsn: sqlite:///tmp/gestalt.db
-
-  agent:
-    simple:
-      source: ./providers/agent/simple/manifest.yaml
-      indexeddb:
-        provider: main
-        db: simple_agent
-```
-
-For the full config shape, see [Config File](/reference/config-file#providersagent).
-
-### Session start hooks
-
-Use session start hooks for lightweight provider-owned setup that should run
-once when a session is created:
-
-```yaml
-providers:
-  agent:
-    claude:
-      source: ./providers/agent/claude/manifest.yaml
-      lifecycle:
-        sessionStart:
-          - id: load-memory
-            type: command
-            command: ["bash", "-lc", "./scripts/load-agent-context.sh"]
-            cwd: ./agent-context
-            timeout: 10s
-```
-
-Hooks fail session creation when the command fails or times out.
-
-### Workspaces and runtimes
+## Workspaces and runtime placement
 
 Session callers can ask Gestalt to prepare Git checkouts before the agent
 session starts:
@@ -95,21 +62,11 @@ session starts:
 Use `workspace` for checkout and working-directory setup. Use `sessionStart`
 hooks for extra context setup.
 
-By default, agent providers run beside `gestaltd`. To run an agent provider in a
-hosted sandbox, attach a runtime provider to the same agent entry:
-
-```yaml
-providers:
-  agent:
-    simple:
-      source: ./providers/agent/simple/manifest.yaml
-      runtime:
-        provider: modal
-        image: ghcr.io/valon/gestalt-python-runtime:latest
-```
-
-For runtime placement, workspace preparation, pools, and egress controls, see
-[Runtime](/providers/runtime).
+By default, agent providers run beside `gestaltd`. To run an agent provider in
+a hosted sandbox, attach a runtime provider to the same agent entry. For
+runtime placement, workspace preparation, pools, and egress controls, see
+[Runtime](/providers/runtime) and
+[Config File](/reference/config-file#providersagent).
 
 ## Session and turn shape
 
@@ -448,9 +405,8 @@ provider.
 Callers use `GetTurn`, `ListTurnEvents`, and `ListInteractions` to observe
 progress or resolve pending human input.
 
-If your provider needs durable state, configure
-`providers.agent.<name>.indexeddb` and store canonical session and turn records
-there.
+If your provider needs durable state, bind it to a host IndexedDB provider and
+store canonical session and turn records there.
 
 Turn events may include an optional `display` projection for CLIs and UIs. The
 raw event `type` and `data` remain the source of truth.
