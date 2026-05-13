@@ -1,0 +1,84 @@
+name: Temporary Gestalt CLI Docker Hub Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type DELETE_GESTALT_CLI_ALPHA_DOCKER_TAGS to delete gestalt CLI alpha Docker Hub tags.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    if: ${{ inputs.confirm == 'DELETE_GESTALT_CLI_ALPHA_DOCKER_TAGS' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete Docker Hub alpha tags
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_DESCRIPTION_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_DESCRIPTION_PASSWORD }}
+        run: |
+          set -euo pipefail
+          namespace="valontechnologies"
+          repository="gestalt"
+
+          token="$(
+            jq -n \
+              --arg identifier "$DOCKERHUB_USERNAME" \
+              --arg secret "$DOCKERHUB_TOKEN" \
+              '{identifier: $identifier, secret: $secret}' \
+              | curl -fsSL \
+                  -H 'Content-Type: application/json' \
+                  -X POST \
+                  -d @- \
+                  https://hub.docker.com/v2/auth/token \
+              | jq -r '.access_token'
+          )"
+          if [[ -z "$token" || "$token" == "null" ]]; then
+            echo "Failed to obtain Docker Hub API token" >&2
+            exit 1
+          fi
+
+          list_tags() {
+            curl -fsSL \
+              -H "Authorization: Bearer ${token}" \
+              "https://hub.docker.com/v2/namespaces/${namespace}/repositories/${repository}/tags?page_size=100" \
+              | jq -r '.results[] | select(.name | test("^0\\.0\\.1-alpha")) | .name' \
+              | sort -V
+          }
+
+          list_tags > /tmp/dockerhub-alpha-tags.txt
+          echo "Docker Hub alpha tags to delete: $(wc -l < /tmp/dockerhub-alpha-tags.txt | tr -d ' ')"
+          cat /tmp/dockerhub-alpha-tags.txt
+
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            echo "Deleting Docker Hub tag ${tag}"
+            code="$(
+              curl -sS -o /tmp/dockerhub-delete.json -w '%{http_code}' \
+                -H "Authorization: Bearer ${token}" \
+                -X DELETE \
+                "https://hub.docker.com/v2/namespaces/${namespace}/repositories/${repository}/tags/${tag}" || true
+            )"
+            if [[ "$code" != "202" && "$code" != "204" && "$code" != "404" ]]; then
+              cat /tmp/dockerhub-delete.json >&2 || true
+              echo "Docker Hub delete failed for ${tag}: HTTP ${code}" >&2
+              exit 1
+            fi
+          done < /tmp/dockerhub-alpha-tags.txt
+
+          for attempt in {1..12}; do
+            list_tags > /tmp/dockerhub-alpha-remaining.txt
+            remaining="$(wc -l < /tmp/dockerhub-alpha-remaining.txt | tr -d ' ')"
+            echo "Remaining Docker Hub alpha tags: ${remaining}"
+            cat /tmp/dockerhub-alpha-remaining.txt
+            [[ "$remaining" = "0" ]] && exit 0
+            sleep 5
+          done
+
+          echo "Docker Hub alpha tags still visible after waiting" >&2
+          exit 1
