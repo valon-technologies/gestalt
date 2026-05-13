@@ -217,12 +217,12 @@ func (l *lazyWorkflowManager) SignalOrStartRun(ctx context.Context, p *principal
 	return target.SignalOrStartRun(ctx, p, req)
 }
 
-func (l *lazyWorkflowManager) PublishEvent(ctx context.Context, p *principal.Principal, providerName string, event coreworkflow.Event) (coreworkflow.Event, error) {
+func (l *lazyWorkflowManager) PublishEvent(ctx context.Context, p *principal.Principal, req workflowmanager.EventPublish) (coreworkflow.Event, error) {
 	target, err := l.current()
 	if err != nil {
 		return coreworkflow.Event{}, err
 	}
-	return target.PublishEvent(ctx, p, providerName, event)
+	return target.PublishEvent(ctx, p, req)
 }
 
 func (l *lazyWorkflowManager) current() (workflowmanager.Service, error) {
