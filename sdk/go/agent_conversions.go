@@ -74,24 +74,6 @@ func agentMessagesToProto(values []AgentMessage) ([]*proto.AgentMessage, error) 
 	return out, nil
 }
 
-func agentMessagePtrsToProto(values []*AgentMessage) ([]*proto.AgentMessage, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.AgentMessage, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		pbValue, err := agentMessageToProto(*value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, pbValue)
-	}
-	return out, nil
-}
-
 func agentMessagePartsFromProto(values []*proto.AgentMessagePart) []AgentMessagePart {
 	if len(values) == 0 {
 		return nil
@@ -133,6 +115,10 @@ func agentMessagePartsToProto(values []AgentMessagePart) ([]*proto.AgentMessageP
 }
 
 func agentMessagePartToProto(value AgentMessagePart) (*proto.AgentMessagePart, error) {
+	partType := value.Type
+	if partType == AgentMessagePartTypeUnspecified {
+		partType = inferAgentMessagePartType(value)
+	}
 	jsonValue, err := StructFromAny(value.JSON)
 	if err != nil {
 		return nil, err
@@ -146,7 +132,7 @@ func agentMessagePartToProto(value AgentMessagePart) (*proto.AgentMessagePart, e
 		return nil, err
 	}
 	return &proto.AgentMessagePart{
-		Type:       proto.AgentMessagePartType(value.Type),
+		Type:       proto.AgentMessagePartType(partType),
 		Text:       value.Text,
 		Json:       jsonValue,
 		ToolCall:   toolCall,
@@ -273,24 +259,6 @@ func agentPreparedWorkspaceFromProto(value *proto.PreparedAgentWorkspace) *Agent
 	return &AgentPreparedWorkspace{
 		Root: value.GetRoot(),
 		Cwd:  value.GetCwd(),
-	}
-}
-
-func agentProtocolWorkspaceToProto(value *AgentProtocolWorkspace) *proto.AgentWorkspace {
-	if value == nil {
-		return nil
-	}
-	checkouts := make([]*proto.AgentWorkspaceGitCheckout, 0, len(value.Checkouts))
-	for _, checkout := range value.Checkouts {
-		checkouts = append(checkouts, &proto.AgentWorkspaceGitCheckout{
-			Url:  checkout.URL,
-			Ref:  checkout.Ref,
-			Path: checkout.Path,
-		})
-	}
-	return &proto.AgentWorkspace{
-		Checkouts: checkouts,
-		Cwd:       value.Cwd,
 	}
 }
 

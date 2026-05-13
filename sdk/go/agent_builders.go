@@ -145,37 +145,6 @@ func AgentToolRefFromRef(value *AgentToolRef) AgentToolRef {
 	}
 }
 
-// NewAgentWorkspace creates an agent workspace.
-func NewAgentWorkspace(input AgentWorkspace) *AgentProtocolWorkspace {
-	checkouts := make([]AgentProtocolWorkspaceGitCheckout, 0, len(input.Checkouts))
-	for _, checkout := range input.Checkouts {
-		checkouts = append(checkouts, AgentProtocolWorkspaceGitCheckout{
-			URL:  checkout.URL,
-			Ref:  checkout.Ref,
-			Path: checkout.Path,
-		})
-	}
-	return &AgentProtocolWorkspace{
-		Checkouts: checkouts,
-		Cwd:       input.CWD,
-	}
-}
-
-func agentMessagesFromInputs(values []AgentMessage) ([]*AgentMessage, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*AgentMessage, 0, len(values))
-	for index, value := range values {
-		message, err := NewAgentMessage(value)
-		if err != nil {
-			return nil, fmt.Errorf("messages[%d]: %w", index, err)
-		}
-		out = append(out, message)
-	}
-	return out, nil
-}
-
 func agentMessageInputsFromMessages(values []*AgentMessage) ([]AgentMessage, error) {
 	if len(values) == 0 {
 		return nil, nil

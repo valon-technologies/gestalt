@@ -228,16 +228,16 @@ Provider code can invoke agents through the SDK agent manager:
         }
         defer agents.Close()
 
-        session, err := agents.CreateSession(ctx, gestalt.AgentManagerCreateSessionInput{
+        session, err := agents.CreateSession(ctx, gestalt.AgentManagerCreateSession{
             ClientRef: "roadmap-risk",
         })
         if err != nil {
             return "", err
         }
 
-        turn, err := agents.CreateTurn(ctx, gestalt.AgentManagerCreateTurnInput{
+        turn, err := agents.CreateTurn(ctx, gestalt.AgentManagerCreateTurn{
             SessionID: session.GetId(),
-            Messages: []gestalt.AgentMessageInput{{
+            Messages: []gestalt.AgentMessage{{
                 Role: "user",
                 Text: "Summarize the latest roadmap risk.",
             }},
@@ -251,19 +251,19 @@ Provider code can invoke agents through the SDK agent manager:
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    from gestalt import AgentManagerCreateSessionInput, AgentManagerCreateTurnInput
-    from gestalt import AgentMessageInput, Request
+    from gestalt import AgentManagerCreateSession, AgentManagerCreateTurn
+    from gestalt import AgentMessage, Request
 
     def summarize(request: Request) -> str:
         with request.agent_manager() as agents:
             session = agents.create_session(
-                AgentManagerCreateSessionInput(client_ref="roadmap-risk")
+                AgentManagerCreateSession(client_ref="roadmap-risk")
             )
             turn = agents.create_turn(
-                AgentManagerCreateTurnInput(
+                AgentManagerCreateTurn(
                     session_id=session.id,
                     messages=[
-                        AgentMessageInput(
+                        AgentMessage(
                             role="user",
                             text="Summarize the latest roadmap risk.",
                         )
@@ -276,20 +276,20 @@ Provider code can invoke agents through the SDK agent manager:
   <Tabs.Tab>
     ```rust
     use gestalt::{
-        AgentManagerCreateSessionInput, AgentManagerCreateTurnInput,
-        AgentMessageInput, Request,
+        AgentManagerCreateSession, AgentManagerCreateTurn,
+        AgentMessage, Request,
     };
 
     async fn summarize(req: &Request) -> Result<String, Box<dyn std::error::Error>> {
         let mut agents = req.agent_manager().await?;
-        let session = agents.create_session(AgentManagerCreateSessionInput {
+        let session = agents.create_session(AgentManagerCreateSession {
             client_ref: "roadmap-risk".into(),
             ..Default::default()
         }).await?;
 
-        let turn = agents.create_turn(AgentManagerCreateTurnInput {
+        let turn = agents.create_turn(AgentManagerCreateTurn {
             session_id: session.id,
-            messages: vec![AgentMessageInput {
+            messages: vec![AgentMessage {
                 role: "user".into(),
                 text: "Summarize the latest roadmap risk.".into(),
                 ..Default::default()
