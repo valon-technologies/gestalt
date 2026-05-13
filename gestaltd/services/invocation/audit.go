@@ -202,6 +202,24 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	if entry.WorkflowCreatedByAuthSource != "" {
 		attrs = append(attrs, slog.String("workflow_created_by_auth_source", entry.WorkflowCreatedByAuthSource))
 	}
+	if entry.WorkflowKeySHA256 != "" {
+		attrs = append(attrs, slog.String("workflow_key_sha256", entry.WorkflowKeySHA256))
+	}
+	if entry.CallerPlugin != "" {
+		attrs = append(attrs, slog.String("caller_plugin", entry.CallerPlugin))
+	}
+	if entry.WorkflowTargetKind != "" {
+		attrs = append(attrs, slog.String("workflow_target_kind", entry.WorkflowTargetKind))
+	}
+	if entry.WorkflowTargetComponent != "" {
+		attrs = append(attrs, slog.String("workflow_target_component", entry.WorkflowTargetComponent))
+	}
+	if entry.WorkflowTargetProvider != "" {
+		attrs = append(attrs, slog.String("workflow_target_provider", entry.WorkflowTargetProvider))
+	}
+	if entry.WorkflowTargetOperation != "" {
+		attrs = append(attrs, slog.String("workflow_target_operation", entry.WorkflowTargetOperation))
+	}
 	if entry.TargetID != "" {
 		attrs = append(attrs, slog.String("target_id", entry.TargetID))
 	}

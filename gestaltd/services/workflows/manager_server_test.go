@@ -1,7 +1,9 @@
 package workflows
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
@@ -77,6 +80,7 @@ func TestManagerServerPublishEventThreadsCallerPluginToSelectedProvider(t *testi
 	token := mintPublishEventToken(t, tokens, "valonSats")
 	selected := &recordingWorkflowProvider{}
 	other := &recordingWorkflowProvider{}
+	var auditBuf bytes.Buffer
 	manager := workflowmanager.New(workflowmanager.Config{
 		Workflow: managerServerWorkflowControl{
 			defaultName: "selected",
@@ -86,6 +90,7 @@ func TestManagerServerPublishEventThreadsCallerPluginToSelectedProvider(t *testi
 				"other":    other,
 			},
 		},
+		Audit: invocation.NewSlogAuditSink(&auditBuf),
 	})
 	server := NewManagerServer("valonSats", manager, tokens)
 
@@ -106,6 +111,20 @@ func TestManagerServerPublishEventThreadsCallerPluginToSelectedProvider(t *testi
 	if len(other.publishReqs) != 0 {
 		t.Fatalf("other publish requests = %d, want 0", len(other.publishReqs))
 	}
+	assertManagerServerWorkflowAudit(t, auditBuf.String(), map[string]any{
+		"level":          "INFO",
+		"log.type":       "audit",
+		"source":         "workflow_manager",
+		"provider":       "selected",
+		"operation":      "workflow.event.publish",
+		"target_kind":    "workflow_event",
+		"target_name":    "valon_sats.attempt.submitted",
+		"caller_plugin":  "valonSats",
+		"subject_id":     "user:user-123",
+		"subject_kind":   "user",
+		"request_id_set": true,
+		"allowed":        true,
+	})
 }
 
 func TestManagerServerPublishEventThreadsCallerPluginToFanoutProviders(t *testing.T) {
@@ -118,6 +137,7 @@ func TestManagerServerPublishEventThreadsCallerPluginToFanoutProviders(t *testin
 	token := mintPublishEventToken(t, tokens, "valonSats")
 	first := &recordingWorkflowProvider{}
 	second := &recordingWorkflowProvider{}
+	var auditBuf bytes.Buffer
 	manager := workflowmanager.New(workflowmanager.Config{
 		Workflow: managerServerWorkflowControl{
 			defaultName: "first",
@@ -127,6 +147,7 @@ func TestManagerServerPublishEventThreadsCallerPluginToFanoutProviders(t *testin
 				"second": second,
 			},
 		},
+		Audit: invocation.NewSlogAuditSink(&auditBuf),
 	})
 	server := NewManagerServer(" valonSats ", manager, tokens)
 
@@ -147,6 +168,22 @@ func TestManagerServerPublishEventThreadsCallerPluginToFanoutProviders(t *testin
 		if got := provider.publishReqs[0].PluginName; got != "valonSats" {
 			t.Fatalf("%s publish plugin = %q, want valonSats", name, got)
 		}
+	}
+	for _, providerName := range []string{"first", "second"} {
+		assertManagerServerWorkflowAudit(t, auditBuf.String(), map[string]any{
+			"level":          "INFO",
+			"log.type":       "audit",
+			"source":         "workflow_manager",
+			"provider":       providerName,
+			"operation":      "workflow.event.publish",
+			"target_kind":    "workflow_event",
+			"target_name":    "valon_sats.attempt.submitted",
+			"caller_plugin":  "valonSats",
+			"subject_id":     "user:user-123",
+			"subject_kind":   "user",
+			"request_id_set": true,
+			"allowed":        true,
+		})
 	}
 }
 
@@ -178,6 +215,46 @@ func TestWorkflowManagerPublishEventSelectedProviderPreservesBlankPlugin(t *test
 	if got := selected.publishReqs[0].PluginName; got != "" {
 		t.Fatalf("selected publish plugin = %q, want empty", got)
 	}
+}
+
+func assertManagerServerWorkflowAudit(t *testing.T, output string, want map[string]any) {
+	t.Helper()
+
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("audit line is not valid JSON: %q: %v", line, err)
+		}
+		if record["log.type"] != "audit" {
+			continue
+		}
+		matches := true
+		for key, value := range want {
+			if key == "request_id_set" {
+				if value == true && !managerServerAuditStringPresent(record, "request_id") {
+					matches = false
+					break
+				}
+				continue
+			}
+			if got := record[key]; got != value {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return
+		}
+	}
+	t.Fatalf("workflow audit record not found in %q", output)
+}
+
+func managerServerAuditStringPresent(record map[string]any, key string) bool {
+	value, ok := record[key].(string)
+	return ok && value != ""
 }
 
 func mintPublishEventToken(t *testing.T, tokens *InvocationTokenManager, callerPlugin string) string {

@@ -31,6 +31,12 @@ type AuditEntry struct {
 	WorkflowCreatedBySubjectKind string
 	WorkflowCreatedByDisplayName string
 	WorkflowCreatedByAuthSource  string
+	WorkflowKeySHA256            string
+	CallerPlugin                 string
+	WorkflowTargetKind           string
+	WorkflowTargetComponent      string
+	WorkflowTargetProvider       string
+	WorkflowTargetOperation      string
 	TargetID                     string
 	TargetKind                   string
 	TargetName                   string

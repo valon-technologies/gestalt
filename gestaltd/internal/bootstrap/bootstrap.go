@@ -1192,12 +1192,23 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetInvoker(sharedInvoker)
 	prepared.Deps.AgentRuntime.SetSystemToolExecutor(workflowTools)
+	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
+	if err != nil {
+		return nil, err
+	}
+	closeAudit := true
+	defer func() {
+		if closeAudit && auditClose != nil {
+			_ = auditClose(context.Background())
+		}
+	}()
 	workflowManager.SetTarget(workflowmanager.New(workflowmanager.Config{
 		Providers:         providers,
 		Workflow:          prepared.Deps.WorkflowRuntime,
 		Agent:             prepared.Deps.AgentRuntime,
 		AgentManager:      agentManager,
 		Invoker:           sharedInvoker,
+		Audit:             audit,
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
@@ -1238,16 +1249,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	defer func() {
 		if closeAgentsOnError {
 			_ = closeAgents(extraAgents...)
-		}
-	}()
-	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
-	if err != nil {
-		return nil, err
-	}
-	closeAudit := true
-	defer func() {
-		if closeAudit && auditClose != nil {
-			_ = auditClose(context.Background())
 		}
 	}()
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "plugin", audit, invocation.WithoutRateLimit()))
