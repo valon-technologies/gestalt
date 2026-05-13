@@ -30,6 +30,7 @@ const globalPrefixes = [
   "/install.sh",
   "/mcp",
   "/registry",
+  "/videos/",
   "/versions.json",
   "/_pagefind/",
 ];
@@ -461,6 +462,7 @@ async function copyRootOutputs(rootOut, finalOut) {
     "install-gestaltd.sh",
     "install.sh",
     "registry.html",
+    "videos",
   ];
   for (const name of allowlist) {
     const source = path.join(rootOut, name);
@@ -613,7 +615,7 @@ async function assertNoUnversionedDocLinks(finalOut) {
   }
   const bad = [];
   const patterns = [
-    /\b(?:href|src|action)=["']\/(?!dev(?:\/|["'])|latest(?:\/|["'])|versions(?:\/|["'])|api\/|admin(?:\/|["'])|favicon\.svg|fonts\/|install(?:-|\.sh)|mcp(?:\/|["'])|registry(?:\/|["'])|versions\.json|_pagefind\/)/g,
+    /\b(?:href|src|action)=["']\/(?!dev(?:\/|["'])|latest(?:\/|["'])|versions(?:\/|["'])|api\/|admin(?:\/|["'])|favicon\.svg|fonts\/|install(?:-|\.sh)|mcp(?:\/|["'])|registry(?:\/|["'])|videos\/|versions\.json|_pagefind\/)/g,
   ];
   for (const file of files.filter((candidate) => candidate.endsWith(".html"))) {
     const body = await readFile(file, "utf8");
