@@ -656,15 +656,46 @@ Implement the target operation in the plugin SDK:
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    The Rust high-level plugin SDK can serve the webhook target operation. It
-    does not currently expose an HTTP subject hook, so use Go, Python, or
-    TypeScript when the webhook must derive a custom subject.
-
     ```rust
     use serde::{Deserialize, Serialize};
     use std::sync::Arc;
 
+    #[derive(Default)]
     pub struct Provider;
+
+    #[gestalt::async_trait]
+    impl gestalt::Provider for Provider {
+        async fn resolve_http_subject(
+            &self,
+            request: gestalt::HTTPSubjectRequest,
+            _context: &gestalt::Request,
+        ) -> gestalt::Result<Option<gestalt::Subject>> {
+            let team_id = request
+                .params
+                .get("team_id")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let user_id = request
+                .params
+                .get("user_id")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+
+            if team_id.is_empty() || user_id.is_empty() {
+                return Err(gestalt::Error::bad_request(
+                    "missing Slack subject fields",
+                ));
+            }
+
+            Ok(Some(gestalt::Subject {
+                id: format!("slack:{team_id}:{user_id}"),
+                kind: "user".to_string(),
+                display_name: user_id.to_string(),
+                auth_source: "slack".to_string(),
+                ..Default::default()
+            }))
+        }
+    }
 
     #[derive(Deserialize, schemars::JsonSchema)]
     pub struct SlackCommandInput {
@@ -694,7 +725,7 @@ Implement the target operation in the plugin SDK:
         )
     }
 
-    gestalt::export_provider!(constructor = Provider, router = router);
+    gestalt::export_provider!(constructor = Provider::default, router = router);
     ```
   </Tabs.Tab>
   <Tabs.Tab>

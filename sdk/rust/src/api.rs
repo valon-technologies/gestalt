@@ -127,6 +127,33 @@ impl Request {
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+/// Carries one verified hosted HTTP request into a provider subject resolver.
+pub struct HTTPSubjectRequest {
+    /// Hosted HTTP binding name from the plugin manifest.
+    pub binding: String,
+    /// HTTP method used for the inbound request.
+    pub method: String,
+    /// Request path received by the hosted HTTP binding.
+    pub path: String,
+    /// Request content type.
+    pub content_type: String,
+    /// Request headers after host-side verification.
+    pub headers: BTreeMap<String, Vec<String>>,
+    /// Request query parameters.
+    pub query: BTreeMap<String, Vec<String>>,
+    /// Decoded request parameters.
+    pub params: serde_json::Map<String, serde_json::Value>,
+    /// Raw request body bytes.
+    pub raw_body: Vec<u8>,
+    /// Security scheme used to verify the request.
+    pub security_scheme: String,
+    /// Subject string verified by the security scheme, when available.
+    pub verified_subject: String,
+    /// Claims verified by the security scheme.
+    pub verified_claims: BTreeMap<String, String>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// Wraps a typed handler response plus an optional explicit HTTP status code.
 pub struct Response<T> {
@@ -222,6 +249,15 @@ pub trait Provider: Send + Sync + 'static {
 
     /// Returns an optional request-scoped catalog extension.
     async fn catalog_for_request(&self, _request: &Request) -> Result<Option<Catalog>> {
+        Ok(None)
+    }
+
+    /// Resolves a hosted HTTP request to a concrete subject before dispatch.
+    async fn resolve_http_subject(
+        &self,
+        _request: HTTPSubjectRequest,
+        _context: &Request,
+    ) -> Result<Option<Subject>> {
         Ok(None)
     }
 

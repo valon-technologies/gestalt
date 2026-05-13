@@ -4,16 +4,18 @@ use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::api::{Access, Credential, ExternalIdentity, Request, Response, Subject};
+use crate::api::{
+    Access, Credential, ExternalIdentity, HTTPSubjectRequest, Request, Response, Subject,
+};
 use crate::catalog::{catalog_to_proto, object_map};
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
 use crate::generated::v1::integration_provider_server::IntegrationProvider;
 use crate::generated::v1::{
-    ExecuteRequest, GetSessionCatalogRequest, GetSessionCatalogResponse,
+    ExecuteRequest, GetSessionCatalogRequest, GetSessionCatalogResponse, HttpSubjectRequest,
     OperationResult as ProtoOperationResult, PostConnectRequest, PostConnectResponse,
     ProviderMetadata, ResolveHttpSubjectRequest, ResolveHttpSubjectResponse, StartProviderRequest,
-    StartProviderResponse,
+    StartProviderResponse, SubjectContext,
 };
 use crate::rpc_status::{require_protocol_version, rpc_status};
 use crate::{Provider, Router};
@@ -117,26 +119,13 @@ where
                 Arc::clone(&self.provider),
                 &request.operation,
                 Value::Object(object_map(request.params)),
-                Request {
-                    token: request.token,
-                    connection_params: request.connection_params.into_iter().collect(),
-                    subject: request_subject(request.context.as_ref()),
-                    agent_subject: request_subject_field(request.context.as_ref(), "agent_subject"),
-                    external_identity: request_external_identity_field(
-                        request.context.as_ref(),
-                        "external_identity",
-                    ),
-                    agent_external_identity: request_external_identity_field(
-                        request.context.as_ref(),
-                        "agent_external_identity",
-                    ),
-                    credential: request_credential(request.context.as_ref()),
-                    access: request_access(request.context.as_ref()),
-                    host: request_host(request.context.as_ref()),
-                    idempotency_key: request.idempotency_key.trim().to_string(),
-                    workflow: request_workflow(request.context.as_ref()),
-                    invocation_token: request.invocation_token,
-                },
+                request_context(
+                    request.context.as_ref(),
+                    request.token,
+                    request.connection_params.into_iter().collect(),
+                    request.idempotency_key.trim().to_string(),
+                    request.invocation_token,
+                ),
             )
             .await;
 
@@ -157,26 +146,13 @@ where
         }
 
         let request = request.into_inner();
-        let request = Request {
-            token: request.token,
-            connection_params: request.connection_params.into_iter().collect(),
-            subject: request_subject(request.context.as_ref()),
-            agent_subject: request_subject_field(request.context.as_ref(), "agent_subject"),
-            external_identity: request_external_identity_field(
-                request.context.as_ref(),
-                "external_identity",
-            ),
-            agent_external_identity: request_external_identity_field(
-                request.context.as_ref(),
-                "agent_external_identity",
-            ),
-            credential: request_credential(request.context.as_ref()),
-            access: request_access(request.context.as_ref()),
-            host: request_host(request.context.as_ref()),
-            workflow: request_workflow(request.context.as_ref()),
-            idempotency_key: String::new(),
-            invocation_token: String::new(),
-        };
+        let request = request_context(
+            request.context.as_ref(),
+            request.token,
+            request.connection_params.into_iter().collect(),
+            String::new(),
+            String::new(),
+        );
         let catalog = self
             .provider
             .catalog_for_request(&request)
@@ -190,9 +166,39 @@ where
 
     async fn resolve_http_subject(
         &self,
-        _request: GrpcRequest<ResolveHttpSubjectRequest>,
+        request: GrpcRequest<ResolveHttpSubjectRequest>,
     ) -> std::result::Result<GrpcResponse<ResolveHttpSubjectResponse>, Status> {
-        Ok(GrpcResponse::new(ResolveHttpSubjectResponse::default()))
+        let request = request.into_inner();
+        let subject = self
+            .provider
+            .resolve_http_subject(
+                http_subject_request(request.request.as_ref()),
+                &request_context(
+                    request.context.as_ref(),
+                    String::new(),
+                    Default::default(),
+                    String::new(),
+                    String::new(),
+                ),
+            )
+            .await;
+
+        let subject = match subject {
+            Ok(subject) => subject,
+            Err(error) if error.status().is_some() && error.expose_message() => {
+                return Ok(GrpcResponse::new(ResolveHttpSubjectResponse {
+                    reject_status: i32::from(error.status().unwrap_or_default()),
+                    reject_message: error.message().to_owned(),
+                    ..Default::default()
+                }));
+            }
+            Err(error) => return Err(rpc_status("resolve http subject", error)),
+        };
+
+        Ok(GrpcResponse::new(ResolveHttpSubjectResponse {
+            subject: subject.map(subject_to_proto),
+            ..Default::default()
+        }))
     }
 
     async fn post_connect(
@@ -202,6 +208,32 @@ where
         Err(Status::unimplemented(
             "provider does not support post connect",
         ))
+    }
+}
+
+fn request_context(
+    context: Option<&crate::generated::v1::RequestContext>,
+    token: String,
+    connection_params: std::collections::BTreeMap<String, String>,
+    idempotency_key: String,
+    invocation_token: String,
+) -> Request {
+    Request {
+        token,
+        connection_params,
+        subject: request_subject(context),
+        agent_subject: request_subject_field(context, "agent_subject"),
+        external_identity: request_external_identity_field(context, "external_identity"),
+        agent_external_identity: request_external_identity_field(
+            context,
+            "agent_external_identity",
+        ),
+        credential: request_credential(context),
+        access: request_access(context),
+        host: request_host(context),
+        idempotency_key,
+        workflow: request_workflow(context),
+        invocation_token,
     }
 }
 
@@ -299,4 +331,42 @@ fn request_workflow(
         return serde_json::Map::new();
     };
     crate::catalog::object_map(context.workflow.clone())
+}
+
+fn http_subject_request(request: Option<&HttpSubjectRequest>) -> HTTPSubjectRequest {
+    let Some(request) = request else {
+        return HTTPSubjectRequest::default();
+    };
+    HTTPSubjectRequest {
+        binding: request.binding.clone(),
+        method: request.method.clone(),
+        path: request.path.clone(),
+        content_type: request.content_type.clone(),
+        headers: string_lists(&request.headers),
+        query: string_lists(&request.query),
+        params: object_map(request.params.clone()),
+        raw_body: request.raw_body.clone(),
+        security_scheme: request.security_scheme.clone(),
+        verified_subject: request.verified_subject.clone(),
+        verified_claims: request.verified_claims.clone(),
+    }
+}
+
+fn string_lists(
+    values: &std::collections::BTreeMap<String, crate::generated::v1::StringList>,
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    values
+        .iter()
+        .map(|(key, value)| (key.clone(), value.values.clone()))
+        .collect()
+}
+
+fn subject_to_proto(subject: Subject) -> SubjectContext {
+    SubjectContext {
+        id: subject.id,
+        kind: subject.kind,
+        display_name: subject.display_name,
+        auth_source: subject.auth_source,
+        email: subject.email,
+    }
 }
