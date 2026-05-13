@@ -190,6 +190,14 @@ class PresignResult:
     headers: dict[str, str] = field(default_factory=dict)
 
 
+@dataclass
+class ProviderReadResult:
+    """Object metadata and body returned by an authored S3 provider."""
+
+    meta: ObjectMeta
+    body: ObjectBody = None
+
+
 ObjectAccessURLOptions = PresignOptions
 ObjectAccessURL = PresignResult
 
@@ -769,6 +777,16 @@ def _object_ref_to_proto(ref: ObjectRef) -> Any:
     return pb.S3ObjectRef(bucket=ref.bucket, key=ref.key, version_id=ref.version_id)
 
 
+def _object_ref_from_proto(ref: Any) -> ObjectRef:
+    if ref is None:
+        return ObjectRef(bucket="", key="")
+    return ObjectRef(
+        bucket=getattr(ref, "bucket", ""),
+        key=getattr(ref, "key", ""),
+        version_id=getattr(ref, "version_id", ""),
+    )
+
+
 def _object_meta_from_proto(meta: Any) -> ObjectMeta:
     last_modified: _dt.datetime | None = None
     if meta.HasField("last_modified"):
@@ -788,11 +806,34 @@ def _object_meta_from_proto(meta: Any) -> ObjectMeta:
     )
 
 
+def _object_meta_to_proto(meta: ObjectMeta) -> Any:
+    out = pb.S3ObjectMeta(
+        ref=_object_ref_to_proto(meta.ref),
+        etag=meta.etag,
+        size=int(meta.size),
+        content_type=meta.content_type,
+        metadata=dict(meta.metadata),
+        storage_class=meta.storage_class,
+    )
+    if meta.last_modified is not None:
+        out.last_modified.CopyFrom(_timestamp_to_proto(meta.last_modified))
+    return out
+
+
 def _byte_range_to_proto(range_value: ByteRange) -> Any:
     out = pb.ByteRange()
     if range_value.start is not None:
         out.start = range_value.start
     if range_value.end is not None:
+        out.end = range_value.end
+    return out
+
+
+def _byte_range_from_proto(range_value: Any) -> ByteRange:
+    out = ByteRange()
+    if range_value.HasField("start"):
+        out.start = range_value.start
+    if range_value.HasField("end"):
         out.end = range_value.end
     return out
 
@@ -807,12 +848,70 @@ def _timestamp_to_proto(value: _dt.datetime) -> Any:
     return out
 
 
+def _timestamp_from_proto(value: Any) -> _dt.datetime:
+    return value.ToDatetime(tzinfo=_UTC)
+
+
+def _read_options_from_proto(req: Any) -> ReadOptions:
+    opts = ReadOptions(
+        if_match=getattr(req, "if_match", ""),
+        if_none_match=getattr(req, "if_none_match", ""),
+    )
+    if req.HasField("range"):
+        opts.range = _byte_range_from_proto(req.range)
+    if req.HasField("if_modified_since"):
+        opts.if_modified_since = _timestamp_from_proto(req.if_modified_since)
+    if req.HasField("if_unmodified_since"):
+        opts.if_unmodified_since = _timestamp_from_proto(req.if_unmodified_since)
+    return opts
+
+
+def _write_options_from_proto(open_request: Any) -> WriteOptions:
+    return WriteOptions(
+        content_type=getattr(open_request, "content_type", ""),
+        cache_control=getattr(open_request, "cache_control", ""),
+        content_disposition=getattr(open_request, "content_disposition", ""),
+        content_encoding=getattr(open_request, "content_encoding", ""),
+        content_language=getattr(open_request, "content_language", ""),
+        metadata=dict(getattr(open_request, "metadata", {})),
+        if_match=getattr(open_request, "if_match", ""),
+        if_none_match=getattr(open_request, "if_none_match", ""),
+    )
+
+
 def _list_page_from_proto(resp: Any) -> ListPage:
     return ListPage(
         objects=[_object_meta_from_proto(item) for item in resp.objects],
         common_prefixes=list(resp.common_prefixes),
         next_continuation_token=resp.next_continuation_token,
         has_more=resp.has_more,
+    )
+
+
+def _list_page_to_proto(page: ListPage) -> Any:
+    return pb.ListObjectsResponse(
+        objects=[_object_meta_to_proto(item) for item in page.objects],
+        common_prefixes=list(page.common_prefixes),
+        next_continuation_token=page.next_continuation_token,
+        has_more=page.has_more,
+    )
+
+
+def _list_options_from_proto(req: Any) -> ListOptions:
+    return ListOptions(
+        bucket=getattr(req, "bucket", ""),
+        prefix=getattr(req, "prefix", ""),
+        delimiter=getattr(req, "delimiter", ""),
+        continuation_token=getattr(req, "continuation_token", ""),
+        start_after=getattr(req, "start_after", ""),
+        max_keys=getattr(req, "max_keys", 0),
+    )
+
+
+def _copy_options_from_proto(req: Any) -> CopyOptions:
+    return CopyOptions(
+        if_match=getattr(req, "if_match", ""),
+        if_none_match=getattr(req, "if_none_match", ""),
     )
 
 
@@ -851,6 +950,19 @@ def _presign_method_value(method: PresignMethod | str | None) -> str:
     return str(method or "").strip().upper()
 
 
+def _presign_options_from_proto(req: Any) -> PresignOptions:
+    expires_seconds = int(getattr(req, "expires_seconds", 0))
+    return PresignOptions(
+        method=_presign_method_from_proto(getattr(req, "method", None)),
+        expires=(
+            _dt.timedelta(seconds=expires_seconds) if expires_seconds != 0 else None
+        ),
+        content_type=getattr(req, "content_type", ""),
+        content_disposition=getattr(req, "content_disposition", ""),
+        headers=dict(getattr(req, "headers", {})),
+    )
+
+
 def _presign_result_from_proto(resp: Any) -> PresignResult:
     expires_at: _dt.datetime | None = None
     if resp.HasField("expires_at"):
@@ -861,3 +973,14 @@ def _presign_result_from_proto(resp: Any) -> PresignResult:
         expires_at=expires_at,
         headers=dict(resp.headers),
     )
+
+
+def _presign_result_to_proto(result: PresignResult) -> Any:
+    out = pb.PresignObjectResponse(
+        url=result.url,
+        method=_presign_method_to_proto(result.method),
+        headers=dict(result.headers),
+    )
+    if result.expires_at is not None:
+        out.expires_at.CopyFrom(_timestamp_to_proto(result.expires_at))
+    return out

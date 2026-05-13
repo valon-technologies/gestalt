@@ -19,6 +19,7 @@ from typing import Any, Final, cast
 from . import _agent as _agent_native
 from . import _authentication as _auth_native
 from . import _pluginruntime as _pluginruntime_native
+from . import _s3 as _s3_native
 from . import _telemetry
 from . import _workflow as _workflow_native
 from ._api import Access, Credential, Error, ExternalIdentity, Host, Request, Subject
@@ -540,21 +541,230 @@ def _register_s3_services(server: Any, provider: PluginProvider) -> None:
         server,
     )
     s3_pb2_grpc.add_S3Servicer_to_server(
-        _service_wrapper(
-            provider,
-            s3_pb2_grpc.S3Servicer,
-            (
-                "HeadObject",
-                "ReadObject",
-                "WriteObject",
-                "DeleteObject",
-                "ListObjects",
-                "CopyObject",
-                "PresignObject",
-            ),
-        ),
+        _s3_servicer(provider=provider),
         server,
     )
+
+
+def _s3_servicer(*, provider: PluginProvider) -> Any:
+    _ensure_grpc_runtime()
+    s3_provider = cast(S3Provider, provider)
+    legacy = _service_wrapper(
+        provider,
+        s3_pb2_grpc.S3Servicer,
+        (
+            "HeadObject",
+            "ReadObject",
+            "WriteObject",
+            "DeleteObject",
+            "ListObjects",
+            "CopyObject",
+            "PresignObject",
+        ),
+    )
+
+    class S3Servicer(s3_pb2_grpc.S3Servicer):
+        def __init__(self) -> None:
+            self._provider = s3_provider
+
+        @_s3_grpc_handler("s3 head object")
+        def HeadObject(self, request: Any, context: Any) -> Any:
+            if handler := _s3_legacy_handler(
+                s3_provider, legacy, "HeadObject", "head_object"
+            ):
+                return handler(request, context)
+            meta = s3_provider.head_object(
+                _s3_native._object_ref_from_proto(request.ref)
+            )
+            return _s3_native.pb.HeadObjectResponse(
+                meta=_s3_native._object_meta_to_proto(meta)
+            )
+
+        def ReadObject(self, request: Any, context: Any) -> Any:
+            if handler := _s3_legacy_handler(
+                s3_provider, legacy, "ReadObject", "read_object"
+            ):
+                yield from handler(request, context)
+                return
+
+            body: Any = None
+            try:
+                result = s3_provider.read_object(
+                    _s3_native._object_ref_from_proto(request.ref),
+                    _s3_native._read_options_from_proto(request),
+                )
+                body = result.body
+                yield _s3_native.pb.ReadObjectChunk(
+                    meta=_s3_native._object_meta_to_proto(result.meta)
+                )
+                for chunk in _s3_native._body_chunks(body):
+                    if chunk:
+                        yield _s3_native.pb.ReadObjectChunk(data=chunk)
+            except Exception as error:
+                _abort_s3_error(context, "s3 read object", error)
+            finally:
+                _close_s3_body(body)
+
+        @_s3_grpc_handler("s3 write object")
+        def WriteObject(self, request_iterator: Any, context: Any) -> Any:
+            if handler := _s3_legacy_handler(
+                s3_provider, legacy, "WriteObject", "write_object"
+            ):
+                return handler(request_iterator, context)
+
+            try:
+                first = next(request_iterator)
+            except StopIteration:
+                return context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    "first message must be WriteObjectOpen",
+                )
+
+            if first.WhichOneof("msg") != "open":
+                return context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    "first message must be WriteObjectOpen",
+                )
+
+            open_request = first.open
+            body = _S3WriteBodyChunks(request_iterator)
+            meta = s3_provider.write_object(
+                _s3_native._object_ref_from_proto(open_request.ref),
+                body,
+                _s3_native._write_options_from_proto(open_request),
+            )
+            body.drain()
+            return _s3_native.pb.WriteObjectResponse(
+                meta=_s3_native._object_meta_to_proto(meta)
+            )
+
+        @_s3_grpc_handler("s3 delete object")
+        def DeleteObject(self, request: Any, context: Any) -> Any:
+            if handler := _s3_legacy_handler(
+                s3_provider, legacy, "DeleteObject", "delete_object"
+            ):
+                return handler(request, context)
+            s3_provider.delete_object(_s3_native._object_ref_from_proto(request.ref))
+            return empty_pb2.Empty()
+
+        @_s3_grpc_handler("s3 list objects")
+        def ListObjects(self, request: Any, context: Any) -> Any:
+            if handler := _s3_legacy_handler(
+                s3_provider, legacy, "ListObjects", "list_objects"
+            ):
+                return handler(request, context)
+            page = s3_provider.list_objects(_s3_native._list_options_from_proto(request))
+            return _s3_native._list_page_to_proto(page)
+
+        @_s3_grpc_handler("s3 copy object")
+        def CopyObject(self, request: Any, context: Any) -> Any:
+            if handler := _s3_legacy_handler(
+                s3_provider, legacy, "CopyObject", "copy_object"
+            ):
+                return handler(request, context)
+            meta = s3_provider.copy_object(
+                _s3_native._object_ref_from_proto(request.source),
+                _s3_native._object_ref_from_proto(request.destination),
+                _s3_native._copy_options_from_proto(request),
+            )
+            return _s3_native.pb.CopyObjectResponse(
+                meta=_s3_native._object_meta_to_proto(meta)
+            )
+
+        @_s3_grpc_handler("s3 presign object")
+        def PresignObject(self, request: Any, context: Any) -> Any:
+            if handler := _s3_legacy_handler(
+                s3_provider, legacy, "PresignObject", "presign_object"
+            ):
+                return handler(request, context)
+            result = s3_provider.presign_object(
+                _s3_native._object_ref_from_proto(request.ref),
+                _s3_native._presign_options_from_proto(request),
+            )
+            return _s3_native._presign_result_to_proto(result)
+
+    return S3Servicer()
+
+
+def _s3_legacy_handler(
+    provider: S3Provider,
+    legacy: Any,
+    rpc_method_name: str,
+    sdk_method_name: str,
+) -> Any:
+    if _provider_overrides(provider, sdk_method_name, S3Provider):
+        return None
+    if getattr(provider, rpc_method_name, None) is None:
+        return None
+    return getattr(legacy, rpc_method_name)
+
+
+def _s3_grpc_handler(label: str):
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(self, request, context):
+            try:
+                return fn(self, request, context)
+            except Exception as error:
+                _abort_s3_error(context, label, error)
+
+        return wrapper
+
+    return decorator
+
+
+def _abort_s3_error(context: Any, label: str, error: Exception) -> None:
+    if context.code() is not None:
+        raise error
+    if isinstance(error, Error):
+        return context.abort(_grpc_status_from_http_status(error.status), error.message)
+    if isinstance(error, _s3_native.S3NotFoundError):
+        return context.abort(grpc.StatusCode.NOT_FOUND, str(error) or "s3: not found")
+    if isinstance(error, _s3_native.S3PreconditionFailedError):
+        return context.abort(
+            grpc.StatusCode.FAILED_PRECONDITION,
+            str(error) or "s3: precondition failed",
+        )
+    if isinstance(error, _s3_native.S3InvalidRangeError):
+        return context.abort(
+            grpc.StatusCode.OUT_OF_RANGE,
+            str(error) or "s3: invalid range",
+        )
+    traceback.print_exception(error)
+    return context.abort(grpc.StatusCode.UNKNOWN, f"{label}: {error}")
+
+
+class _S3WriteBodyChunks:
+    def __init__(self, request_iterator: Any) -> None:
+        self._request_iterator = iter(request_iterator)
+
+    def __iter__(self) -> "_S3WriteBodyChunks":
+        return self
+
+    def __next__(self) -> bytes:
+        while True:
+            message = next(self._request_iterator)
+            if message.WhichOneof("msg") != "data":
+                raise Error(
+                    HTTPStatus.BAD_REQUEST,
+                    "write object stream frames after open must be data",
+                )
+            data = bytes(message.data)
+            if data:
+                return data
+
+    def drain(self) -> None:
+        for _chunk in self:
+            pass
+
+
+def _close_s3_body(body: Any) -> None:
+    close = getattr(body, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:
+            pass
 
 
 def _agent_runtime_plugin(provider: AgentProvider) -> PluginProviderAdapter:
