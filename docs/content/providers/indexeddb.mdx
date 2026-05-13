@@ -2,42 +2,16 @@ import { Tabs } from 'nextra/components'
 
 # IndexedDB
 
-IndexedDB providers back Gestalt's persistent state layer. Gestalt adopts the
-IndexedDB model so a single provider contract can map cleanly to relational,
-document, or key-value backends. The contract is modeled on the
-[W3C Indexed Database API](https://www.w3.org/TR/IndexedDB/).
-
-## How IndexedDB providers work
-
-The active datastore is selected by `server.providers.indexeddb`, which points
-to one of the named entries under `providers.indexeddb`. Gestalt talks to that provider
-through the IndexedDB service contract while keeping plugin state isolated with
-plugin-scoped datastore instances. Plugins may override that host selection
-with `plugins.<name>.indexeddb.provider`; otherwise they inherit the
-selected/default host IndexedDB. `plugins.<name>.indexeddb.db` defaults to the
-plugin key and controls the plugin-visible database name used for backend
-scoping. With the first-party RelationalDB provider, Postgres, MySQL, and SQL
-Server receive that value as `schema`, while SQLite falls back to `<db>_`
-table prefixes because it has no schema support. First-party MongoDB and
-DynamoDB providers receive the same value as their configured database or
-table namespace. Gestalt does not rewrite plugin object-store names at the
-transport layer. Plugins may also set `plugins.<name>.indexeddb.objectStores`
-to allowlist logical stores such as `tasks`.
+IndexedDB providers back Gestalt's persistent state layer, modeled on the
+[W3C Indexed Database API](https://www.w3.org/TR/IndexedDB/). This contract
+allows Gestalt to be agnostic of relational, document, or key-value backends.
 
 ## Using IndexedDB from a plugin
 
-Executable plugins do not choose raw database DSNs or relational schemas at
-runtime. They receive one IndexedDB SDK socket from the host, and the host
-decides what that socket points to from config.
-
-In plugin code, use the IndexedDB client from the language SDK. The
-`plugins.<name>.indexeddb.provider` field selects which named
-`providers.indexeddb` entry backs that client, and `plugins.<name>.indexeddb.db`
-selects the plugin-visible database name used for backend scoping. On
-schema-capable backends such as RelationalDB, that becomes the backend schema
-name. If the plugin omits `plugins.<name>.indexeddb`, it inherits the
-host-selected IndexedDB provider and uses the plugin key as the default `db`
-name.
+Plugins use the IndexedDB client from the language SDK. By default, Gestalt
+uses the host IndexedDB provider and the plugin name as the database scope.
+Configure `plugins.<name>.indexeddb` only when a plugin needs a different
+provider or database scope.
 
 For example:
 
@@ -414,6 +388,8 @@ roll back together.
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
+    import "time"
+
     tx, err := db.Transaction(
         ctx,
         []string{"tasks"},
@@ -642,189 +618,83 @@ spec:
 
 ### Provider interface
 
-You implement the [IndexedDB](https://www.w3.org/TR/IndexedDB/#object-store-interface) contract, which covers object store lifecycle, primary key CRUD, bulk operations, and index queries. Go providers should implement `gestalt.IndexedDBProvider`; the SDK adapts that typed surface to the underlying transport. The examples below show the core CRUD methods. See the [W3C IndexedDB specification](https://www.w3.org/TR/IndexedDB/) for the full interface contract.
+You implement the [IndexedDB](https://www.w3.org/TR/IndexedDB/#object-store-interface) contract, which covers object store lifecycle, primary key CRUD, bulk operations, and index queries. Go providers implement `gestalt.IndexedDBProvider`.
 
-<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
-  <Tabs.Tab>
-    ```go
-    package relationaldb
+```go
+package relationaldb
 
-    import (
-      "context"
-      "database/sql"
-      "fmt"
-      "strings"
+import (
+  "context"
+  "database/sql"
+  "fmt"
+  "strings"
 
-      gestalt "github.com/valon-technologies/gestalt/sdk/go"
-    )
+  gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
 
-    type RelationalDB struct {
-      db *sql.DB
-    }
+type RelationalDB struct {
+  db *sql.DB
+}
 
-    func New() *RelationalDB { return &RelationalDB{} }
+func New() *RelationalDB { return &RelationalDB{} }
 
-    func (r *RelationalDB) Configure(_ context.Context, _ string, config map[string]any) error {
-      dsn, _ := config["dsn"].(string)
-      if dsn == "" {
-        return fmt.Errorf("relationaldb: dsn is required")
-      }
-      driver := "sqlite"
-      connStr := dsn
-      switch {
-      case strings.HasPrefix(dsn, "postgres://"):
-        driver, connStr = "pgx", dsn
-      case strings.HasPrefix(dsn, "mysql://"):
-        driver, connStr = "mysql", strings.TrimPrefix(dsn, "mysql://")
-      case strings.HasPrefix(dsn, "sqlserver://"):
-        driver, connStr = "sqlserver", dsn
-      case strings.HasPrefix(dsn, "sqlite://"):
-        driver, connStr = "sqlite", strings.TrimPrefix(dsn, "sqlite://")
-      }
-      var err error
-      r.db, err = sql.Open(driver, connStr)
-      return err
-    }
+func (r *RelationalDB) Configure(_ context.Context, _ string, config map[string]any) error {
+  dsn, _ := config["dsn"].(string)
+  if dsn == "" {
+    return fmt.Errorf("relationaldb: dsn is required")
+  }
+  driver := "sqlite"
+  connStr := dsn
+  switch {
+  case strings.HasPrefix(dsn, "postgres://"):
+    driver, connStr = "pgx", dsn
+  case strings.HasPrefix(dsn, "mysql://"):
+    driver, connStr = "mysql", strings.TrimPrefix(dsn, "mysql://")
+  case strings.HasPrefix(dsn, "sqlserver://"):
+    driver, connStr = "sqlserver", dsn
+  case strings.HasPrefix(dsn, "sqlite://"):
+    driver, connStr = "sqlite", strings.TrimPrefix(dsn, "sqlite://")
+  }
+  var err error
+  r.db, err = sql.Open(driver, connStr)
+  return err
+}
 
-    func (r *RelationalDB) HealthCheck(ctx context.Context) error {
-      return r.db.PingContext(ctx)
-    }
+func (r *RelationalDB) HealthCheck(ctx context.Context) error {
+  return r.db.PingContext(ctx)
+}
 
-    func (r *RelationalDB) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreSchema) error {
-      return nil
-    }
+func (r *RelationalDB) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreSchema) error {
+  return nil
+}
 
-    func (r *RelationalDB) DeleteObjectStore(ctx context.Context, name string) error {
-      return nil
-    }
+func (r *RelationalDB) DeleteObjectStore(ctx context.Context, name string) error {
+  return nil
+}
 
-    // Get retrieves a single record by primary key.
-    func (r *RelationalDB) Get(ctx context.Context, req gestalt.IndexedDBObjectStoreRequest) (gestalt.Record, error) {
-      return gestalt.Record{}, nil
-    }
+// Get retrieves a single record by primary key.
+func (r *RelationalDB) Get(ctx context.Context, req gestalt.IndexedDBObjectStoreRequest) (gestalt.Record, error) {
+  return gestalt.Record{}, nil
+}
 
-    // Add inserts a new record. Fails if the key already exists.
-    func (r *RelationalDB) Add(ctx context.Context, req gestalt.IndexedDBRecordRequest) error {
-      return nil
-    }
+// Add inserts a new record. Fails if the key already exists.
+func (r *RelationalDB) Add(ctx context.Context, req gestalt.IndexedDBRecordRequest) error {
+  return nil
+}
 
-    // Put inserts or replaces the record at the given key.
-    func (r *RelationalDB) Put(ctx context.Context, req gestalt.IndexedDBRecordRequest) error {
-      return nil
-    }
+// Put inserts or replaces the record at the given key.
+func (r *RelationalDB) Put(ctx context.Context, req gestalt.IndexedDBRecordRequest) error {
+  return nil
+}
 
-    // Delete removes a record by primary key.
-    func (r *RelationalDB) Delete(ctx context.Context, req gestalt.IndexedDBObjectStoreRequest) error {
-      return nil
-    }
+// Delete removes a record by primary key.
+func (r *RelationalDB) Delete(ctx context.Context, req gestalt.IndexedDBObjectStoreRequest) error {
+  return nil
+}
 
-    // See the W3C IndexedDB specification for the remaining methods:
-    // https://www.w3.org/TR/IndexedDB/#object-store-interface
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```python
-    from typing import Any
-
-    from gestalt import IndexedDBProvider
-
-    class RelationalDB(IndexedDBProvider):
-        def configure(self, name: str, config: dict) -> None:
-            dsn = config.get("dsn", "")
-            if not dsn:
-                raise ValueError("relationaldb: dsn is required")
-            self.dsn = dsn
-
-        def get(self, store: str, id: str) -> dict[str, Any]:
-            """Retrieve a single record by primary key."""
-            ...
-
-        def add(self, store: str, record: dict[str, Any]) -> None:
-            """Insert a new record. Fails if the key already exists."""
-            ...
-
-        def put(self, store: str, record: dict[str, Any]) -> None:
-            """Insert or replace the record at the given key."""
-            ...
-
-        def delete(self, store: str, id: str) -> None:
-            """Remove a record by primary key."""
-            ...
-
-        # See the W3C IndexedDB specification for the remaining methods:
-        # https://www.w3.org/TR/IndexedDB/#object-store-interface
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```rust
-    pub struct RelationalDB { /* database connection */ }
-
-    #[gestalt::async_trait]
-    impl gestalt::IndexedDBProvider for RelationalDB {
-        async fn configure(&self, _name: &str, config: serde_json::Map<String, serde_json::Value>) -> gestalt::Result<()> {
-            let dsn = config.get("dsn")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| gestalt::Error::Config("dsn is required"))?;
-            // Parse DSN prefix to select driver, open connection.
-            Ok(())
-        }
-
-        /// Retrieves a single record by primary key.
-        async fn get(&self, req: proto::ObjectStoreRequest) -> gestalt::Result<proto::RecordResponse> {
-            todo!()
-        }
-
-        /// Inserts a new record. Fails if the key already exists.
-        async fn add(&self, req: proto::RecordRequest) -> gestalt::Result<()> {
-            todo!()
-        }
-
-        /// Inserts or replaces the record at the given key.
-        async fn put(&self, req: proto::RecordRequest) -> gestalt::Result<()> {
-            todo!()
-        }
-
-        /// Removes a record by primary key.
-        async fn delete(&self, req: proto::ObjectStoreRequest) -> gestalt::Result<()> {
-            todo!()
-        }
-
-        // See the W3C IndexedDB specification for the remaining methods:
-        // https://www.w3.org/TR/IndexedDB/#object-store-interface
-    }
-
-    gestalt::export_indexeddb_provider!(constructor = RelationalDB::default);
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts
-    import { defineIndexedDBProvider } from "@valon-technologies/gestalt";
-
-    export const provider = defineIndexedDBProvider({
-      async configure(name, config) {
-        const dsn = config.dsn;
-        if (!dsn) throw new Error("relationaldb: dsn is required");
-        // Parse DSN prefix to select driver, open connection.
-      },
-
-      /** Retrieves a single record by primary key. */
-      async get(store: string, id: string): Promise<Record> {},
-
-      /** Inserts a new record. Fails if the key already exists. */
-      async add(store: string, record: Record): Promise<void> {},
-
-      /** Inserts or replaces the record at the given key. */
-      async put(store: string, record: Record): Promise<void> {},
-
-      /** Removes a record by primary key. */
-      async delete(store: string, id: string): Promise<void> {},
-
-      // See the W3C IndexedDB specification for the remaining methods:
-      // https://www.w3.org/TR/IndexedDB/#object-store-interface
-    });
-    ```
-  </Tabs.Tab>
-</Tabs>
+// See the W3C IndexedDB specification for the remaining methods:
+// https://www.w3.org/TR/IndexedDB/#object-store-interface
+```
 
 ### Plugin access, scoping, and deployment
 
