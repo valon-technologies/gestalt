@@ -183,6 +183,14 @@ func providerRPCError(operation string, err error) error {
 		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, ErrExternalCredentialNotFound):
 		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, ErrNotFound):
+		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, ErrAlreadyExists):
+		return status.Error(codes.AlreadyExists, err.Error())
+	case errors.Is(err, ErrInvalidTransaction):
+		return status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, ErrReadOnly), errors.Is(err, ErrTransactionDone):
+		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, ErrExternalTokenValidationUnsupported),
 		errors.Is(err, ErrOAuthRegistrationStoreUnsupported):
 		return status.Error(codes.Unimplemented, err.Error())

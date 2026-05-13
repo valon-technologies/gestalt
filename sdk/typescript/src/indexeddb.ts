@@ -1,6 +1,10 @@
 import { connect } from "node:net";
 
-import { createClient, type Client, type Interceptor } from "@connectrpc/connect";
+import {
+  createClient,
+  type Client,
+  type Interceptor,
+} from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import {
   IndexedDB as IndexedDBService,
@@ -41,27 +45,35 @@ function indexedDBTransportOptions(rawTarget: string): {
   if (target.startsWith("tcp://")) {
     const address = target.slice("tcp://".length).trim();
     if (!address) {
-      throw new Error(`IndexedDB tcp target ${JSON.stringify(rawTarget)} is missing host:port`);
+      throw new Error(
+        `IndexedDB tcp target ${JSON.stringify(rawTarget)} is missing host:port`,
+      );
     }
     return { baseUrl: `http://${address}` };
   }
   if (target.startsWith("tls://")) {
     const address = target.slice("tls://".length).trim();
     if (!address) {
-      throw new Error(`IndexedDB tls target ${JSON.stringify(rawTarget)} is missing host:port`);
+      throw new Error(
+        `IndexedDB tls target ${JSON.stringify(rawTarget)} is missing host:port`,
+      );
     }
     return { baseUrl: `https://${address}` };
   }
   if (target.startsWith("unix://")) {
     const socketPath = target.slice("unix://".length).trim();
     if (!socketPath) {
-      throw new Error(`IndexedDB unix target ${JSON.stringify(rawTarget)} is missing a socket path`);
+      throw new Error(
+        `IndexedDB unix target ${JSON.stringify(rawTarget)} is missing a socket path`,
+      );
     }
     return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
   }
   if (target.includes("://")) {
     const parsed = new URL(target);
-    throw new Error(`Unsupported IndexedDB target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`);
+    throw new Error(
+      `Unsupported IndexedDB target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`,
+    );
   }
   return { baseUrl: "http://localhost", nodeOptions: { path: target } };
 }
@@ -127,7 +139,9 @@ export enum CursorDirection {
   PrevUnique = 3,
 }
 
-const CURSOR_DIRECTION_TO_PROTO: { [K in CursorDirection]: ProtoCursorDirection } = {
+const CURSOR_DIRECTION_TO_PROTO: {
+  [K in CursorDirection]: ProtoCursorDirection;
+} = {
   [CursorDirection.Next]: ProtoCursorDirection.CURSOR_NEXT,
   [CursorDirection.NextUnique]: ProtoCursorDirection.CURSOR_NEXT_UNIQUE,
   [CursorDirection.Prev]: ProtoCursorDirection.CURSOR_PREV,
@@ -173,7 +187,11 @@ export class Cursor {
   static async open(
     client: Client<typeof IndexedDBService>,
     store: string,
-    options?: OpenCursorOptions & { keysOnly?: boolean; index?: string; indexValues?: unknown[] },
+    options?: OpenCursorOptions & {
+      keysOnly?: boolean;
+      index?: string;
+      indexValues?: unknown[];
+    },
   ): Promise<Cursor | null> {
     const sendQueue = new AsyncQueue<any>();
     const direction = options?.direction ?? CursorDirection.Next;
@@ -195,7 +213,7 @@ export class Cursor {
     const responses = client.openCursor(sendQueue);
     const responseIterator = responses[Symbol.asyncIterator]();
 
-    const isIndex = !!(options?.index);
+    const isIndex = !!options?.index;
     const cursor = new Cursor(sendQueue, responseIterator, isIndex);
     // Read the open ack to surface creation errors synchronously.
     await cursor.recvOpenAck();
@@ -235,7 +253,10 @@ export class Cursor {
    */
   async continue(): Promise<boolean> {
     this.sendQueue.push({
-      msg: { case: "command" as const, value: { command: { case: "next" as const, value: true } } },
+      msg: {
+        case: "command" as const,
+        value: { command: { case: "next" as const, value: true } },
+      },
     });
     return this.pull();
   }
@@ -293,7 +314,9 @@ export class Cursor {
     this.sendQueue.push({
       msg: {
         case: "command" as const,
-        value: { command: { case: "update" as const, value: toProtoRecord(record) } },
+        value: {
+          command: { case: "update" as const, value: toProtoRecord(record) },
+        },
       },
     });
     await this.recvMutationAck();
@@ -511,6 +534,311 @@ export interface ObjectStoreSchema {
 }
 
 /**
+ * Native open-cursor request used by provider-side cursor helpers.
+ */
+export interface IndexedDBOpenCursorRequest {
+  store?: string;
+  range?: KeyRange;
+  direction?: CursorDirection;
+  keysOnly?: boolean;
+  index?: string;
+  values?: unknown[];
+}
+
+/**
+ * One provider-side cursor row.
+ */
+export interface IndexedDBCursorSnapshotEntry {
+  /** Object-store key, or secondary-index key for index cursors. */
+  key: unknown;
+  /** Canonical primary key for the object-store row. */
+  primaryKey: string;
+  /** Native primary-key value used as a stable tie-breaker for duplicate index keys. */
+  primaryKeyValue?: unknown;
+  /** Row value returned by full-value cursors. */
+  record?: Record;
+}
+
+/**
+ * Provider-side IndexedDB cursor snapshot.
+ *
+ * The snapshot sorts rows, applies IndexedDB range bounds, and implements
+ * movement semantics for native TypeScript providers without exposing wire
+ * message types.
+ */
+export class IndexedDBCursorSnapshot {
+  /** Whether entry keys contain secondary-index values. */
+  indexCursor: boolean;
+  /** Whether returned cursor entries should omit records. */
+  keysOnly: boolean;
+  /** Whether entries are ordered from greatest to least key. */
+  reverse: boolean;
+  /** Whether duplicate index keys are collapsed while iterating. */
+  unique: boolean;
+  /** Sorted and range-filtered entries used by cursor movement. */
+  entries: IndexedDBCursorSnapshotEntry[] = [];
+  /** Current cursor position, or -1 when unpositioned. */
+  pos = -1;
+
+  constructor(request: IndexedDBOpenCursorRequest = {}) {
+    const direction = request.direction ?? CursorDirection.Next;
+    this.indexCursor = !!request.index;
+    this.keysOnly = request.keysOnly ?? false;
+    this.reverse =
+      direction === CursorDirection.Prev ||
+      direction === CursorDirection.PrevUnique;
+    this.unique =
+      direction === CursorDirection.NextUnique ||
+      direction === CursorDirection.PrevUnique;
+  }
+
+  /**
+   * Sorts entries, applies the supplied key range, and stores the snapshot.
+   */
+  load(entries: IndexedDBCursorSnapshotEntry[], range?: KeyRange): void {
+    const ordered = [...entries].sort((left, right) =>
+      this.compareEntries(left, right),
+    );
+    if (this.reverse) ordered.reverse();
+    this.entries = this.applyRange(ordered, range);
+    this.pos = -1;
+  }
+
+  /**
+   * Returns entries that satisfy the supplied key range without mutating state.
+   */
+  applyRange(
+    entries: IndexedDBCursorSnapshotEntry[],
+    range?: KeyRange,
+  ): IndexedDBCursorSnapshotEntry[] {
+    if (!range) return entries;
+    const [lower, upper] = indexedDBRangeBounds(range, this.indexCursor);
+    const filtered: IndexedDBCursorSnapshotEntry[] = [];
+    for (const entry of entries) {
+      const key = normalizeIndexedDBBound(entry.key, this.indexCursor);
+      if (lower !== undefined) {
+        const cmp = compareIndexedDBValues(key, lower);
+        if (range.lowerOpen && cmp <= 0) continue;
+        if (!range.lowerOpen && cmp < 0) continue;
+      }
+      if (upper !== undefined) {
+        const cmp = compareIndexedDBValues(key, upper);
+        if (range.upperOpen && cmp >= 0) continue;
+        if (!range.upperOpen && cmp > 0) continue;
+      }
+      filtered.push(entry);
+    }
+    return filtered;
+  }
+
+  /**
+   * Advances to the next entry, or returns undefined when exhausted.
+   */
+  next(): IndexedDBCursorSnapshotEntry | undefined {
+    if (
+      this.unique &&
+      this.indexCursor &&
+      this.pos >= 0 &&
+      this.pos < this.entries.length
+    ) {
+      const previous = this.entries[this.pos]!.key;
+      for (this.pos += 1; this.pos < this.entries.length; this.pos += 1) {
+        if (
+          compareIndexedDBValues(this.entries[this.pos]!.key, previous) !== 0
+        ) {
+          return this.current();
+        }
+      }
+      return undefined;
+    }
+
+    this.pos += 1;
+    if (this.pos >= this.entries.length) return undefined;
+    return this.current();
+  }
+
+  /**
+   * Advances to target or the next entry past target for this direction.
+   */
+  continueToKey(target: unknown): IndexedDBCursorSnapshotEntry | undefined {
+    const previous =
+      this.unique &&
+      this.indexCursor &&
+      this.pos >= 0 &&
+      this.pos < this.entries.length
+        ? this.entries[this.pos]!.key
+        : undefined;
+    for (this.pos += 1; this.pos < this.entries.length; this.pos += 1) {
+      const current = this.entries[this.pos]!.key;
+      if (
+        previous !== undefined &&
+        this.unique &&
+        this.indexCursor &&
+        compareIndexedDBValues(current, previous) === 0
+      ) {
+        continue;
+      }
+      const cmp = compareIndexedDBValues(current, target);
+      if (this.reverse) {
+        if (cmp <= 0) return this.current();
+      } else if (cmp >= 0) {
+        return this.current();
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Skips count entries and returns the new current entry.
+   */
+  advance(count: number): IndexedDBCursorSnapshotEntry | undefined {
+    if (count <= 0) throw new RangeError("advance count must be positive");
+    let entry: IndexedDBCursorSnapshotEntry | undefined;
+    for (let i = 0; i < count; i += 1) {
+      entry = this.next();
+      if (!entry) return undefined;
+    }
+    return entry;
+  }
+
+  /**
+   * Returns the currently positioned entry.
+   */
+  current(): IndexedDBCursorSnapshotEntry {
+    if (this.pos < 0 || this.pos >= this.entries.length) {
+      throw new NotFoundError("cursor is not positioned");
+    }
+    return this.entries[this.pos]!;
+  }
+
+  private compareEntries(
+    left: IndexedDBCursorSnapshotEntry,
+    right: IndexedDBCursorSnapshotEntry,
+  ): number {
+    let cmp = compareIndexedDBValues(left.key, right.key);
+    if (cmp === 0) {
+      cmp = compareIndexedDBValues(
+        left.primaryKeyValue ?? left.primaryKey,
+        right.primaryKeyValue ?? right.primaryKey,
+      );
+    }
+    return cmp;
+  }
+}
+
+/**
+ * Creates an empty provider-side cursor snapshot from a native request.
+ */
+export function newIndexedDBCursorSnapshot(
+  request: IndexedDBOpenCursorRequest,
+): IndexedDBCursorSnapshot {
+  return new IndexedDBCursorSnapshot(request);
+}
+
+/**
+ * Normalizes object-store or index cursor range bounds.
+ *
+ * Scalar index bounds are compared as one-part composite keys so providers can
+ * share the same comparison path for scalar and compound indexes.
+ */
+export function indexedDBRangeBounds(
+  range: KeyRange | undefined,
+  indexCursor: boolean,
+): [unknown, unknown] {
+  if (!range) return [undefined, undefined];
+  const lower =
+    range.lower !== undefined
+      ? normalizeIndexedDBBound(range.lower, indexCursor)
+      : undefined;
+  const upper =
+    range.upper !== undefined
+      ? normalizeIndexedDBBound(range.upper, indexCursor)
+      : undefined;
+  return [lower, upper];
+}
+
+/**
+ * Compares native IndexedDB key values.
+ */
+export function compareIndexedDBValues(left: unknown, right: unknown): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    for (let i = 0; i < left.length; i += 1) {
+      if (i >= right.length) return 1;
+      const cmp = compareIndexedDBValues(left[i], right[i]);
+      if (cmp !== 0) return cmp;
+    }
+    if (left.length < right.length) return -1;
+    return 0;
+  }
+  if (typeof left === "string" && typeof right === "string")
+    return compareScalars(left, right);
+  if (left instanceof Date && right instanceof Date)
+    return compareScalars(left.getTime(), right.getTime());
+  if (isBytes(left) && isBytes(right))
+    return compareBytes(byteView(left), byteView(right));
+  if (typeof left === "boolean" && typeof right === "boolean")
+    return compareScalars(Number(left), Number(right));
+  if (isNumeric(left) && isNumeric(right)) return compareNumeric(left, right);
+  return compareScalars(String(left), String(right));
+}
+
+function normalizeIndexedDBBound(
+  value: unknown,
+  indexCursor: boolean,
+): unknown {
+  if (!indexCursor) return value;
+  if (Array.isArray(value)) return [...value];
+  return [value];
+}
+
+function compareScalars<T extends bigint | number | string>(
+  left: T,
+  right: T,
+): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function compareNumeric(left: number | bigint, right: number | bigint): number {
+  if (typeof left === "number" && typeof right === "number")
+    return compareScalars(left, right);
+  if (typeof left === "bigint" && typeof right === "bigint")
+    return compareScalars(left, right);
+  return compareMixedNumeric(left, right);
+}
+
+function compareMixedNumeric(
+  left: number | bigint,
+  right: number | bigint,
+): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function isNumeric(value: unknown): value is number | bigint {
+  return typeof value === "number" || typeof value === "bigint";
+}
+
+function isBytes(value: unknown): value is ArrayBuffer | Uint8Array {
+  return value instanceof ArrayBuffer || value instanceof Uint8Array;
+}
+
+function byteView(value: ArrayBuffer | Uint8Array): Uint8Array {
+  return value instanceof Uint8Array ? value : new Uint8Array(value);
+}
+
+function compareBytes(left: Uint8Array, right: Uint8Array): number {
+  const length = Math.min(left.length, right.length);
+  for (let i = 0; i < length; i += 1) {
+    const cmp = compareScalars(left[i]!, right[i]!);
+    if (cmp !== 0) return cmp;
+  }
+  return compareScalars(left.length, right.length);
+}
+
+/**
  * Client for invoking a host-provided IndexedDB service over the Gestalt transport.
  *
  * @example
@@ -524,7 +852,7 @@ export interface ObjectStoreSchema {
 export class IndexedDB {
   private client: Client<typeof IndexedDBService>;
 
- constructor(name?: string) {
+  constructor(name?: string) {
     const envName = indexedDBSocketEnv(name);
     const target = process.env[envName];
     if (!target) {
@@ -550,7 +878,10 @@ export class IndexedDB {
   /**
    * Creates an object store.
    */
-  async createObjectStore(name: string, schema?: ObjectStoreSchema): Promise<void> {
+  async createObjectStore(
+    name: string,
+    schema?: ObjectStoreSchema,
+  ): Promise<void> {
     await this.client.createObjectStore({
       name,
       schema: {
@@ -613,7 +944,10 @@ export class Transaction {
   private requestId = 0n;
   private streamChain: Promise<void> = Promise.resolve();
 
-  private constructor(sendQueue: AsyncQueue<any>, responseIterator: AsyncIterator<any>) {
+  private constructor(
+    sendQueue: AsyncQueue<any>,
+    responseIterator: AsyncIterator<any>,
+  ) {
     this.sendQueue = sendQueue;
     this.responseIterator = responseIterator;
   }
@@ -634,7 +968,9 @@ export class Transaction {
         value: {
           stores,
           mode: toProtoTransactionMode(mode),
-          durabilityHint: toProtoTransactionDurabilityHint(options?.durabilityHint ?? "default"),
+          durabilityHint: toProtoTransactionDurabilityHint(
+            options?.durabilityHint ?? "default",
+          ),
         },
       },
     });
@@ -697,7 +1033,9 @@ export class Transaction {
     return this.withStreamLock(async () => {
       if (this.closed) return;
       this.closed = true;
-      this.sendQueue.push({ msg: { case: "abort" as const, value: { reason } } });
+      this.sendQueue.push({
+        msg: { case: "abort" as const, value: { reason } },
+      });
       try {
         const { value: resp, done } = await this.responseIterator.next();
         this.sendQueue.end();
@@ -733,7 +1071,9 @@ export class Transaction {
         const { value: resp, done } = await this.responseIterator.next();
         if (done || !resp) {
           this.closeLocally();
-          throw new TransactionError("transaction stream ended during operation");
+          throw new TransactionError(
+            "transaction stream ended during operation",
+          );
         }
         if (resp.msg?.case !== "operation") {
           this.closeLocally();
@@ -742,7 +1082,9 @@ export class Transaction {
         const opResp = resp.msg.value;
         if (opResp.requestId !== requestId) {
           this.closeLocally();
-          throw new TransactionError("transaction response request id mismatch");
+          throw new TransactionError(
+            "transaction response request id mismatch",
+          );
         }
         raiseStatus(opResp.error);
         return opResp;
@@ -768,7 +1110,8 @@ export class Transaction {
   }
 
   private ensureOpen(): void {
-    if (this.closed) throw new TransactionError("transaction is already finished");
+    if (this.closed)
+      throw new TransactionError("transaction is already finished");
   }
 
   private closeLocally(): void {
@@ -857,7 +1200,10 @@ export class TransactionObjectStore {
   async getAll(keyRange?: KeyRange): Promise<Record[]> {
     const resp = await this.tx.sendOperation({
       case: "getAll" as const,
-      value: { store: this.store, range: keyRange ? toProtoKeyRange(keyRange) : undefined },
+      value: {
+        store: this.store,
+        range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+      },
     });
     return resp.result.value.records.map((r: any) => fromProtoRecord(r));
   }
@@ -868,7 +1214,10 @@ export class TransactionObjectStore {
   async getAllKeys(keyRange?: KeyRange): Promise<string[]> {
     const resp = await this.tx.sendOperation({
       case: "getAllKeys" as const,
-      value: { store: this.store, range: keyRange ? toProtoKeyRange(keyRange) : undefined },
+      value: {
+        store: this.store,
+        range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+      },
     });
     return resp.result.value.keys;
   }
@@ -879,7 +1228,10 @@ export class TransactionObjectStore {
   async count(keyRange?: KeyRange): Promise<number> {
     const resp = await this.tx.sendOperation({
       case: "count" as const,
-      value: { store: this.store, range: keyRange ? toProtoKeyRange(keyRange) : undefined },
+      value: {
+        store: this.store,
+        range: keyRange ? toProtoKeyRange(keyRange) : undefined,
+      },
     });
     return Number(resp.result.value.count);
   }
@@ -952,7 +1304,10 @@ export class TransactionIndex {
   /**
    * Reads all indexed primary keys inside the transaction.
    */
-  async getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]> {
+  async getAllKeys(
+    keyRange?: KeyRange,
+    ...values: unknown[]
+  ): Promise<string[]> {
     const resp = await this.tx.sendOperation({
       case: "indexGetAllKeys" as const,
       value: this.indexRequest(values, keyRange),
@@ -1024,14 +1379,18 @@ export class ObjectStore {
    * Inserts a new record and fails if it already exists.
    */
   async add(record: Record): Promise<void> {
-    await rpc(() => this.client.add({ store: this.store, record: toProtoRecord(record) }));
+    await rpc(() =>
+      this.client.add({ store: this.store, record: toProtoRecord(record) }),
+    );
   }
 
   /**
    * Inserts or replaces a record.
    */
   async put(record: Record): Promise<void> {
-    await rpc(() => this.client.put({ store: this.store, record: toProtoRecord(record) }));
+    await rpc(() =>
+      this.client.put({ store: this.store, record: toProtoRecord(record) }),
+    );
   }
 
   /**
@@ -1171,7 +1530,10 @@ export class Index {
   /**
    * Reads all primary keys matching the supplied index values and optional range.
    */
-  async getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]> {
+  async getAllKeys(
+    keyRange?: KeyRange,
+    ...values: unknown[]
+  ): Promise<string[]> {
     const resp = await this.client.indexGetAllKeys({
       store: this.store,
       index: this.indexName,
@@ -1209,7 +1571,10 @@ export class Index {
   /**
    * Opens a cursor over the index.
    */
-  async openCursor(options?: OpenCursorOptions, ...values: unknown[]): Promise<Cursor | null> {
+  async openCursor(
+    options?: OpenCursorOptions,
+    ...values: unknown[]
+  ): Promise<Cursor | null> {
     return Cursor.open(this.client, this.store, {
       ...options,
       index: this.indexName,
@@ -1220,7 +1585,10 @@ export class Index {
   /**
    * Opens a key-only cursor over the index.
    */
-  async openKeyCursor(options?: OpenCursorOptions, ...values: unknown[]): Promise<Cursor | null> {
+  async openKeyCursor(
+    options?: OpenCursorOptions,
+    ...values: unknown[]
+  ): Promise<Cursor | null> {
     return Cursor.open(this.client, this.store, {
       ...options,
       keysOnly: true,
@@ -1232,13 +1600,19 @@ export class Index {
 
 function fromProtoKeyValue(kv: any): unknown {
   if (kv.kind?.case === "scalar") return fromProtoTypedValue(kv.kind.value);
-  if (kv.kind?.case === "array") return kv.kind.value.elements.map(fromProtoKeyValue);
+  if (kv.kind?.case === "array")
+    return kv.kind.value.elements.map(fromProtoKeyValue);
   return undefined;
 }
 
 function toProtoKeyValue(v: unknown): any {
   if (Array.isArray(v)) {
-    return { kind: { case: "array" as const, value: { elements: v.map(toProtoKeyValue) } } };
+    return {
+      kind: {
+        case: "array" as const,
+        value: { elements: v.map(toProtoKeyValue) },
+      },
+    };
   }
   return { kind: { case: "scalar" as const, value: toProtoTypedValue(v) } };
 }
@@ -1268,7 +1642,8 @@ function fromProtoRecord(record: any): Record {
 }
 
 function toProtoTypedValue(v: unknown): any {
-  if (v === null || v === undefined) return { kind: { case: "nullValue", value: 0 } };
+  if (v === null || v === undefined)
+    return { kind: { case: "nullValue", value: 0 } };
   if (typeof v === "boolean") return { kind: { case: "boolValue", value: v } };
   if (typeof v === "bigint") return { kind: { case: "intValue", value: v } };
   if (typeof v === "number") {
@@ -1278,9 +1653,12 @@ function toProtoTypedValue(v: unknown): any {
     return { kind: { case: "floatValue", value: v } };
   }
   if (typeof v === "string") return { kind: { case: "stringValue", value: v } };
-  if (v instanceof Date) return { kind: { case: "timeValue", value: timestampFromDate(v) } };
-  if (v instanceof Uint8Array) return { kind: { case: "bytesValue", value: v } };
-  if (v instanceof ArrayBuffer) return { kind: { case: "bytesValue", value: new Uint8Array(v) } };
+  if (v instanceof Date)
+    return { kind: { case: "timeValue", value: timestampFromDate(v) } };
+  if (v instanceof Uint8Array)
+    return { kind: { case: "bytesValue", value: v } };
+  if (v instanceof ArrayBuffer)
+    return { kind: { case: "bytesValue", value: new Uint8Array(v) } };
   return { kind: { case: "jsonValue", value: toProtoJsonValue(v) } };
 }
 
@@ -1323,11 +1701,18 @@ function toJsInt(value: bigint): number | bigint {
 }
 
 function toProtoJsonValue(value: unknown): any {
-  if (value === null || value === undefined) return { kind: { case: "nullValue", value: 0 } };
+  if (value === null || value === undefined)
+    return { kind: { case: "nullValue", value: 0 } };
   if (typeof value === "boolean") return { kind: { case: "boolValue", value } };
-  if (typeof value === "number") return { kind: { case: "numberValue", value } };
-  if (typeof value === "string") return { kind: { case: "stringValue", value } };
-  if (value instanceof Date || value instanceof Uint8Array || value instanceof ArrayBuffer) {
+  if (typeof value === "number")
+    return { kind: { case: "numberValue", value } };
+  if (typeof value === "string")
+    return { kind: { case: "stringValue", value } };
+  if (
+    value instanceof Date ||
+    value instanceof Uint8Array ||
+    value instanceof ArrayBuffer
+  ) {
     throw new Error(`unsupported JSON value type: ${value.constructor.name}`);
   }
   if (Array.isArray(value)) {
@@ -1340,7 +1725,9 @@ function toProtoJsonValue(value: unknown): any {
   }
   if (typeof value === "object") {
     const fields: { [key: string]: unknown } = {};
-    for (const [key, inner] of Object.entries(value as { [key: string]: unknown })) {
+    for (const [key, inner] of Object.entries(
+      value as { [key: string]: unknown },
+    )) {
       fields[key] = toProtoJsonValue(inner);
     }
     return {
@@ -1363,16 +1750,22 @@ function fromProtoJsonValue(value: any): unknown {
     case "boolValue":
       return value.kind.value;
     case "listValue":
-      return (value.kind.value?.values ?? []).map((item: unknown) => fromProtoJsonValue(item));
+      return (value.kind.value?.values ?? []).map((item: unknown) =>
+        fromProtoJsonValue(item),
+      );
     case "structValue": {
       const out: Record = {};
-      for (const [key, inner] of Object.entries(value.kind.value?.fields ?? {})) {
+      for (const [key, inner] of Object.entries(
+        value.kind.value?.fields ?? {},
+      )) {
         out[key] = fromProtoJsonValue(inner);
       }
       return out;
     }
     default:
-      throw new Error(`unsupported JSON value kind: ${String(value?.kind?.case)}`);
+      throw new Error(
+        `unsupported JSON value kind: ${String(value?.kind?.case)}`,
+      );
   }
 }
 
@@ -1393,11 +1786,15 @@ function toProtoTransactionMode(mode: TransactionMode): ProtoTransactionMode {
     case "readwrite":
       return ProtoTransactionMode.TRANSACTION_READWRITE;
     default:
-      throw new TransactionError(`unsupported transaction mode: ${String(mode)}`);
+      throw new TransactionError(
+        `unsupported transaction mode: ${String(mode)}`,
+      );
   }
 }
 
-function toProtoTransactionDurabilityHint(hint: TransactionDurabilityHint): ProtoTransactionDurabilityHint {
+function toProtoTransactionDurabilityHint(
+  hint: TransactionDurabilityHint,
+): ProtoTransactionDurabilityHint {
   switch (hint) {
     case "default":
       return ProtoTransactionDurabilityHint.TRANSACTION_DURABILITY_DEFAULT;
@@ -1406,7 +1803,9 @@ function toProtoTransactionDurabilityHint(hint: TransactionDurabilityHint): Prot
     case "relaxed":
       return ProtoTransactionDurabilityHint.TRANSACTION_DURABILITY_RELAXED;
     default:
-      throw new TransactionError(`unsupported transaction durability hint: ${String(hint)}`);
+      throw new TransactionError(
+        `unsupported transaction durability hint: ${String(hint)}`,
+      );
   }
 }
 
@@ -1418,11 +1817,16 @@ function raiseStatus(status: any): void {
 }
 
 function mapTransactionTransportError(err: any): never {
-  if (err instanceof NotFoundError || err instanceof AlreadyExistsError || err instanceof TransactionError) {
+  if (
+    err instanceof NotFoundError ||
+    err instanceof AlreadyExistsError ||
+    err instanceof TransactionError
+  ) {
     throw err;
   }
   if (err?.code === 5) throw new NotFoundError(err.message);
   if (err?.code === 6) throw new AlreadyExistsError(err.message);
-  if (err?.code === 3 || err?.code === 9) throw new TransactionError(err.message);
+  if (err?.code === 3 || err?.code === 9)
+    throw new TransactionError(err.message);
   throw err;
 }

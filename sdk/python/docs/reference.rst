@@ -572,6 +572,12 @@ IndexedDB client
    KeyRange
    IndexSchema
    ObjectStoreSchema
+   IndexedDBOpenCursorRequest
+   IndexedDBCursorSnapshotEntry
+   IndexedDBCursorSnapshot
+   new_indexeddb_cursor_snapshot
+   indexeddb_range_bounds
+   compare_indexeddb_values
    IndexedDB
    ObjectStore
    Index
@@ -599,6 +605,20 @@ IndexedDB client
 .. autoclass:: IndexSchema
 
 .. autoclass:: ObjectStoreSchema
+
+.. autoclass:: IndexedDBOpenCursorRequest
+
+.. autoclass:: IndexedDBCursorSnapshotEntry
+
+.. autoclass:: IndexedDBCursorSnapshot
+   :members:
+   :exclude-members: __dict__, __module__, __weakref__
+
+.. autofunction:: new_indexeddb_cursor_snapshot
+
+.. autofunction:: indexeddb_range_bounds
+
+.. autofunction:: compare_indexeddb_values
 
 .. autoclass:: IndexedDB
    :members:

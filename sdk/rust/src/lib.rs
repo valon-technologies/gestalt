@@ -97,9 +97,11 @@ pub use catalog::{Catalog, CatalogOperation, CatalogParameter, OperationAnnotati
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
 pub use indexeddb::{
-    Cursor, CursorDirection, ENV_INDEXEDDB_SOCKET, IndexedDB, IndexedDBError, Transaction,
+    Cursor, CursorDirection, ENV_INDEXEDDB_SOCKET, IndexedDB, IndexedDBCursorSnapshot,
+    IndexedDBCursorSnapshotEntry, IndexedDBError, IndexedDBOpenCursorRequest, Transaction,
     TransactionDurabilityHint, TransactionIndexClient, TransactionMode, TransactionObjectStore,
-    TransactionOptions, indexeddb_socket_env, indexeddb_socket_token_env,
+    TransactionOptions, compare_indexeddb_values, indexeddb_range_bounds, indexeddb_socket_env,
+    indexeddb_socket_token_env, new_indexeddb_cursor_snapshot,
 };
 pub use invoker::{
     ENV_PLUGIN_INVOKER_SOCKET, InvocationGrant, InvokeOptions, PluginInvoker, PluginInvokerError,

@@ -184,6 +184,42 @@ func TestStartRunRejectsProviderReplayWithDifferentExecutionRef(t *testing.T) {
 	}
 }
 
+func TestPublishEventPreservesCallerPluginName(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow: testWorkflowControl{provider: provider},
+	})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID: principal.UserSubjectID("ada"),
+		UserID:    "ada",
+		Kind:      principal.KindUser,
+	})
+
+	if _, err := manager.PublishEvent(context.Background(), caller, EventPublish{
+		ProviderName: "local",
+		PluginName:   " github ",
+		Event:        coreworkflow.Event{Type: "issue.created"},
+	}); err != nil {
+		t.Fatalf("PublishEvent selected provider: %v", err)
+	}
+	if _, err := manager.PublishEvent(context.Background(), caller, EventPublish{
+		PluginName: " github ",
+		Event:      coreworkflow.Event{Type: "issue.updated"},
+	}); err != nil {
+		t.Fatalf("PublishEvent fan-out: %v", err)
+	}
+	if len(provider.publishedEvents) != 2 {
+		t.Fatalf("published events = %d, want 2", len(provider.publishedEvents))
+	}
+	for i, req := range provider.publishedEvents {
+		if req.PluginName != "github" {
+			t.Fatalf("publishedEvents[%d].PluginName = %q, want github", i, req.PluginName)
+		}
+	}
+}
+
 func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -1519,6 +1555,7 @@ type testWorkflowProvider struct {
 	upsertedEventTriggers           []coreworkflow.UpsertEventTriggerRequest
 	signalOrStartErr                error
 	signalOrStartCalls              int
+	publishedEvents                 []coreworkflow.PublishEventRequest
 	getMissingExecutionReferenceErr error
 	putExecutionReferenceHook       func(*coreworkflow.ExecutionReference)
 	putExecutionReferenceCalls      int
@@ -1649,6 +1686,11 @@ func (p *testWorkflowProvider) GetEventTrigger(_ context.Context, req coreworkfl
 	}
 	copied := *trigger
 	return &copied, nil
+}
+
+func (p *testWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) error {
+	p.publishedEvents = append(p.publishedEvents, req)
+	return nil
 }
 
 func (p *testWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {

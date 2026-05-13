@@ -6,6 +6,8 @@ import datetime as _dt
 import os
 import queue
 from dataclasses import dataclass, field
+from functools import cmp_to_key
+from numbers import Real
 from typing import Any, Iterator, Protocol, cast
 from urllib import parse as _urlparse
 
@@ -99,6 +101,274 @@ class ObjectStoreSchema:
     """Schema definition for an object store."""
 
     indexes: list[IndexSchema] = field(default_factory=list)
+
+
+@dataclass
+class IndexedDBOpenCursorRequest:
+    """Native open-cursor request used by provider-side cursor helpers.
+
+    The SDK runtime owns transport serialization. Provider code can use this
+    model when constructing an :class:`IndexedDBCursorSnapshot` from native
+    Python values.
+    """
+
+    store: str = ""
+    key_range: KeyRange | None = None
+    direction: int = CURSOR_NEXT
+    keys_only: bool = False
+    index: str = ""
+    values: tuple[Any, ...] = ()
+
+
+@dataclass
+class IndexedDBCursorSnapshotEntry:
+    """One provider-side cursor row.
+
+    :param key: Object-store key, or secondary-index key for index cursors.
+    :param primary_key: Canonical primary key for the object-store row.
+    :param record: Row value returned by full-value cursors.
+    :param primary_key_value: Native primary-key value used as the stable
+        tie-breaker when multiple index rows share the same index key.
+    """
+
+    key: Any
+    primary_key: str
+    record: dict[str, Any] = field(default_factory=dict)
+    primary_key_value: Any = None
+
+    def __post_init__(self) -> None:
+        if self.primary_key_value is None:
+            self.primary_key_value = self.primary_key
+
+
+class IndexedDBCursorSnapshot:
+    """Provider-side IndexedDB cursor snapshot.
+
+    The snapshot sorts rows, applies IndexedDB range bounds, and implements
+    movement semantics for native Python providers without exposing wire
+    message types.
+    """
+
+    def __init__(self, request: IndexedDBOpenCursorRequest | None = None) -> None:
+        req = request or IndexedDBOpenCursorRequest()
+        self.index_cursor = bool(req.index)
+        self.keys_only = req.keys_only
+        self.reverse = req.direction in (CURSOR_PREV, CURSOR_PREV_UNIQUE)
+        self.unique = req.direction in (CURSOR_NEXT_UNIQUE, CURSOR_PREV_UNIQUE)
+        self.entries: list[IndexedDBCursorSnapshotEntry] = []
+        self.pos = -1
+
+    def load(
+        self,
+        entries: list[IndexedDBCursorSnapshotEntry],
+        key_range: KeyRange | None = None,
+    ) -> None:
+        """Sort and range-filter entries into this snapshot."""
+
+        ordered = sorted(
+            entries,
+            key=cmp_to_key(self._compare_entries),
+            reverse=self.reverse,
+        )
+        self.entries = self.apply_range(ordered, key_range)
+        self.pos = -1
+
+    def apply_range(
+        self,
+        entries: list[IndexedDBCursorSnapshotEntry],
+        key_range: KeyRange | None = None,
+    ) -> list[IndexedDBCursorSnapshotEntry]:
+        """Return entries that satisfy ``key_range`` without mutating state."""
+
+        if key_range is None:
+            return entries
+        lower, upper = indexeddb_range_bounds(key_range, self.index_cursor)
+        filtered: list[IndexedDBCursorSnapshotEntry] = []
+        for entry in entries:
+            key = _normalize_indexeddb_bound(entry.key, self.index_cursor)
+            if lower is not None:
+                cmp = compare_indexeddb_values(key, lower)
+                if key_range.lower_open and cmp <= 0:
+                    continue
+                if not key_range.lower_open and cmp < 0:
+                    continue
+            if upper is not None:
+                cmp = compare_indexeddb_values(key, upper)
+                if key_range.upper_open and cmp >= 0:
+                    continue
+                if not key_range.upper_open and cmp > 0:
+                    continue
+            filtered.append(entry)
+        return filtered
+
+    def next(self) -> IndexedDBCursorSnapshotEntry | None:
+        """Advance to the next entry, or return ``None`` when exhausted."""
+
+        if self.unique and self.index_cursor and 0 <= self.pos < len(self.entries):
+            prev = self.entries[self.pos].key
+            self.pos += 1
+            while self.pos < len(self.entries):
+                if compare_indexeddb_values(self.entries[self.pos].key, prev) != 0:
+                    return self.current()
+                self.pos += 1
+            return None
+
+        self.pos += 1
+        if self.pos >= len(self.entries):
+            return None
+        return self.current()
+
+    def continue_to_key(self, target: Any) -> IndexedDBCursorSnapshotEntry | None:
+        """Advance to ``target`` or the next entry past it for this direction."""
+
+        prev = None
+        if self.unique and self.index_cursor and 0 <= self.pos < len(self.entries):
+            prev = self.entries[self.pos].key
+        self.pos += 1
+        while self.pos < len(self.entries):
+            cur = self.entries[self.pos].key
+            if (
+                prev is not None
+                and self.unique
+                and self.index_cursor
+                and compare_indexeddb_values(cur, prev) == 0
+            ):
+                self.pos += 1
+                continue
+            cmp = compare_indexeddb_values(cur, target)
+            if self.reverse:
+                if cmp <= 0:
+                    return self.current()
+            elif cmp >= 0:
+                return self.current()
+            self.pos += 1
+        return None
+
+    def advance(self, count: int) -> IndexedDBCursorSnapshotEntry | None:
+        """Skip ``count`` entries and return the new current entry."""
+
+        if count <= 0:
+            raise ValueError("advance count must be positive")
+        entry: IndexedDBCursorSnapshotEntry | None = None
+        for _ in range(count):
+            entry = self.next()
+            if entry is None:
+                return None
+        return entry
+
+    def current(self) -> IndexedDBCursorSnapshotEntry:
+        """Return the currently positioned entry."""
+
+        if self.pos < 0 or self.pos >= len(self.entries):
+            raise NotFoundError("cursor is not positioned")
+        return self.entries[self.pos]
+
+    def _compare_entries(
+        self,
+        left: IndexedDBCursorSnapshotEntry,
+        right: IndexedDBCursorSnapshotEntry,
+    ) -> int:
+        cmp = compare_indexeddb_values(left.key, right.key)
+        if cmp == 0:
+            cmp = compare_indexeddb_values(
+                left.primary_key_value, right.primary_key_value
+            )
+        return cmp
+
+
+def new_indexeddb_cursor_snapshot(
+    request: IndexedDBOpenCursorRequest,
+) -> IndexedDBCursorSnapshot:
+    """Create an empty provider-side cursor snapshot from a native request."""
+
+    return IndexedDBCursorSnapshot(request)
+
+
+def indexeddb_range_bounds(
+    key_range: KeyRange | None,
+    index_cursor: bool,
+) -> tuple[Any, Any]:
+    """Normalize object-store or index cursor range bounds.
+
+    Scalar index bounds are compared as one-part composite keys so providers can
+    share the same comparison path for scalar and compound indexes.
+    """
+
+    if key_range is None:
+        return None, None
+    lower = (
+        _normalize_indexeddb_bound(key_range.lower, index_cursor)
+        if key_range.lower is not None
+        else None
+    )
+    upper = (
+        _normalize_indexeddb_bound(key_range.upper, index_cursor)
+        if key_range.upper is not None
+        else None
+    )
+    return lower, upper
+
+
+def compare_indexeddb_values(left: Any, right: Any) -> int:
+    """Compare native IndexedDB key values."""
+
+    left_parts = _sequence_parts(left)
+    right_parts = _sequence_parts(right)
+    if left_parts is not None and right_parts is not None:
+        for i, left_part in enumerate(left_parts):
+            if i >= len(right_parts):
+                return 1
+            cmp = compare_indexeddb_values(left_part, right_parts[i])
+            if cmp != 0:
+                return cmp
+        if len(left_parts) < len(right_parts):
+            return -1
+        return 0
+
+    if isinstance(left, str) and isinstance(right, str):
+        return _cmp(left, right)
+    if isinstance(left, _dt.datetime) and isinstance(right, _dt.datetime):
+        return _cmp(left, right)
+    if isinstance(left, (bytes, bytearray, memoryview)) and isinstance(
+        right, (bytes, bytearray, memoryview)
+    ):
+        return _cmp(bytes(left), bytes(right))
+    if isinstance(left, bool) and isinstance(right, bool):
+        return _cmp(left, right)
+    if (
+        isinstance(left, Real)
+        and not isinstance(left, bool)
+        and isinstance(right, Real)
+        and not isinstance(right, bool)
+    ):
+        return _cmp(left, right)
+
+    return _cmp(str(left), str(right))
+
+
+def _normalize_indexeddb_bound(value: Any, index_cursor: bool) -> Any:
+    if not index_cursor:
+        return value
+    parts = _sequence_parts(value)
+    if parts is not None:
+        return parts
+    return [value]
+
+
+def _sequence_parts(value: Any) -> list[Any] | None:
+    if isinstance(value, (bytes, bytearray, memoryview, str)):
+        return None
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return None
+
+
+def _cmp(left: Any, right: Any) -> int:
+    if left < right:
+        return -1
+    if left > right:
+        return 1
+    return 0
 
 
 class IndexedDB:
