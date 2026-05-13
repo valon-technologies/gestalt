@@ -88,7 +88,7 @@ type Service interface {
 	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*ManagedRun, error)
 	SignalRun(ctx context.Context, p *principal.Principal, req RunSignal) (*ManagedRunSignal, error)
 	SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (*ManagedRunSignal, error)
-	PublishEvent(ctx context.Context, p *principal.Principal, providerName string, event coreworkflow.Event) (coreworkflow.Event, error)
+	PublishEvent(ctx context.Context, p *principal.Principal, req EventPublish) (coreworkflow.Event, error)
 }
 
 type Config struct {
@@ -171,6 +171,14 @@ type RunSignalOrStart struct {
 	IdempotencyKey   string
 	Signal           coreworkflow.Signal
 	CallerPluginName string
+}
+
+type EventPublish struct {
+	ProviderName string
+	// PluginName is trusted owner context. Callers must derive or authorize it before
+	// entering the workflow manager; the manager only normalizes and forwards it.
+	PluginName string
+	Event      coreworkflow.Event
 }
 
 type ManagedDefinition struct {
@@ -674,7 +682,7 @@ func workflowManagerErrorType(err error) string {
 	return "unknown"
 }
 
-func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, providerSelection string, event coreworkflow.Event) (coreworkflow.Event, error) {
+func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req EventPublish) (coreworkflow.Event, error) {
 	p = principal.Canonicalized(p)
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return coreworkflow.Event{}, ErrWorkflowSubjectRequired
@@ -683,18 +691,22 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, prov
 		return coreworkflow.Event{}, ErrWorkflowNotConfigured
 	}
 
+	providerSelection := strings.TrimSpace(req.ProviderName)
+	pluginName := strings.TrimSpace(req.PluginName)
+	event := req.Event
 	event = normalizePublishedEvent(event, m.now())
 	if strings.TrimSpace(event.Type) == "" {
 		return coreworkflow.Event{}, ErrWorkflowEventTypeRequired
 	}
 	publishedBy := workflowActorFromPrincipal(p)
 
-	if strings.TrimSpace(providerSelection) != "" {
+	if providerSelection != "" {
 		_, provider, err := m.resolveProviderSelection(providerSelection)
 		if err != nil {
 			return coreworkflow.Event{}, err
 		}
 		if err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
+			PluginName:  pluginName,
 			Event:       event,
 			PublishedBy: publishedBy,
 		}); err != nil {
@@ -710,6 +722,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, prov
 			return coreworkflow.Event{}, err
 		}
 		if err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
+			PluginName:  pluginName,
 			Event:       event,
 			PublishedBy: publishedBy,
 		}); err != nil {

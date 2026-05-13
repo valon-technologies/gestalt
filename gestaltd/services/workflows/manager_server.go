@@ -621,7 +621,11 @@ func (s *ManagerServer) PublishEvent(ctx context.Context, req *proto.WorkflowMan
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "event: %v", err)
 	}
-	published, err := s.manager.PublishEvent(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), req.GetProviderName(), event)
+	published, err := s.manager.PublishEvent(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.EventPublish{
+		ProviderName: strings.TrimSpace(req.GetProviderName()),
+		PluginName:   strings.TrimSpace(s.pluginName),
+		Event:        event,
+	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
