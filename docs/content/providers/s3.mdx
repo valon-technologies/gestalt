@@ -7,86 +7,6 @@ models the de facto S3-compatible object API rather than a filesystem API, so
 the same plugin code can target AWS S3, MinIO, GCS XML interoperability mode,
 Cloudflare R2, and other compatible backends.
 
-## How S3 providers work
-
-Configure one or more named entries under `providers.s3`, then bind them into
-executable plugins with `plugins.<name>.s3`. The host starts one provider
-process per enabled named entry and only exposes the bindings each plugin is
-granted.
-
-Plugins still work with ordinary `{bucket, key, version_id}` references. The
-host keeps plugin data isolated with an internal namespace prefix, so plugins
-do not need to invent their own storage prefix scheme.
-
-When a plugin binds exactly one S3 provider, the SDKs let it open the default
-client directly. When a plugin binds more than one S3 provider, the plugin
-opens the named binding it wants to use. That keeps plugin code portable while
-letting the host decide which concrete storage backend sits behind each
-binding.
-
-The contract stays close to familiar S3 semantics. It supports metadata reads,
-object reads and writes, deletes, paginated listing, server-side copy,
-provider-native presigned `GET`, `PUT`, `DELETE`, and `HEAD` URLs, and
-host-mediated object access URLs for plugin-scoped browser uploads/downloads.
-
-## Configuring the first-party S3 provider
-
-The first-party package lives at
-`github.com/valon-technologies/gestalt-providers/s3/s3`:
-
-```yaml
-providers:
-  s3:
-    assets:
-      source:
-        package: github.com/valon-technologies/gestalt-providers/s3/s3
-        version: 0.0.1-alpha.1
-      config:
-        region: us-east-1
-        endpoint: https://s3.us-east-1.amazonaws.com
-        forcePathStyle: false
-        accessKeyId: ${AWS_ACCESS_KEY_ID}
-        secretAccessKey:
-          secret:
-            provider: default
-            name: aws-secret-access-key
-
-plugins:
-  media:
-    source: ./plugins/media/manifest.yaml
-    s3:
-      - assets
-```
-
-The main settings are `region`, which controls request signing, and `endpoint`,
-which lets you target S3-compatible systems such as MinIO or GCS XML
-interoperability instead of AWS itself. `forcePathStyle` switches between
-path-style and virtual-host-style requests. If you want to provide static HMAC
-credentials directly, set `accessKeyId`, `secretAccessKey`, and optionally
-`sessionToken`. If you leave those out, the provider falls back to the AWS SDK
-default credential chain.
-
-GCS XML interoperability uses the same provider with a different endpoint and
-HMAC credentials:
-
-```yaml
-providers:
-  s3:
-    archive:
-      source:
-        package: github.com/valon-technologies/gestalt-providers/s3/s3
-        version: 0.0.1-alpha.1
-      config:
-        region: auto
-        endpoint: https://storage.googleapis.com
-        forcePathStyle: true
-        accessKeyId: ${GCS_HMAC_ACCESS_KEY}
-        secretAccessKey:
-          secret:
-            provider: default
-            name: gcs-hmac-secret
-```
-
 ## Using `S3` from a plugin
 
 The SDK exposes an S3 client plus object-handle helpers in every supported
@@ -160,61 +80,16 @@ language.
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { PresignMethod, S3 } from "@valon-technologies/gestalt";
+    import { S3 } from "@valon-technologies/gestalt";
 
     const s3 = new S3();
     const avatar = s3.object("uploads", "avatars/user-123.png");
 
     await avatar.write(pngBytes, { contentType: "image/png" });
     const body = await avatar.bytes();
-
-    const upload = await avatar.createAccessUrl({
-      method: PresignMethod.Put,
-      contentType: "image/png",
-      headers: { "Content-Length": String(pngBytes.byteLength) },
-      expiresSeconds: 900,
-    });
-    await fetch(upload.url, {
-      method: upload.method,
-      headers: { ...upload.headers, "Content-Type": "image/png" },
-      body: pngBytes,
-    });
     ```
   </Tabs.Tab>
 </Tabs>
-
-Use the named helpers when a plugin binds more than one S3 provider: Go uses
-`gestalt.S3("archive")`, Python uses `S3("archive")`, Rust uses
-`gestalt::S3::connect_named("archive")`, and TypeScript uses
-`new S3("archive")`.
-
-## Operational notes
-
-Gestalt does not use S3 providers for its own system state, so these bindings
-are plugin-only. The first-party provider preserves the portable object
-identity `{bucket, key, version_id}`, which means buckets are chosen by the
-caller instead of being fixed in provider config.
-
-For plugin-scoped browser access, use `createAccessUrl` /
-`CreateAccessURL` rather than provider-native `presign`. Gestalt returns a
-short-lived URL under `/api/v1/s3/object-access/{token}`. The token is
-encrypted by the host, contains the plugin, S3 binding, logical object ref,
-HTTP method, expiry, and required headers, and the public route streams bytes
-through the configured S3 provider after applying the plugin namespace prefix.
-That keeps the S3 provider generic and avoids exposing provider-internal object
-keys to clients. The compatibility `presign` methods also return hosted object
-access URLs for plugin-scoped bindings when `server.baseUrl` and
-`server.encryptionKey` are configured.
-
-The first-party provider rejects writes and copies above the single-request S3
-limit instead of exposing provider-specific multipart controls through the
-portable provider contract. Browser uploads that need direct client transport
-should use hosted object access URLs; product-specific multipart state still
-belongs in the plugin that owns that workflow. Published S3 provider packages
-can still be locked and prepared with `gestaltd lock` and
-`gestaltd sync --locked`, just like auth, indexeddb, cache, and secrets
-providers.
-
 
 ## Building your own S3 provider
 
@@ -239,13 +114,13 @@ interface to the underlying gRPC service:
 
 | Method | Purpose |
 | --- | --- |
-| `HeadObject` | Return metadata for one object reference. |
-| `ReadObject` | Stream one object: metadata frame first, then byte frames. |
-| `WriteObject` | Accept one metadata frame followed by byte frames, then return committed metadata. |
-| `DeleteObject` | Delete one object reference. |
-| `ListObjects` | List objects by bucket, prefix, delimiter, and continuation token. |
-| `CopyObject` | Copy an object server-side between object references. |
-| `PresignObject` | Produce a presigned request URL plus required headers. |
+| Head object | Return metadata for one object reference. |
+| Read object | Stream one object body with its metadata. |
+| Write object | Accept a body stream and return committed metadata. |
+| Delete object | Delete one object reference. |
+| List objects | List objects by bucket, prefix, delimiter, and continuation token. |
+| Copy object | Copy an object server-side between object references. |
+| Presign object | Produce a presigned request URL plus required headers. |
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -323,10 +198,55 @@ interface to the underlying gRPC service:
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    The Python SDK exposes S3 client helpers for provider code that consumes
-    object storage. New custom S3 provider implementations should use the Go or
-    TypeScript authored provider surface until the Python server-side S3 adapter
-    is promoted to the same level.
+    ```python
+    from gestalt import (
+        ListPage,
+        ObjectMeta,
+        PresignMethod,
+        PresignResult,
+        ProviderReadResult,
+        S3Provider,
+    )
+
+    class Provider(S3Provider):
+        def head_object(self, ref):
+            return ObjectMeta(
+                ref=ref,
+                etag="",
+                size=0,
+                content_type="application/octet-stream",
+                metadata={},
+            )
+
+        def read_object(self, ref, opts=None):
+            return ProviderReadResult(
+                meta=self.head_object(ref),
+                body=iter(()),
+            )
+
+        def write_object(self, ref, body, opts=None):
+            for _chunk in body:
+                pass
+            return self.head_object(ref)
+
+        def delete_object(self, ref):
+            pass
+
+        def list_objects(self, opts):
+            return ListPage()
+
+        def copy_object(self, source, destination, opts=None):
+            return self.head_object(destination)
+
+        def presign_object(self, ref, opts=None):
+            return PresignResult(
+                url=f"https://example.invalid/{ref.bucket}/{ref.key}",
+                method=opts.method if opts and opts.method else PresignMethod.GET,
+                headers=dict(opts.headers) if opts else {},
+            )
+
+    provider = Provider()
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
@@ -494,8 +414,6 @@ plugins:
       - assets
 ```
 
-For the first-party config shape and binding model, see
-[Configuring the first-party S3 provider](/providers/s3#configuring-the-first-party-s3-provider).
 For packaging and published release URLs, see
 [Releasing provider packages](/providers#releasing-provider-packages).
 
@@ -508,4 +426,3 @@ For packaging and published release URLs, see
 - Map missing objects to `NotFound`, conditional failures to `FailedPrecondition`, and invalid ranges to `OutOfRange` so SDK error mapping stays portable.
 - `PresignObject` should return only caller-required headers. Do not leak transport-generated headers such as `Host`.
 - Implement multipart upload and multipart copy internally when the backend needs them, or reject above the single-request S3 limit explicitly. Do not silently rely on backend-specific `PutObject` / `CopyObject` failures.
-- Plugin-scoped presigning is disabled by the host transport because signed URLs would expose the internal namespace prefix used to isolate plugin data.

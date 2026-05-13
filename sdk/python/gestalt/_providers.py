@@ -9,7 +9,15 @@ from __future__ import annotations
 import datetime as dt
 from enum import Enum
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any, Callable, NoReturn, Protocol, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Iterable,
+    NoReturn,
+    Protocol,
+    runtime_checkable,
+)
 
 if TYPE_CHECKING:
     from ._agent import (
@@ -82,6 +90,18 @@ if TYPE_CHECKING:
         StartHostedPluginRequest,
         StartPluginRuntimeSessionRequest,
         StopPluginRuntimeSessionRequest,
+    )
+    from ._s3 import (
+        CopyOptions,
+        ListOptions,
+        ListPage,
+        ObjectMeta,
+        ObjectRef,
+        PresignOptions,
+        PresignResult,
+        ProviderReadResult,
+        ReadOptions,
+        WriteOptions,
     )
     from ._workflow import (
         BoundWorkflowEventTrigger,
@@ -425,6 +445,59 @@ class CacheProvider(PluginProvider):
 
 class S3Provider(PluginProvider):
     """Base class for S3-compatible object store runtimes."""
+
+    def head_object(self, ref: ObjectRef) -> ObjectMeta:
+        """Return object metadata without reading the object body."""
+
+        self._unimplemented("head_object")
+
+    def read_object(
+        self,
+        ref: ObjectRef,
+        opts: ReadOptions | None = None,
+    ) -> ProviderReadResult:
+        """Return metadata and a streaming body for an object."""
+
+        self._unimplemented("read_object")
+
+    def write_object(
+        self,
+        ref: ObjectRef,
+        body: Iterable[bytes],
+        opts: WriteOptions | None = None,
+    ) -> ObjectMeta:
+        """Consume an object body stream and return committed metadata."""
+
+        self._unimplemented("write_object")
+
+    def delete_object(self, ref: ObjectRef) -> None:
+        """Delete one object or object version."""
+
+        self._unimplemented("delete_object")
+
+    def list_objects(self, opts: ListOptions) -> ListPage:
+        """List objects using S3-style pagination and delimiters."""
+
+        self._unimplemented("list_objects")
+
+    def copy_object(
+        self,
+        source: ObjectRef,
+        destination: ObjectRef,
+        opts: CopyOptions | None = None,
+    ) -> ObjectMeta:
+        """Copy one object to another object reference."""
+
+        self._unimplemented("copy_object")
+
+    def presign_object(
+        self,
+        ref: ObjectRef,
+        opts: PresignOptions | None = None,
+    ) -> PresignResult:
+        """Return a presigned request URL for one object operation."""
+
+        self._unimplemented("presign_object")
 
     def serve(self) -> None:
         """Start the S3 runtime."""
