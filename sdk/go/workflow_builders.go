@@ -153,11 +153,7 @@ func NewBoundWorkflowAgentTarget(input BoundWorkflowAgentTarget) (*proto.BoundWo
 	if err != nil {
 		return nil, err
 	}
-	messages, err := agentMessagesFromInputs(input.Messages)
-	if err != nil {
-		return nil, err
-	}
-	messageProtos, err := agentMessagePtrsToProto(messages)
+	messageProtos, err := agentMessagesToProto(input.Messages)
 	if err != nil {
 		return nil, err
 	}
