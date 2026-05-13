@@ -28,6 +28,7 @@ import (
 const (
 	tracerName         = "gestaltd"
 	graphQLOperationID = "graphql"
+	resultBodyLogLimit = 4096
 
 	attrProvider       = metricutil.AttrProvider
 	attrOperation      = metricutil.AttrOperation
@@ -355,8 +356,65 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if err != nil {
 		return fail(err)
 	}
+	observePlugin5xxResult(ctx, span, p, providerName, opMeta.ID, transport, result)
 
 	return result, nil
+}
+
+func observePlugin5xxResult(ctx context.Context, span trace.Span, p *principal.Principal, providerName, operation, transport string, result *core.OperationResult) {
+	if result == nil || transport != catalog.TransportPlugin || !validHTTPStatus(result.Status) || result.Status < http.StatusInternalServerError {
+		return
+	}
+
+	status, statusClass := resultStatusAttributes(result.Status)
+	span.SetStatus(codes.Error, "provider operation returned 5xx result")
+	span.SetAttributes(
+		metricutil.AttrResultStatus.String(status),
+		metricutil.AttrResultStatusClass.String(statusClass),
+	)
+
+	attrs := []any{
+		"provider", strings.TrimSpace(providerName),
+		"operation", strings.TrimSpace(operation),
+		"transport", strings.TrimSpace(transport),
+		"result_status", result.Status,
+		"result_status_class", statusClass,
+		"result_body", truncateResultBodyForLog(result.Body),
+	}
+	if surface := InvocationSurfaceFromContext(ctx); surface != "" {
+		attrs = append(attrs, "surface", string(surface))
+	}
+	if binding := HTTPBindingFromContext(ctx); binding != "" {
+		attrs = append(attrs, "http_binding", binding)
+	}
+	if subjectID, subjectKind := resultSubjectFields(p); subjectID != "" {
+		attrs = append(attrs, "subject_id", subjectID)
+		if subjectKind != "" {
+			attrs = append(attrs, "subject_kind", subjectKind)
+		}
+	}
+
+	slog.WarnContext(ctx, "provider operation returned 5xx result", attrs...)
+}
+
+func truncateResultBodyForLog(body string) string {
+	if len(body) <= resultBodyLogLimit {
+		return body
+	}
+	return body[:resultBodyLogLimit]
+}
+
+func resultSubjectFields(p *principal.Principal) (string, string) {
+	p = principal.Canonicalized(p)
+	if p == nil {
+		return "", ""
+	}
+	subjectID := strings.TrimSpace(p.SubjectID)
+	subjectKind := strings.TrimSpace(string(p.Kind))
+	if subjectKind == "" && subjectID != "" {
+		subjectKind = string(principal.KindFromSubjectID(subjectID))
+	}
+	return subjectID, subjectKind
 }
 
 func (b *Broker) InvokeGraphQL(ctx context.Context, p *principal.Principal, providerName, instance string, request GraphQLRequest) (result *core.OperationResult, err error) {
