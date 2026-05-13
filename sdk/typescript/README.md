@@ -19,7 +19,7 @@ explicitly names a submodule.
 | --- | --- | --- |
 | Provider authoring | `definePlugin`, `operation`, `ok` | Executable plugin providers, typed request handlers, and operation results. |
 | Runtime schemas | `s`, `object`, `string` | Runtime validation and generated catalog metadata for operation inputs and outputs. |
-| Provider runtimes | `defineAuthenticationProvider`, `defineCacheProvider`, `defineS3Provider`, `defineWorkflowProvider`, `defineAgentProvider` | Host-service backends implemented as TypeScript providers. |
+| Provider runtimes | `defineAuthenticationProvider`, `defineAuthorizationProvider`, `defineCacheProvider`, `defineS3Provider`, `defineWorkflowProvider`, `defineAgentProvider` | Host-service backends implemented as TypeScript providers. |
 | Workflow and agent models | `WorkflowProvider`, `WorkflowManager`, `AgentProvider`, `AgentManager` | Native workflow values, agent sessions, turns, messages, tools, and manager clients. |
 | Host-service clients | `Cache`, `IndexedDB`, `S3`, `PluginInvoker`, `AuthorizationClient` | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Telemetry | `withModelOperation`, `withToolExecution`, `withAgentInvocation` | Provider-authored GenAI spans and metrics inside a running provider process. |
@@ -77,8 +77,8 @@ is omitted, the runtime looks for `provider`, then `plugin`, then the default
 export.
 
 Use `"plugin"` as the kind token for executable plugin providers. Use an object
-target with an explicit kind for authentication, cache, IndexedDB, S3, secrets,
-workflow, agent, and hosted-runtime providers.
+target with an explicit kind for authentication, authorization, cache,
+IndexedDB, S3, secrets, workflow, agent, and hosted-runtime providers.
 
 ## Public surface
 
@@ -86,6 +86,7 @@ The root package exports provider definition helpers:
 
 - `definePlugin` for integration operations and session catalogs.
 - `defineAuthenticationProvider` for authentication surfaces.
+- `defineAuthorizationProvider` for custom authorization providers.
 - `defineCacheProvider`, `defineIndexedDBProvider`, `defineS3Provider`, and
   `defineSecretsProvider` for host-service backends.
 - `defineWorkflowProvider`, `defineAgentProvider`, and
@@ -107,9 +108,6 @@ and native `Date` values. Copy helpers such as `boundWorkflowTargetFromTarget`
 preserve request shape without requiring provider code to assemble transport
 objects. Provider-facing APIs should accept native TypeScript values and keep
 transport serialization inside SDK adapters.
-
-The TypeScript SDK does not currently expose an authored authorization-provider
-helper. Use the Go SDK when you need to build a custom authorization provider.
 
 TypeScript types are not enough to describe runtime payloads. Use the schema
 builders for every operation input and output that should appear in the
