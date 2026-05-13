@@ -1020,9 +1020,31 @@ metadata; Gestalt already stores access and refresh tokens separately.
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    The Rust high-level plugin SDK currently exposes dynamic session catalogs
-    but does not expose a post-connect hook. Use Go, Python, or TypeScript when
-    your provider needs to derive connection metadata during the connect flow.
+    ```rust
+    #[gestalt::async_trait]
+    impl gestalt::Provider for Provider {
+        fn supports_post_connect(&self) -> bool {
+            true
+        }
+
+        async fn post_connect(
+            &self,
+            token: &gestalt::ConnectedToken,
+        ) -> gestalt::Result<std::collections::BTreeMap<String, String>> {
+            Ok([
+                (
+                    "slack_team_id".to_string(),
+                    token.metadata.get("team_id").cloned().unwrap_or_default(),
+                ),
+                ("subject_id".to_string(), token.subject_id.clone()),
+                ("connection".to_string(), token.connection.clone()),
+                ("instance".to_string(), token.instance.clone()),
+            ]
+            .into_iter()
+            .collect())
+        }
+    }
+    ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```typescript

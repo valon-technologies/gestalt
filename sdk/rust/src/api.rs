@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
+use std::time::SystemTime;
 
 use tonic::codegen::async_trait;
 
@@ -88,6 +89,41 @@ pub struct Request {
     pub workflow: serde_json::Map<String, serde_json::Value>,
     /// Invocation token used to call host services.
     pub invocation_token: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Host-managed connection payload passed into post-connect hooks.
+pub struct ConnectedToken {
+    /// Stable connection token id.
+    pub id: String,
+    /// Subject id associated with the connected credential.
+    pub subject_id: String,
+    /// Provider integration name.
+    pub integration: String,
+    /// Connection id or name associated with the credential.
+    pub connection: String,
+    /// Provider instance id or name associated with the credential.
+    pub instance: String,
+    /// Access token stored by the host for the connected credential.
+    pub access_token: String,
+    /// Refresh token stored by the host for the connected credential.
+    pub refresh_token: String,
+    /// Space- or provider-formatted scope string returned by the upstream provider.
+    pub scopes: String,
+    /// Access-token expiration timestamp, when known.
+    pub expires_at: Option<SystemTime>,
+    /// Last refresh timestamp, when known.
+    pub last_refreshed_at: Option<SystemTime>,
+    /// Consecutive refresh failure count tracked by the host.
+    pub refresh_error_count: i32,
+    /// Raw JSON metadata stored with the connected credential.
+    pub metadata_json: String,
+    /// String-valued metadata parsed from [`Self::metadata_json`].
+    pub metadata: BTreeMap<String, String>,
+    /// Credential creation timestamp, when known.
+    pub created_at: Option<SystemTime>,
+    /// Credential update timestamp, when known.
+    pub updated_at: Option<SystemTime>,
 }
 
 impl Request {
@@ -259,6 +295,18 @@ pub trait Provider: Send + Sync + 'static {
         _context: &Request,
     ) -> Result<Option<Subject>> {
         Ok(None)
+    }
+
+    /// Reports whether this provider can derive additional connection metadata
+    /// after the host completes the credential exchange.
+    fn supports_post_connect(&self) -> bool {
+        false
+    }
+
+    /// Returns provider-defined, non-secret connection metadata to persist after
+    /// a successful credential exchange.
+    async fn post_connect(&self, _token: &ConnectedToken) -> Result<BTreeMap<String, String>> {
+        Ok(BTreeMap::new())
     }
 
     /// Shuts the provider down before the runtime exits.

@@ -20,7 +20,7 @@ provider code imports from the crate root after renaming `gestalt-sdk` to
 
 | Section | Start with | Use it for |
 | --- | --- | --- |
-| Provider authoring | [`Provider`], [`Operation`], [`Router`], [`Request`], [`HTTPSubjectRequest`], [`Response`], [`ok`] | Executable plugin providers, typed request handlers, hosted HTTP subject hooks, and operation results. |
+| Provider authoring | [`Provider`], [`Operation`], [`Router`], [`Request`], [`HTTPSubjectRequest`], [`ConnectedToken`], [`Response`], [`ok`] | Executable plugin providers, typed request handlers, hosted HTTP subject hooks, post-connect metadata hooks, and operation results. |
 | Catalog metadata | [`Catalog`], [`CatalogOperation`], [`Router::register`] | Schema-derived operation catalogs from `serde` and `schemars` types. |
 | Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`PluginRuntimeProvider`] | Host-service backends implemented as Rust providers. |
 | Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_signal`], [`new_bound_workflow_run`], [`new_workflow_execution_reference`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
@@ -110,8 +110,8 @@ asking provider code to assemble transport objects.
 
 The crate exposes higher-level authoring APIs:
 
-- `Provider`, `Request`, `Response`, and `ok(...)` model integration
-  providers.
+- `Provider`, `Request`, `ConnectedToken`, `Response`, and `ok(...)` model
+  integration providers.
 - `HTTPSubjectRequest` and `Provider::resolve_http_subject` let executable
   plugins map verified hosted HTTP requests to concrete subjects.
 - `Router` and `Operation` register typed operations and derive catalog
