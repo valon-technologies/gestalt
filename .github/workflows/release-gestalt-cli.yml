@@ -47,7 +47,7 @@ jobs:
     needs: build
     uses: ./.github/workflows/publish-scoped-github-release.yml
     with:
-      component-name: gestalt CLI
+      component-name: gestalt
       version-prefix: 'gestalt/v'
       tag-glob: 'gestalt/v*'
       path-filters: |
