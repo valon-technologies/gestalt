@@ -4,11 +4,18 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/valon-technologies/gestalt)
 
+> [!WARNING]
 > Gestalt is under active development. APIs and configuration may change between releases. Feedback and bug reports are welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
 
 > Gestalt (/ɡəˈʃtält/) refers to the idea that the whole is greater than the sum of its parts.
 
 Gestalt is a self-hostable, open source platform for managing agentic tools and services, with declarative configuration and primitives for authentication and authorization. External REST/OpenAPI, GraphQL, MCP and executable custom-defined code are all supported, while exposing the same operation model to callers.
+
+## Demo
+
+[![Gestalt Claude Code terminal demo](./docs/public/images/gestalt-claude-code-demo.png)](./docs/public/videos/gestalt-claude-code-demo.mp4)
+
+Watch Claude Code invoke Gestalt against the default HTTPBin plugin from a local `gestaltd` install.
 
 ## Why Gestalt
 

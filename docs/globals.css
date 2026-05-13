@@ -681,6 +681,15 @@ footer {
 .dark .arch-light { display: none; }
 .dark .arch-dark { display: block; }
 
+.gestalt-demo-video {
+  display: block;
+  width: 100%;
+  margin: 1.25rem 0 2rem;
+  border: 1px solid var(--valon-line);
+  border-radius: 12px;
+  background: #060b1a;
+}
+
 @media (max-width: 767px) {
   .nextra-content main > p:first-of-type {
     font-size: 1rem;
