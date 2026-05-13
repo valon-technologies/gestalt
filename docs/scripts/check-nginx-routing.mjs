@@ -148,6 +148,18 @@ try {
     location: `${exactVersionPrefix}/reference/cli`,
   });
   await assertResponse({
+    url: `${baseUrl}/latest/api/python/index.html`,
+    host: "gestaltd.ai",
+    status: 301,
+    location: "/api/python/index.html",
+  });
+  await assertResponse({
+    url: `${baseUrl}${exactVersionPrefix}/api/typescript/index.html`,
+    host: "gestaltd.ai",
+    status: 301,
+    location: "/api/typescript/index.html",
+  });
+  await assertResponse({
     url: `${baseUrl}/versions/v9.9.9/`,
     host: "gestaltd.ai",
     status: 404,
