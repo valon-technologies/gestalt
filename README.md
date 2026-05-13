@@ -26,13 +26,16 @@ When you need production controls, add them through the [provider](https://gesta
 ### What Gestalt provides
 
 - **Plug-and-play [providers](https://gestaltd.ai/providers).** Inspired by [Terraform providers](https://developer.hashicorp.com/terraform/language/providers), so you add only what you need.
-- **A unified tool surface for agents.** The same operations are exposed over MCP, HTTP, and CLI, usable by cloud agents, local coding assistants, and human operators.
-- **Authentication and Authorization as primitives.** Credential storage, encryption at rest, token refresh, and RBAC run on infrastructure you control.
+- **A unified tool surface for agents.** The same operations are exposed over MCP, HTTP, and CLI, usable by cloud agents, local coding assistants, and human operators. See [Plugin](https://gestaltd.ai/providers/plugins).
+- **Authentication and Authorization as primitives.** [Authentication](https://gestaltd.ai/providers/authentication) flows, [credential storage](https://gestaltd.ai/providers/external-credentials), encryption at rest, token refresh, and [RBAC](https://gestaltd.ai/providers/authorization) run on infrastructure you control.
 - **Declarative configuration.** A single YAML config defines tools, auth flows, connections, agents, workflows, and schedules.
 - **Observability and audit logging.** [OpenTelemetry](https://opentelemetry.io/) compatible [observability](https://gestaltd.ai/observability) and [audit logging](https://gestaltd.ai/audit-logging).
-- **Workflows and scheduled agents.** Run agentic work on triggers, cron schedules, or delegated invocations, with durable state and retries.*
+- **Runtimes.** [Runtimes](https://gestaltd.ai/providers/runtime) provide agent and code sandboxing.*
+- **Workflows and agents.** [Workflows](https://gestaltd.ai/providers/workflow) and [agents](https://gestaltd.ai/providers/agent) run with durable state, retries, and delegated invocations.†
 
-\* Workflows and agents are both alpha features, and not yet stable.
+\* Runtimes are an alpha feature, and not yet stable.
+
+† Workflows and agents are both alpha features, and not yet stable.
 
 ## What Gestalt Is Not
 
