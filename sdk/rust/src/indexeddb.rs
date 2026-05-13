@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use hyper_util::rt::TokioIo;
@@ -35,6 +36,9 @@ pub enum IndexedDBError {
     /// A cursor was opened in key-only mode and a value was requested.
     #[error("cursor is keys-only; value not available")]
     KeysOnly,
+    /// A provider-side helper received invalid input.
+    #[error("{0}")]
+    InvalidArgument(String),
     /// An explicit transaction failed or was already closed.
     #[error("{0}")]
     Transaction(String),
@@ -53,6 +57,7 @@ pub enum IndexedDBError {
 pub type Record = BTreeMap<String, serde_json::Value>;
 
 /// Constrains a query or cursor by lower and upper bounds.
+#[derive(Debug, Clone, PartialEq)]
 pub struct KeyRange {
     /// Lower bound, inclusive unless `lower_open` is true.
     pub lower: Option<serde_json::Value>,
@@ -65,6 +70,7 @@ pub struct KeyRange {
 }
 
 /// Describes one secondary index on an object store.
+#[derive(Debug, Clone, PartialEq)]
 pub struct IndexSchema {
     /// Index name.
     pub name: String,
@@ -75,6 +81,7 @@ pub struct IndexSchema {
 }
 
 /// Describes the indexes attached to an object store.
+#[derive(Debug, Clone, PartialEq)]
 pub struct ObjectStoreSchema {
     /// Secondary indexes to create with the object store.
     pub indexes: Vec<IndexSchema>,
@@ -149,6 +156,479 @@ impl TransactionDurabilityHint {
 pub struct TransactionOptions {
     /// Durability hint for explicit transactions.
     pub durability_hint: TransactionDurabilityHint,
+}
+
+/// Native open-cursor request used by provider-side cursor helpers.
+#[derive(Debug, Clone)]
+pub struct IndexedDBOpenCursorRequest {
+    /// Object store to open.
+    pub store: String,
+    /// Optional key range to apply.
+    pub range: Option<KeyRange>,
+    /// Cursor traversal direction.
+    pub direction: CursorDirection,
+    /// Whether returned cursor entries omit records.
+    pub keys_only: bool,
+    /// Secondary index name. Empty means object-store cursor.
+    pub index: String,
+    /// Index values supplied by an index query.
+    pub values: Vec<serde_json::Value>,
+}
+
+impl Default for IndexedDBOpenCursorRequest {
+    fn default() -> Self {
+        Self {
+            store: String::new(),
+            range: None,
+            direction: CursorDirection::Next,
+            keys_only: false,
+            index: String::new(),
+            values: Vec::new(),
+        }
+    }
+}
+
+/// One provider-side cursor row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IndexedDBCursorSnapshotEntry {
+    /// Object-store key, or secondary-index key for index cursors.
+    pub key: serde_json::Value,
+    /// Canonical primary key for the object-store row.
+    pub primary_key: String,
+    /// Native primary-key value used as a stable tie-breaker for duplicate index keys.
+    pub primary_key_value: serde_json::Value,
+    /// Row value returned by full-value cursors.
+    pub record: Record,
+}
+
+/// Provider-side IndexedDB cursor snapshot.
+///
+/// The snapshot sorts rows, applies IndexedDB range bounds, and implements
+/// movement semantics for native Rust providers without exposing wire message
+/// types.
+#[derive(Debug, Clone)]
+pub struct IndexedDBCursorSnapshot {
+    /// Whether entry keys contain secondary-index values.
+    pub index_cursor: bool,
+    /// Whether returned cursor entries should omit records.
+    pub keys_only: bool,
+    /// Whether entries are ordered from greatest to least key.
+    pub reverse: bool,
+    /// Whether duplicate index keys are collapsed while iterating.
+    pub unique: bool,
+    /// Sorted and range-filtered entries used by cursor movement.
+    pub entries: Vec<IndexedDBCursorSnapshotEntry>,
+    /// Current cursor position, or -1 when unpositioned.
+    pub pos: isize,
+}
+
+impl IndexedDBCursorSnapshot {
+    /// Creates an empty provider-side cursor snapshot from a native request.
+    pub fn new(req: &IndexedDBOpenCursorRequest) -> Self {
+        Self {
+            index_cursor: !req.index.is_empty(),
+            keys_only: req.keys_only,
+            reverse: matches!(
+                req.direction,
+                CursorDirection::Prev | CursorDirection::PrevUnique
+            ),
+            unique: matches!(
+                req.direction,
+                CursorDirection::NextUnique | CursorDirection::PrevUnique
+            ),
+            entries: Vec::new(),
+            pos: -1,
+        }
+    }
+
+    /// Sorts entries, applies the supplied key range, and stores the snapshot.
+    pub fn load(
+        &mut self,
+        mut entries: Vec<IndexedDBCursorSnapshotEntry>,
+        range: Option<&KeyRange>,
+    ) -> Result<(), IndexedDBError> {
+        entries.sort_by(|left, right| {
+            let mut cmp = compare_indexeddb_values(&left.key, &right.key);
+            if cmp == Ordering::Equal {
+                cmp = compare_indexeddb_values(&left.primary_key_value, &right.primary_key_value);
+            }
+            if self.reverse { cmp.reverse() } else { cmp }
+        });
+        self.entries = self.apply_range(entries, range)?;
+        self.pos = -1;
+        Ok(())
+    }
+
+    /// Returns entries that satisfy the supplied key range without mutating state.
+    pub fn apply_range(
+        &self,
+        entries: Vec<IndexedDBCursorSnapshotEntry>,
+        range: Option<&KeyRange>,
+    ) -> Result<Vec<IndexedDBCursorSnapshotEntry>, IndexedDBError> {
+        let Some(range) = range else {
+            return Ok(entries);
+        };
+        let (lower, upper) = indexeddb_range_bounds(Some(range), self.index_cursor);
+        let mut filtered = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let key = normalize_indexeddb_bound(&entry.key, self.index_cursor);
+            if let Some(lower) = &lower {
+                let cmp = compare_indexeddb_values(&key, lower);
+                if range.lower_open && cmp != Ordering::Greater {
+                    continue;
+                }
+                if !range.lower_open && cmp == Ordering::Less {
+                    continue;
+                }
+            }
+            if let Some(upper) = &upper {
+                let cmp = compare_indexeddb_values(&key, upper);
+                if range.upper_open && cmp != Ordering::Less {
+                    continue;
+                }
+                if !range.upper_open && cmp == Ordering::Greater {
+                    continue;
+                }
+            }
+            filtered.push(entry);
+        }
+        Ok(filtered)
+    }
+
+    /// Advances to the next entry, or returns `None` when exhausted.
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> Result<Option<&IndexedDBCursorSnapshotEntry>, IndexedDBError> {
+        if self.unique
+            && self.index_cursor
+            && self.pos >= 0
+            && (self.pos as usize) < self.entries.len()
+        {
+            let previous = self.entries[self.pos as usize].key.clone();
+            self.pos += 1;
+            while (self.pos as usize) < self.entries.len() {
+                if compare_indexeddb_values(&self.entries[self.pos as usize].key, &previous)
+                    != Ordering::Equal
+                {
+                    return Ok(Some(self.current()?));
+                }
+                self.pos += 1;
+            }
+            return Ok(None);
+        }
+
+        self.pos += 1;
+        if (self.pos as usize) >= self.entries.len() {
+            return Ok(None);
+        }
+        Ok(Some(self.current()?))
+    }
+
+    /// Advances to `target` or the next entry past it for this direction.
+    pub fn continue_to_key(
+        &mut self,
+        target: &serde_json::Value,
+    ) -> Result<Option<&IndexedDBCursorSnapshotEntry>, IndexedDBError> {
+        let previous = if self.unique
+            && self.index_cursor
+            && self.pos >= 0
+            && (self.pos as usize) < self.entries.len()
+        {
+            Some(self.entries[self.pos as usize].key.clone())
+        } else {
+            None
+        };
+        self.pos += 1;
+        while (self.pos as usize) < self.entries.len() {
+            let current = &self.entries[self.pos as usize].key;
+            if let Some(previous) = &previous {
+                if self.unique
+                    && self.index_cursor
+                    && compare_indexeddb_values(current, previous) == Ordering::Equal
+                {
+                    self.pos += 1;
+                    continue;
+                }
+            }
+            let cmp = compare_indexeddb_values(current, target);
+            if self.reverse {
+                if cmp != Ordering::Greater {
+                    return Ok(Some(self.current()?));
+                }
+            } else if cmp != Ordering::Less {
+                return Ok(Some(self.current()?));
+            }
+            self.pos += 1;
+        }
+        Ok(None)
+    }
+
+    /// Skips `count` entries and returns the new current entry.
+    pub fn advance(
+        &mut self,
+        count: i32,
+    ) -> Result<Option<&IndexedDBCursorSnapshotEntry>, IndexedDBError> {
+        if count <= 0 {
+            return Err(IndexedDBError::InvalidArgument(
+                "advance count must be positive".to_string(),
+            ));
+        }
+        for i in 0..count {
+            if self.next()?.is_none() {
+                return Ok(None);
+            }
+            if i == count - 1 {
+                return Ok(Some(self.current()?));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Returns the currently positioned entry.
+    pub fn current(&self) -> Result<&IndexedDBCursorSnapshotEntry, IndexedDBError> {
+        if self.pos < 0 || (self.pos as usize) >= self.entries.len() {
+            return Err(IndexedDBError::NotFound);
+        }
+        Ok(&self.entries[self.pos as usize])
+    }
+}
+
+/// Creates an empty provider-side cursor snapshot from a native request.
+pub fn new_indexeddb_cursor_snapshot(req: &IndexedDBOpenCursorRequest) -> IndexedDBCursorSnapshot {
+    IndexedDBCursorSnapshot::new(req)
+}
+
+/// Normalizes object-store or index cursor range bounds.
+///
+/// Scalar index bounds are compared as one-part composite keys so providers can
+/// share the same comparison path for scalar and compound indexes.
+pub fn indexeddb_range_bounds(
+    range: Option<&KeyRange>,
+    index_cursor: bool,
+) -> (Option<serde_json::Value>, Option<serde_json::Value>) {
+    let Some(range) = range else {
+        return (None, None);
+    };
+    let lower = range
+        .lower
+        .as_ref()
+        .map(|value| normalize_indexeddb_bound(value, index_cursor));
+    let upper = range
+        .upper
+        .as_ref()
+        .map(|value| normalize_indexeddb_bound(value, index_cursor));
+    (lower, upper)
+}
+
+/// Compares native IndexedDB key values.
+pub fn compare_indexeddb_values(left: &serde_json::Value, right: &serde_json::Value) -> Ordering {
+    match (left, right) {
+        (serde_json::Value::Array(left), serde_json::Value::Array(right)) => {
+            for (i, left_value) in left.iter().enumerate() {
+                let Some(right_value) = right.get(i) else {
+                    return Ordering::Greater;
+                };
+                let cmp = compare_indexeddb_values(left_value, right_value);
+                if cmp != Ordering::Equal {
+                    return cmp;
+                }
+            }
+            left.len().cmp(&right.len())
+        }
+        (serde_json::Value::String(left), serde_json::Value::String(right)) => left.cmp(right),
+        (serde_json::Value::Bool(left), serde_json::Value::Bool(right)) => left.cmp(right),
+        (serde_json::Value::Number(left), serde_json::Value::Number(right)) => {
+            compare_json_numbers(left, right)
+        }
+        _ => left.to_string().cmp(&right.to_string()),
+    }
+}
+
+fn normalize_indexeddb_bound(value: &serde_json::Value, index_cursor: bool) -> serde_json::Value {
+    if !index_cursor {
+        return value.clone();
+    }
+    if matches!(value, serde_json::Value::Array(_)) {
+        return value.clone();
+    }
+    serde_json::Value::Array(vec![value.clone()])
+}
+
+fn compare_json_numbers(left: &serde_json::Number, right: &serde_json::Number) -> Ordering {
+    if let (Some(left), Some(right)) = (left.as_i64(), right.as_i64()) {
+        return left.cmp(&right);
+    }
+    if let (Some(left), Some(right)) = (left.as_u64(), right.as_u64()) {
+        return left.cmp(&right);
+    }
+    if let (Some(left), Some(right)) = (left.as_i64(), right.as_u64()) {
+        if left < 0 {
+            return Ordering::Less;
+        }
+        return (left as u64).cmp(&right);
+    }
+    if let (Some(left), Some(right)) = (left.as_u64(), right.as_i64()) {
+        if right < 0 {
+            return Ordering::Greater;
+        }
+        return left.cmp(&(right as u64));
+    }
+    match (left.as_f64(), right.as_f64()) {
+        (Some(left), Some(right)) => left.partial_cmp(&right).unwrap_or(Ordering::Equal),
+        _ => left.to_string().cmp(&right.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn entry(
+        key: serde_json::Value,
+        primary_key: &str,
+        primary_key_value: serde_json::Value,
+    ) -> IndexedDBCursorSnapshotEntry {
+        IndexedDBCursorSnapshotEntry {
+            key,
+            primary_key: primary_key.to_string(),
+            primary_key_value,
+            record: Record::new(),
+        }
+    }
+
+    #[test]
+    fn cursor_snapshot_sorts_ranges_and_skips_duplicate_unique_index_keys() {
+        let mut snapshot = new_indexeddb_cursor_snapshot(&IndexedDBOpenCursorRequest {
+            direction: CursorDirection::NextUnique,
+            index: "by_status".to_string(),
+            ..Default::default()
+        });
+
+        snapshot
+            .load(
+                vec![
+                    entry(json!(["todo"]), "issue-2", json!("issue-2")),
+                    entry(json!(["done"]), "issue-3", json!("issue-3")),
+                    entry(json!(["todo"]), "issue-1", json!("issue-1")),
+                ],
+                Some(&KeyRange {
+                    lower: Some(json!(["done"])),
+                    upper: Some(json!(["todo"])),
+                    lower_open: false,
+                    upper_open: false,
+                }),
+            )
+            .expect("load");
+
+        assert_eq!(
+            snapshot.next().expect("first").unwrap().primary_key,
+            "issue-3"
+        );
+        assert_eq!(
+            snapshot.next().expect("second").unwrap().primary_key,
+            "issue-1"
+        );
+        assert!(snapshot.next().expect("exhausted").is_none());
+    }
+
+    #[test]
+    fn cursor_snapshot_advance_moves_exactly_count_entries_from_current_position() {
+        let mut snapshot = new_indexeddb_cursor_snapshot(&IndexedDBOpenCursorRequest::default());
+        snapshot
+            .load(
+                vec![
+                    entry(json!("a"), "a", json!("a")),
+                    entry(json!("b"), "b", json!("b")),
+                    entry(json!("c"), "c", json!("c")),
+                ],
+                None,
+            )
+            .expect("load");
+
+        assert_eq!(snapshot.next().expect("first").unwrap().primary_key, "a");
+        assert_eq!(
+            snapshot.advance(1).expect("second").unwrap().primary_key,
+            "b"
+        );
+        assert_eq!(
+            snapshot.advance(1).expect("third").unwrap().primary_key,
+            "c"
+        );
+    }
+
+    #[test]
+    fn cursor_snapshot_index_range_accepts_scalar_entry_keys() {
+        let mut snapshot = new_indexeddb_cursor_snapshot(&IndexedDBOpenCursorRequest {
+            index: "by_status".to_string(),
+            ..Default::default()
+        });
+        snapshot
+            .load(
+                vec![
+                    entry(json!("done"), "issue-2", json!("issue-2")),
+                    entry(json!("active"), "issue-1", json!("issue-1")),
+                ],
+                Some(&KeyRange {
+                    lower: Some(json!("active")),
+                    upper: Some(json!("active")),
+                    lower_open: false,
+                    upper_open: false,
+                }),
+            )
+            .expect("load");
+
+        let first = snapshot.next().expect("first").unwrap();
+        assert_eq!(first.primary_key, "issue-1");
+        assert_eq!(first.key, json!("active"));
+        assert!(snapshot.next().expect("exhausted").is_none());
+    }
+
+    #[test]
+    fn range_bounds_normalize_scalar_index_bounds() {
+        let (lower, upper) = indexeddb_range_bounds(
+            Some(&KeyRange {
+                lower: Some(json!("active")),
+                upper: Some(json!(["done"])),
+                lower_open: false,
+                upper_open: false,
+            }),
+            true,
+        );
+
+        assert_eq!(lower, Some(json!(["active"])));
+        assert_eq!(upper, Some(json!(["done"])));
+    }
+
+    #[test]
+    fn compare_values_orders_composite_keys() {
+        assert_eq!(
+            compare_indexeddb_values(&json!(["active", 1]), &json!(["active", 2])),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare_indexeddb_values(&json!(["active", 2]), &json!(["active", 2])),
+            Ordering::Equal
+        );
+        assert_eq!(
+            compare_indexeddb_values(&json!(["active", 3]), &json!(["active", 2])),
+            Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn compare_values_orders_large_integer_keys_exactly() {
+        assert_eq!(
+            compare_indexeddb_values(
+                &json!(9_007_199_254_740_993u64),
+                &json!(9_007_199_254_740_992u64)
+            ),
+            Ordering::Greater
+        );
+        assert_eq!(
+            compare_indexeddb_values(&json!(i64::MAX), &json!(u64::MAX)),
+            Ordering::Less
+        );
+    }
 }
 
 /// Streaming cursor over object store or secondary index rows.
@@ -1402,6 +1882,8 @@ fn map_status(err: tonic::Status) -> IndexedDBError {
     match err.code() {
         tonic::Code::NotFound => IndexedDBError::NotFound,
         tonic::Code::AlreadyExists => IndexedDBError::AlreadyExists,
+        tonic::Code::InvalidArgument => IndexedDBError::InvalidArgument(err.message().to_string()),
+        tonic::Code::FailedPrecondition => IndexedDBError::Transaction(err.message().to_string()),
         _ => IndexedDBError::Status(err),
     }
 }
@@ -1416,7 +1898,8 @@ fn map_rpc_status(
         0 => Ok(()),
         5 => Err(IndexedDBError::NotFound),
         6 => Err(IndexedDBError::AlreadyExists),
-        3 | 9 => Err(IndexedDBError::Transaction(status.message)),
+        3 => Err(IndexedDBError::InvalidArgument(status.message)),
+        9 => Err(IndexedDBError::Transaction(status.message)),
         _ => Err(IndexedDBError::Transaction(status.message)),
     }
 }

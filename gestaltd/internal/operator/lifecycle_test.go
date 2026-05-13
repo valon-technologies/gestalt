@@ -2671,6 +2671,75 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	}
 }
 
+func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWithoutSource(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeTestFile := func(rel string, data []byte, mode os.FileMode) {
+		t.Helper()
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", rel, err)
+		}
+		if err := os.WriteFile(path, data, mode); err != nil {
+			t.Fatalf("WriteFile(%s): %v", rel, err)
+		}
+	}
+
+	writeTestFile("go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/local-locked-provider")), 0o644)
+	writeTestFile("go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile("provider.go", []byte(testutil.GeneratedProviderPackageSource()), 0o644)
+	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/local-locked-provider",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Locked Local Provider",
+		Kind:        providermanifestv1.KindPlugin,
+		Spec:        withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
+	}
+	writeTestFile("manifest.yaml", manifest, 0o644)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+    example:
+      source:
+        path: ./manifest.yaml
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	writeTestFile("config.yaml", []byte(cfg), 0o644)
+
+	lc := NewLifecycle()
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
+	}
+	preparedCommand := loaded.Plugins["example"].Command
+	if preparedCommand == "" {
+		t.Fatal("prepared command is empty")
+	}
+
+	for _, rel := range []string{"manifest.yaml", "provider.go", "go.mod", "go.sum"} {
+		if err := os.Remove(filepath.Join(dir, rel)); err != nil {
+			t.Fatalf("Remove(%s): %v", rel, err)
+		}
+	}
+
+	locked, _, err := lc.LoadForExecutionAtPath(cfgPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	intg := locked.Plugins["example"]
+	if intg == nil || intg.ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", intg)
+	}
+	if intg.Command != preparedCommand {
+		t.Fatalf("command = %q, want prepared command %q", intg.Command, preparedCommand)
+	}
+}
+
 func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalPythonSourcePlugin(t *testing.T) {
 	t.Parallel()
 

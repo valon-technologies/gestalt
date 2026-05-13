@@ -784,6 +784,9 @@ async fn advance_rejects_non_positive_counts() {
         .expect("open cursor");
 
     match cursor.advance(0).await {
+        Err(IndexedDBError::InvalidArgument(message)) => {
+            assert_eq!(message, "advance count must be positive");
+        }
         Err(IndexedDBError::Status(status)) => {
             assert_eq!(status.code(), tonic::Code::InvalidArgument);
         }
