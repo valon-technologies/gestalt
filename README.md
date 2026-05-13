@@ -11,7 +11,7 @@
 
 Gestalt is a self-hostable, open source platform for managing agentic tools and services, with declarative configuration and primitives for authentication and authorization. External REST/OpenAPI, GraphQL, MCP and executable custom-defined code are all supported, while exposing the same operation model to callers.
 
-[![Gestalt Claude Code terminal demo](./docs/public/images/gestalt-claude-code-demo.png)](https://gestaltd.ai/videos/gestalt-claude-code-demo.mp4)
+[Watch the Gestalt Claude Code terminal demo](https://gestaltd.ai/videos/gestalt-claude-code-demo.mp4)
 
 ## Why Gestalt
 
