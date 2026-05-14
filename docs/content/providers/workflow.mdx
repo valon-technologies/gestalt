@@ -429,6 +429,12 @@ Workflow capabilities gate the manager method only. The workflow target still
 has to pass the same provider, operation, credential-mode, catalog, and runtime
 authorization checks as any other delayed workflow invocation.
 
+Workflow-manager mutating actions and event publishes emit audit records with
+`source=workflow_manager`, including the caller plugin, selected workflow
+backend, target object, and target authorization context. See
+[Audit Logging](/audit-logging#workflow-manager-events) for the event names and
+workflow-specific audit fields.
+
 A workflow definition stores a reusable workflow target on a workflow provider.
 Runs, schedules, and event triggers that reference a `definition_id` use that
 provider and snapshot the target when they are created, so later edits to the
