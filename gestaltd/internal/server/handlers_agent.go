@@ -107,15 +107,16 @@ type agentSessionUpdateRequest struct {
 }
 
 type agentTurnCreateRequest struct {
-	Model          string                `json:"model,omitempty"`
-	Messages       []agentMessageRequest `json:"messages,omitempty"`
-	ToolRefs       []agentToolRefRequest `json:"toolRefs,omitempty"`
-	ToolSource     string                `json:"toolSource,omitempty"`
-	ResponseSchema map[string]any        `json:"responseSchema,omitempty"`
-	Metadata       map[string]any        `json:"metadata,omitempty"`
-	ModelOptions   map[string]any        `json:"modelOptions,omitempty"`
-	IdempotencyKey string                `json:"idempotencyKey,omitempty"`
-	toolRefsSet    bool
+	Model             string                `json:"model,omitempty"`
+	Messages          []agentMessageRequest `json:"messages,omitempty"`
+	ToolRefs          []agentToolRefRequest `json:"toolRefs,omitempty"`
+	ToolSource        string                `json:"toolSource,omitempty"`
+	ResponseSchema    map[string]any        `json:"responseSchema,omitempty"`
+	Metadata          map[string]any        `json:"metadata,omitempty"`
+	ModelOptions      map[string]any        `json:"modelOptions,omitempty"`
+	IdempotencyKey    string                `json:"idempotencyKey,omitempty"`
+	toolRefsSet       bool
+	responseSchemaSet bool
 }
 
 type agentTurnCancelRequest struct {
@@ -484,6 +485,10 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "toolRefs cannot be null")
 			return
 		}
+		if req.responseSchemaSet && req.ResponseSchema == nil {
+			writeError(w, http.StatusBadRequest, "responseSchema cannot be null")
+			return
+		}
 	}
 	idempotencyKey, ok := resolveAgentIdempotencyKey(w, r, req.IdempotencyKey)
 	if !ok {
@@ -499,16 +504,17 @@ func (s *Server) createAgentTurn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	turn, err := s.agentRuns.CreateTurn(r.Context(), p, coreagent.ManagerCreateTurnRequest{
-		IdempotencyKey: idempotencyKey,
-		Model:          strings.TrimSpace(req.Model),
-		SessionID:      strings.TrimSpace(sessionID),
-		Messages:       agentMessagesFromRequest(req.Messages),
-		ToolRefs:       agentToolRefsForCreateTurn(req),
-		ToolRefsSet:    req.toolRefsSet,
-		ToolSource:     toolSource,
-		ResponseSchema: maps.Clone(req.ResponseSchema),
-		Metadata:       maps.Clone(req.Metadata),
-		ModelOptions:   maps.Clone(req.ModelOptions),
+		IdempotencyKey:    idempotencyKey,
+		Model:             strings.TrimSpace(req.Model),
+		SessionID:         strings.TrimSpace(sessionID),
+		Messages:          agentMessagesFromRequest(req.Messages),
+		ToolRefs:          agentToolRefsForCreateTurn(req),
+		ToolRefsSet:       req.toolRefsSet,
+		ToolSource:        toolSource,
+		ResponseSchema:    maps.Clone(req.ResponseSchema),
+		ResponseSchemaSet: req.responseSchemaSet,
+		Metadata:          maps.Clone(req.Metadata),
+		ModelOptions:      maps.Clone(req.ModelOptions),
 	})
 	if err != nil {
 		if errors.Is(err, agentmanager.ErrAgentSessionNotFound) {
@@ -534,12 +540,17 @@ func decodeAgentTurnCreateRequest(r io.Reader, req *agentTurnCreateRequest) erro
 		return err
 	}
 	rawToolRefs, hasToolRefs := fields["toolRefs"]
+	rawResponseSchema, hasResponseSchema := fields["responseSchema"]
 	if err := json.Unmarshal(body, req); err != nil {
 		return err
 	}
 	req.toolRefsSet = hasToolRefs
+	req.responseSchemaSet = hasResponseSchema
 	if hasToolRefs && bytes.Equal(bytes.TrimSpace(rawToolRefs), []byte("null")) {
 		req.ToolRefs = nil
+	}
+	if hasResponseSchema && bytes.Equal(bytes.TrimSpace(rawResponseSchema), []byte("null")) {
+		req.ResponseSchema = nil
 	}
 	return nil
 }
@@ -1115,6 +1126,8 @@ func agentToolSourceModeFromRequest(value string) (coreagent.ToolSourceMode, err
 		return coreagent.ToolSourceModeUnspecified, nil
 	case string(coreagent.ToolSourceModeMCPCatalog):
 		return coreagent.ToolSourceModeMCPCatalog, nil
+	case string(coreagent.ToolSourceModeNone):
+		return coreagent.ToolSourceModeNone, nil
 	default:
 		return "", fmt.Errorf("unsupported agent tool source %q", value)
 	}
@@ -1393,7 +1406,8 @@ func (s *Server) writeAgentManagerError(w http.ResponseWriter, r *http.Request, 
 		errors.Is(err, agentmanager.ErrAgentWorkflowToolsNotConfigured),
 		errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported),
 		errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported),
-		errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported):
+		errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported),
+		errors.Is(err, agentmanager.ErrAgentStructuredOutputUnsupported):
 		writeError(w, http.StatusPreconditionFailed, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentProviderNotAvailable):
 		writeError(w, http.StatusServiceUnavailable, err.Error())

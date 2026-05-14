@@ -167,6 +167,7 @@ pub enum AgentToolSourceMode {
     #[default]
     Unspecified = 0,
     McpCatalog = 2,
+    None = 3,
 }
 
 impl AgentToolSourceMode {
@@ -177,6 +178,7 @@ impl AgentToolSourceMode {
     pub const fn from_i32_lossy(value: i32) -> Self {
         match value {
             2 => Self::McpCatalog,
+            3 => Self::None,
             _ => Self::Unspecified,
         }
     }
@@ -189,6 +191,7 @@ impl TryFrom<i32> for AgentToolSourceMode {
         match value {
             0 => Ok(Self::Unspecified),
             2 => Ok(Self::McpCatalog),
+            3 => Ok(Self::None),
             _ => Err(crate::Error::bad_request(format!(
                 "unknown agent tool source mode {value}"
             ))),

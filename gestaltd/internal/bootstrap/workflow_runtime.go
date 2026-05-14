@@ -411,15 +411,16 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		turnCtx = agentmanager.WithInheritedOutputDelivery(turnCtx, inheritedDelivery)
 	}
 	turn, err := agentManager.CreateTurn(turnCtx, principalValue, coreagent.ManagerCreateTurnRequest{
-		CallerPluginName: callerPluginName,
-		SessionID:        session.ID,
-		Model:            agentTarget.Model,
-		Messages:         messages,
-		ToolRefs:         append([]coreagent.ToolRef(nil), agentTarget.ToolRefs...),
-		ResponseSchema:   maps.Clone(agentTarget.ResponseSchema),
-		Metadata:         metadata,
-		ModelOptions:     maps.Clone(agentTarget.ModelOptions),
-		IdempotencyKey:   workflowAgentTurnIdempotencyKey(req),
+		CallerPluginName:  callerPluginName,
+		SessionID:         session.ID,
+		Model:             agentTarget.Model,
+		Messages:          messages,
+		ToolRefs:          append([]coreagent.ToolRef(nil), agentTarget.ToolRefs...),
+		ResponseSchema:    maps.Clone(agentTarget.ResponseSchema),
+		ResponseSchemaSet: len(agentTarget.ResponseSchema) > 0,
+		Metadata:          metadata,
+		ModelOptions:      maps.Clone(agentTarget.ModelOptions),
+		IdempotencyKey:    workflowAgentTurnIdempotencyKey(req),
 	})
 	if err != nil {
 		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, nil)

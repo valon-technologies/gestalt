@@ -366,7 +366,7 @@ impl AgentProvider for TestAgentProvider {
             supports_session_start: false,
             supports_prepared_workspace: false,
             bounded_list_hydration: true,
-            supported_tool_sources: vec![AgentToolSourceMode::McpCatalog],
+            supported_tool_sources: vec![AgentToolSourceMode::McpCatalog, AgentToolSourceMode::None],
         })
     }
 }
@@ -701,6 +701,13 @@ async fn agent_runtime_and_server_round_trip_over_unix_socket() {
     assert!(capabilities.tool_calls);
     assert!(capabilities.interactions);
     assert!(capabilities.resumable_turns);
+    assert_eq!(
+        capabilities.supported_tool_sources,
+        vec![
+            pb::AgentToolSourceMode::McpCatalog as i32,
+            pb::AgentToolSourceMode::None as i32
+        ]
+    );
 
     assert_eq!(
         *provider

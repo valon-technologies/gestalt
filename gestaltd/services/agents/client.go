@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type ExecConfig struct {
@@ -179,6 +180,9 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRe
 	responseSchema, err := structFromMap(req.ResponseSchema)
 	if err != nil {
 		return nil, err
+	}
+	if req.ResponseSchemaSet && responseSchema == nil {
+		responseSchema = &structpb.Struct{Fields: map[string]*structpb.Value{}}
 	}
 	metadata, err := structFromMap(req.Metadata)
 	if err != nil {

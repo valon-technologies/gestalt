@@ -33,22 +33,23 @@ import (
 )
 
 var (
-	ErrAgentNotConfigured              = errors.New("agent is not configured")
-	ErrAgentProviderRequired           = errors.New("agent provider is required")
-	ErrAgentProviderNotAvailable       = errors.New("agent provider is not available")
-	ErrAgentSubjectRequired            = errors.New("agent subject is required")
-	ErrAgentCallerPluginRequired       = errors.New("agent caller plugin is required for inherited tools")
-	ErrAgentInheritedSurfaceTool       = errors.New("agent inherited surface tools are not supported")
-	ErrAgentInteractionRequired        = errors.New("agent interaction is required")
-	ErrAgentInteractionNotFound        = errors.New("agent interaction is not found")
-	ErrAgentSessionNotFound            = errors.New("agent session is not found")
-	ErrAgentWorkflowToolsNotConfigured = errors.New("agent workflow tools are not configured")
-	ErrAgentBoundedListUnsupported     = errors.New("agent provider does not support bounded list hydration")
-	ErrAgentSessionStartUnsupported    = errors.New("agent provider does not support session start hooks")
-	ErrAgentWorkspaceUnsupported       = errors.New("agent provider does not support workspaces")
-	ErrAgentWorkspaceInvalid           = errors.New("agent workspace is invalid")
-	ErrAgentSessionMetadataInvalid     = errors.New("agent session metadata is invalid")
-	ErrAgentInvalidListRequest         = errors.New("agent list request is invalid")
+	ErrAgentNotConfigured               = errors.New("agent is not configured")
+	ErrAgentProviderRequired            = errors.New("agent provider is required")
+	ErrAgentProviderNotAvailable        = errors.New("agent provider is not available")
+	ErrAgentSubjectRequired             = errors.New("agent subject is required")
+	ErrAgentCallerPluginRequired        = errors.New("agent caller plugin is required for inherited tools")
+	ErrAgentInheritedSurfaceTool        = errors.New("agent inherited surface tools are not supported")
+	ErrAgentInteractionRequired         = errors.New("agent interaction is required")
+	ErrAgentInteractionNotFound         = errors.New("agent interaction is not found")
+	ErrAgentSessionNotFound             = errors.New("agent session is not found")
+	ErrAgentWorkflowToolsNotConfigured  = errors.New("agent workflow tools are not configured")
+	ErrAgentBoundedListUnsupported      = errors.New("agent provider does not support bounded list hydration")
+	ErrAgentSessionStartUnsupported     = errors.New("agent provider does not support session start hooks")
+	ErrAgentWorkspaceUnsupported        = errors.New("agent provider does not support workspaces")
+	ErrAgentWorkspaceInvalid            = errors.New("agent workspace is invalid")
+	ErrAgentSessionMetadataInvalid      = errors.New("agent session metadata is invalid")
+	ErrAgentInvalidListRequest          = errors.New("agent list request is invalid")
+	ErrAgentStructuredOutputUnsupported = errors.New("agent provider does not support structured output")
 )
 
 const (
@@ -586,6 +587,9 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if err != nil {
 		return nil, err
 	}
+	if toolSource == coreagent.ToolSourceModeNone {
+		return nil, fmt.Errorf("%w: toolRefs are not supported with agent tool source %q", invocation.ErrInvalidInvocation, toolSource)
+	}
 	refs, err := normalizeToolRefs(req.ToolRefs)
 	if err != nil {
 		return nil, err
@@ -958,8 +962,19 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		toolSource = coreagent.ToolSourceModeMCPCatalog
 		toolRefs = m.defaultAgentTurnToolRefs(ctx, p, req)
 	}
+	if req.ResponseSchemaSet {
+		if err := validateAgentResponseSchema(req.ResponseSchema); err != nil {
+			return nil, err
+		}
+		if supported, err := agentProviderSupportsStructuredOutput(ctx, ownedSession.provider); err != nil {
+			return nil, err
+		} else if !supported {
+			return nil, fmt.Errorf("%w: agent provider %q", ErrAgentStructuredOutputUnsupported, ownedSession.providerName)
+		}
+	}
 	var tools []coreagent.Tool
-	if toolSource == coreagent.ToolSourceModeMCPCatalog {
+	switch toolSource {
+	case coreagent.ToolSourceModeMCPCatalog:
 		if err := validateMCPCatalogToolRefs(toolRefs); err != nil {
 			return nil, err
 		}
@@ -971,6 +986,18 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		} else if !supported {
 			return nil, fmt.Errorf("agent provider %q does not support tool source %q", ownedSession.providerName, toolSource)
 		}
+	case coreagent.ToolSourceModeNone:
+		if len(toolRefs) > 0 {
+			return nil, fmt.Errorf("%w: toolRefs are not supported with agent tool source %q", invocation.ErrInvalidInvocation, toolSource)
+		}
+		if supported, err := agentProviderSupportsToolSource(ctx, ownedSession.provider, toolSource); err != nil {
+			return nil, err
+		} else if !supported {
+			return nil, fmt.Errorf("agent provider %q does not support tool source %q", ownedSession.providerName, toolSource)
+		}
+	case coreagent.ToolSourceModeUnspecified:
+	default:
+		return nil, fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInvalidInvocation, toolSource)
 	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
@@ -980,21 +1007,22 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		return nil, err
 	}
 	turn, err = ownedSession.provider.CreateTurn(ctx, coreagent.CreateTurnRequest{
-		TurnID:         turnID,
-		SessionID:      ownedSession.session.ID,
-		IdempotencyKey: idempotencyKey,
-		Model:          strings.TrimSpace(req.Model),
-		Messages:       append([]coreagent.Message(nil), req.Messages...),
-		ToolRefs:       append([]coreagent.ToolRef(nil), toolRefs...),
-		ToolSource:     toolSource,
-		Tools:          append([]coreagent.Tool(nil), tools...),
-		ResponseSchema: maps.Clone(req.ResponseSchema),
-		Metadata:       maps.Clone(req.Metadata),
-		ModelOptions:   maps.Clone(req.ModelOptions),
-		CreatedBy:      agentActorFromPrincipal(p),
-		ExecutionRef:   turnID,
-		Subject:        agentSubjectFromPrincipal(p),
-		RunGrant:       runGrant,
+		TurnID:            turnID,
+		SessionID:         ownedSession.session.ID,
+		IdempotencyKey:    idempotencyKey,
+		Model:             strings.TrimSpace(req.Model),
+		Messages:          append([]coreagent.Message(nil), req.Messages...),
+		ToolRefs:          append([]coreagent.ToolRef(nil), toolRefs...),
+		ToolSource:        toolSource,
+		Tools:             append([]coreagent.Tool(nil), tools...),
+		ResponseSchema:    maps.Clone(req.ResponseSchema),
+		ResponseSchemaSet: req.ResponseSchemaSet,
+		Metadata:          maps.Clone(req.Metadata),
+		ModelOptions:      maps.Clone(req.ModelOptions),
+		CreatedBy:         agentActorFromPrincipal(p),
+		ExecutionRef:      turnID,
+		Subject:           agentSubjectFromPrincipal(p),
+		RunGrant:          runGrant,
 	})
 	if err != nil {
 		fallback, getErr := ownedSession.provider.GetTurn(ctx, coreagent.GetTurnRequest{
@@ -1713,6 +1741,10 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 	subject := agentSubjectFromPrincipal(p)
 	permissions := agentRunPermissions(ctx, p, callerPluginName, toolRefs)
 	permissions = agentRunPermissionsWithInheritedOutputDelivery(p, permissions, inheritedOutputDelivery)
+	connections := m.agentConnectionBindings(providerName)
+	if toolSource == coreagent.ToolSourceModeNone {
+		connections = nil
+	}
 	return m.runGrants.Mint(agentgrant.Grant{
 		ProviderName:            providerName,
 		SessionID:               sessionID,
@@ -1727,7 +1759,7 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 		ToolRefs:                append([]coreagent.ToolRef(nil), toolRefs...),
 		Tools:                   append([]coreagent.Tool(nil), tools...),
 		ToolSource:              toolSource,
-		Connections:             m.agentConnectionBindings(providerName),
+		Connections:             connections,
 		InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(inheritedOutputDelivery),
 	})
 }
@@ -3499,7 +3531,7 @@ func (m *Manager) mintAgentToolID(target coreagent.ToolTarget) (string, error) {
 func validateToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMode, error) {
 	source = normalizeToolSource(source)
 	switch source {
-	case coreagent.ToolSourceModeMCPCatalog:
+	case coreagent.ToolSourceModeMCPCatalog, coreagent.ToolSourceModeNone:
 	default:
 		return "", fmt.Errorf("unsupported agent tool source %q", source)
 	}
@@ -3509,11 +3541,26 @@ func validateToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMo
 func validateProviderTurnToolSource(source coreagent.ToolSourceMode) (coreagent.ToolSourceMode, error) {
 	source = coreagent.ToolSourceMode(strings.TrimSpace(string(source)))
 	switch source {
-	case coreagent.ToolSourceModeUnspecified, coreagent.ToolSourceModeMCPCatalog:
+	case coreagent.ToolSourceModeUnspecified, coreagent.ToolSourceModeMCPCatalog, coreagent.ToolSourceModeNone:
 		return source, nil
 	default:
 		return "", fmt.Errorf("%w: unsupported agent tool source %q", invocation.ErrInvalidInvocation, source)
 	}
+}
+
+func validateAgentResponseSchema(schema map[string]any) error {
+	if len(schema) == 0 {
+		return fmt.Errorf("%w: responseSchema must be a non-empty JSON schema object with type %q", invocation.ErrInvalidInvocation, "object")
+	}
+	rawType, ok := schema["type"]
+	if !ok {
+		return fmt.Errorf("%w: responseSchema.type must be %q", invocation.ErrInvalidInvocation, "object")
+	}
+	typeValue, ok := rawType.(string)
+	if !ok || strings.TrimSpace(typeValue) != "object" {
+		return fmt.Errorf("%w: responseSchema.type must be %q", invocation.ErrInvalidInvocation, "object")
+	}
+	return nil
 }
 
 func defaultAgentTurnToolSource(ctx context.Context, provider coreagent.Provider) coreagent.ToolSourceMode {
@@ -4073,12 +4120,23 @@ func agentProviderSupportsToolSource(ctx context.Context, provider coreagent.Pro
 	return agentProviderCapabilitiesSupportToolSource(caps, source), nil
 }
 
+func agentProviderSupportsStructuredOutput(ctx context.Context, provider coreagent.Provider) (bool, error) {
+	if provider == nil {
+		return false, ErrAgentProviderNotAvailable
+	}
+	caps, err := provider.GetCapabilities(ctx, coreagent.GetCapabilitiesRequest{})
+	if err != nil {
+		return false, err
+	}
+	return caps != nil && caps.StructuredOutput, nil
+}
+
 func agentProviderCapabilitiesSupportToolSource(caps *coreagent.ProviderCapabilities, source coreagent.ToolSourceMode) bool {
 	if caps == nil {
 		return false
 	}
 	for _, supported := range caps.SupportedToolSources {
-		if normalizeToolSource(supported) == source {
+		if coreagent.ToolSourceMode(strings.TrimSpace(string(supported))) == source {
 			return true
 		}
 	}

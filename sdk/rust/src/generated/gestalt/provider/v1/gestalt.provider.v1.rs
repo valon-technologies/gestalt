@@ -1267,6 +1267,7 @@ impl AgentMessagePartType {
 pub enum AgentToolSourceMode {
     Unspecified = 0,
     McpCatalog = 2,
+    None = 3,
 }
 impl AgentToolSourceMode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1277,6 +1278,7 @@ impl AgentToolSourceMode {
         match self {
             Self::Unspecified => "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED",
             Self::McpCatalog => "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG",
+            Self::None => "AGENT_TOOL_SOURCE_MODE_NONE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1284,6 +1286,7 @@ impl AgentToolSourceMode {
         match value {
             "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED" => Some(Self::Unspecified),
             "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG" => Some(Self::McpCatalog),
+            "AGENT_TOOL_SOURCE_MODE_NONE" => Some(Self::None),
             _ => None,
         }
     }

@@ -2762,6 +2762,68 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 	}
 }
 
+func TestAgentRuntimeRejectsToolsAndConnectionsForNoneSourceBeforeResolvers(t *testing.T) {
+	t.Parallel()
+
+	runGrants := newTestAgentRunGrants(t)
+	runtime := &agentRuntime{
+		providers: map[string]coreagent.Provider{
+			"simple": &routingAgentProvider{
+				getTurn: func(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
+					return &coreagent.Turn{
+						ID:        req.TurnID,
+						SessionID: "session-1",
+						Status:    coreagent.ExecutionStatusRunning,
+					}, nil
+				},
+			},
+		},
+	}
+	runtime.SetRunGrants(runGrants)
+
+	grant, err := runGrants.Mint(agentgrant.Grant{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		SubjectID:    "user:user-123",
+		SubjectKind:  string(principal.KindUser),
+		ToolSource:   coreagent.ToolSourceModeNone,
+	})
+	if err != nil {
+		t.Fatalf("Mint grant: %v", err)
+	}
+
+	_, err = runtime.ListTools(context.Background(), coreagent.ListToolsRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		RunGrant:     grant,
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("ListTools error = %v, want authorization denied before tool searcher", err)
+	}
+	_, err = runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolID:       "not-a-minted-tool-id",
+		RunGrant:     grant,
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) || strings.Contains(err.Error(), "tool id is invalid") {
+		t.Fatalf("ExecuteTool error = %v, want source denial before tool id resolution", err)
+	}
+	_, err = runtime.ResolveConnection(context.Background(), coreagent.ResolveConnectionRequest{
+		ProviderName: "simple",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		Connection:   "anthropic",
+		RunGrant:     grant,
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) || strings.Contains(err.Error(), "credential resolver is not configured") {
+		t.Fatalf("ResolveConnection error = %v, want source denial before credential resolver", err)
+	}
+}
+
 func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 	t.Parallel()
 

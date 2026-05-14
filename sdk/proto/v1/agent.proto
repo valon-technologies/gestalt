@@ -108,6 +108,7 @@ enum AgentToolSourceMode {
 
   AGENT_TOOL_SOURCE_MODE_UNSPECIFIED = 0;
   AGENT_TOOL_SOURCE_MODE_MCP_CATALOG = 2;
+  AGENT_TOOL_SOURCE_MODE_NONE = 3;
 }
 
 enum AgentExecutionStatus {
