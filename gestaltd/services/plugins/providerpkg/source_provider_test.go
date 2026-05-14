@@ -4,6 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -79,5 +80,17 @@ authorization = "provider:authorization_provider"
 	}
 	if target != "provider:authorization_provider" {
 		t.Fatalf("target = %q, want %q", target, "provider:authorization_provider")
+	}
+}
+
+func TestComponentServeCall_ModelReportsGoUnsupported(t *testing.T) {
+	t.Parallel()
+
+	_, err := componentServeCall(providermanifestv1.KindModel)
+	if err == nil {
+		t.Fatal("componentServeCall(model) error = nil, want unsupported Go source component error")
+	}
+	if !strings.Contains(err.Error(), `unsupported Go source component kind "model"`) {
+		t.Fatalf("componentServeCall(model) error = %v, want unsupported Go source component error", err)
 	}
 }

@@ -8,6 +8,10 @@ import "context"
 // bindings.
 type IndexedDBProvider interface {
 	Provider
+	IndexedDBStore
+}
+
+type IndexedDBStore interface {
 	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
 	DeleteObjectStore(ctx context.Context, name string) error
 

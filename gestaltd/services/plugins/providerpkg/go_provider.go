@@ -549,6 +549,8 @@ func componentServeCall(kind string) (string, error) {
 		return "gestalt.ServeWorkflowProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindAgent:
 		return "gestalt.ServeAgentProvider(ctx, providerpkg.New())", nil
+	case providermanifestv1.KindModel:
+		return "", fmt.Errorf("unsupported Go source component kind %q", kind)
 	case providermanifestv1.KindSecrets:
 		return "gestalt.ServeSecretsProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindRuntime:
