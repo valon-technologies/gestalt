@@ -11,10 +11,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type recordingManagerService struct {
 	createSession func(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error)
+	createTurn    func(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error)
 	listSessions  func(context.Context, *principal.Principal, coreagent.ManagerListSessionsRequest) ([]*coreagent.Session, error)
 	listTurns     func(context.Context, *principal.Principal, coreagent.ManagerListTurnsRequest) ([]*coreagent.Turn, error)
 }
@@ -41,7 +43,10 @@ func (s *recordingManagerService) UpdateSession(context.Context, *principal.Prin
 	return nil, errors.New("unexpected UpdateSession call")
 }
 
-func (s *recordingManagerService) CreateTurn(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+func (s *recordingManagerService) CreateTurn(ctx context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+	if s.createTurn != nil {
+		return s.createTurn(ctx, p, req)
+	}
 	return nil, errors.New("unexpected CreateTurn call")
 }
 
@@ -129,6 +134,88 @@ func TestManagerServerMapsInvalidSessionMetadataToInvalidArgument(t *testing.T) 
 	})
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("CreateSession code = %v, want %v", status.Code(err), codes.InvalidArgument)
+	}
+}
+
+func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-turn-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user-1",
+		Kind:      principal.KindUser,
+	})
+	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	server := NewManagerServer("caller-plugin", &recordingManagerService{
+		createTurn: func(_ context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+			if p == nil || p.SubjectID != "user-1" {
+				t.Fatalf("principal = %#v, want subject user-1", p)
+			}
+			if req.ToolSource != coreagent.ToolSourceModeNone {
+				t.Fatalf("tool source = %q, want none", req.ToolSource)
+			}
+			if !req.ResponseSchemaSet {
+				t.Fatal("response schema presence = false, want true")
+			}
+			if req.ResponseSchema["type"] != "object" {
+				t.Fatalf("response schema = %#v, want object schema", req.ResponseSchema)
+			}
+			return &coreagent.Turn{
+				ID:        "turn-1",
+				SessionID: req.SessionID,
+				Status:    coreagent.ExecutionStatusRunning,
+			}, nil
+		},
+	}, tokens)
+
+	schema, err := structpb.NewStruct(map[string]any{"type": "object"})
+	if err != nil {
+		t.Fatalf("NewStruct: %v", err)
+	}
+	_, err = server.CreateTurn(context.Background(), &proto.AgentManagerCreateTurnRequest{
+		SessionId:       "session-1",
+		InvocationToken: token,
+		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
+		ResponseSchema:  schema,
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+}
+
+func TestManagerServerMapsStructuredOutputUnsupportedToFailedPrecondition(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-structured-output-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user-1",
+		Kind:      principal.KindUser,
+	})
+	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	server := NewManagerServer("caller-plugin", &recordingManagerService{
+		createTurn: func(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+			return nil, agentmanager.ErrAgentStructuredOutputUnsupported
+		},
+	}, tokens)
+
+	_, err = server.CreateTurn(context.Background(), &proto.AgentManagerCreateTurnRequest{
+		SessionId:       "session-1",
+		InvocationToken: token,
+	})
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("CreateTurn code = %v, want %v", status.Code(err), codes.FailedPrecondition)
 	}
 }
 

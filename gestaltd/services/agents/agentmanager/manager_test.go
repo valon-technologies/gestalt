@@ -2001,6 +2001,194 @@ func TestManagerCreateTurnHonorsExplicitCatalogSourceWithNoToolRefs(t *testing.T
 	}
 }
 
+func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	alpha.capabilities = &coreagent.ProviderCapabilities{
+		StructuredOutput: true,
+		SupportedToolSources: []coreagent.ToolSourceMode{
+			coreagent.ToolSourceModeNone,
+		},
+	}
+	grants := newAgentManagerTestRunGrants(t)
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		RunGrants:        grants,
+		AgentConnections: map[string][]string{"alpha": {"anthropic"}},
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID:  session.ID,
+		Model:      "test-model",
+		ToolSource: coreagent.ToolSourceModeNone,
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if len(alpha.createTurnReqs) != 1 {
+		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
+	}
+	req := alpha.createTurnReqs[0]
+	if req.ToolSource != coreagent.ToolSourceModeNone {
+		t.Fatalf("CreateTurn tool source = %q, want none", req.ToolSource)
+	}
+	if len(req.ToolRefs) != 0 || len(req.Tools) != 0 {
+		t.Fatalf("CreateTurn tools = refs:%#v resolved:%#v, want none", req.ToolRefs, req.Tools)
+	}
+	grant, err := grants.Resolve(req.RunGrant)
+	if err != nil {
+		t.Fatalf("Resolve run grant: %v", err)
+	}
+	if grant.ToolSource != coreagent.ToolSourceModeNone {
+		t.Fatalf("grant tool source = %q, want none", grant.ToolSource)
+	}
+	if len(grant.ToolRefs) != 0 || len(grant.Tools) != 0 || len(grant.Connections) != 0 {
+		t.Fatalf("grant scope = refs:%#v tools:%#v connections:%#v, want no tool or connection scope", grant.ToolRefs, grant.Tools, grant.Connections)
+	}
+}
+
+func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		caps        *coreagent.ProviderCapabilities
+		req         coreagent.ManagerCreateTurnRequest
+		wantErr     error
+		wantCreated bool
+	}{
+		{
+			name: "valid schema forwards presence",
+			caps: &coreagent.ProviderCapabilities{
+				StructuredOutput: true,
+				SupportedToolSources: []coreagent.ToolSourceMode{
+					coreagent.ToolSourceModeNone,
+				},
+			},
+			req: coreagent.ManagerCreateTurnRequest{
+				ToolSource:        coreagent.ToolSourceModeNone,
+				ResponseSchema:    map[string]any{"type": "object"},
+				ResponseSchemaSet: true,
+			},
+			wantCreated: true,
+		},
+		{
+			name: "empty schema is invalid when present",
+			caps: &coreagent.ProviderCapabilities{
+				StructuredOutput: true,
+				SupportedToolSources: []coreagent.ToolSourceMode{
+					coreagent.ToolSourceModeNone,
+				},
+			},
+			req: coreagent.ManagerCreateTurnRequest{
+				ToolSource:        coreagent.ToolSourceModeNone,
+				ResponseSchema:    map[string]any{},
+				ResponseSchemaSet: true,
+			},
+			wantErr: invocation.ErrInvalidInvocation,
+		},
+		{
+			name: "provider must advertise structured output",
+			caps: &coreagent.ProviderCapabilities{
+				SupportedToolSources: []coreagent.ToolSourceMode{
+					coreagent.ToolSourceModeNone,
+				},
+			},
+			req: coreagent.ManagerCreateTurnRequest{
+				ToolSource:        coreagent.ToolSourceModeNone,
+				ResponseSchema:    map[string]any{"type": "object"},
+				ResponseSchemaSet: true,
+			},
+			wantErr: ErrAgentStructuredOutputUnsupported,
+		},
+		{
+			name: "none source rejects tool refs",
+			caps: &coreagent.ProviderCapabilities{
+				StructuredOutput: true,
+				SupportedToolSources: []coreagent.ToolSourceMode{
+					coreagent.ToolSourceModeNone,
+				},
+			},
+			req: coreagent.ManagerCreateTurnRequest{
+				ToolSource: coreagent.ToolSourceModeNone,
+				ToolRefs:   []coreagent.ToolRef{{Plugin: "docs"}},
+			},
+			wantErr: invocation.ErrInvalidInvocation,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			alpha := newRouteCountingAgentProvider("alpha")
+			alpha.capabilities = tt.caps
+			manager := newTestManager(t, Config{
+				Agent: &routeCountingAgentControl{
+					defaultName: "alpha",
+					names:       []string{"alpha"},
+					providers: map[string]*routeCountingAgentProvider{
+						"alpha": alpha,
+					},
+				},
+				RunGrants: newAgentManagerTestRunGrants(t),
+			})
+			p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+			session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+				ProviderName: "alpha",
+				Model:        "test-model",
+			})
+			if err != nil {
+				t.Fatalf("CreateSession: %v", err)
+			}
+			req := tt.req
+			req.SessionID = session.ID
+			req.Model = "test-model"
+			_, err = manager.CreateTurn(context.Background(), p, req)
+			if tt.wantErr != nil {
+				if !errors.Is(err, tt.wantErr) {
+					t.Fatalf("CreateTurn error = %v, want %v", err, tt.wantErr)
+				}
+				if len(alpha.createTurnReqs) != 0 {
+					t.Fatalf("CreateTurn requests = %d, want 0", len(alpha.createTurnReqs))
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("CreateTurn: %v", err)
+			}
+			if !tt.wantCreated {
+				t.Fatal("test case missing assertion")
+			}
+			if len(alpha.createTurnReqs) != 1 {
+				t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
+			}
+			got := alpha.createTurnReqs[0]
+			if !got.ResponseSchemaSet {
+				t.Fatal("CreateTurn response schema presence = false, want true")
+			}
+			if got.ResponseSchema["type"] != "object" {
+				t.Fatalf("CreateTurn response schema = %#v, want object schema", got.ResponseSchema)
+			}
+		})
+	}
+}
+
 func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testing.T) {
 	t.Parallel()
 

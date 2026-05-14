@@ -306,21 +306,22 @@ type AgentTurnDisplay struct {
 }
 
 type CreateAgentProviderTurnRequest struct {
-	TurnID         string
-	SessionID      string
-	IdempotencyKey string
-	Model          string
-	Messages       []AgentMessage
-	Tools          []ResolvedAgentTool
-	ResponseSchema map[string]any
-	Metadata       map[string]any
-	CreatedBy      *AgentActor
-	ExecutionRef   string
-	ToolRefs       []AgentToolRef
-	ToolSource     AgentToolSourceMode
-	Subject        *AgentSubjectContext
-	ModelOptions   map[string]any
-	RunGrant       string
+	TurnID            string
+	SessionID         string
+	IdempotencyKey    string
+	Model             string
+	Messages          []AgentMessage
+	Tools             []ResolvedAgentTool
+	ResponseSchema    map[string]any
+	ResponseSchemaSet bool
+	Metadata          map[string]any
+	CreatedBy         *AgentActor
+	ExecutionRef      string
+	ToolRefs          []AgentToolRef
+	ToolSource        AgentToolSourceMode
+	Subject           *AgentSubjectContext
+	ModelOptions      map[string]any
+	RunGrant          string
 }
 
 type GetAgentProviderTurnRequest struct {
@@ -479,6 +480,7 @@ const (
 
 	AgentToolSourceModeUnspecified AgentToolSourceMode = AgentToolSourceMode(proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED)
 	AgentToolSourceModeMCPCatalog  AgentToolSourceMode = AgentToolSourceMode(proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG)
+	AgentToolSourceModeNone        AgentToolSourceMode = AgentToolSourceMode(proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE)
 
 	AgentExecutionStatusUnspecified     AgentExecutionStatus = AgentExecutionStatus(proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED)
 	AgentExecutionStatusPending         AgentExecutionStatus = AgentExecutionStatus(proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_PENDING)

@@ -467,6 +467,8 @@ class _AgentManagerServicer(agent_pb2_grpc.AgentManagerHostServicer):
                 "turn_id": "",
                 "interaction_id": "",
                 "reason": "",
+                "tool_source": request.tool_source,
+                "has_response_schema": request.HasField("response_schema"),
             }
         )
         return agent_pb2.AgentTurn(
@@ -1188,7 +1190,8 @@ class AgentTransportTests(unittest.TestCase):
                             ],
                         )
                     ],
-                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
+                    response_schema={"type": "object"},
                 )
             )
             fetched_turn = manager.get_turn(
@@ -1283,6 +1286,8 @@ class AgentTransportTests(unittest.TestCase):
                     "turn_id": "",
                     "interaction_id": "",
                     "reason": "",
+                    "tool_source": agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
+                    "has_response_schema": True,
                 },
                 {
                     "method": "get_turn",
@@ -1387,7 +1392,7 @@ class AgentTransportTests(unittest.TestCase):
                             connection="default",
                         )
                     ],
-                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
+                    tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
                     response_schema={"type": "object"},
                     metadata={"request": "native"},
                     model_options={"temperature": 0},
@@ -1414,6 +1419,8 @@ class AgentTransportTests(unittest.TestCase):
             [item["method"] for item in _manager_requests],
             ["create_turn", "resolve_interaction"],
         )
+        self.assertEqual(_manager_requests[0]["tool_source"], agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE)
+        self.assertTrue(_manager_requests[0]["has_response_schema"])
 
 
 if __name__ == "__main__":

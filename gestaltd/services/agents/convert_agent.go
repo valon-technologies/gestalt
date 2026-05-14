@@ -178,6 +178,19 @@ func agentToolSourceModeFromProto(mode proto.AgentToolSourceMode) coreagent.Tool
 	return agentwire.ToolSourceModeFromProto(mode)
 }
 
+func agentToolSourceModeFromProtoStrict(mode proto.AgentToolSourceMode) coreagent.ToolSourceMode {
+	switch mode {
+	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED:
+		return coreagent.ToolSourceModeUnspecified
+	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG:
+		return coreagent.ToolSourceModeMCPCatalog
+	case proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE:
+		return coreagent.ToolSourceModeNone
+	default:
+		return coreagent.ToolSourceMode(fmt.Sprintf("unknown:%d", mode))
+	}
+}
+
 func agentToolSourceModeToProto(mode coreagent.ToolSourceMode) proto.AgentToolSourceMode {
 	return agentwire.ToolSourceModeToProto(mode)
 }

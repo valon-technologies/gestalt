@@ -155,6 +155,7 @@ type ToolSourceMode string
 const (
 	ToolSourceModeUnspecified ToolSourceMode = ""
 	ToolSourceModeMCPCatalog  ToolSourceMode = "mcp_catalog"
+	ToolSourceModeNone        ToolSourceMode = "none"
 )
 
 func ValidateMCPCatalogToolRefs(refs []ToolRef, fieldName string) error {
@@ -314,21 +315,22 @@ type Turn struct {
 }
 
 type CreateTurnRequest struct {
-	TurnID         string
-	SessionID      string
-	IdempotencyKey string
-	Model          string
-	Messages       []Message
-	ToolRefs       []ToolRef
-	ToolSource     ToolSourceMode
-	Tools          []Tool
-	ResponseSchema map[string]any
-	Metadata       map[string]any
-	ModelOptions   map[string]any
-	CreatedBy      Actor
-	ExecutionRef   string
-	Subject        SubjectContext
-	RunGrant       string
+	TurnID            string
+	SessionID         string
+	IdempotencyKey    string
+	Model             string
+	Messages          []Message
+	ToolRefs          []ToolRef
+	ToolSource        ToolSourceMode
+	Tools             []Tool
+	ResponseSchema    map[string]any
+	ResponseSchemaSet bool
+	Metadata          map[string]any
+	ModelOptions      map[string]any
+	CreatedBy         Actor
+	ExecutionRef      string
+	Subject           SubjectContext
+	RunGrant          string
 }
 
 type GetTurnRequest struct {
@@ -538,17 +540,18 @@ type ManagerUpdateSessionRequest struct {
 }
 
 type ManagerCreateTurnRequest struct {
-	CallerPluginName string
-	IdempotencyKey   string
-	Model            string
-	SessionID        string
-	Messages         []Message
-	ToolRefs         []ToolRef
-	ToolRefsSet      bool
-	ToolSource       ToolSourceMode
-	ResponseSchema   map[string]any
-	Metadata         map[string]any
-	ModelOptions     map[string]any
+	CallerPluginName  string
+	IdempotencyKey    string
+	Model             string
+	SessionID         string
+	Messages          []Message
+	ToolRefs          []ToolRef
+	ToolRefsSet       bool
+	ToolSource        ToolSourceMode
+	ResponseSchema    map[string]any
+	ResponseSchemaSet bool
+	Metadata          map[string]any
+	ModelOptions      map[string]any
 }
 
 type ManagerListSessionsRequest struct {

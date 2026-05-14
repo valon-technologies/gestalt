@@ -169,16 +169,17 @@ func (s *ManagerServer) CreateTurn(ctx context.Context, req *proto.AgentManagerC
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
 	turn, err := s.manager.CreateTurn(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerCreateTurnRequest{
-		CallerPluginName: strings.TrimSpace(s.pluginName),
-		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
-		Model:            strings.TrimSpace(req.GetModel()),
-		SessionID:        sessionID,
-		Messages:         agentMessagesFromProto(req.GetMessages()),
-		ToolRefs:         agentToolRefsFromProto(req.GetToolRefs()),
-		ToolSource:       agentToolSourceModeFromProto(req.GetToolSource()),
-		ResponseSchema:   mapFromStruct(req.GetResponseSchema()),
-		Metadata:         mapFromStruct(req.GetMetadata()),
-		ModelOptions:     mapFromStruct(req.GetModelOptions()),
+		CallerPluginName:  strings.TrimSpace(s.pluginName),
+		IdempotencyKey:    strings.TrimSpace(req.GetIdempotencyKey()),
+		Model:             strings.TrimSpace(req.GetModel()),
+		SessionID:         sessionID,
+		Messages:          agentMessagesFromProto(req.GetMessages()),
+		ToolRefs:          agentToolRefsFromProto(req.GetToolRefs()),
+		ToolSource:        agentToolSourceModeFromProtoStrict(req.GetToolSource()),
+		ResponseSchema:    mapFromStruct(req.GetResponseSchema()),
+		ResponseSchemaSet: req.ResponseSchema != nil,
+		Metadata:          mapFromStruct(req.GetMetadata()),
+		ModelOptions:      mapFromStruct(req.GetModelOptions()),
 	})
 	if err != nil {
 		return nil, agentManagerStatusError(err)
@@ -347,11 +348,11 @@ func agentManagerStatusError(err error) error {
 		return existing.Err()
 	}
 	switch {
-	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentProviderRequired), errors.Is(err, agentmanager.ErrAgentProviderNotAvailable), errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported), errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported), errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported), errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
+	case errors.Is(err, agentmanager.ErrAgentNotConfigured), errors.Is(err, agentmanager.ErrAgentProviderRequired), errors.Is(err, agentmanager.ErrAgentProviderNotAvailable), errors.Is(err, agentmanager.ErrAgentBoundedListUnsupported), errors.Is(err, agentmanager.ErrAgentSessionStartUnsupported), errors.Is(err, agentmanager.ErrAgentWorkspaceUnsupported), errors.Is(err, agentmanager.ErrAgentStructuredOutputUnsupported), errors.Is(err, invocation.ErrNoCredential), errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentCallerPluginRequired), errors.Is(err, agentmanager.ErrAgentInheritedSurfaceTool), errors.Is(err, agentmanager.ErrAgentInteractionRequired), errors.Is(err, agentmanager.ErrAgentSessionMetadataInvalid), errors.Is(err, agentmanager.ErrAgentWorkspaceInvalid):
 		return status.Error(codes.InvalidArgument, err.Error())
-	case errors.Is(err, agentmanager.ErrAgentInvalidListRequest):
+	case errors.Is(err, agentmanager.ErrAgentInvalidListRequest), errors.Is(err, invocation.ErrInvalidInvocation):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, agentmanager.ErrAgentSubjectRequired), errors.Is(err, invocation.ErrNotAuthenticated):
 		return status.Error(codes.Unauthenticated, err.Error())

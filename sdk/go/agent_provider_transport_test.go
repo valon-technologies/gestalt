@@ -15,7 +15,8 @@ import (
 type fullAgentProvider struct {
 	gestalt.UnimplementedAgentProvider
 	closeTracker
-	configuredName string
+	configuredName      string
+	receivedTurnRequest *gestalt.CreateAgentProviderTurnRequest
 }
 
 func (p *fullAgentProvider) Configure(_ context.Context, name string, _ map[string]any) error {
@@ -88,6 +89,7 @@ func (p *fullAgentProvider) UpdateSession(_ context.Context, req *gestalt.Update
 }
 
 func (p *fullAgentProvider) CreateTurn(_ context.Context, req *gestalt.CreateAgentProviderTurnRequest) (*gestalt.AgentTurn, error) {
+	p.receivedTurnRequest = req
 	return &gestalt.AgentTurn{
 		ID:               req.TurnID,
 		SessionID:        req.SessionID,
@@ -230,7 +232,7 @@ func (p *fullAgentProvider) GetCapabilities(context.Context, *gestalt.GetAgentPr
 		StructuredOutput:          true,
 		Interactions:              true,
 		BoundedListHydration:      true,
-		SupportedToolSources:      []gestalt.AgentToolSourceMode{gestalt.AgentToolSourceModeMCPCatalog},
+		SupportedToolSources:      []gestalt.AgentToolSourceMode{gestalt.AgentToolSourceModeMCPCatalog, gestalt.AgentToolSourceModeNone},
 		SupportsSessionStart:      true,
 		SupportsPreparedWorkspace: true,
 	}, nil
@@ -407,6 +409,9 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	if turn.GetStructuredOutput().GetFields()["type"].GetStringValue() != "object" {
 		t.Fatalf("CreateTurn structured_output = %+v, want native JSON round trip", turn.GetStructuredOutput())
 	}
+	if !provider.receivedTurnRequest.ResponseSchemaSet {
+		t.Fatalf("CreateTurn ResponseSchemaSet = false, want true for present response_schema")
+	}
 
 	fetchedTurn, err := agentClient.GetTurn(rpcCtx, &proto.GetAgentProviderTurnRequest{TurnId: "turn-1"})
 	if err != nil {
@@ -474,8 +479,11 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCapabilities: %v", err)
 	}
-	if !capabilities.GetStreamingText() || !capabilities.GetToolCalls() || !capabilities.GetStructuredOutput() || len(capabilities.GetSupportedToolSources()) != 1 {
+	if !capabilities.GetStreamingText() || !capabilities.GetToolCalls() || !capabilities.GetStructuredOutput() || len(capabilities.GetSupportedToolSources()) != 2 {
 		t.Fatalf("GetCapabilities = %+v, want streaming text and tool calls", capabilities)
+	}
+	if capabilities.GetSupportedToolSources()[1] != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE {
+		t.Fatalf("GetCapabilities supported tool sources = %+v, want none source round trip", capabilities.GetSupportedToolSources())
 	}
 }
 

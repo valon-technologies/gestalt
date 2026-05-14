@@ -311,6 +311,9 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if err := r.validateAgentRunGrantTurn(ctx, grant, requestedTurnID); err != nil {
 		return nil, err
 	}
+	if source := normalizeAgentToolSource(grant.ToolSource); source != coreagent.ToolSourceModeMCPCatalog {
+		return nil, fmt.Errorf("%w: agent tool execution requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeMCPCatalog)
+	}
 	toolTarget, err := grants.ResolveToolID(req.ToolID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: agent tool id is invalid", invocation.ErrAuthorizationDenied)
@@ -420,9 +423,6 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 	grants := r.runGrants
 	searcher := r.toolSearcher
 	r.mu.RUnlock()
-	if searcher == nil {
-		return nil, fmt.Errorf("%w: agent tool listing is not configured", invocation.ErrInternal)
-	}
 	grant, err = resolveAgentRunGrant(grants, strings.TrimSpace(req.RunGrant), strings.TrimSpace(req.ProviderName), strings.TrimSpace(req.SessionID), requestedTurnID)
 	if err != nil {
 		return nil, err
@@ -437,6 +437,9 @@ func (r *agentRuntime) ListTools(ctx context.Context, req coreagent.ListToolsReq
 	toolSource := normalizeAgentToolSource(grant.ToolSource)
 	if toolSource != coreagent.ToolSourceModeMCPCatalog {
 		return nil, fmt.Errorf("%w: agent tool listing requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeMCPCatalog)
+	}
+	if searcher == nil {
+		return nil, fmt.Errorf("%w: agent tool listing is not configured", invocation.ErrInternal)
 	}
 	if err := validateAgentMCPCatalogToolRefs(grant.ToolRefs); err != nil {
 		return nil, fmt.Errorf("%w: %v", invocation.ErrAuthorizationDenied, err)
@@ -594,6 +597,9 @@ func (r *agentRuntime) ResolveConnection(ctx context.Context, req coreagent.Reso
 	}
 	if err := r.validateAgentRunGrantTurn(ctx, grant, requestedTurnID); err != nil {
 		return nil, err
+	}
+	if source := normalizeAgentToolSource(grant.ToolSource); source != coreagent.ToolSourceModeMCPCatalog {
+		return nil, fmt.Errorf("%w: agent connection resolution requires %q tool source", invocation.ErrAuthorizationDenied, coreagent.ToolSourceModeMCPCatalog)
 	}
 	connection := config.ResolveConnectionAlias(req.Connection)
 	if connection == "" {

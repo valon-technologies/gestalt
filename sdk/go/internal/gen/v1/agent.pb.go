@@ -86,6 +86,7 @@ type AgentToolSourceMode int32
 const (
 	AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED AgentToolSourceMode = 0
 	AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG AgentToolSourceMode = 2
+	AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE        AgentToolSourceMode = 3
 )
 
 // Enum value maps for AgentToolSourceMode.
@@ -93,10 +94,12 @@ var (
 	AgentToolSourceMode_name = map[int32]string{
 		0: "AGENT_TOOL_SOURCE_MODE_UNSPECIFIED",
 		2: "AGENT_TOOL_SOURCE_MODE_MCP_CATALOG",
+		3: "AGENT_TOOL_SOURCE_MODE_NONE",
 	}
 	AgentToolSourceMode_value = map[string]int32{
 		"AGENT_TOOL_SOURCE_MODE_UNSPECIFIED": 0,
 		"AGENT_TOOL_SOURCE_MODE_MCP_CATALOG": 2,
+		"AGENT_TOOL_SOURCE_MODE_NONE":        3,
 	}
 )
 
@@ -5164,10 +5167,11 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x1cAGENT_MESSAGE_PART_TYPE_JSON\x10\x02\x12%\n" +
 	"!AGENT_MESSAGE_PART_TYPE_TOOL_CALL\x10\x03\x12'\n" +
 	"#AGENT_MESSAGE_PART_TYPE_TOOL_RESULT\x10\x04\x12%\n" +
-	"!AGENT_MESSAGE_PART_TYPE_IMAGE_REF\x10\x05*k\n" +
+	"!AGENT_MESSAGE_PART_TYPE_IMAGE_REF\x10\x05*\x8c\x01\n" +
 	"\x13AgentToolSourceMode\x12&\n" +
 	"\"AGENT_TOOL_SOURCE_MODE_UNSPECIFIED\x10\x00\x12&\n" +
-	"\"AGENT_TOOL_SOURCE_MODE_MCP_CATALOG\x10\x02\"\x04\b\x01\x10\x01*\xa2\x02\n" +
+	"\"AGENT_TOOL_SOURCE_MODE_MCP_CATALOG\x10\x02\x12\x1f\n" +
+	"\x1bAGENT_TOOL_SOURCE_MODE_NONE\x10\x03\"\x04\b\x01\x10\x01*\xa2\x02\n" +
 	"\x14AgentExecutionStatus\x12&\n" +
 	"\"AGENT_EXECUTION_STATUS_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eAGENT_EXECUTION_STATUS_PENDING\x10\x01\x12\"\n" +

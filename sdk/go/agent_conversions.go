@@ -655,21 +655,22 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		return &CreateAgentProviderTurnRequest{}
 	}
 	return &CreateAgentProviderTurnRequest{
-		TurnID:         req.GetTurnId(),
-		SessionID:      req.GetSessionId(),
-		IdempotencyKey: req.GetIdempotencyKey(),
-		Model:          req.GetModel(),
-		Messages:       agentMessagesFromProto(req.GetMessages()),
-		Tools:          resolvedAgentToolsFromProto(req.GetTools()),
-		ResponseSchema: mapFromStruct(req.GetResponseSchema()),
-		Metadata:       mapFromStruct(req.GetMetadata()),
-		CreatedBy:      agentActorFromProto(req.GetCreatedBy()),
-		ExecutionRef:   req.GetExecutionRef(),
-		ToolRefs:       agentToolRefsFromProto(req.GetToolRefs()),
-		ToolSource:     AgentToolSourceMode(req.GetToolSource()),
-		Subject:        agentSubjectContextFromProto(req.GetSubject()),
-		ModelOptions:   mapFromStruct(req.GetModelOptions()),
-		RunGrant:       req.GetRunGrant(),
+		TurnID:            req.GetTurnId(),
+		SessionID:         req.GetSessionId(),
+		IdempotencyKey:    req.GetIdempotencyKey(),
+		Model:             req.GetModel(),
+		Messages:          agentMessagesFromProto(req.GetMessages()),
+		Tools:             resolvedAgentToolsFromProto(req.GetTools()),
+		ResponseSchema:    mapFromStruct(req.GetResponseSchema()),
+		ResponseSchemaSet: req.ResponseSchema != nil,
+		Metadata:          mapFromStruct(req.GetMetadata()),
+		CreatedBy:         agentActorFromProto(req.GetCreatedBy()),
+		ExecutionRef:      req.GetExecutionRef(),
+		ToolRefs:          agentToolRefsFromProto(req.GetToolRefs()),
+		ToolSource:        AgentToolSourceMode(req.GetToolSource()),
+		Subject:           agentSubjectContextFromProto(req.GetSubject()),
+		ModelOptions:      mapFromStruct(req.GetModelOptions()),
+		RunGrant:          req.GetRunGrant(),
 	}
 }
 

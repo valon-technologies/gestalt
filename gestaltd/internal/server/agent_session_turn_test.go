@@ -1380,6 +1380,93 @@ func TestAgentTurnToolRefsDefaultBroadAndExplicitEmptyNone(t *testing.T) {
 	}
 }
 
+func TestAgentCreateTurnAcceptsNoneToolSourceWithStructuredOutput(t *testing.T) {
+	t.Parallel()
+
+	provider := newMemoryAgentProvider()
+	provider.capabilities = &coreagent.ProviderCapabilities{
+		StructuredOutput: true,
+		SupportedToolSources: []coreagent.ToolSourceMode{
+			coreagent.ToolSourceModeNone,
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		services := testutil.NewStubServices(t)
+		agentControl := &stubAgentControl{defaultProviderName: "managed", provider: provider}
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "ada@example.com", DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Agent = agentControl
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Agent:     agentControl,
+			RunGrants: newServerTestAgentRunGrants(t),
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	sessionReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions", bytes.NewBufferString(`{"provider":"managed","model":"gpt-5.4"}`))
+	sessionReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	sessionResp, err := http.DefaultClient.Do(sessionReq)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	defer func() { _ = sessionResp.Body.Close() }()
+	if sessionResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(sessionResp.Body)
+		t.Fatalf("create session status = %d body=%s", sessionResp.StatusCode, body)
+	}
+	var session map[string]any
+	if err := json.NewDecoder(sessionResp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode session: %v", err)
+	}
+	sessionID := session["id"].(string)
+
+	createTurn := func(name, body string, wantStatus int) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(body))
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s: create turn: %v", name, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != wantStatus {
+			respBody, _ := io.ReadAll(resp.Body)
+			t.Fatalf("%s: create turn status = %d body=%s, want %d", name, resp.StatusCode, respBody, wantStatus)
+		}
+	}
+
+	createTurn("structured none", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","responseSchema":{"type":"object","properties":{"score":{"type":"number"}}}}`, http.StatusCreated)
+	createTurn("null schema", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","responseSchema":null}`, http.StatusBadRequest)
+	createTurn("empty schema", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","responseSchema":{}}`, http.StatusBadRequest)
+	createTurn("none with tools", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","toolRefs":[{"plugin":"docs"}]}`, http.StatusBadRequest)
+
+	turnRequests := provider.capturedTurnRequests()
+	if len(turnRequests) != 1 {
+		t.Fatalf("provider turn requests len = %d, want 1", len(turnRequests))
+	}
+	req := turnRequests[0]
+	if req.ToolSource != coreagent.ToolSourceModeNone {
+		t.Fatalf("provider turn tool source = %q, want none", req.ToolSource)
+	}
+	if len(req.ToolRefs) != 0 || len(req.Tools) != 0 {
+		t.Fatalf("provider turn tools = refs:%#v resolved:%#v, want none", req.ToolRefs, req.Tools)
+	}
+	if !req.ResponseSchemaSet {
+		t.Fatal("provider turn response schema presence = false, want true")
+	}
+	if req.ResponseSchema["type"] != "object" {
+		t.Fatalf("provider turn response schema = %#v, want object schema", req.ResponseSchema)
+	}
+}
+
 func TestAgentTurnOmittedToolsDoNotForceCatalogForUnsupportedProvider(t *testing.T) {
 	t.Parallel()
 
