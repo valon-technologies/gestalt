@@ -1,9 +1,11 @@
 package providerpkg
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -101,5 +103,32 @@ func TestStagePreparedInstallDir_WithBuildKindCopiesGeneratedCatalog(t *testing.
 	}
 	if len(catalogData) == 0 {
 		t.Fatal("staged catalog.yaml is empty")
+	}
+}
+
+func TestStageSourcePreparedInstallDir_ModelMissingSourcePackageReportsMissingComponent(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindModel,
+		Source:      "github.com/test/plugins/model",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Example Model",
+		Spec:        &providermanifestv1.Spec{},
+	}))
+
+	stagingDir := filepath.Join(t.TempDir(), "prepared")
+	_, err := StageSourcePreparedInstallDir(manifestPath, stagingDir, StageSourcePreparedInstallOptions{
+		Kind:       providermanifestv1.KindModel,
+		PluginName: "prepared-model-test",
+		GOOS:       runtime.GOOS,
+		GOARCH:     runtime.GOARCH,
+	})
+	if !errors.Is(err, ErrNoSourceComponentPackage) {
+		t.Fatalf("StageSourcePreparedInstallDir error = %v, want ErrNoSourceComponentPackage", err)
+	}
+	if strings.Contains(err.Error(), "unsupported release build target") {
+		t.Fatalf("StageSourcePreparedInstallDir reported unsupported model release target: %v", err)
 	}
 }
