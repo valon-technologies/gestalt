@@ -32,6 +32,11 @@ func structFromMap(value map[string]any) (*structpb.Struct, error) {
 	return structpb.NewStruct(normalized)
 }
 
+// StructFromMap converts a Go map into a protobuf Struct.
+func StructFromMap(value map[string]any) (*structpb.Struct, error) {
+	return structFromMap(value)
+}
+
 // structFromAny converts a JSON-compatible object into an optional protobuf Struct.
 //
 // The input may be nil, a string-keyed map, a struct, or a pointer to one of
@@ -53,12 +58,28 @@ func structFromAny(value any) (*structpb.Struct, error) {
 	return structpb.NewStruct(normalized)
 }
 
+// StructFromAny converts a JSON-compatible object into an optional protobuf Struct.
+//
+// The input may be nil, a string-keyed map, a struct, or a pointer to one of
+// those. Struct fields use their exported field names unless a json tag
+// supplies a name; json:"-" skips the field and omitempty skips zero values.
+// Anonymous embedded fields must have an explicit json tag name; embedded
+// fields are not flattened.
+func StructFromAny(value any) (*structpb.Struct, error) {
+	return structFromAny(value)
+}
+
 // mapFromStruct converts a protobuf Struct into its Go map representation.
 func mapFromStruct(value *structpb.Struct) map[string]any {
 	if value == nil {
 		return nil
 	}
 	return value.AsMap()
+}
+
+// MapFromStruct converts a protobuf Struct into its Go map representation.
+func MapFromStruct(value *structpb.Struct) map[string]any {
+	return mapFromStruct(value)
 }
 
 // valueFromAny converts a Go JSON-compatible value into a protobuf Value.
