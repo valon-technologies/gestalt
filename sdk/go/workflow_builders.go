@@ -97,6 +97,11 @@ func workflowOutputDeliveryToProto(input WorkflowOutputDelivery) (*proto.Workflo
 	}, nil
 }
 
+// NewWorkflowOutputDelivery creates a workflow output delivery protocol value.
+func NewWorkflowOutputDelivery(input WorkflowOutputDelivery) (*proto.WorkflowOutputDelivery, error) {
+	return workflowOutputDeliveryToProto(input)
+}
+
 // workflowOutputDeliveryFromProto converts an existing protocol delivery
 // into builder input.
 func workflowOutputDeliveryFromProto(value *proto.WorkflowOutputDelivery) *WorkflowOutputDelivery {
@@ -220,6 +225,11 @@ func workflowActorToProto(input WorkflowActor) *proto.WorkflowActor {
 	}
 }
 
+// NewWorkflowActor creates workflow actor protocol metadata.
+func NewWorkflowActor(input WorkflowActor) *proto.WorkflowActor {
+	return workflowActorToProto(input)
+}
+
 // workflowActorFromProto converts existing workflow actor metadata into
 // builder input.
 func workflowActorFromProto(value *proto.WorkflowActor) WorkflowActor {
@@ -232,6 +242,12 @@ func workflowActorFromProto(value *proto.WorkflowActor) WorkflowActor {
 		DisplayName: value.GetDisplayName(),
 		AuthSource:  value.GetAuthSource(),
 	}
+}
+
+// WorkflowActorFromActor converts existing workflow actor protocol metadata
+// into builder input.
+func WorkflowActorFromActor(value *proto.WorkflowActor) WorkflowActor {
+	return workflowActorFromProto(value)
 }
 
 // boundWorkflowTargetToProto creates a workflow target.
@@ -254,6 +270,11 @@ func boundWorkflowTargetToProto(input BoundWorkflowTarget) (*proto.BoundWorkflow
 	}
 }
 
+// NewBoundWorkflowTarget creates a workflow target protocol value.
+func NewBoundWorkflowTarget(input BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
+	return boundWorkflowTargetToProto(input)
+}
+
 // boundWorkflowTargetFromProto converts an existing protocol target into
 // builder input.
 func boundWorkflowTargetFromProto(value *proto.BoundWorkflowTarget) BoundWorkflowTarget {
@@ -271,6 +292,12 @@ func boundWorkflowTargetFromProto(value *proto.BoundWorkflowTarget) BoundWorkflo
 	return BoundWorkflowTarget{}
 }
 
+// BoundWorkflowTargetFromTarget converts an existing workflow target protocol
+// value into builder input.
+func BoundWorkflowTargetFromTarget(value *proto.BoundWorkflowTarget) BoundWorkflowTarget {
+	return boundWorkflowTargetFromProto(value)
+}
+
 // cloneBoundWorkflowTargetProto creates a copy of an existing workflow target
 // through the target input builder.
 func cloneBoundWorkflowTargetProto(value *proto.BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
@@ -278,6 +305,12 @@ func cloneBoundWorkflowTargetProto(value *proto.BoundWorkflowTarget) (*proto.Bou
 		return nil, nil
 	}
 	return boundWorkflowTargetToProto(boundWorkflowTargetFromProto(value))
+}
+
+// NewBoundWorkflowTargetFromTarget creates a normalized copy of an existing
+// workflow target protocol value.
+func NewBoundWorkflowTargetFromTarget(value *proto.BoundWorkflowTarget) (*proto.BoundWorkflowTarget, error) {
+	return cloneBoundWorkflowTargetProto(value)
 }
 
 // WorkflowEvent contains fields for constructing a WorkflowEvent.
@@ -316,6 +349,11 @@ func workflowEventToProto(input WorkflowEvent) (*proto.WorkflowEvent, error) {
 	}, nil
 }
 
+// NewWorkflowEvent creates a workflow event protocol value.
+func NewWorkflowEvent(input WorkflowEvent) (*proto.WorkflowEvent, error) {
+	return workflowEventToProto(input)
+}
+
 // workflowEventFromProto converts an existing protocol event into builder input.
 func workflowEventFromProto(value *proto.WorkflowEvent) WorkflowEvent {
 	if value == nil {
@@ -334,6 +372,12 @@ func workflowEventFromProto(value *proto.WorkflowEvent) WorkflowEvent {
 	}
 }
 
+// WorkflowEventFromEvent converts an existing workflow event protocol value
+// into builder input.
+func WorkflowEventFromEvent(value *proto.WorkflowEvent) WorkflowEvent {
+	return workflowEventFromProto(value)
+}
+
 // cloneWorkflowEventProto creates a copy of an existing workflow event through
 // the event input builder.
 func cloneWorkflowEventProto(value *proto.WorkflowEvent) (*proto.WorkflowEvent, error) {
@@ -341,6 +385,12 @@ func cloneWorkflowEventProto(value *proto.WorkflowEvent) (*proto.WorkflowEvent, 
 		return nil, nil
 	}
 	return workflowEventToProto(workflowEventFromProto(value))
+}
+
+// NewWorkflowEventFromEvent creates a normalized copy of an existing workflow
+// event protocol value.
+func NewWorkflowEventFromEvent(value *proto.WorkflowEvent) (*proto.WorkflowEvent, error) {
+	return cloneWorkflowEventProto(value)
 }
 
 // WorkflowSignal contains fields for constructing a
@@ -378,6 +428,11 @@ func workflowSignalToProto(input WorkflowSignal) (*proto.WorkflowSignal, error) 
 	}, nil
 }
 
+// NewWorkflowSignal creates a workflow signal protocol value.
+func NewWorkflowSignal(input WorkflowSignal) (*proto.WorkflowSignal, error) {
+	return workflowSignalToProto(input)
+}
+
 // workflowSignalFromProto converts an existing protocol signal into builder input.
 func workflowSignalFromProto(value *proto.WorkflowSignal) WorkflowSignal {
 	if value == nil {
@@ -395,6 +450,12 @@ func workflowSignalFromProto(value *proto.WorkflowSignal) WorkflowSignal {
 	}
 }
 
+// WorkflowSignalFromSignal converts an existing workflow signal protocol value
+// into builder input.
+func WorkflowSignalFromSignal(value *proto.WorkflowSignal) WorkflowSignal {
+	return workflowSignalFromProto(value)
+}
+
 // cloneWorkflowSignalProto creates a copy of an existing workflow signal
 // through the signal input builder.
 func cloneWorkflowSignalProto(value *proto.WorkflowSignal) (*proto.WorkflowSignal, error) {
@@ -402,6 +463,12 @@ func cloneWorkflowSignalProto(value *proto.WorkflowSignal) (*proto.WorkflowSigna
 		return nil, nil
 	}
 	return workflowSignalToProto(workflowSignalFromProto(value))
+}
+
+// NewWorkflowSignalFromSignal creates a normalized copy of an existing workflow
+// signal protocol value.
+func NewWorkflowSignalFromSignal(value *proto.WorkflowSignal) (*proto.WorkflowSignal, error) {
+	return cloneWorkflowSignalProto(value)
 }
 
 // WorkflowScheduleTrigger contains fields for constructing a
@@ -568,6 +635,11 @@ func boundWorkflowRunToProto(input BoundWorkflowRun) (*proto.BoundWorkflowRun, e
 	}, nil
 }
 
+// NewBoundWorkflowRun creates a bound workflow run protocol value.
+func NewBoundWorkflowRun(input BoundWorkflowRun) (*proto.BoundWorkflowRun, error) {
+	return boundWorkflowRunToProto(input)
+}
+
 // boundWorkflowRunFromProto converts an existing protocol run into builder input.
 func boundWorkflowRunFromProto(value *proto.BoundWorkflowRun) (BoundWorkflowRun, error) {
 	if value == nil {
@@ -599,6 +671,12 @@ func boundWorkflowRunFromProto(value *proto.BoundWorkflowRun) (BoundWorkflowRun,
 		ExecutionRef:  value.GetExecutionRef(),
 		WorkflowKey:   value.GetWorkflowKey(),
 	}, nil
+}
+
+// BoundWorkflowRunFromRun converts an existing bound workflow run protocol
+// value into builder input.
+func BoundWorkflowRunFromRun(value *proto.BoundWorkflowRun) (BoundWorkflowRun, error) {
+	return boundWorkflowRunFromProto(value)
 }
 
 // cloneBoundWorkflowRunProto creates a copy of an existing bound workflow run
@@ -646,6 +724,11 @@ func boundWorkflowScheduleToProto(input BoundWorkflowSchedule) (*proto.BoundWork
 	}, nil
 }
 
+// NewBoundWorkflowSchedule creates a bound workflow schedule protocol value.
+func NewBoundWorkflowSchedule(input BoundWorkflowSchedule) (*proto.BoundWorkflowSchedule, error) {
+	return boundWorkflowScheduleToProto(input)
+}
+
 // boundWorkflowScheduleFromProto converts an existing protocol schedule
 // into builder input.
 func boundWorkflowScheduleFromProto(value *proto.BoundWorkflowSchedule) (BoundWorkflowSchedule, error) {
@@ -668,6 +751,12 @@ func boundWorkflowScheduleFromProto(value *proto.BoundWorkflowSchedule) (BoundWo
 		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		ExecutionRef: value.GetExecutionRef(),
 	}, nil
+}
+
+// BoundWorkflowScheduleFromSchedule converts an existing bound workflow
+// schedule protocol value into builder input.
+func BoundWorkflowScheduleFromSchedule(value *proto.BoundWorkflowSchedule) (BoundWorkflowSchedule, error) {
+	return boundWorkflowScheduleFromProto(value)
 }
 
 // cloneBoundWorkflowScheduleProto creates a copy of an existing schedule
@@ -719,6 +808,12 @@ func boundWorkflowEventTriggerToProto(input BoundWorkflowEventTrigger) (*proto.B
 	}, nil
 }
 
+// NewBoundWorkflowEventTrigger creates a bound workflow event trigger protocol
+// value.
+func NewBoundWorkflowEventTrigger(input BoundWorkflowEventTrigger) (*proto.BoundWorkflowEventTrigger, error) {
+	return boundWorkflowEventTriggerToProto(input)
+}
+
 // boundWorkflowEventTriggerFromProto converts an existing protocol event
 // trigger into builder input.
 func boundWorkflowEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger) (BoundWorkflowEventTrigger, error) {
@@ -735,6 +830,12 @@ func boundWorkflowEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger) 
 		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		ExecutionRef: value.GetExecutionRef(),
 	}, nil
+}
+
+// BoundWorkflowEventTriggerFromTrigger converts an existing bound workflow
+// event trigger protocol value into builder input.
+func BoundWorkflowEventTriggerFromTrigger(value *proto.BoundWorkflowEventTrigger) (BoundWorkflowEventTrigger, error) {
+	return boundWorkflowEventTriggerFromProto(value)
 }
 
 // cloneBoundWorkflowEventTriggerProto creates a copy of an existing event
@@ -806,6 +907,12 @@ func workflowExecutionReferenceToProto(input WorkflowExecutionReference) (*proto
 	}, nil
 }
 
+// NewWorkflowExecutionReference creates a workflow execution reference protocol
+// value.
+func NewWorkflowExecutionReference(input WorkflowExecutionReference) (*proto.WorkflowExecutionReference, error) {
+	return workflowExecutionReferenceToProto(input)
+}
+
 // workflowExecutionReferenceFromProto converts an existing protocol
 // execution reference into builder input.
 func workflowExecutionReferenceFromProto(value *proto.WorkflowExecutionReference) (WorkflowExecutionReference, error) {
@@ -834,6 +941,12 @@ func workflowExecutionReferenceFromProto(value *proto.WorkflowExecutionReference
 	}, nil
 }
 
+// WorkflowExecutionReferenceFromReference converts an existing workflow
+// execution reference protocol value into builder input.
+func WorkflowExecutionReferenceFromReference(value *proto.WorkflowExecutionReference) (WorkflowExecutionReference, error) {
+	return workflowExecutionReferenceFromProto(value)
+}
+
 // cloneWorkflowExecutionReferenceProto creates a copy of an existing
 // execution reference through the execution reference input builder.
 func cloneWorkflowExecutionReferenceProto(value *proto.WorkflowExecutionReference) (*proto.WorkflowExecutionReference, error) {
@@ -842,6 +955,12 @@ func cloneWorkflowExecutionReferenceProto(value *proto.WorkflowExecutionReferenc
 		return nil, err
 	}
 	return workflowExecutionReferenceToProto(input)
+}
+
+// NewWorkflowExecutionReferenceFromReference creates a normalized copy of an
+// existing workflow execution reference protocol value.
+func NewWorkflowExecutionReferenceFromReference(value *proto.WorkflowExecutionReference) (*proto.WorkflowExecutionReference, error) {
+	return cloneWorkflowExecutionReferenceProto(value)
 }
 
 func timestampFromNonZeroTime(value time.Time) *timestamppb.Timestamp {

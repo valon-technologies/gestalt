@@ -115,6 +115,11 @@ func valuesFromMap(values map[string]any) (map[string]*structpb.Value, error) {
 	return out, nil
 }
 
+// ValuesFromMap converts a JSON-compatible map into protobuf Value entries.
+func ValuesFromMap(values map[string]any) (map[string]*structpb.Value, error) {
+	return valuesFromMap(values)
+}
+
 // mapFromValues converts protobuf Value entries into their Go representation.
 func mapFromValues(values map[string]*structpb.Value) map[string]any {
 	if len(values) == 0 {
@@ -129,6 +134,11 @@ func mapFromValues(values map[string]*structpb.Value) map[string]any {
 		out[key] = value.AsInterface()
 	}
 	return out
+}
+
+// MapFromValues converts protobuf Value entries into their Go representation.
+func MapFromValues(values map[string]*structpb.Value) map[string]any {
+	return mapFromValues(values)
 }
 
 // timeFromTimestamp converts a protobuf Timestamp into a Go time.
