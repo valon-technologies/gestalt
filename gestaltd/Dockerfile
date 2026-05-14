@@ -49,7 +49,9 @@ ARG GESTALT_CREATED
 ARG GESTALT_SOURCE
 ARG GESTALT_DOCUMENTATION
 ARG GESTALT_URL
-RUN apk upgrade --no-cache && apk add --no-cache ca-certificates && rm -f /usr/bin/wget
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates libgcc libstdc++ \
+    && rm -f /usr/bin/wget
 COPY --from=build-binary /out/ /usr/local/bin/
 RUN mkdir -p /data && chown nobody:nobody /data
 LABEL org.opencontainers.image.title="gestaltd" \
