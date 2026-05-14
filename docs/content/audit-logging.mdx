@@ -8,7 +8,7 @@ backend without having to reconstruct behavior from mixed application logs.
 
 ## Coverage
 
-Audit events cover HTTP and MCP operation invocations, other guarded runtime surfaces such as binding hooks, failed auth on protected routes, HTTP authorization denials rejected before `GuardedInvoker` runs, login and logout flows, plugin connect and disconnect flows, and API token inventory and lifecycle events. Each event carries a `source` field (`http`, `mcp`, or a surface-specific value like `binding:...`) so consumers can filter by surface.
+Audit events cover HTTP and MCP operation invocations, other guarded runtime surfaces such as binding hooks, workflow-manager actions, failed auth on protected routes, HTTP authorization denials rejected before `GuardedInvoker` runs, login and logout flows, plugin connect and disconnect flows, and API token inventory and lifecycle events. Each event carries a `source` field (`http`, `mcp`, `workflow_manager`, or a surface-specific value like `binding:...`) so consumers can filter by surface.
 
 `gestaltd` resolves the authenticated canonical subject before emitting user-backed audit events, so both session requests and API-token requests produce stable `subject_id` values such as `user:usr_123`. Emitted audit records do not include a separate `user_id` field.
 
@@ -54,6 +54,21 @@ use `target_kind=connection` with `target_id` and `target_name` derived from the
 provider, connection, and instance being changed. Bulk revocations use
 `target_kind=api_token_collection` because no single token ID applies.
 
+Workflow events also use workflow-specific fields when available:
+
+| Field | Meaning |
+| --- | --- |
+| `caller_plugin` | Plugin that called `WorkflowManager`, such as a Slack event provider. |
+| `workflow_key_sha256` | SHA-256 hash of the workflow key for run start and signal-or-start events. The raw workflow key is not emitted. |
+| `workflow_target_kind` | Target kind, currently `plugin` or `agent`. |
+| `workflow_target_component` | Target subcomponent involved in a workflow target authorization denial, such as `plugin_target`, `agent_provider`, `agent_tool_ref`, `output_delivery`, or `session_ready_delivery`. |
+| `workflow_target_provider` | Target plugin, agent provider, or tool provider involved in the workflow action or denial. |
+| `workflow_target_operation` | Target operation involved in the workflow action or denial. |
+| `workflow_created_by_subject_id` | Original workflow creator subject for audited operations that execute inside a workflow context. |
+| `workflow_created_by_subject_kind` | Original workflow creator subject kind. |
+| `workflow_created_by_display_name` | Display name for the original workflow creator, when available. |
+| `workflow_created_by_auth_source` | Auth source for the original workflow creator, when available. |
+
 ## Event Names
 
 Invocation events use the catalog operation ID in `operation`.
@@ -75,12 +90,65 @@ Non-invocation audit events use explicit operation names:
 - `api_token.revoke`
 - `api_token.revoke_all`
 
+Workflow-manager audit events use `source=workflow_manager`. Their `provider`
+field is the selected workflow backend, not the plugin or agent target. They
+emit one audit record per backend for fanout event publishes.
+
+- `workflow.definition.create`
+- `workflow.definition.update`
+- `workflow.definition.delete`
+- `workflow.schedule.create`
+- `workflow.schedule.update`
+- `workflow.schedule.delete`
+- `workflow.schedule.pause`
+- `workflow.schedule.resume`
+- `workflow.event_trigger.create`
+- `workflow.event_trigger.update`
+- `workflow.event_trigger.delete`
+- `workflow.event_trigger.pause`
+- `workflow.event_trigger.resume`
+- `workflow.run.start`
+- `workflow.run.signal`
+- `workflow.run.signal_or_start`
+- `workflow.run.cancel`
+- `workflow.event.publish`
+
 Denied requests to `/api/v1/{integration}/{operation}` that are blocked before
 `GuardedInvoker` still use the attempted catalog operation ID in `operation`,
 matching the guarded invocation audit shape. `api_token.create` is also emitted
 when the CLI login callback successfully mints a token. `auth.authenticate`
 can be emitted from both HTTP and MCP request paths when shared auth middleware
 rejects the request before invocation.
+
+## Workflow Manager Events
+
+Workflow-manager audit records cover mutating workflow actions and event
+publishing from HTTP, CLI, and plugin SDK paths. Read-only workflow list/get
+requests remain ordinary HTTP request telemetry.
+
+Workflow object actions set the generic target fields:
+
+| Object | `target_kind` | `target_id` | `target_name` |
+| --- | --- | --- | --- |
+| Definition | `workflow_definition` | Definition ID | Empty |
+| Schedule | `workflow_schedule` | Schedule ID | Empty |
+| Event trigger | `workflow_event_trigger` | Trigger ID | Empty |
+| Run | `workflow_run` | Run ID when available | Empty |
+| Published event | `workflow_event` | Empty | Event type |
+
+Run start and signal-or-start events include `workflow_key_sha256` so operators
+can correlate repeated events for the same workflow key without logging the raw
+key. Targeted workflow actions include `workflow_target_kind`, and plugin
+targets include `workflow_target_provider` and `workflow_target_operation`.
+
+When `workflow.run.signal_or_start` rejects a stored or requested target during
+the target authorization check, the audit record sets
+`allowed=false`, `error=not_found`, and an `authorization_decision` value with
+the `workflow_target_` prefix, such as
+`workflow_target_authorizer_operation_denied` or
+`workflow_target_principal_operation_permission_denied`. In that case the
+record also includes the failing `workflow_target_component` and, when known,
+the target provider and operation.
 
 ## Metrics Vs Audit
 
@@ -98,6 +166,7 @@ rejects the request before invocation.
 | IndexedDB operations | Yes: `db.client.operation.duration` | No | Datastore calls are internal implementation telemetry, not audit events. |
 | API token inventory read | No dedicated semantic metric family | Yes | `api_token.list` is audited because it exposes stored API-token inventory. |
 | API token lifecycle | No dedicated semantic metric family | Yes | Audit records exist for explicit token create/revoke flows and CLI token minting. |
+| Workflow-manager mutations and event publishing | No dedicated semantic metric family | Yes | Workflow control-plane actions are audited with `source=workflow_manager`. |
 | Logout, pending selection, disconnect | No dedicated semantic metric family | Yes | These remain audit-only workflow events. |
 
 See [Observability](/observability) for the metric families and attribute
@@ -116,6 +185,29 @@ definitions.
   "subject_kind": "user",
   "provider": "github",
   "operation": "issues_list",
+  "depth": 0,
+  "allowed": true,
+  "trace_id": "0af7651916cd43dd8448eb211c80319c",
+  "span_id": "b7ad6b7169203331"
+}
+```
+
+Workflow-manager records keep workflow routing context in audit logs:
+
+```json
+{
+  "log.type": "audit",
+  "event_time": "2026-05-14T00:45:59.542Z",
+  "request_id": "21d82738-3fa7-4d5f-b33f-cff12b92bb24",
+  "source": "workflow_manager",
+  "auth_source": "api_token",
+  "subject_id": "service_account:slack-bot",
+  "subject_kind": "service_account",
+  "provider": "temporal",
+  "operation": "workflow.event.publish",
+  "target_kind": "workflow_event",
+  "target_name": "slack.message.created",
+  "caller_plugin": "slack",
   "depth": 0,
   "allowed": true,
   "trace_id": "0af7651916cd43dd8448eb211c80319c",
