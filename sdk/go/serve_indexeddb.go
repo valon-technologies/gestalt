@@ -23,6 +23,12 @@ func ServeIndexedDBProvider(ctx context.Context, datastore IndexedDBProvider) er
 	})
 }
 
+// NewIndexedDBServer adapts a native IndexedDB provider to the generated gRPC
+// server interface.
+func NewIndexedDBServer(datastore IndexedDBProvider) proto.IndexedDBServer {
+	return indexedDBProviderServer{provider: datastore}
+}
+
 type indexedDBProviderServer struct {
 	proto.UnimplementedIndexedDBServer
 	provider IndexedDBProvider
