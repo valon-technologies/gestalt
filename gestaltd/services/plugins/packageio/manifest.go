@@ -100,6 +100,7 @@ var validManifestKinds = map[string]bool{
 	providermanifestv1.KindS3:                  true,
 	providermanifestv1.KindWorkflow:            true,
 	providermanifestv1.KindAgent:               true,
+	providermanifestv1.KindModel:               true,
 	providermanifestv1.KindSecrets:             true,
 	providermanifestv1.KindUI:                  true,
 	providermanifestv1.KindRuntime:             true,
@@ -180,7 +181,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		needsArtifacts = needsArtifacts || manifest.Entrypoint != nil
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindModel, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		needsArtifacts = needsArtifacts || !allowsSourceEntrypointOmission
 	}
 
@@ -242,7 +243,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		default:
 			return fmt.Errorf("entrypoint is required")
 		}
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindModel, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		if manifest.Entrypoint == nil && !allowsSourceEntrypointOmission {
 			return fmt.Errorf("entrypoint is required")
 		}

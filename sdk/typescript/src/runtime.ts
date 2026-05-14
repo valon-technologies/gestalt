@@ -18,6 +18,9 @@ import {
   AgentProvider as AgentProviderService,
 } from "./internal/gen/v1/agent_pb.ts";
 import {
+  ModelProvider as ModelProviderService,
+} from "./internal/gen/v1/model_pb.ts";
+import {
   AuthenticationProvider as AuthenticationProviderService,
   AuthSessionSettingsSchema,
   AuthenticatedUserSchema,
@@ -92,6 +95,11 @@ import {
   isAuthorizationProvider,
 } from "./authorization.ts";
 import { CacheProvider, isCacheProvider } from "./cache.ts";
+import {
+  ModelProvider,
+  createModelProviderService,
+  isModelProvider,
+} from "./model.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
 import { valueFromJson, type JsonInput } from "./protocol.ts";
@@ -153,6 +161,7 @@ export const CURRENT_PROTOCOL_VERSION = 3;
  */
 export const USAGE = "usage: bun run runtime.ts ROOT PROVIDER_TARGET";
 export { createAgentProviderService } from "./agent.ts";
+export { createModelProviderService } from "./model.ts";
 export { createAuthorizationProviderService } from "./authorization.ts";
 export { createPluginRuntimeProviderService } from "./pluginruntime.ts";
 export { createWorkflowProviderService } from "./workflow.ts";
@@ -177,6 +186,7 @@ export type LoadedProvider =
   | S3Provider
   | PluginRuntimeProvider
   | AgentProvider
+  | ModelProvider
   | WorkflowProvider;
 
 type ProviderRuntimeEntry = {
@@ -266,6 +276,16 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
       router.service(
         AgentProviderService,
         createAgentProviderService(provider as AgentProvider),
+      );
+    },
+  },
+  model: {
+    isProvider: isModelProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.MODEL,
+    registerService(router, provider) {
+      router.service(
+        ModelProviderService,
+        createModelProviderService(provider as ModelProvider),
       );
     },
   },

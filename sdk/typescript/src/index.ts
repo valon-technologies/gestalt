@@ -172,6 +172,28 @@ export {
   type AgentManagerWorkspaceGitCheckout,
 } from "./agent-manager.ts";
 export {
+  ENV_MODEL_MANAGER_SOCKET,
+  ENV_MODEL_MANAGER_SOCKET_TOKEN,
+  ModelManager,
+  type ModelManagerGenerate,
+} from "./model-manager.ts";
+export {
+  ModelProvider,
+  createModelProviderService,
+  defineModelProvider,
+  isModelProvider,
+  type GenerateModelResponse,
+  type GenerateModelRequest,
+  type GetModelProviderCapabilitiesRequest,
+  type ModelMessage,
+  type ModelMessagePart,
+  type ModelMessageRole,
+  type ModelProviderCapabilities,
+  type ModelProviderOptions,
+  type ModelSubjectContext,
+  type ModelUsage,
+} from "./model.ts";
+export {
   ENV_WORKFLOW_MANAGER_SOCKET,
   ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
   WorkflowManager,

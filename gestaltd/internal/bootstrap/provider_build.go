@@ -22,6 +22,7 @@ import (
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	coremodel "github.com/valon-technologies/gestalt/server/core/model"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -36,6 +37,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	modelservice "github.com/valon-technologies/gestalt/server/services/models"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
@@ -1082,6 +1084,9 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			pluginservice.WithWorkflowManagerGrants(
 				invocationconfig.PluginWorkflowManagerGrants(entry.Capabilities),
 			),
+			pluginservice.WithModelManagerGrants(
+				invocationconfig.PluginModelManagerGrants(entry.Capabilities),
+			),
 		)
 	}
 	prov, err := pluginservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
@@ -1677,8 +1682,9 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 	}
 	includeWorkflowManager := deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders())
 	includeAgentManager := deps.AgentManager != nil || deps.AgentRuntime != nil
+	includeModelManager := invocationconfig.PluginModelManagerGrants(entry.Capabilities) != nil
 	needInvocationTokens := len(entry.Invokes) > 0
-	if includeWorkflowManager || includeAgentManager {
+	if includeWorkflowManager || includeAgentManager || includeModelManager {
 		needInvocationTokens = true
 	}
 	if needInvocationTokens {
@@ -1692,6 +1698,9 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 	}
 	if includeAgentManager {
 		hostServices = append(hostServices, buildPluginAgentManagerHostService(name, deps, invTokens))
+	}
+	if includeModelManager {
+		hostServices = append(hostServices, buildPluginModelManagerHostService(name, deps, invTokens))
 	}
 	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
@@ -1810,6 +1819,10 @@ func buildHostedRuntimeHostServiceEnv(providerName, sessionID string, hostServic
 		serviceKey = "agent_manager"
 		serviceLabel = "agent manager"
 		methodPrefix = "/" + proto.AgentManagerHost_ServiceDesc.ServiceName + "/"
+	case hostService.EnvVar == modelservice.DefaultManagerSocketEnv:
+		serviceKey = "model_manager"
+		serviceLabel = "model manager"
+		methodPrefix = "/" + proto.ModelManagerHost_ServiceDesc.ServiceName + "/"
 	case hostService.EnvVar == authorizationservice.DefaultSocketEnv:
 		serviceKey = "authorization"
 		serviceLabel = "authorization"
@@ -2313,6 +2326,20 @@ func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *pl
 	}
 }
 
+func buildPluginModelManagerHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
+	manager := deps.ModelManager
+	if manager == nil {
+		manager = unavailableModelManager{}
+	}
+	return runtimehost.HostService{
+		Name:   "model_manager",
+		EnvVar: modelservice.DefaultManagerSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterModelManagerHostServer(srv, modelservice.NewManagerServer(pluginName, manager, tokens))
+		},
+	}
+}
+
 func buildPluginAuthorizationHostService(provider core.AuthorizationProvider) runtimehost.HostService {
 	return runtimehost.HostService{
 		Name:   "authorization",
@@ -2514,6 +2541,12 @@ func (unavailableAgentManager) ListInteractions(context.Context, *principal.Prin
 
 func (unavailableAgentManager) ResolveInteraction(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.Interaction, error) {
 	return nil, fmt.Errorf("agent manager is not available")
+}
+
+type unavailableModelManager struct{}
+
+func (unavailableModelManager) Generate(context.Context, *principal.Principal, coremodel.ManagerGenerateRequest) (*coremodel.GenerateResponse, error) {
+	return nil, fmt.Errorf("model manager is not available")
 }
 
 func buildPluginScopedIndexedDB(_ string, effective config.EffectiveHostIndexedDBBinding, deps Deps) (indexeddb.IndexedDB, error) {

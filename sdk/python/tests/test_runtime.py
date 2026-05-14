@@ -31,9 +31,13 @@ from gestalt import (
     CompleteLoginRequest,
     ConnectedToken,
     ExternalTokenValidator,
+    GenerateModelResponse,
+    GetModelProviderCapabilitiesRequest,
     GetPluginRuntimeSupportRequest,
     HealthChecker,
     MetadataProvider,
+    ModelProvider,
+    ModelProviderCapabilities,
     PauseWorkflowProviderEventTriggerRequest,
     PauseWorkflowProviderScheduleRequest,
     Plugin,
@@ -57,6 +61,8 @@ from gestalt import (
 from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
 from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt._gen.v1 import cache_pb2 as _cache_pb2
+from gestalt._gen.v1 import model_pb2 as _model_pb2
+from gestalt._gen.v1 import model_pb2_grpc as _model_pb2_grpc
 from gestalt._gen.v1 import plugin_pb2 as _plugin_pb2
 from gestalt._gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 from gestalt._gen.v1 import pluginruntime_pb2 as _pluginruntime_pb2
@@ -71,6 +77,8 @@ authentication_pb2: Any = _authentication_pb2
 cache_pb2: Any = _cache_pb2
 duration_pb2: Any = _duration_pb2
 empty_pb2: Any = _empty_pb2
+model_pb2: Any = _model_pb2
+model_pb2_grpc: Any = _model_pb2_grpc
 plugin_pb2: Any = _plugin_pb2
 plugin_pb2_grpc: Any = _plugin_pb2_grpc
 pluginruntime_pb2: Any = _pluginruntime_pb2
@@ -1417,6 +1425,105 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual(
             wrapped.CreateSession("request", object()), {"request": "request"}
         )
+
+
+class ModelRuntimeTests(unittest.TestCase):
+    class StubModelProvider(ModelProvider, MetadataProvider):
+        def metadata(self) -> ProviderMetadata:
+            return ProviderMetadata(
+                kind=ProviderKind.MODEL,
+                name="stub-model",
+                display_name="Stub Model",
+            )
+
+        def generate(self, request: Any) -> GenerateModelResponse:
+            self.request = request
+            return GenerateModelResponse(
+                output_text=f"graded {request.model}",
+                structured_output={"score": 1, "reasoning": "matches"},
+                finish_reason="tool_use",
+                message={"role": "assistant", "text": "graded"},
+            )
+
+        def get_capabilities(
+            self, request: GetModelProviderCapabilitiesRequest
+        ) -> ModelProviderCapabilities:
+            self.capabilities_request = request
+            return ModelProviderCapabilities(
+                text_output=True,
+                structured_output=True,
+                usage=True,
+                parallel_requests=True,
+            )
+
+    def test_runtime_metadata_and_model_registration(self) -> None:
+        provider = self.StubModelProvider()
+
+        runtime_servicer = _runtime._runtime_servicer(
+            provider=provider,
+            kind=ProviderKind.MODEL,
+        )
+        meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
+        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_MODEL)
+        self.assertEqual(meta.name, "stub-model")
+
+        adapter = _runtime._model_runtime_plugin(provider)
+        server = mock.Mock()
+        with mock.patch.object(
+            model_pb2_grpc,
+            "add_ModelProviderServicer_to_server",
+        ) as add_model:
+            adapter.register_services(server, provider)
+        add_model.assert_called_once()
+        wrapped, registered_server = add_model.call_args.args
+        self.assertIsNot(wrapped, provider)
+        self.assertIs(getattr(wrapped, "_provider"), provider)
+        self.assertIs(registered_server, server)
+
+    def test_model_wrapper_accepts_native_handlers(self) -> None:
+        provider = self.StubModelProvider()
+        wrapped = _runtime._model_provider_servicer(provider)
+
+        response = wrapped.Generate(
+            model_pb2.GenerateModelRequest(
+                model="claude-test",
+                messages=[
+                    model_pb2.ModelMessage(role="user", text="grade this"),
+                ],
+            ),
+            object(),
+        )
+        self.assertEqual(provider.request.model, "claude-test")
+        self.assertEqual(response.output_text, "graded claude-test")
+        self.assertEqual(
+            json_format.MessageToDict(
+                response.structured_output,
+                preserving_proto_field_name=True,
+            ),
+            {"score": 1.0, "reasoning": "matches"},
+        )
+
+        capabilities = wrapped.GetCapabilities(
+            model_pb2.GetModelProviderCapabilitiesRequest(),
+            object(),
+        )
+        self.assertIsInstance(
+            provider.capabilities_request,
+            GetModelProviderCapabilitiesRequest,
+        )
+        self.assertTrue(capabilities.structured_output)
+        self.assertTrue(capabilities.parallel_requests)
+
+    def test_servable_target_wraps_model_provider(self) -> None:
+        provider = self.StubModelProvider()
+        servable = _runtime._servable_target(
+            provider,
+            runtime_kind=ProviderKind.MODEL,
+        )
+        self.assertIsInstance(servable, PluginProviderAdapter)
+        servable = cast(PluginProviderAdapter, servable)
+        self.assertEqual(servable.kind, ProviderKind.MODEL)
+        self.assertIs(servable.provider, provider)
 
 
 class WorkflowRuntimeTests(unittest.TestCase):

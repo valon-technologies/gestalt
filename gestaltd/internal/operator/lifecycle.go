@@ -41,6 +41,7 @@ const (
 	PreparedCacheDir               = ".gestaltd/cache"
 	PreparedWorkflowDir            = ".gestaltd/workflow"
 	PreparedAgentDir               = ".gestaltd/agent"
+	PreparedModelDir               = ".gestaltd/model"
 	PreparedRuntimeDir             = ".gestaltd/runtime"
 	PreparedUIDir                  = ".gestaltd/ui"
 
@@ -57,6 +58,7 @@ type Lockfile struct {
 	S3                  map[string]LockEntry `json:"s3,omitempty"`
 	Workflows           map[string]LockEntry `json:"workflow,omitempty"`
 	Agents              map[string]LockEntry `json:"agent,omitempty"`
+	Models              map[string]LockEntry `json:"model,omitempty"`
 	Runtimes            map[string]LockEntry `json:"runtime,omitempty"`
 	Secrets             map[string]LockEntry `json:"secrets,omitempty"`
 	Telemetry           map[string]LockEntry `json:"telemetry,omitempty"`
@@ -292,7 +294,7 @@ func (l *Lifecycle) prepareAtPathsAndWriteLock(configPaths []string, state State
 		return nil, nil, lifecyclePaths{}, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "authentication", len(lock.Authentication), "authorization", len(lock.Authorization), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "workflow", len(lock.Workflows), "agent", len(lock.Agents), "runtime", len(lock.Runtimes), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "authentication", len(lock.Authentication), "authorization", len(lock.Authorization), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "workflow", len(lock.Workflows), "agent", len(lock.Agents), "model", len(lock.Models), "runtime", len(lock.Runtimes), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, paths, nil
 }
@@ -1173,6 +1175,7 @@ type lifecyclePaths struct {
 	cacheDir               string
 	workflowDir            string
 	agentDir               string
+	modelDir               string
 	runtimeDir             string
 	uiDir                  string
 }
@@ -1271,6 +1274,7 @@ func hostProviderCollections(cfg *config.Config) []struct {
 		{config.HostProviderKindCache, cfg.Providers.Cache},
 		{config.HostProviderKindWorkflow, cfg.Providers.Workflow},
 		{config.HostProviderKindAgent, cfg.Providers.Agent},
+		{config.HostProviderKindModel, cfg.Providers.Model},
 	}
 }
 
@@ -1299,6 +1303,8 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 		return lock.Workflows
 	case config.HostProviderKindAgent:
 		return lock.Agents
+	case config.HostProviderKindModel:
+		return lock.Models
 	case config.HostProviderKindRuntime:
 		return lock.Runtimes
 	default:
@@ -1439,6 +1445,7 @@ func resolveLifecyclePaths(configPaths []string, cfg *config.Config, state State
 		cacheDir:               filepath.Join(artifactsDir, filepath.FromSlash(PreparedCacheDir)),
 		workflowDir:            filepath.Join(artifactsDir, filepath.FromSlash(PreparedWorkflowDir)),
 		agentDir:               filepath.Join(artifactsDir, filepath.FromSlash(PreparedAgentDir)),
+		modelDir:               filepath.Join(artifactsDir, filepath.FromSlash(PreparedModelDir)),
 		runtimeDir:             filepath.Join(artifactsDir, filepath.FromSlash(PreparedRuntimeDir)),
 		uiDir:                  filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
@@ -1492,6 +1499,10 @@ func agentDestDir(paths lifecyclePaths, name string) string {
 	return filepath.Join(paths.agentDir, name)
 }
 
+func modelDestDir(paths lifecyclePaths, name string) string {
+	return filepath.Join(paths.modelDir, name)
+}
+
 func runtimeDestDir(paths lifecyclePaths, name string) string {
 	return filepath.Join(paths.runtimeDir, name)
 }
@@ -1526,6 +1537,8 @@ func componentDestDir(paths lifecyclePaths, kind config.HostProviderKind, name s
 		return workflowDestDir(paths, name)
 	case config.HostProviderKindAgent:
 		return agentDestDir(paths, name)
+	case config.HostProviderKindModel:
+		return modelDestDir(paths, name)
 	case config.HostProviderKindRuntime:
 		return runtimeDestDir(paths, name)
 	default:
@@ -1645,6 +1658,8 @@ func providerManifestKind(kind config.HostProviderKind) string {
 		return providermanifestv1.KindWorkflow
 	case config.HostProviderKindAgent:
 		return providermanifestv1.KindAgent
+	case config.HostProviderKindModel:
+		return providermanifestv1.KindModel
 	case config.HostProviderKindRuntime:
 		return providermanifestv1.KindRuntime
 	default:
@@ -2302,6 +2317,8 @@ func lockEntryDestDir(paths lifecyclePaths, kind, name string) string {
 		return s3DestDir(paths, name)
 	case providermanifestv1.KindWorkflow:
 		return workflowDestDir(paths, name)
+	case providermanifestv1.KindModel:
+		return modelDestDir(paths, name)
 	case providerLockKindTelemetry:
 		return telemetryDestDir(paths, name)
 	case providerLockKindAudit:

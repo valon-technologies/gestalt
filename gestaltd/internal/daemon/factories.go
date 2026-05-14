@@ -10,6 +10,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	coremodel "github.com/valon-technologies/gestalt/server/core/model"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -142,6 +143,12 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	}
 	factories.Agent = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coreagent.Provider, error) {
 		return providerdrivers.AgentFactory(ctx, name, node, hostServices, providerdrivers.AgentDeps{
+			EgressDefaultAction: deps.Egress.DefaultAction,
+			Telemetry:           deps.Telemetry,
+		})
+	}
+	factories.Model = func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps bootstrap.Deps) (coremodel.Provider, error) {
+		return providerdrivers.ModelFactory(ctx, name, node, hostServices, providerdrivers.ModelDeps{
 			EgressDefaultAction: deps.Egress.DefaultAction,
 			Telemetry:           deps.Telemetry,
 		})

@@ -271,6 +271,7 @@ func TransformSourceAuthTokens(cfg *Config, transform ConfigStringTransformer) e
 		cfg.Providers.S3,
 		cfg.Providers.Workflow,
 		cfg.Providers.Agent,
+		cfg.Providers.Model,
 	} {
 		for _, entry := range entries {
 			if err := transformEntry(entry); err != nil {
@@ -317,6 +318,7 @@ func TransformConfigStringFields(cfg *Config, transform ConfigStringTransformer)
 		cfg.Providers.S3,
 		cfg.Providers.Workflow,
 		cfg.Providers.Agent,
+		cfg.Providers.Model,
 	} {
 		for _, entry := range entries {
 			if entry == nil {

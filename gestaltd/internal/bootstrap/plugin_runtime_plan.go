@@ -133,6 +133,9 @@ func pluginRuntimeRequirementsForPlugin(name string, entry *config.ProviderEntry
 	if deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders()) {
 		requiresHostServiceAccess = true
 	}
+	if entry.Capabilities != nil && entry.Capabilities.Model != nil {
+		requiresHostServiceAccess = true
+	}
 	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
 		requiresHostServiceAccess = true
 	}

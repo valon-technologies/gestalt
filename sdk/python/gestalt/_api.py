@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from ._agent import AgentManager
     from ._authorization import AuthorizationClient
     from ._invoker import PluginInvoker
+    from ._model import ModelManager
     from ._workflow import WorkflowManager
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
@@ -116,6 +117,11 @@ class Request:
         from ._agent import AgentManager
 
         return AgentManager(self.invocation_token)
+
+    def model_manager(self) -> "ModelManager":
+        from ._model import ModelManager
+
+        return ModelManager(self.invocation_token)
 
     def workflow_manager(self) -> "WorkflowManager":
         from ._workflow import WorkflowManager

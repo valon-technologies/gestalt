@@ -12,7 +12,7 @@ import (
 const (
 	providerLockSchemaName          = "gestaltd-provider-lock"
 	providerLockLegacySchemaVersion = 6
-	providerLockSchemaVersion       = 7
+	providerLockSchemaVersion       = 8
 	providerLockMinSchemaVersion    = 5
 	providerLockRevision            = 0
 	providerLockKindWorkflow        = "workflow"
@@ -41,6 +41,7 @@ type providerLockBuckets struct {
 	S3                  map[string]portableLockEntry `json:"s3,omitempty"`
 	Workflow            map[string]portableLockEntry `json:"workflow,omitempty"`
 	Agent               map[string]portableLockEntry `json:"agent,omitempty"`
+	Model               map[string]portableLockEntry `json:"model,omitempty"`
 	Runtime             map[string]portableLockEntry `json:"runtime,omitempty"`
 	Secrets             map[string]portableLockEntry `json:"secrets,omitempty"`
 	Telemetry           map[string]portableLockEntry `json:"telemetry,omitempty"`
@@ -75,6 +76,7 @@ func newLockfile() *Lockfile {
 		S3:                  make(map[string]LockEntry),
 		Workflows:           make(map[string]LockEntry),
 		Agents:              make(map[string]LockEntry),
+		Models:              make(map[string]LockEntry),
 		Runtimes:            make(map[string]LockEntry),
 		Secrets:             make(map[string]LockEntry),
 		Telemetry:           make(map[string]LockEntry),
@@ -114,6 +116,9 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 	if lock.Agents == nil {
 		lock.Agents = make(map[string]LockEntry)
 	}
+	if lock.Models == nil {
+		lock.Models = make(map[string]LockEntry)
+	}
 	if lock.Runtimes == nil {
 		lock.Runtimes = make(map[string]LockEntry)
 	}
@@ -143,6 +148,7 @@ func providerLockKinds() []string {
 		providermanifestv1.KindS3,
 		providermanifestv1.KindWorkflow,
 		providermanifestv1.KindAgent,
+		providermanifestv1.KindModel,
 		providermanifestv1.KindRuntime,
 		providermanifestv1.KindSecrets,
 		providerLockKindTelemetry,
@@ -174,6 +180,8 @@ func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntr
 		return lock.Workflows
 	case providermanifestv1.KindAgent:
 		return lock.Agents
+	case providermanifestv1.KindModel:
+		return lock.Models
 	case providermanifestv1.KindRuntime:
 		return lock.Runtimes
 	case providermanifestv1.KindSecrets:
@@ -205,6 +213,7 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 			S3:                  portableEntriesFromLockEntries(lock.S3, providermanifestv1.KindS3),
 			Workflow:            portableEntriesFromLockEntries(lock.Workflows, providerLockKindWorkflow),
 			Agent:               portableEntriesFromLockEntries(lock.Agents, providermanifestv1.KindAgent),
+			Model:               portableEntriesFromLockEntries(lock.Models, providermanifestv1.KindModel),
 			Runtime:             portableEntriesFromLockEntries(lock.Runtimes, providermanifestv1.KindRuntime),
 			Secrets:             portableEntriesFromLockEntries(lock.Secrets, providermanifestv1.KindSecrets),
 			Telemetry:           portableEntriesFromLockEntries(lock.Telemetry, providerLockKindTelemetry),
@@ -228,6 +237,7 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 	runtimeLock.S3 = lockEntriesFromPortableEntries(lock.Providers.S3)
 	runtimeLock.Workflows = lockEntriesFromPortableEntries(lock.Providers.Workflow)
 	runtimeLock.Agents = lockEntriesFromPortableEntries(lock.Providers.Agent)
+	runtimeLock.Models = lockEntriesFromPortableEntries(lock.Providers.Model)
 	runtimeLock.Runtimes = lockEntriesFromPortableEntries(lock.Providers.Runtime)
 	runtimeLock.Secrets = lockEntriesFromPortableEntries(lock.Providers.Secrets)
 	runtimeLock.Telemetry = lockEntriesFromPortableEntries(lock.Providers.Telemetry)
@@ -311,6 +321,9 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 }
 
 func providerLockSchemaVersionForLock(lock *Lockfile) int {
+	if len(lockEntriesForProviderKind(lock, providermanifestv1.KindModel)) > 0 {
+		return providerLockSchemaVersion
+	}
 	for _, kind := range providerLockKinds() {
 		entries := lockEntriesForProviderKind(lock, kind)
 		for idx := range entries {

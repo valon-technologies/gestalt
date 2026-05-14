@@ -13,6 +13,7 @@ export type ProviderKind =
   | "runtime"
   | "workflow"
   | "agent"
+  | "model"
   | "telemetry";
 
 /**

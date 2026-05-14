@@ -74,6 +74,11 @@ import {
   StopPluginRuntimeSessionRequestSchema,
 } from "../src/internal/gen/v1/pluginruntime_pb.ts";
 import {
+  GenerateModelRequestSchema,
+  GetModelProviderCapabilitiesRequestSchema,
+  ModelProvider as ModelProviderService,
+} from "../src/internal/gen/v1/model_pb.ts";
+import {
   GetSecretRequestSchema,
   SecretsProvider as SecretsProviderService,
 } from "../src/internal/gen/v1/secrets_pb.ts";
@@ -92,6 +97,7 @@ import {
   createAgentProviderService,
   createAuthorizationProviderService,
   createCacheService,
+  createModelProviderService,
   ENV_WRITE_CATALOG,
   ENV_PROVIDER_SOCKET,
   createAuthenticationService,
@@ -111,6 +117,7 @@ import {
   WorkflowRunStatus,
   defineAuthorizationProvider,
   defineCacheProvider,
+  defineModelProvider,
   definePlugin,
   definePluginRuntimeProvider,
   defineS3Provider,
@@ -2165,6 +2172,68 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
     create(EmptySchema, {}),
   );
   expect(refreshedMetadata.warnings).toEqual(["canceled-turns:1"]);
+});
+
+test("model provider target resolves and serves runtime metadata plus model operations", async () => {
+  const provider = defineModelProvider({
+    name: "basic-model",
+    generate(request) {
+      return {
+        outputText: `graded ${request.model}`,
+        structuredOutput: { score: 1, reasoning: "correct" },
+        finishReason: "tool_use",
+        usage: {
+          inputTokens: 11n,
+          outputTokens: 7n,
+          totalTokens: 18n,
+        },
+        message: {
+          role: "assistant",
+          text: "graded",
+        },
+      };
+    },
+    getCapabilities() {
+      return {
+        textOutput: true,
+        structuredOutput: true,
+        usage: true,
+        parallelRequests: true,
+      };
+    },
+  });
+  const runtime = createRuntimeService(provider);
+  const model = createModelProviderService(provider);
+
+  const metadata = await (runtime.getProviderIdentity as any)(
+    create(EmptySchema),
+  );
+  expect(metadata.kind).toBe(ProtoProviderKind.MODEL);
+  expect(metadata.name).toBe("basic-model");
+
+  const response = await (model.generate as any)(
+    create(GenerateModelRequestSchema, {
+      model: "claude-test",
+      messages: [{ role: "user", text: "grade this" }],
+      responseSchema: {
+        type: "object",
+        required: ["score", "reasoning"],
+        properties: {
+          score: { enum: [0, 0.5, 1] },
+          reasoning: { type: "string" },
+        },
+      },
+    }),
+  );
+  expect(response.outputText).toBe("graded claude-test");
+  expect(response.structuredOutput).toEqual({ score: 1, reasoning: "correct" });
+  expect(response.usage?.totalTokens).toBe(18n);
+
+  const capabilities = await (model.getCapabilities as any)(
+    create(GetModelProviderCapabilitiesRequestSchema),
+  );
+  expect(capabilities.structuredOutput).toBe(true);
+  expect(capabilities.parallelRequests).toBe(true);
 });
 
 test("integration provider request context includes workflow metadata", async () => {

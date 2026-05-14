@@ -18,6 +18,7 @@ from typing import Any, Final, cast
 
 from . import _agent as _agent_native
 from . import _authentication as _auth_native
+from . import _model as _model_native
 from . import _pluginruntime as _pluginruntime_native
 from . import _s3 as _s3_native
 from . import _telemetry
@@ -38,6 +39,7 @@ from ._providers import (
     ExternalTokenValidator,
     HealthChecker,
     MetadataProvider,
+    ModelProvider,
     PluginProvider,
     PluginProviderAdapter,
     PluginRuntimeProvider,
@@ -73,6 +75,7 @@ s3_pb2_grpc: Any = cast(Any, None)
 secrets_pb2: Any = cast(Any, None)
 secrets_pb2_grpc: Any = cast(Any, None)
 agent_pb2_grpc: Any = cast(Any, None)
+model_pb2_grpc: Any = cast(Any, None)
 workflow_pb2: Any = cast(Any, None)
 workflow_pb2_grpc: Any = cast(Any, None)
 
@@ -108,6 +111,7 @@ def _ensure_grpc_runtime() -> None:
     global secrets_pb2
     global secrets_pb2_grpc
     global agent_pb2_grpc
+    global model_pb2_grpc
     global workflow_pb2
     global workflow_pb2_grpc
 
@@ -126,6 +130,7 @@ def _ensure_grpc_runtime() -> None:
     from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
     from ._gen.v1 import cache_pb2 as _cache_pb2
     from ._gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
+    from ._gen.v1 import model_pb2_grpc as _model_pb2_grpc
     from ._gen.v1 import plugin_pb2 as _plugin_pb2
     from ._gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
     from ._gen.v1 import pluginruntime_pb2 as _pluginruntime_pb2
@@ -158,6 +163,7 @@ def _ensure_grpc_runtime() -> None:
     secrets_pb2 = _secrets_pb2
     secrets_pb2_grpc = _secrets_pb2_grpc
     agent_pb2_grpc = _agent_pb2_grpc
+    model_pb2_grpc = _model_pb2_grpc
     workflow_pb2 = _workflow_pb2
     workflow_pb2_grpc = _workflow_pb2_grpc
 
@@ -351,6 +357,8 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
         return _s3_runtime_plugin(target)
     if resolved_kind == ProviderKind.AGENT and isinstance(target, AgentProvider):
         return _agent_runtime_plugin(target)
+    if resolved_kind == ProviderKind.MODEL and isinstance(target, ModelProvider):
+        return _model_runtime_plugin(target)
     if resolved_kind == ProviderKind.RUNTIME and isinstance(
         target, PluginRuntimeProvider
     ):
@@ -361,7 +369,7 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
         return _secrets_runtime_plugin(target)
     if isinstance(target, PluginProvider):
         raise RuntimeError(
-            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is authentication, authorization, cache, s3, agent, runtime, workflow, or secrets"
+            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is authentication, authorization, cache, s3, agent, model, runtime, workflow, or secrets"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -473,6 +481,8 @@ def _servable_target(
         return _s3_runtime_plugin(target)
     if kind == ProviderKind.AGENT and isinstance(target, AgentProvider):
         return _agent_runtime_plugin(target)
+    if kind == ProviderKind.MODEL and isinstance(target, ModelProvider):
+        return _model_runtime_plugin(target)
     if kind == ProviderKind.RUNTIME and isinstance(target, PluginRuntimeProvider):
         return _plugin_runtime_runtime_plugin(target)
     if kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
@@ -783,6 +793,26 @@ def _register_agent_services(server: Any, provider: PluginProvider) -> None:
     )
     agent_pb2_grpc.add_AgentProviderServicer_to_server(
         _agent_provider_servicer(provider),
+        server,
+    )
+
+
+def _model_runtime_plugin(provider: ModelProvider) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
+        kind=ProviderKind.MODEL,
+        provider=provider,
+        register_services=_register_model_services,
+    )
+
+
+def _register_model_services(server: Any, provider: PluginProvider) -> None:
+    _ensure_grpc_runtime()
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
+        _runtime_servicer(provider=provider, kind=ProviderKind.MODEL),
+        server,
+    )
+    model_pb2_grpc.add_ModelProviderServicer_to_server(
+        _model_provider_servicer(provider),
         server,
     )
 
@@ -1418,6 +1448,30 @@ def _workflow_provider_servicer(provider: PluginProvider) -> Any:
             return _empty_response(result)
 
     return WorkflowProviderServicer(provider)
+
+
+def _model_provider_servicer(provider: PluginProvider) -> Any:
+    _ensure_grpc_runtime()
+
+    class ModelProviderServicer(model_pb2_grpc.ModelProviderServicer):
+        def __init__(self, inner: PluginProvider) -> None:
+            self._provider = inner
+
+        @_grpc_handler("model generate")
+        def Generate(self, request: Any, context: Any) -> Any:
+            result = self._provider.generate(
+                _model_native.generate_model_request_from_proto(request)
+            )
+            return _model_native.generate_model_response_to_proto(result)
+
+        @_grpc_handler("model get capabilities")
+        def GetCapabilities(self, request: Any, context: Any) -> Any:
+            result = self._provider.get_capabilities(
+                _model_native.GetModelProviderCapabilitiesRequest()
+            )
+            return _model_native.model_provider_capabilities_to_proto(result)
+
+    return ModelProviderServicer(provider)
 
 
 def _secrets_runtime_plugin(provider: SecretsProvider) -> PluginProviderAdapter:
@@ -2274,6 +2328,7 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
         ProviderKind.CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
         ProviderKind.S3: runtime_pb2.ProviderKind.PROVIDER_KIND_S3,
         ProviderKind.AGENT: runtime_pb2.ProviderKind.PROVIDER_KIND_AGENT,
+        ProviderKind.MODEL: runtime_pb2.ProviderKind.PROVIDER_KIND_MODEL,
         ProviderKind.RUNTIME: runtime_pb2.ProviderKind.PROVIDER_KIND_RUNTIME,
         ProviderKind.WORKFLOW: runtime_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW,
         ProviderKind.SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,

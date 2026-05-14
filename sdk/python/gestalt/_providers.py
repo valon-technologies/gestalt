@@ -76,6 +76,12 @@ if TYPE_CHECKING:
         WriteModelRequest,
         WriteRelationshipsRequest,
     )
+    from ._model import (
+        GenerateModelRequest,
+        GenerateModelResponse,
+        GetModelProviderCapabilitiesRequest,
+        ModelProviderCapabilities,
+    )
     from ._pluginruntime import (
         GetPluginRuntimeSessionRequest,
         GetPluginRuntimeSupportRequest,
@@ -150,6 +156,7 @@ class ProviderKind(str, Enum):
     CACHE = "cache"
     S3 = "s3"
     AGENT = "agent"
+    MODEL = "model"
     RUNTIME = "runtime"
     WORKFLOW = "workflow"
     SECRETS = "secrets"
@@ -579,6 +586,25 @@ class AgentProvider(PluginProvider):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.AGENT)
+
+
+class ModelProvider(PluginProvider):
+    """Base class for stateless model-provider runtimes."""
+
+    def generate(self, request: GenerateModelRequest) -> GenerateModelResponse:
+        self._unimplemented("generate")
+
+    def get_capabilities(
+        self, request: GetModelProviderCapabilitiesRequest
+    ) -> ModelProviderCapabilities:
+        self._unimplemented("get_capabilities")
+
+    def serve(self) -> None:
+        """Start the model runtime."""
+
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.MODEL)
 
 
 class PluginRuntimeProvider(PluginProvider):

@@ -93,6 +93,11 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		return warnings, err
 	}
 	defer func() { _ = closeAgents(extraAgents...) }()
+	extraModels, _, err := buildModels(ctx, cfg, factories, prepared.Deps)
+	if err != nil {
+		return warnings, err
+	}
+	defer func() { _ = closeModels(extraModels...) }()
 	<-providersReady
 	if errs := errResolver(); len(errs) > 0 {
 		return warnings, fmt.Errorf("bootstrap: provider validation failed: %w", errors.Join(errs...))

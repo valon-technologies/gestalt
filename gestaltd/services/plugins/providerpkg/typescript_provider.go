@@ -28,6 +28,7 @@ const (
 	typeScriptS3Key        = "s3"
 	typeScriptWorkflowKey  = "workflow"
 	typeScriptAgentKey     = "agent"
+	typeScriptModelKey     = "model"
 )
 
 var ErrNoTypeScriptProviderPackage = errors.New("no TypeScript provider package found")
@@ -187,6 +188,8 @@ func typeScriptComponentKind(kind string) (string, error) {
 		return "workflow", nil
 	case providermanifestv1.KindAgent:
 		return "agent", nil
+	case providermanifestv1.KindModel:
+		return "model", nil
 	case providermanifestv1.KindSecrets:
 		return "secrets", nil
 	default:
@@ -383,6 +386,8 @@ func normalizeTypeScriptProviderKind(value string) string {
 		return "workflow"
 	case "agent":
 		return "agent"
+	case "model":
+		return "model"
 	case "secrets":
 		return "secrets"
 	case "telemetry":

@@ -21,6 +21,7 @@
         "s3",
         "workflow",
         "agent",
+        "model",
         "secrets",
         "ui",
         "runtime"

@@ -295,6 +295,7 @@ const (
 	pythonRuntimeKindS3             = "s3"
 	pythonRuntimeKindWorkflow       = "workflow"
 	pythonRuntimeKindAgent          = "agent"
+	pythonRuntimeKindModel          = "model"
 	pythonRuntimeKindSecrets        = "secrets"
 )
 
@@ -317,6 +318,8 @@ func pythonRuntimeKind(kind string) (string, error) {
 		return pythonRuntimeKindWorkflow, nil
 	case providermanifestv1.KindAgent:
 		return pythonRuntimeKindAgent, nil
+	case providermanifestv1.KindModel:
+		return pythonRuntimeKindModel, nil
 	case providermanifestv1.KindSecrets:
 		return pythonRuntimeKindSecrets, nil
 	default:

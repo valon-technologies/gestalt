@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/egress"
+	"github.com/valon-technologies/gestalt/server/services/models/modelgrants"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
@@ -32,6 +33,7 @@ type ExecConfig struct {
 	InvocationTokens *plugininvokerservice.InvocationTokenManager
 	InvocationGrants plugininvokerservice.InvocationGrants
 	WorkflowGrants   workflowgrants.Grants
+	ModelGrants      modelgrants.Grants
 	ProviderName     string
 	Telemetry        metricutil.TelemetryProviders
 }
@@ -51,6 +53,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
 			WithInvocationTokens(cfg.InvocationTokens),
 			WithInvocationTokenSubject(cfg.StaticSpec.Name, cfg.InvocationGrants),
 			WithWorkflowManagerGrants(cfg.WorkflowGrants),
+			WithModelManagerGrants(cfg.ModelGrants),
 		)
 	}
 	prov, err := NewRemote(

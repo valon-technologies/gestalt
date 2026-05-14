@@ -19,6 +19,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"github.com/valon-technologies/gestalt/server/services/models/modelgrants"
 	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
@@ -150,6 +151,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		return err
 	}
 	if err := validateAgentConfig(cfg); err != nil {
+		return err
+	}
+	if err := validateModelConfig(cfg); err != nil {
 		return err
 	}
 	if err := validateS3Config(cfg); err != nil {
@@ -346,6 +350,11 @@ func normalizeConnectionBindings(cfg *Config) error {
 	}
 	for name, entry := range cfg.Providers.Agent {
 		if err := normalizeEntry("providers.agent", name, entry); err != nil {
+			return err
+		}
+	}
+	for name, entry := range cfg.Providers.Model {
+		if err := normalizeEntry("providers.model", name, entry); err != nil {
 			return err
 		}
 	}
@@ -926,10 +935,20 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 }
 
 func validatePluginCapabilities(path string, capabilities *PluginCapabilitiesConfig) error {
-	if capabilities == nil || capabilities.Workflow == nil {
+	if capabilities == nil {
 		return nil
 	}
-	operations := capabilities.Workflow.Operations
+	if err := validatePluginWorkflowCapabilities(path, capabilities.Workflow); err != nil {
+		return err
+	}
+	return validatePluginModelCapabilities(path, capabilities.Model)
+}
+
+func validatePluginWorkflowCapabilities(path string, capabilities *PluginWorkflowCapabilitiesConfig) error {
+	if capabilities == nil {
+		return nil
+	}
+	operations := capabilities.Operations
 	if len(operations) == 0 {
 		return fmt.Errorf("config validation: %s.workflow.operations is required when workflow capabilities are set", path)
 	}
@@ -945,6 +964,32 @@ func validatePluginCapabilities(path string, capabilities *PluginCapabilitiesCon
 		}
 		if prev, ok := seen[operation]; ok {
 			return fmt.Errorf("config validation: %s.workflow.operations[%d] duplicates operations[%d]", path, i, prev)
+		}
+		seen[operation] = i
+	}
+	return nil
+}
+
+func validatePluginModelCapabilities(path string, capabilities *PluginModelCapabilitiesConfig) error {
+	if capabilities == nil {
+		return nil
+	}
+	operations := capabilities.Operations
+	if len(operations) == 0 {
+		return fmt.Errorf("config validation: %s.model.operations is required when model capabilities are set", path)
+	}
+	seen := make(map[string]int, len(operations))
+	for i := range operations {
+		operation := strings.TrimSpace(operations[i])
+		operations[i] = operation
+		switch {
+		case operation == "":
+			return fmt.Errorf("config validation: %s.model.operations[%d] is required", path, i)
+		case !modelgrants.IsSupportedOperation(operation):
+			return fmt.Errorf("config validation: %s.model.operations[%d] %q is not supported; supported operations: %s", path, i, operation, strings.Join(modelgrants.SupportedOperations(), ", "))
+		}
+		if prev, ok := seen[operation]; ok {
+			return fmt.Errorf("config validation: %s.model.operations[%d] duplicates operations[%d]", path, i, prev)
 		}
 		seen[operation] = i
 	}
@@ -1132,6 +1177,32 @@ func validateAgentConfig(cfg *Config) error {
 	if len(defaults) > 1 {
 		sort.Strings(defaults)
 		return fmt.Errorf("config validation: providers.agent declares multiple defaults: %s", strings.Join(defaults, ", "))
+	}
+	return nil
+}
+
+func validateModelConfig(cfg *Config) error {
+	defaults := make([]string, 0, len(cfg.Providers.Model))
+	for name, entry := range cfg.Providers.Model {
+		if entry == nil {
+			return fmt.Errorf("config validation: providers.model.%s is required", name)
+		}
+		if entry.Default {
+			defaults = append(defaults, name)
+		}
+		if err := validatePluginOnlyProviderFields("providers.model."+name, entry); err != nil {
+			return err
+		}
+		if err := validateProviderEntrySource("model", name, entry); err != nil {
+			return err
+		}
+	}
+	if len(defaults) > 1 {
+		sort.Strings(defaults)
+		return fmt.Errorf("config validation: providers.model declares multiple defaults: %s", strings.Join(defaults, ", "))
+	}
+	if _, _, err := cfg.SelectedModelProvider(); err != nil {
+		return err
 	}
 	return nil
 }

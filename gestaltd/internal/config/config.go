@@ -82,6 +82,7 @@ type ProvidersConfig struct {
 	S3                  map[string]*ProviderEntry `yaml:"s3,omitempty"`
 	Workflow            map[string]*ProviderEntry `yaml:"workflow,omitempty"`
 	Agent               map[string]*ProviderEntry `yaml:"agent,omitempty"`
+	Model               map[string]*ProviderEntry `yaml:"model,omitempty"`
 }
 
 type RuntimeConfig struct {
@@ -131,6 +132,7 @@ const (
 	HostProviderKindCache               HostProviderKind = "cache"
 	HostProviderKindWorkflow            HostProviderKind = "workflow"
 	HostProviderKindAgent               HostProviderKind = "agent"
+	HostProviderKindModel               HostProviderKind = "model"
 	HostProviderKindRuntime             HostProviderKind = "runtime"
 )
 
@@ -142,6 +144,7 @@ type ServerProvidersConfig struct {
 	Telemetry           string `yaml:"telemetry,omitempty"`
 	Audit               string `yaml:"audit,omitempty"`
 	IndexedDB           string `yaml:"indexeddb,omitempty"`
+	Model               string `yaml:"model,omitempty"`
 }
 
 // ProviderSource supports handwritten config in three forms via custom
@@ -2140,9 +2143,14 @@ type PluginInvocationDependency struct {
 
 type PluginCapabilitiesConfig struct {
 	Workflow *PluginWorkflowCapabilitiesConfig `yaml:"workflow,omitempty"`
+	Model    *PluginModelCapabilitiesConfig    `yaml:"model,omitempty"`
 }
 
 type PluginWorkflowCapabilitiesConfig struct {
+	Operations []string `yaml:"operations,omitempty"`
+}
+
+type PluginModelCapabilitiesConfig struct {
 	Operations []string `yaml:"operations,omitempty"`
 }
 
@@ -2349,6 +2357,9 @@ func normalizeProviderEntries(cfg *Config) {
 	for _, entry := range cfg.Providers.Agent {
 		normalizeProviderEntryAliases(entry)
 	}
+	for _, entry := range cfg.Providers.Model {
+		normalizeProviderEntryAliases(entry)
+	}
 	for _, entry := range cfg.Providers.UI {
 		if entry != nil {
 			normalizeProviderEntryAliases(&entry.ProviderEntry)
@@ -2395,6 +2406,7 @@ func OverlayRemotePluginConfigPaths(paths []string, cfg *Config) error {
 		{HostProviderKindCache, cfg.Providers.Cache},
 		{HostProviderKindWorkflow, cfg.Providers.Workflow},
 		{HostProviderKindAgent, cfg.Providers.Agent},
+		{HostProviderKindModel, cfg.Providers.Model},
 	} {
 		kindNode := mappingValueNode(providersNode, string(collection.kind))
 		for name, entry := range collection.entries {
@@ -3048,6 +3060,7 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.S3 = nonNilProviderEntryMap(cfg.Providers.S3)
 	cfg.Providers.Workflow = nonNilProviderEntryMap(cfg.Providers.Workflow)
 	cfg.Providers.Agent = nonNilProviderEntryMap(cfg.Providers.Agent)
+	cfg.Providers.Model = nonNilProviderEntryMap(cfg.Providers.Model)
 }
 
 func nonNilWorkflowScheduleMap(in map[string]WorkflowScheduleConfig) map[string]WorkflowScheduleConfig {
@@ -3095,6 +3108,7 @@ func normalizeProviderSourceShapes(cfg *Config) {
 		{providermanifestv1.KindS3, cfg.Providers.S3},
 		{string(HostProviderKindWorkflow), cfg.Providers.Workflow},
 		{string(HostProviderKindAgent), cfg.Providers.Agent},
+		{string(HostProviderKindModel), cfg.Providers.Model},
 	} {
 		for _, entry := range collection.entries {
 			normalizeEntry(collection.kind, entry)
@@ -3412,6 +3426,7 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 			{key: "s3", kind: providermanifestv1.KindS3},
 			{key: "workflow", kind: string(HostProviderKindWorkflow)},
 			{key: "agent", kind: string(HostProviderKindAgent)},
+			{key: "model", kind: string(HostProviderKindModel)},
 		} {
 			for _, entry := range mapValues(nestedMap(providers, section.key)) {
 				resolveRelativePathsInEntry(section.kind, entry, baseDir)
@@ -3564,6 +3579,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		resolveEntry(entry)
 	}
 	for _, entry := range cfg.Providers.Agent {
+		resolveEntry(entry)
+	}
+	for _, entry := range cfg.Providers.Model {
 		resolveEntry(entry)
 	}
 	for _, entry := range cfg.Runtime.Providers {

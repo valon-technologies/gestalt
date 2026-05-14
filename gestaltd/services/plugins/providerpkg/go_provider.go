@@ -57,7 +57,7 @@ func BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch string) er
 }
 
 func DetectGoComponentImportPath(root, kind, goos, goarch string) (string, error) {
-	if err := validateSourceComponentKind(kind); err != nil {
+	if err := validateGoSourceComponentKind(kind); err != nil {
 		return "", err
 	}
 	return detectGoPackageImportPath(root, goProviderPackageTarget, ErrNoSourceComponentPackage, goComponentSourceExists, goos, goarch)
@@ -70,7 +70,7 @@ func BuildGoComponentTempBinary(root, kind, goos, goarch string) (string, func()
 }
 
 func BuildGoComponentBinary(root, outputPath, kind, goos, goarch string) error {
-	if err := validateSourceComponentKind(kind); err != nil {
+	if err := validateGoSourceComponentKind(kind); err != nil {
 		return err
 	}
 	return buildGoSourceBinary(root, outputPath, goos, goarch, ErrNoSourceComponentPackage, goComponentSourceExists, "gestalt-go-component-*.go", fmt.Sprintf("Go %s wrapper", kind), func(importPath string) (goExecutableWrapperData, error) {
@@ -187,12 +187,14 @@ func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, 
 	}
 
 	var goToolUnavailable error
-	if _, err := DetectGoComponentImportPath(root, kind, goos, goarch); err == nil {
-		return sourceProviderKindGo, "", nil
-	} else if errors.Is(err, ErrGoToolUnavailable) {
-		goToolUnavailable = err
-	} else if !errors.Is(err, ErrNoSourceComponentPackage) {
-		return "", "", err
+	if supportsGoSourceComponent(kind) {
+		if _, err := DetectGoComponentImportPath(root, kind, goos, goarch); err == nil {
+			return sourceProviderKindGo, "", nil
+		} else if errors.Is(err, ErrGoToolUnavailable) {
+			goToolUnavailable = err
+		} else if !errors.Is(err, ErrNoSourceComponentPackage) {
+			return "", "", err
+		}
 	}
 	if kind == providermanifestv1.KindExternalCredentials {
 		if goToolUnavailable != nil {
@@ -201,10 +203,12 @@ func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, 
 		return "", "", ErrNoSourceComponentPackage
 	}
 
-	if _, err := detectRustPackage(root); err == nil {
-		return sourceProviderKindRust, "", nil
-	} else if !errors.Is(err, ErrNoRustProviderPackage) {
-		return "", "", err
+	if supportsRustSourceComponent(kind) {
+		if _, err := detectRustPackage(root); err == nil {
+			return sourceProviderKindRust, "", nil
+		} else if !errors.Is(err, ErrNoRustProviderPackage) {
+			return "", "", err
+		}
 	}
 
 	target, err = DetectPythonComponentTarget(root, kind)
@@ -492,10 +496,37 @@ func slugPluginName(value string) string {
 func validateSourceComponentKind(kind string) error {
 	kind = providermanifestv1.NormalizeKind(kind)
 	switch kind {
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindModel, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		return nil
 	default:
 		return fmt.Errorf("unsupported source component kind %q", kind)
+	}
+}
+
+func validateGoSourceComponentKind(kind string) error {
+	if !supportsGoSourceComponent(kind) {
+		return fmt.Errorf("unsupported Go source component kind %q", providermanifestv1.NormalizeKind(kind))
+	}
+	return nil
+}
+
+func supportsGoSourceComponent(kind string) bool {
+	kind = providermanifestv1.NormalizeKind(kind)
+	switch kind {
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+		return true
+	default:
+		return false
+	}
+}
+
+func supportsRustSourceComponent(kind string) bool {
+	kind = providermanifestv1.NormalizeKind(kind)
+	switch kind {
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -150,6 +150,23 @@ _AGENT_HELPER_EXPORTS = (
     "prepared_workspace_to_dict",
 )
 
+_MODEL_EXPORTS = (
+    "ENV_MODEL_MANAGER_SOCKET",
+    "ENV_MODEL_MANAGER_SOCKET_TOKEN",
+    "GenerateModelRequest",
+    "GenerateModelResponse",
+    "GetModelProviderCapabilitiesRequest",
+    "MODEL_MESSAGE_PART_TYPE_TEXT",
+    "MODEL_MESSAGE_PART_TYPE_UNSPECIFIED",
+    "ModelManager",
+    "ModelManagerGenerate",
+    "ModelMessage",
+    "ModelMessagePart",
+    "ModelProviderCapabilities",
+    "ModelSubjectContext",
+    "ModelUsage",
+)
+
 _AUTHENTICATION_AUTHORED_EXPORTS = (
     "AuthenticatedUser",
     "BeginLoginRequest",
@@ -401,6 +418,7 @@ _LAZY_EXPORTS = {
     "ListOptions": ("._s3", "ListOptions"),
     "ListPage": ("._s3", "ListPage"),
     "MetadataProvider": ("._providers", "MetadataProvider"),
+    "ModelProvider": ("._providers", "ModelProvider"),
     "NotFoundError": ("._indexeddb", "NotFoundError"),
     "ObjectMeta": ("._s3", "ObjectMeta"),
     "ObjectAccessURL": ("._s3", "ObjectAccessURL"),
@@ -465,6 +483,7 @@ _LAZY_EXPORTS = {
 
 _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_PROTOCOL_EXPORTS})
 _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_HELPER_EXPORTS})
+_LAZY_EXPORTS.update({name: ("._model", name) for name in _MODEL_EXPORTS})
 _LAZY_EXPORTS.update(
     {name: ("._authentication", name) for name in _AUTHENTICATION_AUTHORED_EXPORTS}
 )
@@ -502,6 +521,7 @@ def __getattr__(name: str):
 __all__ = [
     *_AGENT_PROTOCOL_EXPORTS,
     *_AGENT_HELPER_EXPORTS,
+    *_MODEL_EXPORTS,
     *_AUTHENTICATION_AUTHORED_EXPORTS,
     *_AUTHORIZATION_HELPER_EXPORTS,
     *_PLUGIN_RUNTIME_AUTHORED_EXPORTS,
@@ -564,6 +584,7 @@ __all__ = [
     "ListPage",
     "MetadataProvider",
     "Model",
+    "ModelProvider",
     "NotFoundError",
     "OK",
     "ObjectMeta",

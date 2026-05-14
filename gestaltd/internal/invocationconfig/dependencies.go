@@ -4,6 +4,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/models/modelgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 )
 
@@ -30,4 +31,11 @@ func PluginWorkflowManagerGrants(capabilities *config.PluginCapabilitiesConfig) 
 		return nil
 	}
 	return workflowgrants.DecodeClaims(capabilities.Workflow.Operations)
+}
+
+func PluginModelManagerGrants(capabilities *config.PluginCapabilitiesConfig) modelgrants.Grants {
+	if capabilities == nil || capabilities.Model == nil {
+		return nil
+	}
+	return modelgrants.DecodeClaims(capabilities.Model.Operations)
 }

@@ -62,6 +62,12 @@ const PROVIDER_KIND_DEFINITIONS = {
     defaultExportNames: ["agent", "provider"],
     label: "agent provider",
   },
+  model: {
+    tokens: ["model"],
+    formatToken: "model",
+    defaultExportNames: ["model", "provider"],
+    label: "model provider",
+  },
   telemetry: {
     tokens: ["telemetry"],
     formatToken: "telemetry",

@@ -18,6 +18,7 @@ import (
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	coremodel "github.com/valon-technologies/gestalt/server/core/model"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -31,6 +32,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/models/modelmanager"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
@@ -172,6 +174,7 @@ type Deps struct {
 	AgentRunGrants        *agentgrant.Manager
 	WorkflowManager       workflowmanager.Service
 	AgentManager          agentmanager.Service
+	ModelManager          modelmanager.Service
 	Egress                EgressDeps
 	AuthorizationProvider core.AuthorizationProvider
 	PluginInvoker         invocation.Invoker
@@ -192,6 +195,7 @@ type CacheFactory func(node yaml.Node) (corecache.Cache, error)
 type S3Factory func(node yaml.Node) (s3store.Client, error)
 type WorkflowFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreworkflow.Provider, error)
 type AgentFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coreagent.Provider, error)
+type ModelFactory func(ctx context.Context, name string, node yaml.Node, hostServices []runtimehost.HostService, deps Deps) (coremodel.Provider, error)
 type RuntimeFactory func(ctx context.Context, name string, entry *config.RuntimeProviderEntry, deps Deps) (pluginruntime.Provider, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
@@ -207,6 +211,7 @@ type FactoryRegistry struct {
 	S3                  S3Factory
 	Workflow            WorkflowFactory
 	Agent               AgentFactory
+	Model               ModelFactory
 	Telemetry           map[string]TelemetryFactory
 	Audit               AuditFactory
 	Builtins            []core.Provider
@@ -231,10 +236,12 @@ type Result struct {
 	ExtraS3s              []s3store.Client
 	ExtraWorkflows        []coreworkflow.Provider
 	ExtraAgents           []coreagent.Provider
+	ExtraModels           []coremodel.Provider
 	Providers             *registry.ProviderMap[core.Provider]
 	WorkflowControl       WorkflowControl
 	AgentControl          AgentControl
 	AgentManager          agentmanager.Service
+	ModelManager          modelmanager.Service
 	ProvidersReady        <-chan struct{}
 	Authorizer            authorization.RuntimeAuthorizer
 	ConnectionAuth        func() map[string]map[string]OAuthHandler
@@ -387,6 +394,7 @@ func (r *Result) Close(ctx context.Context) error {
 		closeS3s(r.ExtraS3s...),
 		closeWorkflows(r.ExtraWorkflows...),
 		closeAgents(r.ExtraAgents...),
+		closeModels(r.ExtraModels...),
 		closeSecretManager(r.SecretManager),
 		closePluginRuntimeRegistry(r.pluginRuntimeRegistry),
 	)
@@ -448,6 +456,19 @@ func closeWorkflows(providers ...coreworkflow.Provider) error {
 }
 
 func closeAgents(providers ...coreagent.Provider) error {
+	var errs []error
+	for _, provider := range providers {
+		if provider == nil {
+			continue
+		}
+		if err := provider.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func closeModels(providers ...coremodel.Provider) error {
 	var errs []error
 	for _, provider := range providers {
 		if provider == nil {
@@ -1119,11 +1140,13 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	pluginInvoker := newLazyInvoker()
 	workflowManager := newLazyWorkflowManager()
 	agentManager := newLazyAgentManager()
+	modelManager := newLazyModelManager()
 	workflowTools := newWorkflowSystemTools(workflowManager, prepared.Deps.WorkflowRuntime)
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	prepared.Deps.PluginInvoker = pluginInvoker
 	prepared.Deps.WorkflowManager = workflowManager
 	prepared.Deps.AgentManager = agentManager
+	prepared.Deps.ModelManager = modelManager
 	prepared.Deps.PublicHostServices = publicHostServices
 	prepared.Deps.WorkflowRuntime.SetAgentManager(agentManager)
 
@@ -1230,6 +1253,14 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		RouteStore:                    agentRouteStore,
 		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
 	}))
+	defaultModelProvider, _, err := cfg.SelectedModelProvider()
+	if err != nil {
+		return nil, err
+	}
+	modelManager.SetTarget(modelmanager.New(modelmanager.Config{
+		Providers:       nil,
+		DefaultProvider: defaultModelProvider,
+	}))
 	prepared.Deps.AgentRuntime.SetToolSearcher(agentManager)
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
@@ -1251,6 +1282,20 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			_ = closeAgents(extraAgents...)
 		}
 	}()
+	extraModels, modelProviders, err := buildModels(ctx, cfg, factories, prepared.Deps)
+	if err != nil {
+		return nil, err
+	}
+	closeModelsOnError := true
+	defer func() {
+		if closeModelsOnError {
+			_ = closeModels(extraModels...)
+		}
+	}()
+	modelManager.SetTarget(modelmanager.New(modelmanager.Config{
+		Providers:       modelProviders,
+		DefaultProvider: defaultModelProvider,
+	}))
 	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "plugin", audit, invocation.WithoutRateLimit()))
 	reconcileWorkflowConfig := func(ctx context.Context, includeProvider workflowConfigProviderFilter) error {
 		if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, includeProvider); err != nil {
@@ -1282,6 +1327,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeAuthz = false
 	closeWorkflowsOnError = false
 	closeAgentsOnError = false
+	closeModelsOnError = false
 	return &Result{
 		Auth:                         prepared.Auth,
 		SelectedAuthProvider:         prepared.SelectedAuthProvider,
@@ -1293,10 +1339,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		ExtraS3s:                     prepared.ExtraS3s,
 		ExtraWorkflows:               extraWorkflows,
 		ExtraAgents:                  extraAgents,
+		ExtraModels:                  extraModels,
 		Providers:                    providers,
 		WorkflowControl:              prepared.Deps.WorkflowRuntime,
 		AgentControl:                 prepared.Deps.AgentRuntime,
 		AgentManager:                 prepared.Deps.AgentManager,
+		ModelManager:                 prepared.Deps.ModelManager,
 		ProvidersReady:               providersReady,
 		Authorizer:                   authz,
 		ConnectionAuth:               connAuthResolver,
@@ -1414,6 +1462,24 @@ func buildAgents(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		extraAgents = append(extraAgents, value)
 	}
 	return extraAgents, nil
+}
+
+func buildModels(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coremodel.Provider, map[string]coremodel.Provider, error) {
+	var extraModels []coremodel.Provider
+	models := make(map[string]coremodel.Provider, len(cfg.Providers.Model))
+	for name, entry := range cfg.Providers.Model {
+		if entry == nil {
+			continue
+		}
+		value, err := buildModel(ctx, name, entry, factories, deps)
+		if err != nil {
+			_ = closeModels(extraModels...)
+			return nil, nil, fmt.Errorf("bootstrap: model from resource %q: %w", name, err)
+		}
+		extraModels = append(extraModels, value)
+		models[name] = value
+	}
+	return extraModels, models, nil
 }
 
 func agentPluginInvokes(cfg *config.Config) map[string][]invocation.PluginInvocationDependency {
@@ -2036,4 +2102,26 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		return provider, nil
 	}
 	return tracked, nil
+}
+
+func buildModel(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coremodel.Provider, error) {
+	if entry == nil {
+		return nil, fmt.Errorf("model provider is required")
+	}
+	node := entry.Config
+	if !config.IsComponentRuntimeConfigNode(node) {
+		var err error
+		node, err = config.BuildComponentRuntimeConfigNode(name, "model", entry, entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("model provider: %w", err)
+		}
+	}
+	if factories.Model == nil {
+		return nil, fmt.Errorf("model factory is not registered")
+	}
+	provider, err := factories.Model(ctx, name, node, nil, deps)
+	if err != nil {
+		return nil, fmt.Errorf("model provider: %w", err)
+	}
+	return provider, nil
 }

@@ -23,6 +23,7 @@ const (
 	KindS3                  = "s3"
 	KindWorkflow            = "workflow"
 	KindAgent               = "agent"
+	KindModel               = "model"
 	KindSecrets             = "secrets"
 	KindUI                  = "ui"
 	KindRuntime             = "runtime"
@@ -50,6 +51,8 @@ func NormalizeKind(kind string) string {
 		return KindWorkflow
 	case KindAgent:
 		return KindAgent
+	case KindModel:
+		return KindModel
 	case KindSecrets:
 		return KindSecrets
 	case KindUI:

@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/protobuf/struct.proto";
+
+message ModelMessage {
+  string role = 1;
+  string text = 2;
+  repeated ModelMessagePart parts = 3;
+  google.protobuf.Struct metadata = 4;
+}
+
+enum ModelMessagePartType {
+  MODEL_MESSAGE_PART_TYPE_UNSPECIFIED = 0;
+  MODEL_MESSAGE_PART_TYPE_TEXT = 1;
+}
+
+message ModelMessagePart {
+  ModelMessagePartType type = 1;
+  string text = 2;
+}
+
+message ModelSubjectContext {
+  string subject_id = 1;
+  string subject_kind = 2;
+  string credential_subject_id = 3;
+  string display_name = 4;
+  string auth_source = 5;
+}
+
+message ModelUsage {
+  int64 input_tokens = 1;
+  int64 output_tokens = 2;
+  int64 total_tokens = 3;
+}
+
+message ModelProviderCapabilities {
+  bool text_output = 1;
+  bool structured_output = 2;
+  bool usage = 3;
+  bool parallel_requests = 4;
+}
+
+message GetModelProviderCapabilitiesRequest {}
+
+message GenerateModelRequest {
+  string provider_name = 1;
+  string model = 2;
+  repeated ModelMessage messages = 3;
+  google.protobuf.Struct response_schema = 4;
+  google.protobuf.Struct model_options = 5;
+  google.protobuf.Struct metadata = 6;
+  ModelSubjectContext subject = 7;
+  string caller_plugin_name = 8;
+}
+
+message GenerateModelResponse {
+  ModelMessage message = 1;
+  string output_text = 2;
+  google.protobuf.Struct structured_output = 3;
+  string finish_reason = 4;
+  ModelUsage usage = 5;
+  google.protobuf.Struct provider_metadata = 6;
+}
+
+message ModelManagerGenerateRequest {
+  string provider_name = 1;
+  string model = 2;
+  repeated ModelMessage messages = 3;
+  google.protobuf.Struct response_schema = 4;
+  google.protobuf.Struct model_options = 5;
+  google.protobuf.Struct metadata = 6;
+  string invocation_token = 7;
+}
+
+service ModelProvider {
+  rpc Generate(GenerateModelRequest) returns (GenerateModelResponse);
+  rpc GetCapabilities(GetModelProviderCapabilitiesRequest) returns (ModelProviderCapabilities);
+}
+
+service ModelManagerHost {
+  rpc Generate(ModelManagerGenerateRequest) returns (GenerateModelResponse);
+}

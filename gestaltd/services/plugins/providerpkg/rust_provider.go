@@ -162,7 +162,10 @@ func BuildRustComponentBinary(root, outputPath, kind, goos, goarch string) (stri
 }
 
 func validateRustComponentKind(kind string) error {
-	return validateSourceComponentKind(kind)
+	if !supportsRustSourceComponent(kind) {
+		return fmt.Errorf("unsupported Rust source component kind %q", providermanifestv1.NormalizeKind(kind))
+	}
+	return nil
 }
 
 func buildRustBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {

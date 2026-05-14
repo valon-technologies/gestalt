@@ -19,3 +19,8 @@ type AgentDeps struct {
 	EgressDefaultAction egress.PolicyAction
 	Telemetry           runtimehost.TelemetryProviders
 }
+
+type ModelDeps struct {
+	EgressDefaultAction egress.PolicyAction
+	Telemetry           runtimehost.TelemetryProviders
+}

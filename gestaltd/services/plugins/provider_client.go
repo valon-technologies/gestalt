@@ -12,6 +12,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/models/modelgrants"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"google.golang.org/grpc/codes"
@@ -53,6 +54,7 @@ type remoteProviderBase struct {
 	callerPlugin   string
 	invokeGrants   plugininvokerservice.InvocationGrants
 	workflowGrants workflowgrants.Grants
+	modelGrants    modelgrants.Grants
 }
 
 var (
@@ -92,6 +94,19 @@ func WithInvocationTokenSubject(pluginName string, grants plugininvokerservice.I
 func WithWorkflowManagerGrants(grants workflowgrants.Grants) RemoteProviderOption {
 	return func(b *remoteProviderBase) {
 		b.workflowGrants = workflowgrants.Clone(grants)
+	}
+}
+
+func WithModelManagerGrants(grants modelgrants.Grants) RemoteProviderOption {
+	return func(b *remoteProviderBase) {
+		if grants == nil {
+			b.modelGrants = nil
+			return
+		}
+		b.modelGrants = make(modelgrants.Grants, len(grants))
+		for operation := range grants {
+			b.modelGrants[operation] = struct{}{}
+		}
 	}
 }
 
@@ -181,7 +196,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	}
 	requestToken := ""
 	if p != nil && p.invTokens != nil && p.callerPlugin != "" {
-		requestToken, err = p.invTokens.MintRootTokenWithWorkflowGrants(ctx, p.callerPlugin, p.invokeGrants, p.workflowGrants)
+		requestToken, err = p.invTokens.MintRootTokenWithManagerGrants(ctx, p.callerPlugin, p.invokeGrants, p.workflowGrants, p.modelGrants)
 		if err != nil {
 			return nil, err
 		}

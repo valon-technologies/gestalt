@@ -10,6 +10,7 @@ PROTO_MODULES = (
     "authorization",
     "cache",
     "datastore",
+    "model",
     "plugin",
     "pluginruntime",
     "runtime",
