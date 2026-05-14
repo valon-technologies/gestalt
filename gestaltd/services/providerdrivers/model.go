@@ -20,7 +20,7 @@ func ModelFactory(ctx context.Context, name string, node yaml.Node, hostServices
 	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindModel,
 		Subject:              "model provider",
-		SourceMissingMessage: "no Go, Rust, Python, or TypeScript model provider source package found",
+		SourceMissingMessage: "no Python or TypeScript model provider source package found",
 		Config:               cfg,
 	})
 	if err != nil {

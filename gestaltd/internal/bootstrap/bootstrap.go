@@ -1253,14 +1253,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		RouteStore:                    agentRouteStore,
 		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
 	}))
-	defaultModelProvider, _, err := cfg.SelectedModelProvider()
-	if err != nil {
-		return nil, err
-	}
-	modelManager.SetTarget(modelmanager.New(modelmanager.Config{
-		Providers:       nil,
-		DefaultProvider: defaultModelProvider,
-	}))
 	prepared.Deps.AgentRuntime.SetToolSearcher(agentManager)
 	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
@@ -1292,6 +1284,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 			_ = closeModels(extraModels...)
 		}
 	}()
+	defaultModelProvider, _, err := cfg.SelectedModelProvider()
+	if err != nil {
+		return nil, err
+	}
 	modelManager.SetTarget(modelmanager.New(modelmanager.Config{
 		Providers:       modelProviders,
 		DefaultProvider: defaultModelProvider,

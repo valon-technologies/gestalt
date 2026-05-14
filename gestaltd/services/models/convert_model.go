@@ -114,19 +114,6 @@ func modelSubjectContextToProto(value coremodel.SubjectContext) *proto.ModelSubj
 	}
 }
 
-func modelSubjectContextFromProto(value *proto.ModelSubjectContext) coremodel.SubjectContext {
-	if value == nil {
-		return coremodel.SubjectContext{}
-	}
-	return coremodel.SubjectContext{
-		SubjectID:           strings.TrimSpace(value.GetSubjectId()),
-		SubjectKind:         strings.TrimSpace(value.GetSubjectKind()),
-		CredentialSubjectID: strings.TrimSpace(value.GetCredentialSubjectId()),
-		DisplayName:         strings.TrimSpace(value.GetDisplayName()),
-		AuthSource:          strings.TrimSpace(value.GetAuthSource()),
-	}
-}
-
 func modelUsageToProto(value coremodel.Usage) *proto.ModelUsage {
 	if value == (coremodel.Usage{}) {
 		return nil
@@ -211,17 +198,5 @@ func modelProviderCapabilitiesFromProto(value *proto.ModelProviderCapabilities) 
 		StructuredOutput: value.GetStructuredOutput(),
 		Usage:            value.GetUsage(),
 		ParallelRequests: value.GetParallelRequests(),
-	}
-}
-
-func modelProviderCapabilitiesToProto(value *coremodel.ProviderCapabilities) *proto.ModelProviderCapabilities {
-	if value == nil {
-		return &proto.ModelProviderCapabilities{}
-	}
-	return &proto.ModelProviderCapabilities{
-		TextOutput:       value.TextOutput,
-		StructuredOutput: value.StructuredOutput,
-		Usage:            value.Usage,
-		ParallelRequests: value.ParallelRequests,
 	}
 }

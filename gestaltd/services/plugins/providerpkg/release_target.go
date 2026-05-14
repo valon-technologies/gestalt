@@ -63,7 +63,7 @@ func IsMissingSourceReleaseTarget(err error, kind string) bool {
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		return errors.Is(err, ErrNoSourceProviderPackage)
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindModel, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		return errors.Is(err, ErrNoSourceComponentPackage)
 	default:
 		return false
