@@ -127,6 +127,49 @@ func TestNewBoundWorkflowPluginTargetUsesNativeValues(t *testing.T) {
 	}
 }
 
+func TestAgentToolRefCarriesRunAs(t *testing.T) {
+	input := AgentToolRef{
+		Plugin:    "notion",
+		Operation: "search",
+		RunAs: &AgentSubjectContext{
+			SubjectID:           "service_account:gestalt-support-notion",
+			SubjectKind:         "service_account",
+			CredentialSubjectID: "service_account:notion-credential",
+			DisplayName:         "Gestalt Support Notion",
+			AuthSource:          "notion_service_account",
+		},
+		RunAsExternalIdentity: &ExternalIdentity{
+			Type: "notion_workspace",
+			ID:   "valon-support",
+		},
+	}
+
+	copied := NewAgentToolRef(input)
+	input.RunAs.SubjectID = "changed"
+	input.RunAsExternalIdentity.ID = "changed"
+	if copied.RunAs == nil || copied.RunAs.SubjectID != "service_account:gestalt-support-notion" {
+		t.Fatalf("copied runAs = %#v, want independent copy", copied.RunAs)
+	}
+	if copied.RunAsExternalIdentity == nil || copied.RunAsExternalIdentity.ID != "valon-support" {
+		t.Fatalf("copied external identity = %#v, want independent copy", copied.RunAsExternalIdentity)
+	}
+
+	encoded := agentToolRefToProto(*copied)
+	if got := encoded.GetRunAs().GetSubjectId(); got != "service_account:gestalt-support-notion" {
+		t.Fatalf("encoded runAs subject = %q", got)
+	}
+	if got := encoded.GetRunAsExternalIdentity().GetId(); got != "valon-support" {
+		t.Fatalf("encoded external identity = %q", got)
+	}
+	roundTrip := agentToolRefFromProto(encoded)
+	if roundTrip.RunAs == nil || roundTrip.RunAs.DisplayName != "Gestalt Support Notion" {
+		t.Fatalf("round-trip runAs = %#v", roundTrip.RunAs)
+	}
+	if roundTrip.RunAsExternalIdentity == nil || roundTrip.RunAsExternalIdentity.Type != "notion_workspace" {
+		t.Fatalf("round-trip external identity = %#v", roundTrip.RunAsExternalIdentity)
+	}
+}
+
 func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 	target, err := boundWorkflowTargetToProto(BoundWorkflowTarget{
 		Agent: &BoundWorkflowAgentTarget{

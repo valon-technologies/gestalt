@@ -11,6 +11,7 @@ type PluginInvocationDependency struct {
 	CredentialMode        core.ConnectionMode
 	RunAs                 *core.RunAsSubject
 	RunAsExternalIdentity *core.ExternalIdentityRef
+	RunAsExplicitOnly     bool
 }
 
 func ClonePluginInvocationDependencies(src []PluginInvocationDependency) []PluginInvocationDependency {

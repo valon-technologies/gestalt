@@ -101,6 +101,8 @@ message AgentToolRef {
   string title = 5;
   string description = 6;
   string system = 8;
+  AgentSubjectContext run_as = 9;
+  ExternalIdentityContext run_as_external_identity = 10;
 }
 
 enum AgentToolSourceMode {

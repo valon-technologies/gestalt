@@ -595,6 +595,10 @@ pub struct AgentToolRef {
     pub description: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
     pub system: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub run_as: ::core::option::Option<AgentSubjectContext>,
+    #[prost(message, optional, tag = "10")]
+    pub run_as_external_identity: ::core::option::Option<ExternalIdentityContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentProviderCapabilities {

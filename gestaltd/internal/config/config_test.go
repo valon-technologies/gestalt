@@ -5858,6 +5858,7 @@ func TestValidateStructureConnectionRefPreservesCredentialRefreshOverride(t *tes
 func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 	t.Parallel()
 
+	applyByDefault := false
 	cfg := &Config{
 		APIVersion: ConfigAPIVersion,
 		Plugins: map[string]*ProviderEntry{
@@ -5876,6 +5877,7 @@ func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 							Type: " github_app_installation ",
 							ID:   " repo:{owner}/{repo} ",
 						},
+						ApplyByDefault: &applyByDefault,
 					},
 				}},
 			},
@@ -5898,6 +5900,9 @@ func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 	identity := cfg.Plugins["slack"].Invokes[0].RunAsExternalIdentity()
 	if identity == nil || identity.Type != "github_app_installation" || identity.ID != "repo:{owner}/{repo}" {
 		t.Fatalf("RunAsExternalIdentity() = %#v, want normalized GitHub app repo identity", identity)
+	}
+	if cfg.Plugins["slack"].Invokes[0].RunAsAppliesByDefault() {
+		t.Fatal("RunAsAppliesByDefault() = true, want false")
 	}
 }
 

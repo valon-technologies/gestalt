@@ -30,7 +30,8 @@ use gestalt::{
     AgentManagerListInteractions, AgentManagerListSessions, AgentManagerListTurnEvents,
     AgentManagerListTurns, AgentManagerResolveInteraction, AgentManagerUpdateSession, AgentMessage,
     AgentMessagePart, AgentMessagePartType as NativeAgentMessagePartType, AgentSessionState,
-    AgentToolRef, AgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET, Request,
+    AgentSubjectContext, AgentToolRef, AgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET,
+    ExternalIdentity, Request,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -698,6 +699,17 @@ async fn agent_manager_create_turn_accepts_native_values() {
                 plugin: "github".to_string(),
                 operation: "issues.get".to_string(),
                 connection: "default".to_string(),
+                run_as: Some(AgentSubjectContext {
+                    subject_id: "service_account:gestalt-support-github".to_string(),
+                    subject_kind: "service_account".to_string(),
+                    credential_subject_id: "service_account:github-credential".to_string(),
+                    display_name: "Gestalt Support GitHub".to_string(),
+                    auth_source: "github_app".to_string(),
+                }),
+                run_as_external_identity: Some(ExternalIdentity {
+                    r#type: "github_app_installation".to_string(),
+                    id: "repo:valon/toolshed".to_string(),
+                }),
                 ..Default::default()
             }],
             tool_source: AgentToolSourceMode::McpCatalog,
@@ -742,6 +754,18 @@ async fn agent_manager_create_turn_accepts_native_values() {
     assert_eq!(request.tool_refs[0].plugin, "github");
     assert_eq!(request.tool_refs[0].operation, "issues.get");
     assert_eq!(request.tool_refs[0].connection, "default");
+    let run_as = request.tool_refs[0]
+        .run_as
+        .as_ref()
+        .expect("tool ref run_as");
+    assert_eq!(run_as.subject_id, "service_account:gestalt-support-github");
+    assert_eq!(run_as.display_name, "Gestalt Support GitHub");
+    let external_identity = request.tool_refs[0]
+        .run_as_external_identity
+        .as_ref()
+        .expect("tool ref run_as_external_identity");
+    assert_eq!(external_identity.r#type, "github_app_installation");
+    assert_eq!(external_identity.id, "repo:valon/toolshed");
     assert_eq!(
         support_protocol::json_from_struct(request.response_schema.as_ref().unwrap()),
         serde_json::json!({ "type": "object" })

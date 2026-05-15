@@ -366,7 +366,10 @@ impl AgentProvider for TestAgentProvider {
             supports_session_start: false,
             supports_prepared_workspace: false,
             bounded_list_hydration: true,
-            supported_tool_sources: vec![AgentToolSourceMode::McpCatalog, AgentToolSourceMode::None],
+            supported_tool_sources: vec![
+                AgentToolSourceMode::McpCatalog,
+                AgentToolSourceMode::None,
+            ],
         })
     }
 }

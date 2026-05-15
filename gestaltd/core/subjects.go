@@ -54,3 +54,13 @@ func RunAsSubjectsEqual(left, right *RunAsSubject) bool {
 		left.DisplayName == right.DisplayName &&
 		left.AuthSource == right.AuthSource
 }
+
+func RunAsSubjectsMatchIdentity(left, right *RunAsSubject) bool {
+	left = NormalizeRunAsSubject(left)
+	right = NormalizeRunAsSubject(right)
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.SubjectID == right.SubjectID &&
+		left.SubjectKind == right.SubjectKind
+}

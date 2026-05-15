@@ -2149,6 +2149,7 @@ type PluginWorkflowCapabilitiesConfig struct {
 type PluginInvocationRunAsConfig struct {
 	Subject          *PluginInvocationRunAsSubjectConfig     `yaml:"subject,omitempty"`
 	ExternalIdentity *PluginInvocationExternalIdentityConfig `yaml:"externalIdentity,omitempty"`
+	ApplyByDefault   *bool                                   `yaml:"applyByDefault,omitempty"`
 }
 
 type PluginInvocationRunAsSubjectConfig struct {
@@ -2180,6 +2181,13 @@ func (d PluginInvocationDependency) RunAsSubject() *core.RunAsSubject {
 		})
 	}
 	return nil
+}
+
+func (d PluginInvocationDependency) RunAsAppliesByDefault() bool {
+	if d.RunAs == nil || d.RunAs.ApplyByDefault == nil {
+		return true
+	}
+	return *d.RunAs.ApplyByDefault
 }
 
 func (d PluginInvocationDependency) RunAsExternalIdentity() *core.ExternalIdentityRef {

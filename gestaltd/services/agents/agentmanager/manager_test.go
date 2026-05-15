@@ -2684,8 +2684,11 @@ func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
 		},
 	}
 	runAs := &core.RunAsSubject{
-		SubjectID:   "service_account:github-toolshed",
-		SubjectKind: "service_account",
+		SubjectID:           "service_account:github-toolshed",
+		SubjectKind:         "service_account",
+		CredentialSubjectID: "service_account:github-toolshed-credential",
+		DisplayName:         "GitHub Toolshed",
+		AuthSource:          "github_app_webhook",
 	}
 	externalIdentity := &core.ExternalIdentityRef{
 		Type: "github_app_installation",
@@ -2710,6 +2713,12 @@ func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
 		ToolRefs: []coreagent.ToolRef{{
 			Plugin:    "github",
 			Operation: "bot.createPullRequest",
+			RunAs: &core.RunAsSubject{
+				SubjectID:   runAs.SubjectID,
+				DisplayName: "Spoofed display name",
+				AuthSource:  "spoofed_auth_source",
+			},
+			RunAsExternalIdentity: externalIdentity,
 		}},
 	})
 	if err != nil {
@@ -2721,8 +2730,247 @@ func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
 	if tools[0].Target.RunAs == nil || tools[0].Target.RunAs.SubjectID != runAs.SubjectID {
 		t.Fatalf("tool runAs = %#v, want %q", tools[0].Target.RunAs, runAs.SubjectID)
 	}
+	if tools[0].Target.RunAs.CredentialSubjectID != runAs.CredentialSubjectID {
+		t.Fatalf("tool runAs credential subject = %q, want %q", tools[0].Target.RunAs.CredentialSubjectID, runAs.CredentialSubjectID)
+	}
+	if tools[0].Target.RunAs.DisplayName != runAs.DisplayName || tools[0].Target.RunAs.AuthSource != runAs.AuthSource {
+		t.Fatalf("tool runAs metadata = %#v, want declared invoke metadata", tools[0].Target.RunAs)
+	}
 	if !core.ExternalIdentityRefsEqual(tools[0].Target.RunAsExternalIdentity, externalIdentity) {
 		t.Fatalf("tool runAs external identity = %#v, want %#v", tools[0].Target.RunAsExternalIdentity, externalIdentity)
+	}
+}
+
+func TestResolveToolsExplicitOnlyInvokeRunAsDoesNotApplyImplicitly(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "notion",
+			ConnMode: core.ConnectionModeUser,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:    "search",
+				Title: "Search",
+			}}},
+		},
+	}
+	runAs := &core.RunAsSubject{
+		SubjectID:           "service_account:gestalt-support-notion",
+		SubjectKind:         "service_account",
+		CredentialSubjectID: "service_account:gestalt-support-notion",
+		DisplayName:         "Gestalt Support Notion",
+	}
+	externalIdentity := &core.ExternalIdentityRef{
+		Type: "notion_workspace",
+		ID:   "valon-support",
+	}
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, provider),
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"slack": {{
+				Plugin:                "notion",
+				Operation:             "search",
+				RunAs:                 runAs,
+				RunAsExternalIdentity: externalIdentity,
+				RunAsExplicitOnly:     true,
+			}},
+		},
+	})
+
+	implicitTools, err := manager.ResolveTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.ResolveToolsRequest{
+		CallerPluginName: "slack",
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "notion",
+			Operation: "search",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ResolveTools implicit: %v", err)
+	}
+	if len(implicitTools) != 1 {
+		t.Fatalf("implicit ResolveTools returned %d tools, want 1", len(implicitTools))
+	}
+	if implicitTools[0].Target.RunAs != nil {
+		t.Fatalf("implicit tool runAs = %#v, want nil", implicitTools[0].Target.RunAs)
+	}
+	if implicitTools[0].Target.RunAsExternalIdentity != nil {
+		t.Fatalf("implicit tool runAs external identity = %#v, want nil", implicitTools[0].Target.RunAsExternalIdentity)
+	}
+
+	explicitTools, err := manager.ResolveTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.ResolveToolsRequest{
+		CallerPluginName: "slack",
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "notion",
+			Operation: "search",
+			RunAs: &core.RunAsSubject{
+				SubjectID: runAs.SubjectID,
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ResolveTools explicit: %v", err)
+	}
+	if len(explicitTools) != 1 {
+		t.Fatalf("explicit ResolveTools returned %d tools, want 1", len(explicitTools))
+	}
+	if !core.RunAsSubjectsEqual(explicitTools[0].Target.RunAs, runAs) {
+		t.Fatalf("explicit tool runAs = %#v, want %#v", explicitTools[0].Target.RunAs, runAs)
+	}
+	if !core.ExternalIdentityRefsEqual(explicitTools[0].Target.RunAsExternalIdentity, externalIdentity) {
+		t.Fatalf("explicit tool runAs external identity = %#v, want %#v", explicitTools[0].Target.RunAsExternalIdentity, externalIdentity)
+	}
+}
+
+func TestApplyCallerInvokePoliciesExplicitOnlyExternalIdentityRequestAppliesRunAs(t *testing.T) {
+	t.Parallel()
+
+	runAs := &core.RunAsSubject{
+		SubjectID:           "service_account:gestalt-support-notion",
+		SubjectKind:         "service_account",
+		CredentialSubjectID: "service_account:gestalt-support-notion",
+		DisplayName:         "Gestalt Support Notion",
+	}
+	externalIdentity := &core.ExternalIdentityRef{
+		Type: "notion_workspace",
+		ID:   "valon-support",
+	}
+	manager := newTestManager(t, Config{
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"slack": {{
+				Plugin:                "notion",
+				Operation:             "search",
+				RunAs:                 runAs,
+				RunAsExternalIdentity: externalIdentity,
+				RunAsExplicitOnly:     true,
+			}},
+		},
+	})
+
+	// Exercise the policy helper directly because normalizeToolRefs rejects this
+	// user-facing shape before policy application.
+	refs, err := manager.applyCallerInvokePolicies("slack", []coreagent.ToolRef{{
+		Plugin:                "notion",
+		Operation:             "search",
+		RunAsExternalIdentity: externalIdentity,
+	}})
+	if err != nil {
+		t.Fatalf("applyCallerInvokePolicies: %v", err)
+	}
+	if len(refs) != 1 {
+		t.Fatalf("applyCallerInvokePolicies returned %d refs, want 1", len(refs))
+	}
+	if !core.RunAsSubjectsEqual(refs[0].RunAs, runAs) {
+		t.Fatalf("tool ref runAs = %#v, want %#v", refs[0].RunAs, runAs)
+	}
+	if !core.ExternalIdentityRefsEqual(refs[0].RunAsExternalIdentity, externalIdentity) {
+		t.Fatalf("tool ref runAs external identity = %#v, want %#v", refs[0].RunAsExternalIdentity, externalIdentity)
+	}
+}
+
+func TestManagerCreateTurnAppliesExplicitInvokeRunAsToProviderAndRunGrant(t *testing.T) {
+	t.Parallel()
+
+	alpha := newRouteCountingAgentProvider("alpha")
+	grants := newAgentManagerTestRunGrants(t)
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "notion",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:    "search",
+				Title: "Search",
+			}}},
+		},
+	}
+	runAs := &core.RunAsSubject{
+		SubjectID:           "service_account:gestalt-support-notion",
+		SubjectKind:         "service_account",
+		CredentialSubjectID: "service_account:gestalt-support-notion-credential",
+		DisplayName:         "Gestalt Support Notion",
+		AuthSource:          "notion_service_account",
+	}
+	externalIdentity := &core.ExternalIdentityRef{
+		Type: "notion_workspace",
+		ID:   "valon-support",
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+			},
+		},
+		Providers: testutil.NewProviderRegistry(t, provider),
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"slack": {{
+				Plugin:                "notion",
+				Operation:             "search",
+				RunAs:                 runAs,
+				RunAsExternalIdentity: externalIdentity,
+			}},
+		},
+		RunGrants: grants,
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+
+	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
+		SessionID:        session.ID,
+		Model:            "test-model",
+		CallerPluginName: "slack",
+		ToolSource:       coreagent.ToolSourceModeMCPCatalog,
+		ToolRefsSet:      true,
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "notion",
+			Operation: "search",
+			RunAs: &core.RunAsSubject{
+				SubjectID: runAs.SubjectID,
+			},
+			RunAsExternalIdentity: externalIdentity,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if len(alpha.createTurnReqs) != 1 {
+		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
+	}
+	req := alpha.createTurnReqs[0]
+	if len(req.ToolRefs) != 1 {
+		t.Fatalf("CreateTurn tool refs = %d, want 1", len(req.ToolRefs))
+	}
+	if !core.RunAsSubjectsEqual(req.ToolRefs[0].RunAs, runAs) {
+		t.Fatalf("CreateTurn tool ref runAs = %#v, want %#v", req.ToolRefs[0].RunAs, runAs)
+	}
+	if !core.ExternalIdentityRefsEqual(req.ToolRefs[0].RunAsExternalIdentity, externalIdentity) {
+		t.Fatalf("CreateTurn tool ref runAs external identity = %#v, want %#v", req.ToolRefs[0].RunAsExternalIdentity, externalIdentity)
+	}
+	grant, err := grants.Resolve(req.RunGrant)
+	if err != nil {
+		t.Fatalf("Resolve run grant: %v", err)
+	}
+	if grant.CallerPluginName != "slack" {
+		t.Fatalf("run grant caller plugin = %q, want slack", grant.CallerPluginName)
+	}
+	if len(grant.ToolRefs) != 1 {
+		t.Fatalf("run grant tool refs = %d, want 1", len(grant.ToolRefs))
+	}
+	if !core.RunAsSubjectsEqual(grant.ToolRefs[0].RunAs, runAs) {
+		t.Fatalf("run grant tool ref runAs = %#v, want %#v", grant.ToolRefs[0].RunAs, runAs)
+	}
+	if !core.ExternalIdentityRefsEqual(grant.ToolRefs[0].RunAsExternalIdentity, externalIdentity) {
+		t.Fatalf("run grant tool ref runAs external identity = %#v, want %#v", grant.ToolRefs[0].RunAsExternalIdentity, externalIdentity)
 	}
 }
 
@@ -2885,6 +3133,58 @@ func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
 				t.Fatalf("ResolveTools error = %v, want ErrAuthorizationDenied", err)
 			}
 		})
+	}
+}
+
+func TestResolveToolsRejectsMismatchedRunAsExternalIdentity(t *testing.T) {
+	t.Parallel()
+
+	provider := &catalogCountingProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
+				ID:    "bot.createPullRequest",
+				Title: "Create pull request",
+			}}},
+		},
+	}
+	runAs := &core.RunAsSubject{
+		SubjectID:           "service_account:github-toolshed",
+		SubjectKind:         "service_account",
+		CredentialSubjectID: "service_account:github-toolshed",
+	}
+	manager := newTestManager(t, Config{
+		Providers: testutil.NewProviderRegistry(t, provider),
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"slack": {{
+				Plugin:    "github",
+				Operation: "bot.createPullRequest",
+				RunAs:     runAs,
+				RunAsExternalIdentity: &core.ExternalIdentityRef{
+					Type: "github_app_installation",
+					ID:   "repo:acme/widgets",
+				},
+			}},
+		},
+	})
+
+	_, err := manager.ResolveTools(context.Background(), &principal.Principal{
+		SubjectID: principal.UserSubjectID("user-1"),
+	}, coreagent.ResolveToolsRequest{
+		CallerPluginName: "slack",
+		ToolRefs: []coreagent.ToolRef{{
+			Plugin:    "github",
+			Operation: "bot.createPullRequest",
+			RunAs:     runAs,
+			RunAsExternalIdentity: &core.ExternalIdentityRef{
+				Type: "github_app_installation",
+				ID:   "repo:acme/other",
+			},
+		}},
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("ResolveTools error = %v, want ErrAuthorizationDenied", err)
 	}
 }
 
@@ -3291,7 +3591,7 @@ func agentToolSchemaPropertiesForTest(t *testing.T, schema map[string]any) map[s
 	return properties
 }
 
-func TestAgentToolTargetKeyIncludesFullRunAsSubject(t *testing.T) {
+func TestAgentToolTargetKeyIgnoresRunAsDisplayMetadata(t *testing.T) {
 	t.Parallel()
 
 	base := coreagent.ToolRef{
@@ -3321,12 +3621,20 @@ func TestAgentToolTargetKeyIncludesFullRunAsSubject(t *testing.T) {
 		Type: " github_app_installation ",
 		ID:   " repo:acme/widgets ",
 	}
-	differentMetadata := base
-	differentMetadata.RunAs = &core.RunAsSubject{
+	differentDisplayMetadata := base
+	differentDisplayMetadata.RunAs = &core.RunAsSubject{
 		SubjectID:           base.RunAs.SubjectID,
 		SubjectKind:         base.RunAs.SubjectKind,
 		CredentialSubjectID: base.RunAs.CredentialSubjectID,
 		DisplayName:         "Another display name",
+		AuthSource:          "another_auth_source",
+	}
+	differentCredentialSubject := base
+	differentCredentialSubject.RunAs = &core.RunAsSubject{
+		SubjectID:           base.RunAs.SubjectID,
+		SubjectKind:         base.RunAs.SubjectKind,
+		CredentialSubjectID: "service_account:github_app_installation:99:repo:acme/other",
+		DisplayName:         base.RunAs.DisplayName,
 		AuthSource:          base.RunAs.AuthSource,
 	}
 	differentExternalIdentity := base
@@ -3338,8 +3646,11 @@ func TestAgentToolTargetKeyIncludesFullRunAsSubject(t *testing.T) {
 	if agentToolTargetKeyFromRef(base) != agentToolTargetKeyFromRef(same) {
 		t.Fatal("agentToolTargetKeyFromRef should normalize equivalent runAs subjects and external identities")
 	}
-	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentMetadata) {
-		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs metadata")
+	if agentToolTargetKeyFromRef(base) != agentToolTargetKeyFromRef(differentDisplayMetadata) {
+		t.Fatal("agentToolTargetKeyFromRef should ignore runAs display/auth metadata")
+	}
+	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentCredentialSubject) {
+		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs credential subject")
 	}
 	if agentToolTargetKeyFromRef(base) == agentToolTargetKeyFromRef(differentExternalIdentity) {
 		t.Fatal("agentToolTargetKeyFromRef collapsed distinct runAs external identity")

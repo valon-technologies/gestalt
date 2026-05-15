@@ -215,6 +215,8 @@ class AgentToolRef(_message.Message):
     TITLE_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     SYSTEM_FIELD_NUMBER: _ClassVar[int]
+    RUN_AS_FIELD_NUMBER: _ClassVar[int]
+    RUN_AS_EXTERNAL_IDENTITY_FIELD_NUMBER: _ClassVar[int]
     plugin: str
     operation: str
     connection: str
@@ -222,7 +224,9 @@ class AgentToolRef(_message.Message):
     title: str
     description: str
     system: str
-    def __init__(self, plugin: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., system: _Optional[str] = ...) -> None: ...
+    run_as: AgentSubjectContext
+    run_as_external_identity: _plugin_pb2.ExternalIdentityContext
+    def __init__(self, plugin: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., system: _Optional[str] = ..., run_as: _Optional[_Union[AgentSubjectContext, _Mapping]] = ..., run_as_external_identity: _Optional[_Union[_plugin_pb2.ExternalIdentityContext, _Mapping]] = ...) -> None: ...
 
 class AgentProviderCapabilities(_message.Message):
     __slots__ = ()

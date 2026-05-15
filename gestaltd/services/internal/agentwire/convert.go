@@ -3,6 +3,7 @@ package agentwire
 import (
 	"fmt"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
@@ -75,6 +76,10 @@ func ToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 		Instance:    ref.GetInstance(),
 		Title:       ref.GetTitle(),
 		Description: ref.GetDescription(),
+		RunAs:       agentRunAsSubjectFromProto(ref.GetRunAs()),
+		RunAsExternalIdentity: externalIdentityRefFromProto(
+			ref.GetRunAsExternalIdentity(),
+		),
 	}
 }
 
@@ -87,6 +92,58 @@ func ToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 		Instance:    ref.Instance,
 		Title:       ref.Title,
 		Description: ref.Description,
+		RunAs:       agentRunAsSubjectToProto(ref.RunAs),
+		RunAsExternalIdentity: externalIdentityRefToProto(
+			ref.RunAsExternalIdentity,
+		),
+	}
+}
+
+func agentRunAsSubjectFromProto(subject *proto.AgentSubjectContext) *core.RunAsSubject {
+	if subject == nil {
+		return nil
+	}
+	return core.NormalizeRunAsSubject(&core.RunAsSubject{
+		SubjectID:           subject.GetSubjectId(),
+		SubjectKind:         subject.GetSubjectKind(),
+		CredentialSubjectID: subject.GetCredentialSubjectId(),
+		DisplayName:         subject.GetDisplayName(),
+		AuthSource:          subject.GetAuthSource(),
+	})
+}
+
+func agentRunAsSubjectToProto(subject *core.RunAsSubject) *proto.AgentSubjectContext {
+	normalized := core.NormalizeRunAsSubject(subject)
+	if normalized == nil {
+		return nil
+	}
+	return &proto.AgentSubjectContext{
+		SubjectId:           normalized.SubjectID,
+		SubjectKind:         normalized.SubjectKind,
+		CredentialSubjectId: normalized.CredentialSubjectID,
+		DisplayName:         normalized.DisplayName,
+		AuthSource:          normalized.AuthSource,
+	}
+}
+
+func externalIdentityRefFromProto(identity *proto.ExternalIdentityContext) *core.ExternalIdentityRef {
+	if identity == nil {
+		return nil
+	}
+	return core.NormalizeExternalIdentityRef(&core.ExternalIdentityRef{
+		Type: identity.GetType(),
+		ID:   identity.GetId(),
+	})
+}
+
+func externalIdentityRefToProto(identity *core.ExternalIdentityRef) *proto.ExternalIdentityContext {
+	normalized := core.NormalizeExternalIdentityRef(identity)
+	if normalized == nil {
+		return nil
+	}
+	return &proto.ExternalIdentityContext{
+		Type: normalized.Type,
+		Id:   normalized.ID,
 	}
 }
 
