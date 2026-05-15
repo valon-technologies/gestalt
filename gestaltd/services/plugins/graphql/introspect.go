@@ -12,6 +12,8 @@ import (
 const (
 	KindScalar      = "SCALAR"
 	KindObject      = "OBJECT"
+	KindInterface   = "INTERFACE"
+	KindUnion       = "UNION"
 	KindEnum        = "ENUM"
 	KindInputObject = "INPUT_OBJECT"
 	KindNonNull     = "NON_NULL"
@@ -30,12 +32,13 @@ type TypeName struct {
 }
 
 type FullType struct {
-	Kind        string       `json:"kind"`
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Fields      []Field      `json:"fields"`
-	InputFields []InputValue `json:"inputFields"`
-	EnumValues  []EnumValue  `json:"enumValues"`
+	Kind          string       `json:"kind"`
+	Name          string       `json:"name"`
+	Description   string       `json:"description"`
+	Fields        []Field      `json:"fields"`
+	InputFields   []InputValue `json:"inputFields"`
+	EnumValues    []EnumValue  `json:"enumValues"`
+	PossibleTypes []TypeName   `json:"possibleTypes"`
 }
 
 type Field struct {
@@ -85,7 +88,7 @@ const introspectionQuery = `query IntrospectionQuery {
       kind
       name
       description
-      fields(includeDeprecated: false) {
+      fields(includeDeprecated: true) {
         name
         description
         args {
@@ -105,6 +108,9 @@ const introspectionQuery = `query IntrospectionQuery {
       enumValues(includeDeprecated: false) {
         name
         description
+      }
+      possibleTypes {
+        name
       }
     }
   }

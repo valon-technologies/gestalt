@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
 	"github.com/valon-technologies/gestalt/server/services/plugins/graphql"
 )
@@ -84,10 +85,11 @@ func TestGraphQLSessionCatalogProviderLoadsCatalogOnDemand(t *testing.T) {
 	}
 
 	wrapped := wrapGraphQLSessionCatalogProvider(base, "linear", srv.URL, map[string]*config.OperationOverride{
-		"viewer": {Tags: []string{"profile"}},
-	}, map[string]string{
-		"viewer": "id",
-	})
+		"viewer": {
+			Tags:    []string{"profile"},
+			GraphQL: &providermanifestv1.ManifestGraphQLOperation{SelectionSet: "id"},
+		},
+	}, nil)
 	if got := len(wrapped.Catalog().Operations); got != 0 {
 		t.Fatalf("static catalog ops = %d, want 0", got)
 	}

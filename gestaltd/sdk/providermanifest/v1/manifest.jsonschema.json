@@ -1282,6 +1282,26 @@
         },
         "pagination": {
           "$ref": "#/$defs/paginationConfig"
+        },
+        "graphql": {
+          "$ref": "#/$defs/manifestGraphQLOperation"
+        }
+      }
+    },
+    "manifestGraphQLOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "operationType": {
+          "type": "string",
+          "enum": [
+            "query",
+            "mutation"
+          ]
+        },
+        "selectionSet": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

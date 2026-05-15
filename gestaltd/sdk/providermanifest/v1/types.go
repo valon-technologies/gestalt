@@ -402,6 +402,12 @@ type ManifestOperationOverride struct {
 	Tags         []string                  `json:"tags,omitempty" yaml:"tags,omitempty"`
 	Paginate     bool                      `json:"paginate,omitempty" yaml:"paginate,omitempty"`
 	Pagination   *ManifestPaginationConfig `json:"pagination,omitempty" yaml:"pagination,omitempty"`
+	GraphQL      *ManifestGraphQLOperation `json:"graphql,omitempty" yaml:"graphql,omitempty"`
+}
+
+type ManifestGraphQLOperation struct {
+	OperationType string `json:"operationType,omitempty" yaml:"operationType,omitempty"`
+	SelectionSet  string `json:"selectionSet,omitempty" yaml:"selectionSet,omitempty"`
 }
 
 type ManifestConnectionDef struct {
