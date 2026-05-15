@@ -668,15 +668,15 @@ func mcpAllowedOperationsForSpecComposite(allowedOperations map[string]*config.O
 	if !hasAPI {
 		return allowedOperations, true
 	}
+	mcpAllowed := dynamicMCPAllowedOperations(allowedOperations, apiCatalog)
 	if mcpCatalog != nil && len(mcpCatalog.Operations) > 0 {
-		matched := operationexposure.MatchingAllowedOperations(allowedOperations, mcpCatalog)
+		matched := operationexposure.MatchingAllowedOperations(mcpAllowed, mcpCatalog)
 		return matched, len(matched) > 0
 	}
-	filtered := dynamicMCPAllowedOperations(allowedOperations, apiCatalog)
-	if len(filtered) == 0 {
+	if len(mcpAllowed) == 0 {
 		return nil, false
 	}
-	return filtered, true
+	return mcpAllowed, true
 }
 
 func dynamicMCPAllowedOperations(allowedOperations map[string]*config.OperationOverride, apiCatalog *catalog.Catalog) map[string]*config.OperationOverride {

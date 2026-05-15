@@ -468,6 +468,34 @@ func TestLoadDefinitionWithAllowedOpsAllowsScalarWithoutSelection(t *testing.T) 
 	}
 }
 
+func TestLoadDefinitionWithAllowedOpsIgnoresMixedSurfaceEntriesWithoutSelectionOverrides(t *testing.T) {
+	t.Parallel()
+
+	srv := startIntrospectionServer(t, Schema{
+		QueryType: &TypeName{Name: "Query"},
+		Types: []FullType{
+			{Kind: KindObject, Name: "Query", Fields: []Field{
+				{Name: "version", Type: TypeRef{Kind: KindScalar, Name: strPtr("String")}},
+			}},
+		},
+	})
+	defer srv.Close()
+
+	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*operationexposure.OperationOverride{
+		"version":   nil,
+		"get_issue": nil,
+	}, nil)
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+	if len(def.Operations) != 1 {
+		t.Fatalf("Operations: got %d, want 1", len(def.Operations))
+	}
+	if got := def.Operations["version"].Query; got != "query { version }" {
+		t.Fatalf("version query = %q, want scalar query without selection", got)
+	}
+}
+
 func TestLoadDefinitionWithAllowedOpsValidatesSelectionSet(t *testing.T) {
 	t.Parallel()
 

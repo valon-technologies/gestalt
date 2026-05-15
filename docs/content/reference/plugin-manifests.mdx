@@ -425,10 +425,10 @@ selection set. GraphQL manifests that use per-operation `graphql` blocks must
 not also use legacy
 `spec.surfaces.graphql.operationSelections`. For older `gestaltd` compatibility,
 manifests may instead keep selection bodies in `operationSelections` and use
-`allowedOperations` only as the provider-wide exposure allowlist. In that legacy
-mode, GraphQL catalog generation applies only allowlisted schema root fields and
-selection override names so OpenAPI or MCP-only entries can remain in the same
-provider-wide allowlist.
+`allowedOperations` only as the provider-wide exposure allowlist. In the bare
+provider-wide mode, GraphQL catalog generation applies only allowlisted schema
+root fields and selection override names so OpenAPI or MCP-only entries can
+remain in the same allowlist.
 If an upstream schema defines the same root field name on both query and mutation
 roots, set `graphql.operationType` to bind the allowlisted operation to one root.
 For providers that combine GraphQL with another surface, mark each GraphQL entry

@@ -75,10 +75,7 @@ func graphQLAllowedOperations(schema *Schema, allowedOps map[string]*operationex
 	}
 
 	if !hasGraphQLAllowedOperationConfig(allowedOps) {
-		if len(selectionOverrides) > 0 {
-			return legacyGraphQLAllowedOperations(schema, allowedOps, selectionOverrides)
-		}
-		return allowedOps
+		return legacyGraphQLAllowedOperations(schema, allowedOps, selectionOverrides)
 	}
 
 	filtered := make(map[string]*operationexposure.OperationOverride)
