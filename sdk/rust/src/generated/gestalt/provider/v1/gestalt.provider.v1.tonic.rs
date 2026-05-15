@@ -1035,7 +1035,11 @@ pub mod agent_provider_client {
     )]
     use tonic::codegen::http::Uri;
     use tonic::codegen::*;
-    ///
+    /** AgentProvider is the authoritative agent data boundary. Read RPCs for
+     sessions, turns, turn events, and interactions should use provider-owned
+     control-plane state and should not require a live execution sandbox,
+     pod-level transport, or cached tunnel.
+    */
     #[derive(Debug, Clone)]
     pub struct AgentProviderClient<T> {
         inner: tonic::client::Grpc<T>,
@@ -1467,7 +1471,11 @@ pub mod agent_provider_server {
             request: tonic::Request<super::GetAgentProviderCapabilitiesRequest>,
         ) -> std::result::Result<tonic::Response<super::AgentProviderCapabilities>, tonic::Status>;
     }
-    ///
+    /** AgentProvider is the authoritative agent data boundary. Read RPCs for
+     sessions, turns, turn events, and interactions should use provider-owned
+     control-plane state and should not require a live execution sandbox,
+     pod-level transport, or cached tunnel.
+    */
     #[derive(Debug)]
     pub struct AgentProviderServer<T> {
         inner: Arc<T>,

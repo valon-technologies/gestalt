@@ -1472,6 +1472,11 @@ func (s *Server) writeAgentProviderError(ctx context.Context, w http.ResponseWri
 		writeError(w, http.StatusNotFound, fmt.Sprintf("%s %q not found", resource, id))
 	case grpcstatus.Code(err) == codes.InvalidArgument:
 		writeError(w, http.StatusBadRequest, grpcstatus.Convert(err).Message())
+	case grpcstatus.Code(err) == codes.Unavailable ||
+		grpcstatus.Code(err) == codes.DeadlineExceeded ||
+		errors.Is(err, context.DeadlineExceeded):
+		slog.WarnContext(ctx, "agent provider unavailable", "resource", resource, "id", id, "error", err)
+		writeError(w, http.StatusServiceUnavailable, "agent provider unavailable")
 	default:
 		slog.ErrorContext(ctx, "agent provider error", "resource", resource, "id", id, "error", err)
 		writeError(w, http.StatusInternalServerError, "agent request failed")

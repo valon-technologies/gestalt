@@ -37,6 +37,11 @@ const (
 // AgentProviderClient is the client API for AgentProvider service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// AgentProvider is the authoritative agent data boundary. Read RPCs for
+// sessions, turns, turn events, and interactions should use provider-owned
+// control-plane state and should not require a live execution sandbox,
+// pod-level transport, or cached tunnel.
 type AgentProviderClient interface {
 	CreateSession(ctx context.Context, in *CreateAgentProviderSessionRequest, opts ...grpc.CallOption) (*AgentSession, error)
 	GetSession(ctx context.Context, in *GetAgentProviderSessionRequest, opts ...grpc.CallOption) (*AgentSession, error)
@@ -194,6 +199,11 @@ func (c *agentProviderClient) GetCapabilities(ctx context.Context, in *GetAgentP
 // AgentProviderServer is the server API for AgentProvider service.
 // All implementations must embed UnimplementedAgentProviderServer
 // for forward compatibility.
+//
+// AgentProvider is the authoritative agent data boundary. Read RPCs for
+// sessions, turns, turn events, and interactions should use provider-owned
+// control-plane state and should not require a live execution sandbox,
+// pod-level transport, or cached tunnel.
 type AgentProviderServer interface {
 	CreateSession(context.Context, *CreateAgentProviderSessionRequest) (*AgentSession, error)
 	GetSession(context.Context, *GetAgentProviderSessionRequest) (*AgentSession, error)
