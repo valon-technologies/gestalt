@@ -10,7 +10,10 @@ import (
 // AgentProvider is implemented by providers that serve the agent base
 // primitive. The SDK owns the gRPC/protobuf transport adapter; provider code
 // implements this typed interface instead of importing generated protobuf
-// service bindings.
+// service bindings. Read methods for sessions, turns, turn events, and
+// interactions must be served from provider-owned control-plane state. They
+// must not require a live execution sandbox, pod IP, cached tunnel, or other
+// transport attachment.
 type AgentProvider interface {
 	Provider
 	// CreateSession creates or idempotently returns an agent session.

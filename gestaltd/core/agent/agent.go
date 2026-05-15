@@ -575,6 +575,13 @@ type ManagerCancelTurnRequest struct {
 	Reason string
 }
 
+// Provider is the authoritative agent data boundary. Read methods for
+// sessions, turns, turn events, and interactions must be served from
+// provider-owned control-plane state and must not require a live execution
+// sandbox, pod IP, cached tunnel, or other transport attachment. Execution
+// methods may require runtime transport and should return an unavailable error
+// when the provider has durable state but cannot attach to the execution
+// runtime.
 type Provider interface {
 	CreateSession(ctx context.Context, req CreateSessionRequest) (*Session, error)
 	GetSession(ctx context.Context, req GetSessionRequest) (*Session, error)

@@ -151,6 +151,10 @@ type routeCountingAgentProvider struct {
 	listTurnReqs      []coreagent.ListTurnsRequest
 	turnIDOverride    string
 	cancelStatus      coreagent.ExecutionStatus
+	getSessionErr     error
+	listSessionsErr   error
+	getTurnErr        error
+	listTurnsErr      error
 	getSessionCalls   int
 	getTurnCalls      int
 }
@@ -272,6 +276,9 @@ func (p *routeCountingAgentProvider) SupportsWorkspaceRequests() bool {
 
 func (p *routeCountingAgentProvider) GetSession(_ context.Context, req coreagent.GetSessionRequest) (*coreagent.Session, error) {
 	p.getSessionCalls++
+	if p.getSessionErr != nil {
+		return nil, p.getSessionErr
+	}
 	session := p.sessions[strings.TrimSpace(req.SessionID)]
 	if session == nil {
 		return nil, core.ErrNotFound
@@ -281,6 +288,9 @@ func (p *routeCountingAgentProvider) GetSession(_ context.Context, req coreagent
 
 func (p *routeCountingAgentProvider) ListSessions(_ context.Context, req coreagent.ListSessionsRequest) ([]*coreagent.Session, error) {
 	p.listSessionReqs = append(p.listSessionReqs, req)
+	if p.listSessionsErr != nil {
+		return nil, p.listSessionsErr
+	}
 	var sessions []*coreagent.Session
 	requested := map[string]struct{}{}
 	for _, id := range req.SessionIDs {
@@ -348,6 +358,9 @@ func (p *routeCountingAgentProvider) CreateTurn(_ context.Context, req coreagent
 
 func (p *routeCountingAgentProvider) GetTurn(_ context.Context, req coreagent.GetTurnRequest) (*coreagent.Turn, error) {
 	p.getTurnCalls++
+	if p.getTurnErr != nil {
+		return nil, p.getTurnErr
+	}
 	turn := p.turns[strings.TrimSpace(req.TurnID)]
 	if turn == nil {
 		return nil, core.ErrNotFound
@@ -357,6 +370,9 @@ func (p *routeCountingAgentProvider) GetTurn(_ context.Context, req coreagent.Ge
 
 func (p *routeCountingAgentProvider) ListTurns(_ context.Context, req coreagent.ListTurnsRequest) ([]*coreagent.Turn, error) {
 	p.listTurnReqs = append(p.listTurnReqs, req)
+	if p.listTurnsErr != nil {
+		return nil, p.listTurnsErr
+	}
 	var turns []*coreagent.Turn
 	requested := map[string]struct{}{}
 	for _, id := range req.TurnIDs {
@@ -890,6 +906,130 @@ func TestManagerUsesDurableProviderRoutesAcrossManagers(t *testing.T) {
 	}
 }
 
+func TestManagerGetSessionContinuesAfterHintedProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	routeStore := newTestRouteStore(t, db)
+	alpha := newRouteCountingAgentProvider("alpha")
+	beta := newRouteCountingAgentProvider("beta")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"beta", "alpha"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+			"beta":  beta,
+		},
+	}
+	manager := newTestManager(t, Config{Agent: control, RouteStore: routeStore})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	session := &coreagent.Session{
+		ID:           "session-1",
+		ProviderName: "alpha",
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")},
+	}
+	alpha.sessions[session.ID] = session
+	beta.getSessionErr = status.Error(codes.Unavailable, "provider restarting")
+	if err := routeStore.RememberSession(ctx, session.ID, "beta"); err != nil {
+		t.Fatalf("RememberSession: %v", err)
+	}
+
+	got, err := manager.GetSession(ctx, p, session.ID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if got.ProviderName != "alpha" || got.ID != session.ID {
+		t.Fatalf("GetSession = %+v, want alpha session", got)
+	}
+	if beta.getSessionCalls != 1 || alpha.getSessionCalls != 1 {
+		t.Fatalf("GetSession calls = beta:%d alpha:%d, want 1 each", beta.getSessionCalls, alpha.getSessionCalls)
+	}
+}
+
+func TestManagerGetSessionReturnsRetainedProviderErrorAfterFanoutMiss(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	routeStore := newTestRouteStore(t, db)
+	alpha := newRouteCountingAgentProvider("alpha")
+	beta := newRouteCountingAgentProvider("beta")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"beta", "alpha"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+			"beta":  beta,
+		},
+	}
+	manager := newTestManager(t, Config{Agent: control, RouteStore: routeStore})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	beta.getSessionErr = status.Error(codes.Unavailable, "provider restarting")
+	if err := routeStore.RememberSession(ctx, "session-1", "beta"); err != nil {
+		t.Fatalf("RememberSession: %v", err)
+	}
+
+	_, err := manager.GetSession(ctx, p, "session-1")
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("GetSession error = %v, want retained unavailable", err)
+	}
+	if beta.getSessionCalls != 1 || alpha.getSessionCalls != 1 {
+		t.Fatalf("GetSession calls = beta:%d alpha:%d, want 1 each", beta.getSessionCalls, alpha.getSessionCalls)
+	}
+}
+
+func TestManagerGetTurnContinuesAfterHintedProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	routeStore := newTestRouteStore(t, db)
+	alpha := newRouteCountingAgentProvider("alpha")
+	beta := newRouteCountingAgentProvider("beta")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"beta", "alpha"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+			"beta":  beta,
+		},
+	}
+	manager := newTestManager(t, Config{Agent: control, RouteStore: routeStore})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	session := &coreagent.Session{
+		ID:           "session-1",
+		ProviderName: "alpha",
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")},
+	}
+	turn := &coreagent.Turn{
+		ID:           "turn-1",
+		SessionID:    session.ID,
+		ProviderName: "alpha",
+		Status:       coreagent.ExecutionStatusSucceeded,
+		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("user-1")},
+	}
+	alpha.sessions[session.ID] = session
+	alpha.turns[turn.ID] = turn
+	beta.getTurnErr = status.Error(codes.Unavailable, "provider restarting")
+	if err := routeStore.RememberTurn(ctx, turn.ID, session.ID, "beta"); err != nil {
+		t.Fatalf("RememberTurn: %v", err)
+	}
+
+	got, err := manager.GetTurn(ctx, p, turn.ID)
+	if err != nil {
+		t.Fatalf("GetTurn: %v", err)
+	}
+	if got.ProviderName != "alpha" || got.ID != turn.ID {
+		t.Fatalf("GetTurn = %+v, want alpha turn", got)
+	}
+	if beta.getTurnCalls != 1 || alpha.getTurnCalls != 1 {
+		t.Fatalf("GetTurn calls = beta:%d alpha:%d, want 1 each", beta.getTurnCalls, alpha.getTurnCalls)
+	}
+}
+
 func TestManagerWrongPrincipalDoesNotDeleteDurableSessionRoute(t *testing.T) {
 	t.Parallel()
 
@@ -929,6 +1069,101 @@ func TestManagerWrongPrincipalDoesNotDeleteDurableSessionRoute(t *testing.T) {
 	}
 	if _, err := managerC.GetSession(ctx, owner, session.ID); err != nil {
 		t.Fatalf("GetSession(owner after wrong principal): %v", err)
+	}
+}
+
+func TestManagerWrongPrincipalDoesNotDeleteDurableTurnRoute(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	routeStore := newTestRouteStore(t, db)
+	alpha := newRouteCountingAgentProvider("alpha")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"alpha"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+		},
+	}
+	managerA := newTestManager(t, Config{Agent: control, RouteStore: routeStore})
+	managerB := newTestManager(t, Config{Agent: control, RouteStore: newTestRouteStore(t, db)})
+	managerC := newTestManager(t, Config{Agent: control, RouteStore: newTestRouteStore(t, db)})
+	owner := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	other := &principal.Principal{SubjectID: principal.UserSubjectID("user-2")}
+
+	session, err := managerA.CreateSession(ctx, owner, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	turn, err := managerA.CreateTurn(ctx, owner, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	if _, err := managerB.GetTurn(ctx, other, turn.ID); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetTurn(wrong principal) error = %v, want not found", err)
+	}
+	route, ok, err := routeStore.LookupTurn(ctx, turn.ID)
+	if err != nil {
+		t.Fatalf("LookupTurn: %v", err)
+	}
+	if !ok || route.ProviderName != "alpha" || route.SessionID != session.ID {
+		t.Fatalf("LookupTurn route = %+v, %t, want alpha session route", route, ok)
+	}
+	if _, err := managerC.GetTurn(ctx, owner, turn.ID); err != nil {
+		t.Fatalf("GetTurn(owner after wrong principal): %v", err)
+	}
+}
+
+func TestManagerWrongPrincipalDoesNotDeleteOwnedSessionRoute(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	routeStore := newTestRouteStore(t, db)
+	alpha := newRouteCountingAgentProvider("alpha")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"alpha"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+		},
+	}
+	managerA := newTestManager(t, Config{Agent: control, RouteStore: routeStore})
+	managerB := newTestManager(t, Config{Agent: control, RouteStore: newTestRouteStore(t, db)})
+	managerC := newTestManager(t, Config{Agent: control, RouteStore: newTestRouteStore(t, db)})
+	owner := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	other := &principal.Principal{SubjectID: principal.UserSubjectID("user-2")}
+
+	session, err := managerA.CreateSession(ctx, owner, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := managerB.UpdateSession(ctx, other, coreagent.ManagerUpdateSessionRequest{
+		SessionID: session.ID,
+		ClientRef: "wrong-user",
+	}); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("UpdateSession(wrong principal) error = %v, want not found", err)
+	}
+	route, ok, err := routeStore.LookupSession(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("LookupSession: %v", err)
+	}
+	if !ok || route.ProviderName != "alpha" {
+		t.Fatalf("LookupSession route = %+v, %t, want alpha", route, ok)
+	}
+	if _, err := managerC.GetSession(ctx, owner, session.ID); err != nil {
+		t.Fatalf("GetSession(owner after wrong principal update): %v", err)
 	}
 }
 
@@ -1206,6 +1441,80 @@ func TestManagerListSessionsRequiresBoundedHydrationForLimitedLists(t *testing.T
 	}
 }
 
+func TestManagerListSessionsReturnsCapabilityErrorWhenCapabilityReadUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	provider := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+		RouteStore: newTestRouteStore(t, db),
+		RunGrants:  newAgentManagerTestRunGrants(t),
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	if _, err := manager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	provider.capabilitiesErr = status.Error(codes.Unavailable, "sandbox is redeploying")
+
+	_, err := manager.ListSessions(ctx, p, coreagent.ManagerListSessionsRequest{
+		ProviderName: "alpha",
+		SummaryOnly:  true,
+		Limit:        10,
+	})
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("ListSessions error = %v, want unavailable capability error", err)
+	}
+	if len(provider.listSessionReqs) != 0 {
+		t.Fatalf("provider ListSessions calls = %d, want 0 after capability error", len(provider.listSessionReqs))
+	}
+}
+
+func TestManagerListSessionsReturnsProviderErrorWithoutPartialResults(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	alpha := newRouteCountingAgentProvider("alpha")
+	beta := newRouteCountingAgentProvider("beta")
+	control := &routeCountingAgentControl{
+		defaultName: "alpha",
+		names:       []string{"alpha", "beta"},
+		providers: map[string]*routeCountingAgentProvider{
+			"alpha": alpha,
+			"beta":  beta,
+		},
+	}
+	manager := newTestManager(t, Config{
+		Agent:      control,
+		RouteStore: newTestRouteStore(t, db),
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	if _, err := manager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	beta.listSessionsErr = status.Error(codes.Unavailable, "sandbox is redeploying")
+
+	_, err := manager.ListSessions(ctx, p, coreagent.ManagerListSessionsRequest{
+		SummaryOnly: true,
+		Limit:       10,
+	})
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("ListSessions error = %v, want unavailable from provider without projection", err)
+	}
+}
+
 func TestManagerListSharedSessionsUsesEffectiveSearchResources(t *testing.T) {
 	t.Parallel()
 
@@ -1244,6 +1553,135 @@ func TestManagerListSharedSessionsUsesEffectiveSearchResources(t *testing.T) {
 	}
 	if authz.searchResourceCalls != 0 {
 		t.Fatalf("SearchResources calls = %d, want 0", authz.searchResourceCalls)
+	}
+}
+
+func TestManagerListSharedSessionsReturnsSearchError(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	authz := &sharedSessionAuthorizationProvider{
+		effectiveErr: status.Error(codes.Unavailable, "authorization search unavailable"),
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+		AuthorizationProvider: authz,
+	})
+
+	_, err := manager.ListSessions(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("viewer")}, coreagent.ManagerListSessionsRequest{
+		SummaryOnly: true,
+		Limit:       10,
+	})
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("ListSessions error = %v, want unavailable search error", err)
+	}
+	if authz.searchResourceCalls != 0 {
+		t.Fatalf("SearchResources calls = %d, want no fallback after transient effective search error", authz.searchResourceCalls)
+	}
+}
+
+func TestManagerListSharedSessionsReturnsProviderErrorWhenProviderUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	provider := newRouteCountingAgentProvider("alpha")
+	authz := &sharedSessionAuthorizationProvider{
+		allowedSessions: map[string]struct{}{},
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+		RouteStore:            newTestRouteStore(t, db),
+		AuthorizationProvider: authz,
+		RunGrants:             newAgentManagerTestRunGrants(t),
+	})
+	owner := &principal.Principal{SubjectID: principal.UserSubjectID("owner")}
+	viewer := &principal.Principal{SubjectID: principal.UserSubjectID("viewer")}
+
+	session, err := manager.CreateSession(ctx, owner, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	authz.effectiveResources = []*core.ResourceRef{{Type: authorization.ProviderResourceTypeAgentSession, Id: session.ID}}
+	authz.allowedSessions[session.ID] = struct{}{}
+	unavailable := status.Error(codes.Unavailable, "sandbox is redeploying")
+	provider.getSessionErr = unavailable
+
+	_, err = manager.ListSessions(ctx, viewer, coreagent.ManagerListSessionsRequest{
+		SummaryOnly: true,
+		Limit:       10,
+	})
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("ListSessions error = %v, want unavailable shared hydration error", err)
+	}
+	if provider.getSessionCalls != 1 {
+		t.Fatalf("GetSession calls = %d, want one failed shared hydration", provider.getSessionCalls)
+	}
+}
+
+func TestManagerListSharedSessionsHonorsProviderFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	alpha := newRouteCountingAgentProvider("alpha")
+	beta := newRouteCountingAgentProvider("beta")
+	authz := &sharedSessionAuthorizationProvider{
+		allowedSessions: map[string]struct{}{},
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha", "beta"},
+			providers: map[string]*routeCountingAgentProvider{
+				"alpha": alpha,
+				"beta":  beta,
+			},
+		},
+		RouteStore:            newTestRouteStore(t, db),
+		AuthorizationProvider: authz,
+		RunGrants:             newAgentManagerTestRunGrants(t),
+	})
+	owner := &principal.Principal{SubjectID: principal.UserSubjectID("owner")}
+	viewer := &principal.Principal{SubjectID: principal.UserSubjectID("viewer")}
+
+	session, err := manager.CreateSession(ctx, owner, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	authz.effectiveResources = []*core.ResourceRef{{Type: authorization.ProviderResourceTypeAgentSession, Id: session.ID}}
+	authz.allowedSessions[session.ID] = struct{}{}
+
+	sessions, err := manager.ListSessions(ctx, viewer, coreagent.ManagerListSessionsRequest{
+		ProviderName: "beta",
+		SummaryOnly:  true,
+		Limit:        10,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("ListSessions shared sessions = %#v, want none for beta filter", sessions)
+	}
+	if beta.getSessionCalls != 1 {
+		t.Fatalf("beta GetSession calls = %d, want one failed shared hydration", beta.getSessionCalls)
+	}
+	if alpha.getSessionCalls != 0 {
+		t.Fatalf("alpha GetSession calls = %d, want 0 for beta filter", alpha.getSessionCalls)
 	}
 }
 
@@ -1324,6 +1762,51 @@ func TestManagerListTurnsRequiresBoundedHydrationForSummaryLists(t *testing.T) {
 	}
 	if len(provider.listTurnReqs) != 0 {
 		t.Fatalf("provider ListTurns calls = %d, want 0", len(provider.listTurnReqs))
+	}
+}
+
+func TestManagerListTurnsReturnsCapabilityErrorWhenCapabilityReadUnavailable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	provider := newRouteCountingAgentProvider("alpha")
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+		RouteStore: newTestRouteStore(t, db),
+		RunGrants:  newAgentManagerTestRunGrants(t),
+	})
+	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
+	session, err := manager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+		ProviderName: "alpha",
+		Model:        "test-model",
+	})
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := manager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		SessionID: session.ID,
+		Model:     "test-model",
+		Messages:  []coreagent.Message{{Role: "user", Text: "hello"}},
+	}); err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+	provider.capabilitiesErr = status.Error(codes.Unavailable, "sandbox is redeploying")
+
+	_, err = manager.ListTurns(ctx, p, coreagent.ManagerListTurnsRequest{
+		SessionID:   session.ID,
+		SummaryOnly: true,
+		Limit:       10,
+	})
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("ListTurns error = %v, want unavailable capability error", err)
+	}
+	if len(provider.listTurnReqs) != 0 {
+		t.Fatalf("provider ListTurns calls = %d, want 0 after capability error", len(provider.listTurnReqs))
 	}
 }
 

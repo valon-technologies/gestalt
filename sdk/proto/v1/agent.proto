@@ -567,6 +567,10 @@ message AgentManagerResolveInteractionRequest {
   string invocation_token = 5;
 }
 
+// AgentProvider is the authoritative agent data boundary. Read RPCs for
+// sessions, turns, turn events, and interactions should use provider-owned
+// control-plane state and should not require a live execution sandbox,
+// pod-level transport, or cached tunnel.
 service AgentProvider {
   rpc CreateSession(CreateAgentProviderSessionRequest) returns (AgentSession);
   rpc GetSession(GetAgentProviderSessionRequest) returns (AgentSession);
