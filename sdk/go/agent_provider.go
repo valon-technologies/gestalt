@@ -152,14 +152,6 @@ type AgentSubjectContext struct {
 	AuthSource          string
 }
 
-type AgentRunAsSubject struct {
-	SubjectID           string
-	SubjectKind         string
-	CredentialSubjectID string
-	DisplayName         string
-	AuthSource          string
-}
-
 type AgentPreparedWorkspace struct {
 	Root string
 	Cwd  string
@@ -180,7 +172,7 @@ type AgentToolRef struct {
 	Title                 string
 	Description           string
 	System                string
-	RunAs                 *AgentRunAsSubject
+	RunAs                 *AgentSubjectContext
 	RunAsExternalIdentity *ExternalIdentity
 }
 

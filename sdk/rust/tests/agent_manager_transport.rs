@@ -29,8 +29,8 @@ use gestalt::{
     AgentManagerCreateTurn, AgentManagerGetSession, AgentManagerGetTurn,
     AgentManagerListInteractions, AgentManagerListSessions, AgentManagerListTurnEvents,
     AgentManagerListTurns, AgentManagerResolveInteraction, AgentManagerUpdateSession, AgentMessage,
-    AgentMessagePart, AgentMessagePartType as NativeAgentMessagePartType, AgentRunAsSubject,
-    AgentSessionState, AgentToolRef, AgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET,
+    AgentMessagePart, AgentMessagePartType as NativeAgentMessagePartType, AgentSessionState,
+    AgentSubjectContext, AgentToolRef, AgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET,
     ExternalIdentity, Request,
 };
 use tokio::net::{TcpListener, UnixListener};
@@ -699,7 +699,7 @@ async fn agent_manager_create_turn_accepts_native_values() {
                 plugin: "github".to_string(),
                 operation: "issues.get".to_string(),
                 connection: "default".to_string(),
-                run_as: Some(AgentRunAsSubject {
+                run_as: Some(AgentSubjectContext {
                     subject_id: "service_account:gestalt-support-github".to_string(),
                     subject_kind: "service_account".to_string(),
                     credential_subject_id: "service_account:github-credential".to_string(),

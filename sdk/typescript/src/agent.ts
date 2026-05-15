@@ -205,14 +205,6 @@ export interface AgentSubjectContext {
   authSource?: string | undefined;
 }
 
-export interface AgentRunAsSubject {
-  subjectId?: string | undefined;
-  subjectKind?: string | undefined;
-  credentialSubjectId?: string | undefined;
-  displayName?: string | undefined;
-  authSource?: string | undefined;
-}
-
 export interface AgentToolRef {
   plugin?: string | undefined;
   operation?: string | undefined;
@@ -221,7 +213,7 @@ export interface AgentToolRef {
   title?: string | undefined;
   description?: string | undefined;
   system?: string | undefined;
-  runAs?: AgentRunAsSubject | undefined;
+  runAs?: AgentSubjectContext | undefined;
   runAsExternalIdentity?: ExternalIdentity | undefined;
 }
 

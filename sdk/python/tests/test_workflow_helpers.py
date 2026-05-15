@@ -95,7 +95,7 @@ class WorkflowHelperTests(unittest.TestCase):
                 gestalt.AgentToolRef(
                     plugin="notion",
                     operation="search",
-                    run_as=gestalt.AgentRunAsSubject(
+                    run_as=gestalt.AgentSubjectContext(
                         subject_id="service_account:gestalt-support-notion",
                         subject_kind="service_account",
                         credential_subject_id="service_account:notion-credential",

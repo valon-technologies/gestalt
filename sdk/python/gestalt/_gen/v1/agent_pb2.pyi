@@ -168,20 +168,6 @@ class AgentSubjectContext(_message.Message):
     auth_source: str
     def __init__(self, subject_id: _Optional[str] = ..., subject_kind: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ...) -> None: ...
 
-class AgentRunAsSubject(_message.Message):
-    __slots__ = ()
-    SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    SUBJECT_KIND_FIELD_NUMBER: _ClassVar[int]
-    CREDENTIAL_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
-    AUTH_SOURCE_FIELD_NUMBER: _ClassVar[int]
-    subject_id: str
-    subject_kind: str
-    credential_subject_id: str
-    display_name: str
-    auth_source: str
-    def __init__(self, subject_id: _Optional[str] = ..., subject_kind: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ...) -> None: ...
-
 class AgentWorkspace(_message.Message):
     __slots__ = ()
     CHECKOUTS_FIELD_NUMBER: _ClassVar[int]
@@ -238,9 +224,9 @@ class AgentToolRef(_message.Message):
     title: str
     description: str
     system: str
-    run_as: AgentRunAsSubject
+    run_as: AgentSubjectContext
     run_as_external_identity: _plugin_pb2.ExternalIdentityContext
-    def __init__(self, plugin: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., system: _Optional[str] = ..., run_as: _Optional[_Union[AgentRunAsSubject, _Mapping]] = ..., run_as_external_identity: _Optional[_Union[_plugin_pb2.ExternalIdentityContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, plugin: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., system: _Optional[str] = ..., run_as: _Optional[_Union[AgentSubjectContext, _Mapping]] = ..., run_as_external_identity: _Optional[_Union[_plugin_pb2.ExternalIdentityContext, _Mapping]] = ...) -> None: ...
 
 class AgentProviderCapabilities(_message.Message):
     __slots__ = ()

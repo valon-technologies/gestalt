@@ -423,7 +423,6 @@ export {
   type AgentPreparedWorkspace,
   type AgentProviderCapabilities,
   type AgentProviderOptions,
-  type AgentRunAsSubject,
   type AgentSession,
   type AgentSessionStartConfig,
   type AgentSessionStartHook,

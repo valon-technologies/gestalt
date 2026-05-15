@@ -340,11 +340,11 @@ func agentToolRefToProto(value AgentToolRef) *proto.AgentToolRef {
 	}
 }
 
-func agentRunAsSubjectFromProto(value *proto.AgentRunAsSubject) *AgentRunAsSubject {
+func agentRunAsSubjectFromProto(value *proto.AgentSubjectContext) *AgentSubjectContext {
 	if value == nil {
 		return nil
 	}
-	return &AgentRunAsSubject{
+	return &AgentSubjectContext{
 		SubjectID:           value.GetSubjectId(),
 		SubjectKind:         value.GetSubjectKind(),
 		CredentialSubjectID: value.GetCredentialSubjectId(),
@@ -353,11 +353,11 @@ func agentRunAsSubjectFromProto(value *proto.AgentRunAsSubject) *AgentRunAsSubje
 	}
 }
 
-func agentRunAsSubjectToProto(value *AgentRunAsSubject) *proto.AgentRunAsSubject {
+func agentRunAsSubjectToProto(value *AgentSubjectContext) *proto.AgentSubjectContext {
 	if value == nil {
 		return nil
 	}
-	return &proto.AgentRunAsSubject{
+	return &proto.AgentSubjectContext{
 		SubjectId:           value.SubjectID,
 		SubjectKind:         value.SubjectKind,
 		CredentialSubjectId: value.CredentialSubjectID,

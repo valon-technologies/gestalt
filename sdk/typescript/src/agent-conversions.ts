@@ -8,13 +8,13 @@ import {
   AgentMessagePartSchema,
   AgentMessagePartType as ProtoAgentMessagePartType,
   AgentMessageSchema,
-  AgentRunAsSubjectSchema,
+  AgentSubjectContextSchema,
   AgentToolRefSchema,
   AgentTurnDisplaySchema,
   type AgentActor as ProtoAgentActor,
   type AgentMessage as ProtoAgentMessage,
   type AgentMessagePart as ProtoAgentMessagePart,
-  type AgentRunAsSubject as ProtoAgentRunAsSubject,
+  type AgentSubjectContext as ProtoAgentSubjectContext,
   type AgentToolRef as ProtoAgentToolRef,
   type AgentTurnDisplay as ProtoAgentTurnDisplay,
 } from "./internal/gen/v1/agent_pb.ts";
@@ -36,7 +36,7 @@ import type {
   AgentMessage,
   AgentMessagePart,
   AgentMessagePartType,
-  AgentRunAsSubject,
+  AgentSubjectContext,
   AgentToolRef,
   AgentTurnDisplay,
 } from "./agent.ts";
@@ -213,8 +213,8 @@ export function agentToolRefToProto(ref: AgentToolRef): ProtoAgentToolRef {
 }
 
 function agentRunAsSubjectFromProto(
-  subject?: ProtoAgentRunAsSubject | undefined,
-): AgentRunAsSubject | undefined {
+  subject?: ProtoAgentSubjectContext | undefined,
+): AgentSubjectContext | undefined {
   if (subject === undefined) {
     return undefined;
   }
@@ -228,12 +228,12 @@ function agentRunAsSubjectFromProto(
 }
 
 function agentRunAsSubjectToProto(
-  subject?: AgentRunAsSubject | undefined,
-): ProtoAgentRunAsSubject | undefined {
+  subject?: AgentSubjectContext | undefined,
+): ProtoAgentSubjectContext | undefined {
   if (subject === undefined) {
     return undefined;
   }
-  return create(AgentRunAsSubjectSchema, {
+  return create(AgentSubjectContextSchema, {
     subjectId: subject.subjectId ?? "",
     subjectKind: subject.subjectKind ?? "",
     credentialSubjectId: subject.credentialSubjectId ?? "",

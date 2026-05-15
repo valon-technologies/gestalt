@@ -64,14 +64,6 @@ message AgentSubjectContext {
   string auth_source = 5;
 }
 
-message AgentRunAsSubject {
-  string subject_id = 1;
-  string subject_kind = 2;
-  string credential_subject_id = 3;
-  string display_name = 4;
-  string auth_source = 5;
-}
-
 message AgentWorkspace {
   repeated AgentWorkspaceGitCheckout checkouts = 1;
   string cwd = 2;
@@ -109,7 +101,7 @@ message AgentToolRef {
   string title = 5;
   string description = 6;
   string system = 8;
-  AgentRunAsSubject run_as = 9;
+  AgentSubjectContext run_as = 9;
   ExternalIdentityContext run_as_external_identity = 10;
 }
 

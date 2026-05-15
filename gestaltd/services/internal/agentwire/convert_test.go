@@ -52,7 +52,7 @@ func TestToolRefFromProtoDropsMalformedRunAsExternalIdentity(t *testing.T) {
 	decoded := ToolRefFromProto(&proto.AgentToolRef{
 		Plugin:    "notion",
 		Operation: "search",
-		RunAs: &proto.AgentRunAsSubject{
+		RunAs: &proto.AgentSubjectContext{
 			SubjectId: "service_account:gestalt-support-notion",
 		},
 		RunAsExternalIdentity: &proto.ExternalIdentityContext{

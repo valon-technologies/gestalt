@@ -440,15 +440,6 @@ pub struct ResolvedAgentTool {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct AgentRunAsSubject {
-    pub subject_id: String,
-    pub subject_kind: String,
-    pub credential_subject_id: String,
-    pub display_name: String,
-    pub auth_source: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AgentToolRef {
     pub plugin: String,
     pub operation: String,
@@ -457,7 +448,7 @@ pub struct AgentToolRef {
     pub title: String,
     pub description: String,
     pub system: String,
-    pub run_as: Option<AgentRunAsSubject>,
+    pub run_as: Option<AgentSubjectContext>,
     pub run_as_external_identity: Option<ExternalIdentity>,
 }
 
@@ -1199,7 +1190,7 @@ pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef
         title: value.title,
         description: value.description,
         system: value.system,
-        run_as: agent_run_as_subject_from_proto(value.run_as),
+        run_as: agent_run_as_context_from_proto(value.run_as),
         run_as_external_identity: external_identity_from_proto(value.run_as_external_identity),
     }
 }
@@ -1213,15 +1204,15 @@ pub(crate) fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
         title: value.title,
         description: value.description,
         system: value.system,
-        run_as: agent_run_as_subject_to_proto(value.run_as),
+        run_as: agent_run_as_context_to_proto(value.run_as),
         run_as_external_identity: external_identity_to_proto(value.run_as_external_identity),
     }
 }
 
-fn agent_run_as_subject_from_proto(
-    value: Option<pb::AgentRunAsSubject>,
-) -> Option<AgentRunAsSubject> {
-    value.map(|value| AgentRunAsSubject {
+fn agent_run_as_context_from_proto(
+    value: Option<pb::AgentSubjectContext>,
+) -> Option<AgentSubjectContext> {
+    value.map(|value| AgentSubjectContext {
         subject_id: value.subject_id,
         subject_kind: value.subject_kind,
         credential_subject_id: value.credential_subject_id,
@@ -1230,10 +1221,10 @@ fn agent_run_as_subject_from_proto(
     })
 }
 
-fn agent_run_as_subject_to_proto(
-    value: Option<AgentRunAsSubject>,
-) -> Option<pb::AgentRunAsSubject> {
-    value.map(|value| pb::AgentRunAsSubject {
+fn agent_run_as_context_to_proto(
+    value: Option<AgentSubjectContext>,
+) -> Option<pb::AgentSubjectContext> {
+    value.map(|value| pb::AgentSubjectContext {
         subject_id: value.subject_id,
         subject_kind: value.subject_kind,
         credential_subject_id: value.credential_subject_id,

@@ -99,7 +99,7 @@ func ToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 	}
 }
 
-func agentRunAsSubjectFromProto(subject *proto.AgentRunAsSubject) *core.RunAsSubject {
+func agentRunAsSubjectFromProto(subject *proto.AgentSubjectContext) *core.RunAsSubject {
 	if subject == nil {
 		return nil
 	}
@@ -112,12 +112,12 @@ func agentRunAsSubjectFromProto(subject *proto.AgentRunAsSubject) *core.RunAsSub
 	})
 }
 
-func agentRunAsSubjectToProto(subject *core.RunAsSubject) *proto.AgentRunAsSubject {
+func agentRunAsSubjectToProto(subject *core.RunAsSubject) *proto.AgentSubjectContext {
 	normalized := core.NormalizeRunAsSubject(subject)
 	if normalized == nil {
 		return nil
 	}
-	return &proto.AgentRunAsSubject{
+	return &proto.AgentSubjectContext{
 		SubjectId:           normalized.SubjectID,
 		SubjectKind:         normalized.SubjectKind,
 		CredentialSubjectId: normalized.CredentialSubjectID,

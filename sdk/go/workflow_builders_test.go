@@ -131,7 +131,7 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	input := AgentToolRef{
 		Plugin:    "notion",
 		Operation: "search",
-		RunAs: &AgentRunAsSubject{
+		RunAs: &AgentSubjectContext{
 			SubjectID:           "service_account:gestalt-support-notion",
 			SubjectKind:         "service_account",
 			CredentialSubjectID: "service_account:notion-credential",
