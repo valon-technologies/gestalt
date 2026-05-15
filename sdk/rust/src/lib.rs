@@ -34,6 +34,11 @@ pub mod telemetry;
 mod workflow;
 mod workflow_manager;
 
+#[doc(hidden)]
+pub mod proto {
+    pub use crate::generated::v1;
+}
+
 pub use agent::{
     AgentActor, AgentExecutionStatus, AgentHost, AgentHostError, AgentHostExecuteToolInput,
     AgentHostListToolsInput, AgentHostResolveConnectionInput, AgentInteraction,
