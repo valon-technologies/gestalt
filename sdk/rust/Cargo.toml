@@ -28,6 +28,6 @@ tonic = { version = "0.14", features = ["transport", "tls-native-roots", "tls-ri
 tonic-prost = "0.14"
 tower = "0.5"
 hyper-util = "0.1"
-opentelemetry = "0.31"
+opentelemetry = "0.32"
 
 [dev-dependencies]
