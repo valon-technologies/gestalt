@@ -320,19 +320,20 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 type credentialMaterial struct {
-	SubjectID       string
-	AuthSource      string
-	ConnectionID    string
-	Integration     string
-	Connection      string
-	Instance        string
-	AccessToken     string
-	RefreshToken    string
-	TokenExpiresAt  *time.Time
-	MetadataJSON    string
-	ActorSubjectID  string
-	ActorUserID     string
-	ActorAuthSource string
+	SubjectID        string
+	AuthSource       string
+	ConnectionID     string
+	Integration      string
+	Connection       string
+	Instance         string
+	AccessToken      string
+	RefreshToken     string
+	TokenExpiresAt   *time.Time
+	MetadataJSON     string
+	ExpectedMetadata map[string]string
+	ActorSubjectID   string
+	ActorUserID      string
+	ActorAuthSource  string
 }
 
 type credentialActor struct {
@@ -563,6 +564,9 @@ func (s *Server) completeConnection(ctx context.Context, prov core.Provider, tm 
 	if err != nil {
 		return nil, err
 	}
+	if err := validateExpectedMetadata(tm.MetadataJSON, tm.ExpectedMetadata); err != nil {
+		return nil, err
+	}
 	if _, err := s.storeCredentialFromMaterial(ctx, tm); err != nil {
 		return nil, err
 	}
@@ -619,6 +623,26 @@ func (s *Server) applyProviderPostConnect(ctx context.Context, prov core.Provide
 	}
 	tm.MetadataJSON = merged
 	return tm, nil
+}
+
+func validateExpectedMetadata(metadataJSON string, expected map[string]string) error {
+	if len(expected) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(metadataJSON) == "" {
+		return fmt.Errorf("connected account did not match the selected preset")
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(metadataJSON), &metadata); err != nil {
+		return fmt.Errorf("connected account metadata is invalid: %w", err)
+	}
+	for key, want := range expected {
+		got, ok := metadata[key]
+		if !ok || fmt.Sprintf("%v", got) != want {
+			return fmt.Errorf("connected account did not match the selected preset")
+		}
+	}
+	return nil
 }
 
 func manualConnectionAllowed(prov core.Provider, conn config.ConnectionDef, hasConnectionDef bool) bool {

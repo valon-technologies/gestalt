@@ -68,6 +68,7 @@ type connectionDefInfo struct {
 	Mode             string                         `json:"mode,omitempty"`
 	AuthTypes        []string                       `json:"authTypes"`
 	ConnectionParams map[string]connectionParamInfo `json:"connectionParams,omitempty"`
+	Presets          []connectionPresetInfo         `json:"presets,omitempty"`
 	CredentialFields []credentialFieldInfo          `json:"credentialFields"`
 	Status           string                         `json:"status"`
 	CredentialState  string                         `json:"credentialState"`
@@ -82,6 +83,15 @@ type connectionDefInfo struct {
 	connected      bool
 	connectable    bool
 	disconnectable bool
+}
+
+type connectionPresetInfo struct {
+	ID              string `json:"id"`
+	DisplayName     string `json:"displayName,omitempty"`
+	Instance        string `json:"instance,omitempty"`
+	Status          string `json:"status,omitempty"`
+	CredentialState string `json:"credentialState,omitempty"`
+	HealthState     string `json:"healthState,omitempty"`
 }
 
 type integrationInfo struct {

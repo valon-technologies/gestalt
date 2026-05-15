@@ -20,6 +20,7 @@ type startOAuthRequest struct {
 	Integration      string            `json:"integration"`
 	Connection       string            `json:"connection"`
 	Instance         string            `json:"instance"`
+	Preset           string            `json:"preset"`
 	Scopes           []string          `json:"scopes"`
 	ConnectionParams map[string]string `json:"connectionParams"`
 }
@@ -57,7 +58,8 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
 	}
-	if conn, ok := s.effectiveConnectionDef(req.Integration, connection); ok {
+	conn, hasConnectionDef := s.effectiveConnectionDef(req.Integration, connection)
+	if hasConnectionDef {
 		if mode := config.ConnectionModeForConnection(conn); mode != "" {
 			connectionMode = metricutil.NormalizeConnectionMode(mode)
 		}
@@ -75,14 +77,21 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subjectID, instance, err := s.resolveCredentialConnectionSetup(w, r, req.Instance)
+	preset, mergedConnectionParams, requestedInstance, err := resolveConnectionPreset(conn, hasConnectionDef, req)
+	if err != nil {
+		auditErr = err
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	subjectID, instance, err := s.resolveCredentialConnectionSetup(w, r, requestedInstance)
 	if err != nil {
 		auditErr = err
 		return
 	}
 	auditTarget = connectionAuditTarget(req.Integration, connection, instance)
 
-	connParams, ok := resolveConnectionParams(w, prov, req.ConnectionParams)
+	connParams, ok := resolveConnectionParams(w, prov, mergedConnectionParams)
 	if !ok {
 		auditErr = errors.New("invalid connection parameters")
 		return
@@ -100,6 +109,14 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	if authURL == "" {
 		authURL, verifier = handler.StartOAuth("_", req.Scopes)
 	}
+	if preset != nil && len(preset.AuthorizationParams) > 0 {
+		authURL, err = setURLQueryParams(authURL, preset.AuthorizationParams)
+		if err != nil {
+			auditErr = errors.New("failed to prepare oauth URL")
+			writeError(w, http.StatusInternalServerError, "failed to prepare oauth URL")
+			return
+		}
+	}
 
 	authSource := ""
 	if p != nil {
@@ -115,8 +132,10 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		Integration:      req.Integration,
 		Connection:       connection,
 		Instance:         instance,
+		Preset:           presetID(preset),
 		Verifier:         verifier,
 		ConnectionParams: connParams,
+		ExpectedMetadata: presetExpectedMetadata(preset),
 		ExpiresAt:        s.now().Add(integrationOAuthStateTTL).Unix(),
 	})
 	if err != nil {
@@ -267,15 +286,16 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	tm := credentialMaterial{
-		SubjectID:      state.SubjectID,
-		AuthSource:     state.AuthSource,
-		Integration:    providerName,
-		Connection:     state.Connection,
-		Instance:       callbackInstance,
-		AccessToken:    tokenResp.AccessToken,
-		RefreshToken:   tokenResp.RefreshToken,
-		TokenExpiresAt: tokenExpiresAt,
-		MetadataJSON:   metadata,
+		SubjectID:        state.SubjectID,
+		AuthSource:       state.AuthSource,
+		Integration:      providerName,
+		Connection:       state.Connection,
+		Instance:         callbackInstance,
+		AccessToken:      tokenResp.AccessToken,
+		RefreshToken:     tokenResp.RefreshToken,
+		TokenExpiresAt:   tokenExpiresAt,
+		MetadataJSON:     metadata,
+		ExpectedMetadata: state.ExpectedMetadata,
 	}
 	if conn, ok := s.effectiveConnectionDef(providerName, state.Connection); ok {
 		tm.ConnectionID = conn.ConnectionID

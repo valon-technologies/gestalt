@@ -385,7 +385,8 @@ func connectionBindingHasCredentialMaterial(conn *ConnectionDef) bool {
 		len(conn.Auth.TokenMetadata) > 0 ||
 		len(conn.Auth.Credentials) > 0 ||
 		conn.Auth.AuthMapping != nil ||
-		len(conn.ConnectionParams) > 0
+		len(conn.ConnectionParams) > 0 ||
+		len(conn.Presets) > 0
 }
 
 func connectionBindingRequiresUserCredential(conn *ConnectionDef) bool {
@@ -404,6 +405,7 @@ func cloneConnectionDef(src ConnectionDef) ConnectionDef {
 	dst := src
 	dst.Auth = cloneConnectionAuthDef(src.Auth)
 	dst.ConnectionParams = maps.Clone(src.ConnectionParams)
+	dst.Presets = cloneConnectionPresets(src.Presets)
 	dst.CredentialRefresh = cloneCredentialRefreshDef(src.CredentialRefresh)
 	dst.PostConnect = providermanifestv1.CloneProviderPostConnect(src.PostConnect)
 	return dst
@@ -701,6 +703,9 @@ func validateTopLevelConnections(cfg *Config) error {
 			return fmt.Errorf("config validation: connections.%s mode %q is not supported", id, conn.Mode)
 		}
 		if err := validateCredentialRefresh(fmt.Sprintf("connections.%s", id), *conn); err != nil {
+			return err
+		}
+		if err := validateConnectionPresets(fmt.Sprintf("connections.%s", id), *conn, conn.ConnectionParams); err != nil {
 			return err
 		}
 		if len(conn.Auth.TokenExchangeDrivers) > 0 {
@@ -2401,6 +2406,9 @@ func validatePluginIntegrationConnections(name string, entry *ProviderEntry) err
 	if err := validateCredentialRefresh(fmt.Sprintf("integration %q plugin connection", name), plan.PluginConnection()); err != nil {
 		return err
 	}
+	if err := validateConnectionPresets(fmt.Sprintf("integration %q plugin connection", name), plan.PluginConnection(), plan.PluginConnection().ConnectionParams); err != nil {
+		return err
+	}
 	for _, connName := range plan.NamedConnectionNames() {
 		conn, _ := plan.NamedConnectionDef(connName)
 		if err := validateConnectionAuthMappings(name, conn.Auth, fmt.Sprintf("connection %q", connName)); err != nil {
@@ -2409,8 +2417,84 @@ func validatePluginIntegrationConnections(name string, entry *ProviderEntry) err
 		if err := validateCredentialRefresh(fmt.Sprintf("integration %q connection %q", name, connName), conn); err != nil {
 			return err
 		}
+		if err := validateConnectionPresets(fmt.Sprintf("integration %q connection %q", name, connName), conn, conn.ConnectionParams); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func validateConnectionPresets(scope string, conn ConnectionDef, params map[string]ConnectionParamDef) error {
+	if len(conn.Presets) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	for i, preset := range conn.Presets {
+		id := strings.TrimSpace(preset.ID)
+		if id == "" {
+			return fmt.Errorf("config validation: %s presets[%d].id is required", scope, i)
+		}
+		if !SafeConnectionValue(id) {
+			return fmt.Errorf("config validation: %s presets[%q].id contains invalid characters", scope, id)
+		}
+		if _, ok := seen[id]; ok {
+			return fmt.Errorf("config validation: %s presets contains duplicate id %q", scope, id)
+		}
+		seen[id] = struct{}{}
+		if instance := strings.TrimSpace(preset.Instance); instance != "" && !SafeInstanceValue(instance) {
+			return fmt.Errorf("config validation: %s presets[%q].instance contains invalid characters", scope, id)
+		}
+		for key, value := range preset.ConnectionParams {
+			if params != nil {
+				if _, ok := params[key]; !ok {
+					return fmt.Errorf("config validation: %s presets[%q].connectionParams references unknown parameter %q", scope, id, key)
+				}
+			}
+			if !safePresetValue(key) || !safePresetValue(value) {
+				return fmt.Errorf("config validation: %s presets[%q].connectionParams[%q] contains invalid characters", scope, id, key)
+			}
+		}
+		for key, value := range preset.AuthorizationParams {
+			if reservedOAuthAuthorizationParam(key) {
+				return fmt.Errorf("config validation: %s presets[%q].authorizationParams[%q] is reserved", scope, id, key)
+			}
+			if !safePresetValue(key) || !safePresetValue(value) {
+				return fmt.Errorf("config validation: %s presets[%q].authorizationParams[%q] contains invalid characters", scope, id, key)
+			}
+		}
+		for key, value := range preset.ExpectedMetadata {
+			if !safePresetValue(key) || !safePresetValue(value) {
+				return fmt.Errorf("config validation: %s presets[%q].expectedMetadata[%q] contains invalid characters", scope, id, key)
+			}
+		}
+	}
+	return nil
+}
+
+func reservedOAuthAuthorizationParam(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "client_id", "redirect_uri", "response_type", "scope", "state", "user_scope":
+		return true
+	default:
+		return false
+	}
+}
+
+func safePresetValue(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, ch := range value {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+		case ch >= 'A' && ch <= 'Z':
+		case ch >= '0' && ch <= '9':
+		case ch == '.', ch == '_', ch == '-', ch == ':', ch == '/':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func validateCredentialRefresh(scope string, conn ConnectionDef) error {

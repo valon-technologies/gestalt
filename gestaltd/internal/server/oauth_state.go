@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,8 +27,10 @@ type integrationOAuthState struct {
 	Integration      string            `json:"int"`
 	Connection       string            `json:"con,omitempty"`
 	Instance         string            `json:"ins,omitempty"`
+	Preset           string            `json:"pre,omitempty"`
 	Verifier         string            `json:"ver,omitempty"`
 	ConnectionParams map[string]string `json:"cp,omitempty"`
+	ExpectedMetadata map[string]string `json:"em,omitempty"`
 	ExpiresAt        int64             `json:"exp"`
 }
 
@@ -378,6 +381,24 @@ func setURLQueryParam(rawURL, key, value string) (string, error) {
 	}
 	q := u.Query()
 	q.Set(key, value)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+func setURLQueryParams(rawURL string, params map[string]string) (string, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("parse URL: %w", err)
+	}
+	q := u.Query()
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		q.Set(key, params[key])
+	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

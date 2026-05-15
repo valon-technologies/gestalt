@@ -5809,6 +5809,39 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 	}
 }
 
+func TestValidateStructureRejectsTopLevelPresetUnknownConnectionParam(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		APIVersion: ConfigAPIVersion,
+		Connections: map[string]*ConnectionDef{
+			"slack-default": {
+				Mode: providermanifestv1.ConnectionModeUser,
+				Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeOAuth2},
+				ConnectionParams: map[string]ConnectionParamDef{
+					"team": {},
+				},
+				Presets: []ConnectionPresetDef{
+					{
+						ID: "valon-mortgage",
+						ConnectionParams: map[string]string{
+							"unknown": "TMORT",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := ValidateStructure(cfg)
+	if err == nil {
+		t.Fatal("ValidateStructure() error = nil, want unknown preset connection parameter")
+	}
+	if !strings.Contains(err.Error(), `presets["valon-mortgage"].connectionParams references unknown parameter "unknown"`) {
+		t.Fatalf("ValidateStructure() error = %v, want unknown preset connection parameter", err)
+	}
+}
+
 func TestValidateStructureConnectionRefPreservesCredentialRefreshOverride(t *testing.T) {
 	t.Parallel()
 

@@ -425,6 +425,7 @@ func (s *Server) connectionInfoFromAuth(integration, _ string, name, instanceCon
 		Mode:             string(displayMode),
 		AuthTypes:        []string{},
 		ConnectionParams: connectionParams,
+		Presets:          connectionPresetInfos(conn.Presets, connectionInstances, len(authTypes) > 0, ownerKindForPrincipal(p)),
 		CredentialFields: []credentialFieldInfo{},
 		Status:           status.Status,
 		CredentialState:  status.CredentialState,
@@ -456,6 +457,43 @@ func (s *Server) connectionInfoFromAuth(integration, _ string, name, instanceCon
 		info.CredentialFields = defaultManualCredentialFieldInfos()
 	}
 	return info, true
+}
+
+func connectionPresetInfos(presets []config.ConnectionPresetDef, instances []instanceInfo, connectable bool, ownerKind string) []connectionPresetInfo {
+	if len(presets) == 0 {
+		return nil
+	}
+	out := make([]connectionPresetInfo, 0, len(presets))
+	for _, preset := range presets {
+		instance := strings.TrimSpace(preset.Instance)
+		statusInstance := instance
+		if statusInstance == "" {
+			statusInstance = defaultTokenInstance
+		}
+		status := subjectConnectionStatus(instancesForPreset(instances, statusInstance), connectable, ownerKind)
+		out = append(out, connectionPresetInfo{
+			ID:              strings.TrimSpace(preset.ID),
+			DisplayName:     preset.DisplayName,
+			Instance:        instance,
+			Status:          status.Status,
+			CredentialState: status.CredentialState,
+			HealthState:     status.HealthState,
+		})
+	}
+	return out
+}
+
+func instancesForPreset(instances []instanceInfo, presetInstance string) []instanceInfo {
+	if presetInstance == "" {
+		return nil
+	}
+	out := make([]instanceInfo, 0, 1)
+	for _, instance := range instances {
+		if instance.Name == presetInstance {
+			out = append(out, instance)
+		}
+	}
+	return out
 }
 
 func cloneConnectionParamInfos(params map[string]connectionParamInfo) map[string]connectionParamInfo {

@@ -1872,11 +1872,24 @@ type ConnectionDef struct {
 	Exposure          string                                  `yaml:"exposure,omitempty"`
 	Auth              ConnectionAuthDef                       `yaml:"auth"`
 	ConnectionParams  map[string]ConnectionParamDef           `yaml:"params"`
+	Presets           []ConnectionPresetDef                   `yaml:"presets,omitempty"`
 	CredentialRefresh *CredentialRefreshDef                   `yaml:"credentialRefresh,omitempty"`
 	Discovery         *providermanifestv1.ProviderDiscovery   `yaml:"-"`
 	PostConnect       *providermanifestv1.ProviderPostConnect `yaml:"-"`
 	ConnectionID      string                                  `yaml:"-"`
 	BindingResolved   bool                                    `yaml:"-"`
+}
+
+// ConnectionPresetDef declares a fixed, operator-owned instance target for a
+// connection flow. AuthorizationParams are applied only when the preset starts
+// OAuth; ExpectedMetadata is checked after post-connect metadata is available.
+type ConnectionPresetDef struct {
+	ID                  string            `yaml:"id"`
+	DisplayName         string            `yaml:"displayName,omitempty"`
+	Instance            string            `yaml:"instance,omitempty"`
+	ConnectionParams    map[string]string `yaml:"connectionParams,omitempty"`
+	AuthorizationParams map[string]string `yaml:"authorizationParams,omitempty"`
+	ExpectedMetadata    map[string]string `yaml:"expectedMetadata,omitempty"`
 }
 
 type CredentialRefreshDef = providermanifestv1.CredentialRefreshConfig
@@ -2050,6 +2063,9 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	if len(src.ConnectionParams) > 0 {
 		dst.ConnectionParams = maps.Clone(src.ConnectionParams)
 	}
+	if src.Presets != nil {
+		dst.Presets = cloneConnectionPresets(src.Presets)
+	}
 	if src.CredentialRefresh != nil {
 		dst.CredentialRefresh = cloneCredentialRefreshDef(src.CredentialRefresh)
 	}
@@ -2065,6 +2081,20 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	if src.BindingResolved {
 		dst.BindingResolved = true
 	}
+}
+
+func cloneConnectionPresets(src []ConnectionPresetDef) []ConnectionPresetDef {
+	if src == nil {
+		return nil
+	}
+	dst := make([]ConnectionPresetDef, len(src))
+	for i, preset := range src {
+		dst[i] = preset
+		dst[i].ConnectionParams = maps.Clone(preset.ConnectionParams)
+		dst[i].AuthorizationParams = maps.Clone(preset.AuthorizationParams)
+		dst[i].ExpectedMetadata = maps.Clone(preset.ExpectedMetadata)
+	}
+	return dst
 }
 
 func ManifestAuthToConnectionAuthDef(auth *providermanifestv1.ProviderAuth) ConnectionAuthDef {

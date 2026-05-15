@@ -44,6 +44,7 @@ type ResolvedConnectionDef struct {
 	Exposure          string
 	Auth              ConnectionAuthDef
 	Params            map[string]ConnectionParamDef
+	Presets           []ConnectionPresetDef
 	Discovery         *providermanifestv1.ProviderDiscovery
 	PostConnect       *providermanifestv1.ProviderPostConnect
 	CredentialRefresh *CredentialRefreshDef
@@ -58,6 +59,7 @@ func (r ResolvedConnectionDef) ConnectionDef() ConnectionDef {
 		Exposure:          r.Exposure,
 		Auth:              r.Auth,
 		ConnectionParams:  r.Params,
+		Presets:           cloneConnectionPresets(r.Presets),
 		Discovery:         r.Discovery,
 		PostConnect:       providermanifestv1.CloneProviderPostConnect(r.PostConnect),
 		CredentialRefresh: r.CredentialRefresh,
@@ -620,6 +622,7 @@ func resolvedConnectionDef(name string, conn ConnectionDef, source ResolvedConne
 		Exposure:          conn.Exposure,
 		Auth:              conn.Auth,
 		Params:            conn.ConnectionParams,
+		Presets:           cloneConnectionPresets(conn.Presets),
 		Discovery:         conn.Discovery,
 		PostConnect:       providermanifestv1.CloneProviderPostConnect(conn.PostConnect),
 		CredentialRefresh: conn.CredentialRefresh,

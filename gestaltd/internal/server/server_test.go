@@ -15622,6 +15622,196 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_ConnectionPresets(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+	handler := &testOAuthHandler{authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize"}
+	svc := testutil.NewStubServices(t)
+	user := seedUser(t, svc, "anonymous@gestalt")
+	seedSubjectToken(t, svc, principal.UserSubjectID(user.ID), "slack", testDefaultConnection, "default", "test-token")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: {
+						Auth: config.ConnectionAuthDef{Type: providermanifestv1.AuthTypeOAuth2},
+						Presets: []config.ConnectionPresetDef{
+							{
+								ID:          "default-workspace",
+								DisplayName: "Default Workspace",
+							},
+							{
+								ID:                  "valon-technologies",
+								DisplayName:         "Valon Technologies",
+								Instance:            "valon-technologies",
+								AuthorizationParams: map[string]string{"team": "TTECH"},
+								ExpectedMetadata:    map[string]string{"slack.team_id": "TTECH"},
+							},
+							{
+								ID:                  "valon-mortgage",
+								DisplayName:         "Valon Mortgage",
+								Instance:            "valon-mortgage",
+								AuthorizationParams: map[string]string{"team": "TMORT"},
+								ExpectedMetadata:    map[string]string{"slack.team_id": "TMORT"},
+							},
+						},
+					},
+				},
+			},
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	text := string(body)
+	for _, fragment := range []string{"authorizationParams", "expectedMetadata"} {
+		if strings.Contains(text, fragment) {
+			t.Fatalf("integration response exposed server-only preset field %q: %s", fragment, text)
+		}
+	}
+
+	type presetInfo struct {
+		ID              string `json:"id"`
+		DisplayName     string `json:"displayName"`
+		Instance        string `json:"instance"`
+		Status          string `json:"status"`
+		CredentialState string `json:"credentialState"`
+	}
+	var integrations []struct {
+		Name        string `json:"name"`
+		Connections []struct {
+			Name    string       `json:"name"`
+			Presets []presetInfo `json:"presets"`
+		} `json:"connections"`
+	}
+	if err := json.Unmarshal(body, &integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 || len(integrations[0].Connections) != 1 {
+		t.Fatalf("integrations = %+v, want one slack connection", integrations)
+	}
+	presets := integrations[0].Connections[0].Presets
+	if !reflect.DeepEqual(presets, []presetInfo{
+		{ID: "default-workspace", DisplayName: "Default Workspace", Status: "ready", CredentialState: "connected"},
+		{ID: "valon-technologies", DisplayName: "Valon Technologies", Instance: "valon-technologies", Status: "needs_user_connection", CredentialState: "missing"},
+		{ID: "valon-mortgage", DisplayName: "Valon Mortgage", Instance: "valon-mortgage", Status: "needs_user_connection", CredentialState: "missing"},
+	}) {
+		t.Fatalf("presets = %+v", presets)
+	}
+}
+
+func TestStartIntegrationOAuth_ConnectionPreset(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "slack"},
+		authURL:         "https://slack.com/oauth/v2/authorize",
+	}
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: {
+						Auth: config.ConnectionAuthDef{Type: providermanifestv1.AuthTypeOAuth2},
+						Presets: []config.ConnectionPresetDef{
+							{
+								ID:                  "valon-mortgage",
+								DisplayName:         "Valon Mortgage",
+								Instance:            "valon-mortgage",
+								AuthorizationParams: map[string]string{"team": "TMORT"},
+								ExpectedMetadata:    map[string]string{"slack.team_id": "TMORT"},
+							},
+						},
+					},
+				},
+			},
+		}
+		cfg.Services = testutil.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"integration":"slack","preset":"valon-mortgage"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	parsedURL, err := url.Parse(result["url"])
+	if err != nil {
+		t.Fatalf("parse auth URL: %v", err)
+	}
+	if got := parsedURL.Query().Get("team"); got != "TMORT" {
+		t.Fatalf("auth URL team = %q, want TMORT", got)
+	}
+	if got := parsedURL.Query().Get("state"); got != result["state"] {
+		t.Fatalf("auth URL state = %q, want returned state %q", got, result["state"])
+	}
+
+	conflictBody := bytes.NewBufferString(`{"integration":"slack","preset":"valon-mortgage","instance":"other"}`)
+	conflictReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", conflictBody)
+	conflictReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	conflictReq.Header.Set("Content-Type", "application/json")
+	conflictResp, err := http.DefaultClient.Do(conflictReq)
+	if err != nil {
+		t.Fatalf("conflict request: %v", err)
+	}
+	defer func() { _ = conflictResp.Body.Close() }()
+	if conflictResp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(conflictResp.Body)
+		t.Fatalf("expected 400 for conflicting preset instance, got %d: %s", conflictResp.StatusCode, body)
+	}
+
+	paramsBody := bytes.NewBufferString(`{"integration":"slack","preset":"valon-mortgage","connectionParams":{"team":"TMORT"}}`)
+	paramsReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", paramsBody)
+	paramsReq.Header.Set("X-Dev-User-Email", "dev@example.com")
+	paramsReq.Header.Set("Content-Type", "application/json")
+	paramsResp, err := http.DefaultClient.Do(paramsReq)
+	if err != nil {
+		t.Fatalf("connection params request: %v", err)
+	}
+	defer func() { _ = paramsResp.Body.Close() }()
+	if paramsResp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(paramsResp.Body)
+		t.Fatalf("expected 400 for client params with preset, got %d: %s", paramsResp.StatusCode, body)
+	}
+}
+
 func TestStartIntegrationOAuth_ServiceAccountDeniedByPolicy(t *testing.T) {
 	t.Parallel()
 
@@ -16376,6 +16566,150 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("linked subject after conflict = %q, want %q", got, principal.UserSubjectID(admin.ID))
 		}
 	})
+}
+
+func TestIntegrationOAuthCallback_ConnectionPresetMetadata(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+		exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+			teamID := "TMORT"
+			if code == "wrong-workspace" {
+				teamID = "TTECH"
+			}
+			return &core.TokenResponse{
+				AccessToken: "slack-token-" + teamID,
+				Extra: map[string]any{
+					"team": map[string]any{"id": teamID},
+				},
+			}, nil
+		},
+	}
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "slack"},
+		authURL:         "https://slack.com/oauth/v2/authorize",
+		connectionParams: map[string]core.ConnectionParamDef{
+			"team_id": {
+				Required: true,
+				From:     "token_response",
+				Field:    "team.id",
+			},
+		},
+		postConnect: func(_ context.Context, token *core.ExternalCredential) (map[string]string, error) {
+			var metadata map[string]string
+			if err := json.Unmarshal([]byte(token.MetadataJSON), &metadata); err != nil {
+				return nil, err
+			}
+			return map[string]string{"slack.team_id": metadata["team_id"]}, nil
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, fmt.Errorf("bad token")
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack": {
+				Connections: map[string]*config.ConnectionDef{
+					testDefaultConnection: {
+						Auth: config.ConnectionAuthDef{Type: providermanifestv1.AuthTypeOAuth2},
+						Presets: []config.ConnectionPresetDef{
+							{
+								ID:                  "valon-mortgage",
+								DisplayName:         "Valon Mortgage",
+								Instance:            "valon-mortgage",
+								AuthorizationParams: map[string]string{"team": "TMORT"},
+								ExpectedMetadata:    map[string]string{"slack.team_id": "TMORT"},
+							},
+						},
+					},
+				},
+			},
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	start := func(t *testing.T) string {
+		t.Helper()
+		startBody := bytes.NewBufferString(`{"integration":"slack","preset":"valon-mortgage"}`)
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
+		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer session-token")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+		if startResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(startResp.Body)
+			t.Fatalf("expected 200 from start-oauth, got %d: %s", startResp.StatusCode, body)
+		}
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+		return startResult["state"]
+	}
+
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(start(t)), nil)
+	resp, err := noRedirect.Do(req)
+	if err != nil {
+		t.Fatalf("callback request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusSeeOther {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 303, got %d: %s", resp.StatusCode, body)
+	}
+
+	u, _ := svc.Users.FindOrCreateUser(context.Background(), "user@example.com")
+	tokens, _ := svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
+	if len(tokens) != 1 {
+		t.Fatalf("stored tokens = %+v, want one", tokens)
+	}
+	stored := tokens[0]
+	if stored.Instance != "valon-mortgage" {
+		t.Fatalf("stored instance = %q, want valon-mortgage", stored.Instance)
+	}
+	var metadata map[string]string
+	if err := json.Unmarshal([]byte(stored.MetadataJSON), &metadata); err != nil {
+		t.Fatalf("unmarshal metadata: %v", err)
+	}
+	if metadata["slack.team_id"] != "TMORT" {
+		t.Fatalf("stored slack.team_id = %q, want TMORT", metadata["slack.team_id"])
+	}
+
+	wrongReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=wrong-workspace&state="+url.QueryEscape(start(t)), nil)
+	wrongResp, err := noRedirect.Do(wrongReq)
+	if err != nil {
+		t.Fatalf("wrong callback request: %v", err)
+	}
+	defer func() { _ = wrongResp.Body.Close() }()
+	if wrongResp.StatusCode != http.StatusBadGateway {
+		body, _ := io.ReadAll(wrongResp.Body)
+		t.Fatalf("expected 502 for wrong workspace, got %d: %s", wrongResp.StatusCode, body)
+	}
+	tokens, _ = svc.ExternalCredentials.ListCredentials(context.Background(), principal.UserSubjectID(u.ID))
+	if len(tokens) != 1 {
+		t.Fatalf("wrong-workspace callback stored a credential: %+v", tokens)
+	}
 }
 
 func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
