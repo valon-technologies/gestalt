@@ -619,7 +619,9 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 		return apiProv, authFallback, nil
 	}
 
-	mcpProv, _, err := buildConfiguredSpecProvider(ctx, name, mcpResolved, meta, cfg, deps)
+	mcpCfg := cfg
+	mcpCfg.allowedOperations = nil
+	mcpProv, _, err := buildConfiguredSpecProvider(ctx, name, mcpResolved, meta, mcpCfg, deps)
 	if err != nil {
 		closeIfPossible(apiProv)
 		return nil, nil, err
@@ -630,8 +632,16 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 		return nil, nil, fmt.Errorf("unexpected mcp provider type %T", mcpProv)
 	}
 
-	filtered := operationexposure.MatchingAllowedOperations(allowedOperations, mcpUp.Catalog())
-	if len(filtered) > 0 {
+	var apiCatalog *catalog.Catalog
+	if apiProv != nil {
+		apiCatalog = apiProv.Catalog()
+	}
+	mcpAllowedOperations, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, apiProv != nil, apiCatalog, mcpUp.Catalog())
+	if !includeMCP {
+		closeIfPossible(mcpUp)
+		return apiProv, authFallback, nil
+	}
+	if mcpAllowedOperations != nil {
 		filterable, ok := any(mcpUp).(interface {
 			FilterOperations(map[string]*operationexposure.OperationOverride) error
 		})
@@ -639,7 +649,7 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 			closeIfPossible(mcpUp, apiProv)
 			return nil, nil, fmt.Errorf("unexpected non-filterable mcp provider type %T", mcpProv)
 		}
-		if err := filterable.FilterOperations(filtered); err != nil {
+		if err := filterable.FilterOperations(mcpAllowedOperations); err != nil {
 			closeIfPossible(mcpUp, apiProv)
 			return nil, nil, fmt.Errorf("filter mcp operations: %w", err)
 		}
@@ -649,6 +659,55 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 		return mcpUp, nil, nil
 	}
 	return composite.New(name, apiProv, mcpUp), authFallback, nil
+}
+
+func mcpAllowedOperationsForSpecComposite(allowedOperations map[string]*config.OperationOverride, hasAPI bool, apiCatalog, mcpCatalog *catalog.Catalog) (map[string]*config.OperationOverride, bool) {
+	if allowedOperations == nil {
+		return nil, true
+	}
+	if !hasAPI {
+		return allowedOperations, true
+	}
+	if mcpCatalog != nil && len(mcpCatalog.Operations) > 0 {
+		matched := operationexposure.MatchingAllowedOperations(allowedOperations, mcpCatalog)
+		return matched, len(matched) > 0
+	}
+	filtered := dynamicMCPAllowedOperations(allowedOperations, apiCatalog)
+	if len(filtered) == 0 {
+		return nil, false
+	}
+	return filtered, true
+}
+
+func dynamicMCPAllowedOperations(allowedOperations map[string]*config.OperationOverride, apiCatalog *catalog.Catalog) map[string]*config.OperationOverride {
+	apiOps := catalogOperationIDs(apiCatalog)
+	filtered := make(map[string]*config.OperationOverride)
+	for name, override := range allowedOperations {
+		if override != nil && override.GraphQL != nil {
+			continue
+		}
+		if _, ok := apiOps[name]; ok {
+			continue
+		}
+		if override != nil && override.Alias != "" {
+			if _, ok := apiOps[override.Alias]; ok {
+				continue
+			}
+		}
+		filtered[name] = override
+	}
+	return filtered
+}
+
+func catalogOperationIDs(cat *catalog.Catalog) map[string]struct{} {
+	ids := make(map[string]struct{})
+	if cat == nil {
+		return ids
+	}
+	for i := range cat.Operations {
+		ids[cat.Operations[i].ID] = struct{}{}
+	}
+	return ids
 }
 
 func buildConfiguredAPIProvider(ctx context.Context, name string, plan config.StaticConnectionPlan, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, *specAuthFallback, error) {

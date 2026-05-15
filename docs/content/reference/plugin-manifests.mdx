@@ -189,6 +189,7 @@ Surfaces load operation catalogs from external specifications. They are configur
 | ------------ | ------ | --------------------------------------- |
 | `url`        | string | URL of the upstream GraphQL endpoint.   |
 | `connection` | string | Connection name used for GraphQL calls. |
+| `operationSelections` | object | Legacy per-operation selection overrides for generated GraphQL catalogs. Do not combine with GraphQL `allowedOperations`. |
 
 GraphQL surfaces expose a raw GraphQL passthrough immediately. Generated GraphQL operation catalogs are resolved lazily from the upstream schema when a real request runs under that surface's connection. Gestalt does not introspect GraphQL endpoints during package build, `gestaltd lock`, or config validation.
 
@@ -385,6 +386,8 @@ The `allowedOperations` map selectively exposes and customizes operations from a
 | `allowedRoles` | string[]                 | Restrict the operation to callers whose resolved human role matches one of these values. This only takes effect when the deployment binds the plugin to `authorizationPolicy`. |
 | `paginate`     | bool                     | Enable automatic pagination for this operation. Uses the plugin-level pagination config.                                                                                       |
 | `pagination`   | ManifestPaginationConfig | Per-operation pagination config that overrides the plugin-level default.                                                                                                       |
+| `graphql.operationType` | `"query"` or `"mutation"` | GraphQL root operation type. Required when the same allowlisted field name exists on both query and mutation roots. |
+| `graphql.selectionSet` | string | GraphQL selection-set body for an allowlisted GraphQL root field. Required for object, interface, and union return types when `allowedOperations` is set on a GraphQL surface. |
 
 ```yaml
 spec:
@@ -397,6 +400,36 @@ spec:
       alias: get_ticket
       allowedRoles: [admin]
 ```
+
+For GraphQL surfaces, `allowedOperations` keys are the upstream schema root
+field names. When a GraphQL surface declares `allowedOperations`, Gestalt treats
+the allowlist as an explicit operation contract and does not generate response
+selections for object-like return types. Provide `graphql.selectionSet` without
+outer braces:
+
+```yaml
+spec:
+  allowedOperations:
+    issues:
+      graphql:
+        selectionSet: |
+          nodes { id identifier title url team { id name key } }
+          pageInfo { hasNextPage endCursor }
+```
+
+Selection sets may include aliases, nested selections, `__typename`, and inline
+fragments. Named fragment spreads, fragment definitions, directives, and field
+arguments in selection sets are not supported. GraphQL manifests that use
+per-operation `graphql` blocks must not also use legacy
+`spec.surfaces.graphql.operationSelections`. For older `gestaltd` compatibility,
+manifests may instead keep selection bodies in `operationSelections` and use
+`allowedOperations` only as the exposure allowlist.
+If an upstream schema defines the same root field name on both query and mutation
+roots, set `graphql.operationType` to bind the allowlisted operation to one root.
+For providers that combine GraphQL with another surface, mark each GraphQL entry
+with a `graphql` block; entries without that block are left for the other surface.
+This only controls generated GraphQL catalog operations; raw GraphQL passthrough
+access remains a separate surface permission.
 
 ### Response Mapping
 

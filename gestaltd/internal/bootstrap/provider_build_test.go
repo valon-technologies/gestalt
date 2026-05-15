@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
@@ -65,5 +66,92 @@ func TestApplyProviderPaginationUsesExposedAlias(t *testing.T) {
 	}
 	if _, ok := def.Operations["mcp_only"]; ok {
 		t.Fatal("applyProviderPagination created absent mcp_only operation")
+	}
+}
+
+func TestMCPAllowedOperationsForSpecCompositeFiltersOnlyWhenAPIIsPresent(t *testing.T) {
+	t.Parallel()
+
+	allowedOperations := map[string]*config.OperationOverride{
+		"searchIssues": {
+			Description: "GraphQL search",
+			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+				SelectionSet: "nodes { id }",
+			},
+		},
+		"lookup":     {Description: "MCP lookup"},
+		"list_notes": {Alias: "listNotes"},
+	}
+	apiCatalog := &catalog.Catalog{Operations: []catalog.CatalogOperation{
+		{ID: "listNotes"},
+	}}
+	mcpCatalog := &catalog.Catalog{Operations: []catalog.CatalogOperation{
+		{ID: "lookup"},
+	}}
+
+	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, apiCatalog, mcpCatalog)
+	if !includeMCP {
+		t.Fatal("includeMCP = false, want true for matching static MCP catalog")
+	}
+	if len(filtered) != 1 || filtered["lookup"] == nil {
+		t.Fatalf("filtered allowedOperations = %#v, want only lookup", filtered)
+	}
+	if _, ok := filtered["searchIssues"]; ok {
+		t.Fatal("GraphQL-only operation should not be passed to MCP filter when API surface exists")
+	}
+
+	unfiltered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, false, nil, mcpCatalog)
+	if !includeMCP {
+		t.Fatal("includeMCP = false, want true for MCP-only provider")
+	}
+	if len(unfiltered) != len(allowedOperations) {
+		t.Fatalf("unfiltered allowedOperations = %#v, want all operations for MCP-only provider", unfiltered)
+	}
+}
+
+func TestMCPAllowedOperationsForSpecCompositePreservesDynamicAllowlist(t *testing.T) {
+	t.Parallel()
+
+	allowedOperations := map[string]*config.OperationOverride{
+		"searchIssues": {
+			Description: "GraphQL search",
+			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+				SelectionSet: "nodes { id }",
+			},
+		},
+		"lookup":     {Description: "MCP lookup"},
+		"list_notes": {Alias: "listNotes"},
+	}
+	apiCatalog := &catalog.Catalog{Operations: []catalog.CatalogOperation{
+		{ID: "listNotes"},
+	}}
+
+	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, apiCatalog, &catalog.Catalog{})
+	if !includeMCP {
+		t.Fatal("includeMCP = false, want true for dynamic MCP allowlist")
+	}
+	if len(filtered) != 1 || filtered["lookup"] == nil {
+		t.Fatalf("filtered allowedOperations = %#v, want only dynamic MCP operation", filtered)
+	}
+}
+
+func TestMCPAllowedOperationsForSpecCompositeOmitsMCPWhenNoMCPAllowlistEntries(t *testing.T) {
+	t.Parallel()
+
+	allowedOperations := map[string]*config.OperationOverride{
+		"searchIssues": {
+			Description: "GraphQL search",
+			GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+				SelectionSet: "nodes { id }",
+			},
+		},
+	}
+
+	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, nil, &catalog.Catalog{})
+	if includeMCP {
+		t.Fatalf("includeMCP = true with filtered allowedOperations %#v, want false", filtered)
+	}
+	if filtered != nil {
+		t.Fatalf("filtered allowedOperations = %#v, want nil", filtered)
 	}
 }
