@@ -54,6 +54,28 @@ func newTestSchema() Schema {
 			{Kind: "OBJECT", Name: "Team", Fields: []Field{
 				{Name: "id", Type: TypeRef{Kind: "SCALAR", Name: strPtr("ID")}},
 				{Name: "name", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
+				{
+					Name: "displayName",
+					Args: []InputValue{
+						{Name: "format", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
+					},
+					Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")},
+				},
+				{
+					Name: "comments",
+					Args: []InputValue{
+						{Name: "first", Type: TypeRef{Kind: "NON_NULL", OfType: &TypeRef{Kind: "SCALAR", Name: strPtr("Int")}}},
+					},
+					Type: TypeRef{Kind: "OBJECT", Name: strPtr("CommentConnection")},
+				},
+			}},
+			{Kind: "OBJECT", Name: "CommentConnection", Fields: []Field{
+				{Name: "nodes", Type: TypeRef{Kind: "LIST", OfType: &TypeRef{Kind: "OBJECT", Name: strPtr("Comment")}}},
+				{Name: "pageInfo", Type: TypeRef{Kind: "OBJECT", Name: strPtr("PageInfo")}},
+			}},
+			{Kind: "OBJECT", Name: "Comment", Fields: []Field{
+				{Name: "id", Type: TypeRef{Kind: "SCALAR", Name: strPtr("ID")}},
+				{Name: "body", Type: TypeRef{Kind: "SCALAR", Name: strPtr("String")}},
 			}},
 			{Kind: "OBJECT", Name: "Issue", Fields: []Field{
 				{Name: "id", Type: TypeRef{Kind: "SCALAR", Name: strPtr("ID")}},
@@ -240,6 +262,45 @@ func TestLoadDefinitionWithAllowedOpsAllowsLegacySelectionOverrides(t *testing.T
 	}
 }
 
+func TestLoadDefinitionWithAllowedOpsIgnoresMixedSurfaceEntriesInLegacySelectionMode(t *testing.T) {
+	t.Parallel()
+
+	srv := startIntrospectionServer(t, newTestSchema())
+	defer srv.Close()
+
+	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*operationexposure.OperationOverride{
+		"teams":     nil,
+		"get_issue": nil,
+	}, map[string]string{
+		"teams": "nodes { id name } pageInfo { hasNextPage endCursor }",
+	})
+	if err != nil {
+		t.Fatalf("LoadDefinition: %v", err)
+	}
+	if len(def.Operations) != 1 {
+		t.Fatalf("Operations: got %d, want 1", len(def.Operations))
+	}
+	if _, ok := def.Operations["teams"]; !ok {
+		t.Fatalf("Operations = %#v, want teams", def.Operations)
+	}
+}
+
+func TestLoadDefinitionWithAllowedOpsRejectsUnknownLegacySelectionOverride(t *testing.T) {
+	t.Parallel()
+
+	srv := startIntrospectionServer(t, newTestSchema())
+	defer srv.Close()
+
+	_, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*operationexposure.OperationOverride{
+		"missing": nil,
+	}, map[string]string{
+		"missing": "id",
+	})
+	if err == nil || !strings.Contains(err.Error(), `allowed operation "missing" is not defined in schema`) {
+		t.Fatalf("LoadDefinition error = %v, want unknown allowed operation", err)
+	}
+}
+
 func TestLoadDefinitionWithAllowedOpsRequiresObjectSelection(t *testing.T) {
 	t.Parallel()
 
@@ -420,6 +481,10 @@ func TestLoadDefinitionWithAllowedOpsValidatesSelectionSet(t *testing.T) {
 			selection: "nodes { teamName: name } pageInfo { hasNextPage endCursor }",
 		},
 		{
+			name:      "optional argument field can be selected without arguments",
+			selection: "nodes { teamName: name displayName } pageInfo { hasNextPage endCursor }",
+		},
+		{
 			name:      "unknown field",
 			selection: "nodes { missing } pageInfo { hasNextPage endCursor }",
 			wantErr:   `field "missing" does not exist on type "Team"`,
@@ -428,6 +493,11 @@ func TestLoadDefinitionWithAllowedOpsValidatesSelectionSet(t *testing.T) {
 			name:      "field arguments rejected",
 			selection: "nodes { name(format: SHORT) } pageInfo { hasNextPage endCursor }",
 			wantErr:   "field arguments are not supported",
+		},
+		{
+			name:      "required argument field rejected",
+			selection: "nodes { comments { nodes { id } } } pageInfo { hasNextPage endCursor }",
+			wantErr:   `field "comments" on "Team" requires argument "first"`,
 		},
 		{
 			name:      "fragment spreads rejected",

@@ -115,6 +115,9 @@ func validateFieldSelection(schema *Schema, operation string, parent *FullType, 
 	if field == nil {
 		return fmt.Errorf("operation %q field %q does not exist on type %q", operation, sel.Name, parent.Name)
 	}
+	if required := requiredArgumentNames(field.Args); len(required) > 0 {
+		return fmt.Errorf("operation %q field %q on %q requires argument %q, but selectionSet arguments are not supported", operation, sel.Name, parent.Name, required[0])
+	}
 	fieldType := schema.lookupType(field.Type.innerType().namedType())
 	fieldComposite := isCompositeType(fieldType)
 	if fieldComposite {
@@ -127,6 +130,16 @@ func validateFieldSelection(schema *Schema, operation string, parent *FullType, 
 		return fmt.Errorf("operation %q field %q on %q cannot have a nested selection", operation, sel.Name, parent.Name)
 	}
 	return nil
+}
+
+func requiredArgumentNames(args []InputValue) []string {
+	var required []string
+	for _, arg := range args {
+		if arg.Type.isNonNull() && arg.DefaultValue == nil {
+			required = append(required, arg.Name)
+		}
+	}
+	return required
 }
 
 func lookupField(ft *FullType, name string) *Field {

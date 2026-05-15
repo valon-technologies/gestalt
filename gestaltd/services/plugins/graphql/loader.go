@@ -49,7 +49,7 @@ func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[
 	if hasGraphQLAllowedOperationConfig(allowedOps) && len(selectionOverrides) > 0 {
 		return nil, fmt.Errorf("graphql %s: operationSelections cannot be combined with allowedOperations", name)
 	}
-	allowedOps = graphQLAllowedOperations(allowedOps)
+	allowedOps = graphQLAllowedOperations(schema, allowedOps, selectionOverrides)
 	if err := validateAllowedOperationRoots(schema, allowedOps, selectionOverrides); err != nil {
 		return nil, err
 	}
@@ -69,12 +69,15 @@ func DefinitionFromSchema(name, endpoint string, schema *Schema, allowedOps map[
 	return def, nil
 }
 
-func graphQLAllowedOperations(allowedOps map[string]*operationexposure.OperationOverride) map[string]*operationexposure.OperationOverride {
+func graphQLAllowedOperations(schema *Schema, allowedOps map[string]*operationexposure.OperationOverride, selectionOverrides map[string]string) map[string]*operationexposure.OperationOverride {
 	if len(allowedOps) == 0 {
 		return allowedOps
 	}
 
 	if !hasGraphQLAllowedOperationConfig(allowedOps) {
+		if len(selectionOverrides) > 0 {
+			return legacyGraphQLAllowedOperations(schema, allowedOps, selectionOverrides)
+		}
 		return allowedOps
 	}
 
@@ -85,6 +88,40 @@ func graphQLAllowedOperations(allowedOps map[string]*operationexposure.Operation
 		}
 	}
 	return filtered
+}
+
+func legacyGraphQLAllowedOperations(schema *Schema, allowedOps map[string]*operationexposure.OperationOverride, selectionOverrides map[string]string) map[string]*operationexposure.OperationOverride {
+	roots := graphQLRootNames(schema)
+	filtered := make(map[string]*operationexposure.OperationOverride)
+	for name, override := range allowedOps {
+		if _, ok := roots[name]; ok {
+			filtered[name] = override
+			continue
+		}
+		if _, ok := selectionOverrides[name]; ok {
+			filtered[name] = override
+		}
+	}
+	return filtered
+}
+
+func graphQLRootNames(schema *Schema) map[string]struct{} {
+	roots := make(map[string]struct{})
+	addRoot := func(root *TypeName) {
+		if root == nil {
+			return
+		}
+		rootType := schema.lookupType(root.Name)
+		if rootType == nil {
+			return
+		}
+		for _, field := range rootType.Fields {
+			roots[field.Name] = struct{}{}
+		}
+	}
+	addRoot(schema.QueryType)
+	addRoot(schema.MutationType)
+	return roots
 }
 
 func hasGraphQLAllowedOperationConfig(allowedOps map[string]*operationexposure.OperationOverride) bool {
