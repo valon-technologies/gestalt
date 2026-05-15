@@ -1,6 +1,8 @@
 /**
  * Common request and response types shared across authored Gestalt providers.
  */
+import type { AgentToolRef } from "./agent.ts";
+
 export interface Subject {
   id: string;
   kind: string;
@@ -70,6 +72,8 @@ export interface Request {
   // Workflow callback metadata uses a JSON-style lowerCamelCase object such as
   // runId, target.plugin.pluginName, trigger.scheduleId, and trigger.event.specVersion.
   workflow: Record<string, unknown>;
+  toolRefs: AgentToolRef[];
+  toolRefsSet: boolean;
   invocationToken: string;
 }
 
@@ -141,6 +145,8 @@ export function request(
   agentSubject: Partial<Subject> = {},
   externalIdentity: Partial<ExternalIdentity> = {},
   agentExternalIdentity: Partial<ExternalIdentity> = {},
+  toolRefs: readonly AgentToolRef[] = [],
+  toolRefsSet = false,
 ): Request {
   return {
     token,
@@ -182,6 +188,15 @@ export function request(
     workflow: {
       ...workflow,
     },
+    toolRefs: toolRefs.map((ref) => ({
+      ...ref,
+      runAs: ref.runAs === undefined ? undefined : { ...ref.runAs },
+      runAsExternalIdentity:
+        ref.runAsExternalIdentity === undefined
+          ? undefined
+          : { ...ref.runAsExternalIdentity },
+    })),
+    toolRefsSet,
     host: {
       publicBaseUrl: host.publicBaseUrl ?? "",
     },

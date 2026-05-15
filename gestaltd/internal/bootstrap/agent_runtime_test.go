@@ -77,6 +77,8 @@ type agentRuntimeInvokerCall struct {
 	runAsSubjectID         string
 	externalIdentityType   string
 	externalIdentityID     string
+	toolRefsSet            bool
+	toolRefs               []coreagent.ToolRef
 }
 
 type recordingAgentRuntimeInvoker struct {
@@ -95,6 +97,7 @@ func (i *recordingAgentRuntimeInvoker) Invoke(ctx context.Context, p *principal.
 	if runAsAudit.RunAsSubject != nil {
 		runAsSubjectID = runAsAudit.RunAsSubject.SubjectID
 	}
+	toolRefs := invocation.ToolRefsContextFromContext(ctx)
 	i.calls = append(i.calls, agentRuntimeInvokerCall{
 		providerName:           providerName,
 		operation:              operation,
@@ -106,6 +109,8 @@ func (i *recordingAgentRuntimeInvoker) Invoke(ctx context.Context, p *principal.
 		runAsSubjectID:         runAsSubjectID,
 		externalIdentityType:   invocation.ExternalIdentityContextFromContext(ctx).Type,
 		externalIdentityID:     invocation.ExternalIdentityContextFromContext(ctx).ID,
+		toolRefsSet:            toolRefs.Set,
+		toolRefs:               toolRefs.Refs,
 	})
 	i.mu.Unlock()
 
@@ -2440,6 +2445,9 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 	}
 	if calls[0].idempotencyKey != "agent-tool:turn-1:call-1" {
 		t.Fatalf("invoker idempotency key = %q, want agent-tool:turn-1:call-1", calls[0].idempotencyKey)
+	}
+	if !calls[0].toolRefsSet || len(calls[0].toolRefs) != 1 || calls[0].toolRefs[0].Plugin != "slack" || calls[0].toolRefs[0].Operation != "events.reply" {
+		t.Fatalf("invoker tool refs = set %t refs %#v, want slack events.reply", calls[0].toolRefsSet, calls[0].toolRefs)
 	}
 
 	calls = invoker.Calls()

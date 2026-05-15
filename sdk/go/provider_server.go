@@ -325,5 +325,8 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 	if workflow := reqCtx.GetWorkflow(); workflow != nil {
 		ctx = WithWorkflowContext(ctx, workflow.AsMap())
 	}
+	if reqCtx.GetToolRefsSet() {
+		ctx = WithToolRefsContext(ctx, agentToolRefsFromProto(reqCtx.GetToolRefs()))
+	}
 	return ctx
 }

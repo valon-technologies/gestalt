@@ -18,6 +18,7 @@ from ._agent import (
     agent_tool_ref_to_proto,
 )
 from ._gen.v1 import agent_pb2 as _agent_pb
+from ._gen.v1 import plugin_pb2 as _plugin_pb
 from ._gen.v1 import workflow_pb2 as _pb
 from ._gen.v1 import workflow_pb2_grpc as _pb_grpc
 from ._grpc_transport import host_service_channel
@@ -608,7 +609,7 @@ def _message_proto_list(
             output.append(_copy(item))
         elif message_type is _agent_pb.AgentMessage:
             output.append(agent_message_to_proto(item))
-        elif message_type is _agent_pb.AgentToolRef:
+        elif message_type is _plugin_pb.AgentToolRef:
             converted = agent_tool_ref_to_proto(item)
             if converted is None:
                 raise TypeError("AgentToolRef item cannot be None")
@@ -635,7 +636,7 @@ def _agent_tool_ref_input_list(values: Sequence[Any] | None) -> list[Any]:
         return []
     output = []
     for item in values:
-        if isinstance(item, _agent_pb.AgentToolRef):
+        if isinstance(item, _plugin_pb.AgentToolRef):
             output.append(agent_tool_ref_from_proto(item))
         else:
             output.append(agent_tool_ref_from_dict(item))
@@ -900,7 +901,7 @@ def bound_workflow_agent_target(value: Any | None = None, **kwargs: Any) -> Any:
         model=data.get("model", ""),
         prompt=data.get("prompt", ""),
         messages=_message_proto_list(data.get("messages"), _agent_pb.AgentMessage),
-        tool_refs=_message_proto_list(data.get("tool_refs"), _agent_pb.AgentToolRef),
+        tool_refs=_message_proto_list(data.get("tool_refs"), _plugin_pb.AgentToolRef),
         response_schema=_optional_struct(data.get("response_schema")),
         metadata=_optional_struct(data.get("metadata")),
         timeout_seconds=data.get("timeout_seconds", 0),

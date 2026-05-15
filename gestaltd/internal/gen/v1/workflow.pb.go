@@ -5028,7 +5028,7 @@ var File_v1_workflow_proto protoreflect.FileDescriptor
 
 const file_v1_workflow_proto_rawDesc = "" +
 	"\n" +
-	"\x11v1/workflow.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\"\xe9\x01\n" +
+	"\x11v1/workflow.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x0ev1/agent.proto\x1a\x0fv1/plugin.proto\"\xe9\x01\n" +
 	"\x13BoundWorkflowTarget\x12H\n" +
 	"\x06plugin\x18\x06 \x01(\v2..gestalt.provider.v1.BoundWorkflowPluginTargetH\x00R\x06plugin\x12E\n" +
 	"\x05agent\x18\a \x01(\v2-.gestalt.provider.v1.BoundWorkflowAgentTargetH\x00R\x05agentB\x06\n" +
@@ -5796,6 +5796,7 @@ func file_v1_workflow_proto_init() {
 		return
 	}
 	file_v1_agent_proto_init()
+	file_v1_plugin_proto_init()
 	file_v1_workflow_proto_msgTypes[0].OneofWrappers = []any{
 		(*BoundWorkflowTarget_Plugin)(nil),
 		(*BoundWorkflowTarget_Agent)(nil),

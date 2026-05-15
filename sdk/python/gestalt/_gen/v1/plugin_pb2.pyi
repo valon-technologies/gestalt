@@ -265,6 +265,42 @@ class ExternalIdentityContext(_message.Message):
     id: str
     def __init__(self, type: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
 
+class AgentSubjectContext(_message.Message):
+    __slots__ = ()
+    SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    SUBJECT_KIND_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
+    AUTH_SOURCE_FIELD_NUMBER: _ClassVar[int]
+    subject_id: str
+    subject_kind: str
+    credential_subject_id: str
+    display_name: str
+    auth_source: str
+    def __init__(self, subject_id: _Optional[str] = ..., subject_kind: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ...) -> None: ...
+
+class AgentToolRef(_message.Message):
+    __slots__ = ()
+    PLUGIN_FIELD_NUMBER: _ClassVar[int]
+    OPERATION_FIELD_NUMBER: _ClassVar[int]
+    CONNECTION_FIELD_NUMBER: _ClassVar[int]
+    INSTANCE_FIELD_NUMBER: _ClassVar[int]
+    TITLE_FIELD_NUMBER: _ClassVar[int]
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    SYSTEM_FIELD_NUMBER: _ClassVar[int]
+    RUN_AS_FIELD_NUMBER: _ClassVar[int]
+    RUN_AS_EXTERNAL_IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    plugin: str
+    operation: str
+    connection: str
+    instance: str
+    title: str
+    description: str
+    system: str
+    run_as: AgentSubjectContext
+    run_as_external_identity: ExternalIdentityContext
+    def __init__(self, plugin: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., system: _Optional[str] = ..., run_as: _Optional[_Union[AgentSubjectContext, _Mapping]] = ..., run_as_external_identity: _Optional[_Union[ExternalIdentityContext, _Mapping]] = ...) -> None: ...
+
 class StringList(_message.Message):
     __slots__ = ()
     VALUES_FIELD_NUMBER: _ClassVar[int]
@@ -307,6 +343,8 @@ class RequestContext(_message.Message):
     AGENT_SUBJECT_FIELD_NUMBER: _ClassVar[int]
     AGENT_EXTERNAL_IDENTITY_FIELD_NUMBER: _ClassVar[int]
     EXTERNAL_IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    TOOL_REFS_FIELD_NUMBER: _ClassVar[int]
+    TOOL_REFS_SET_FIELD_NUMBER: _ClassVar[int]
     subject: SubjectContext
     credential: CredentialContext
     access: AccessContext
@@ -315,7 +353,9 @@ class RequestContext(_message.Message):
     agent_subject: SubjectContext
     agent_external_identity: ExternalIdentityContext
     external_identity: ExternalIdentityContext
-    def __init__(self, subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., credential: _Optional[_Union[CredentialContext, _Mapping]] = ..., access: _Optional[_Union[AccessContext, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., host: _Optional[_Union[HostContext, _Mapping]] = ..., agent_subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., agent_external_identity: _Optional[_Union[ExternalIdentityContext, _Mapping]] = ..., external_identity: _Optional[_Union[ExternalIdentityContext, _Mapping]] = ...) -> None: ...
+    tool_refs: _containers.RepeatedCompositeFieldContainer[AgentToolRef]
+    tool_refs_set: bool
+    def __init__(self, subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., credential: _Optional[_Union[CredentialContext, _Mapping]] = ..., access: _Optional[_Union[AccessContext, _Mapping]] = ..., workflow: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., host: _Optional[_Union[HostContext, _Mapping]] = ..., agent_subject: _Optional[_Union[SubjectContext, _Mapping]] = ..., agent_external_identity: _Optional[_Union[ExternalIdentityContext, _Mapping]] = ..., external_identity: _Optional[_Union[ExternalIdentityContext, _Mapping]] = ..., tool_refs: _Optional[_Iterable[_Union[AgentToolRef, _Mapping]]] = ..., tool_refs_set: _Optional[bool] = ...) -> None: ...
 
 class HTTPSubjectRequest(_message.Message):
     __slots__ = ()

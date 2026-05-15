@@ -456,6 +456,19 @@ class MainEntrypointTests(unittest.TestCase):
                     request.workflow.get("trigger", {}).get("kind", "")
                 ),
                 "workflow": request.workflow,
+                "tool_refs_set": request.tool_refs_set,
+                "tool_ref_plugin": request.tool_refs[0].plugin
+                if request.tool_refs
+                else "",
+                "tool_ref_operation": request.tool_refs[0].operation
+                if request.tool_refs
+                else "",
+                "tool_ref_run_as": request.tool_refs[0].run_as.subject_id
+                if request.tool_refs and request.tool_refs[0].run_as
+                else "",
+                "tool_ref_external_id": request.tool_refs[0].run_as_external_identity.id
+                if request.tool_refs and request.tool_refs[0].run_as_external_identity
+                else "",
             }
 
         @plugin.session_catalog
@@ -581,6 +594,24 @@ class MainEntrypointTests(unittest.TestCase):
                         public_base_url="https://gestalt.example.test",
                     ),
                     workflow=execute_workflow,
+                    tool_refs=[
+                        plugin_pb2.AgentToolRef(
+                            plugin="github",
+                            operation="bot.getPullRequest",
+                            run_as=plugin_pb2.AgentSubjectContext(
+                                subject_id="service_account:github-review",
+                                subject_kind="service_account",
+                                credential_subject_id="service_account:github-review",
+                                display_name="GitHub Review",
+                                auth_source="managed_subject",
+                            ),
+                            run_as_external_identity=plugin_pb2.ExternalIdentityContext(
+                                type="github_identity",
+                                id="user:12345678",
+                            ),
+                        )
+                    ],
+                    tool_refs_set=True,
                 ),
             ),
             mock.Mock(),
@@ -688,6 +719,11 @@ class MainEntrypointTests(unittest.TestCase):
                         },
                     },
                 },
+                "tool_refs_set": True,
+                "tool_ref_plugin": "github",
+                "tool_ref_operation": "bot.getPullRequest",
+                "tool_ref_run_as": "service_account:github-review",
+                "tool_ref_external_id": "user:12345678",
                 "invocation_token": "opaque-invocation-token",
             },
         )
@@ -1518,15 +1554,21 @@ class WorkflowRuntimeTests(unittest.TestCase):
             object(),
         )
         resumed_schedule = wrapped.ResumeSchedule(
-            workflow_pb2.ResumeWorkflowProviderScheduleRequest(schedule_id="schedule-1"),
+            workflow_pb2.ResumeWorkflowProviderScheduleRequest(
+                schedule_id="schedule-1"
+            ),
             object(),
         )
         paused_trigger = wrapped.PauseEventTrigger(
-            workflow_pb2.PauseWorkflowProviderEventTriggerRequest(trigger_id="trigger-1"),
+            workflow_pb2.PauseWorkflowProviderEventTriggerRequest(
+                trigger_id="trigger-1"
+            ),
             object(),
         )
         resumed_trigger = wrapped.ResumeEventTrigger(
-            workflow_pb2.ResumeWorkflowProviderEventTriggerRequest(trigger_id="trigger-1"),
+            workflow_pb2.ResumeWorkflowProviderEventTriggerRequest(
+                trigger_id="trigger-1"
+            ),
             object(),
         )
 

@@ -63,12 +63,14 @@ from gestalt import (
 )
 from gestalt._gen.v1 import agent_pb2 as _agent_pb2
 from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
+from gestalt._gen.v1 import plugin_pb2 as _plugin_pb2
 from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
 
 agent_pb2: Any = _agent_pb2
 agent_pb2_grpc: Any = _agent_pb2_grpc
 empty_pb2: Any = _empty_pb2
+plugin_pb2: Any = _plugin_pb2
 runtime_pb2: Any = _runtime_pb2
 runtime_pb2_grpc: Any = _runtime_pb2_grpc
 struct_pb2: Any = _struct_pb2
@@ -313,7 +315,7 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                     title="Send Slack message",
                     description="Send a direct message",
                     input_schema='{"type":"object"}',
-                    ref=agent_pb2.AgentToolRef(
+                    ref=plugin_pb2.AgentToolRef(
                         plugin="slack",
                         operation="chat.postMessage",
                     ),

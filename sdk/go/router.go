@@ -22,6 +22,8 @@ type Request struct {
 	Access                Access
 	Host                  Host
 	IdempotencyKey        string
+	ToolRefs              []AgentToolRef
+	ToolRefsSet           bool
 	invocationToken       string
 }
 
@@ -226,6 +228,8 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 			Access:                AccessFromContext(ctx),
 			Host:                  HostContextFromContext(ctx),
 			IdempotencyKey:        IdempotencyKeyFromContext(ctx),
+			ToolRefs:              ToolRefsFromContext(ctx),
+			ToolRefsSet:           ToolRefsSetFromContext(ctx),
 			invocationToken:       invocationTokenFromContext(ctx),
 		})
 	})

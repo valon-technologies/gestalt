@@ -4,6 +4,7 @@ from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from . import agent_pb2 as _agent_pb2
+from . import plugin_pb2 as _plugin_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -69,14 +70,14 @@ class BoundWorkflowAgentTarget(_message.Message):
     model: str
     prompt: str
     messages: _containers.RepeatedCompositeFieldContainer[_agent_pb2.AgentMessage]
-    tool_refs: _containers.RepeatedCompositeFieldContainer[_agent_pb2.AgentToolRef]
+    tool_refs: _containers.RepeatedCompositeFieldContainer[_plugin_pb2.AgentToolRef]
     response_schema: _struct_pb2.Struct
     metadata: _struct_pb2.Struct
     timeout_seconds: int
     output_delivery: WorkflowOutputDelivery
     model_options: _struct_pb2.Struct
     session_ready_delivery: WorkflowOutputDelivery
-    def __init__(self, provider_name: _Optional[str] = ..., model: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_agent_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., session_ready_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ...) -> None: ...
+    def __init__(self, provider_name: _Optional[str] = ..., model: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., session_ready_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ...) -> None: ...
 
 class WorkflowOutputDelivery(_message.Message):
     __slots__ = ()

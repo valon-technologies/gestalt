@@ -8,18 +8,18 @@ import {
   AgentMessagePartSchema,
   AgentMessagePartType as ProtoAgentMessagePartType,
   AgentMessageSchema,
-  AgentSubjectContextSchema,
-  AgentToolRefSchema,
   AgentTurnDisplaySchema,
   type AgentActor as ProtoAgentActor,
   type AgentMessage as ProtoAgentMessage,
   type AgentMessagePart as ProtoAgentMessagePart,
-  type AgentSubjectContext as ProtoAgentSubjectContext,
-  type AgentToolRef as ProtoAgentToolRef,
   type AgentTurnDisplay as ProtoAgentTurnDisplay,
 } from "./internal/gen/v1/agent_pb.ts";
 import {
+  AgentSubjectContextSchema,
+  AgentToolRefSchema,
   ExternalIdentityContextSchema,
+  type AgentSubjectContext as ProtoAgentSubjectContext,
+  type AgentToolRef as ProtoAgentToolRef,
   type ExternalIdentityContext as ProtoExternalIdentityContext,
 } from "./internal/gen/v1/plugin_pb.ts";
 import {

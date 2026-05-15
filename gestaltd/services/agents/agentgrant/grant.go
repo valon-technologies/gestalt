@@ -47,6 +47,7 @@ type Grant struct {
 	AuthSource              string
 	Permissions             []core.AccessPermission
 	ToolRefs                []coreagent.ToolRef
+	ToolRefsSet             bool
 	Tools                   []coreagent.Tool
 	ToolSource              coreagent.ToolSourceMode
 	Connections             []ConnectionBinding
@@ -69,6 +70,7 @@ type claims struct {
 
 type toolScope struct {
 	ToolRefs                []coreagent.ToolRef          `json:"tool_refs,omitempty"`
+	ToolRefsSet             bool                         `json:"tool_refs_set,omitempty"`
 	Tools                   []coreagent.Tool             `json:"tools,omitempty"`
 	ToolSource              coreagent.ToolSourceMode     `json:"tool_source,omitempty"`
 	Connections             []ConnectionBinding          `json:"connections,omitempty"`
@@ -120,6 +122,7 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 	}
 	scope, err := m.sealValue(sealPurposeToolScope, toolScope{
 		ToolRefs:                append([]coreagent.ToolRef(nil), grant.ToolRefs...),
+		ToolRefsSet:             grant.ToolRefsSet || len(grant.ToolRefs) > 0,
 		Tools:                   append([]coreagent.Tool(nil), grant.Tools...),
 		ToolSource:              grant.ToolSource,
 		Connections:             append([]ConnectionBinding(nil), grant.Connections...),
@@ -171,6 +174,7 @@ func (m *Manager) Resolve(token string) (Grant, error) {
 		AuthSource:              strings.TrimSpace(decoded.AuthSource),
 		Permissions:             append([]core.AccessPermission(nil), decoded.Permissions...),
 		ToolRefs:                append([]coreagent.ToolRef(nil), scope.ToolRefs...),
+		ToolRefsSet:             scope.ToolRefsSet || len(scope.ToolRefs) > 0,
 		Tools:                   append([]coreagent.Tool(nil), scope.Tools...),
 		ToolSource:              scope.ToolSource,
 		Connections:             append([]ConnectionBinding(nil), scope.Connections...),

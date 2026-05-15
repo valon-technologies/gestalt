@@ -40,8 +40,6 @@ import {
   type AgentMessagePartToolCall as ProtoAgentMessagePartToolCall,
   type AgentMessagePartToolResult as ProtoAgentMessagePartToolResult,
   type AgentSession as ProtoAgentSession,
-  type AgentSubjectContext as ProtoAgentSubjectContext,
-  type AgentToolRef as ProtoAgentToolRef,
   type AgentTurn as ProtoAgentTurn,
   type AgentTurnEvent as ProtoAgentTurnEvent,
   type CancelAgentProviderTurnRequest as ProtoCancelAgentProviderTurnRequest,
@@ -66,6 +64,10 @@ import {
   type ResolvedAgentTool as ProtoResolvedAgentTool,
   type UpdateAgentProviderSessionRequest as ProtoUpdateAgentProviderSessionRequest,
 } from "./internal/gen/v1/agent_pb.ts";
+import {
+  type AgentSubjectContext as ProtoAgentSubjectContext,
+  type AgentToolRef as ProtoAgentToolRef,
+} from "./internal/gen/v1/plugin_pb.ts";
 import { errorMessage, type ExternalIdentity, type MaybePromise } from "./api.ts";
 import {
   agentActorFromProto,
