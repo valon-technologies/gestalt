@@ -496,6 +496,14 @@ func TestLoadDefinitionWithAllowedOpsIgnoresMixedSurfaceEntriesWithoutSelectionO
 	}
 }
 
+func TestIntrospectionQueryIncludesDeprecatedFields(t *testing.T) {
+	t.Parallel()
+
+	if !strings.Contains(IntrospectionRequest().Document, "fields(includeDeprecated: true)") {
+		t.Fatal("introspection query should include deprecated fields for selection-set validation")
+	}
+}
+
 func TestLoadDefinitionWithAllowedOpsValidatesSelectionSet(t *testing.T) {
 	t.Parallel()
 

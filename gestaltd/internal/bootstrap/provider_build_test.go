@@ -90,7 +90,7 @@ func TestMCPAllowedOperationsForSpecCompositeFiltersOnlyWhenAPIIsPresent(t *test
 		{ID: "mcp_lookup"},
 	}}
 
-	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, apiCatalog, mcpCatalog)
+	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, apiCatalog, mcpCatalog, nil)
 	if !includeMCP {
 		t.Fatal("includeMCP = false, want true for matching static MCP catalog")
 	}
@@ -101,7 +101,7 @@ func TestMCPAllowedOperationsForSpecCompositeFiltersOnlyWhenAPIIsPresent(t *test
 		t.Fatal("GraphQL-tagged operation should not be passed to MCP filter when API surface exists")
 	}
 
-	unfiltered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, false, nil, mcpCatalog)
+	unfiltered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, false, nil, mcpCatalog, nil)
 	if !includeMCP {
 		t.Fatal("includeMCP = false, want true for MCP-only provider")
 	}
@@ -127,12 +127,34 @@ func TestMCPAllowedOperationsForSpecCompositePreservesDynamicAllowlist(t *testin
 		{ID: "listNotes"},
 	}}
 
-	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, apiCatalog, &catalog.Catalog{})
+	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, apiCatalog, &catalog.Catalog{}, nil)
 	if !includeMCP {
 		t.Fatal("includeMCP = false, want true for dynamic MCP allowlist")
 	}
 	if len(filtered) != 1 || filtered["lookup"] == nil {
 		t.Fatalf("filtered allowedOperations = %#v, want only dynamic MCP operation", filtered)
+	}
+}
+
+func TestMCPAllowedOperationsForSpecCompositeFiltersLegacyGraphQLSelections(t *testing.T) {
+	t.Parallel()
+
+	allowedOperations := map[string]*config.OperationOverride{
+		"searchIssues": {Description: "legacy GraphQL search"},
+		"lookup":       {Description: "MCP lookup"},
+	}
+
+	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, &catalog.Catalog{}, &catalog.Catalog{}, map[string]string{
+		"searchIssues": "nodes { id }",
+	})
+	if !includeMCP {
+		t.Fatal("includeMCP = false, want true for dynamic MCP allowlist")
+	}
+	if len(filtered) != 1 || filtered["lookup"] == nil {
+		t.Fatalf("filtered allowedOperations = %#v, want only lookup", filtered)
+	}
+	if _, ok := filtered["searchIssues"]; ok {
+		t.Fatal("legacy GraphQL selection operation should not be passed to dynamic MCP filter")
 	}
 }
 
@@ -148,7 +170,7 @@ func TestMCPAllowedOperationsForSpecCompositeOmitsMCPWhenNoMCPAllowlistEntries(t
 		},
 	}
 
-	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, nil, &catalog.Catalog{})
+	filtered, includeMCP := mcpAllowedOperationsForSpecComposite(allowedOperations, true, nil, &catalog.Catalog{}, nil)
 	if includeMCP {
 		t.Fatalf("includeMCP = true with filtered allowedOperations %#v, want false", filtered)
 	}

@@ -88,7 +88,7 @@ const introspectionQuery = `query IntrospectionQuery {
       kind
       name
       description
-      fields(includeDeprecated: false) {
+      fields(includeDeprecated: true) {
         name
         description
         args {
