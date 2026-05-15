@@ -20,6 +20,7 @@ func PluginInvocationDependencies(deps []config.PluginInvocationDependency) []in
 			CredentialMode:        core.ConnectionMode(dep.CredentialMode),
 			RunAs:                 dep.RunAsSubject(),
 			RunAsExternalIdentity: dep.RunAsExternalIdentity(),
+			RunAsExplicitOnly:     !dep.RunAsAppliesByDefault(),
 		})
 	}
 	return out

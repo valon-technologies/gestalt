@@ -60,3 +60,53 @@ test("workflow copy helpers do not alias nested payloads", () => {
     value: "original",
   });
 });
+
+test("agent workflow tool refs carry runAs subjects", () => {
+  const target = boundWorkflowTarget({
+    agent: {
+      providerName: "agent",
+      toolRefs: [
+        {
+          plugin: "notion",
+          operation: "search",
+          runAs: {
+            subjectId: "service_account:gestalt-support-notion",
+            subjectKind: "service_account",
+            credentialSubjectId: "service_account:notion-credential",
+            displayName: "Gestalt Support Notion",
+            authSource: "notion_service_account",
+          },
+          runAsExternalIdentity: {
+            type: "notion_workspace",
+            id: "valon-support",
+          },
+        },
+      ],
+    },
+  });
+
+  if (target.kind?.case !== "agent") {
+    throw new Error("expected agent target");
+  }
+  const refs = target.kind.value.toolRefs ?? [];
+  expect(refs).toHaveLength(1);
+  const ref = refs[0];
+  if (ref === undefined) {
+    throw new Error("expected agent tool ref");
+  }
+  expect(ref.runAs?.subjectId).toBe("service_account:gestalt-support-notion");
+  expect(ref.runAsExternalIdentity?.id).toBe("valon-support");
+
+  const copied = boundWorkflowTargetFromTarget(target);
+  if (copied.kind?.case !== "agent") {
+    throw new Error("expected copied agent target");
+  }
+  const copiedRefs = copied.kind.value.toolRefs ?? [];
+  expect(copiedRefs).toHaveLength(1);
+  const copiedRef = copiedRefs[0];
+  if (copiedRef === undefined) {
+    throw new Error("expected copied agent tool ref");
+  }
+  expect(copiedRef.runAs?.displayName).toBe("Gestalt Support Notion");
+  expect(copiedRef.runAsExternalIdentity?.type).toBe("notion_workspace");
+});

@@ -118,14 +118,26 @@ func NewAgentMessagePartImageRef(input AgentMessagePartImageRef) *AgentMessagePa
 
 // NewAgentToolRef creates an agent tool reference.
 func NewAgentToolRef(input AgentToolRef) *AgentToolRef {
+	var runAs *AgentRunAsSubject
+	if input.RunAs != nil {
+		copied := *input.RunAs
+		runAs = &copied
+	}
+	var runAsExternalIdentity *ExternalIdentity
+	if input.RunAsExternalIdentity != nil {
+		copied := *input.RunAsExternalIdentity
+		runAsExternalIdentity = &copied
+	}
 	return &AgentToolRef{
-		Plugin:      input.Plugin,
-		Operation:   input.Operation,
-		Connection:  input.Connection,
-		Instance:    input.Instance,
-		Title:       input.Title,
-		Description: input.Description,
-		System:      input.System,
+		Plugin:                input.Plugin,
+		Operation:             input.Operation,
+		Connection:            input.Connection,
+		Instance:              input.Instance,
+		Title:                 input.Title,
+		Description:           input.Description,
+		System:                input.System,
+		RunAs:                 runAs,
+		RunAsExternalIdentity: runAsExternalIdentity,
 	}
 }
 
@@ -134,14 +146,26 @@ func AgentToolRefFromRef(value *AgentToolRef) AgentToolRef {
 	if value == nil {
 		return AgentToolRef{}
 	}
+	var runAs *AgentRunAsSubject
+	if value.RunAs != nil {
+		copied := *value.RunAs
+		runAs = &copied
+	}
+	var runAsExternalIdentity *ExternalIdentity
+	if value.RunAsExternalIdentity != nil {
+		copied := *value.RunAsExternalIdentity
+		runAsExternalIdentity = &copied
+	}
 	return AgentToolRef{
-		Plugin:      value.Plugin,
-		Operation:   value.Operation,
-		Connection:  value.Connection,
-		Instance:    value.Instance,
-		Title:       value.Title,
-		Description: value.Description,
-		System:      value.System,
+		Plugin:                value.Plugin,
+		Operation:             value.Operation,
+		Connection:            value.Connection,
+		Instance:              value.Instance,
+		Title:                 value.Title,
+		Description:           value.Description,
+		System:                value.System,
+		RunAs:                 runAs,
+		RunAsExternalIdentity: runAsExternalIdentity,
 	}
 }
 

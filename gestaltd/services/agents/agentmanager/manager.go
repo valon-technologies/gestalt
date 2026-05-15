@@ -3966,6 +3966,7 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 	modes := make(map[string]core.ConnectionMode)
 	runAsSubjects := make(map[string]*core.RunAsSubject)
 	runAsExternalIdentities := make(map[string]*core.ExternalIdentityRef)
+	runAsExplicitOnly := make(map[string]bool)
 	if callerPluginName != "" {
 		for _, invoke := range m.pluginInvokes[callerPluginName] {
 			if strings.TrimSpace(invoke.Surface) != "" {
@@ -3986,6 +3987,7 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 			if runAs := core.NormalizeRunAsSubject(invoke.RunAs); runAs != nil {
 				key := agentToolInvokeKey(pluginName, operation)
 				runAsSubjects[key] = runAs
+				runAsExplicitOnly[key] = invoke.RunAsExplicitOnly
 				if identity := core.NormalizeExternalIdentityRef(invoke.RunAsExternalIdentity); identity != nil {
 					runAsExternalIdentities[key] = identity
 				}
@@ -4020,6 +4022,9 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 		mode, hasMode := modes[key]
 		runAs, hasRunAs := runAsSubjects[key]
 		externalIdentity, hasExternalIdentity := runAsExternalIdentities[key]
+		explicitOnly := runAsExplicitOnly[key]
+		requestedRunAs := out[i].RunAs != nil
+		requestedExternalIdentity := out[i].RunAsExternalIdentity != nil
 		if !hasMode && !hasRunAs && !hasExternalIdentity {
 			if out[i].CredentialMode != "" {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
@@ -4038,7 +4043,7 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 		if !hasMode && out[i].CredentialMode != "" {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
 		}
-		if hasRunAs && out[i].RunAs != nil && !core.RunAsSubjectsEqual(out[i].RunAs, runAs) {
+		if hasRunAs && out[i].RunAs != nil && !core.RunAsSubjectsMatchIdentity(out[i].RunAs, runAs) {
 			return nil, fmt.Errorf("%w: agent tool_refs[%d].runAs exceeds declared invoke delegation", invocation.ErrAuthorizationDenied, i)
 		}
 		if !hasRunAs && out[i].RunAs != nil {
@@ -4053,10 +4058,10 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 		if hasMode {
 			out[i].CredentialMode = mode
 		}
-		if hasRunAs {
+		if hasRunAs && (!explicitOnly || requestedRunAs) {
 			out[i].RunAs = runAs
 		}
-		if hasExternalIdentity {
+		if hasExternalIdentity && (!explicitOnly || requestedRunAs || requestedExternalIdentity) {
 			out[i].RunAsExternalIdentity = externalIdentity
 		}
 	}
@@ -4075,7 +4080,11 @@ func agentToolRunAsKey(subject *core.RunAsSubject) core.RunAsSubject {
 	if normalized == nil {
 		return core.RunAsSubject{}
 	}
-	return *normalized
+	return core.RunAsSubject{
+		SubjectID:           normalized.SubjectID,
+		SubjectKind:         normalized.SubjectKind,
+		CredentialSubjectID: normalized.CredentialSubjectID,
+	}
 }
 
 func agentToolRunAsKeyString(subject core.RunAsSubject) string {
@@ -4086,8 +4095,6 @@ func agentToolRunAsKeyString(subject core.RunAsSubject) string {
 		subject.SubjectID,
 		subject.SubjectKind,
 		subject.CredentialSubjectID,
-		subject.DisplayName,
-		subject.AuthSource,
 	}, "\x00")
 }
 

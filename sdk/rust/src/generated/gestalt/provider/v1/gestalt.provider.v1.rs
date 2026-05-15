@@ -545,6 +545,19 @@ pub struct AgentSubjectContext {
     #[prost(string, tag = "5")]
     pub auth_source: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentRunAsSubject {
+    #[prost(string, tag = "1")]
+    pub subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub subject_kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub credential_subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub display_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub auth_source: ::prost::alloc::string::String,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentWorkspace {
     #[prost(message, repeated, tag = "1")]
@@ -595,6 +608,10 @@ pub struct AgentToolRef {
     pub description: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
     pub system: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub run_as: ::core::option::Option<AgentRunAsSubject>,
+    #[prost(message, optional, tag = "10")]
+    pub run_as_external_identity: ::core::option::Option<ExternalIdentityContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentProviderCapabilities {

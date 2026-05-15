@@ -53,10 +53,14 @@ class WorkflowHelperTests(unittest.TestCase):
         )
         copied = gestalt.bound_workflow_target_from_target(target)
 
-        target.plugin.input.fields["nested"].struct_value.fields["value"].string_value = "changed"
+        target.plugin.input.fields["nested"].struct_value.fields[
+            "value"
+        ].string_value = "changed"
 
         self.assertEqual(
-            copied.plugin.input.fields["nested"].struct_value.fields["value"].string_value,
+            copied.plugin.input.fields["nested"]
+            .struct_value.fields["value"]
+            .string_value,
             "original",
         )
 
@@ -84,6 +88,45 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(target.messages[0].text, "Watch the alerts channel.")
         self.assertEqual(target.tool_refs[0].plugin, "github")
         self.assertEqual(target.tool_refs[0].operation, "search/code")
+
+    def test_agent_tool_ref_carries_run_as(self) -> None:
+        target = gestalt.bound_workflow_agent_target(
+            tool_refs=[
+                gestalt.AgentToolRef(
+                    plugin="notion",
+                    operation="search",
+                    run_as=gestalt.AgentRunAsSubject(
+                        subject_id="service_account:gestalt-support-notion",
+                        subject_kind="service_account",
+                        credential_subject_id="service_account:notion-credential",
+                        display_name="Gestalt Support Notion",
+                        auth_source="notion_service_account",
+                    ),
+                    run_as_external_identity=gestalt.ExternalIdentity(
+                        type="notion_workspace",
+                        id="valon-support",
+                    ),
+                )
+            ],
+        )
+
+        self.assertEqual(
+            target.tool_refs[0].run_as.subject_id,
+            "service_account:gestalt-support-notion",
+        )
+        self.assertEqual(
+            target.tool_refs[0].run_as_external_identity.id,
+            "valon-support",
+        )
+        copied = gestalt.bound_workflow_agent_target_input_from_target(target)
+        self.assertEqual(
+            copied.tool_refs[0].run_as.display_name,
+            "Gestalt Support Notion",
+        )
+        self.assertEqual(
+            copied.tool_refs[0].run_as_external_identity.type,
+            "notion_workspace",
+        )
 
     def test_agent_target_copy_returns_native_messages(self) -> None:
         target = gestalt.bound_workflow_agent_target(

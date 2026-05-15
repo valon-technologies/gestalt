@@ -291,13 +291,15 @@ func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
 		return AgentToolRef{}
 	}
 	return AgentToolRef{
-		Plugin:      value.GetPlugin(),
-		Operation:   value.GetOperation(),
-		Connection:  value.GetConnection(),
-		Instance:    value.GetInstance(),
-		Title:       value.GetTitle(),
-		Description: value.GetDescription(),
-		System:      value.GetSystem(),
+		Plugin:                value.GetPlugin(),
+		Operation:             value.GetOperation(),
+		Connection:            value.GetConnection(),
+		Instance:              value.GetInstance(),
+		Title:                 value.GetTitle(),
+		Description:           value.GetDescription(),
+		System:                value.GetSystem(),
+		RunAs:                 agentRunAsSubjectFromProto(value.GetRunAs()),
+		RunAsExternalIdentity: externalIdentityFromProto(value.GetRunAsExternalIdentity()),
 	}
 }
 
@@ -326,13 +328,61 @@ func agentToolRefPtrsFromProto(values []*proto.AgentToolRef) []*AgentToolRef {
 
 func agentToolRefToProto(value AgentToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
-		Plugin:      value.Plugin,
-		Operation:   value.Operation,
-		Connection:  value.Connection,
-		Instance:    value.Instance,
-		Title:       value.Title,
-		Description: value.Description,
-		System:      value.System,
+		Plugin:                value.Plugin,
+		Operation:             value.Operation,
+		Connection:            value.Connection,
+		Instance:              value.Instance,
+		Title:                 value.Title,
+		Description:           value.Description,
+		System:                value.System,
+		RunAs:                 agentRunAsSubjectToProto(value.RunAs),
+		RunAsExternalIdentity: externalIdentityToProto(value.RunAsExternalIdentity),
+	}
+}
+
+func agentRunAsSubjectFromProto(value *proto.AgentRunAsSubject) *AgentRunAsSubject {
+	if value == nil {
+		return nil
+	}
+	return &AgentRunAsSubject{
+		SubjectID:           value.GetSubjectId(),
+		SubjectKind:         value.GetSubjectKind(),
+		CredentialSubjectID: value.GetCredentialSubjectId(),
+		DisplayName:         value.GetDisplayName(),
+		AuthSource:          value.GetAuthSource(),
+	}
+}
+
+func agentRunAsSubjectToProto(value *AgentRunAsSubject) *proto.AgentRunAsSubject {
+	if value == nil {
+		return nil
+	}
+	return &proto.AgentRunAsSubject{
+		SubjectId:           value.SubjectID,
+		SubjectKind:         value.SubjectKind,
+		CredentialSubjectId: value.CredentialSubjectID,
+		DisplayName:         value.DisplayName,
+		AuthSource:          value.AuthSource,
+	}
+}
+
+func externalIdentityFromProto(value *proto.ExternalIdentityContext) *ExternalIdentity {
+	if value == nil {
+		return nil
+	}
+	return &ExternalIdentity{
+		Type: value.GetType(),
+		ID:   value.GetId(),
+	}
+}
+
+func externalIdentityToProto(value *ExternalIdentity) *proto.ExternalIdentityContext {
+	if value == nil {
+		return nil
+	}
+	return &proto.ExternalIdentityContext{
+		Type: value.Type,
+		Id:   value.ID,
 	}
 }
 

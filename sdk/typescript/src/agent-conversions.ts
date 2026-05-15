@@ -8,14 +8,20 @@ import {
   AgentMessagePartSchema,
   AgentMessagePartType as ProtoAgentMessagePartType,
   AgentMessageSchema,
+  AgentRunAsSubjectSchema,
   AgentToolRefSchema,
   AgentTurnDisplaySchema,
   type AgentActor as ProtoAgentActor,
   type AgentMessage as ProtoAgentMessage,
   type AgentMessagePart as ProtoAgentMessagePart,
+  type AgentRunAsSubject as ProtoAgentRunAsSubject,
   type AgentToolRef as ProtoAgentToolRef,
   type AgentTurnDisplay as ProtoAgentTurnDisplay,
 } from "./internal/gen/v1/agent_pb.ts";
+import {
+  ExternalIdentityContextSchema,
+  type ExternalIdentityContext as ProtoExternalIdentityContext,
+} from "./internal/gen/v1/plugin_pb.ts";
 import {
   jsonFromValue,
   valueFromJson,
@@ -30,9 +36,11 @@ import type {
   AgentMessage,
   AgentMessagePart,
   AgentMessagePartType,
+  AgentRunAsSubject,
   AgentToolRef,
   AgentTurnDisplay,
 } from "./agent.ts";
+import type { ExternalIdentity } from "./api.ts";
 
 export function agentTurnDisplayFromProto(
   display?: ProtoAgentTurnDisplay | undefined,
@@ -185,6 +193,8 @@ export function agentToolRefFromProto(ref: ProtoAgentToolRef): AgentToolRef {
     title: ref.title,
     description: ref.description,
     system: ref.system,
+    runAs: agentRunAsSubjectFromProto(ref.runAs),
+    runAsExternalIdentity: externalIdentityFromProto(ref.runAsExternalIdentity),
   };
 }
 
@@ -197,5 +207,61 @@ export function agentToolRefToProto(ref: AgentToolRef): ProtoAgentToolRef {
     title: ref.title ?? "",
     description: ref.description ?? "",
     system: ref.system ?? "",
+    runAs: agentRunAsSubjectToProto(ref.runAs),
+    runAsExternalIdentity: externalIdentityToProto(ref.runAsExternalIdentity),
+  });
+}
+
+function agentRunAsSubjectFromProto(
+  subject?: ProtoAgentRunAsSubject | undefined,
+): AgentRunAsSubject | undefined {
+  if (subject === undefined) {
+    return undefined;
+  }
+  return {
+    subjectId: subject.subjectId,
+    subjectKind: subject.subjectKind,
+    credentialSubjectId: subject.credentialSubjectId,
+    displayName: subject.displayName,
+    authSource: subject.authSource,
+  };
+}
+
+function agentRunAsSubjectToProto(
+  subject?: AgentRunAsSubject | undefined,
+): ProtoAgentRunAsSubject | undefined {
+  if (subject === undefined) {
+    return undefined;
+  }
+  return create(AgentRunAsSubjectSchema, {
+    subjectId: subject.subjectId ?? "",
+    subjectKind: subject.subjectKind ?? "",
+    credentialSubjectId: subject.credentialSubjectId ?? "",
+    displayName: subject.displayName ?? "",
+    authSource: subject.authSource ?? "",
+  });
+}
+
+function externalIdentityFromProto(
+  identity?: ProtoExternalIdentityContext | undefined,
+): ExternalIdentity | undefined {
+  if (identity === undefined) {
+    return undefined;
+  }
+  return {
+    type: identity.type,
+    id: identity.id,
+  };
+}
+
+function externalIdentityToProto(
+  identity?: ExternalIdentity | undefined,
+): ProtoExternalIdentityContext | undefined {
+  if (identity === undefined) {
+    return undefined;
+  }
+  return create(ExternalIdentityContextSchema, {
+    type: identity.type,
+    id: identity.id,
   });
 }

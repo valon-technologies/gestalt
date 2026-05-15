@@ -66,7 +66,7 @@ import {
   type ResolvedAgentTool as ProtoResolvedAgentTool,
   type UpdateAgentProviderSessionRequest as ProtoUpdateAgentProviderSessionRequest,
 } from "./internal/gen/v1/agent_pb.ts";
-import { errorMessage, type MaybePromise } from "./api.ts";
+import { errorMessage, type ExternalIdentity, type MaybePromise } from "./api.ts";
 import {
   agentActorFromProto,
   agentActorToProto,
@@ -205,6 +205,14 @@ export interface AgentSubjectContext {
   authSource?: string | undefined;
 }
 
+export interface AgentRunAsSubject {
+  subjectId?: string | undefined;
+  subjectKind?: string | undefined;
+  credentialSubjectId?: string | undefined;
+  displayName?: string | undefined;
+  authSource?: string | undefined;
+}
+
 export interface AgentToolRef {
   plugin?: string | undefined;
   operation?: string | undefined;
@@ -213,6 +221,8 @@ export interface AgentToolRef {
   title?: string | undefined;
   description?: string | undefined;
   system?: string | undefined;
+  runAs?: AgentRunAsSubject | undefined;
+  runAsExternalIdentity?: ExternalIdentity | undefined;
 }
 
 export interface ResolvedAgentTool {

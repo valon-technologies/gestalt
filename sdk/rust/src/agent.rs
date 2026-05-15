@@ -13,7 +13,7 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
-use crate::api::RuntimeMetadata;
+use crate::api::{ExternalIdentity, RuntimeMetadata};
 use crate::error::Result as ProviderResult;
 use crate::generated::v1::{
     self as pb, agent_host_client::AgentHostClient as ProtoAgentHostClient,
@@ -440,6 +440,15 @@ pub struct ResolvedAgentTool {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AgentRunAsSubject {
+    pub subject_id: String,
+    pub subject_kind: String,
+    pub credential_subject_id: String,
+    pub display_name: String,
+    pub auth_source: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AgentToolRef {
     pub plugin: String,
     pub operation: String,
@@ -448,6 +457,8 @@ pub struct AgentToolRef {
     pub title: String,
     pub description: String,
     pub system: String,
+    pub run_as: Option<AgentRunAsSubject>,
+    pub run_as_external_identity: Option<ExternalIdentity>,
 }
 
 impl AgentMessage {
@@ -867,6 +878,8 @@ pub fn new_agent_tool_ref(input: AgentToolRef) -> AgentToolRef {
         title: input.title,
         description: input.description,
         system: input.system,
+        run_as: input.run_as,
+        run_as_external_identity: input.run_as_external_identity,
     }
 }
 
@@ -1186,6 +1199,8 @@ pub(crate) fn agent_tool_ref_from_proto(value: pb::AgentToolRef) -> AgentToolRef
         title: value.title,
         description: value.description,
         system: value.system,
+        run_as: agent_run_as_subject_from_proto(value.run_as),
+        run_as_external_identity: external_identity_from_proto(value.run_as_external_identity),
     }
 }
 
@@ -1198,7 +1213,51 @@ pub(crate) fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
         title: value.title,
         description: value.description,
         system: value.system,
+        run_as: agent_run_as_subject_to_proto(value.run_as),
+        run_as_external_identity: external_identity_to_proto(value.run_as_external_identity),
     }
+}
+
+fn agent_run_as_subject_from_proto(
+    value: Option<pb::AgentRunAsSubject>,
+) -> Option<AgentRunAsSubject> {
+    value.map(|value| AgentRunAsSubject {
+        subject_id: value.subject_id,
+        subject_kind: value.subject_kind,
+        credential_subject_id: value.credential_subject_id,
+        display_name: value.display_name,
+        auth_source: value.auth_source,
+    })
+}
+
+fn agent_run_as_subject_to_proto(
+    value: Option<AgentRunAsSubject>,
+) -> Option<pb::AgentRunAsSubject> {
+    value.map(|value| pb::AgentRunAsSubject {
+        subject_id: value.subject_id,
+        subject_kind: value.subject_kind,
+        credential_subject_id: value.credential_subject_id,
+        display_name: value.display_name,
+        auth_source: value.auth_source,
+    })
+}
+
+fn external_identity_from_proto(
+    value: Option<pb::ExternalIdentityContext>,
+) -> Option<ExternalIdentity> {
+    value.map(|value| ExternalIdentity {
+        r#type: value.r#type,
+        id: value.id,
+    })
+}
+
+fn external_identity_to_proto(
+    value: Option<ExternalIdentity>,
+) -> Option<pb::ExternalIdentityContext> {
+    value.map(|value| pb::ExternalIdentityContext {
+        r#type: value.r#type,
+        id: value.id,
+    })
 }
 
 pub(crate) fn message_from_proto(value: pb::AgentMessage) -> AgentMessage {
