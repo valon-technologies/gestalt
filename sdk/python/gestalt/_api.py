@@ -25,7 +25,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from ._agent import AgentManager
+    from ._agent import AgentManager, AgentToolRef
     from ._authorization import AuthorizationClient
     from ._invoker import PluginInvoker
     from ._workflow import WorkflowManager
@@ -94,13 +94,17 @@ class Request:
     # as runId, target.plugin.pluginName, trigger.scheduleId, and
     # trigger.event.specVersion.
     workflow: dict[str, Any] = dataclasses.field(default_factory=dict)
+    tool_refs: list[AgentToolRef] = dataclasses.field(default_factory=list)
+    tool_refs_set: bool = False
     idempotency_key: str = ""
     host: Host = dataclasses.field(default_factory=Host)
     agent_subject: Subject = dataclasses.field(default_factory=Subject)
     agent_external_identity: ExternalIdentity = dataclasses.field(
         default_factory=ExternalIdentity
     )
-    external_identity: ExternalIdentity = dataclasses.field(default_factory=ExternalIdentity)
+    external_identity: ExternalIdentity = dataclasses.field(
+        default_factory=ExternalIdentity
+    )
 
     def connection_param(self, name: str) -> str | None:
         """Return a connection parameter by name if the host supplied it."""

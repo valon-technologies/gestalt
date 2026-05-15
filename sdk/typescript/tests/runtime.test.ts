@@ -52,8 +52,11 @@ import {
 } from "../src/internal/gen/v1/cache_pb.ts";
 import {
   AccessContextSchema,
+  AgentSubjectContextSchema,
+  AgentToolRefSchema,
   CredentialContextSchema,
   ExecuteRequestSchema,
+  ExternalIdentityContextSchema,
   GetSessionCatalogRequestSchema,
   HostContextSchema,
   HTTPSubjectRequestSchema,
@@ -2176,6 +2179,8 @@ test("integration provider request context includes workflow metadata", async ()
           return {
             host: request.host,
             workflow: request.workflow,
+            toolRefsSet: request.toolRefsSet,
+            toolRefs: request.toolRefs,
           };
         },
       },
@@ -2228,6 +2233,24 @@ test("integration provider request context includes workflow metadata", async ()
             attempt: 2,
           },
         },
+        toolRefs: [
+          create(AgentToolRefSchema, {
+            plugin: "github",
+            operation: "bot.getPullRequest",
+            runAs: create(AgentSubjectContextSchema, {
+              subjectId: "service_account:github-review",
+              subjectKind: "service_account",
+              credentialSubjectId: "service_account:github-review",
+              displayName: "GitHub Review",
+              authSource: "managed_subject",
+            }),
+            runAsExternalIdentity: create(ExternalIdentityContextSchema, {
+              type: "github_identity",
+              id: "user:12345678",
+            }),
+          }),
+        ],
+        toolRefsSet: true,
       }),
     }),
   );
@@ -2272,6 +2295,29 @@ test("integration provider request context includes workflow metadata", async ()
         attempt: 2,
       },
     },
+    toolRefsSet: true,
+    toolRefs: [
+      {
+        plugin: "github",
+        operation: "bot.getPullRequest",
+        connection: "",
+        instance: "",
+        title: "",
+        description: "",
+        system: "",
+        runAs: {
+          subjectId: "service_account:github-review",
+          subjectKind: "service_account",
+          credentialSubjectId: "service_account:github-review",
+          displayName: "GitHub Review",
+          authSource: "managed_subject",
+        },
+        runAsExternalIdentity: {
+          type: "github_identity",
+          id: "user:12345678",
+        },
+      },
+    ],
   });
 });
 

@@ -10,10 +10,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use generated::v1::integration_provider_client::IntegrationProviderClient;
 use generated::v1::{
-    AccessContext, CredentialContext, ExecuteRequest, ExternalIdentityContext,
-    GetSessionCatalogRequest, HostContext, HttpSubjectRequest, PostConnectCredential,
-    PostConnectRequest, RequestContext, ResolveHttpSubjectRequest, StartProviderRequest,
-    StringList, SubjectContext,
+    AccessContext, AgentSubjectContext, AgentToolRef, CredentialContext, ExecuteRequest,
+    ExternalIdentityContext, GetSessionCatalogRequest, HostContext, HttpSubjectRequest,
+    PostConnectCredential, PostConnectRequest, RequestContext, ResolveHttpSubjectRequest,
+    StartProviderRequest, StringList, SubjectContext,
 };
 use gestalt::{Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok};
 use hyper_util::rt::tokio::TokioIo;
@@ -262,6 +262,11 @@ struct Output {
     workflow_event_spec_version: String,
     workflow_event_data_content_type: String,
     workflow_created_by_subject_id: String,
+    tool_refs_set: bool,
+    tool_ref_plugin: String,
+    tool_ref_operation: String,
+    tool_ref_run_as: String,
+    tool_ref_external_id: String,
 }
 
 #[tokio::test]
@@ -332,6 +337,33 @@ async fn serves_provider_requests_over_unix_socket() {
                         .and_then(serde_json::Value::as_object)
                         .and_then(|created_by| created_by.get("subjectId"))
                         .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    tool_refs_set: request.tool_refs_set,
+                    tool_ref_plugin: request
+                        .tool_refs
+                        .first()
+                        .map(|ref_| ref_.plugin.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    tool_ref_operation: request
+                        .tool_refs
+                        .first()
+                        .map(|ref_| ref_.operation.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    tool_ref_run_as: request
+                        .tool_refs
+                        .first()
+                        .and_then(|ref_| ref_.run_as.as_ref())
+                        .map(|run_as| run_as.subject_id.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    tool_ref_external_id: request
+                        .tool_refs
+                        .first()
+                        .and_then(|ref_| ref_.run_as_external_identity.as_ref())
+                        .map(|identity| identity.id.as_str())
                         .unwrap_or_default()
                         .to_string(),
                 }))
@@ -464,6 +496,23 @@ async fn serves_provider_requests_over_unix_socket() {
                 host: Some(HostContext {
                     public_base_url: "https://gestalt.example.test".to_string(),
                 }),
+                tool_refs: vec![AgentToolRef {
+                    plugin: "github".to_string(),
+                    operation: "bot.getPullRequest".to_string(),
+                    run_as: Some(AgentSubjectContext {
+                        subject_id: "service_account:github-review".to_string(),
+                        subject_kind: "service_account".to_string(),
+                        credential_subject_id: "service_account:github-review".to_string(),
+                        display_name: "GitHub Review".to_string(),
+                        auth_source: "managed_subject".to_string(),
+                    }),
+                    run_as_external_identity: Some(ExternalIdentityContext {
+                        r#type: "github_identity".to_string(),
+                        id: "user:12345678".to_string(),
+                    }),
+                    ..Default::default()
+                }],
+                tool_refs_set: true,
                 ..Default::default()
             }),
         })
@@ -474,7 +523,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"user","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","subject_email":"ada@example.com","agent_subject_email":"grace@example.com","credential_mode":"user","access_role":"admin","host_base_url":"https://gestalt.example.test","invocation_token":"token-123","idempotency_key":"transport-tool-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123","tool_refs_set":true,"tool_ref_plugin":"github","tool_ref_operation":"bot.getPullRequest","tool_ref_run_as":"service_account:github-review","tool_ref_external_id":"user:12345678"}"#
     );
 
     let session_catalog = client
@@ -588,6 +637,7 @@ async fn serves_provider_requests_over_unix_socket() {
                 host: Some(HostContext {
                     public_base_url: "https://gestalt.example.test".to_string(),
                 }),
+                ..Default::default()
             }),
         })
         .await

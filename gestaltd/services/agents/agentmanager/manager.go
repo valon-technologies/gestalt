@@ -977,6 +977,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		toolSource = coreagent.ToolSourceModeMCPCatalog
 		toolRefs = m.defaultAgentTurnToolRefs(ctx, p, req)
 	}
+	toolRefsSet := req.ToolRefsSet || len(toolRefs) > 0
 	if req.ResponseSchemaSet {
 		if err := validateAgentResponseSchema(req.ResponseSchema); err != nil {
 			return nil, err
@@ -1017,7 +1018,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
 	inheritedOutputDelivery := InheritedOutputDeliveryFromContext(ctx)
-	runGrant, err := m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerPluginName, toolRefs, tools, toolSource, inheritedOutputDelivery)
+	runGrant, err := m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerPluginName, toolRefs, toolRefsSet, tools, toolSource, inheritedOutputDelivery)
 	if err != nil {
 		return nil, err
 	}
@@ -1969,7 +1970,7 @@ func agentProviderReadFallbackAllowed(err error) bool {
 	return false
 }
 
-func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerPluginName string, toolRefs []coreagent.ToolRef, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode, inheritedOutputDelivery *coreworkflow.OutputDelivery) (string, error) {
+func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerPluginName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode, inheritedOutputDelivery *coreworkflow.OutputDelivery) (string, error) {
 	if m == nil || m.runGrants == nil {
 		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
 	}
@@ -1992,6 +1993,7 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 		AuthSource:              subject.AuthSource,
 		Permissions:             permissions,
 		ToolRefs:                append([]coreagent.ToolRef(nil), toolRefs...),
+		ToolRefsSet:             toolRefsSet,
 		Tools:                   append([]coreagent.Tool(nil), tools...),
 		ToolSource:              toolSource,
 		Connections:             connections,

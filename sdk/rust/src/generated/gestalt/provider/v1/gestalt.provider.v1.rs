@@ -251,6 +251,40 @@ pub struct ExternalIdentityContext {
     #[prost(string, tag = "2")]
     pub id: ::prost::alloc::string::String,
 }
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentSubjectContext {
+    #[prost(string, tag = "1")]
+    pub subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub subject_kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub credential_subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub display_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub auth_source: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AgentToolRef {
+    #[prost(string, tag = "1")]
+    pub plugin: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub operation: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub connection: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub instance: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub title: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub description: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub system: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub run_as: ::core::option::Option<AgentSubjectContext>,
+    #[prost(message, optional, tag = "10")]
+    pub run_as_external_identity: ::core::option::Option<ExternalIdentityContext>,
+}
 /// StringList is a helper map value for repeated HTTP header and query values.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StringList {
@@ -306,6 +340,14 @@ pub struct RequestContext {
     /// Provider-owned external identity the invocation is authorized to assume.
     #[prost(message, optional, tag = "8")]
     pub external_identity: ::core::option::Option<ExternalIdentityContext>,
+    /// Agent tool refs granted to the operation request, when the request is
+    /// executing as an agent tool.
+    #[prost(message, repeated, tag = "9")]
+    pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
+    /// Preserves the distinction between an omitted tool-ref context and an
+    /// explicitly empty inherited tool-ref context.
+    #[prost(bool, tag = "10")]
+    pub tool_refs_set: bool,
 }
 /// HTTPSubjectRequest carries one verified hosted HTTP request into an optional
 /// plugin-local subject resolution hook.
@@ -532,19 +574,6 @@ pub struct AgentActor {
     #[prost(string, tag = "4")]
     pub auth_source: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AgentSubjectContext {
-    #[prost(string, tag = "1")]
-    pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub subject_kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub credential_subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub auth_source: ::prost::alloc::string::String,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentWorkspace {
     #[prost(message, repeated, tag = "1")]
@@ -578,27 +607,6 @@ pub struct ResolvedAgentTool {
     pub description: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "5")]
     pub parameters_schema: ::core::option::Option<::prost_types::Struct>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AgentToolRef {
-    #[prost(string, tag = "1")]
-    pub plugin: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub operation: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub connection: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub title: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub description: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
-    pub system: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "9")]
-    pub run_as: ::core::option::Option<AgentSubjectContext>,
-    #[prost(message, optional, tag = "10")]
-    pub run_as_external_identity: ::core::option::Option<ExternalIdentityContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentProviderCapabilities {

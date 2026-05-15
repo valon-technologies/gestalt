@@ -2540,6 +2540,9 @@ func TestManagerCreateTurnHonorsNoneToolSource(t *testing.T) {
 	if grant.ToolSource != coreagent.ToolSourceModeNone {
 		t.Fatalf("grant tool source = %q, want none", grant.ToolSource)
 	}
+	if grant.ToolRefsSet {
+		t.Fatalf("grant tool refs set = true, want false for unset tool refs")
+	}
 	if len(grant.ToolRefs) != 0 || len(grant.Tools) != 0 || len(grant.Connections) != 0 {
 		t.Fatalf("grant scope = refs:%#v tools:%#v connections:%#v, want no tool or connection scope", grant.ToolRefs, grant.Tools, grant.Connections)
 	}
@@ -2723,6 +2726,9 @@ func TestManagerCreateTurnHonorsExplicitEmptyToolRefsWithoutToolSource(t *testin
 	}
 	if grant.ToolSource != coreagent.ToolSourceModeUnspecified {
 		t.Fatalf("grant tool source = %q, want empty", grant.ToolSource)
+	}
+	if !grant.ToolRefsSet {
+		t.Fatalf("grant tool refs set = false, want true for explicit empty tool refs")
 	}
 	if got := grant.ToolRefs; len(got) != 0 {
 		t.Fatalf("grant tool refs = %#v, want none for explicit empty tool refs", got)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 )
 
@@ -68,6 +69,11 @@ type HostContext struct {
 	PublicBaseURL string
 }
 
+type ToolRefsContext struct {
+	Set  bool
+	Refs []coreagent.ToolRef
+}
+
 type invocationSurfaceCtxKey struct{}
 type httpBindingCtxKey struct{}
 type credentialCtxKey struct{}
@@ -76,6 +82,7 @@ type agentExternalIdentityCtxKey struct{}
 type accessCtxKey struct{}
 type hostCtxKey struct{}
 type workflowCtxKey struct{}
+type toolRefsCtxKey struct{}
 type internalConnectionAccessCtxKey struct{}
 
 type InvocationSurface string
@@ -212,6 +219,39 @@ func WithWorkflowContextString(ctx context.Context, key, value string) context.C
 func WorkflowContextFromContext(ctx context.Context) map[string]any {
 	workflow, _ := ctx.Value(workflowCtxKey{}).(map[string]any)
 	return workflow
+}
+
+func WithToolRefsContext(ctx context.Context, refs []coreagent.ToolRef) context.Context {
+	return context.WithValue(ctx, toolRefsCtxKey{}, ToolRefsContext{
+		Set:  true,
+		Refs: cloneToolRefs(refs),
+	})
+}
+
+func ToolRefsContextFromContext(ctx context.Context) ToolRefsContext {
+	refs, _ := ctx.Value(toolRefsCtxKey{}).(ToolRefsContext)
+	refs.Refs = cloneToolRefs(refs.Refs)
+	return refs
+}
+
+func cloneToolRefs(refs []coreagent.ToolRef) []coreagent.ToolRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]coreagent.ToolRef, 0, len(refs))
+	for i := range refs {
+		ref := refs[i]
+		if ref.RunAs != nil {
+			runAs := *ref.RunAs
+			ref.RunAs = &runAs
+		}
+		if ref.RunAsExternalIdentity != nil {
+			identity := *ref.RunAsExternalIdentity
+			ref.RunAsExternalIdentity = &identity
+		}
+		out = append(out, ref)
+	}
+	return out
 }
 
 func WorkflowContextMap(value map[string]any, key string) map[string]any {

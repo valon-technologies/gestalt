@@ -7,6 +7,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
+use crate::agent::{AgentToolRef, agent_tool_ref_from_proto};
 use crate::api::{
     Access, ConnectedToken, Credential, ExternalIdentity, HTTPSubjectRequest, Request, Response,
     Subject,
@@ -252,6 +253,10 @@ fn request_context(
         host: request_host(context),
         idempotency_key,
         workflow: request_workflow(context),
+        tool_refs: request_tool_refs(context),
+        tool_refs_set: context
+            .map(|context| context.tool_refs_set)
+            .unwrap_or(false),
         invocation_token,
     }
 }
@@ -396,6 +401,18 @@ fn request_workflow(
         return serde_json::Map::new();
     };
     crate::catalog::object_map(context.workflow.clone())
+}
+
+fn request_tool_refs(context: Option<&crate::generated::v1::RequestContext>) -> Vec<AgentToolRef> {
+    let Some(context) = context else {
+        return Vec::new();
+    };
+    context
+        .tool_refs
+        .iter()
+        .cloned()
+        .map(agent_tool_ref_from_proto)
+        .collect()
 }
 
 fn http_subject_request(request: Option<&HttpSubjectRequest>) -> HTTPSubjectRequest {

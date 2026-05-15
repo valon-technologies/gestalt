@@ -397,6 +397,9 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 			ID:   identity.ID,
 		})
 	}
+	if grant.ToolRefsSet {
+		ctx = invocation.WithToolRefsContext(ctx, grant.ToolRefs)
+	}
 	result, err := invoker.Invoke(ctx, invokePrincipal, resolvedTool.Target.Plugin, strings.TrimSpace(resolvedTool.Target.Instance), resolvedTool.Target.Operation, params)
 	if err != nil {
 		return nil, err

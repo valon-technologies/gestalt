@@ -80,7 +80,9 @@ import {
   AgentProvider,
   createAgentProviderService,
   isAgentProvider,
+  type AgentToolRef,
 } from "./agent.ts";
+import { agentToolRefFromProto } from "./agent-conversions.ts";
 import {
   AuthenticationProvider,
   isAuthenticationProvider,
@@ -891,12 +893,20 @@ function providerRequest(
     workflow: {
       ...(requestContext?.workflow ?? {}),
     },
+    toolRefs: providerRequestToolRefs(requestContext),
+    toolRefsSet: requestContext?.toolRefsSet ?? false,
     host: {
       publicBaseUrl: host?.publicBaseUrl ?? "",
     },
     invocationToken,
     idempotencyKey: idempotencyKey.trim(),
   };
+}
+
+function providerRequestToolRefs(
+  requestContext?: ProtoRequestContext,
+): AgentToolRef[] {
+  return requestContext?.toolRefs.map(agentToolRefFromProto) ?? [];
 }
 
 function providerHTTPSubjectRequest(

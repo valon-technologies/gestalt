@@ -4,6 +4,7 @@ use std::time::SystemTime;
 
 use tonic::codegen::async_trait;
 
+use crate::agent::AgentToolRef;
 use crate::catalog::Catalog;
 use crate::error::{Error, Result};
 
@@ -87,6 +88,10 @@ pub struct Request {
     /// such as `runId`, `target.plugin.pluginName`, `trigger.scheduleId`, and
     /// `trigger.event.specVersion`.
     pub workflow: serde_json::Map<String, serde_json::Value>,
+    /// Agent tool refs granted to the current operation request.
+    pub tool_refs: Vec<AgentToolRef>,
+    /// Whether the host attached a tool-ref context to this request.
+    pub tool_refs_set: bool,
     /// Invocation token used to call host services.
     pub invocation_token: String,
 }

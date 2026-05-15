@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
@@ -393,6 +395,10 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 		}
 		out.Workflow = value
 	}
+	if toolRefs := invocation.ToolRefsContextFromContext(ctx); toolRefs.Set {
+		out.ToolRefs = requestToolRefsToProto(toolRefs.Refs)
+		out.ToolRefsSet = true
+	}
 
 	if publicBaseURL = normalizePublicBaseURL(publicBaseURL); publicBaseURL == "" {
 		publicBaseURL = normalizePublicBaseURL(invocation.HostContextFromContext(ctx).PublicBaseURL)
@@ -418,10 +424,21 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 		}
 	}
 
-	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && out.Host == nil && out.AgentSubject == nil && out.AgentExternalIdentity == nil && out.ExternalIdentity == nil {
+	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil && !out.ToolRefsSet && len(out.ToolRefs) == 0 && out.Host == nil && out.AgentSubject == nil && out.AgentExternalIdentity == nil && out.ExternalIdentity == nil {
 		return nil, nil
 	}
 	return &out, nil
+}
+
+func requestToolRefsToProto(refs []coreagent.ToolRef) []*proto.AgentToolRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]*proto.AgentToolRef, 0, len(refs))
+	for i := range refs {
+		out = append(out, agentwire.ToolRefToProto(refs[i]))
+	}
+	return out
 }
 
 func normalizePublicBaseURL(baseURL string) string {

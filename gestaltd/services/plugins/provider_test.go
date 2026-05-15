@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -571,6 +572,90 @@ func TestRequestContextProto_PreservesWorkflowContext(t *testing.T) {
 		},
 	}) {
 		t.Fatalf("workflow context = %#v", got)
+	}
+}
+
+func TestRequestContextProto_PreservesToolRefsContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := invocation.WithToolRefsContext(context.Background(), []coreagent.ToolRef{{
+		Plugin:    "github",
+		Operation: "bot.getPullRequest",
+		RunAs: &core.RunAsSubject{
+			SubjectID:           "service_account:github-review",
+			SubjectKind:         "service_account",
+			CredentialSubjectID: "service_account:github-review",
+			DisplayName:         "GitHub Review",
+			AuthSource:          "managed_subject",
+		},
+		RunAsExternalIdentity: &core.ExternalIdentityRef{
+			Type: "github_identity",
+			ID:   "user:12345678",
+		},
+	}})
+
+	reqCtx, err := requestContextProto(ctx, "")
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
+	if !reqCtx.GetToolRefsSet() {
+		t.Fatal("tool refs set = false, want true")
+	}
+	refs := reqCtx.GetToolRefs()
+	if len(refs) != 1 {
+		t.Fatalf("tool refs = %#v, want one ref", refs)
+	}
+	if got := refs[0].GetPlugin(); got != "github" {
+		t.Fatalf("tool ref plugin = %q, want github", got)
+	}
+	if got := refs[0].GetOperation(); got != "bot.getPullRequest" {
+		t.Fatalf("tool ref operation = %q, want bot.getPullRequest", got)
+	}
+	if got := refs[0].GetRunAs().GetSubjectId(); got != "service_account:github-review" {
+		t.Fatalf("tool ref runAs subject = %q, want service_account:github-review", got)
+	}
+	if got := refs[0].GetRunAsExternalIdentity().GetId(); got != "user:12345678" {
+		t.Fatalf("tool ref external identity = %q, want user:12345678", got)
+	}
+}
+
+func TestApplyRequestContext_PreservesToolRefsContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := applyRequestContext(context.Background(), &proto.RequestContext{
+		ToolRefsSet: true,
+		ToolRefs: []*proto.AgentToolRef{{
+			Plugin:    "github",
+			Operation: "bot.getPullRequest",
+			RunAs: &proto.AgentSubjectContext{
+				SubjectId:           "service_account:github-review",
+				SubjectKind:         "service_account",
+				CredentialSubjectId: "service_account:github-review",
+				DisplayName:         "GitHub Review",
+				AuthSource:          "managed_subject",
+			},
+			RunAsExternalIdentity: &proto.ExternalIdentityContext{
+				Type: "github_identity",
+				Id:   "user:12345678",
+			},
+		}},
+	})
+
+	refs := invocation.ToolRefsContextFromContext(ctx)
+	if !refs.Set || len(refs.Refs) != 1 {
+		t.Fatalf("tool refs context = %#v, want one present ref", refs)
+	}
+	if got := refs.Refs[0].Plugin; got != "github" {
+		t.Fatalf("tool ref plugin = %q, want github", got)
+	}
+	if got := refs.Refs[0].Operation; got != "bot.getPullRequest" {
+		t.Fatalf("tool ref operation = %q, want bot.getPullRequest", got)
+	}
+	if refs.Refs[0].RunAs == nil || refs.Refs[0].RunAs.SubjectID != "service_account:github-review" {
+		t.Fatalf("tool ref runAs = %#v, want service_account:github-review", refs.Refs[0].RunAs)
+	}
+	if refs.Refs[0].RunAsExternalIdentity == nil || refs.Refs[0].RunAsExternalIdentity.ID != "user:12345678" {
+		t.Fatalf("tool ref external identity = %#v, want user:12345678", refs.Refs[0].RunAsExternalIdentity)
 	}
 }
 

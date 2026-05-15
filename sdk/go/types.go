@@ -169,6 +169,12 @@ type hostKey struct{}
 type idempotencyKeyKey struct{}
 type invocationTokenKey struct{}
 type workflowKey struct{}
+type toolRefsKey struct{}
+
+type toolRefsContext struct {
+	Set  bool
+	Refs []AgentToolRef
+}
 
 // WithConnectionParams returns a child context carrying the given connection
 // parameters. The host calls this before invoking an executable operation so
@@ -329,4 +335,37 @@ func WithWorkflowContext(ctx context.Context, workflow map[string]any) context.C
 func WorkflowContextFromContext(ctx context.Context) map[string]any {
 	workflow, _ := ctx.Value(workflowKey{}).(map[string]any)
 	return workflow
+}
+
+// WithToolRefsContext attaches the agent tool refs granted to the current
+// operation request.
+func WithToolRefsContext(ctx context.Context, refs []AgentToolRef) context.Context {
+	return context.WithValue(ctx, toolRefsKey{}, toolRefsContext{
+		Set:  true,
+		Refs: copyAgentToolRefs(refs),
+	})
+}
+
+// ToolRefsFromContext returns a defensive copy of the request tool refs.
+func ToolRefsFromContext(ctx context.Context) []AgentToolRef {
+	refs, _ := ctx.Value(toolRefsKey{}).(toolRefsContext)
+	return copyAgentToolRefs(refs.Refs)
+}
+
+// ToolRefsSetFromContext reports whether the host attached a tool-ref context
+// to the current operation request.
+func ToolRefsSetFromContext(ctx context.Context) bool {
+	refs, _ := ctx.Value(toolRefsKey{}).(toolRefsContext)
+	return refs.Set
+}
+
+func copyAgentToolRefs(refs []AgentToolRef) []AgentToolRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]AgentToolRef, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, AgentToolRefFromRef(NewAgentToolRef(ref)))
+	}
+	return out
 }

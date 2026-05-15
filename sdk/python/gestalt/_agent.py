@@ -1066,8 +1066,8 @@ def agent_actor_to_proto(value: AgentActor | Mapping[str, Any] | None) -> Any | 
 
 def agent_subject_context_from_proto(value: Any) -> AgentSubjectContext:
     return AgentSubjectContext(
-        subject_id=value.subject_id,
-        subject_kind=value.subject_kind,
+        subject_id=getattr(value, "subject_id", "") or getattr(value, "id", ""),
+        subject_kind=getattr(value, "subject_kind", "") or getattr(value, "kind", ""),
         credential_subject_id=value.credential_subject_id,
         display_name=value.display_name,
         auth_source=value.auth_source,
@@ -1080,7 +1080,7 @@ def agent_subject_context_to_proto(
     if value is None:
         return None
     subject = _coerce(value, AgentSubjectContext, "AgentSubjectContext")
-    return pb.AgentSubjectContext(
+    return _plugin_pb.AgentSubjectContext(
         subject_id=subject.subject_id,
         subject_kind=subject.subject_kind,
         credential_subject_id=subject.credential_subject_id,
@@ -1153,7 +1153,7 @@ def agent_tool_ref_to_proto(
     if value is None:
         return None
     ref = _coerce(value, AgentToolRef, "AgentToolRef")
-    message = pb.AgentToolRef(
+    message = _plugin_pb.AgentToolRef(
         plugin=ref.plugin,
         operation=ref.operation,
         connection=ref.connection,
@@ -1891,7 +1891,7 @@ def _agent_message_value(value: Any) -> Any:
 
 
 def _agent_tool_ref_value(value: Any) -> Any:
-    if isinstance(value, pb.AgentToolRef):
+    if isinstance(value, _plugin_pb.AgentToolRef):
         return _copy(value)
     return agent_tool_ref_to_proto(value)
 

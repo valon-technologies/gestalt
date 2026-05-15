@@ -653,7 +653,9 @@ def _s3_servicer(*, provider: PluginProvider) -> Any:
                 s3_provider, legacy, "ListObjects", "list_objects"
             ):
                 return handler(request, context)
-            page = s3_provider.list_objects(_s3_native._list_options_from_proto(request))
+            page = s3_provider.list_objects(
+                _s3_native._list_options_from_proto(request)
+            )
             return _s3_native._list_page_to_proto(page)
 
         @_s3_grpc_handler("s3 copy object")
@@ -1398,8 +1400,10 @@ def _workflow_provider_servicer(provider: PluginProvider) -> Any:
                 request,
                 context,
             )
-            return _workflow_native.list_workflow_execution_references_response_to_proto(
-                result
+            return (
+                _workflow_native.list_workflow_execution_references_response_to_proto(
+                    result
+                )
             )
 
         @_grpc_handler("workflow publish event")
@@ -2099,6 +2103,7 @@ def _cache_servicer(*, provider: PluginProvider) -> Any:
 
 
 def _plugin_request(request: Any) -> Request:
+    tool_refs, tool_refs_set = _tool_refs_from_proto(getattr(request, "context", None))
     return Request(
         token=getattr(request, "token", ""),
         connection_params=dict(getattr(request, "connection_params", {})),
@@ -2116,6 +2121,8 @@ def _plugin_request(request: Any) -> Request:
         access=_access_from_proto(getattr(request, "context", None)),
         host=_host_from_proto(getattr(request, "context", None)),
         workflow=_workflow_from_proto(getattr(request, "context", None)),
+        tool_refs=tool_refs,
+        tool_refs_set=tool_refs_set,
         idempotency_key=getattr(request, "idempotency_key", "").strip(),
         invocation_token=getattr(request, "invocation_token", ""),
     )
@@ -2231,6 +2238,17 @@ def _workflow_from_proto(request_context: Any) -> dict[str, Any]:
             preserving_proto_field_name=True,
         ),
     )
+
+
+def _tool_refs_from_proto(request_context: Any) -> tuple[list[Any], bool]:
+    if request_context is None:
+        return [], False
+    if not bool(getattr(request_context, "tool_refs_set", False)):
+        return [], False
+    return [
+        _agent_native.agent_tool_ref_from_proto(ref)
+        for ref in getattr(request_context, "tool_refs", ())
+    ], True
 
 
 def _message_to_dict(

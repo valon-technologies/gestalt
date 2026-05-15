@@ -26,7 +26,11 @@ if _version_not_supported:
 
 
 class AgentProviderStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """AgentProvider is the authoritative agent data boundary. Read RPCs for
+    sessions, turns, turn events, and interactions should use provider-owned
+    control-plane state and should not require a live execution sandbox,
+    pod-level transport, or cached tunnel.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -102,7 +106,11 @@ class AgentProviderStub(object):
 
 
 class AgentProviderServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """AgentProvider is the authoritative agent data boundary. Read RPCs for
+    sessions, turns, turn events, and interactions should use provider-owned
+    control-plane state and should not require a live execution sandbox,
+    pod-level transport, or cached tunnel.
+    """
 
     def CreateSession(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -259,7 +267,11 @@ def add_AgentProviderServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class AgentProvider(object):
-    """Missing associated documentation comment in .proto file."""
+    """AgentProvider is the authoritative agent data boundary. Read RPCs for
+    sessions, turns, turn events, and interactions should use provider-owned
+    control-plane state and should not require a live execution sandbox,
+    pod-level transport, or cached tunnel.
+    """
 
     @staticmethod
     def CreateSession(request,
