@@ -2825,6 +2825,52 @@ func TestResolveToolsExplicitOnlyInvokeRunAsDoesNotApplyImplicitly(t *testing.T)
 	}
 }
 
+func TestApplyCallerInvokePoliciesExplicitOnlyExternalIdentityRequestAppliesRunAs(t *testing.T) {
+	t.Parallel()
+
+	runAs := &core.RunAsSubject{
+		SubjectID:           "service_account:gestalt-support-notion",
+		SubjectKind:         "service_account",
+		CredentialSubjectID: "service_account:gestalt-support-notion",
+		DisplayName:         "Gestalt Support Notion",
+	}
+	externalIdentity := &core.ExternalIdentityRef{
+		Type: "notion_workspace",
+		ID:   "valon-support",
+	}
+	manager := newTestManager(t, Config{
+		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+			"slack": {{
+				Plugin:                "notion",
+				Operation:             "search",
+				RunAs:                 runAs,
+				RunAsExternalIdentity: externalIdentity,
+				RunAsExplicitOnly:     true,
+			}},
+		},
+	})
+
+	// Exercise the policy helper directly because normalizeToolRefs rejects this
+	// user-facing shape before policy application.
+	refs, err := manager.applyCallerInvokePolicies("slack", []coreagent.ToolRef{{
+		Plugin:                "notion",
+		Operation:             "search",
+		RunAsExternalIdentity: externalIdentity,
+	}})
+	if err != nil {
+		t.Fatalf("applyCallerInvokePolicies: %v", err)
+	}
+	if len(refs) != 1 {
+		t.Fatalf("applyCallerInvokePolicies returned %d refs, want 1", len(refs))
+	}
+	if !core.RunAsSubjectsEqual(refs[0].RunAs, runAs) {
+		t.Fatalf("tool ref runAs = %#v, want %#v", refs[0].RunAs, runAs)
+	}
+	if !core.ExternalIdentityRefsEqual(refs[0].RunAsExternalIdentity, externalIdentity) {
+		t.Fatalf("tool ref runAs external identity = %#v, want %#v", refs[0].RunAsExternalIdentity, externalIdentity)
+	}
+}
+
 func TestManagerCreateTurnAppliesExplicitInvokeRunAsToProviderAndRunGrant(t *testing.T) {
 	t.Parallel()
 

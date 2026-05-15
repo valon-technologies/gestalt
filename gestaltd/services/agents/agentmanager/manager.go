@@ -4025,6 +4025,7 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 		explicitOnly := runAsExplicitOnly[key]
 		requestedRunAs := out[i].RunAs != nil
 		requestedExternalIdentity := out[i].RunAsExternalIdentity != nil
+		requestedDelegation := requestedRunAs || requestedExternalIdentity
 		if !hasMode && !hasRunAs && !hasExternalIdentity {
 			if out[i].CredentialMode != "" {
 				return nil, fmt.Errorf("%w: agent tool_refs[%d].credentialMode requires a declared invoke mode", invocation.ErrAuthorizationDenied, i)
@@ -4058,10 +4059,10 @@ func (m *Manager) applyCallerInvokePolicies(callerPluginName string, refs []core
 		if hasMode {
 			out[i].CredentialMode = mode
 		}
-		if hasRunAs && (!explicitOnly || requestedRunAs) {
+		if hasRunAs && (!explicitOnly || requestedDelegation) {
 			out[i].RunAs = runAs
 		}
-		if hasExternalIdentity && (!explicitOnly || requestedRunAs || requestedExternalIdentity) {
+		if hasExternalIdentity && (!explicitOnly || requestedDelegation) {
 			out[i].RunAsExternalIdentity = externalIdentity
 		}
 	}
