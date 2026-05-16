@@ -503,7 +503,7 @@ packaging.
 Source UI manifests should normally define top-level `build`. Gestalt runs it
 before source-manifest preparation, which lets UI packages generate static
 assets without checking built files into source control. The environment running
-`gestaltd lock`, `gestaltd sync --locked`, provider dev, or
+`gestaltd lock`, `gestaltd sync --locked`, `gestaltd serve --path`, or
 `gestaltd provider release` must have the command's build tools available.
 `gestaltd serve --locked` only serves prepared static assets.
 

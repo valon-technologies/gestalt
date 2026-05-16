@@ -29,7 +29,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "validate",
 			args:      []string{"validate", "--help"},
-			wantParts: []string{"gestaltd validate", "Repeated --config flags merge left-to-right.", "--lockfile PATH"},
+			wantParts: []string{"gestaltd validate", "scoped validation of one plugin closure", "--plugin NAME", "--lockfile PATH"},
 		},
 		{
 			name:      "lock",
@@ -44,7 +44,13 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "provider",
 			args:      []string{"provider", "--help"},
-			wantParts: []string{"gestaltd provider <command> [flags]", "add", "attach", "dev", "info", "list", "remove", "repo", "search", "upgrade", "validate", "release"},
+			wantParts: []string{"gestaltd provider <command> [flags]", "add", "attach", "info", "list", "remove", "repo", "search", "upgrade", "validate", "release"},
+			notWant:   []string{"  dev         "},
+		},
+		{
+			name:      "serve",
+			args:      []string{"serve", "--help"},
+			wantParts: []string{"gestaltd serve --path PATH", "gestaltd serve --remote URL", "--plugin NAME", "--port PORT"},
 		},
 		{
 			name:      "provider repo",
@@ -60,11 +66,6 @@ func TestE2ECLIHelp(t *testing.T) {
 			name:      "provider validate",
 			args:      []string{"provider", "validate", "--help"},
 			wantParts: []string{"gestaltd provider validate", "v1 supports kind: plugin and kind: ui manifests", "--config PATH"},
-		},
-		{
-			name:      "provider dev",
-			args:      []string{"provider", "dev", "--help"},
-			wantParts: []string{"gestaltd provider dev", "The built-in admin UI remains available at /admin", "sibling public UIs", "--port PORT"},
 		},
 	}
 
@@ -167,6 +168,11 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			wantPart: "unexpected arguments: extra",
 		},
 		{
+			name:     "top level plugin flag",
+			args:     []string{"--plugin", "alpha"},
+			wantPart: "flag provided but not defined: -plugin",
+		},
+		{
 			name:     "serve trailing args",
 			args:     []string{"serve", "--config", "foo.yaml", "extra"},
 			wantPart: "unexpected arguments: extra",
@@ -187,8 +193,8 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			wantPart: "unexpected arguments: extra",
 		},
 		{
-			name:     "provider dev trailing args",
-			args:     []string{"provider", "dev", "--path", ".", "extra"},
+			name:     "serve path trailing args",
+			args:     []string{"serve", "--path", ".", "extra"},
 			wantPart: "unexpected arguments: extra",
 		},
 	}

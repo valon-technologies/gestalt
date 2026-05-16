@@ -1076,7 +1076,7 @@ metadata; Gestalt already stores access and refresh tokens separately.
 
 ### Testing locally
 
-Use `gestaltd provider validate` and `gestaltd provider dev` when iterating on
+Use `gestaltd provider validate` and `gestaltd serve --path` when iterating on
 source plugins.
 
 Validate the plugin in isolation:
@@ -1088,7 +1088,7 @@ gestaltd provider validate --path ./slack
 Run the plugin locally with browser-facing UI available:
 
 ```sh
-gestaltd provider dev --path ./slack
+gestaltd serve --path ./slack
 ```
 
 Validate or serve the UI bundle directly when you are working on the frontend
@@ -1096,7 +1096,7 @@ itself:
 
 ```sh
 gestaltd provider validate --path ./ui
-gestaltd provider dev --path ./ui
+gestaltd serve --path ./ui
 ```
 
 When the plugin needs supporting providers, extra plugins, or explicit mounted
@@ -1104,7 +1104,7 @@ UIs, layer real config overlays on top of the synthesized baseline:
 
 ```sh
 gestaltd provider validate --path ./slack --config ./dev/support.yaml
-gestaltd provider dev --path ./slack --config ./dev/support.yaml
+gestaltd serve --path ./slack --config ./dev/support.yaml
 ```
 
 Repeated `--config` flags merge left-to-right, and `null` deletes inherited
@@ -1113,16 +1113,16 @@ suppressing others for a local session.
 
 #### Attaching local code to a remote server
 
-<ActiveDevelopmentCallout changeNote="Behavior, authorization requirements, and attach-session semantics may change between releases without warning.">Remote provider dev</ActiveDevelopmentCallout>
+<ActiveDevelopmentCallout changeNote="Behavior, authorization requirements, and attach-session semantics may change between releases without warning.">Remote local serve</ActiveDevelopmentCallout>
 
-Use remote provider dev when you want a remote Gestalt instance to handle auth,
+Use `gestaltd serve --remote` when you want a remote Gestalt instance to handle auth,
 authorization, connections, secrets, and host services, but route a selected
 plugin implementation to your local machine:
 
 ```sh
 export GESTALT_URL=https://gestalt.example.com
 
-gestaltd provider dev --remote "$GESTALT_URL" --path ./slack
+gestaltd serve --remote "$GESTALT_URL" --path ./slack
 ```
 
 With `--path` and no `--config`, Gestalt matches the local manifest `source` to
@@ -1131,14 +1131,14 @@ than one remote plugin uses the same source, or the manifest has no source, pass
 `--name`:
 
 ```sh
-gestaltd provider dev --remote "$GESTALT_URL" --path ./slack --name slack
+gestaltd serve --remote "$GESTALT_URL" --path ./slack --name slack
 ```
 
 Use layered config files for explicit local config overrides or multi-plugin
 attach sessions:
 
 ```sh
-gestaltd provider dev \
+gestaltd serve \
   --remote "$GESTALT_URL" \
   --config ./base.yaml \
   --config ./prod.yaml \
@@ -1149,7 +1149,7 @@ gestaltd provider dev \
 You can also attach every source-backed plugin from layered config overlays:
 
 ```sh
-gestaltd provider dev \
+gestaltd serve \
   --remote "$GESTALT_URL" \
   --config ./base.yaml \
   --config ./prod.yaml \
