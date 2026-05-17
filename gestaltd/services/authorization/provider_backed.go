@@ -587,7 +587,7 @@ func (a *ProviderBackedAuthorizer) readAllRelationships(ctx context.Context, mod
 			return nil, fmt.Errorf("read authorization relationships: %w", err)
 		}
 		for _, rel := range resp.GetRelationships() {
-			if !managedRelationship(rel) {
+			if !managedRelationship(rel) && !legacyManagedRelationship(rel) {
 				continue
 			}
 			out[relationshipMapKey(rel)] = rel
@@ -651,11 +651,6 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 				continue
 			}
 			if strings.TrimSpace(subject.GetType()) != subjectTypeSubject {
-				continue
-			}
-			addDesiredRelationship(desired, rel)
-		case resourceTypeAgentSession:
-			if !validManagedAgentSessionRelationship(rel) {
 				continue
 			}
 			addDesiredRelationship(desired, rel)
@@ -793,45 +788,6 @@ func ensureRoleSet(target map[string]map[string]struct{}, key string) map[string
 func managedSubjectManagementRelation(relation string) bool {
 	switch strings.TrimSpace(relation) {
 	case relationManagedSubjectViewer, relationManagedSubjectEditor, relationManagedSubjectAdmin:
-		return true
-	default:
-		return false
-	}
-}
-
-func validManagedAgentSessionRelationship(rel *core.Relationship) bool {
-	if rel == nil || rel.GetResource() == nil || strings.TrimSpace(rel.GetResource().GetId()) == "" {
-		return false
-	}
-	switch strings.TrimSpace(rel.GetRelation()) {
-	case relationAgentSessionViewer, relationAgentSessionEditor:
-		return validAgentSessionAccessTarget(rel)
-	case relationAgentSessionParent:
-		target := relationshipTargetResource(rel)
-		return target != nil &&
-			strings.TrimSpace(target.GetType()) == resourceTypeAgentSession &&
-			strings.TrimSpace(target.GetId()) != ""
-	default:
-		return false
-	}
-}
-
-func validAgentSessionAccessTarget(rel *core.Relationship) bool {
-	if subject := relationshipTargetSubject(rel); subject != nil {
-		return strings.TrimSpace(subject.GetType()) == subjectTypeSubject && strings.TrimSpace(subject.GetId()) != ""
-	}
-	subjectSet := relationshipTargetSubjectSet(rel)
-	if subjectSet == nil || strings.TrimSpace(subjectSet.GetRelation()) != relationMember {
-		return false
-	}
-	resource := subjectSet.GetResource()
-	if resource == nil || strings.TrimSpace(resource.GetId()) == "" {
-		return false
-	}
-	switch strings.TrimSpace(resource.GetType()) {
-	case resourceTypeEveryone:
-		return strings.TrimSpace(resource.GetId()) == resourceIDEveryoneGlobal
-	case resourceTypeTeam, resourceTypeSlackChannel:
 		return true
 	default:
 		return false
@@ -1029,20 +985,6 @@ func relationshipTargetSubject(rel *core.Relationship) *core.SubjectRef {
 	return RelationshipSubject(rel)
 }
 
-func relationshipTargetResource(rel *core.Relationship) *core.ResourceRef {
-	if rel == nil || rel.GetTarget() == nil || rel.GetSubject() != nil {
-		return nil
-	}
-	return rel.GetTarget().GetResource()
-}
-
-func relationshipTargetSubjectSet(rel *core.Relationship) *core.SubjectSetRef {
-	if rel == nil || rel.GetTarget() == nil || rel.GetSubject() != nil {
-		return nil
-	}
-	return rel.GetTarget().GetSubjectSet()
-}
-
 func sameSubjectRef(left, right *core.SubjectRef) bool {
 	return left != nil &&
 		right != nil &&
@@ -1069,4 +1011,8 @@ func (a *ProviderBackedAuthorizer) currentState() providerBackedRoleState {
 
 func managedRelationship(rel *core.Relationship) bool {
 	return IsManagedProviderRelationship(rel)
+}
+
+func legacyManagedRelationship(rel *core.Relationship) bool {
+	return rel != nil && strings.TrimSpace(rel.GetResource().GetType()) == "agent_session"
 }

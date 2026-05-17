@@ -28,16 +28,9 @@
  * @module
  */
 export {
-  AGENT_SESSION_ACTION_EDIT,
-  AGENT_SESSION_ACTION_VIEW,
-  AGENT_SESSION_RELATION_EDITOR,
-  AGENT_SESSION_RESOURCE_TYPE,
   Authorization,
   AuthorizationClient,
   AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
-  agentSessionAuthorizationResource,
-  agentSessionEditorRelationship,
-  agentSessionEditorWriteRequest,
   authorizationAction,
   authorizationRelationship,
   authorizationRelationshipKey,

@@ -26,7 +26,6 @@ import {
   AuthorizationClient,
   ENV_AUTHORIZATION_SOCKET,
   ENV_AUTHORIZATION_SOCKET_TOKEN,
-  agentSessionEditorRelationship,
   authorizationAction,
   authorizationRelationshipWithTarget,
   authorizationResource,
@@ -312,35 +311,12 @@ test("Authorization() forwards authorization requests to the host socket", async
         ),
       ],
     });
-    await Authorization().grantAgentSessionEditor("user:user-123", "session-123");
-    expect(
-      agentSessionEditorRelationship("user:user-123", "session-123"),
-    ).toEqual({
-      subject: { type: "subject", id: "user:user-123" },
-      target: {
-        kind: {
-          case: "subject",
-          value: { type: "subject", id: "user:user-123" },
-        },
-      },
-      relation: "editor",
-      resource: { type: "agent_session", id: "session-123" },
-    });
     expect(writeCalls).toEqual([
       {
         subjectId: "",
         targetSubjectId: "",
         targetResourceType: "slack_channel",
         targetRelation: "member",
-        relation: "editor",
-        resourceType: "agent_session",
-        resourceId: "session-123",
-      },
-      {
-        subjectId: "user:user-123",
-        targetSubjectId: "user:user-123",
-        targetResourceType: "",
-        targetRelation: "",
         relation: "editor",
         resourceType: "agent_session",
         resourceId: "session-123",

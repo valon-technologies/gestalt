@@ -2621,10 +2621,10 @@ func TestMemoryAuthorizationProviderDoesNotGrantMixedSubjectAndSubjectSetTarget(
 	provider.activeModelID = "model"
 	invalidMixedGrant := &core.Relationship{
 		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:invalid"},
-		Relation: authorization.ProviderAgentSessionActionView,
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"},
+		Relation: authorization.ProviderRelationMember,
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeTeam, Id: "team-1"},
 		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeSlackChannel, Id: "T999:C999"},
+			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeEveryone, Id: authorization.ProviderResourceIDEveryoneGlobal},
 			Relation: authorization.ProviderRelationMember,
 		}}},
 	}
@@ -2657,7 +2657,7 @@ func TestMemoryAuthorizationProviderDoesNotGrantMixedSubjectAndSubjectSetTarget(
 	}
 }
 
-func TestAuthorizationProviderBackedReloadPreservesAgentSessionGrants(t *testing.T) {
+func TestAuthorizationProviderBackedReloadDropsLegacyAgentSessionGrants(t *testing.T) {
 	t.Parallel()
 
 	provider := newMemoryAuthorizationProvider("memory-authorization")
@@ -2674,26 +2674,26 @@ func TestAuthorizationProviderBackedReloadPreservesAgentSessionGrants(t *testing
 	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	editorGrant := &core.Relationship{
 		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:shared"},
-		Relation: authorization.ProviderAgentSessionRelationEditor,
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"},
+		Relation: "editor",
+		Resource: &core.ResourceRef{Type: "agent_session", Id: "agent-session-1"},
 	}
 	channelGrant := &core.Relationship{
-		Relation: authorization.ProviderAgentSessionRelationViewer,
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"},
+		Relation: "viewer",
+		Resource: &core.ResourceRef{Type: "agent_session", Id: "agent-session-1"},
 		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
 			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeSlackChannel, Id: "T123:C456"},
 			Relation: authorization.ProviderRelationMember,
 		}}},
 	}
 	parentGrant := &core.Relationship{
-		Relation: authorization.ProviderAgentSessionRelationParent,
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-child"},
-		Target:   &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Resource{Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"}}},
+		Relation: "parent",
+		Resource: &core.ResourceRef{Type: "agent_session", Id: "agent-session-child"},
+		Target:   &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Resource{Resource: &core.ResourceRef{Type: "agent_session", Id: "agent-session-1"}}},
 	}
 	invalidMixedGrant := &core.Relationship{
 		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:invalid"},
-		Relation: authorization.ProviderAgentSessionRelationViewer,
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeAgentSession, Id: "agent-session-1"},
+		Relation: "viewer",
+		Resource: &core.ResourceRef{Type: "agent_session", Id: "agent-session-1"},
 		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
 			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeSlackChannel, Id: "T999:C999"},
 			Relation: authorization.ProviderRelationMember,
@@ -2713,8 +2713,8 @@ func TestAuthorizationProviderBackedReloadPreservesAgentSessionGrants(t *testing
 	if err != nil {
 		t.Fatalf("ReadRelationships: %v", err)
 	}
-	if len(resp.GetRelationships()) != 1 {
-		t.Fatalf("agent session grants after reload = %+v, want preserved editor grant", resp.GetRelationships())
+	if len(resp.GetRelationships()) != 0 {
+		t.Fatalf("legacy agent session grants after reload = %+v, want removed editor grant", resp.GetRelationships())
 	}
 	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
 		Target:   channelGrant.Target,
@@ -2724,8 +2724,8 @@ func TestAuthorizationProviderBackedReloadPreservesAgentSessionGrants(t *testing
 	if err != nil {
 		t.Fatalf("ReadRelationships channel grant: %v", err)
 	}
-	if len(resp.GetRelationships()) != 1 {
-		t.Fatalf("agent session channel grants after reload = %+v, want preserved subject-set grant", resp.GetRelationships())
+	if len(resp.GetRelationships()) != 0 {
+		t.Fatalf("legacy agent session channel grants after reload = %+v, want removed subject-set grant", resp.GetRelationships())
 	}
 	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
 		Target:   parentGrant.Target,
@@ -2735,8 +2735,8 @@ func TestAuthorizationProviderBackedReloadPreservesAgentSessionGrants(t *testing
 	if err != nil {
 		t.Fatalf("ReadRelationships parent grant: %v", err)
 	}
-	if len(resp.GetRelationships()) != 1 {
-		t.Fatalf("agent session parent grants after reload = %+v, want preserved resource-target grant", resp.GetRelationships())
+	if len(resp.GetRelationships()) != 0 {
+		t.Fatalf("legacy agent session parent grants after reload = %+v, want removed resource-target grant", resp.GetRelationships())
 	}
 	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
 		Target:   invalidMixedGrant.Target,

@@ -159,14 +159,7 @@ _AUTHENTICATION_AUTHORED_EXPORTS = (
 )
 
 _AUTHORIZATION_HELPER_EXPORTS = (
-    "AGENT_SESSION_ACTION_EDIT",
-    "AGENT_SESSION_ACTION_VIEW",
-    "AGENT_SESSION_RELATION_EDITOR",
-    "AGENT_SESSION_RESOURCE_TYPE",
     "AUTHORIZATION_SUBJECT_TYPE_SUBJECT",
-    "agent_session_editor_relationship",
-    "agent_session_editor_write_request",
-    "agent_session_resource",
 )
 
 _PLUGIN_RUNTIME_AUTHORED_EXPORTS = (

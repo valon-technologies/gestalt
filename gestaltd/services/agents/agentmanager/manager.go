@@ -1,7 +1,6 @@
 package agentmanager
 
 import (
-	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -50,8 +48,6 @@ var (
 	ErrAgentSessionMetadataInvalid      = errors.New("agent session metadata is invalid")
 	ErrAgentInvalidListRequest          = errors.New("agent list request is invalid")
 	ErrAgentStructuredOutputUnsupported = errors.New("agent provider does not support structured output")
-
-	errAgentSessionInaccessible = fmt.Errorf("%w: agent session is not accessible", core.ErrNotFound)
 )
 
 const (
@@ -60,7 +56,6 @@ const (
 	agentToolListMaxPageSize     = 1000
 	agentToolSchemaMaxBytes      = 128 * 1024
 	agentDefaultToolNarrowingK   = 200
-	maxAgentRouteCacheEntries    = 20_000
 	AgentListSummaryDefaultLimit = 100
 	AgentListMaxLimit            = 500
 	agentReadHydrationTimeout    = 750 * time.Millisecond
@@ -118,19 +113,17 @@ type Service interface {
 }
 
 type Config struct {
-	Providers             *registry.ProviderMap[core.Provider]
-	Agent                 AgentControl
-	WorkflowTools         WorkflowSystemTools
-	RunGrants             *agentgrant.Manager
-	Invoker               invocation.Invoker
-	Authorizer            authorization.RuntimeAuthorizer
-	AuthorizationProvider core.AuthorizationProvider
-	DefaultConnection     map[string]string
-	CatalogConnection     map[string]string
-	PluginInvokes         map[string][]invocation.PluginInvocationDependency
-	AgentConnections      map[string][]string
-	SessionStart          map[string]*coreagent.SessionStartConfig
-	RouteStore            RouteStore
+	Providers         *registry.ProviderMap[core.Provider]
+	Agent             AgentControl
+	WorkflowTools     WorkflowSystemTools
+	RunGrants         *agentgrant.Manager
+	Invoker           invocation.Invoker
+	Authorizer        authorization.RuntimeAuthorizer
+	DefaultConnection map[string]string
+	CatalogConnection map[string]string
+	PluginInvokes     map[string][]invocation.PluginInvocationDependency
+	AgentConnections  map[string][]string
+	SessionStart      map[string]*coreagent.SessionStartConfig
 	// DefaultToolNarrowingThreshold controls when implicit default wildcard
 	// catalog grants are narrowed to exactly mentioned providers. Nil uses the
 	// package default; zero means narrow whenever any visible catalog candidate
@@ -145,40 +138,30 @@ type Manager struct {
 	runGrants                     *agentgrant.Manager
 	invoker                       invocation.Invoker
 	authorizer                    authorization.RuntimeAuthorizer
-	authorizationProvider         core.AuthorizationProvider
 	defaultConnection             map[string]string
 	catalogConnection             map[string]string
 	pluginInvokes                 map[string][]invocation.PluginInvocationDependency
 	agentConnections              map[string][]string
 	sessionStart                  map[string]*coreagent.SessionStartConfig
-	routeStore                    RouteStore
 	defaultToolNarrowingThreshold int
-	// Route caches are process-local accelerators; the route store is the durable provider index.
-	routeMu       sync.Mutex
-	sessionRoutes agentRouteCache
-	turnRoutes    agentRouteCache
 }
 
 func New(cfg Config) *Manager {
 	return &Manager{
-		providers:             cfg.Providers,
-		agent:                 cfg.Agent,
-		workflowTools:         cfg.WorkflowTools,
-		runGrants:             cfg.RunGrants,
-		invoker:               cfg.Invoker,
-		authorizer:            cfg.Authorizer,
-		authorizationProvider: cfg.AuthorizationProvider,
-		defaultConnection:     maps.Clone(cfg.DefaultConnection),
-		catalogConnection:     maps.Clone(cfg.CatalogConnection),
-		pluginInvokes:         invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
-		agentConnections:      cloneStringSliceMap(cfg.AgentConnections),
-		sessionStart:          cloneSessionStartConfigMap(cfg.SessionStart),
-		routeStore:            cfg.RouteStore,
+		providers:         cfg.Providers,
+		agent:             cfg.Agent,
+		workflowTools:     cfg.WorkflowTools,
+		runGrants:         cfg.RunGrants,
+		invoker:           cfg.Invoker,
+		authorizer:        cfg.Authorizer,
+		defaultConnection: maps.Clone(cfg.DefaultConnection),
+		catalogConnection: maps.Clone(cfg.CatalogConnection),
+		pluginInvokes:     invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
+		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
+		sessionStart:      cloneSessionStartConfigMap(cfg.SessionStart),
 		defaultToolNarrowingThreshold: effectiveAgentToolNarrowingThreshold(
 			cfg.DefaultToolNarrowingThreshold,
 		),
-		sessionRoutes: newAgentRouteCache(),
-		turnRoutes:    newAgentRouteCache(),
 	}
 }
 
@@ -233,327 +216,6 @@ func cloneStringSliceMap(src map[string][]string) map[string][]string {
 		dst[key] = append([]string(nil), value...)
 	}
 	return dst
-}
-
-func (m *Manager) cachedSessionRoute(sessionID string) (AgentRoute, bool) {
-	if m == nil {
-		return AgentRoute{}, false
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return AgentRoute{}, false
-	}
-	m.routeMu.Lock()
-	defer m.routeMu.Unlock()
-	return m.sessionRoutes.get(sessionID)
-}
-
-func (m *Manager) storedSessionRoute(ctx context.Context, sessionID string) (AgentRoute, bool, error) {
-	if m == nil {
-		return AgentRoute{}, false, nil
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" || m.routeStore == nil {
-		return AgentRoute{}, false, nil
-	}
-	route, ok, err := m.routeStore.LookupSession(ctx, sessionID)
-	if err != nil || !ok {
-		return AgentRoute{}, false, err
-	}
-	route.SessionID = sessionID
-	return route, true, nil
-}
-
-func (m *Manager) rememberSessionRoute(ctx context.Context, sessionID, providerName string) error {
-	if m == nil {
-		return nil
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	providerName = strings.TrimSpace(providerName)
-	if sessionID == "" || providerName == "" {
-		return nil
-	}
-	if m.routeStore != nil {
-		if err := m.routeStore.RememberSession(ctx, sessionID, providerName); err != nil {
-			return err
-		}
-	}
-	m.rememberCachedSessionRoute(sessionID, providerName)
-	return nil
-}
-
-func (m *Manager) rememberSessionRouteBestEffort(ctx context.Context, sessionID, providerName string) {
-	if m == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	providerName = strings.TrimSpace(providerName)
-	if sessionID == "" || providerName == "" {
-		return
-	}
-	if m.routeStore == nil {
-		m.rememberCachedSessionRoute(sessionID, providerName)
-		return
-	}
-	if existing, ok, err := m.routeStore.LookupSession(ctx, sessionID); err != nil {
-		return
-	} else if ok {
-		if existing.ProviderName != providerName {
-			m.forgetCachedSessionRoute(sessionID, providerName)
-			return
-		}
-	} else if err := m.routeStore.RememberSession(ctx, sessionID, providerName); err != nil {
-		return
-	}
-	m.rememberCachedSessionRoute(sessionID, providerName)
-}
-
-func (m *Manager) rememberCachedSessionRoute(sessionID, providerName string) {
-	if m == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	providerName = strings.TrimSpace(providerName)
-	if sessionID == "" || providerName == "" {
-		return
-	}
-	m.routeMu.Lock()
-	defer m.routeMu.Unlock()
-	m.sessionRoutes.remember(sessionID, AgentRoute{ProviderName: providerName, SessionID: sessionID})
-}
-
-func (m *Manager) forgetCachedSessionRoute(sessionID, providerName string) {
-	if m == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	providerName = strings.TrimSpace(providerName)
-	if sessionID == "" {
-		return
-	}
-	m.routeMu.Lock()
-	defer m.routeMu.Unlock()
-	m.sessionRoutes.forget(sessionID, providerName)
-}
-
-func (m *Manager) forgetSessionRoute(ctx context.Context, sessionID, providerName string) error {
-	if m == nil {
-		return nil
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	providerName = strings.TrimSpace(providerName)
-	if sessionID == "" {
-		return nil
-	}
-	if m.routeStore != nil {
-		if err := m.routeStore.ForgetSession(ctx, sessionID, providerName); err != nil {
-			return err
-		}
-	}
-	m.forgetCachedSessionRoute(sessionID, providerName)
-	return nil
-}
-
-func (m *Manager) cachedTurnRoute(turnID string) (AgentRoute, bool) {
-	if m == nil {
-		return AgentRoute{}, false
-	}
-	turnID = strings.TrimSpace(turnID)
-	if turnID == "" {
-		return AgentRoute{}, false
-	}
-	m.routeMu.Lock()
-	defer m.routeMu.Unlock()
-	return m.turnRoutes.get(turnID)
-}
-
-func (m *Manager) storedTurnRoute(ctx context.Context, turnID string) (AgentRoute, bool, error) {
-	if m == nil {
-		return AgentRoute{}, false, nil
-	}
-	turnID = strings.TrimSpace(turnID)
-	if turnID == "" || m.routeStore == nil {
-		return AgentRoute{}, false, nil
-	}
-	route, ok, err := m.routeStore.LookupTurn(ctx, turnID)
-	if err != nil || !ok {
-		return AgentRoute{}, false, err
-	}
-	return route, true, nil
-}
-
-func (m *Manager) rememberTurnRoute(ctx context.Context, turnID, sessionID, providerName string) error {
-	if m == nil {
-		return nil
-	}
-	turnID = strings.TrimSpace(turnID)
-	sessionID = strings.TrimSpace(sessionID)
-	providerName = strings.TrimSpace(providerName)
-	if turnID == "" || sessionID == "" || providerName == "" {
-		return nil
-	}
-	if m.routeStore != nil {
-		if err := m.routeStore.RememberTurn(ctx, turnID, sessionID, providerName); err != nil {
-			return err
-		}
-	}
-	m.rememberCachedTurnRoute(turnID, sessionID, providerName)
-	return nil
-}
-
-func (m *Manager) rememberTurnRouteBestEffort(ctx context.Context, turnID, sessionID, providerName string) {
-	if m == nil {
-		return
-	}
-	turnID = strings.TrimSpace(turnID)
-	sessionID = strings.TrimSpace(sessionID)
-	providerName = strings.TrimSpace(providerName)
-	if turnID == "" || sessionID == "" || providerName == "" {
-		return
-	}
-	if m.routeStore == nil {
-		m.rememberCachedTurnRoute(turnID, sessionID, providerName)
-		return
-	}
-	if existing, ok, err := m.routeStore.LookupTurn(ctx, turnID); err != nil {
-		return
-	} else if ok {
-		if existing.ProviderName != providerName || existing.SessionID != sessionID {
-			m.forgetCachedTurnRoute(turnID, providerName)
-			return
-		}
-	} else if err := m.routeStore.RememberTurn(ctx, turnID, sessionID, providerName); err != nil {
-		return
-	}
-	m.rememberCachedTurnRoute(turnID, sessionID, providerName)
-}
-
-func (m *Manager) rememberCachedTurnRoute(turnID, sessionID, providerName string) {
-	if m == nil {
-		return
-	}
-	turnID = strings.TrimSpace(turnID)
-	sessionID = strings.TrimSpace(sessionID)
-	providerName = strings.TrimSpace(providerName)
-	if turnID == "" || sessionID == "" || providerName == "" {
-		return
-	}
-	m.routeMu.Lock()
-	defer m.routeMu.Unlock()
-	m.turnRoutes.remember(turnID, AgentRoute{ProviderName: providerName, SessionID: sessionID})
-}
-
-func (m *Manager) forgetCachedTurnRoute(turnID, providerName string) {
-	if m == nil {
-		return
-	}
-	turnID = strings.TrimSpace(turnID)
-	providerName = strings.TrimSpace(providerName)
-	if turnID == "" {
-		return
-	}
-	m.routeMu.Lock()
-	defer m.routeMu.Unlock()
-	m.turnRoutes.forget(turnID, providerName)
-}
-
-func (m *Manager) forgetTurnRoute(ctx context.Context, turnID, providerName string) error {
-	if m == nil {
-		return nil
-	}
-	turnID = strings.TrimSpace(turnID)
-	providerName = strings.TrimSpace(providerName)
-	if turnID == "" {
-		return nil
-	}
-	if m.routeStore != nil {
-		if err := m.routeStore.ForgetTurn(ctx, turnID, providerName); err != nil {
-			return err
-		}
-	}
-	m.forgetCachedTurnRoute(turnID, providerName)
-	return nil
-}
-
-type agentRouteCache struct {
-	values map[string]*list.Element
-	order  *list.List
-}
-
-type agentRouteEntry struct {
-	key   string
-	value AgentRoute
-}
-
-func newAgentRouteCache() agentRouteCache {
-	return agentRouteCache{
-		values: map[string]*list.Element{},
-		order:  list.New(),
-	}
-}
-
-func (c *agentRouteCache) ensure() {
-	if c.values == nil {
-		c.values = map[string]*list.Element{}
-	}
-	if c.order == nil {
-		c.order = list.New()
-	}
-}
-
-func (c *agentRouteCache) get(key string) (AgentRoute, bool) {
-	if c == nil || c.values == nil {
-		return AgentRoute{}, false
-	}
-	elem := c.values[key]
-	if elem == nil {
-		return AgentRoute{}, false
-	}
-	c.order.MoveToBack(elem)
-	return elem.Value.(agentRouteEntry).value, true
-}
-
-func (c *agentRouteCache) remember(key string, value AgentRoute) {
-	c.ensure()
-	if elem := c.values[key]; elem != nil {
-		elem.Value = agentRouteEntry{key: key, value: value}
-		c.order.MoveToBack(elem)
-		c.trim(maxAgentRouteCacheEntries)
-		return
-	}
-	c.values[key] = c.order.PushBack(agentRouteEntry{key: key, value: value})
-	c.trim(maxAgentRouteCacheEntries)
-}
-
-func (c *agentRouteCache) forget(key, value string) {
-	if c == nil || c.values == nil {
-		return
-	}
-	elem := c.values[key]
-	if elem == nil {
-		return
-	}
-	entry := elem.Value.(agentRouteEntry)
-	if value != "" && strings.TrimSpace(entry.value.ProviderName) != value {
-		return
-	}
-	delete(c.values, key)
-	c.order.Remove(elem)
-}
-
-func (c *agentRouteCache) trim(maxEntries int) {
-	if c == nil || c.values == nil || c.order == nil || maxEntries <= 0 {
-		return
-	}
-	for len(c.values) > maxEntries {
-		oldest := c.order.Front()
-		if oldest == nil {
-			return
-		}
-		entry := oldest.Value.(agentRouteEntry)
-		delete(c.values, entry.key)
-		c.order.Remove(oldest)
-	}
 }
 
 func (m *Manager) Available() bool {
@@ -710,9 +372,6 @@ func (m *Manager) CreateSession(ctx context.Context, p *principal.Principal, req
 	if !providerSessionOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
 	}
-	if err := m.rememberSessionRoute(ctx, normalized.ID, providerName); err != nil {
-		return nil, err
-	}
 	return normalized, nil
 }
 
@@ -721,7 +380,7 @@ func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, sessio
 	defer func() { finish(err) }()
 
 	hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-	owned, err := m.findAccessibleSession(hydrationCtx, p, sessionID, "", authorization.ProviderAgentSessionActionView)
+	owned, err := m.findAccessibleSession(hydrationCtx, p, sessionID, "")
 	cancel()
 	if err != nil {
 		return nil, err
@@ -773,9 +432,6 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 			if session == nil {
 				continue
 			}
-			if !providerSessionOwnedBy(session, p) {
-				continue
-			}
 			normalized, err := normalizeProviderSession(candidate.name, strings.TrimSpace(session.ID), session)
 			if err != nil {
 				return nil, err
@@ -783,7 +439,6 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 			if req.State != "" && normalized.State != req.State {
 				continue
 			}
-			m.rememberSessionRouteBestEffort(ctx, normalized.ID, candidate.name)
 			if _, ok := seen[normalized.ID]; ok {
 				continue
 			}
@@ -793,20 +448,6 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 			}
 			out = append(out, normalized)
 		}
-	}
-	sharedSessions, err := m.listSharedAgentSessions(ctx, p, req, limit)
-	if err != nil {
-		return nil, err
-	}
-	for _, session := range sharedSessions {
-		if session == nil {
-			continue
-		}
-		if _, ok := seen[session.ID]; ok {
-			continue
-		}
-		seen[session.ID] = struct{}{}
-		out = append(out, session)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		left := out[i]
@@ -822,89 +463,6 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 		out = out[:limit]
 	}
 	return out, nil
-}
-
-func (m *Manager) listSharedAgentSessions(ctx context.Context, p *principal.Principal, req coreagent.ManagerListSessionsRequest, limit int) ([]*coreagent.Session, error) {
-	if m == nil || m.authorizationProvider == nil {
-		return nil, nil
-	}
-	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	if subjectID == "" {
-		return nil, nil
-	}
-	pageSize := limit
-	if pageSize <= 0 || pageSize > AgentListSummaryDefaultLimit {
-		pageSize = AgentListSummaryDefaultLimit
-	}
-	providerName := strings.TrimSpace(req.ProviderName)
-	pageToken := ""
-	out := make([]*coreagent.Session, 0)
-	seen := map[string]struct{}{}
-	for {
-		resp, err := m.searchSharedAgentSessionResources(ctx, &core.ResourceSearchRequest{
-			Subject: &core.SubjectRef{
-				Type: authorization.ProviderSubjectTypeSubject,
-				Id:   subjectID,
-			},
-			Action:       &core.ActionRef{Name: authorization.ProviderAgentSessionActionView},
-			ResourceType: authorization.ProviderResourceTypeAgentSession,
-			PageSize:     int32(pageSize),
-			PageToken:    pageToken,
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, resource := range resp.GetResources() {
-			if resource == nil || strings.TrimSpace(resource.GetType()) != authorization.ProviderResourceTypeAgentSession {
-				continue
-			}
-			sessionID := strings.TrimSpace(resource.GetId())
-			if sessionID == "" {
-				continue
-			}
-			if _, ok := seen[sessionID]; ok {
-				continue
-			}
-			seen[sessionID] = struct{}{}
-			hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-			session, err := m.findAccessibleSession(hydrationCtx, p, sessionID, providerName, authorization.ProviderAgentSessionActionView)
-			cancel()
-			if err != nil {
-				if agentProviderReturnedNotFound(err) || errors.Is(err, invocation.ErrAuthorizationDenied) {
-					continue
-				}
-				return nil, err
-			}
-			if req.State != "" && session.session.State != req.State {
-				continue
-			}
-			if req.SummaryOnly {
-				out = append(out, summarizeAgentSession(session.session))
-			} else {
-				out = append(out, session.session)
-			}
-		}
-		pageToken = strings.TrimSpace(resp.GetNextPageToken())
-		if pageToken == "" {
-			return out, nil
-		}
-	}
-}
-
-func (m *Manager) searchSharedAgentSessionResources(ctx context.Context, req *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
-	if m == nil || m.authorizationProvider == nil {
-		return &core.ResourceSearchResponse{}, nil
-	}
-	if effective, ok := m.authorizationProvider.(core.AuthorizationProviderEffectiveSearch); ok {
-		resp, err := effective.EffectiveSearchResources(ctx, req)
-		if err == nil {
-			return resp, nil
-		}
-		if status.Code(err) != codes.Unimplemented {
-			return nil, err
-		}
-	}
-	return m.authorizationProvider.SearchResources(ctx, req)
 }
 
 func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerUpdateSessionRequest) (session *coreagent.Session, err error) {
@@ -937,7 +495,6 @@ func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req
 	if !providerSessionOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
 	}
-	m.rememberSessionRouteBestEffort(ctx, normalized.ID, owned.providerName)
 	return normalized, nil
 }
 
@@ -950,7 +507,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if subjectID == "" {
 		return nil, ErrAgentSubjectRequired
 	}
-	ownedSession, err := m.findAccessibleSession(ctx, p, req.SessionID, "", authorization.ProviderAgentSessionActionEdit)
+	ownedSession, err := m.findOwnedSession(ctx, p, req.SessionID, "")
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return nil, fmt.Errorf("%w: %w", ErrAgentSessionNotFound, err)
@@ -1058,9 +615,6 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	if !providerTurnOwnedBy(normalized, p) {
 		return nil, core.ErrNotFound
 	}
-	if err := m.rememberTurnRoute(ctx, normalized.ID, normalized.SessionID, ownedSession.providerName); err != nil {
-		return nil, err
-	}
 	return normalized, nil
 }
 
@@ -1069,7 +623,7 @@ func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, turnID st
 	defer func() { finish(err) }()
 
 	hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-	owned, err := m.findAccessibleTurn(hydrationCtx, p, turnID, "", "", authorization.ProviderAgentSessionActionView)
+	owned, err := m.findAccessibleTurn(hydrationCtx, p, turnID, "", "")
 	cancel()
 	if err != nil {
 		return nil, err
@@ -1087,7 +641,7 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req cor
 		return nil, err
 	}
 	hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-	ownedSession, err := m.findAccessibleSession(hydrationCtx, p, req.SessionID, "", authorization.ProviderAgentSessionActionView)
+	ownedSession, err := m.findAccessibleSession(hydrationCtx, p, req.SessionID, "")
 	cancel()
 	if err != nil {
 		return nil, err
@@ -1101,6 +655,7 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req cor
 	hydrationCtx, cancel = context.WithTimeout(ctx, agentReadHydrationTimeout)
 	turns, err = ownedSession.provider.ListTurns(hydrationCtx, coreagent.ListTurnsRequest{
 		SessionID:   ownedSession.session.ID,
+		Subject:     agentSubjectFromPrincipal(p),
 		Status:      req.Status,
 		Limit:       limit,
 		SummaryOnly: req.SummaryOnly,
@@ -1121,7 +676,6 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req cor
 		if req.Status != "" && normalized.Status != req.Status {
 			continue
 		}
-		m.rememberTurnRouteBestEffort(ctx, normalized.ID, normalized.SessionID, ownedSession.providerName)
 		if req.SummaryOnly {
 			normalized = summarizeAgentTurn(normalized)
 		}
@@ -1145,17 +699,18 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, turnID
 	ctx, finish := startAgentOperation(ctx, "cancel_turn")
 	defer func() { finish(err) }()
 
-	owned, err := m.findAccessibleTurn(ctx, p, turnID, "", "", authorization.ProviderAgentSessionActionEdit)
+	owned, err := m.findAccessibleTurn(ctx, p, turnID, "", "")
 	if err != nil {
 		return nil, err
 	}
-	if !owned.sessionOwned && !providerTurnOwnedBy(owned.turn, p) {
+	if !owned.sessionOwned {
 		return nil, core.ErrNotFound
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
 	turn, err = owned.provider.CancelTurn(ctx, coreagent.CancelTurnRequest{
-		TurnID: strings.TrimSpace(turnID),
-		Reason: strings.TrimSpace(reason),
+		TurnID:  strings.TrimSpace(turnID),
+		Reason:  strings.TrimSpace(reason),
+		Subject: agentSubjectFromPrincipal(p),
 	})
 	if err != nil {
 		return nil, err
@@ -1163,9 +718,6 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, turnID
 	normalized, err := normalizeProviderTurn(owned.providerName, owned.turn.SessionID, owned.turn.ID, turn)
 	if err != nil {
 		return nil, err
-	}
-	if !owned.sessionOwned && !providerTurnOwnedBy(normalized, p) {
-		return nil, core.ErrNotFound
 	}
 	if coreagent.ExecutionStatusIsLive(normalized.Status) {
 		return nil, fmt.Errorf("%w: agent provider %q returned live turn %q after cancel", invocation.ErrInternal, owned.providerName, strings.TrimSpace(normalized.ID))
@@ -1176,7 +728,6 @@ func (m *Manager) CancelTurn(ctx context.Context, p *principal.Principal, turnID
 			m.runGrants.RevokeTurn(owned.providerName, normalized.SessionID, executionRef)
 		}
 	}
-	m.rememberTurnRouteBestEffort(ctx, normalized.ID, normalized.SessionID, owned.providerName)
 	return normalized, nil
 }
 
@@ -1185,7 +736,7 @@ func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, tu
 	defer func() { finish(err) }()
 
 	hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-	owned, err := m.findAccessibleTurn(hydrationCtx, p, turnID, "", "", authorization.ProviderAgentSessionActionView)
+	owned, err := m.findAccessibleTurn(hydrationCtx, p, turnID, "", "")
 	cancel()
 	if err != nil {
 		return nil, err
@@ -1196,6 +747,7 @@ func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, tu
 		TurnID:   owned.turn.ID,
 		AfterSeq: afterSeq,
 		Limit:    limit,
+		Subject:  agentSubjectFromPrincipal(p),
 	})
 	cancel()
 	if err != nil {
@@ -1209,7 +761,7 @@ func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, 
 	defer func() { finish(err) }()
 
 	hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-	owned, err := m.findAccessibleTurn(hydrationCtx, p, turnID, "", "", authorization.ProviderAgentSessionActionView)
+	owned, err := m.findAccessibleTurn(hydrationCtx, p, turnID, "", "")
 	cancel()
 	if err != nil {
 		return nil, err
@@ -1217,7 +769,8 @@ func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, 
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
 	hydrationCtx, cancel = context.WithTimeout(ctx, agentReadHydrationTimeout)
 	interactions, err := owned.provider.ListInteractions(hydrationCtx, coreagent.ListInteractionsRequest{
-		TurnID: owned.turn.ID,
+		TurnID:  owned.turn.ID,
+		Subject: agentSubjectFromPrincipal(p),
 	})
 	cancel()
 	if err != nil {
@@ -1243,9 +796,12 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	ctx, finish := startAgentOperation(ctx, "resolve_interaction")
 	defer func() { finish(err) }()
 
-	owned, err := m.findAccessibleTurn(ctx, p, turnID, "", "", authorization.ProviderAgentSessionActionEdit)
+	owned, err := m.findAccessibleTurn(ctx, p, turnID, "", "")
 	if err != nil {
 		return nil, err
+	}
+	if !owned.sessionOwned {
+		return nil, core.ErrNotFound
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
 	interactionID = strings.TrimSpace(interactionID)
@@ -1255,6 +811,7 @@ func (m *Manager) ResolveInteraction(ctx context.Context, p *principal.Principal
 	interaction, err = owned.provider.ResolveInteraction(ctx, coreagent.ResolveInteractionRequest{
 		InteractionID: interactionID,
 		Resolution:    maps.Clone(resolution),
+		Subject:       agentSubjectFromPrincipal(p),
 	})
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -1351,7 +908,7 @@ func (m *Manager) providerCandidates(providerName string) ([]namedAgentProvider,
 	return candidates, nil
 }
 
-func (m *Manager) directReadProviderCandidates(providerName string, exclude map[string]struct{}) ([]namedAgentProvider, error, error) {
+func (m *Manager) directReadProviderCandidates(providerName string) ([]namedAgentProvider, error, error) {
 	providerName = strings.TrimSpace(providerName)
 	if providerName != "" {
 		candidates, err := m.providerCandidates(providerName)
@@ -1366,9 +923,6 @@ func (m *Manager) directReadProviderCandidates(providerName string, exclude map[
 	for _, name := range names {
 		name = strings.TrimSpace(name)
 		if name == "" {
-			continue
-		}
-		if _, ok := exclude[name]; ok {
 			continue
 		}
 		provider, err := m.resolveProviderByName(name)
@@ -1404,106 +958,16 @@ func (m *Manager) authorizedProviderCandidates(ctx context.Context, p *principal
 	return authorized, nil
 }
 
-func (m *Manager) agentProviderConfigured(providerName string) bool {
-	if m == nil || m.agent == nil {
-		return false
-	}
-	providerName = strings.TrimSpace(providerName)
-	if providerName == "" {
-		return false
-	}
-	for _, name := range m.agent.ProviderNames() {
-		if strings.TrimSpace(name) == providerName {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *Manager) findAccessibleSession(ctx context.Context, p *principal.Principal, sessionID, providerName, action string) (*accessibleAgentSession, error) {
+func (m *Manager) findAccessibleSession(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*accessibleAgentSession, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, core.ErrNotFound
 	}
-	providerName = strings.TrimSpace(providerName)
-	if providerName != "" {
-		found, err := m.findAccessibleSessionInProviders(ctx, p, sessionID, providerName, action)
-		if err != nil {
-			return nil, err
-		}
-		m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
-		return found, nil
-	}
-	var retainedErr error
-	attemptedProviders := map[string]struct{}{}
-	if storedRoute, ok, err := m.storedSessionRoute(ctx, sessionID); err != nil {
-		return nil, err
-	} else if ok {
-		attemptedProviders[strings.TrimSpace(storedRoute.ProviderName)] = struct{}{}
-		found, findErr := m.findAccessibleSessionInProviders(ctx, p, sessionID, storedRoute.ProviderName, action)
-		if findErr == nil {
-			m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
-			return found, nil
-		}
-		switch {
-		case agentProviderConfirmedMissing(findErr):
-			if err := m.forgetSessionRoute(ctx, sessionID, storedRoute.ProviderName); err != nil {
-				return nil, err
-			}
-		case agentProviderReadFallbackAllowed(findErr):
-			if errors.Is(findErr, ErrAgentProviderNotAvailable) && !m.agentProviderConfigured(storedRoute.ProviderName) {
-				if err := m.forgetSessionRoute(ctx, sessionID, storedRoute.ProviderName); err != nil {
-					return nil, err
-				}
-			} else {
-				retainedErr = retainAgentProviderReadError(retainedErr, findErr)
-			}
-		default:
-			return nil, findErr
-		}
-	}
-	if cachedRoute, ok := m.cachedSessionRoute(sessionID); ok {
-		cachedProviderName := strings.TrimSpace(cachedRoute.ProviderName)
-		if _, alreadyTried := attemptedProviders[cachedProviderName]; !alreadyTried {
-			attemptedProviders[cachedProviderName] = struct{}{}
-			found, err := m.findAccessibleSessionInProviders(ctx, p, sessionID, cachedRoute.ProviderName, action)
-			if err == nil {
-				m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
-				return found, nil
-			}
-			switch {
-			case agentProviderConfirmedMissing(err):
-				m.forgetCachedSessionRoute(sessionID, cachedRoute.ProviderName)
-				_ = m.forgetSessionRoute(ctx, sessionID, cachedRoute.ProviderName)
-			case agentProviderReadFallbackAllowed(err):
-				if errors.Is(err, ErrAgentProviderNotAvailable) && !m.agentProviderConfigured(cachedRoute.ProviderName) {
-					m.forgetCachedSessionRoute(sessionID, cachedRoute.ProviderName)
-					_ = m.forgetSessionRoute(ctx, sessionID, cachedRoute.ProviderName)
-				} else {
-					retainedErr = retainAgentProviderReadError(retainedErr, err)
-				}
-			default:
-				return nil, err
-			}
-		}
-	}
-	found, err := m.findAccessibleSessionInProviders(ctx, p, sessionID, "", action, attemptedProviders)
-	if err != nil {
-		if agentProviderReturnedNotFound(err) && retainedErr != nil {
-			return nil, retainedErr
-		}
-		return nil, err
-	}
-	m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
-	return found, nil
+	return m.findAccessibleSessionInProviders(ctx, p, sessionID, providerName)
 }
 
-func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName, action string, exclude ...map[string]struct{}) (*accessibleAgentSession, error) {
-	var excluded map[string]struct{}
-	if len(exclude) > 0 {
-		excluded = exclude[0]
-	}
-	candidates, retainedErr, err := m.directReadProviderCandidates(providerName, excluded)
+func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*accessibleAgentSession, error) {
+	candidates, retainedErr, err := m.directReadProviderCandidates(providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -1513,14 +977,14 @@ func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *princ
 	}
 	var found *accessibleAgentSession
 	authDenied := false
-	inaccessible := false
 	for _, candidate := range candidates {
-		if m.authorizationProvider == nil && !m.allowsAgentProvider(ctx, p, candidate.name) {
+		if !m.allowsAgentProvider(ctx, p, candidate.name) {
 			authDenied = true
 			continue
 		}
 		session, err := candidate.provider.GetSession(ctx, coreagent.GetSessionRequest{
 			SessionID: sessionID,
+			Subject:   agentSubjectFromPrincipal(p),
 		})
 		if err != nil {
 			if agentProviderReturnedNotFound(err) {
@@ -1536,15 +1000,6 @@ func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *princ
 		if err != nil {
 			return nil, err
 		}
-		allowed, owned := m.allowsAgentSessionAccess(ctx, p, candidate.name, normalized, action)
-		if !allowed {
-			if owned {
-				authDenied = true
-			} else {
-				inaccessible = true
-			}
-			continue
-		}
 		if found != nil {
 			return nil, fmt.Errorf("%w: agent session %q is present in multiple providers", invocation.ErrInternal, sessionID)
 		}
@@ -1552,111 +1007,34 @@ func (m *Manager) findAccessibleSessionInProviders(ctx context.Context, p *princ
 			providerName: candidate.name,
 			provider:     candidate.provider,
 			session:      normalized,
-			owned:        owned,
+			owned:        providerSessionOwnedBy(normalized, p),
 		}
 	}
 	if found == nil {
+		if retainedErr != nil {
+			return nil, retainedErr
+		}
 		if authDenied {
 			if providerName = strings.TrimSpace(providerName); providerName != "" {
 				return nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName)
 			}
 			return nil, invocation.ErrAuthorizationDenied
 		}
-		if retainedErr != nil {
-			return nil, retainedErr
-		}
-		if inaccessible {
-			return nil, errAgentSessionInaccessible
-		}
 		return nil, core.ErrNotFound
 	}
 	return found, nil
 }
 
-func (m *Manager) findAccessibleTurn(ctx context.Context, p *principal.Principal, turnID, providerName, expectedSessionID, action string) (*accessibleAgentTurn, error) {
+func (m *Manager) findAccessibleTurn(ctx context.Context, p *principal.Principal, turnID, providerName, expectedSessionID string) (*accessibleAgentTurn, error) {
 	turnID = strings.TrimSpace(turnID)
 	if turnID == "" {
 		return nil, core.ErrNotFound
 	}
-	providerName = strings.TrimSpace(providerName)
-	if providerName != "" {
-		found, err := m.findAccessibleTurnInProviders(ctx, p, turnID, providerName, expectedSessionID, action)
-		if err != nil {
-			return nil, err
-		}
-		m.rememberTurnRouteBestEffort(ctx, found.turn.ID, found.turn.SessionID, found.providerName)
-		return found, nil
-	}
-	var retainedErr error
-	attemptedProviders := map[string]struct{}{}
-	if storedRoute, ok, err := m.storedTurnRoute(ctx, turnID); err != nil {
-		return nil, err
-	} else if ok {
-		attemptedProviders[strings.TrimSpace(storedRoute.ProviderName)] = struct{}{}
-		found, findErr := m.findAccessibleTurnInProviders(ctx, p, turnID, storedRoute.ProviderName, storedRoute.SessionID, action)
-		if findErr == nil {
-			m.rememberTurnRouteBestEffort(ctx, found.turn.ID, found.turn.SessionID, found.providerName)
-			return found, nil
-		}
-		switch {
-		case agentProviderConfirmedMissing(findErr):
-			if err := m.forgetTurnRoute(ctx, turnID, storedRoute.ProviderName); err != nil {
-				return nil, err
-			}
-		case agentProviderReadFallbackAllowed(findErr):
-			if errors.Is(findErr, ErrAgentProviderNotAvailable) && !m.agentProviderConfigured(storedRoute.ProviderName) {
-				if err := m.forgetTurnRoute(ctx, turnID, storedRoute.ProviderName); err != nil {
-					return nil, err
-				}
-			} else {
-				retainedErr = retainAgentProviderReadError(retainedErr, findErr)
-			}
-		default:
-			return nil, findErr
-		}
-	}
-	if cachedRoute, ok := m.cachedTurnRoute(turnID); ok {
-		cachedProviderName := strings.TrimSpace(cachedRoute.ProviderName)
-		if _, alreadyTried := attemptedProviders[cachedProviderName]; !alreadyTried {
-			attemptedProviders[cachedProviderName] = struct{}{}
-			found, err := m.findAccessibleTurnInProviders(ctx, p, turnID, cachedRoute.ProviderName, cachedRoute.SessionID, action)
-			if err == nil {
-				m.rememberTurnRouteBestEffort(ctx, found.turn.ID, found.turn.SessionID, found.providerName)
-				return found, nil
-			}
-			switch {
-			case agentProviderConfirmedMissing(err):
-				m.forgetCachedTurnRoute(turnID, cachedRoute.ProviderName)
-				_ = m.forgetTurnRoute(ctx, turnID, cachedRoute.ProviderName)
-			case agentProviderReadFallbackAllowed(err):
-				if errors.Is(err, ErrAgentProviderNotAvailable) && !m.agentProviderConfigured(cachedRoute.ProviderName) {
-					m.forgetCachedTurnRoute(turnID, cachedRoute.ProviderName)
-					_ = m.forgetTurnRoute(ctx, turnID, cachedRoute.ProviderName)
-				} else {
-					retainedErr = retainAgentProviderReadError(retainedErr, err)
-				}
-			default:
-				return nil, err
-			}
-		}
-	}
-	found, err := m.findAccessibleTurnInProviders(ctx, p, turnID, "", expectedSessionID, action, attemptedProviders)
-	if err != nil {
-		if agentProviderReturnedNotFound(err) && retainedErr != nil {
-			return nil, retainedErr
-		}
-		return nil, err
-	}
-	m.rememberTurnRouteBestEffort(ctx, found.turn.ID, found.turn.SessionID, found.providerName)
-	return found, nil
+	return m.findAccessibleTurnInProviders(ctx, p, turnID, providerName, expectedSessionID)
 }
 
-func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principal.Principal, turnID, providerName, expectedSessionID, action string, exclude ...map[string]struct{}) (*accessibleAgentTurn, error) {
-	var excluded map[string]struct{}
-	if len(exclude) > 0 {
-		excluded = exclude[0]
-	}
-	candidates, retainedErr, err := m.directReadProviderCandidates(providerName, excluded)
+func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principal.Principal, turnID, providerName, expectedSessionID string) (*accessibleAgentTurn, error) {
+	candidates, retainedErr, err := m.directReadProviderCandidates(providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -1665,9 +1043,15 @@ func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principa
 		return nil, err
 	}
 	var found *accessibleAgentTurn
+	authDenied := false
 	for _, candidate := range candidates {
+		if !m.allowsAgentProvider(ctx, p, candidate.name) {
+			authDenied = true
+			continue
+		}
 		turn, err := candidate.provider.GetTurn(ctx, coreagent.GetTurnRequest{
-			TurnID: turnID,
+			TurnID:  turnID,
+			Subject: agentSubjectFromPrincipal(p),
 		})
 		if err != nil {
 			if agentProviderReturnedNotFound(err) {
@@ -1690,9 +1074,9 @@ func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principa
 		if err != nil {
 			return nil, err
 		}
-		session, err := m.findAccessibleSessionInProviders(ctx, p, normalized.SessionID, candidate.name, action)
+		session, err := m.findAccessibleSessionInProviders(ctx, p, normalized.SessionID, candidate.name)
 		if err != nil {
-			if agentProviderConfirmedMissing(err) {
+			if agentProviderReturnedNotFound(err) {
 				continue
 			}
 			if strings.TrimSpace(providerName) == "" && agentProviderReadFallbackAllowed(err) {
@@ -1716,46 +1100,15 @@ func (m *Manager) findAccessibleTurnInProviders(ctx context.Context, p *principa
 		if retainedErr != nil {
 			return nil, retainedErr
 		}
+		if authDenied {
+			if providerName = strings.TrimSpace(providerName); providerName != "" {
+				return nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName)
+			}
+			return nil, invocation.ErrAuthorizationDenied
+		}
 		return nil, core.ErrNotFound
 	}
 	return found, nil
-}
-
-func (m *Manager) allowsAgentSessionAccess(ctx context.Context, p *principal.Principal, providerName string, session *coreagent.Session, action string) (bool, bool) {
-	owned := providerSessionOwnedBy(session, p)
-	if owned && m.allowsAgentProvider(ctx, p, providerName) {
-		return true, true
-	}
-	if m == nil || m.authorizationProvider == nil {
-		return false, owned
-	}
-	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
-	if subjectID == "" {
-		return false, owned
-	}
-	action = strings.TrimSpace(action)
-	if action == "" {
-		return false, owned
-	}
-	decision, err := m.authorizationProvider.Evaluate(ctx, &core.AccessEvaluationRequest{
-		Subject: &core.SubjectRef{
-			Type: authorization.ProviderSubjectTypeSubject,
-			Id:   subjectID,
-		},
-		Action:   &core.ActionRef{Name: action},
-		Resource: agentSessionResourceRef(session.ID),
-	})
-	if err != nil {
-		return false, owned
-	}
-	return decision.GetAllowed(), owned
-}
-
-func agentSessionResourceRef(sessionID string) *core.ResourceRef {
-	return &core.ResourceRef{
-		Type: authorization.ProviderResourceTypeAgentSession,
-		Id:   strings.TrimSpace(sessionID),
-	}
 }
 
 func filterProviderCandidatesByTokenPermission(p *principal.Principal, candidates []namedAgentProvider, providerName string) ([]namedAgentProvider, error) {
@@ -1782,85 +1135,11 @@ func (m *Manager) findOwnedSession(ctx context.Context, p *principal.Principal, 
 	if sessionID == "" {
 		return nil, core.ErrNotFound
 	}
-	providerName = strings.TrimSpace(providerName)
-	if providerName != "" {
-		found, err := m.findOwnedSessionInProviders(ctx, p, sessionID, providerName)
-		if err != nil {
-			return nil, err
-		}
-		m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
-		return found, nil
-	}
-	var retainedErr error
-	attemptedProviders := map[string]struct{}{}
-	if storedRoute, ok, err := m.storedSessionRoute(ctx, sessionID); err != nil {
-		return nil, err
-	} else if ok {
-		attemptedProviders[strings.TrimSpace(storedRoute.ProviderName)] = struct{}{}
-		found, findErr := m.findOwnedSessionInProviders(ctx, p, sessionID, storedRoute.ProviderName)
-		if findErr == nil {
-			m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
-			return found, nil
-		}
-		switch {
-		case agentProviderConfirmedMissing(findErr):
-			if err := m.forgetSessionRoute(ctx, sessionID, storedRoute.ProviderName); err != nil {
-				return nil, err
-			}
-		case agentProviderReadFallbackAllowed(findErr):
-			if errors.Is(findErr, ErrAgentProviderNotAvailable) && !m.agentProviderConfigured(storedRoute.ProviderName) {
-				if err := m.forgetSessionRoute(ctx, sessionID, storedRoute.ProviderName); err != nil {
-					return nil, err
-				}
-			} else {
-				retainedErr = retainAgentProviderReadError(retainedErr, findErr)
-			}
-		default:
-			return nil, findErr
-		}
-	}
-	if cachedRoute, ok := m.cachedSessionRoute(sessionID); ok {
-		cachedProviderName := strings.TrimSpace(cachedRoute.ProviderName)
-		if _, alreadyTried := attemptedProviders[cachedProviderName]; !alreadyTried {
-			attemptedProviders[cachedProviderName] = struct{}{}
-			found, err := m.findOwnedSessionInProviders(ctx, p, sessionID, cachedRoute.ProviderName)
-			if err == nil {
-				m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
-				return found, nil
-			}
-			switch {
-			case agentProviderConfirmedMissing(err):
-				m.forgetCachedSessionRoute(sessionID, cachedRoute.ProviderName)
-				_ = m.forgetSessionRoute(ctx, sessionID, cachedRoute.ProviderName)
-			case agentProviderReadFallbackAllowed(err):
-				if errors.Is(err, ErrAgentProviderNotAvailable) && !m.agentProviderConfigured(cachedRoute.ProviderName) {
-					m.forgetCachedSessionRoute(sessionID, cachedRoute.ProviderName)
-					_ = m.forgetSessionRoute(ctx, sessionID, cachedRoute.ProviderName)
-				} else {
-					retainedErr = retainAgentProviderReadError(retainedErr, err)
-				}
-			default:
-				return nil, err
-			}
-		}
-	}
-	found, err := m.findOwnedSessionInProviders(ctx, p, sessionID, "", attemptedProviders)
-	if err != nil {
-		if agentProviderReturnedNotFound(err) && retainedErr != nil {
-			return nil, retainedErr
-		}
-		return nil, err
-	}
-	m.rememberSessionRouteBestEffort(ctx, found.session.ID, found.providerName)
-	return found, nil
+	return m.findOwnedSessionInProviders(ctx, p, sessionID, providerName)
 }
 
-func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string, exclude ...map[string]struct{}) (*ownedAgentSession, error) {
-	var excluded map[string]struct{}
-	if len(exclude) > 0 {
-		excluded = exclude[0]
-	}
-	candidates, retainedErr, err := m.directReadProviderCandidates(providerName, excluded)
+func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.Principal, sessionID, providerName string) (*ownedAgentSession, error) {
+	candidates, retainedErr, err := m.directReadProviderCandidates(providerName)
 	if err != nil {
 		return nil, err
 	}
@@ -1870,7 +1149,6 @@ func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.
 	}
 	var found *ownedAgentSession
 	authDenied := false
-	inaccessible := false
 	for _, candidate := range candidates {
 		if !m.allowsAgentProvider(ctx, p, candidate.name) {
 			authDenied = true
@@ -1895,7 +1173,6 @@ func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.
 			return nil, err
 		}
 		if !providerSessionOwnedBy(normalized, p) {
-			inaccessible = true
 			continue
 		}
 		if found != nil {
@@ -1908,17 +1185,14 @@ func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.
 		}
 	}
 	if found == nil {
+		if retainedErr != nil {
+			return nil, retainedErr
+		}
 		if authDenied {
 			if providerName = strings.TrimSpace(providerName); providerName != "" {
 				return nil, fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, providerName)
 			}
 			return nil, invocation.ErrAuthorizationDenied
-		}
-		if retainedErr != nil {
-			return nil, retainedErr
-		}
-		if inaccessible {
-			return nil, errAgentSessionInaccessible
 		}
 		return nil, core.ErrNotFound
 	}
@@ -1927,10 +1201,6 @@ func (m *Manager) findOwnedSessionInProviders(ctx context.Context, p *principal.
 
 func agentProviderReturnedNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
-}
-
-func agentProviderConfirmedMissing(err error) bool {
-	return agentProviderReturnedNotFound(err) && !errors.Is(err, errAgentSessionInaccessible)
 }
 
 func retainAgentProviderReadError(existing, err error) error {

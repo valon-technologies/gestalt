@@ -1177,11 +1177,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
-	agentRouteStore, err := agentmanager.NewIndexedDBRouteStore(ctx, prepared.Deps.IndexedDBs[prepared.Deps.SelectedIndexedDBName])
-	if err != nil {
-		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
-		return nil, fmt.Errorf("bootstrap: agent route store: %w", err)
-	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.ExternalCredentials,
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
@@ -1221,13 +1216,11 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		RunGrants:                     prepared.Deps.AgentRunGrants,
 		Invoker:                       sharedInvoker,
 		Authorizer:                    authz,
-		AuthorizationProvider:         prepared.AuthorizationProvider,
 		DefaultConnection:             connMaps.DefaultConnection,
 		CatalogConnection:             connMaps.APIConnection,
 		PluginInvokes:                 agentPluginInvokes(cfg),
 		AgentConnections:              agentConnectionBindings(cfg),
 		SessionStart:                  agentSessionStartConfigs(cfg),
-		RouteStore:                    agentRouteStore,
 		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
 	}))
 	prepared.Deps.AgentRuntime.SetToolSearcher(agentManager)

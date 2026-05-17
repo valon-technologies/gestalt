@@ -113,14 +113,6 @@ const AUTHORIZATION_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
 /** Subject type used for canonical Gestalt subject ids in managed grants. */
 export const AUTHORIZATION_SUBJECT_TYPE_SUBJECT = "subject";
-/** Managed authorization resource type for agent sessions. */
-export const AGENT_SESSION_RESOURCE_TYPE = "agent_session";
-/** Relation that grants view and edit access to an agent session. */
-export const AGENT_SESSION_RELATION_EDITOR = "editor";
-/** Action checked when reading a shared agent session. */
-export const AGENT_SESSION_ACTION_VIEW = "view";
-/** Action checked when creating turns or resolving interactions in a session. */
-export const AGENT_SESSION_ACTION_EDIT = "edit";
 
 export interface AuthorizationSubject {
   type: string;
@@ -506,20 +498,6 @@ export class AuthorizationClient {
     request: AuthorizationWriteRelationshipsInput,
   ): Promise<void> {
     await this.client.writeRelationships(authorizationWriteRelationshipsInputToProto(request));
-  }
-
-  /**
-   * Grants a canonical Gestalt subject id editor access to an agent session.
-   *
-   * This writes the host-managed `agent_session` relationship through the SDK.
-   */
-  async grantAgentSessionEditor(
-    subjectId: string,
-    sessionId: string,
-  ): Promise<void> {
-    await this.writeRelationships(
-      agentSessionEditorWriteRequest(subjectId, sessionId),
-    );
   }
 
   async getMetadata(): Promise<AuthorizationMetadata> {
@@ -920,13 +898,6 @@ export function authorizationSubjectSetTarget(
   };
 }
 
-/** Creates the managed authorization resource for an agent session. */
-export function agentSessionAuthorizationResource(
-  sessionId: string,
-): AuthorizationResource {
-  return authorizationResource(AGENT_SESSION_RESOURCE_TYPE, sessionId);
-}
-
 /** Creates an authorization action reference. */
 export function authorizationAction(
   name: string,
@@ -957,40 +928,6 @@ export function authorizationRelationshipWithTarget(
   return properties === undefined
     ? { target, relation, resource }
     : { target, relation, resource, properties };
-}
-
-/**
- * Creates the relationship that shares an agent session with a canonical
- * Gestalt subject id such as `user:123`.
- *
- * The returned relationship mirrors the subject into both the legacy `subject`
- * field and the generalized `target.subject` field so it remains compatible
- * with mixed host/provider versions.
- */
-export function agentSessionEditorRelationship(
-  subjectId: string,
-  sessionId: string,
-): AuthorizationRelationship {
-  const subject = authorizationSubject(
-    AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
-    subjectId,
-  );
-  return {
-    subject,
-    target: authorizationSubjectTarget(subject),
-    relation: AGENT_SESSION_RELATION_EDITOR,
-    resource: agentSessionAuthorizationResource(sessionId),
-  };
-}
-
-/** Creates a relationship-write request that shares an agent session. */
-export function agentSessionEditorWriteRequest(
-  subjectId: string,
-  sessionId: string,
-): AuthorizationWriteRelationshipsInput {
-  return {
-    writes: [agentSessionEditorRelationship(subjectId, sessionId)],
-  };
 }
 
 /** Creates a relationship key for authorization deletes. */
