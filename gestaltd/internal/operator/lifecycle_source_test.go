@@ -4315,6 +4315,92 @@ func TestLockAndSyncResolveSourceAuthSecretRefs(t *testing.T) {
 	}
 }
 
+func TestLoadForStaticValidationPluginScopePreparesMissingCurrentPlatformLock(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const (
+		packageSource = "github.com/acme/tools/private"
+		version       = "0.0.1-alpha.1"
+	)
+	archivePath := buildExecutableArchive(t, dir, "private-src", packageSource, version, providermanifestv1.KindPlugin, "private-plugin", "private-plugin-binary")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSHA := sha256.Sum256(archiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/providers/private/provider-release.yaml":
+			metadataCount.Add(1)
+			data, err := yaml.Marshal(providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   "private.tar.gz",
+						SHA256: hex.EncodeToString(archiveSHA[:]),
+					},
+				},
+			})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			_, _ = w.Write(data)
+		case "/providers/private/private.tar.gz":
+			archiveCount.Add(1)
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := "apiVersion: " + config.ConfigAPIVersion + "\n" +
+		requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) +
+		strings.Join([]string{
+			"server:",
+			"  providers:",
+			"    indexeddb: sqlite",
+			"  artifactsDir: " + filepath.ToSlash(filepath.Join(dir, "artifacts")),
+			"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"plugins:",
+			"  private:",
+			"    source: " + srv.URL + "/providers/private/provider-release.yaml",
+			"  unrelated:",
+			"    source: https://example.invalid/unrelated/provider-release.yaml",
+			"",
+		}, "\n")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err = NewLifecycle().
+		WithHTTPClient(srv.Client()).
+		LoadForStaticValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"private"}}, StaticValidationOptions{})
+	if err != nil {
+		t.Fatalf("LoadForStaticValidationAtPathsWithStatePaths: %v", err)
+	}
+	if got := metadataCount.Load(); got == 0 {
+		t.Fatal("metadata server was not called")
+	}
+	if got := archiveCount.Load(); got == 0 {
+		t.Fatal("archive server was not called")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "artifacts", ".gestaltd", "scopes")); !os.IsNotExist(err) {
+		t.Fatalf("static validation should not leave scoped state in artifacts dir, got err=%v", err)
+	}
+}
+
 func TestStaticValidationNeedsSourceAuthSecretsSkipsNilRuntimeProviders(t *testing.T) {
 	t.Parallel()
 
