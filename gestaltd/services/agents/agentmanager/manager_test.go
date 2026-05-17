@@ -162,10 +162,13 @@ type routeCountingAgentProvider struct {
 type sharedSessionAuthorizationProvider struct {
 	directResources              []*core.ResourceRef
 	effectiveResources           []*core.ResourceRef
+	relationships                []*core.Relationship
 	effectiveErr                 error
+	readErr                      error
 	allowedSessions              map[string]struct{}
 	searchResourceCalls          int
 	effectiveSearchResourceCalls int
+	readRelationshipCalls        int
 }
 
 func (p *sharedSessionAuthorizationProvider) Name() string { return "shared-session-authz" }
@@ -216,8 +219,18 @@ func (*sharedSessionAuthorizationProvider) GetMetadata(context.Context) (*core.A
 	return &core.AuthorizationMetadata{}, nil
 }
 
-func (*sharedSessionAuthorizationProvider) ReadRelationships(context.Context, *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
-	return &core.ReadRelationshipsResponse{}, nil
+func (p *sharedSessionAuthorizationProvider) ReadRelationships(_ context.Context, req *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
+	p.readRelationshipCalls++
+	if p.readErr != nil {
+		return nil, p.readErr
+	}
+	out := make([]*core.Relationship, 0, len(p.relationships))
+	for _, rel := range p.relationships {
+		if sharedSessionRelationshipMatches(rel, req) {
+			out = append(out, rel)
+		}
+	}
+	return &core.ReadRelationshipsResponse{Relationships: out}, nil
 }
 
 func (*sharedSessionAuthorizationProvider) WriteRelationships(context.Context, *core.WriteRelationshipsRequest) error {
@@ -245,6 +258,37 @@ func cloneAuthzResources(resources []*core.ResourceRef) []*core.ResourceRef {
 		out = append(out, &core.ResourceRef{Type: resource.GetType(), Id: resource.GetId()})
 	}
 	return out
+}
+
+func sharedSessionRelationshipMatches(rel *core.Relationship, req *core.ReadRelationshipsRequest) bool {
+	if rel == nil || req == nil {
+		return rel != nil
+	}
+	if target := req.GetTarget(); target != nil {
+		if authorization.RelationshipTargetMapKey(rel.GetTarget(), rel.GetSubject()) != authorization.RelationshipTargetMapKey(target, nil) {
+			return false
+		}
+	}
+	if relation := strings.TrimSpace(req.GetRelation()); relation != "" && rel.GetRelation() != relation {
+		return false
+	}
+	if resource := req.GetResource(); resource != nil {
+		if got := rel.GetResource(); got == nil || got.GetType() != resource.GetType() || got.GetId() != resource.GetId() {
+			return false
+		}
+	}
+	return true
+}
+
+func everyoneAgentSessionViewerRelationship(sessionID string) *core.Relationship {
+	return &core.Relationship{
+		Relation: authorization.ProviderAgentSessionRelationViewer,
+		Resource: &core.ResourceRef{
+			Type: authorization.ProviderResourceTypeAgentSession,
+			Id:   sessionID,
+		},
+		Target: agentSessionEveryoneTarget(),
+	}
 }
 
 func newRouteCountingAgentProvider(name string) *routeCountingAgentProvider {
@@ -1553,6 +1597,81 @@ func TestManagerListSharedSessionsUsesEffectiveSearchResources(t *testing.T) {
 	}
 	if authz.searchResourceCalls != 0 {
 		t.Fatalf("SearchResources calls = %d, want 0", authz.searchResourceCalls)
+	}
+}
+
+func TestManagerGetSessionAllowsEveryoneSharedSession(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	provider.sessions["shared-session"] = &coreagent.Session{
+		ID:           "shared-session",
+		ProviderName: "alpha",
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("owner")},
+	}
+	authz := &sharedSessionAuthorizationProvider{
+		relationships: []*core.Relationship{
+			everyoneAgentSessionViewerRelationship("shared-session"),
+		},
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+		AuthorizationProvider: authz,
+	})
+
+	session, err := manager.GetSession(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("viewer")}, "shared-session")
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if session.ID != "shared-session" {
+		t.Fatalf("GetSession ID = %q, want shared-session", session.ID)
+	}
+	if authz.readRelationshipCalls == 0 {
+		t.Fatal("ReadRelationships calls = 0, want everyone grant lookup")
+	}
+}
+
+func TestManagerListSharedSessionsIncludesEveryoneSharedSessions(t *testing.T) {
+	t.Parallel()
+
+	provider := newRouteCountingAgentProvider("alpha")
+	provider.sessions["shared-session"] = &coreagent.Session{
+		ID:           "shared-session",
+		ProviderName: "alpha",
+		State:        coreagent.SessionStateActive,
+		CreatedBy:    coreagent.Actor{SubjectID: principal.UserSubjectID("owner")},
+	}
+	authz := &sharedSessionAuthorizationProvider{
+		relationships: []*core.Relationship{
+			everyoneAgentSessionViewerRelationship("shared-session"),
+		},
+	}
+	manager := newTestManager(t, Config{
+		Agent: &routeCountingAgentControl{
+			defaultName: "alpha",
+			names:       []string{"alpha"},
+			providers:   map[string]*routeCountingAgentProvider{"alpha": provider},
+		},
+		AuthorizationProvider: authz,
+	})
+
+	sessions, err := manager.ListSessions(context.Background(), &principal.Principal{SubjectID: principal.UserSubjectID("viewer")}, coreagent.ManagerListSessionsRequest{
+		SummaryOnly: true,
+		Limit:       10,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "shared-session" {
+		t.Fatalf("ListSessions shared sessions = %#v, want shared-session", sessions)
+	}
+	if authz.readRelationshipCalls == 0 {
+		t.Fatal("ReadRelationships calls = 0, want everyone grant lookup")
 	}
 }
 

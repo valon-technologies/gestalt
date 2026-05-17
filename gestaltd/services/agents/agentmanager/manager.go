@@ -20,6 +20,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -840,6 +841,37 @@ func (m *Manager) listSharedAgentSessions(ctx context.Context, p *principal.Prin
 	pageToken := ""
 	out := make([]*coreagent.Session, 0)
 	seen := map[string]struct{}{}
+	appendSharedResource := func(resource *core.ResourceRef) error {
+		if resource == nil || strings.TrimSpace(resource.GetType()) != authorization.ProviderResourceTypeAgentSession {
+			return nil
+		}
+		sessionID := strings.TrimSpace(resource.GetId())
+		if sessionID == "" {
+			return nil
+		}
+		if _, ok := seen[sessionID]; ok {
+			return nil
+		}
+		seen[sessionID] = struct{}{}
+		hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
+		session, err := m.findAccessibleSession(hydrationCtx, p, sessionID, providerName, authorization.ProviderAgentSessionActionView)
+		cancel()
+		if err != nil {
+			if agentProviderReturnedNotFound(err) || errors.Is(err, invocation.ErrAuthorizationDenied) {
+				return nil
+			}
+			return err
+		}
+		if req.State != "" && session.session.State != req.State {
+			return nil
+		}
+		if req.SummaryOnly {
+			out = append(out, summarizeAgentSession(session.session))
+		} else {
+			out = append(out, session.session)
+		}
+		return nil
+	}
 	for {
 		resp, err := m.searchSharedAgentSessionResources(ctx, &core.ResourceSearchRequest{
 			Subject: &core.SubjectRef{
@@ -855,40 +887,25 @@ func (m *Manager) listSharedAgentSessions(ctx context.Context, p *principal.Prin
 			return nil, err
 		}
 		for _, resource := range resp.GetResources() {
-			if resource == nil || strings.TrimSpace(resource.GetType()) != authorization.ProviderResourceTypeAgentSession {
-				continue
-			}
-			sessionID := strings.TrimSpace(resource.GetId())
-			if sessionID == "" {
-				continue
-			}
-			if _, ok := seen[sessionID]; ok {
-				continue
-			}
-			seen[sessionID] = struct{}{}
-			hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-			session, err := m.findAccessibleSession(hydrationCtx, p, sessionID, providerName, authorization.ProviderAgentSessionActionView)
-			cancel()
-			if err != nil {
-				if agentProviderReturnedNotFound(err) || errors.Is(err, invocation.ErrAuthorizationDenied) {
-					continue
-				}
+			if err := appendSharedResource(resource); err != nil {
 				return nil, err
-			}
-			if req.State != "" && session.session.State != req.State {
-				continue
-			}
-			if req.SummaryOnly {
-				out = append(out, summarizeAgentSession(session.session))
-			} else {
-				out = append(out, session.session)
 			}
 		}
 		pageToken = strings.TrimSpace(resp.GetNextPageToken())
 		if pageToken == "" {
-			return out, nil
+			break
 		}
 	}
+	everyoneResources, err := m.listEveryoneSharedAgentSessionResources(ctx, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	for _, resource := range everyoneResources {
+		if err := appendSharedResource(resource); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
 
 func (m *Manager) searchSharedAgentSessionResources(ctx context.Context, req *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
@@ -905,6 +922,53 @@ func (m *Manager) searchSharedAgentSessionResources(ctx context.Context, req *co
 		}
 	}
 	return m.authorizationProvider.SearchResources(ctx, req)
+}
+
+func (m *Manager) listEveryoneSharedAgentSessionResources(ctx context.Context, pageSize int) ([]*core.ResourceRef, error) {
+	if m == nil || m.authorizationProvider == nil {
+		return nil, nil
+	}
+	if pageSize <= 0 {
+		pageSize = AgentListSummaryDefaultLimit
+	}
+	out := make([]*core.ResourceRef, 0)
+	seen := map[string]struct{}{}
+	pageToken := ""
+	for {
+		resp, err := m.authorizationProvider.ReadRelationships(ctx, &core.ReadRelationshipsRequest{
+			Target:    agentSessionEveryoneTarget(),
+			Relation:  authorization.ProviderAgentSessionRelationViewer,
+			PageSize:  int32(pageSize),
+			PageToken: pageToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, rel := range resp.GetRelationships() {
+			resource := rel.GetResource()
+			if resource == nil || strings.TrimSpace(resource.GetType()) != authorization.ProviderResourceTypeAgentSession {
+				continue
+			}
+			sessionID := strings.TrimSpace(resource.GetId())
+			if sessionID == "" {
+				continue
+			}
+			key := strings.TrimSpace(resource.GetType()) + "\x00" + sessionID
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, &core.ResourceRef{
+				Type: strings.TrimSpace(resource.GetType()),
+				Id:   sessionID,
+			})
+		}
+		pageToken = strings.TrimSpace(resp.GetNextPageToken())
+		if pageToken == "" {
+			break
+		}
+	}
+	return out, nil
 }
 
 func (m *Manager) UpdateSession(ctx context.Context, p *principal.Principal, req coreagent.ManagerUpdateSessionRequest) (session *coreagent.Session, err error) {
@@ -1746,9 +1810,12 @@ func (m *Manager) allowsAgentSessionAccess(ctx context.Context, p *principal.Pri
 		Resource: agentSessionResourceRef(session.ID),
 	})
 	if err != nil {
-		return false, owned
+		return m.agentSessionSharedWithEveryone(ctx, session.ID, action), owned
 	}
-	return decision.GetAllowed(), owned
+	if decision.GetAllowed() {
+		return true, owned
+	}
+	return m.agentSessionSharedWithEveryone(ctx, session.ID, action), owned
 }
 
 func agentSessionResourceRef(sessionID string) *core.ResourceRef {
@@ -1756,6 +1823,35 @@ func agentSessionResourceRef(sessionID string) *core.ResourceRef {
 		Type: authorization.ProviderResourceTypeAgentSession,
 		Id:   strings.TrimSpace(sessionID),
 	}
+}
+
+func (m *Manager) agentSessionSharedWithEveryone(ctx context.Context, sessionID, action string) bool {
+	if m == nil ||
+		m.authorizationProvider == nil ||
+		strings.TrimSpace(sessionID) == "" ||
+		strings.TrimSpace(action) != authorization.ProviderAgentSessionActionView {
+		return false
+	}
+	resp, err := m.authorizationProvider.ReadRelationships(ctx, &core.ReadRelationshipsRequest{
+		Target:   agentSessionEveryoneTarget(),
+		Relation: authorization.ProviderAgentSessionRelationViewer,
+		Resource: agentSessionResourceRef(sessionID),
+		PageSize: 1,
+	})
+	if err != nil {
+		return false
+	}
+	return len(resp.GetRelationships()) > 0
+}
+
+func agentSessionEveryoneTarget() *core.RelationshipTargetRef {
+	return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
+		Resource: &core.ResourceRef{
+			Type: authorization.ProviderResourceTypeEveryone,
+			Id:   authorization.ProviderResourceIDEveryoneGlobal,
+		},
+		Relation: authorization.ProviderRelationMember,
+	}}}
 }
 
 func filterProviderCandidatesByTokenPermission(p *principal.Principal, candidates []namedAgentProvider, providerName string) ([]namedAgentProvider, error) {
