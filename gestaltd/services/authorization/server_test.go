@@ -91,8 +91,8 @@ func TestProviderServerWriteRelationshipsForwardsRequest(t *testing.T) {
 					Subject: &proto.Subject{Type: "subject", Id: "user:shared"},
 				},
 			},
-			Relation: "editor",
-			Resource: &proto.Resource{Type: "agent_session", Id: "session-123"},
+			Relation: "member",
+			Resource: &proto.Resource{Type: "team", Id: "team-123"},
 		}},
 		Deletes: []*proto.RelationshipKey{{
 			Target: &proto.RelationshipTarget{
@@ -103,8 +103,8 @@ func TestProviderServerWriteRelationshipsForwardsRequest(t *testing.T) {
 					},
 				},
 			},
-			Relation: "viewer",
-			Resource: &proto.Resource{Type: "agent_session", Id: "session-old"},
+			Relation: "member",
+			Resource: &proto.Resource{Type: "slack_channel", Id: "T123:C123"},
 		}},
 	}
 

@@ -247,12 +247,11 @@ class AuthorizationTransportTest(unittest.TestCase):
                         ]
                     )
                 )
-                client.grant_agent_session_editor("user:shared", "session-1")
                 client.close()
             finally:
                 server.stop(grace=0)
 
-        self.assertEqual(len(provider.writes), 2)
+        self.assertEqual(len(provider.writes), 1)
         self.assertEqual(
             provider.writes[0].writes[0],
             authorization_pb2.Relationship(
@@ -272,25 +271,6 @@ class AuthorizationTransportTest(unittest.TestCase):
                 ),
             ),
         )
-
-        expected_editor_relationship = authorization_pb2.Relationship(
-            subject=authorization_pb2.Subject(
-                type="subject",
-                id="user:shared",
-            ),
-            target=authorization_pb2.RelationshipTarget(
-                subject=authorization_pb2.Subject(
-                    type="subject",
-                    id="user:shared",
-                ),
-            ),
-            relation="editor",
-            resource=authorization_pb2.Resource(
-                type="agent_session",
-                id="session-1",
-            ),
-        )
-        self.assertEqual(provider.writes[1].writes[0], expected_editor_relationship)
 
     def test_sdk_authorization_provider_serves_required_rpcs(self) -> None:
         provider = _SDKAuthorizationProvider()

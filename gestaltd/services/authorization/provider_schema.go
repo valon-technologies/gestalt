@@ -16,7 +16,6 @@ const (
 	ProviderResourceTypeAdminDynamic                   = "admin_dynamic"
 	ProviderResourceTypeExternalIdentity               = "external_identity"
 	ProviderResourceTypeManagedSubject                 = "managed_subject"
-	ProviderResourceTypeAgentSession                   = "agent_session"
 	ProviderResourceTypeEveryone                       = "everyone"
 	ProviderResourceTypeTeam                           = "team"
 	ProviderResourceTypeSlackChannel                   = "slack_channel"
@@ -24,11 +23,6 @@ const (
 	ProviderResourceIDEveryoneGlobal                   = "global"
 	ProviderExternalIdentityRelationAssume             = "assume"
 	ProviderRelationMember                             = "member"
-	ProviderAgentSessionRelationViewer                 = "viewer"
-	ProviderAgentSessionRelationEditor                 = "editor"
-	ProviderAgentSessionRelationParent                 = "parent"
-	ProviderAgentSessionActionView                     = "view"
-	ProviderAgentSessionActionEdit                     = "edit"
 	ProviderManagedSubjectRelationViewer               = "viewer"
 	ProviderManagedSubjectRelationEditor               = "editor"
 	ProviderManagedSubjectRelationAdmin                = "admin"
@@ -51,7 +45,6 @@ const (
 	resourceTypeAdminDynamic       = ProviderResourceTypeAdminDynamic
 	resourceTypeExternalIdentity   = ProviderResourceTypeExternalIdentity
 	resourceTypeManagedSubject     = ProviderResourceTypeManagedSubject
-	resourceTypeAgentSession       = ProviderResourceTypeAgentSession
 	resourceTypeEveryone           = ProviderResourceTypeEveryone
 	resourceTypeTeam               = ProviderResourceTypeTeam
 	resourceTypeSlackChannel       = ProviderResourceTypeSlackChannel
@@ -59,9 +52,6 @@ const (
 	resourceIDEveryoneGlobal       = ProviderResourceIDEveryoneGlobal
 	relationExternalIdentityAssume = ProviderExternalIdentityRelationAssume
 	relationMember                 = ProviderRelationMember
-	relationAgentSessionViewer     = ProviderAgentSessionRelationViewer
-	relationAgentSessionEditor     = ProviderAgentSessionRelationEditor
-	relationAgentSessionParent     = ProviderAgentSessionRelationParent
 	relationManagedSubjectViewer   = ProviderManagedSubjectRelationViewer
 	relationManagedSubjectEditor   = ProviderManagedSubjectRelationEditor
 	relationManagedSubjectAdmin    = ProviderManagedSubjectRelationAdmin
@@ -82,7 +72,6 @@ func IsManagedProviderRelationship(rel *core.Relationship) bool {
 		ProviderResourceTypeAdminDynamic,
 		ProviderResourceTypeExternalIdentity,
 		ProviderResourceTypeManagedSubject,
-		ProviderResourceTypeAgentSession,
 		ProviderResourceTypeEveryone,
 		ProviderResourceTypeTeam,
 		ProviderResourceTypeSlackChannel:
@@ -182,37 +171,6 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 		},
 	)
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
-		&core.AuthorizationModelResourceType{
-			Name: resourceTypeAgentSession,
-			Relations: []*core.AuthorizationModelRelation{
-				agentSessionAccessRelation(relationAgentSessionViewer),
-				agentSessionAccessRelation(relationAgentSessionEditor),
-				{
-					Name:         relationAgentSessionParent,
-					SubjectTypes: []string{subjectTypeSubject},
-					AllowedTargets: []*core.AuthorizationModelAllowedTarget{{
-						Kind: &proto.AuthorizationModelAllowedTarget_ResourceType{ResourceType: resourceTypeAgentSession},
-					}},
-				},
-			},
-			Actions: []*core.AuthorizationModelAction{
-				{
-					Name:      ProviderAgentSessionActionView,
-					Relations: []string{relationAgentSessionViewer, relationAgentSessionEditor},
-					Rewrite: rewriteUnion(
-						rewriteComputedUserset(relationAgentSessionViewer),
-						rewriteComputedUserset(relationAgentSessionEditor),
-					),
-				},
-				{
-					Name:      ProviderAgentSessionActionEdit,
-					Relations: []string{relationAgentSessionEditor},
-					Rewrite:   rewriteComputedUserset(relationAgentSessionEditor),
-				},
-			},
-		},
-	)
-	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		membershipResourceType(resourceTypeEveryone),
 	)
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
@@ -226,25 +184,6 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 		return strings.Compare(left.GetName(), right.GetName())
 	})
 	return model
-}
-
-func agentSessionAccessRelation(name string) *core.AuthorizationModelRelation {
-	children := []*core.AuthorizationModelRewrite{rewriteThis()}
-	if name == relationAgentSessionViewer {
-		children = append(children, rewriteComputedUserset(relationAgentSessionEditor))
-	}
-	children = append(children, rewriteTupleToUserset(relationAgentSessionParent, name))
-	return &core.AuthorizationModelRelation{
-		Name:         name,
-		SubjectTypes: []string{subjectTypeSubject},
-		AllowedTargets: []*core.AuthorizationModelAllowedTarget{
-			{Kind: &proto.AuthorizationModelAllowedTarget_SubjectType{SubjectType: subjectTypeSubject}},
-			{Kind: &proto.AuthorizationModelAllowedTarget_SubjectSet{SubjectSet: &core.AuthorizationModelSubjectSetTarget{ResourceType: resourceTypeEveryone, Relation: relationMember}}},
-			{Kind: &proto.AuthorizationModelAllowedTarget_SubjectSet{SubjectSet: &core.AuthorizationModelSubjectSetTarget{ResourceType: resourceTypeTeam, Relation: relationMember}}},
-			{Kind: &proto.AuthorizationModelAllowedTarget_SubjectSet{SubjectSet: &core.AuthorizationModelSubjectSetTarget{ResourceType: resourceTypeSlackChannel, Relation: relationMember}}},
-		},
-		Rewrite: rewriteUnion(children...),
-	}
 }
 
 func membershipResourceType(name string) *core.AuthorizationModelResourceType {
@@ -275,21 +214,6 @@ func rewriteThis() *core.AuthorizationModelRewrite {
 func rewriteComputedUserset(relation string) *core.AuthorizationModelRewrite {
 	return &core.AuthorizationModelRewrite{
 		Kind: &proto.AuthorizationModelRewrite_ComputedUserset{ComputedUserset: &core.AuthorizationModelComputedUserset{Relation: relation}},
-	}
-}
-
-func rewriteTupleToUserset(tuplesetRelation, computedRelation string) *core.AuthorizationModelRewrite {
-	return &core.AuthorizationModelRewrite{
-		Kind: &proto.AuthorizationModelRewrite_TupleToUserset{TupleToUserset: &core.AuthorizationModelTupleToUserset{
-			TuplesetRelation: tuplesetRelation,
-			ComputedRelation: computedRelation,
-		}},
-	}
-}
-
-func rewriteUnion(children ...*core.AuthorizationModelRewrite) *core.AuthorizationModelRewrite {
-	return &core.AuthorizationModelRewrite{
-		Kind: &proto.AuthorizationModelRewrite_Union{Union: &core.AuthorizationModelRewriteUnion{Children: children}},
 	}
 }
 

@@ -151,7 +151,7 @@ client.
         gestalt "github.com/valon-technologies/gestalt/sdk/go"
     )
 
-    func canView(ctx context.Context, req gestalt.Request, userID string) (bool, error) {
+    func canJoinTeam(ctx context.Context, req gestalt.Request, userID string) (bool, error) {
         authz, err := req.Authorization()
         if err != nil {
             return false, err
@@ -160,8 +160,8 @@ client.
 
         decision, err := authz.Evaluate(ctx, gestalt.NewAccessEvaluationRequest(
             gestalt.NewAuthorizationSubject(gestalt.AuthorizationSubjectTypeSubject, userID),
-            gestalt.NewAuthorizationAction(gestalt.AuthorizationAgentSessionActionView),
-            gestalt.NewAgentSessionAuthorizationResource("session-1"),
+            gestalt.NewAuthorizationAction("join"),
+            gestalt.NewAuthorizationResource("team", "support"),
         ))
         return decision.Allowed, err
     }
@@ -172,12 +172,12 @@ client.
     from gestalt import Authorization, AccessEvaluationRequest
     from gestalt import AuthorizationAction, AuthorizationResource, AuthorizationSubject
 
-    def can_view(user_id: str) -> bool:
+    def can_join_team(user_id: str) -> bool:
         decision = Authorization().evaluate(
             AccessEvaluationRequest(
                 subject=AuthorizationSubject(type="subject", id=user_id),
-                action=AuthorizationAction(name="view"),
-                resource=AuthorizationResource(type="agent_session", id="session-1"),
+                action=AuthorizationAction(name="join"),
+                resource=AuthorizationResource(type="team", id="support"),
             )
         )
         return decision.allowed
@@ -190,12 +190,12 @@ client.
         AuthorizationResource, AuthorizationSubject,
     };
 
-    async fn can_view(user_id: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    async fn can_join_team(user_id: &str) -> Result<bool, Box<dyn std::error::Error>> {
         let mut authz = Authorization::connect().await?;
         let decision = authz.evaluate(AccessEvaluationRequest::new(
             AuthorizationSubject::new("subject", user_id),
-            AuthorizationAction::new("view"),
-            AuthorizationResource::new("agent_session", "session-1"),
+            AuthorizationAction::new("join"),
+            AuthorizationResource::new("team", "support"),
         )).await?;
         Ok(decision.allowed)
     }
@@ -210,11 +210,11 @@ client.
       authorizationSubject,
     } from "@valon-technologies/gestalt";
 
-    export async function canView(userId: string) {
+    export async function canJoinTeam(userId: string) {
       const decision = await Authorization().evaluate({
         subject: authorizationSubject("subject", userId),
-        action: authorizationAction("view"),
-        resource: authorizationResource("agent_session", "session-1"),
+        action: authorizationAction("join"),
+        resource: authorizationResource("team", "support"),
       });
       return decision.allowed;
     }

@@ -29,19 +29,12 @@
  * ```
  */
 export {
-  AGENT_SESSION_ACTION_EDIT,
-  AGENT_SESSION_ACTION_VIEW,
-  AGENT_SESSION_RELATION_EDITOR,
-  AGENT_SESSION_RESOURCE_TYPE,
   Authorization,
   AuthorizationClient,
   AuthorizationProvider,
   AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
   ENV_AUTHORIZATION_SOCKET,
   ENV_AUTHORIZATION_SOCKET_TOKEN,
-  agentSessionAuthorizationResource,
-  agentSessionEditorRelationship,
-  agentSessionEditorWriteRequest,
   authorizationAction,
   createAuthorizationProviderService,
   defineAuthorizationProvider,

@@ -555,7 +555,7 @@ func (r *ActionSearchResponse) GetModelId() string {
 // Relationship describes one authorization relationship tuple.
 //
 // A relationship grants a subject a relation on a resource, for example
-// subject "user:123" has relation "editor" on resource "agent_session:sess_123".
+// subject "user:123" has relation "member" on resource "team:servicing".
 type Relationship struct {
 	Subject    *AuthorizationSubject
 	Relation   string
@@ -1209,22 +1209,6 @@ const (
 	// AuthorizationSubjectTypeSubject identifies canonical Gestalt subjects in
 	// managed authorization relationships.
 	AuthorizationSubjectTypeSubject = "subject"
-
-	// AuthorizationResourceTypeAgentSession is the managed authorization
-	// resource type for agent sessions.
-	AuthorizationResourceTypeAgentSession = "agent_session"
-
-	// AuthorizationAgentSessionRelationEditor grants view and edit access to an
-	// agent session in the host-managed authorization model.
-	AuthorizationAgentSessionRelationEditor = "editor"
-
-	// AuthorizationAgentSessionActionView is the action checked when reading a
-	// shared agent session.
-	AuthorizationAgentSessionActionView = "view"
-
-	// AuthorizationAgentSessionActionEdit is the action checked when creating
-	// turns or resolving interactions in a shared agent session.
-	AuthorizationAgentSessionActionEdit = "edit"
 )
 
 // NewAuthorizationSubject creates a subject reference for authorization requests.
@@ -1374,39 +1358,6 @@ func NewAuthorizationModelUnionRewrite(children ...*AuthorizationModelRewrite) *
 	return &AuthorizationModelRewrite{
 		Union: &AuthorizationModelRewriteUnion{Children: children},
 	}
-}
-
-// NewAgentSessionAuthorizationResource creates the managed authorization
-// resource for an agent session.
-func NewAgentSessionAuthorizationResource(sessionID string) *AuthorizationResource {
-	return NewAuthorizationResource(AuthorizationResourceTypeAgentSession, sessionID)
-}
-
-// NewAgentSessionEditorRelationship creates the relationship that shares an
-// agent session with a canonical Gestalt subject id such as "user:123".
-//
-// The editor relation grants both view and edit actions in the host-managed
-// authorization model. The returned relationship mirrors the subject into both
-// the legacy Subject field and the generalized Target field so it remains
-// compatible with mixed host/provider versions.
-func NewAgentSessionEditorRelationship(subjectID, sessionID string) *Relationship {
-	subject := NewAuthorizationSubject(AuthorizationSubjectTypeSubject, subjectID)
-	rel := NewRelationshipWithTarget(
-		NewAuthorizationSubjectTarget(subject),
-		AuthorizationAgentSessionRelationEditor,
-		NewAgentSessionAuthorizationResource(sessionID),
-	)
-	rel.Subject = subject
-	return rel
-}
-
-// NewAgentSessionEditorWriteRequest creates a relationship-write request that
-// shares an agent session with a canonical Gestalt subject id.
-func NewAgentSessionEditorWriteRequest(subjectID, sessionID string) *WriteRelationshipsRequest {
-	return NewWriteRelationshipsRequest(
-		[]*Relationship{NewAgentSessionEditorRelationship(subjectID, sessionID)},
-		nil,
-	)
 }
 
 // AuthorizationProvider serves authorization APIs to the host.

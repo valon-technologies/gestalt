@@ -28,14 +28,6 @@ pub const ENV_AUTHORIZATION_SOCKET_TOKEN: &str = "GESTALT_AUTHORIZATION_SOCKET_T
 const AUTHORIZATION_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 /// Subject type used for canonical Gestalt subject ids in managed grants.
 pub const AUTHORIZATION_SUBJECT_TYPE_SUBJECT: &str = "subject";
-/// Managed authorization resource type for agent sessions.
-pub const AGENT_SESSION_RESOURCE_TYPE: &str = "agent_session";
-/// Relation that grants view and edit access to an agent session.
-pub const AGENT_SESSION_RELATION_EDITOR: &str = "editor";
-/// Action checked when reading a shared agent session.
-pub const AGENT_SESSION_ACTION_VIEW: &str = "view";
-/// Action checked when creating turns or resolving interactions in a session.
-pub const AGENT_SESSION_ACTION_EDIT: &str = "edit";
 
 #[derive(Debug, thiserror::Error)]
 /// Errors returned by the authorization host-service client.
@@ -80,10 +72,10 @@ impl AuthorizationSubject {
 #[derive(Clone, Debug, Default, PartialEq)]
 /// Resource in the authorization graph.
 ///
-/// Resources are objects protected by authorization checks, such as an
-/// `agent_session` with a concrete session id.
+/// Resources are objects protected by authorization checks, such as a `team`
+/// with a concrete team id.
 pub struct AuthorizationResource {
-    /// Resource type, such as `agent_session`.
+    /// Resource type, such as `team`.
     pub r#type: String,
     /// Stable resource identifier within the resource type.
     pub id: String,
@@ -99,11 +91,6 @@ impl AuthorizationResource {
             id: id.into(),
             properties: serde_json::Map::new(),
         }
-    }
-
-    /// Creates the managed authorization resource for an agent session.
-    pub fn agent_session(session_id: impl Into<String>) -> Self {
-        Self::new(AGENT_SESSION_RESOURCE_TYPE, session_id)
     }
 }
 
@@ -498,7 +485,7 @@ pub struct WriteModelRequest {
 /// Relationship tuple stored in the authorization graph.
 ///
 /// A relationship grants a subject a relation on a resource, for example
-/// `subject:user:123` has `editor` on `agent_session:sess_123`.
+/// `subject:user:123` has `member` on `team:servicing`.
 pub struct Relationship {
     /// Subject receiving the relation.
     pub subject: AuthorizationSubject,
@@ -540,27 +527,6 @@ impl Relationship {
             target: Some(target),
             relation: relation.into(),
             resource,
-            properties: serde_json::Map::new(),
-        }
-    }
-
-    /// Creates the relationship that shares an agent session with a canonical
-    /// Gestalt subject id such as `user:123`.
-    ///
-    /// The editor relation grants both view and edit actions in the
-    /// host-managed authorization model. The returned relationship mirrors the
-    /// subject into both the legacy `subject` field and generalized `target`
-    /// field so it remains compatible with mixed host/provider versions.
-    pub fn agent_session_editor(
-        subject_id: impl Into<String>,
-        session_id: impl Into<String>,
-    ) -> Self {
-        let subject = AuthorizationSubject::new(AUTHORIZATION_SUBJECT_TYPE_SUBJECT, subject_id);
-        Self {
-            subject: subject.clone(),
-            target: Some(AuthorizationRelationshipTarget::Subject(subject)),
-            relation: AGENT_SESSION_RELATION_EDITOR.to_string(),
-            resource: AuthorizationResource::agent_session(session_id),
             properties: serde_json::Map::new(),
         }
     }
@@ -661,15 +627,6 @@ impl WriteRelationshipsRequest {
             deletes: Vec::new(),
             model_id: String::new(),
         }
-    }
-
-    /// Creates a write request that shares an agent session with a canonical
-    /// Gestalt subject id.
-    pub fn agent_session_editor(
-        subject_id: impl Into<String>,
-        session_id: impl Into<String>,
-    ) -> Self {
-        Self::writes([Relationship::agent_session_editor(subject_id, session_id)])
     }
 }
 
@@ -898,18 +855,6 @@ impl Authorization {
             .write_relationships(pb::WriteRelationshipsRequest::from(request))
             .await?;
         Ok(())
-    }
-
-    /// Grants a canonical Gestalt subject id editor access to an agent session.
-    pub async fn grant_agent_session_editor(
-        &mut self,
-        subject_id: impl Into<String>,
-        session_id: impl Into<String>,
-    ) -> std::result::Result<(), AuthorizationError> {
-        self.write_relationships(WriteRelationshipsRequest::agent_session_editor(
-            subject_id, session_id,
-        ))
-        .await
     }
 
     /// Returns host authorization provider metadata.

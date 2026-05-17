@@ -31,10 +31,6 @@ ENV_AUTHORIZATION_SOCKET = "GESTALT_AUTHORIZATION_SOCKET"
 ENV_AUTHORIZATION_SOCKET_TOKEN = f"{ENV_AUTHORIZATION_SOCKET}_TOKEN"
 _AUTHORIZATION_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 AUTHORIZATION_SUBJECT_TYPE_SUBJECT = "subject"
-AGENT_SESSION_RESOURCE_TYPE = "agent_session"
-AGENT_SESSION_RELATION_EDITOR = "editor"
-AGENT_SESSION_ACTION_VIEW = "view"
-AGENT_SESSION_ACTION_EDIT = "edit"
 
 _shared_authorization_transport: dict[str, Any] = {
     "target": "",
@@ -592,49 +588,6 @@ def _datetime_to_proto_json(value: _dt.datetime) -> str:
     return value.astimezone(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def agent_session_resource(session_id: str) -> Any:
-    """Create the managed authorization resource for an agent session.
-
-    Gestalt core treats agent-session sharing as normal authorization data:
-    the resource type is ``agent_session`` and the resource id is the concrete
-    provider session id.
-    """
-
-    return AuthorizationResource(type=AGENT_SESSION_RESOURCE_TYPE, id=session_id)
-
-
-def agent_session_editor_relationship(subject_id: str, session_id: str) -> Any:
-    """Create the relationship that shares an agent session with a subject.
-
-    The ``editor`` relation grants both ``view`` and ``edit`` actions in the
-    host-managed authorization model. ``subject_id`` should be the canonical
-    Gestalt subject id, for example ``user:123``. The returned relationship
-    fills both the legacy ``subject`` field and the generalized
-    ``target.subject`` field so it works across mixed host/provider versions.
-    """
-
-    subject = AuthorizationSubject(
-        type=AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
-        id=subject_id,
-    )
-    return Relationship(
-        subject=subject,
-        target=AuthorizationRelationshipTarget(
-            subject=subject,
-        ),
-        relation=AGENT_SESSION_RELATION_EDITOR,
-        resource=agent_session_resource(session_id),
-    )
-
-
-def agent_session_editor_write_request(subject_id: str, session_id: str) -> Any:
-    """Create a relationship-write request that shares an agent session."""
-
-    return WriteRelationshipsRequest(
-        writes=[agent_session_editor_relationship(subject_id, session_id)]
-    )
-
-
 class AuthorizationClient:
     """Transport client for the host authorization provider."""
 
@@ -767,18 +720,6 @@ class AuthorizationClient:
                 request,
                 authorization_pb2.WriteRelationshipsRequest,
             )
-        )
-
-    def grant_agent_session_editor(self, subject_id: str, session_id: str) -> None:
-        """Grant a subject editor access to an agent session.
-
-        This convenience method writes the same managed authorization tuple as
-        ``agent_session_editor_write_request`` and does not require callers to
-        import transport modules.
-        """
-
-        self.write_relationships(
-            agent_session_editor_write_request(subject_id, session_id)
         )
 
     def get_metadata(self) -> Any:
