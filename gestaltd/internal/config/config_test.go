@@ -6275,6 +6275,35 @@ func TestLoadErrors(t *testing.T) {
 	})
 }
 
+func TestValidateProviderSnapshotRepositoryReferencesRequiresGestaltRef(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		ProviderSnapshotRepositories: map[string]ProviderSnapshotRepositoryConfig{
+			"valon": {URL: "https://example.invalid/snapshots"},
+		},
+		Plugins: map[string]*ProviderEntry{
+			"alpha": {
+				Source: ProviderSource{Git: &GitSourceDef{
+					Repo:               "https://github.com/acme/providers.git",
+					Ref:                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					Path:               "plugins/alpha/manifest.yaml",
+					ArtifactRepository: "valon",
+					Materialization:    "snapshot",
+				}},
+			},
+		},
+	}
+
+	err := validateProviderSnapshotRepositoryReferences(cfg)
+	if err == nil {
+		t.Fatal("expected missing gestaltRef error")
+	}
+	if !strings.Contains(err.Error(), "providerSnapshotRepositories.valon.gestaltRef") {
+		t.Fatalf("error = %v, want gestaltRef", err)
+	}
+}
+
 func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	t.Parallel()
 

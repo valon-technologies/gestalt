@@ -93,6 +93,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateProviderSnapshotRepositories(cfg); err != nil {
 		return err
 	}
+	if err := validateProviderSnapshotRepositoryReferences(cfg); err != nil {
+		return err
+	}
 
 	for _, collection := range []struct {
 		kind    HostProviderKind
@@ -237,6 +240,42 @@ func validateProviderSnapshotRepositories(cfg *Config) error {
 		}
 	}
 	return nil
+}
+
+func validateProviderSnapshotRepositoryReferences(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	var validationErr error
+	collectProviderSources(cfg, func(source ProviderSource) {
+		if validationErr != nil {
+			return
+		}
+		git := source.GitSource()
+		if git == nil {
+			return
+		}
+		materialization := strings.TrimSpace(git.Materialization)
+		if materialization == "" {
+			materialization = "source"
+		}
+		if materialization != "snapshot" {
+			return
+		}
+		repoName := strings.TrimSpace(git.ArtifactRepository)
+		if repoName == "" {
+			return
+		}
+		repo, ok := cfg.ProviderSnapshotRepositories[repoName]
+		if !ok {
+			validationErr = fmt.Errorf("config validation: providerSnapshotRepositories.%s is required by source.git.artifactRepository", repoName)
+			return
+		}
+		if strings.TrimSpace(repo.GestaltRef) == "" {
+			validationErr = fmt.Errorf("config validation: providerSnapshotRepositories.%s.gestaltRef is required for source.git.materialization %q", repoName, materialization)
+		}
+	})
+	return validationErr
 }
 
 func isFullGitSHA(value string) bool {

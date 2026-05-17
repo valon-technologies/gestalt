@@ -111,6 +111,10 @@ func resolveGitSnapshotSource(cfg *config.Config, entry *config.ProviderEntry) (
 	if !ok {
 		return gitSnapshotSource{}, fmt.Errorf("providerSnapshotRepositories.%s is not configured", repoName)
 	}
+	gestaltRef := strings.ToLower(strings.TrimSpace(repo.GestaltRef))
+	if gestaltRef == "" {
+		return gitSnapshotSource{}, fmt.Errorf("providerSnapshotRepositories.%s.gestaltRef is required for source.git snapshots", repoName)
+	}
 	owner, name, err := githubRepoPath(git.Repo)
 	if err != nil {
 		return gitSnapshotSource{}, err
@@ -121,14 +125,14 @@ func resolveGitSnapshotSource(cfg *config.Config, entry *config.ProviderEntry) (
 	if providerDir == "." {
 		providerDir = ""
 	}
-	parts := []string{base, "github.com", owner, name, ref}
+	parts := []string{base, "gestalt", gestaltRef, "github.com", owner, name, ref}
 	if providerDir != "" {
 		parts = append(parts, strings.Split(providerDir, "/")...)
 	}
 	parts = append(parts, "provider-release.yaml")
 	return gitSnapshotSource{
 		MetadataURL: strings.Join(parts, "/"),
-		GestaltRef:  strings.TrimSpace(repo.GestaltRef),
+		GestaltRef:  gestaltRef,
 	}, nil
 }
 

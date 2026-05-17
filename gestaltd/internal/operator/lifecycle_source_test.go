@@ -688,7 +688,7 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 		ref           = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		gestaltRef    = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 		packageSource = "github.com/acme/providers/plugins/alpha"
-		version       = "0.0.0-snapshot.gaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		version       = "0.0.0-snapshot.gaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.gestalt.gbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 	)
 	archivePath := buildV2Archive(t, dir, packageSource, version, "snapshot-binary")
 	archiveData, err := os.ReadFile(archivePath)
@@ -703,7 +703,7 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	var archiveCount atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/snapshots/github.com/acme/providers/" + ref + "/plugins/alpha/provider-release.yaml":
+		case "/snapshots/gestalt/" + gestaltRef + "/github.com/acme/providers/" + ref + "/plugins/alpha/provider-release.yaml":
 			metadataCount.Add(1)
 			metadata := providerReleaseMetadata{
 				Schema:        providerReleaseSchemaName,
@@ -724,7 +724,7 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 				t.Fatalf("marshal metadata: %v", err)
 			}
 			_, _ = w.Write(data)
-		case "/snapshots/github.com/acme/providers/" + ref + "/plugins/alpha/alpha.tar.gz":
+		case "/snapshots/gestalt/" + gestaltRef + "/github.com/acme/providers/" + ref + "/plugins/alpha/alpha.tar.gz":
 			archiveCount.Add(1)
 			_, _ = w.Write(archiveData)
 		default:
@@ -775,7 +775,7 @@ plugins:
 	if entry.SourceRef.ResolvedGestaltRef != gestaltRef {
 		t.Fatalf("resolvedGestaltRef = %q, want %q", entry.SourceRef.ResolvedGestaltRef, gestaltRef)
 	}
-	if entry.Source != srv.URL+"/snapshots/github.com/acme/providers/"+ref+"/plugins/alpha/provider-release.yaml" {
+	if entry.Source != srv.URL+"/snapshots/gestalt/"+gestaltRef+"/github.com/acme/providers/"+ref+"/plugins/alpha/provider-release.yaml" {
 		t.Fatalf("source = %q", entry.Source)
 	}
 	if entry.Version != version {
@@ -797,7 +797,7 @@ func TestLifecycleGitSourceSnapshotRequirePrimesSecretsProvider(t *testing.T) {
 		ref           = "cccccccccccccccccccccccccccccccccccccccc"
 		gestaltRef    = "dddddddddddddddddddddddddddddddddddddddd"
 		packageSource = "github.com/acme/providers/secrets/google"
-		version       = "0.0.0-snapshot.gcccccccccccccccccccccccccccccccccccccccc"
+		version       = "0.0.0-snapshot.gcccccccccccccccccccccccccccccccccccccccc.gestalt.gdddddddddddddddddddddddddddddddddddddddd"
 	)
 	archivePath := buildV2ArchiveForKind(t, dir, providermanifestv1.KindSecrets, packageSource, version, artifactRelPath("secrets-provider"), "secrets-binary")
 	archiveData, err := os.ReadFile(archivePath)
@@ -812,7 +812,7 @@ func TestLifecycleGitSourceSnapshotRequirePrimesSecretsProvider(t *testing.T) {
 	var archiveCount atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/snapshots/github.com/acme/providers/" + ref + "/secrets/google/provider-release.yaml":
+		case "/snapshots/gestalt/" + gestaltRef + "/github.com/acme/providers/" + ref + "/secrets/google/provider-release.yaml":
 			metadataCount.Add(1)
 			metadata := providerReleaseMetadata{
 				Schema:        providerReleaseSchemaName,
@@ -833,7 +833,7 @@ func TestLifecycleGitSourceSnapshotRequirePrimesSecretsProvider(t *testing.T) {
 				t.Fatalf("marshal metadata: %v", err)
 			}
 			_, _ = w.Write(data)
-		case "/snapshots/github.com/acme/providers/" + ref + "/secrets/google/secrets.tar.gz":
+		case "/snapshots/gestalt/" + gestaltRef + "/github.com/acme/providers/" + ref + "/secrets/google/secrets.tar.gz":
 			archiveCount.Add(1)
 			_, _ = w.Write(archiveData)
 		default:

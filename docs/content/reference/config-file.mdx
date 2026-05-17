@@ -133,7 +133,9 @@ supply a token.
 
 `providerSnapshotRepositories` declares immutable artifact roots for commit-pinned
 git provider sources. Snapshot repositories are used by `source.git` entries
-that set `artifactRepository`.
+that set `artifactRepository`. Snapshot artifact paths include both the Gestalt
+toolchain commit and the provider commit, so the repository must declare the
+Gestalt commit used to package the snapshots.
 
 ```yaml
 providerSnapshotRepositories:
@@ -145,7 +147,7 @@ providerSnapshotRepositories:
 | Field | Description |
 | --- | --- |
 | `providerSnapshotRepositories.<name>.url` | HTTP(S) root containing deterministic snapshot `provider-release.yaml` files and archives. |
-| `providerSnapshotRepositories.<name>.gestaltRef` | Optional full Gestalt commit SHA expected for snapshots from this repository. |
+| `providerSnapshotRepositories.<name>.gestaltRef` | Full Gestalt commit SHA used to package snapshots from this repository. Required when `source.git.materialization` is `snapshot`. |
 
 ## `server`
 
@@ -1244,12 +1246,14 @@ source:
 
 To consume prebuilt snapshots, set `artifactRepository` and an explicit
 `materialization: snapshot`. Snapshot materialization never falls back to git
-or provider indexes:
+or provider indexes. The metadata URL is resolved under
+`<url>/gestalt/<gestaltRef>/github.com/<owner>/<repo>/<providerRef>/<providerPath>/provider-release.yaml`:
 
 ```yaml
 providerSnapshotRepositories:
   acme:
     url: https://storage.googleapis.com/acme-gestalt-provider-snapshots
+    gestaltRef: 651a5c30feb995c9364c38f63d0d5c3880bc2055
 
 plugins:
   github:
