@@ -110,3 +110,59 @@ test("agent workflow tool refs carry runAs subjects", () => {
   expect(copiedRef.runAs?.displayName).toBe("Gestalt Support Notion");
   expect(copiedRef.runAsExternalIdentity?.type).toBe("notion_workspace");
 });
+
+test("agent workflow steps round-trip through copy helpers", () => {
+  const target = boundWorkflowTarget({
+    agent: {
+      providerName: "agent",
+      model: "claude",
+      steps: [
+        {
+          id: "diagnosis",
+          prompt: "Diagnose the alert.",
+          messages: [{ role: "system", text: "Use concise replies." }],
+          toolRefs: [{ plugin: "datadog", operation: "queryLogs" }],
+          responseSchema: { type: "object" },
+          modelOptions: { temperature: 0 },
+          timeoutSeconds: 45,
+          metadata: { kind: "diagnosis" },
+          outputDelivery: {
+            target: { pluginName: "slack", operation: "reply" },
+            inputBindings: [
+              { inputField: "text", value: { agentOutput: "text" } },
+            ],
+          },
+        },
+        {
+          id: "pr_fix",
+          prompt: "Open a PR.",
+          toolRefs: [{ plugin: "github", operation: "createPullRequest" }],
+          when: {
+            stepId: "diagnosis",
+            outputPath: "structured_output.actionable_for_pr",
+            equals: true,
+          },
+        },
+      ],
+    },
+  });
+
+  if (target.kind?.case !== "agent") {
+    throw new Error("expected agent target");
+  }
+  const steps = target.kind.value.steps ?? [];
+  expect(steps).toHaveLength(2);
+  expect(steps[0]?.toolRefs?.[0]?.plugin).toBe("datadog");
+  expect(steps[1]?.when?.equals).toBe(true);
+
+  const copied = boundWorkflowTargetFromTarget(target);
+  if (copied.kind?.case !== "agent") {
+    throw new Error("expected copied agent target");
+  }
+  const copiedSteps = copied.kind.value.steps ?? [];
+  expect(copiedSteps[0]?.responseSchema).toEqual({ type: "object" });
+  expect(copiedSteps[0]?.outputDelivery?.target?.pluginName).toBe("slack");
+  expect(copiedSteps[1]?.when?.outputPath).toBe(
+    "structured_output.actionable_for_pr",
+  );
+});

@@ -208,6 +208,7 @@ func (r *remoteAgent) CreateTurn(ctx context.Context, req coreagent.CreateTurnRe
 		ToolSource:     agentToolSourceModeToProto(req.ToolSource),
 		Subject:        agentSubjectContextToProto(req.Subject),
 		RunGrant:       req.RunGrant,
+		TimeoutSeconds: int32(req.TimeoutSeconds),
 	})
 	if err != nil {
 		return nil, err

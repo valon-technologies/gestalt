@@ -112,11 +112,13 @@ pub struct AgentManagerCreateTurn {
     pub model: String,
     pub messages: Vec<AgentMessage>,
     pub tool_refs: Vec<AgentToolRef>,
+    pub tool_refs_set: bool,
     pub tool_source: AgentToolSourceMode,
     pub response_schema: Option<serde_json::Value>,
     pub metadata: Option<serde_json::Value>,
     pub idempotency_key: String,
     pub model_options: Option<serde_json::Value>,
+    pub timeout_seconds: i32,
 }
 
 impl Default for AgentManagerCreateTurn {
@@ -126,11 +128,13 @@ impl Default for AgentManagerCreateTurn {
             model: String::new(),
             messages: Vec::new(),
             tool_refs: Vec::new(),
+            tool_refs_set: false,
             tool_source: AgentToolSourceMode::Unspecified,
             response_schema: None,
             metadata: None,
             idempotency_key: String::new(),
             model_options: None,
+            timeout_seconds: 0,
         }
     }
 }
@@ -265,6 +269,7 @@ pub(crate) fn new_agent_manager_create_turn_request(
         session_id: input.session_id,
         model: input.model,
         messages: new_agent_messages(input.messages)?,
+        tool_refs_set: input.tool_refs_set || !input.tool_refs.is_empty(),
         tool_refs: new_agent_tool_refs(input.tool_refs),
         tool_source: input.tool_source.as_i32(),
         response_schema: input
@@ -278,6 +283,7 @@ pub(crate) fn new_agent_manager_create_turn_request(
             .model_options
             .map(protocol::struct_from_json)
             .transpose()?,
+        timeout_seconds: input.timeout_seconds,
     })
 }
 

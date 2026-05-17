@@ -46,6 +46,48 @@ type workflowAgentTargetRequest struct {
 	Metadata             map[string]any                 `json:"metadata,omitempty"`
 	ModelOptions         map[string]any                 `json:"modelOptions,omitempty"`
 	TimeoutSeconds       int                            `json:"timeoutSeconds,omitempty"`
+	Steps                []workflowAgentStepRequest     `json:"steps,omitempty"`
+}
+
+type workflowAgentStepRequest struct {
+	ID             string                         `json:"id,omitempty"`
+	Prompt         string                         `json:"prompt,omitempty"`
+	Messages       []agentMessageRequest          `json:"messages,omitempty"`
+	ToolRefs       []agentToolRefRequest          `json:"toolRefs,omitempty"`
+	OutputDelivery *workflowOutputDeliveryRequest `json:"outputDelivery,omitempty"`
+	ResponseSchema map[string]any                 `json:"responseSchema,omitempty"`
+	Metadata       map[string]any                 `json:"metadata,omitempty"`
+	ModelOptions   map[string]any                 `json:"modelOptions,omitempty"`
+	TimeoutSeconds int                            `json:"timeoutSeconds,omitempty"`
+	When           *workflowAgentStepWhenRequest  `json:"when,omitempty"`
+}
+
+type workflowAgentStepWhenRequest struct {
+	StepID     string `json:"stepId,omitempty"`
+	OutputPath string `json:"outputPath,omitempty"`
+	Equals     any    `json:"equals,omitempty"`
+	EqualsSet  bool   `json:"-"`
+}
+
+func (r *workflowAgentStepWhenRequest) UnmarshalJSON(data []byte) error {
+	type workflowAgentStepWhenRequestAlias struct {
+		StepID     string `json:"stepId,omitempty"`
+		OutputPath string `json:"outputPath,omitempty"`
+		Equals     any    `json:"equals,omitempty"`
+	}
+	var alias workflowAgentStepWhenRequestAlias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.StepID = alias.StepID
+	r.OutputPath = alias.OutputPath
+	r.Equals = alias.Equals
+	_, r.EqualsSet = raw["equals"]
+	return nil
 }
 
 type workflowOutputDeliveryRequest struct {
@@ -101,6 +143,26 @@ type workflowAgentTargetInfo struct {
 	Metadata             map[string]any              `json:"metadata,omitempty"`
 	ModelOptions         map[string]any              `json:"modelOptions,omitempty"`
 	TimeoutSeconds       int                         `json:"timeoutSeconds,omitempty"`
+	Steps                []workflowAgentStepInfo     `json:"steps,omitempty"`
+}
+
+type workflowAgentStepInfo struct {
+	ID             string                      `json:"id,omitempty"`
+	Prompt         string                      `json:"prompt,omitempty"`
+	Messages       []agentMessageRequest       `json:"messages,omitempty"`
+	ToolRefs       []agentToolRefRequest       `json:"toolRefs,omitempty"`
+	OutputDelivery *workflowOutputDeliveryInfo `json:"outputDelivery,omitempty"`
+	ResponseSchema map[string]any              `json:"responseSchema,omitempty"`
+	Metadata       map[string]any              `json:"metadata,omitempty"`
+	ModelOptions   map[string]any              `json:"modelOptions,omitempty"`
+	TimeoutSeconds int                         `json:"timeoutSeconds,omitempty"`
+	When           *workflowAgentStepWhenInfo  `json:"when,omitempty"`
+}
+
+type workflowAgentStepWhenInfo struct {
+	StepID     string `json:"stepId,omitempty"`
+	OutputPath string `json:"outputPath,omitempty"`
+	Equals     any    `json:"equals,omitempty"`
 }
 
 type workflowOutputDeliveryInfo struct {
@@ -340,6 +402,11 @@ func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) e
 		if target.Agent.SessionReadyDelivery != nil && strings.TrimSpace(target.Agent.SessionReadyDelivery.Target.CredentialMode) != "" {
 			return fmt.Errorf("workflow target agent.sessionReadyDelivery.target.credentialMode is not supported")
 		}
+		for i := range target.Agent.Steps {
+			if target.Agent.Steps[i].OutputDelivery != nil && strings.TrimSpace(target.Agent.Steps[i].OutputDelivery.Target.CredentialMode) != "" {
+				return fmt.Errorf("workflow target agent.steps[%d].outputDelivery.target.credentialMode is not supported", i)
+			}
+		}
 	}
 	return nil
 }
@@ -360,6 +427,42 @@ func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) corework
 		Metadata:             maps.Clone(target.Metadata),
 		ModelOptions:         maps.Clone(target.ModelOptions),
 		TimeoutSeconds:       target.TimeoutSeconds,
+		Steps:                workflowAgentStepsFromRequest(target.Steps),
+	}
+}
+
+func workflowAgentStepsFromRequest(steps []workflowAgentStepRequest) []coreworkflow.AgentStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]coreworkflow.AgentStep, 0, len(steps))
+	for i := range steps {
+		step := &steps[i]
+		out = append(out, coreworkflow.AgentStep{
+			ID:             strings.TrimSpace(step.ID),
+			Prompt:         strings.TrimSpace(step.Prompt),
+			Messages:       agentMessagesFromRequest(step.Messages),
+			ToolRefs:       agentToolRefsFromRequest(step.ToolRefs),
+			OutputDelivery: workflowOutputDeliveryFromRequest(step.OutputDelivery),
+			ResponseSchema: maps.Clone(step.ResponseSchema),
+			Metadata:       maps.Clone(step.Metadata),
+			ModelOptions:   maps.Clone(step.ModelOptions),
+			TimeoutSeconds: step.TimeoutSeconds,
+			When:           workflowAgentStepWhenFromRequest(step.When),
+		})
+	}
+	return out
+}
+
+func workflowAgentStepWhenFromRequest(when *workflowAgentStepWhenRequest) *coreworkflow.AgentStepWhen {
+	if when == nil {
+		return nil
+	}
+	return &coreworkflow.AgentStepWhen{
+		StepID:     strings.TrimSpace(when.StepID),
+		OutputPath: strings.TrimSpace(when.OutputPath),
+		Equals:     when.Equals,
+		EqualsSet:  when.EqualsSet,
 	}
 }
 
@@ -462,6 +565,7 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 				Metadata:             maps.Clone(agentTarget.Metadata),
 				ModelOptions:         maps.Clone(agentTarget.ModelOptions),
 				TimeoutSeconds:       agentTarget.TimeoutSeconds,
+				Steps:                workflowAgentStepInfoFromCore(agentTarget.Steps),
 			},
 		}
 	}
@@ -478,6 +582,40 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 			CredentialMode: string(pluginTarget.CredentialMode),
 			Input:          maps.Clone(pluginTarget.Input),
 		},
+	}
+}
+
+func workflowAgentStepInfoFromCore(steps []coreworkflow.AgentStep) []workflowAgentStepInfo {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]workflowAgentStepInfo, 0, len(steps))
+	for i := range steps {
+		step := &steps[i]
+		out = append(out, workflowAgentStepInfo{
+			ID:             step.ID,
+			Prompt:         step.Prompt,
+			Messages:       agentMessageInfoFromCore(step.Messages),
+			ToolRefs:       agentToolRefsToRequest(step.ToolRefs),
+			OutputDelivery: workflowOutputDeliveryInfoFromCore(step.OutputDelivery),
+			ResponseSchema: maps.Clone(step.ResponseSchema),
+			Metadata:       maps.Clone(step.Metadata),
+			ModelOptions:   maps.Clone(step.ModelOptions),
+			TimeoutSeconds: step.TimeoutSeconds,
+			When:           workflowAgentStepWhenInfoFromCore(step.When),
+		})
+	}
+	return out
+}
+
+func workflowAgentStepWhenInfoFromCore(when *coreworkflow.AgentStepWhen) *workflowAgentStepWhenInfo {
+	if when == nil {
+		return nil
+	}
+	return &workflowAgentStepWhenInfo{
+		StepID:     when.StepID,
+		OutputPath: when.OutputPath,
+		Equals:     when.Equals,
 	}
 }
 

@@ -871,6 +871,8 @@ pub struct CreateAgentProviderTurnRequest {
     pub model_options: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "17")]
     pub run_grant: ::prost::alloc::string::String,
+    #[prost(int32, tag = "18")]
+    pub timeout_seconds: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderTurnRequest {
@@ -1162,6 +1164,10 @@ pub struct AgentManagerCreateTurnRequest {
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "12")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
+    #[prost(int32, tag = "13")]
+    pub timeout_seconds: i32,
+    #[prost(bool, tag = "14")]
+    pub tool_refs_set: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentManagerGetTurnRequest {
@@ -3258,6 +3264,40 @@ pub struct BoundWorkflowAgentTarget {
     pub model_options: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "13")]
     pub session_ready_delivery: ::core::option::Option<WorkflowOutputDelivery>,
+    #[prost(message, repeated, tag = "14")]
+    pub steps: ::prost::alloc::vec::Vec<WorkflowAgentStep>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowAgentStep {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub prompt: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "3")]
+    pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
+    #[prost(message, repeated, tag = "4")]
+    pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
+    #[prost(message, optional, tag = "5")]
+    pub response_schema: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "6")]
+    pub model_options: ::core::option::Option<::prost_types::Struct>,
+    #[prost(int32, tag = "7")]
+    pub timeout_seconds: i32,
+    #[prost(message, optional, tag = "8")]
+    pub output_delivery: ::core::option::Option<WorkflowOutputDelivery>,
+    #[prost(message, optional, tag = "9")]
+    pub when: ::core::option::Option<WorkflowAgentStepWhen>,
+    #[prost(message, optional, tag = "10")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowAgentStepWhen {
+    #[prost(string, tag = "1")]
+    pub step_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub output_path: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub equals: ::core::option::Option<::prost_types::Value>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowOutputDelivery {

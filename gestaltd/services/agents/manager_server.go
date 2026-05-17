@@ -175,11 +175,13 @@ func (s *ManagerServer) CreateTurn(ctx context.Context, req *proto.AgentManagerC
 		SessionID:         sessionID,
 		Messages:          agentMessagesFromProto(req.GetMessages()),
 		ToolRefs:          agentToolRefsFromProto(req.GetToolRefs()),
+		ToolRefsSet:       req.GetToolRefsSet() || len(req.GetToolRefs()) > 0,
 		ToolSource:        agentToolSourceModeFromProtoStrict(req.GetToolSource()),
 		ResponseSchema:    mapFromStruct(req.GetResponseSchema()),
 		ResponseSchemaSet: req.ResponseSchema != nil,
 		Metadata:          mapFromStruct(req.GetMetadata()),
 		ModelOptions:      mapFromStruct(req.GetModelOptions()),
+		TimeoutSeconds:    int(req.GetTimeoutSeconds()),
 	})
 	if err != nil {
 		return nil, agentManagerStatusError(err)

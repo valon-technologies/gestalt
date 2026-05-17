@@ -66,6 +66,7 @@ class BoundWorkflowAgentTarget(_message.Message):
     OUTPUT_DELIVERY_FIELD_NUMBER: _ClassVar[int]
     MODEL_OPTIONS_FIELD_NUMBER: _ClassVar[int]
     SESSION_READY_DELIVERY_FIELD_NUMBER: _ClassVar[int]
+    STEPS_FIELD_NUMBER: _ClassVar[int]
     provider_name: str
     model: str
     prompt: str
@@ -77,7 +78,42 @@ class BoundWorkflowAgentTarget(_message.Message):
     output_delivery: WorkflowOutputDelivery
     model_options: _struct_pb2.Struct
     session_ready_delivery: WorkflowOutputDelivery
-    def __init__(self, provider_name: _Optional[str] = ..., model: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., session_ready_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ...) -> None: ...
+    steps: _containers.RepeatedCompositeFieldContainer[WorkflowAgentStep]
+    def __init__(self, provider_name: _Optional[str] = ..., model: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., session_ready_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., steps: _Optional[_Iterable[_Union[WorkflowAgentStep, _Mapping]]] = ...) -> None: ...
+
+class WorkflowAgentStep(_message.Message):
+    __slots__ = ()
+    ID_FIELD_NUMBER: _ClassVar[int]
+    PROMPT_FIELD_NUMBER: _ClassVar[int]
+    MESSAGES_FIELD_NUMBER: _ClassVar[int]
+    TOOL_REFS_FIELD_NUMBER: _ClassVar[int]
+    RESPONSE_SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    MODEL_OPTIONS_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_DELIVERY_FIELD_NUMBER: _ClassVar[int]
+    WHEN_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    prompt: str
+    messages: _containers.RepeatedCompositeFieldContainer[_agent_pb2.AgentMessage]
+    tool_refs: _containers.RepeatedCompositeFieldContainer[_plugin_pb2.AgentToolRef]
+    response_schema: _struct_pb2.Struct
+    model_options: _struct_pb2.Struct
+    timeout_seconds: int
+    output_delivery: WorkflowOutputDelivery
+    when: WorkflowAgentStepWhen
+    metadata: _struct_pb2.Struct
+    def __init__(self, id: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., when: _Optional[_Union[WorkflowAgentStepWhen, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+
+class WorkflowAgentStepWhen(_message.Message):
+    __slots__ = ()
+    STEP_ID_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_PATH_FIELD_NUMBER: _ClassVar[int]
+    EQUALS_FIELD_NUMBER: _ClassVar[int]
+    step_id: str
+    output_path: str
+    equals: _struct_pb2.Value
+    def __init__(self, step_id: _Optional[str] = ..., output_path: _Optional[str] = ..., equals: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ...) -> None: ...
 
 class WorkflowOutputDelivery(_message.Message):
     __slots__ = ()

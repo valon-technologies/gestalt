@@ -125,6 +125,32 @@ class BoundWorkflowAgentTarget:
     output_delivery: Any | None = None
     model_options: Any | None = None
     session_ready_delivery: Any | None = None
+    steps: Sequence[Any] | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowAgentStep:
+    """Native data for one workflow agent step."""
+
+    id: str = ""
+    prompt: str = ""
+    messages: Sequence[Any] | None = None
+    tool_refs: Sequence[Any] | None = None
+    response_schema: Any | None = None
+    model_options: Any | None = None
+    timeout_seconds: int = 0
+    output_delivery: Any | None = None
+    when: Any | None = None
+    metadata: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowAgentStepWhen:
+    """Native data for a workflow agent step condition."""
+
+    step_id: str = ""
+    output_path: str = ""
+    equals: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -912,6 +938,10 @@ def bound_workflow_agent_target(value: Any | None = None, **kwargs: Any) -> Any:
         session_ready_delivery=workflow_output_delivery(session_ready_delivery)
         if session_ready_delivery is not None
         else None,
+        steps=[
+            workflow_agent_step(step)
+            for step in (data.get("steps") or [])
+        ],
     )
 
 
@@ -948,6 +978,89 @@ def bound_workflow_agent_target_input_from_target(
         )
         if has_field(value, "session_ready_delivery")
         else None,
+        steps=[workflow_agent_step_input_from_step(step) for step in value.steps],
+    )
+
+
+def workflow_agent_step(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow agent step."""
+
+    if isinstance(value, pb.WorkflowAgentStep):
+        return _copy(value)
+    data = _data(value, kwargs)
+    output_delivery = data.get("output_delivery")
+    when = data.get("when")
+    return pb.WorkflowAgentStep(
+        id=data.get("id", ""),
+        prompt=data.get("prompt", ""),
+        messages=_message_proto_list(data.get("messages"), _agent_pb.AgentMessage),
+        tool_refs=_message_proto_list(data.get("tool_refs"), _plugin_pb.AgentToolRef),
+        response_schema=_optional_struct(data.get("response_schema")),
+        model_options=_optional_struct(data.get("model_options")),
+        timeout_seconds=data.get("timeout_seconds", 0),
+        output_delivery=workflow_output_delivery(output_delivery)
+        if output_delivery is not None
+        else None,
+        when=workflow_agent_step_when(when) if when is not None else None,
+        metadata=_optional_struct(data.get("metadata")),
+    )
+
+
+def workflow_agent_step_input_from_step(value: Any | None) -> WorkflowAgentStep | None:
+    """Return input copied from a workflow agent step."""
+
+    if value is None:
+        return None
+    return WorkflowAgentStep(
+        id=value.id,
+        prompt=value.prompt,
+        messages=_agent_message_input_list(value.messages),
+        tool_refs=_agent_tool_ref_input_list(value.tool_refs),
+        response_schema=struct_to_dict(value.response_schema)
+        if has_field(value, "response_schema")
+        else None,
+        model_options=struct_to_dict(value.model_options)
+        if has_field(value, "model_options")
+        else None,
+        timeout_seconds=value.timeout_seconds,
+        output_delivery=workflow_output_delivery_input_from_delivery(
+            value.output_delivery
+        )
+        if has_field(value, "output_delivery")
+        else None,
+        when=workflow_agent_step_when_input_from_when(value.when)
+        if has_field(value, "when")
+        else None,
+        metadata=struct_to_dict(value.metadata)
+        if has_field(value, "metadata")
+        else None,
+    )
+
+
+def workflow_agent_step_when(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow agent step condition."""
+
+    if isinstance(value, pb.WorkflowAgentStepWhen):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.WorkflowAgentStepWhen(
+        step_id=data.get("step_id", ""),
+        output_path=data.get("output_path", ""),
+        equals=_optional_value(data.get("equals")),
+    )
+
+
+def workflow_agent_step_when_input_from_when(
+    value: Any | None,
+) -> WorkflowAgentStepWhen | None:
+    """Return input copied from a workflow agent step condition."""
+
+    if value is None:
+        return None
+    return WorkflowAgentStepWhen(
+        step_id=value.step_id,
+        output_path=value.output_path,
+        equals=value_to_json(value.equals) if has_field(value, "equals") else None,
     )
 
 

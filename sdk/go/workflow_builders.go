@@ -129,6 +129,29 @@ type BoundWorkflowAgentTarget struct {
 	OutputDelivery       *WorkflowOutputDelivery
 	ModelOptions         any
 	SessionReadyDelivery *WorkflowOutputDelivery
+	Steps                []WorkflowAgentStep
+}
+
+// WorkflowAgentStep contains fields for constructing one workflow agent step.
+type WorkflowAgentStep struct {
+	ID             string
+	Prompt         string
+	Messages       []AgentMessage
+	ToolRefs       []AgentToolRef
+	ResponseSchema any
+	ModelOptions   any
+	TimeoutSeconds int32
+	OutputDelivery *WorkflowOutputDelivery
+	When           *WorkflowAgentStepWhen
+	Metadata       any
+}
+
+// WorkflowAgentStepWhen contains the narrow condition for running a workflow
+// agent step.
+type WorkflowAgentStepWhen struct {
+	StepID     string
+	OutputPath string
+	Equals     any
 }
 
 // boundWorkflowAgentTargetToProto creates an agent workflow target.
@@ -157,6 +180,10 @@ func boundWorkflowAgentTargetToProto(input BoundWorkflowAgentTarget) (*proto.Bou
 	if err != nil {
 		return nil, err
 	}
+	steps, err := workflowAgentStepsToProto(input.Steps)
+	if err != nil {
+		return nil, err
+	}
 	toolRefs := agentToolRefPtrsToProto(agentToolRefsFromInputs(input.ToolRefs))
 	return &proto.BoundWorkflowAgentTarget{
 		ProviderName:         input.ProviderName,
@@ -170,6 +197,7 @@ func boundWorkflowAgentTargetToProto(input BoundWorkflowAgentTarget) (*proto.Bou
 		OutputDelivery:       outputDelivery,
 		ModelOptions:         modelOptions,
 		SessionReadyDelivery: sessionReadyDelivery,
+		Steps:                steps,
 	}, nil
 }
 
@@ -191,6 +219,105 @@ func boundWorkflowAgentTargetFromProto(value *proto.BoundWorkflowAgentTarget) Bo
 		OutputDelivery:       workflowOutputDeliveryFromProto(value.GetOutputDelivery()),
 		ModelOptions:         mapFromStruct(value.GetModelOptions()),
 		SessionReadyDelivery: workflowOutputDeliveryFromProto(value.GetSessionReadyDelivery()),
+		Steps:                workflowAgentStepsFromProto(value.GetSteps()),
+	}
+}
+
+func workflowAgentStepsToProto(input []WorkflowAgentStep) ([]*proto.WorkflowAgentStep, error) {
+	if len(input) == 0 {
+		return nil, nil
+	}
+	out := make([]*proto.WorkflowAgentStep, 0, len(input))
+	for i := range input {
+		step := input[i]
+		messages, err := agentMessagesToProto(step.Messages)
+		if err != nil {
+			return nil, err
+		}
+		responseSchema, err := structFromAny(step.ResponseSchema)
+		if err != nil {
+			return nil, err
+		}
+		modelOptions, err := structFromAny(step.ModelOptions)
+		if err != nil {
+			return nil, err
+		}
+		metadata, err := structFromAny(step.Metadata)
+		if err != nil {
+			return nil, err
+		}
+		outputDelivery, err := newOptionalWorkflowOutputDelivery(step.OutputDelivery)
+		if err != nil {
+			return nil, err
+		}
+		when, err := workflowAgentStepWhenToProto(step.When)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, &proto.WorkflowAgentStep{
+			Id:             step.ID,
+			Prompt:         step.Prompt,
+			Messages:       messages,
+			ToolRefs:       agentToolRefPtrsToProto(agentToolRefsFromInputs(step.ToolRefs)),
+			ResponseSchema: responseSchema,
+			ModelOptions:   modelOptions,
+			TimeoutSeconds: step.TimeoutSeconds,
+			OutputDelivery: outputDelivery,
+			When:           when,
+			Metadata:       metadata,
+		})
+	}
+	return out, nil
+}
+
+func workflowAgentStepsFromProto(input []*proto.WorkflowAgentStep) []WorkflowAgentStep {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make([]WorkflowAgentStep, 0, len(input))
+	for _, step := range input {
+		if step == nil {
+			continue
+		}
+		out = append(out, WorkflowAgentStep{
+			ID:             step.GetId(),
+			Prompt:         step.GetPrompt(),
+			Messages:       agentMessagesFromPtrs(agentMessagePtrsFromProto(step.GetMessages())),
+			ToolRefs:       agentToolRefsFromPtrs(agentToolRefPtrsFromProto(step.GetToolRefs())),
+			ResponseSchema: mapFromStruct(step.GetResponseSchema()),
+			ModelOptions:   mapFromStruct(step.GetModelOptions()),
+			TimeoutSeconds: step.GetTimeoutSeconds(),
+			OutputDelivery: workflowOutputDeliveryFromProto(step.GetOutputDelivery()),
+			When:           workflowAgentStepWhenFromProto(step.GetWhen()),
+			Metadata:       mapFromStruct(step.GetMetadata()),
+		})
+	}
+	return out
+}
+
+func workflowAgentStepWhenToProto(input *WorkflowAgentStepWhen) (*proto.WorkflowAgentStepWhen, error) {
+	if input == nil {
+		return nil, nil
+	}
+	equals, err := valueFromAny(input.Equals)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.WorkflowAgentStepWhen{
+		StepId:     input.StepID,
+		OutputPath: input.OutputPath,
+		Equals:     equals,
+	}, nil
+}
+
+func workflowAgentStepWhenFromProto(input *proto.WorkflowAgentStepWhen) *WorkflowAgentStepWhen {
+	if input == nil {
+		return nil
+	}
+	return &WorkflowAgentStepWhen{
+		StepID:     input.GetStepId(),
+		OutputPath: input.GetOutputPath(),
+		Equals:     anyFromValue(input.GetEquals()),
 	}
 }
 

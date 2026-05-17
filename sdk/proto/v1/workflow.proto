@@ -40,6 +40,26 @@ message BoundWorkflowAgentTarget {
   WorkflowOutputDelivery output_delivery = 11;
   google.protobuf.Struct model_options = 12;
   WorkflowOutputDelivery session_ready_delivery = 13;
+  repeated WorkflowAgentStep steps = 14;
+}
+
+message WorkflowAgentStep {
+  string id = 1;
+  string prompt = 2;
+  repeated AgentMessage messages = 3;
+  repeated AgentToolRef tool_refs = 4;
+  google.protobuf.Struct response_schema = 5;
+  google.protobuf.Struct model_options = 6;
+  int32 timeout_seconds = 7;
+  WorkflowOutputDelivery output_delivery = 8;
+  WorkflowAgentStepWhen when = 9;
+  google.protobuf.Struct metadata = 10;
+}
+
+message WorkflowAgentStepWhen {
+  string step_id = 1;
+  string output_path = 2;
+  google.protobuf.Value equals = 3;
 }
 
 message WorkflowOutputDelivery {

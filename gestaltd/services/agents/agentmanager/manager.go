@@ -1035,6 +1035,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 		ResponseSchemaSet: req.ResponseSchemaSet,
 		Metadata:          maps.Clone(req.Metadata),
 		ModelOptions:      maps.Clone(req.ModelOptions),
+		TimeoutSeconds:    req.TimeoutSeconds,
 		CreatedBy:         agentActorFromPrincipal(p),
 		ExecutionRef:      turnID,
 		Subject:           agentSubjectFromPrincipal(p),

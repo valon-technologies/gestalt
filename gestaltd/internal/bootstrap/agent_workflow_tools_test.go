@@ -288,6 +288,350 @@ func TestAgentRuntimeWorkflowSystemToolStartsRunWithInheritedOutputDelivery(t *t
 	}
 }
 
+func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithInheritedOutputDelivery(t *testing.T) {
+	t.Parallel()
+
+	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
+	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
+		CallerPluginName: "slack",
+		Permissions: []core.AccessPermission{
+			{Plugin: "managed"},
+			{Plugin: "datadog", Operations: []string{"queryLogs"}},
+			{Plugin: "github", Operations: []string{"createPullRequest"}},
+			{Plugin: "notification", Operations: []string{"reply"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
+			{Plugin: "datadog", Operation: "queryLogs"},
+			{Plugin: "github", Operation: "createPullRequest"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
+			Target: coreworkflow.PluginTarget{
+				PluginName: "notification",
+				Operation:  "reply",
+			},
+			InputBindings: []coreworkflow.OutputBinding{
+				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+				{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{Literal: "signed-parent-reply-ref"}},
+			},
+		},
+	})
+
+	resp, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "call-run-steps",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"workflowKey": "slack-child-run-steps",
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"steps": []any{
+						map[string]any{
+							"id":     "diagnosis",
+							"prompt": "Diagnose the Datadog alert.",
+							"toolRefs": []any{
+								map[string]any{"plugin": "datadog", "operation": "queryLogs"},
+							},
+						},
+						map[string]any{
+							"id":     "pr_fix",
+							"prompt": "Open a PR if the diagnosis is actionable.",
+							"toolRefs": []any{
+								map[string]any{"plugin": "github", "operation": "createPullRequest"},
+							},
+						},
+					},
+				},
+			},
+			"deliverResultToCaller": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusCreated {
+		t.Fatalf("response = %#v, want 201", resp)
+	}
+	if len(workflowProvider.startedRuns) != 1 {
+		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))
+	}
+	started := workflowProvider.startedRuns[0]
+	if started.Target.Agent == nil || len(started.Target.Agent.Steps) != 2 {
+		t.Fatalf("started target agent steps = %#v", started.Target.Agent)
+	}
+	if started.Target.Agent.OutputDelivery != nil {
+		t.Fatalf("top-level output delivery = %#v, want nil for stepped target", started.Target.Agent.OutputDelivery)
+	}
+	if started.Target.Agent.Steps[0].OutputDelivery != nil {
+		t.Fatalf("diagnosis inherited delivery = %#v, want nil", started.Target.Agent.Steps[0].OutputDelivery)
+	}
+	delivery := started.Target.Agent.Steps[1].OutputDelivery
+	if delivery == nil || delivery.Target.PluginName != "notification" || delivery.Target.Operation != "reply" {
+		t.Fatalf("final step inherited delivery = %#v", delivery)
+	}
+	if got := delivery.InputBindings[1].Value.Literal; got != "signed-parent-reply-ref" {
+		t.Fatalf("final step inherited reply ref = %#v, want signed-parent-reply-ref", got)
+	}
+	ref, err := workflowProvider.GetExecutionReference(context.Background(), started.ExecutionRef)
+	if err != nil {
+		t.Fatalf("GetExecutionReference: %v", err)
+	}
+	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
+		{Plugin: "datadog", Operations: []string{"queryLogs"}},
+		{Plugin: "github", Operations: []string{"createPullRequest"}},
+		{Plugin: "managed"},
+		{Plugin: "notification", Operations: []string{"reply"}},
+	})
+}
+
+func TestAgentRuntimeWorkflowSystemToolRejectsInheritedOutputDeliveryForConditionalFinalStep(t *testing.T) {
+	t.Parallel()
+
+	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
+	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
+		CallerPluginName: "slack",
+		Permissions: []core.AccessPermission{
+			{Plugin: "managed"},
+			{Plugin: "notification", Operations: []string{"reply"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
+			Target: coreworkflow.PluginTarget{
+				PluginName: "notification",
+				Operation:  "reply",
+			},
+			InputBindings: []coreworkflow.OutputBinding{
+				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+			},
+		},
+	})
+
+	_, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "call-run-conditional-final-delivery",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"workflowKey": "slack-child-run-conditional-final-delivery",
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"steps": []any{
+						map[string]any{
+							"id":     "diagnosis",
+							"prompt": "Diagnose the Datadog alert.",
+						},
+						map[string]any{
+							"id":     "pr_fix",
+							"prompt": "Open a PR if the diagnosis is actionable.",
+							"when": map[string]any{
+								"stepId":     "diagnosis",
+								"outputPath": "structured_output.actionable_for_pr",
+								"equals":     true,
+							},
+						},
+					},
+				},
+			},
+			"deliverResultToCaller": true,
+		},
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool succeeded, want invalid invocation")
+	}
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
+	}
+	if !strings.Contains(err.Error(), "unconditional final agent step") {
+		t.Fatalf("ExecuteTool error = %v, want conditional final step message", err)
+	}
+	if len(workflowProvider.startedRuns) != 0 {
+		t.Fatalf("started runs = %d, want none", len(workflowProvider.startedRuns))
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithStepOutputDelivery(t *testing.T) {
+	t.Parallel()
+
+	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
+	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
+		CallerPluginName: "slack",
+		Permissions: []core.AccessPermission{
+			{Plugin: "managed"},
+			{Plugin: "notification", Operations: []string{"reply"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	})
+
+	resp, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "call-run-step-delivery",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"workflowKey": "slack-child-run-step-delivery",
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"steps": []any{
+						map[string]any{
+							"id":     "diagnosis",
+							"prompt": "Diagnose the Datadog alert.",
+							"outputDelivery": map[string]any{
+								"target": map[string]any{
+									"name":      "notification",
+									"operation": "reply",
+								},
+								"inputBindings": []any{
+									map[string]any{
+										"inputField": "text",
+										"value":      map[string]any{"agentOutput": "text"},
+									},
+									map[string]any{
+										"inputField": "reply_ref",
+										"value":      map[string]any{"literal": "explicit-reply-ref"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusCreated {
+		t.Fatalf("response = %#v, want 201", resp)
+	}
+	if len(workflowProvider.startedRuns) != 1 {
+		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))
+	}
+	started := workflowProvider.startedRuns[0]
+	if started.Target.Agent == nil || len(started.Target.Agent.Steps) != 1 {
+		t.Fatalf("started target agent steps = %#v", started.Target.Agent)
+	}
+	delivery := started.Target.Agent.Steps[0].OutputDelivery
+	if delivery == nil || delivery.Target.PluginName != "notification" || delivery.Target.Operation != "reply" {
+		t.Fatalf("step output delivery = %#v", delivery)
+	}
+	if got := delivery.InputBindings[1].Value.Literal; got != "explicit-reply-ref" {
+		t.Fatalf("step output delivery literal = %#v, want explicit-reply-ref", got)
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
+	t.Parallel()
+
+	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
+	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
+		Permissions: []core.AccessPermission{
+			{Plugin: "managed"},
+			{Plugin: "datadog", Operations: []string{"queryLogs"}},
+			{Plugin: "notification", Operations: []string{"reply"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
+			{Plugin: "datadog", Operation: "queryLogs"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
+			Target: coreworkflow.PluginTarget{
+				PluginName: "notification",
+				Operation:  "reply",
+			},
+			InputBindings: []coreworkflow.OutputBinding{
+				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+				{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{Literal: "signed-parent-reply-ref"}},
+			},
+		},
+	})
+
+	resp, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "call-run-step-info",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"workflowKey": "slack-child-run-step-info",
+			"target": map[string]any{
+				"agent": map[string]any{
+					"provider": "managed",
+					"steps": []any{
+						map[string]any{
+							"id":     "diagnosis",
+							"prompt": "Diagnose the Datadog alert.",
+							"toolRefs": []any{
+								map[string]any{"plugin": "datadog", "operation": "queryLogs"},
+							},
+						},
+					},
+				},
+			},
+			"deliverResultToCaller": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExecuteTool: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusCreated {
+		t.Fatalf("response = %#v, want 201", resp)
+	}
+	if strings.Contains(resp.Body, "outputDelivery") || strings.Contains(resp.Body, "signed-parent-reply-ref") || strings.Contains(resp.Body, "notification") {
+		t.Fatalf("response leaked inherited delivery: %s", resp.Body)
+	}
+	var body struct {
+		Run struct {
+			Target struct {
+				Agent struct {
+					Steps []struct {
+						ID       string `json:"id"`
+						Prompt   string `json:"prompt"`
+						ToolRefs []struct {
+							Plugin    string `json:"plugin"`
+							Operation string `json:"operation"`
+						} `json:"toolRefs"`
+					} `json:"steps"`
+				} `json:"agent"`
+			} `json:"target"`
+		} `json:"run"`
+	}
+	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
+		t.Fatalf("decode response body: %v", err)
+	}
+	if len(body.Run.Target.Agent.Steps) != 1 || body.Run.Target.Agent.Steps[0].ID != "diagnosis" || body.Run.Target.Agent.Steps[0].Prompt == "" {
+		t.Fatalf("run target steps = %#v", body.Run.Target.Agent.Steps)
+	}
+	if len(body.Run.Target.Agent.Steps[0].ToolRefs) != 1 || body.Run.Target.Agent.Steps[0].ToolRefs[0].Plugin != "datadog" {
+		t.Fatalf("step tool refs = %#v", body.Run.Target.Agent.Steps[0].ToolRefs)
+	}
+	if len(workflowProvider.startedRuns) != 1 {
+		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))
+	}
+}
+
 func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 	t.Parallel()
 

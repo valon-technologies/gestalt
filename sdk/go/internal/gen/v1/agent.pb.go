@@ -2224,6 +2224,7 @@ type CreateAgentProviderTurnRequest struct {
 	Subject        *AgentSubjectContext   `protobuf:"bytes,14,opt,name=subject,proto3" json:"subject,omitempty"`
 	ModelOptions   *structpb.Struct       `protobuf:"bytes,16,opt,name=model_options,json=modelOptions,proto3" json:"model_options,omitempty"`
 	RunGrant       string                 `protobuf:"bytes,17,opt,name=run_grant,json=runGrant,proto3" json:"run_grant,omitempty"`
+	TimeoutSeconds int32                  `protobuf:"varint,18,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2361,6 +2362,13 @@ func (x *CreateAgentProviderTurnRequest) GetRunGrant() string {
 		return x.RunGrant
 	}
 	return ""
+}
+
+func (x *CreateAgentProviderTurnRequest) GetTimeoutSeconds() int32 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
 }
 
 type GetAgentProviderTurnRequest struct {
@@ -3954,6 +3962,8 @@ type AgentManagerCreateTurnRequest struct {
 	IdempotencyKey  string                 `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	InvocationToken string                 `protobuf:"bytes,11,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
 	ModelOptions    *structpb.Struct       `protobuf:"bytes,12,opt,name=model_options,json=modelOptions,proto3" json:"model_options,omitempty"`
+	TimeoutSeconds  int32                  `protobuf:"varint,13,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	ToolRefsSet     bool                   `protobuf:"varint,14,opt,name=tool_refs_set,json=toolRefsSet,proto3" json:"tool_refs_set,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -4056,6 +4066,20 @@ func (x *AgentManagerCreateTurnRequest) GetModelOptions() *structpb.Struct {
 		return x.ModelOptions
 	}
 	return nil
+}
+
+func (x *AgentManagerCreateTurnRequest) GetTimeoutSeconds() int32 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+func (x *AgentManagerCreateTurnRequest) GetToolRefsSet() bool {
+	if x != nil {
+		return x.ToolRefsSet
+	}
+	return false
 }
 
 type AgentManagerGetTurnRequest struct {
@@ -4756,7 +4780,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x06action\x18\n" +
 	" \x01(\tR\x06action\x12\x16\n" +
 	"\x06format\x18\v \x01(\tR\x06format\x12\x1a\n" +
-	"\blanguage\x18\f \x01(\tR\blanguage\"\xc4\x06\n" +
+	"\blanguage\x18\f \x01(\tR\blanguage\"\xed\x06\n" +
 	"\x1eCreateAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x1d\n" +
 	"\n" +
@@ -4776,7 +4800,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"toolSource\x12B\n" +
 	"\asubject\x18\x0e \x01(\v2(.gestalt.provider.v1.AgentSubjectContextR\asubject\x12<\n" +
 	"\rmodel_options\x18\x10 \x01(\v2\x17.google.protobuf.StructR\fmodelOptions\x12\x1b\n" +
-	"\trun_grant\x18\x11 \x01(\tR\brunGrantJ\x04\b\t\x10\n" +
+	"\trun_grant\x18\x11 \x01(\tR\brunGrant\x12'\n" +
+	"\x0ftimeout_seconds\x18\x12 \x01(\x05R\x0etimeoutSecondsJ\x04\b\t\x10\n" +
 	"J\x04\b\x0f\x10\x10R\x10provider_optionsR\n" +
 	"tool_grant\"z\n" +
 	"\x1bGetAgentProviderTurnRequest\x12\x17\n" +
@@ -4924,7 +4949,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"client_ref\x18\x03 \x01(\tR\tclientRef\x12<\n" +
 	"\x05state\x18\x04 \x01(\x0e2&.gestalt.provider.v1.AgentSessionStateR\x05state\x123\n" +
 	"\bmetadata\x18\x05 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12)\n" +
-	"\x10invocation_token\x18\x06 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\xd5\x04\n" +
+	"\x10invocation_token\x18\x06 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\xa2\x05\n" +
 	"\x1dAgentManagerCreateTurnRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x14\n" +
@@ -4938,7 +4963,9 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x0fidempotency_key\x18\n" +
 	" \x01(\tR\x0eidempotencyKey\x12)\n" +
 	"\x10invocation_token\x18\v \x01(\tR\x0finvocationToken\x12<\n" +
-	"\rmodel_options\x18\f \x01(\v2\x17.google.protobuf.StructR\fmodelOptionsJ\x04\b\x01\x10\x02J\x04\b\t\x10\n" +
+	"\rmodel_options\x18\f \x01(\v2\x17.google.protobuf.StructR\fmodelOptions\x12'\n" +
+	"\x0ftimeout_seconds\x18\r \x01(\x05R\x0etimeoutSeconds\x12\"\n" +
+	"\rtool_refs_set\x18\x0e \x01(\bR\vtoolRefsSetJ\x04\b\x01\x10\x02J\x04\b\t\x10\n" +
 	"R\x0erequest_handleR\x10provider_options\"v\n" +
 	"\x1aAgentManagerGetTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x02 \x01(\tR\x06turnId\x12)\n" +

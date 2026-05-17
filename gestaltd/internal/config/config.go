@@ -863,6 +863,55 @@ type WorkflowAgentConfig struct {
 	Metadata             map[string]any                `yaml:"metadata,omitempty"`
 	ModelOptions         map[string]any                `yaml:"modelOptions,omitempty"`
 	Timeout              string                        `yaml:"timeout,omitempty"`
+	Steps                []WorkflowAgentStepConfig     `yaml:"steps,omitempty"`
+}
+
+type WorkflowAgentStepConfig struct {
+	ID             string                        `yaml:"id,omitempty"`
+	Prompt         string                        `yaml:"prompt,omitempty"`
+	Messages       []WorkflowAgentMessage        `yaml:"messages,omitempty"`
+	Tools          []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
+	OutputDelivery *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
+	ResponseSchema map[string]any                `yaml:"responseSchema,omitempty"`
+	Metadata       map[string]any                `yaml:"metadata,omitempty"`
+	ModelOptions   map[string]any                `yaml:"modelOptions,omitempty"`
+	Timeout        string                        `yaml:"timeout,omitempty"`
+	When           *WorkflowAgentStepWhenConfig  `yaml:"when,omitempty"`
+}
+
+type WorkflowAgentStepWhenConfig struct {
+	StepID     string `yaml:"stepId,omitempty"`
+	OutputPath string `yaml:"outputPath,omitempty"`
+	Equals     any    `yaml:"equals,omitempty"`
+
+	equalsSet bool
+}
+
+func (c *WorkflowAgentStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
+	type workflowAgentStepWhenConfig struct {
+		StepID     string `yaml:"stepId,omitempty"`
+		OutputPath string `yaml:"outputPath,omitempty"`
+		Equals     any    `yaml:"equals,omitempty"`
+	}
+	var out workflowAgentStepWhenConfig
+	if err := value.Decode(&out); err != nil {
+		return err
+	}
+
+	c.StepID = out.StepID
+	c.OutputPath = out.OutputPath
+	c.Equals = out.Equals
+	c.equalsSet = false
+	if value.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		if value.Content[i].Value == "equals" {
+			c.equalsSet = true
+			break
+		}
+	}
+	return nil
 }
 
 type WorkflowOutputDeliveryConfig struct {

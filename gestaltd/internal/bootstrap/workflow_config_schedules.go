@@ -328,6 +328,68 @@ func workflowConfigAgentTarget(agent *config.WorkflowAgentConfig) *coreworkflow.
 		Metadata:             maps.Clone(agent.Metadata),
 		ModelOptions:         maps.Clone(agent.ModelOptions),
 		TimeoutSeconds:       timeoutSeconds,
+		Steps:                workflowConfigAgentSteps(agent.Steps),
+	}
+}
+
+func workflowConfigAgentSteps(steps []config.WorkflowAgentStepConfig) []coreworkflow.AgentStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]coreworkflow.AgentStep, 0, len(steps))
+	for i := range steps {
+		step := &steps[i]
+		timeoutSeconds := 0
+		if timeout := strings.TrimSpace(step.Timeout); timeout != "" {
+			if parsed, err := time.ParseDuration(timeout); err == nil {
+				timeoutSeconds = int(parsed.Seconds())
+			}
+		}
+		messages := make([]coreagent.Message, 0, len(step.Messages))
+		for _, message := range step.Messages {
+			messages = append(messages, coreagent.Message{
+				Role:     strings.TrimSpace(message.Role),
+				Text:     strings.TrimSpace(message.Text),
+				Metadata: maps.Clone(message.Metadata),
+			})
+		}
+		tools := make([]coreagent.ToolRef, 0, len(step.Tools))
+		for _, tool := range step.Tools {
+			tools = append(tools, coreagent.ToolRef{
+				System:      strings.TrimSpace(tool.System),
+				Plugin:      strings.TrimSpace(tool.Plugin),
+				Operation:   strings.TrimSpace(tool.Operation),
+				Connection:  strings.TrimSpace(tool.Connection),
+				Instance:    strings.TrimSpace(tool.Instance),
+				Title:       strings.TrimSpace(tool.Title),
+				Description: strings.TrimSpace(tool.Description),
+			})
+		}
+		out = append(out, coreworkflow.AgentStep{
+			ID:             strings.TrimSpace(step.ID),
+			Prompt:         strings.TrimSpace(step.Prompt),
+			Messages:       messages,
+			ToolRefs:       tools,
+			OutputDelivery: workflowConfigOutputDelivery(step.OutputDelivery),
+			ResponseSchema: maps.Clone(step.ResponseSchema),
+			Metadata:       maps.Clone(step.Metadata),
+			ModelOptions:   maps.Clone(step.ModelOptions),
+			TimeoutSeconds: timeoutSeconds,
+			When:           workflowConfigAgentStepWhen(step.When),
+		})
+	}
+	return out
+}
+
+func workflowConfigAgentStepWhen(when *config.WorkflowAgentStepWhenConfig) *coreworkflow.AgentStepWhen {
+	if when == nil {
+		return nil
+	}
+	return &coreworkflow.AgentStepWhen{
+		StepID:     strings.TrimSpace(when.StepID),
+		OutputPath: strings.TrimSpace(when.OutputPath),
+		Equals:     when.Equals,
+		EqualsSet:  true,
 	}
 }
 
@@ -535,6 +597,31 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 				})
 			}
 		}
+		for i := range target.Agent.Steps {
+			step := target.Agent.Steps[i]
+			for j := range step.ToolRefs {
+				tool := step.ToolRefs[j]
+				pluginName := strings.TrimSpace(tool.Plugin)
+				operation := strings.TrimSpace(tool.Operation)
+				if pluginName == "" || operation == "" {
+					continue
+				}
+				base = append(base, core.AccessPermission{
+					Plugin:     pluginName,
+					Operations: []string{operation},
+				})
+			}
+			if delivery := step.OutputDelivery; delivery != nil {
+				pluginName := strings.TrimSpace(delivery.Target.PluginName)
+				operation := strings.TrimSpace(delivery.Target.Operation)
+				if pluginName != "" && operation != "" {
+					base = append(base, core.AccessPermission{
+						Plugin:     pluginName,
+						Operations: []string{operation},
+					})
+				}
+			}
+		}
 		return workflowMergeExecutionRefPermissions(append([][]core.AccessPermission{base}, explicit...)...)
 	}
 	if target.Plugin == nil {
@@ -631,6 +718,28 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 		if delivery := target.Agent.SessionReadyDelivery; delivery != nil {
 			if err := workflowConfigValidateNoUserCredentialTarget(cfg, delivery.Target, hasRunAs); err != nil {
 				return nil, err
+			}
+		}
+		for i := range target.Agent.Steps {
+			step := target.Agent.Steps[i]
+			for j := range step.ToolRefs {
+				tool := step.ToolRefs[j]
+				if strings.TrimSpace(tool.System) != "" {
+					continue
+				}
+				if err := workflowConfigValidateNoUserCredentialTarget(cfg, coreworkflow.PluginTarget{
+					PluginName: strings.TrimSpace(tool.Plugin),
+					Operation:  strings.TrimSpace(tool.Operation),
+					Connection: strings.TrimSpace(tool.Connection),
+					Instance:   strings.TrimSpace(tool.Instance),
+				}, hasRunAs); err != nil {
+					return nil, err
+				}
+			}
+			if delivery := step.OutputDelivery; delivery != nil {
+				if err := workflowConfigValidateNoUserCredentialTarget(cfg, delivery.Target, hasRunAs); err != nil {
+					return nil, err
+				}
 			}
 		}
 		return ref, nil

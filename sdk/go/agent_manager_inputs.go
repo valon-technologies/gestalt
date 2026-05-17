@@ -34,11 +34,13 @@ type AgentManagerCreateTurn struct {
 	Model          string
 	Messages       []AgentMessage
 	ToolRefs       []AgentToolRef
+	ToolRefsSet    bool
 	ToolSource     AgentToolSourceMode
 	ResponseSchema any
 	Metadata       any
 	IdempotencyKey string
 	ModelOptions   any
+	TimeoutSeconds int32
 }
 
 type AgentManagerGetTurn struct {
@@ -156,11 +158,13 @@ func newAgentManagerCreateTurnRequest(input AgentManagerCreateTurn) (*proto.Agen
 		Model:          input.Model,
 		Messages:       messages,
 		ToolRefs:       agentToolRefPtrsToProto(agentToolRefsFromInputs(input.ToolRefs)),
+		ToolRefsSet:    input.ToolRefsSet || len(input.ToolRefs) > 0,
 		ToolSource:     proto.AgentToolSourceMode(input.ToolSource),
 		ResponseSchema: responseSchema,
 		Metadata:       metadata,
 		IdempotencyKey: input.IdempotencyKey,
 		ModelOptions:   modelOptions,
+		TimeoutSeconds: input.TimeoutSeconds,
 	}, nil
 }
 

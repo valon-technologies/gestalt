@@ -3113,6 +3113,71 @@ server:
 				want: `workflows.schedules.nightly.target.agent.sessionReadyDelivery.inputBindings[0].value.agentOutput is not available before the agent turn starts`,
 			},
 			{
+				name: "agent step when rejects self reference",
+				yaml: `
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        agent:
+          provider: simple
+          steps:
+            - id: diagnosis
+              prompt: "diagnose"
+              when:
+                stepId: diagnosis
+                outputPath: structured_output.actionable_for_pr
+                equals: true
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.agent.steps[0].when.stepId "diagnosis" must reference an earlier step`,
+			},
+			{
+				name: "agent step when requires equals",
+				yaml: `
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        agent:
+          provider: simple
+          steps:
+            - id: diagnosis
+              prompt: "diagnose"
+            - id: pr_fix
+              prompt: "fix"
+              when:
+                stepId: diagnosis
+                outputPath: structured_output.actionable_for_pr
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.agent.steps[1].when.equals is required`,
+			},
+			{
 				name: "event trigger agent missing provider",
 				yaml: `
 workflows:

@@ -32,6 +32,8 @@ import {
   WorkflowExecutionReferenceSchema,
   WorkflowHost as WorkflowHostService,
   WorkflowManualTriggerSchema,
+  WorkflowAgentStepSchema,
+  WorkflowAgentStepWhenSchema,
   WorkflowOutputBindingSchema,
   WorkflowOutputDeliverySchema,
   WorkflowOutputValueSourceSchema,
@@ -77,6 +79,8 @@ import {
   type WorkflowEventMatch as ProtoWorkflowEventMatch,
   type WorkflowEventTriggerInvocation as ProtoWorkflowEventTriggerInvocation,
   type WorkflowExecutionReference as ProtoWorkflowExecutionReference,
+  type WorkflowAgentStep as ProtoWorkflowAgentStep,
+  type WorkflowAgentStepWhen as ProtoWorkflowAgentStepWhen,
   type WorkflowOutputBinding as ProtoWorkflowOutputBinding,
   type WorkflowOutputDelivery as ProtoWorkflowOutputDelivery,
   type WorkflowOutputValueSource as ProtoWorkflowOutputValueSource,
@@ -183,6 +187,26 @@ export interface BoundWorkflowAgentTarget {
   outputDelivery?: WorkflowOutputDelivery | undefined;
   modelOptions?: JsonObjectInput | undefined;
   sessionReadyDelivery?: WorkflowOutputDelivery | undefined;
+  steps?: readonly WorkflowAgentStep[] | undefined;
+}
+
+export interface WorkflowAgentStep {
+  id?: string | undefined;
+  prompt?: string | undefined;
+  messages?: readonly AgentMessage[] | undefined;
+  toolRefs?: readonly AgentToolRef[] | undefined;
+  responseSchema?: JsonObjectInput | undefined;
+  modelOptions?: JsonObjectInput | undefined;
+  timeoutSeconds?: number | undefined;
+  outputDelivery?: WorkflowOutputDelivery | undefined;
+  when?: WorkflowAgentStepWhen | undefined;
+  metadata?: JsonObjectInput | undefined;
+}
+
+export interface WorkflowAgentStepWhen {
+  stepId?: string | undefined;
+  outputPath?: string | undefined;
+  equals?: JsonInput | undefined;
 }
 
 export type BoundWorkflowTargetKind =
@@ -716,6 +740,7 @@ export function boundWorkflowAgentTarget(
     sessionReadyDelivery: input.sessionReadyDelivery === undefined
       ? undefined
       : workflowOutputDelivery(input.sessionReadyDelivery),
+    steps: (input.steps ?? []).map(workflowAgentStep),
   };
 }
 
@@ -738,6 +763,67 @@ export function boundWorkflowAgentTargetInputFromTarget(
     outputDelivery: workflowOutputDeliveryInputFromDelivery(input.outputDelivery),
     modelOptions: input.modelOptions === undefined ? undefined : jsonObjectClone(input.modelOptions),
     sessionReadyDelivery: workflowOutputDeliveryInputFromDelivery(input.sessionReadyDelivery),
+    steps: (input.steps ?? []).map((step) => workflowAgentStepInputFromStep(step)!),
+  };
+}
+
+/** Creates one bound workflow agent step from native input. */
+export function workflowAgentStep(input: WorkflowAgentStep = {}): WorkflowAgentStep {
+  return {
+    id: input.id ?? "",
+    prompt: input.prompt ?? "",
+    messages: [...(input.messages ?? [])],
+    toolRefs: [...(input.toolRefs ?? [])],
+    responseSchema: input.responseSchema === undefined ? undefined : structFromObject(input.responseSchema),
+    modelOptions: input.modelOptions === undefined ? undefined : structFromObject(input.modelOptions),
+    timeoutSeconds: input.timeoutSeconds ?? 0,
+    outputDelivery: input.outputDelivery === undefined ? undefined : workflowOutputDelivery(input.outputDelivery),
+    when: input.when === undefined ? undefined : workflowAgentStepWhen(input.when),
+    metadata: input.metadata === undefined ? undefined : structFromObject(input.metadata),
+  };
+}
+
+/** Returns native input copied from one bound workflow agent step. */
+export function workflowAgentStepInputFromStep(
+  input?: WorkflowAgentStep,
+): WorkflowAgentStep | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    id: input.id,
+    prompt: input.prompt,
+    messages: [...(input.messages ?? [])],
+    toolRefs: [...(input.toolRefs ?? [])],
+    responseSchema: input.responseSchema === undefined ? undefined : jsonObjectClone(input.responseSchema),
+    modelOptions: input.modelOptions === undefined ? undefined : jsonObjectClone(input.modelOptions),
+    timeoutSeconds: input.timeoutSeconds,
+    outputDelivery: workflowOutputDeliveryInputFromDelivery(input.outputDelivery),
+    when: input.when === undefined ? undefined : workflowAgentStepWhenInputFromWhen(input.when),
+    metadata: input.metadata === undefined ? undefined : jsonObjectClone(input.metadata),
+  };
+}
+
+/** Creates a narrow condition for running one workflow agent step. */
+export function workflowAgentStepWhen(input: WorkflowAgentStepWhen = {}): WorkflowAgentStepWhen {
+  return {
+    stepId: input.stepId ?? "",
+    outputPath: input.outputPath ?? "",
+    equals: input.equals,
+  };
+}
+
+/** Returns native input copied from a workflow agent step condition. */
+export function workflowAgentStepWhenInputFromWhen(
+  input?: WorkflowAgentStepWhen,
+): WorkflowAgentStepWhen | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    stepId: input.stepId,
+    outputPath: input.outputPath,
+    equals: input.equals,
   };
 }
 
@@ -1867,6 +1953,7 @@ export function boundWorkflowAgentTargetToProto(
     outputDelivery: workflowOutputDeliveryToProto(input.outputDelivery),
     modelOptions: optionalStruct(input.modelOptions),
     sessionReadyDelivery: workflowOutputDeliveryToProto(input.sessionReadyDelivery),
+    steps: input.steps?.map(workflowAgentStepToProto) ?? [],
   });
 }
 
@@ -1888,6 +1975,63 @@ export function boundWorkflowAgentTargetFromProto(
     outputDelivery: workflowOutputDeliveryFromProto(input.outputDelivery),
     modelOptions: optionalObjectFromStruct(input.modelOptions),
     sessionReadyDelivery: workflowOutputDeliveryFromProto(input.sessionReadyDelivery),
+    steps: input.steps.map(workflowAgentStepFromProto),
+  };
+}
+
+export function workflowAgentStepToProto(input: WorkflowAgentStep): ProtoWorkflowAgentStep {
+  return create(WorkflowAgentStepSchema, {
+    id: input.id ?? "",
+    prompt: input.prompt ?? "",
+    messages: input.messages?.map(agentMessageToProto) ?? [],
+    toolRefs: input.toolRefs?.map(agentToolRefToProto) ?? [],
+    responseSchema: optionalStruct(input.responseSchema),
+    modelOptions: optionalStruct(input.modelOptions),
+    timeoutSeconds: input.timeoutSeconds ?? 0,
+    outputDelivery: workflowOutputDeliveryToProto(input.outputDelivery),
+    when: workflowAgentStepWhenToProto(input.when),
+    metadata: optionalStruct(input.metadata),
+  });
+}
+
+export function workflowAgentStepFromProto(input: ProtoWorkflowAgentStep): WorkflowAgentStep {
+  return {
+    id: input.id,
+    prompt: input.prompt,
+    messages: input.messages.map(agentMessageFromProto),
+    toolRefs: input.toolRefs.map(agentToolRefFromProto),
+    responseSchema: optionalObjectFromStruct(input.responseSchema),
+    modelOptions: optionalObjectFromStruct(input.modelOptions),
+    timeoutSeconds: input.timeoutSeconds,
+    outputDelivery: workflowOutputDeliveryFromProto(input.outputDelivery),
+    when: workflowAgentStepWhenFromProto(input.when),
+    metadata: optionalObjectFromStruct(input.metadata),
+  };
+}
+
+export function workflowAgentStepWhenToProto(
+  input?: WorkflowAgentStepWhen | undefined,
+): ProtoWorkflowAgentStepWhen | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return create(WorkflowAgentStepWhenSchema, {
+    stepId: input.stepId ?? "",
+    outputPath: input.outputPath ?? "",
+    equals: input.equals === undefined ? undefined : valueFromJson(input.equals),
+  });
+}
+
+export function workflowAgentStepWhenFromProto(
+  input?: ProtoWorkflowAgentStepWhen | undefined,
+): WorkflowAgentStepWhen | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    stepId: input.stepId,
+    outputPath: input.outputPath,
+    equals: input.equals === undefined ? undefined : jsonFromValue(input.equals),
   };
 }
 
