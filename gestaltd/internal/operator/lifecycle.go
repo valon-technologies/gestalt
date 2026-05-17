@@ -830,7 +830,10 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 	if configHasProviderLoading(cfg) {
 		lock, lockErr = ReadLockfile(paths.lockfilePath)
 		if lockErr != nil && configRequiresStaticLock(cfg) {
-			if configRequiresRemoteStaticLock(cfg) || platform != providerpkg.CurrentPlatformString() || !os.IsNotExist(lockErr) {
+			canPrepareScratchLock := os.IsNotExist(lockErr) &&
+				platform == providerpkg.CurrentPlatformString() &&
+				(paths.pluginScope != "" || !configRequiresRemoteStaticLock(cfg))
+			if !canPrepareScratchLock {
 				if paths.pluginScope != "" {
 					return nil, fmt.Errorf("scoped validation for plugin %q requires an existing scoped lockfile for platform %q; pass --lockfile with that metadata or validate on the current platform without --platform: %w", paths.pluginScope, platform, lockErr)
 				}
