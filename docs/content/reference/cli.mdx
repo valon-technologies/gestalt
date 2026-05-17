@@ -48,14 +48,14 @@ import { Callout } from 'nextra/components'
 | `gestaltd provider repo list` | List the default, user-level, and project provider repositories. |
 | `gestaltd provider repo update` | Fetch and cache provider repository indexes. |
 | `gestaltd provider repo remove NAME` | Remove a provider repository from the user-level store. Pass `--config PATH` to remove it from project config instead. |
-| `gestaltd provider dev --path PATH` | Run a local source plugin or UI bundle inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs. |
-| `gestaltd provider dev --config PATH` | Layer supporting providers, plugins, and UI mounts on top of the synthesized local baseline. Repeat `--config` to merge left-to-right. |
-| `gestaltd provider dev --remote URL --path PATH` | Attach one local source plugin to an authenticated remote `gestaltd` session. The remote server matches by manifest `source` and keeps its configured auth, authorization, connections, plugin config, and host services. |
-| `gestaltd provider dev --remote URL --config PATH` | Attach every source-backed plugin in the layered config. Use repeated `--config` files when you need explicit local config overrides or multiple local plugins. |
+| `gestaltd serve --path PATH` | Run a local source plugin or UI bundle inside a synthesized Gestalt config. Serves `/admin` and any configured or inferred public UIs. |
+| `gestaltd serve --path PATH --config PATH` | Layer supporting providers, plugins, and UI mounts on top of the synthesized local baseline. Repeat `--config` to merge left-to-right. |
+| `gestaltd serve --remote URL --path PATH` | Attach one local source plugin to an authenticated remote `gestaltd` session. The remote server matches by manifest `source` and keeps its configured auth, authorization, connections, plugin config, and host services. |
+| `gestaltd serve --remote URL --config PATH` | Attach every source-backed plugin in the layered config. Use repeated `--config` files when you need explicit local config overrides or multiple local plugins. |
 | `gestaltd provider attach list --remote URL` | List your active remote provider-dev attachments on that server. |
 | `gestaltd provider attach show --remote URL ATTACH_ID` | Inspect one active remote provider-dev attachment. |
 | `gestaltd provider attach detach --remote URL ATTACH_ID` | Detach a stuck remote provider-dev attachment owned by your authenticated principal. |
-| `gestaltd provider validate --path PATH` | Validate a local source plugin or UI bundle inside the same synthesized Gestalt config used by `provider dev`. |
+| `gestaltd provider validate --path PATH` | Validate a local source plugin or UI bundle inside the same synthesized Gestalt config used by `gestaltd serve --path`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
 | `gestaltd provider release --version VERSION` | Build and package a provider release. Go, Python, Rust, and TypeScript source plugins default to the host platform. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
 | `gestaltd provider release --output DIR` | Output directory for the release archive. Defaults to `dist/`. |
@@ -106,13 +106,13 @@ gestaltd provider remove github --config ./config.yaml --kind plugin
 gestaltd provider validate --path ./plugins/support
 gestaltd provider validate --path ./ui/dashboard
 gestaltd provider validate --path ./plugins/support --config ./dev/support.yaml --config ./dev/local.yaml
-gestaltd provider dev --path ./plugins/support
-gestaltd provider dev --path ./ui/dashboard
-gestaltd provider dev --path ./plugins/support --config ./dev/support.yaml --port 8080
-gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support
-gestaltd provider dev --remote https://gestalt.example.com --path ./plugins/support --name support
-gestaltd provider dev --remote https://gestalt.example.com --remote-token <token-with-provider_dev.attach> --path ./plugins/support
-gestaltd provider dev --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
+gestaltd serve --path ./plugins/support
+gestaltd serve --path ./ui/dashboard
+gestaltd serve --path ./plugins/support --config ./dev/support.yaml --port 8080
+gestaltd serve --remote https://gestalt.example.com --path ./plugins/support
+gestaltd serve --remote https://gestalt.example.com --path ./plugins/support --name support
+gestaltd serve --remote https://gestalt.example.com --remote-token <token-with-provider_dev.attach> --path ./plugins/support
+gestaltd serve --remote https://gestalt.example.com --config ./remote.yaml --config ./local-overrides.yaml
 gestaltd provider attach list --remote https://gestalt.example.com
 gestaltd provider attach show --remote https://gestalt.example.com att_123
 gestaltd provider attach detach --remote https://gestalt.example.com att_123
@@ -127,7 +127,7 @@ keys. By default, lockfiles and artifact paths stay rooted at the leftmost
 config file. `--lockfile` overrides only the lockfile path. `--artifacts-dir`
 keeps the same config-relative resolution used by `sync` and `serve`.
 
-`provider dev --remote` is environment-agnostic: the URL is just the remote
+`gestaltd serve --remote` is environment-agnostic: the URL is just the remote
 `gestaltd` instance to attach to. The local command only replaces source-backed
 plugin implementations for the authenticated principal that created the session.
 The remote server must opt in with `server.dev.attachmentState`; otherwise the
@@ -135,7 +135,7 @@ command fails before local code is attached. Use `attachmentState: indexeddb` on
 shared or load-balanced servers so attachment metadata and queued provider calls
 are stored in the configured host IndexedDB. Process-local remote attachment
 state is not a supported server mode.
-For the interactive happy path, `provider dev --remote` creates a short-lived
+For the interactive happy path, `gestaltd serve --remote` creates a short-lived
 attach approval request and opens the remote server in your browser. Approving
 that page with your normal browser session creates an owner-scoped attachment
 only when your resolved role is allowed by the plugin's provider-dev attach
@@ -144,7 +144,7 @@ page requires that code before approval succeeds. `--remote-token` and
 `GESTALT_API_KEY` are the non-interactive direct-attach path; those API tokens
 must include `permissions[].actions: ["provider_dev.attach"]` for every attached
 plugin. Stored CLI credentials from `gestaltd auth login` are not used for
-direct attach; when no explicit token is provided, `provider dev --remote` uses
+direct attach; when no explicit token is provided, `gestaltd serve --remote` uses
 browser approval.
 With `--remote URL --path PATH` and no `--config`, the local command sends the
 manifest `source` and the local implementation only; the remote server chooses
@@ -196,7 +196,7 @@ Remote mode tunnels plugin RPC, catalog, post-connect, host-service calls, and
 plugin-owned UI assets for mounted UIs that already exist on the remote server.
 Raw GraphQL surfaces are not tunneled in v1.
 
-For TypeScript source plugins, `provider dev` installs dependencies with
+For TypeScript source plugins, `gestaltd serve --path` installs dependencies with
 `bun install` when a `package.json` is present and `node_modules` is missing.
 Source UI builds use the same bootstrap for Bun-managed build workdirs before
 `build.command` or legacy `release.build.command` when dependencies are

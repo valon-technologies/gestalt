@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -6311,4 +6312,409 @@ plugins:
 	if entry.SourcePath() != wantPath {
 		t.Fatalf("entry.SourcePath() = %q, want %q", entry.SourcePath(), wantPath)
 	}
+}
+
+func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Server: ServerConfig{
+			Admin: AdminConfig{
+				UI: "admin_console",
+			},
+			Providers: ServerProvidersConfig{
+				IndexedDB: "sqlite",
+				Secrets:   "runtime_env",
+			},
+		},
+		Plugins: map[string]*ProviderEntry{
+			"alpha": {
+				Source: ProviderSource{
+					Path: "alpha/manifest.yaml",
+					Auth: &SourceAuthDef{
+						Token: EncodeSecretRefTransport(SecretRef{Provider: "repo_auth", Name: "source-token"}),
+					},
+				},
+				UI:        "alpha_ui",
+				MountPath: "/alpha",
+				RouteAuth: &RouteAuthDef{Provider: "server"},
+				IndexedDB: &HostIndexedDBBindingConfig{
+					Provider: "sqlite",
+				},
+				Cache:   []string{"session"},
+				S3:      []string{"assets"},
+				Runtime: &RuntimePlacementConfig{Provider: "runner"},
+				Env: map[string]string{
+					"TOKEN": EncodeSecretRefTransport(SecretRef{Provider: "repo_auth", Name: "plugin-token"}),
+				},
+				Invokes: []PluginInvocationDependency{{
+					Plugin:    "beta",
+					Operation: "ping",
+				}},
+			},
+			"beta": {
+				Source: ProviderSource{Path: "beta/manifest.yaml"},
+				Invokes: []PluginInvocationDependency{{
+					Plugin:    "delta",
+					Operation: "pong",
+				}},
+			},
+			"delta": {
+				Source: ProviderSource{Path: "delta/manifest.yaml"},
+			},
+			"gamma": {
+				Source: ProviderSource{Path: "gamma/manifest.yaml"},
+			},
+		},
+		Providers: ProvidersConfig{
+			Authentication: map[string]*ProviderEntry{
+				"auth":   {Source: ProviderSource{Builtin: "test"}, Default: true},
+				"unused": {Source: ProviderSource{Path: "providers/auth/unused.yaml"}},
+			},
+			Secrets: map[string]*ProviderEntry{
+				"runtime_env": {Source: ProviderSource{Builtin: "env"}},
+				"repo_auth": {
+					Source: ProviderSource{
+						Path: "providers/secrets/repo_auth.yaml",
+						Auth: &SourceAuthDef{
+							Token: EncodeSecretRefTransport(SecretRef{Provider: "env_auth", Name: "repo-token"}),
+						},
+					},
+				},
+				"env_auth": {Source: ProviderSource{Builtin: "env"}},
+				"unused":   {Source: ProviderSource{Path: "providers/secrets/unused.yaml"}},
+			},
+			IndexedDB: map[string]*ProviderEntry{
+				"sqlite": {Source: ProviderSource{Path: "providers/indexeddb/sqlite.yaml"}},
+				"noisy":  {Source: ProviderSource{Path: "providers/indexeddb/noisy.yaml"}},
+			},
+			Cache: map[string]*ProviderEntry{
+				"session": {Source: ProviderSource{Path: "providers/cache/session.yaml"}},
+				"unused":  {Source: ProviderSource{Path: "providers/cache/unused.yaml"}},
+			},
+			S3: map[string]*ProviderEntry{
+				"assets": {Source: ProviderSource{Path: "providers/s3/assets.yaml"}},
+				"unused": {Source: ProviderSource{Path: "providers/s3/unused.yaml"}},
+			},
+			Workflow: map[string]*ProviderEntry{
+				"temporal": {Source: ProviderSource{Path: "providers/workflow/temporal.yaml"}},
+				"unused":   {Source: ProviderSource{Path: "providers/workflow/unused.yaml"}},
+			},
+			UI: map[string]*UIEntry{
+				"admin_console": {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/admin.yaml"}}},
+				"alpha_ui":      {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/alpha.yaml"}}, OwnerPlugin: "alpha"},
+				"gamma_ui":      {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/gamma.yaml"}}, OwnerPlugin: "gamma"},
+			},
+		},
+		Runtime: RuntimeConfig{
+			Providers: map[string]*RuntimeProviderEntry{
+				"runner": {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "runtime/runner.yaml"}}},
+				"noisy":  {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "runtime/noisy.yaml"}}},
+			},
+		},
+		Workflows: WorkflowsConfig{
+			Schedules: map[string]WorkflowScheduleConfig{
+				"kept": {
+					Provider: "temporal",
+					Target:   &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "alpha"}},
+				},
+				"dropped": {
+					Target: &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "gamma"}},
+				},
+				"dependency_only": {
+					Target:  &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "gamma"}},
+					Invokes: []WorkflowInvokeConfig{{Plugin: "alpha", Operation: "ping"}},
+				},
+			},
+		},
+	}
+
+	if err := ApplyPluginScope(cfg, []string{"alpha"}); err != nil {
+		t.Fatalf("ApplyPluginScope: %v", err)
+	}
+
+	if got, want := sortedProviderEntryKeys(cfg.Plugins), []string{"alpha", "beta", "delta"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Plugins = %v, want %v", got, want)
+	}
+	if got, want := sortedUIEntryKeys(cfg.Providers.UI), []string{"admin_console", "alpha_ui"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.UI = %v, want %v", got, want)
+	}
+	if got, want := sortedProviderEntryKeys(cfg.Providers.Authentication), []string{"auth"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.Authentication = %v, want %v", got, want)
+	}
+	if got, want := sortedProviderEntryKeys(cfg.Providers.Secrets), []string{"env_auth", "repo_auth", "runtime_env"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.Secrets = %v, want %v", got, want)
+	}
+	if got, want := sortedProviderEntryKeys(cfg.Providers.IndexedDB), []string{"sqlite"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.IndexedDB = %v, want %v", got, want)
+	}
+	if got, want := sortedProviderEntryKeys(cfg.Providers.Cache), []string{"session"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.Cache = %v, want %v", got, want)
+	}
+	if got, want := sortedProviderEntryKeys(cfg.Providers.S3), []string{"assets"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.S3 = %v, want %v", got, want)
+	}
+	if got, want := sortedProviderEntryKeys(cfg.Providers.Workflow), []string{"temporal"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.Workflow = %v, want %v", got, want)
+	}
+	if got, want := sortedRuntimeProviderEntryKeys(cfg.Runtime.Providers), []string{"runner"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Runtime.Providers = %v, want %v", got, want)
+	}
+	if got, want := sortedWorkflowScheduleKeys(cfg.Workflows.Schedules), []string{"kept"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Workflows.Schedules = %v, want %v", got, want)
+	}
+}
+
+func TestApplyPluginScopeKeepsSameNameUIBeforeCanonicalization(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Plugins: map[string]*ProviderEntry{
+			"alpha": {
+				Source:    ProviderSource{Path: "alpha/manifest.yaml"},
+				MountPath: "/alpha",
+			},
+			"unused": {
+				Source: ProviderSource{Path: "unused/manifest.yaml"},
+			},
+		},
+		Providers: ProvidersConfig{
+			UI: map[string]*UIEntry{
+				"alpha":  {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/alpha.yaml"}}},
+				"unused": {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/unused.yaml"}}},
+			},
+		},
+	}
+
+	if err := ApplyPluginScope(cfg, []string{"alpha"}); err != nil {
+		t.Fatalf("ApplyPluginScope: %v", err)
+	}
+
+	if got, want := sortedUIEntryKeys(cfg.Providers.UI), []string{"alpha"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.UI = %v, want %v", got, want)
+	}
+}
+
+func TestApplyPluginScopeNodeKeepsOwnerPluginUI(t *testing.T) {
+	t.Parallel()
+
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(withDefaultConfigAPIVersion(`
+providers:
+  ui:
+    alpha_view:
+      ownerPlugin: alpha
+      source:
+        path: ui/alpha.yaml
+    noisy:
+      ownerPlugin: noisy
+      source:
+        path: ui/noisy.yaml
+plugins:
+  alpha:
+    source:
+      path: alpha/manifest.yaml
+`)), &root); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+
+	if err := applyPluginScopeNode(&root, []string{"alpha"}); err != nil {
+		t.Fatalf("applyPluginScopeNode: %v", err)
+	}
+
+	providersUI := mappingValueNode(mappingValueNode(documentValueNode(&root), "providers"), "ui")
+	if mappingValueNode(providersUI, "alpha_view") == nil {
+		t.Fatal("providers.ui.alpha_view should be retained by ownerPlugin")
+	}
+	if mappingValueNode(providersUI, "noisy") != nil {
+		t.Fatal("providers.ui.noisy should be dropped")
+	}
+}
+
+func TestLoadPluginScopePreserveMissingEnvPathsKeepsProjectReposForUnqualifiedPackageSource(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+providerRepositories:
+  mirror:
+    url: https://mirror.example.test/provider-index.yaml
+  private:
+    url: https://private.example.test/provider-index.yaml
+plugins:
+  alpha:
+    source:
+      package: github.com/acme/plugins/alpha
+  beta:
+    source:
+      repo: private
+      package: github.com/acme/plugins/beta
+`)
+
+	cfg, err := LoadPluginScopePreserveMissingEnvPaths([]string{path}, []string{"alpha"})
+	if err != nil {
+		t.Fatalf("LoadPluginScopePreserveMissingEnvPaths: %v", err)
+	}
+
+	if got, want := sortedProviderEntryKeys(cfg.Plugins), []string{"alpha"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Plugins = %v, want %v", got, want)
+	}
+	if got, want := sortedProviderRepositoryKeys(cfg.ProviderRepositories), []string{"mirror", "private"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("ProviderRepositories = %v, want %v", got, want)
+	}
+}
+
+func TestLoadPluginScopePreserveMissingEnvPathsFiltersProjectReposForQualifiedPackageSource(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+providerRepositories:
+  mirror:
+    url: https://mirror.example.test/provider-index.yaml
+  private:
+    url: https://private.example.test/provider-index.yaml
+plugins:
+  alpha:
+    source:
+      repo: private
+      package: github.com/acme/plugins/alpha
+  beta:
+    source:
+      repo: mirror
+      package: github.com/acme/plugins/beta
+`)
+
+	cfg, err := LoadPluginScopePreserveMissingEnvPaths([]string{path}, []string{"alpha"})
+	if err != nil {
+		t.Fatalf("LoadPluginScopePreserveMissingEnvPaths: %v", err)
+	}
+
+	if got, want := sortedProviderRepositoryKeys(cfg.ProviderRepositories), []string{"private"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("ProviderRepositories = %v, want %v", got, want)
+	}
+}
+
+func TestReferencedProviderRepositoriesKeepsProjectReposForUnqualifiedPackageSource(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		ProviderRepositories: map[string]ProviderRepositoryConfig{
+			"mirror":  {URL: "https://mirror.example.test/provider-index.yaml"},
+			"private": {URL: "https://private.example.test/provider-index.yaml"},
+		},
+		Plugins: map[string]*ProviderEntry{
+			"alpha": {
+				Source: ProviderSource{packageName: "github.com/acme/plugins/alpha"},
+			},
+		},
+	}
+
+	if got, want := sortedStringSetKeys(referencedProviderRepositories(cfg)), []string{"mirror", "private"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("referencedProviderRepositories = %v, want %v", got, want)
+	}
+}
+
+func TestApplyPluginScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{
+		Plugins: map[string]*ProviderEntry{
+			"alpha": {Source: ProviderSource{Path: "alpha/manifest.yaml"}},
+			"beta":  {Source: ProviderSource{Path: "beta/manifest.yaml"}},
+			"delta": {Source: ProviderSource{Path: "delta/manifest.yaml"}},
+			"gamma": {Source: ProviderSource{Path: "gamma/manifest.yaml"}},
+		},
+		Workflows: WorkflowsConfig{
+			Schedules: map[string]WorkflowScheduleConfig{
+				"fanout": {
+					Target: &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "alpha"}},
+					Invokes: []WorkflowInvokeConfig{{
+						Plugin:    "beta",
+						Operation: "ping",
+					}},
+					Permissions: []core.AccessPermission{{Plugin: "gamma"}},
+				},
+				"dependency_target": {
+					Target: &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "beta"}},
+					Invokes: []WorkflowInvokeConfig{{
+						Plugin:    "delta",
+						Operation: "pong",
+					}},
+				},
+			},
+		},
+	}
+
+	if err := ApplyPluginScope(cfg, []string{"alpha"}); err != nil {
+		t.Fatalf("ApplyPluginScope: %v", err)
+	}
+	if got, want := sortedProviderEntryKeys(cfg.Plugins), []string{"alpha", "beta", "gamma"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Plugins = %v, want %v", got, want)
+	}
+	if got, want := sortedWorkflowScheduleKeys(cfg.Workflows.Schedules), []string{"fanout"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Workflows.Schedules = %v, want %v", got, want)
+	}
+}
+
+func TestApplyPluginScopeRejectsUnknownPlugin(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Config{Plugins: map[string]*ProviderEntry{}}
+	err := ApplyPluginScope(cfg, []string{"missing"})
+	if err == nil || !strings.Contains(err.Error(), `unknown plugin "missing"`) {
+		t.Fatalf("ApplyPluginScope error = %v, want unknown plugin", err)
+	}
+}
+
+func sortedProviderEntryKeys(entries map[string]*ProviderEntry) []string {
+	keys := make([]string, 0, len(entries))
+	for key := range entries {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func sortedUIEntryKeys(entries map[string]*UIEntry) []string {
+	keys := make([]string, 0, len(entries))
+	for key := range entries {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func sortedProviderRepositoryKeys(entries map[string]ProviderRepositoryConfig) []string {
+	keys := make([]string, 0, len(entries))
+	for key := range entries {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func sortedStringSetKeys(entries map[string]struct{}) []string {
+	keys := make([]string, 0, len(entries))
+	for key := range entries {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func sortedWorkflowScheduleKeys(entries map[string]WorkflowScheduleConfig) []string {
+	keys := make([]string, 0, len(entries))
+	for key := range entries {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func sortedRuntimeProviderEntryKeys(entries map[string]*RuntimeProviderEntry) []string {
+	keys := make([]string, 0, len(entries))
+	for key := range entries {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
 }

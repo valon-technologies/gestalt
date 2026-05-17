@@ -2233,6 +2233,229 @@ func LoadPartialAllowMissingEnvPaths(paths []string) (*Config, error) {
 	return loadWithLookupPathsValidation(paths, os.LookupEnv, true, false)
 }
 
+// LoadPartialPreserveMissingEnvPaths is like LoadPartialAllowMissingEnvPaths,
+// but preserves unresolved environment placeholders so callers can project a
+// local subset first, then reject missing env only in the retained config.
+func LoadPartialPreserveMissingEnvPaths(paths []string) (*Config, error) {
+	return loadWithLookupPathsMode(paths, os.LookupEnv, envMissingPreserve, "", false, false, false)
+}
+
+// LoadPluginScopePreserveMissingEnvPaths projects the merged YAML before typed
+// decoding so dropped non-string fields with unresolved env placeholders cannot
+// fail before the plugin scope is applied.
+func LoadPluginScopePreserveMissingEnvPaths(paths []string, plugins []string) (*Config, error) {
+	root, err := loadMergedConfigRoot(paths, os.LookupEnv, envMissingPreserve, "")
+	if err != nil {
+		return nil, err
+	}
+	if err := NormalizeConfigSecretRefs(&root); err != nil {
+		return nil, err
+	}
+	if err := applyPluginScopeNode(&root, plugins); err != nil {
+		return nil, err
+	}
+	if err := validateNoMissingEnvRefsInNode(&root); err != nil {
+		return nil, err
+	}
+	return loadConfigFromRoot(paths, root, false, false)
+}
+
+func validateNoMissingEnvRefsInNode(node *yaml.Node) error {
+	data, err := yaml.Marshal(documentValueNode(node))
+	if err != nil {
+		return fmt.Errorf("marshaling scoped config YAML: %w", err)
+	}
+	if _, firstMissing, err := expandEnvVariables(string(data), os.LookupEnv, true); err != nil {
+		return err
+	} else if firstMissing != "" {
+		return fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
+	}
+	return nil
+}
+
+func ValidateNoMissingEnvRefs(cfg *Config) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshaling scoped config YAML: %w", err)
+	}
+	if _, firstMissing, err := expandEnvVariables(string(data), os.LookupEnv, true); err != nil {
+		return err
+	} else if firstMissing != "" {
+		return fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
+	}
+	return nil
+}
+
+func ValidateNoMissingEnvRefsForPluginScope(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	scoped := *cfg
+	scoped.Connections = filterConnectionDefs(cfg.Connections, referencedTopLevelConnectionDefs(cfg))
+	scoped.ProviderRepositories = filterProviderRepositories(cfg.ProviderRepositories, referencedProviderRepositories(cfg))
+	scoped.ProviderSnapshotRepositories = filterProviderSnapshotRepositories(cfg.ProviderSnapshotRepositories, referencedProviderSnapshotRepositories(cfg))
+	return ValidateNoMissingEnvRefs(&scoped)
+}
+
+func referencedTopLevelConnectionDefs(cfg *Config) map[string]struct{} {
+	refs := map[string]struct{}{}
+	addEntryRefs := func(entry *ProviderEntry) {
+		if entry == nil {
+			return
+		}
+		for _, conn := range entry.Connections {
+			if conn == nil {
+				continue
+			}
+			if ref := strings.TrimSpace(conn.Ref); ref != "" {
+				refs[ref] = struct{}{}
+			}
+		}
+	}
+	for _, entry := range cfg.Plugins {
+		addEntryRefs(entry)
+	}
+	for _, entries := range [][]*ProviderEntry{
+		mapProviderEntries(cfg.Providers.Authentication),
+		mapProviderEntries(cfg.Providers.Authorization),
+		mapProviderEntries(cfg.Providers.ExternalCredentials),
+		mapProviderEntries(cfg.Providers.Secrets),
+		mapProviderEntries(cfg.Providers.Telemetry),
+		mapProviderEntries(cfg.Providers.Audit),
+		mapProviderEntries(cfg.Providers.IndexedDB),
+		mapProviderEntries(cfg.Providers.Cache),
+		mapProviderEntries(cfg.Providers.S3),
+		mapProviderEntries(cfg.Providers.Workflow),
+		mapProviderEntries(cfg.Providers.Agent),
+	} {
+		for _, entry := range entries {
+			addEntryRefs(entry)
+		}
+	}
+	return refs
+}
+
+func referencedProviderRepositories(cfg *Config) map[string]struct{} {
+	refs := map[string]struct{}{}
+	keepAll := false
+	collectProviderSources(cfg, func(source ProviderSource) {
+		if !source.IsPackage() {
+			return
+		}
+		if repo := strings.TrimSpace(source.PackageRepo()); repo != "" {
+			refs[repo] = struct{}{}
+			return
+		}
+		keepAll = true
+	})
+	if keepAll {
+		for name := range cfg.ProviderRepositories {
+			refs[name] = struct{}{}
+		}
+	}
+	return refs
+}
+
+func referencedProviderSnapshotRepositories(cfg *Config) map[string]struct{} {
+	refs := map[string]struct{}{}
+	collectProviderSources(cfg, func(source ProviderSource) {
+		if git := source.GitSource(); git != nil {
+			if repo := strings.TrimSpace(git.ArtifactRepository); repo != "" {
+				refs[repo] = struct{}{}
+			}
+		}
+	})
+	return refs
+}
+
+func collectProviderSources(cfg *Config, visit func(ProviderSource)) {
+	if cfg == nil || visit == nil {
+		return
+	}
+	visitEntry := func(entry *ProviderEntry) {
+		if entry != nil {
+			visit(entry.Source)
+		}
+	}
+	for _, entry := range cfg.Plugins {
+		visitEntry(entry)
+	}
+	for _, entries := range [][]*ProviderEntry{
+		mapProviderEntries(cfg.Providers.Authentication),
+		mapProviderEntries(cfg.Providers.Authorization),
+		mapProviderEntries(cfg.Providers.ExternalCredentials),
+		mapProviderEntries(cfg.Providers.Secrets),
+		mapProviderEntries(cfg.Providers.Telemetry),
+		mapProviderEntries(cfg.Providers.Audit),
+		mapProviderEntries(cfg.Providers.IndexedDB),
+		mapProviderEntries(cfg.Providers.Cache),
+		mapProviderEntries(cfg.Providers.S3),
+		mapProviderEntries(cfg.Providers.Workflow),
+		mapProviderEntries(cfg.Providers.Agent),
+	} {
+		for _, entry := range entries {
+			visitEntry(entry)
+		}
+	}
+	for _, entry := range cfg.Providers.UI {
+		if entry != nil {
+			visit(entry.Source)
+		}
+	}
+	for _, entry := range cfg.Runtime.Providers {
+		if entry != nil {
+			visit(entry.Source)
+		}
+	}
+}
+
+func mapProviderEntries(entries map[string]*ProviderEntry) []*ProviderEntry {
+	out := make([]*ProviderEntry, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, entry)
+	}
+	return out
+}
+
+func filterConnectionDefs(entries map[string]*ConnectionDef, keep map[string]struct{}) map[string]*ConnectionDef {
+	if len(entries) == 0 {
+		return entries
+	}
+	filtered := make(map[string]*ConnectionDef, len(keep))
+	for name := range keep {
+		if entry := entries[name]; entry != nil {
+			filtered[name] = entry
+		}
+	}
+	return filtered
+}
+
+func filterProviderRepositories(entries map[string]ProviderRepositoryConfig, keep map[string]struct{}) map[string]ProviderRepositoryConfig {
+	if len(entries) == 0 {
+		return entries
+	}
+	filtered := make(map[string]ProviderRepositoryConfig, len(keep))
+	for name := range keep {
+		if entry, ok := entries[name]; ok {
+			filtered[name] = entry
+		}
+	}
+	return filtered
+}
+
+func filterProviderSnapshotRepositories(entries map[string]ProviderSnapshotRepositoryConfig, keep map[string]struct{}) map[string]ProviderSnapshotRepositoryConfig {
+	if len(entries) == 0 {
+		return entries
+	}
+	filtered := make(map[string]ProviderSnapshotRepositoryConfig, len(keep))
+	for name := range keep {
+		if entry, ok := entries[name]; ok {
+			filtered[name] = entry
+		}
+	}
+	return filtered
+}
+
 // ValidateSelectedAgentHarnessEnvPaths fails if the selected agent harness
 // references missing environment variables.
 func ValidateSelectedAgentHarnessEnvPaths(paths []string, providerName string, harnessName string) error {
@@ -2298,6 +2521,13 @@ func selectedAgentHarnessNode(entry *yaml.Node, harnessName string) *yaml.Node {
 }
 
 func normalizeConfigShape(cfg *Config) error {
+	if err := normalizeConfigShapeForPartialLoad(cfg); err != nil {
+		return err
+	}
+	return applyPluginMountBindings(cfg)
+}
+
+func normalizeConfigShapeForPartialLoad(cfg *Config) error {
 	normalizeProviderSourceShapes(cfg)
 	normalizeProviderEntries(cfg)
 	normalizeServerRuntimeConfig(cfg)
@@ -2307,7 +2537,7 @@ func normalizeConfigShape(cfg *Config) error {
 	if err := normalizeAdminConfig(cfg); err != nil {
 		return err
 	}
-	return applyPluginMountBindings(cfg)
+	return nil
 }
 
 func normalizeServerRuntimeConfig(cfg *Config) {
@@ -2505,8 +2735,10 @@ func loadWithLookupPaths(paths []string, lookup func(string) (string, bool), all
 func loadWithLookupPathsValidation(paths []string, lookup func(string) (string, bool), allowMissing bool, validate bool) (*Config, error) {
 	mode := envMissingBlank
 	missingEnvSentinelContext := ""
+	rejectMissing := false
 	if !allowMissing {
 		mode = envMissingSentinel
+		rejectMissing = true
 		var err error
 		missingEnvSentinelContext, err = newMissingEnvSentinelPrefix()
 		if err != nil {
@@ -2514,6 +2746,10 @@ func loadWithLookupPathsValidation(paths []string, lookup func(string) (string, 
 		}
 	}
 
+	return loadWithLookupPathsMode(paths, lookup, mode, missingEnvSentinelContext, rejectMissing, true, validate)
+}
+
+func loadWithLookupPathsMode(paths []string, lookup func(string) (string, bool), mode envMissingMode, missingEnvSentinelContext string, rejectMissing bool, canonicalize bool, validate bool) (*Config, error) {
 	root, err := loadMergedConfigRoot(paths, lookup, mode, missingEnvSentinelContext)
 	if err != nil {
 		return nil, err
@@ -2521,20 +2757,24 @@ func loadWithLookupPathsValidation(paths []string, lookup func(string) (string, 
 	if err := NormalizeConfigSecretRefs(&root); err != nil {
 		return nil, err
 	}
-	if !allowMissing {
+	if rejectMissing {
 		firstMissing := firstMissingEnvSentinel(&root, missingEnvSentinelContext)
 		if firstMissing != "" {
 			return nil, fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
 		}
 	}
+	if mode == envMissingSentinel {
+		restoreMissingEnvSentinelsInNode(&root, missingEnvSentinelContext)
+	}
+	return loadConfigFromRoot(paths, root, canonicalize, validate)
+}
+
+func loadConfigFromRoot(paths []string, root yaml.Node, canonicalize bool, validate bool) (*Config, error) {
 	normalized, err := yaml.Marshal(documentValueNode(&root))
 	if err != nil {
 		return nil, fmt.Errorf("marshaling normalized config YAML: %w", err)
 	}
 	normalizedInput := string(normalized)
-	if !allowMissing {
-		normalizedInput = restoreMissingEnvSentinels(normalizedInput, missingEnvSentinelContext)
-	}
 
 	var cfg Config
 	dec := yaml.NewDecoder(strings.NewReader(normalizedInput))
@@ -2543,8 +2783,14 @@ func loadWithLookupPathsValidation(paths []string, lookup func(string) (string, 
 		return nil, fmt.Errorf("parsing config YAML: %w", err)
 	}
 
-	if err := CanonicalizeStructure(&cfg); err != nil {
-		return nil, err
+	if canonicalize {
+		if err := CanonicalizeStructure(&cfg); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := normalizeConfigShapeForPartialLoad(&cfg); err != nil {
+			return nil, err
+		}
 	}
 	applyDefaults(&cfg)
 	resolveBaseURL(&cfg)
@@ -2913,6 +3159,23 @@ func restoreMissingEnvSentinels(input, sentinelPrefix string) string {
 		start = encodedEnd + len(missingEnvSentinelSuffix)
 	}
 	return b.String()
+}
+
+func restoreMissingEnvSentinelsInNode(node *yaml.Node, sentinelPrefix string) {
+	if node == nil || sentinelPrefix == "" {
+		return
+	}
+	node = documentValueNode(node)
+	if node == nil {
+		return
+	}
+	if node.Kind == yaml.ScalarNode {
+		node.Value = restoreMissingEnvSentinels(node.Value, sentinelPrefix)
+		return
+	}
+	for _, child := range node.Content {
+		restoreMissingEnvSentinelsInNode(child, sentinelPrefix)
+	}
 }
 
 func newMissingEnvSentinelPrefix() (string, error) {

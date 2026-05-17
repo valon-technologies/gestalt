@@ -113,6 +113,7 @@ type Lifecycle struct {
 type StatePaths struct {
 	ArtifactsDir string
 	LockfilePath string
+	PluginScope  []string
 }
 
 type artifactMode int
@@ -313,12 +314,15 @@ func (l *Lifecycle) prepareLockAtPathsInScratch(configPaths []string, state Stat
 }
 
 func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
-	cfg, err := config.LoadAllowMissingEnvPaths(configPaths)
+	cfg, err := loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
+	}
+	if err := applyPluginScope(cfg, state); err != nil {
+		return nil, nil, lifecyclePaths{}, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	if len(displayState) > 0 {
@@ -682,6 +686,50 @@ func defaultLockfilePath(configPath string) string {
 	return filepath.Join(dir, LockfileName)
 }
 
+func pluginScopeNames(scope []string) []string {
+	names := config.NormalizePluginScopeNames(scope)
+	slices.Sort(names)
+	return names
+}
+
+func pluginScopeLabel(scope []string) string {
+	names := pluginScopeNames(scope)
+	if len(names) == 0 {
+		return ""
+	}
+	if len(names) == 1 {
+		return names[0]
+	}
+	return strings.Join(names, ",")
+}
+
+func applyPluginScope(cfg *config.Config, state StatePaths) error {
+	names := pluginScopeNames(state.PluginScope)
+	if len(names) == 0 {
+		return nil
+	}
+	if err := config.ApplyPluginScope(cfg, names); err != nil {
+		return err
+	}
+	if err := config.ValidateNoMissingEnvRefsForPluginScope(cfg); err != nil {
+		return err
+	}
+	if err := config.ValidateStructure(cfg); err != nil {
+		return err
+	}
+	return nil
+}
+
+func loadConfigForLifecycle(configPaths []string, state StatePaths, allowMissingEnv bool) (*config.Config, error) {
+	if pluginScopeLabel(state.PluginScope) != "" {
+		return config.LoadPluginScopePreserveMissingEnvPaths(configPaths, state.PluginScope)
+	}
+	if allowMissingEnv {
+		return config.LoadAllowMissingEnvPaths(configPaths)
+	}
+	return config.LoadPaths(configPaths)
+}
+
 func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*config.Config, map[string]string, error) {
 	return l.LoadForExecutionAtPaths([]string{configPath}, locked)
 }
@@ -691,9 +739,12 @@ func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, locked bool) (
 }
 
 func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, state StatePaths, locked bool) (*config.Config, map[string]string, error) {
-	cfg, err := config.LoadPaths(configPaths)
+	cfg, err := loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
+	}
+	if err := applyPluginScope(cfg, state); err != nil {
+		return nil, nil, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	mode := artifactModeMaterialize
@@ -730,9 +781,12 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 }
 
 func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string, state StatePaths) (*config.Config, error) {
-	cfg, err := config.LoadPaths(configPaths)
+	cfg, err := loadConfigForLifecycle(configPaths, state, false)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
+	}
+	if err := applyPluginScope(cfg, state); err != nil {
+		return nil, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	lock, err := l.prepareRuntimeLockFromLoadedConfig(context.Background(), paths, cfg)
@@ -755,12 +809,15 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 }
 
 func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []string, state StatePaths, opts StaticValidationOptions) (*config.Config, error) {
-	cfg, err := config.LoadAllowMissingEnvPaths(configPaths)
+	cfg, err := loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
+	}
+	if err := applyPluginScope(cfg, state); err != nil {
+		return nil, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	platform := strings.TrimSpace(opts.Platform)
@@ -774,6 +831,9 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 		lock, lockErr = ReadLockfile(paths.lockfilePath)
 		if lockErr != nil && configRequiresStaticLock(cfg) {
 			if configRequiresRemoteStaticLock(cfg) || platform != providerpkg.CurrentPlatformString() || !os.IsNotExist(lockErr) {
+				if paths.pluginScope != "" {
+					return nil, fmt.Errorf("scoped validation for plugin %q requires an existing scoped lockfile for platform %q; pass --lockfile with that metadata or validate on the current platform without --platform: %w", paths.pluginScope, platform, lockErr)
+				}
 				return nil, fmt.Errorf("lockfile is missing or unreadable; run `%s`: %w", formatLockCommand(paths), lockErr)
 			}
 			_, scratchCfg, _, cleanup, err := l.prepareLockAtPathsInScratch(configPaths, state)
@@ -811,19 +871,28 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 }
 
 func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StatePaths, mode artifactMode) error {
-	cfg, err := config.LoadAllowMissingEnvPaths(configPaths)
+	cfg, err := loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return fmt.Errorf("loading config: %v", err)
 	}
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return fmt.Errorf("loading config: %v", err)
 	}
+	if err := applyPluginScope(cfg, state); err != nil {
+		return err
+	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if err != nil {
+		if paths.pluginScope != "" {
+			return fmt.Errorf("scoped local plugin lock metadata is missing or unreadable for plugin %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
+		}
 		return fmt.Errorf("source-backed providers require lock metadata; run `%s`: %w", formatLockCommand(paths), err)
 	}
 	if !lockMetadataMatchesConfigForSync(cfg, paths, lock) {
+		if paths.pluginScope != "" {
+			return fmt.Errorf("scoped local plugin lockfile is out of date for plugin %q; rerun without --locked to prepare it", paths.pluginScope)
+		}
 		return fmt.Errorf("lockfile is out of date; run `%s`", formatLockCommand(paths))
 	}
 	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, lock, mode, configSecretResolutionSourceAuth); err != nil {
@@ -1017,7 +1086,13 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePat
 		validatedDuringPrepare = err == nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("source-backed providers require lock metadata; run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		if paths.pluginScope != "" {
+			if locked {
+				return nil, false, fmt.Errorf("scoped local plugin state is missing or stale for plugin %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
+			}
+			return nil, false, fmt.Errorf("preparing scoped local plugin state for plugin %q failed: %w", paths.pluginScope, err)
+		}
+		return nil, false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-plugin development, use `gestaltd serve --plugin NAME` or `gestaltd serve --path PATH`; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
 	return lock, validatedDuringPrepare, nil
 }
@@ -1159,6 +1234,7 @@ type lifecyclePaths struct {
 	configPaths            []string
 	configFlags            string
 	lockFlags              string
+	pluginScope            string
 	configPath             string
 	configDir              string
 	artifactsDir           string
@@ -1198,6 +1274,9 @@ func formatConfigStateFlags(paths []string, state StatePaths) string {
 	if state.LockfilePath != "" {
 		args = append(args, "--lockfile", state.LockfilePath)
 	}
+	for _, plugin := range pluginScopeNames(state.PluginScope) {
+		args = append(args, "--plugin", plugin)
+	}
 	return strings.Join(args, " ")
 }
 
@@ -1232,10 +1311,16 @@ func formatSyncLockedCommand(paths lifecyclePaths) string {
 }
 
 func preparedArtifactStaleError(paths lifecyclePaths, format string, args ...any) error {
+	if paths.pluginScope != "" {
+		return fmt.Errorf(format+"; rerun without --locked to prepare scoped local state for plugin %q", append(args, paths.pluginScope)...)
+	}
 	return fmt.Errorf(format+"; run `%s`", append(args, formatSyncLockedCommand(paths))...)
 }
 
 func lockMetadataStaleError(paths lifecyclePaths, format string, args ...any) error {
+	if paths.pluginScope != "" {
+		return fmt.Errorf(format+"; rerun without --locked to prepare scoped local state for plugin %q", append(args, paths.pluginScope)...)
+	}
 	return fmt.Errorf(format+"; run `%s`", append(args, formatLockCommand(paths))...)
 }
 
@@ -1416,15 +1501,29 @@ func resolveLockfilePath(configPath, override string) string {
 	return override
 }
 
+func scopedLifecycleStatePaths(configPath string, cfg *config.Config, state StatePaths) (string, string) {
+	artifactsRoot := resolveArtifactsDir(configPath, cfg, state.ArtifactsDir)
+	if pluginScopeLabel(state.PluginScope) == "" {
+		return artifactsRoot, resolveLockfilePath(configPath, state.LockfilePath)
+	}
+
+	scopeDir := filepath.Join(artifactsRoot, ".gestaltd", "scopes", "plugins", pluginScopeLabel(state.PluginScope))
+	lockfilePath := resolveLockfilePath(configPath, state.LockfilePath)
+	if state.LockfilePath == "" {
+		lockfilePath = filepath.Join(scopeDir, LockfileName)
+	}
+	return filepath.Join(scopeDir, "artifacts"), lockfilePath
+}
+
 func resolveLifecyclePaths(configPaths []string, cfg *config.Config, state StatePaths) lifecyclePaths {
 	configPath := primaryConfigPath(configPaths)
 	configDir := filepath.Dir(configPath)
-	artifactsDir := resolveArtifactsDir(configPath, cfg, state.ArtifactsDir)
-	lockfilePath := resolveLockfilePath(configPath, state.LockfilePath)
+	artifactsDir, lockfilePath := scopedLifecycleStatePaths(configPath, cfg, state)
 	return lifecyclePaths{
 		configPaths:            append([]string(nil), configPaths...),
 		configFlags:            formatConfigStateFlags(configPaths, state),
 		lockFlags:              formatLockFlags(configPaths, state),
+		pluginScope:            pluginScopeLabel(state.PluginScope),
 		configPath:             configPath,
 		configDir:              configDir,
 		artifactsDir:           artifactsDir,
@@ -3015,7 +3114,13 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths,
 		validatedDuringPrepare = err == nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("source-backed providers require lock metadata; run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		if paths.pluginScope != "" {
+			if locked {
+				return false, fmt.Errorf("scoped local plugin state is missing or stale for plugin %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
+			}
+			return false, fmt.Errorf("preparing scoped local plugin state for plugin %q failed: %w", paths.pluginScope, err)
+		}
+		return false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-plugin development, use `gestaltd serve --plugin NAME` or `gestaltd serve --path PATH`; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
 	if err := l.applyPreparedProviders(paths, lock, cfg, mode); err != nil {
 		return false, err

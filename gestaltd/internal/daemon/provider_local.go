@@ -48,6 +48,7 @@ type providerLocalCommandOptions struct {
 	Path        string
 	ConfigPaths []string
 	Name        string
+	Plugin      string
 	Port        int
 	Remote      string
 	RemoteToken string
@@ -105,36 +106,8 @@ func runProviderValidate(args []string) error {
 	return nil
 }
 
-func runProviderDev(args []string) error {
-	fs := flag.NewFlagSet("gestaltd provider dev", flag.ContinueOnError)
-	fs.Usage = func() { printProviderDevUsage(fs.Output()) }
-	var configPaths repeatedStringFlag
-	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
-	pathFlag := fs.String("path", "", "provider manifest path or directory (defaults to current working directory)")
-	nameFlag := fs.String("name", "", "provider key override")
-	portFlag := fs.Int("port", 0, "public port (defaults to a free localhost port)")
-	remoteFlag := fs.String("remote", "", "remote gestaltd base URL to attach local source plugins to")
-	remoteTokenFlag := fs.String("remote-token", "", "bearer token for --remote (defaults to GESTALT_API_KEY)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if fs.NArg() > 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
-	}
-	if strings.TrimSpace(*remoteFlag) != "" {
-		if *portFlag != 0 {
-			return errors.New("--port is only supported for local provider dev")
-		}
-		return runProviderRemoteDev(providerLocalCommandOptions{
-			Path:        *pathFlag,
-			ConfigPaths: []string(configPaths),
-			Name:        *nameFlag,
-			Remote:      *remoteFlag,
-			RemoteToken: *remoteTokenFlag,
-		})
-	}
-
-	port := *portFlag
+func runServeProviderLocal(opts providerLocalCommandOptions) error {
+	port := opts.Port
 	if port == 0 {
 		selectedPort, err := reserveLocalPort()
 		if err != nil {
@@ -144,9 +117,9 @@ func runProviderDev(args []string) error {
 	}
 
 	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
-		Path:        *pathFlag,
-		ConfigPaths: []string(configPaths),
-		Name:        *nameFlag,
+		Path:        opts.Path,
+		ConfigPaths: opts.ConfigPaths,
+		Name:        opts.Name,
 		Port:        port,
 	})
 	if err != nil {
@@ -158,7 +131,7 @@ func runProviderDev(args []string) error {
 	if err != nil {
 		return err
 	}
-	logProviderLocalSummary("provider dev ready", session)
+	logProviderLocalSummary("local provider ready", session)
 	return runServer(env)
 }
 
@@ -185,7 +158,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 
 	cfg, err := config.LoadPartialAllowMissingEnvPaths(configPaths)
 	if err != nil {
-		return fmt.Errorf("loading provider dev remote config: %w", err)
+		return fmt.Errorf("loading serve remote config: %w", err)
 	}
 	inheritRemoteConfig := opts.Path != "" && len(opts.ConfigPaths) == 0
 	targets, err := collectProviderRemoteTargets(cfg, opts.Name, inheritRemoteConfig)
@@ -193,7 +166,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		return err
 	}
 	if len(targets) == 0 {
-		return errors.New("provider dev --remote requires at least one source-backed plugin in --config or --path")
+		return errors.New("gestaltd serve --remote requires at least one source-backed plugin in --config or --path")
 	}
 
 	if _, err := providerRemoteBaseURL(opts.Remote); err != nil {
@@ -213,7 +186,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	for i, target := range targets {
 		spec, _, err := bootstrap.BuildStartupProviderSpec(target.Name, target.Entry)
 		if err != nil {
-			return fmt.Errorf("build provider dev remote spec for plugins.%s: %w", target.Name, err)
+			return fmt.Errorf("build serve remote spec for plugins.%s: %w", target.Name, err)
 		}
 		attachName := target.Name
 		if target.InheritRemoteConfig && opts.Name == "" {
@@ -227,7 +200,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		if !target.InheritRemoteConfig {
 			pluginConfig, err := config.NodeToMap(target.Entry.Config)
 			if err != nil {
-				return fmt.Errorf("build provider dev remote config for plugins.%s: %w", target.Name, err)
+				return fmt.Errorf("build serve remote config for plugins.%s: %w", target.Name, err)
 			}
 			if pluginConfig == nil {
 				pluginConfig = map[string]any{}
@@ -236,7 +209,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		}
 		uiHandler, hasUI, err := providerRemoteUIHandler(cfg, target)
 		if err != nil {
-			return fmt.Errorf("prepare provider dev remote ui for plugins.%s: %w", target.Name, err)
+			return fmt.Errorf("prepare serve remote ui for plugins.%s: %w", target.Name, err)
 		}
 		if hasUI {
 			requested.UI = true
@@ -251,7 +224,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	}
 	attachID := strings.TrimSpace(session.AttachID)
 	if attachID == "" {
-		return fmt.Errorf("remote provider dev did not return attachId")
+		return fmt.Errorf("remote serve did not return attachId")
 	}
 	defer func() { _ = client.CloseSession(context.Background(), attachID) }()
 
@@ -264,7 +237,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		remoteName := targets[i].Name
 		if targets[i].InheritRemoteConfig && opts.Name == "" {
 			if len(targets) != 1 || len(session.Providers) != 1 {
-				return fmt.Errorf("remote provider dev could not resolve unique provider for source %q; pass --name", targets[i].Source)
+				return fmt.Errorf("remote serve could not resolve unique provider for source %q; pass --name", targets[i].Source)
 			}
 			remoteName = session.Providers[0].Name
 			targets[i].Name = remoteName
@@ -286,7 +259,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	for _, target := range targets {
 		sessionProvider, ok := sessionProviders[target.Name]
 		if !ok {
-			return fmt.Errorf("remote provider dev did not return runtime env for provider %q", target.Name)
+			return fmt.Errorf("remote serve did not return runtime env for provider %q", target.Name)
 		}
 		process, err := startProviderRemoteProcess(ctx, target, sessionProvider)
 		if err != nil {
@@ -296,7 +269,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		providerClients[target.Name] = process.Integration()
 	}
 
-	slog.Info("provider dev attached",
+	slog.Info("local providers attached to remote",
 		"remote", strings.TrimRight(opts.Remote, "/"),
 		"attachId", attachID,
 		"providers", providerRemoteTargetNames(targets),
@@ -330,7 +303,7 @@ func createProviderRemoteSession(ctx context.Context, client *providerdev.Client
 func createProviderRemoteSessionWithBrowser(ctx context.Context, client *providerdev.Client, req providerdev.CreateSessionRequest) (*providerdev.CreateSessionResponse, error) {
 	authorization, err := client.CreateAttachAuthorization(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("create provider dev browser approval: %w", err)
+		return nil, fmt.Errorf("create remote serve browser approval: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "Approve provider-dev attach in your browser:\n\n  %s\n\nVerification code: %s\n\nOnly approve if the browser asks for this code.\n\n", authorization.ApprovalURL, authorization.VerificationCode)
 	if err := providerRemoteOpenBrowser(authorization.ApprovalURL); err != nil {
@@ -347,13 +320,13 @@ func createProviderRemoteSessionWithBrowser(ctx context.Context, client *provide
 		}
 		status, err := client.PollAttachAuthorization(ctx, authorization.AuthorizationID)
 		if err != nil {
-			return nil, fmt.Errorf("poll provider dev browser approval: %w", err)
+			return nil, fmt.Errorf("poll remote serve browser approval: %w", err)
 		}
 		if status.Approved {
 			return client.CreateAuthorizedSession(ctx, authorization.AuthorizationID, req)
 		}
 		if !authorization.ExpiresAt.IsZero() && time.Now().After(authorization.ExpiresAt) {
-			return nil, errors.New("provider dev browser approval expired")
+			return nil, errors.New("remote serve browser approval expired")
 		}
 		timer.Reset(time.Second)
 	}
@@ -548,7 +521,7 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 		return nil, err
 	}
 	if kind != providermanifestv1.KindPlugin && kind != providermanifestv1.KindUI {
-		return nil, fmt.Errorf("gestaltd provider dev and validate only support kind: plugin or ui in v1 (got %q)", kind)
+		return nil, fmt.Errorf("gestaltd serve --path and provider validate only support kind: plugin or ui in v1 (got %q)", kind)
 	}
 
 	targetManifestPath, err := canonicalPath(manifestPath)
@@ -609,7 +582,7 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 
 	loadedCfg, err := config.LoadPaths(configPaths)
 	if err != nil {
-		return nil, fmt.Errorf("loading provider dev config: %w", err)
+		return nil, fmt.Errorf("loading local provider config: %w", err)
 	}
 
 	autoMountPath := ""
@@ -648,7 +621,7 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 
 	loadedCfg, err = config.LoadPaths(configPaths)
 	if err != nil {
-		return nil, fmt.Errorf("loading provider dev config with mounted ui: %w", err)
+		return nil, fmt.Errorf("loading local provider config with mounted ui: %w", err)
 	}
 
 	publicURL := providerLocalPublicURL(loadedCfg)
@@ -695,7 +668,7 @@ func prepareUILocalSession(sessionDir, baseConfigPath string, state operator.Sta
 
 	loadedCfg, err := config.LoadPaths(configPaths)
 	if err != nil {
-		return nil, fmt.Errorf("loading provider dev config: %w", err)
+		return nil, fmt.Errorf("loading local provider config: %w", err)
 	}
 
 	publicURL := providerLocalPublicURL(loadedCfg)
@@ -721,9 +694,12 @@ func prepareUILocalSession(sessionDir, baseConfigPath string, state operator.Sta
 
 func prepareProviderRemoteConfigPaths(opts providerLocalCommandOptions) ([]string, func(), error) {
 	cleanup := func() {}
+	if strings.TrimSpace(opts.Plugin) != "" && strings.TrimSpace(opts.Path) != "" {
+		return nil, cleanup, errors.New("--plugin cannot be combined with --path")
+	}
 	if strings.TrimSpace(opts.Path) == "" {
 		if len(opts.ConfigPaths) == 0 {
-			return nil, cleanup, errors.New("provider dev --remote requires --config or --path")
+			return nil, cleanup, errors.New("gestaltd serve --remote requires --config or --path")
 		}
 		return append([]string(nil), opts.ConfigPaths...), cleanup, nil
 	}
@@ -737,7 +713,7 @@ func prepareProviderRemoteConfigPaths(opts providerLocalCommandOptions) ([]strin
 		return nil, cleanup, err
 	}
 	if kind != providermanifestv1.KindPlugin {
-		return nil, cleanup, fmt.Errorf("provider dev --remote only supports kind: plugin in v1 (got %q)", kind)
+		return nil, cleanup, fmt.Errorf("gestaltd serve --remote only supports kind: plugin in v1 (got %q)", kind)
 	}
 	targetManifestPath, err := canonicalPath(manifestPath)
 	if err != nil {
@@ -793,11 +769,11 @@ func collectProviderRemoteTargets(cfg *config.Config, explicitName string, inher
 			return nil, err
 		}
 		if kind != providermanifestv1.KindPlugin {
-			return nil, fmt.Errorf("provider dev --remote only supports plugins in v1 (plugins.%s has kind %q)", name, kind)
+			return nil, fmt.Errorf("gestaltd serve --remote only supports plugins in v1 (plugins.%s has kind %q)", name, kind)
 		}
 		source := strings.TrimSpace(manifest.Source)
 		if inheritRemoteConfig && explicitName == "" && source == "" {
-			return nil, fmt.Errorf("plugins.%s manifest source is required for provider dev --remote --path without --name", name)
+			return nil, fmt.Errorf("plugins.%s manifest source is required for gestaltd serve --remote --path without --name", name)
 		}
 		targets = append(targets, providerRemoteTarget{
 			Name:                name,
@@ -807,7 +783,7 @@ func collectProviderRemoteTargets(cfg *config.Config, explicitName string, inher
 		})
 	}
 	if explicitName != "" && len(targets) == 0 {
-		return nil, fmt.Errorf("no source-backed plugins.%s entry found in provider dev remote config", explicitName)
+		return nil, fmt.Errorf("no source-backed plugins.%s entry found in serve remote config", explicitName)
 	}
 	return targets, nil
 }
@@ -1375,12 +1351,12 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 func reserveLocalPort() (int, error) {
 	listener, err := net.Listen("tcp", net.JoinHostPort(providerDevHost, "0"))
 	if err != nil {
-		return 0, fmt.Errorf("reserve provider dev port: %w", err)
+		return 0, fmt.Errorf("reserve local provider port: %w", err)
 	}
 	defer func() { _ = listener.Close() }()
 	addr, ok := listener.Addr().(*net.TCPAddr)
 	if !ok {
-		return 0, errors.New("reserve provider dev port: unexpected listener address type")
+		return 0, errors.New("reserve local provider port: unexpected listener address type")
 	}
 	return addr.Port, nil
 }
@@ -1694,27 +1670,4 @@ func printProviderValidateUsage(w io.Writer) {
 	writeUsageLine(w, "  --path     Provider manifest path or directory (default: current working directory)")
 	writeUsageLine(w, "  --config   Additional config file to merge; repeat to add support providers or null deletions")
 	writeUsageLine(w, "  --name     Provider key override when the target key is ambiguous")
-}
-
-func printProviderDevUsage(w io.Writer) {
-	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd provider dev [--path PATH] [--config PATH]... [--name NAME] [--port PORT]")
-	writeUsageLine(w, "  gestaltd provider dev --remote URL --config PATH [--config PATH]... [--name NAME]")
-	writeUsageLine(w, "  gestaltd provider dev --remote URL --path PATH [--config PATH]... [--name NAME]")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "Run a local source plugin or ui inside a synthesized Gestalt config.")
-	writeUsageLine(w, "v1 supports kind: plugin and kind: ui manifests.")
-	writeUsageLine(w, "The built-in admin UI remains available at /admin; configured, owned, or sibling public UIs")
-	writeUsageLine(w, "are mounted when present.")
-	writeUsageLine(w, "With --remote, source-backed local plugins attach to an authenticated remote gestaltd session")
-	writeUsageLine(w, "while the remote config keeps its normal auth, authorization, connections, host services,")
-	writeUsageLine(w, "and mounted plugin UI routes.")
-	writeUsageLine(w, "")
-	writeUsageLine(w, "Flags:")
-	writeUsageLine(w, "  --path     Provider manifest path or directory (default: current working directory)")
-	writeUsageLine(w, "  --config   Additional config file to merge; repeat to add support providers or null deletions")
-	writeUsageLine(w, "  --name     Provider key override when the target key is ambiguous")
-	writeUsageLine(w, "  --port     Public port (default: auto-selected free localhost port)")
-	writeUsageLine(w, "  --remote   Remote gestaltd base URL to attach local source plugins to")
-	writeUsageLine(w, "  --remote-token  Bearer token for non-interactive --remote attach (must grant provider_dev.attach)")
 }

@@ -307,7 +307,7 @@ func printProviderAttachUsage(w io.Writer) {
 	writeUsageLine(w, "  show       Show one remote provider-dev attachment")
 	writeUsageLine(w, "  detach     Detach one remote provider-dev attachment")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "Run these against the same remote gestaltd URL used by provider dev --remote.")
+	writeUsageLine(w, "Run these against the same remote gestaltd URL used by gestaltd serve --remote.")
 }
 
 func printProviderAttachListUsage(w io.Writer) {

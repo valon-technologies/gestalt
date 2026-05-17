@@ -395,6 +395,291 @@ plugins:
 	}
 }
 
+func TestLoadForExecutionPluginScopeIgnoresUnrelatedLocalSources(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v5
+connections:
+  orphan:
+    mode: none
+    auth:
+      type: none
+      token: ${GESTALT_SCOPED_PLUGIN_UNUSED_CONNECTION_MISSING_ENV}
+workflows:
+  schedules:
+    noisy:
+      target:
+        plugin:
+          name: beta
+          operation: ping
+      cron: "* * * * *"
+      paused: ${GESTALT_SCOPED_PLUGIN_DROPPED_WORKFLOW_BOOL_MISSING_ENV}
+      runAs:
+        subject:
+          id: test
+          kind: test
+%s
+  secrets:
+    runtime_env:
+      source: env
+    unused:
+      source:
+        path: ${GESTALT_SCOPED_PLUGIN_UNUSED_PROVIDER_MISSING_ENV}
+  cache:
+    unused:
+      source:
+        path: providers/cache/unused/manifest.yaml
+  workflow:
+    unused:
+      source:
+        path: ${GESTALT_SCOPED_PLUGIN_UNUSED_WORKFLOW_PROVIDER_MISSING_ENV}
+  ui:
+    noisy:
+      source:
+        path: ui/noisy/manifest.yaml
+      path: /noisy
+server:
+  providers:
+    indexeddb: sqlite
+    secrets: runtime_env
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
+  alpha:
+    source:
+      path: plugins/alpha/manifest.yaml
+  beta:
+    default: ${GESTALT_SCOPED_PLUGIN_DROPPED_BOOL_MISSING_ENV}
+    source:
+      path: plugins/beta/manifest.yaml
+    env:
+      UNRELATED_TOKEN: ${GESTALT_SCOPED_PLUGIN_TEST_MISSING_ENV}
+    connections:
+      default:
+        ref: ${GESTALT_SCOPED_PLUGIN_TEST_MISSING_CONNECTION_REF}
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(artifactsDir))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle()
+	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{}, false); err == nil {
+		t.Fatal("unscoped load unexpectedly succeeded with unrelated missing sources")
+	}
+
+	loaded, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, false)
+	if err != nil {
+		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths: %v", err)
+	}
+	if got, want := len(loaded.Plugins), 1; got != want {
+		t.Fatalf("loaded plugins = %d, want %d", got, want)
+	}
+	if loaded.Plugins["alpha"] == nil {
+		t.Fatal("plugins.alpha missing from scoped config")
+	}
+	if _, ok := loaded.Plugins["beta"]; ok {
+		t.Fatal("plugins.beta should be dropped from scoped config")
+	}
+	if _, ok := loaded.Providers.UI["noisy"]; ok {
+		t.Fatal("providers.ui.noisy should be dropped from scoped config")
+	}
+	if _, ok := loaded.Providers.Secrets["unused"]; ok {
+		t.Fatal("providers.secrets.unused should be dropped from scoped config")
+	}
+	if _, ok := loaded.Providers.Cache["unused"]; ok {
+		t.Fatal("providers.cache.unused should be dropped from scoped config")
+	}
+	if _, ok := loaded.Providers.Workflow["unused"]; ok {
+		t.Fatal("providers.workflow.unused should be dropped from scoped config")
+	}
+	if _, err := os.Stat(filepath.Join(dir, LockfileName)); !os.IsNotExist(err) {
+		t.Fatalf("production lockfile should not be written, stat err=%v", err)
+	}
+	scopedLockPath := filepath.Join(artifactsDir, ".gestaltd", "scopes", "plugins", "alpha", LockfileName)
+	lock, err := ReadLockfile(scopedLockPath)
+	if err != nil {
+		t.Fatalf("read scoped lockfile: %v", err)
+	}
+	if _, ok := lock.Providers["alpha"]; !ok {
+		t.Fatalf("scoped lock missing alpha provider: %+v", lock.Providers)
+	}
+	if _, ok := lock.Providers["beta"]; ok {
+		t.Fatalf("scoped lock should not include beta provider: %+v", lock.Providers)
+	}
+
+	explicitArtifactsDir := filepath.Join(dir, "explicit-artifacts")
+	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{
+		ArtifactsDir: explicitArtifactsDir,
+		PluginScope:  []string{"alpha"},
+	}, false); err != nil {
+		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths with explicit artifacts dir: %v", err)
+	}
+	explicitScopedLockPath := filepath.Join(explicitArtifactsDir, ".gestaltd", "scopes", "plugins", "alpha", LockfileName)
+	if _, err := os.Stat(explicitScopedLockPath); err != nil {
+		t.Fatalf("explicit artifacts scoped lockfile missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(explicitArtifactsDir, LockfileName)); !os.IsNotExist(err) {
+		t.Fatalf("explicit artifacts root lockfile should not be written, stat err=%v", err)
+	}
+}
+
+func TestLoadForExecutionPluginScopeKeepsReferencedSecretsProvider(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("GESTALT_SCOPED_PLUGIN_REPO_TOKEN", "repo-token")
+	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v5
+%s
+  secrets:
+    runtime_env:
+      source: env
+    repo_auth:
+      source: env
+    unused:
+      source:
+        path: ${GESTALT_SCOPED_PLUGIN_UNUSED_SECRET_PROVIDER_MISSING_ENV}
+server:
+  providers:
+    indexeddb: sqlite
+    secrets: runtime_env
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
+  alpha:
+    source:
+      path: plugins/alpha/manifest.yaml
+    env:
+      TARGET_TOKEN:
+        secret:
+          provider: repo_auth
+          name: GESTALT_SCOPED_PLUGIN_REPO_TOKEN
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	loaded, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, false)
+	if err != nil {
+		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths: %v", err)
+	}
+	if _, ok := loaded.Providers.Secrets["repo_auth"]; !ok {
+		t.Fatal("providers.secrets.repo_auth should be kept for selected plugin secret ref")
+	}
+	if _, ok := loaded.Providers.Secrets["unused"]; ok {
+		t.Fatal("providers.secrets.unused should be dropped")
+	}
+}
+
+func TestLoadForExecutionPluginScopeLockedMissingStateUsesScopedError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v5
+%s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
+  alpha:
+    source:
+      path: plugins/alpha/manifest.yaml
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, true)
+	if err == nil {
+		t.Fatal("locked scoped load unexpectedly succeeded without scoped state")
+	}
+	if !strings.Contains(err.Error(), `scoped local plugin state is missing or stale for plugin "alpha"`) {
+		t.Fatalf("error = %v, want scoped local plugin state guidance", err)
+	}
+}
+
+func TestLoadForExecutionPluginScopeRejectsMissingEnvInSelectedClosure(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v5
+%s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
+  alpha:
+    source:
+      path: plugins/alpha/manifest.yaml
+    env:
+      TARGET_TOKEN: ${GESTALT_SCOPED_PLUGIN_SELECTED_MISSING_ENV}
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, false)
+	if err == nil {
+		t.Fatal("scoped load unexpectedly succeeded with missing selected plugin env")
+	}
+	if !strings.Contains(err.Error(), `environment variable "GESTALT_SCOPED_PLUGIN_SELECTED_MISSING_ENV" not set`) {
+		t.Fatalf("error = %v, want selected missing env", err)
+	}
+}
+
+func TestLoadForExecutionPluginScopeRejectsMissingEnvInSelectedNonStringField(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	configYAML := fmt.Sprintf(`
+apiVersion: gestaltd.config/v5
+%s
+server:
+  providers:
+    indexeddb: sqlite
+  artifactsDir: %s
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
+  alpha:
+    default: ${GESTALT_SCOPED_PLUGIN_SELECTED_BOOL_MISSING_ENV}
+    source:
+      path: plugins/alpha/manifest.yaml
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, false)
+	if err == nil {
+		t.Fatal("scoped load unexpectedly succeeded with selected non-string missing env")
+	}
+	if !strings.Contains(err.Error(), `environment variable "GESTALT_SCOPED_PLUGIN_SELECTED_BOOL_MISSING_ENV" not set`) {
+		t.Fatalf("error = %v, want selected non-string missing env", err)
+	}
+}
+
 func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	t.Parallel()
 

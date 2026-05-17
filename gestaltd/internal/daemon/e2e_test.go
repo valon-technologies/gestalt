@@ -2371,11 +2371,11 @@ func TestE2EServeAndHealthCheck(t *testing.T) {
 	}
 }
 
-func TestE2EProviderDevServesAdminWithoutInjectingRootUI(t *testing.T) {
+func TestE2EServePathServesAdminWithoutInjectingRootUI(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping provider dev serve test in short mode")
+		t.Skip("skipping serve --path test in short mode")
 	}
 
 	dir := t.TempDir()
@@ -2385,7 +2385,7 @@ func TestE2EProviderDevServesAdminWithoutInjectingRootUI(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	_ = holder.Close()
 
-	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", pluginDir, "--port", fmt.Sprintf("%d", port))
+	cmd := exec.Command(gestaltdBin, "serve", "--path", pluginDir, "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -2414,11 +2414,11 @@ func TestE2EProviderDevServesAdminWithoutInjectingRootUI(t *testing.T) {
 	}
 }
 
-func TestE2EProviderDevAutoMountsOwnedUI(t *testing.T) {
+func TestE2EServePathAutoMountsOwnedUI(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping provider dev owned-ui test in short mode")
+		t.Skip("skipping serve --path owned-ui test in short mode")
 	}
 
 	dir := t.TempDir()
@@ -2430,7 +2430,7 @@ func TestE2EProviderDevAutoMountsOwnedUI(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	_ = holder.Close()
 
-	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
+	cmd := exec.Command(gestaltdBin, "serve", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -2464,11 +2464,11 @@ func TestE2EProviderDevAutoMountsOwnedUI(t *testing.T) {
 	t.Fatalf(`integration "provider" mountedPath missing from response: %s`, integrationsBody)
 }
 
-func TestE2EProviderDevServesSourceUI(t *testing.T) {
+func TestE2EServePathServesSourceUI(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping provider dev ui test in short mode")
+		t.Skip("skipping serve --path ui test in short mode")
 	}
 
 	dir := t.TempDir()
@@ -2479,7 +2479,7 @@ func TestE2EProviderDevServesSourceUI(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	_ = holder.Close()
 
-	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", mountedUI.ManifestPath, "--port", fmt.Sprintf("%d", port))
+	cmd := exec.Command(gestaltdBin, "serve", "--path", mountedUI.ManifestPath, "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
@@ -2490,11 +2490,11 @@ func TestE2EProviderDevServesSourceUI(t *testing.T) {
 	_ = waitForHTTPBody(t, client, baseURL+"/roadmap.review/sync", "Roadmap Review UI")
 }
 
-func TestE2EProviderDevAutoMountsSiblingUIForPlugin(t *testing.T) {
+func TestE2EServePathAutoMountsSiblingUIForPlugin(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("skipping provider dev sibling-ui test in short mode")
+		t.Skip("skipping serve --path sibling-ui test in short mode")
 	}
 
 	dir := t.TempDir()
@@ -2507,7 +2507,7 @@ func TestE2EProviderDevAutoMountsSiblingUIForPlugin(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	_ = holder.Close()
 
-	cmd := exec.Command(gestaltdBin, "provider", "dev", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
+	cmd := exec.Command(gestaltdBin, "serve", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
