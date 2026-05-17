@@ -199,7 +199,6 @@ Raw GraphQL surfaces are not tunneled in v1.
 For TypeScript source plugins, `gestaltd serve --path` installs dependencies with
 `bun install` when a `package.json` is present and `node_modules` is missing.
 Source UI builds use the same bootstrap for Bun-managed build workdirs before
-`build.command` or legacy `release.build.command` when dependencies are
-missing.
+`build.command` when dependencies are missing.
 
 See [Configuration](/reference/configuration) for the relationship between `lock`, `sync --locked`, `serve --locked`, and `validate`.

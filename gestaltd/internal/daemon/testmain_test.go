@@ -226,7 +226,10 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 		Source:      "github.com/test/ui/default",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Default Gestalt UI",
-		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"go", "version"},
+			Output:  "dist",
+		},
 	}); err != nil {
 		return "", err
 	}

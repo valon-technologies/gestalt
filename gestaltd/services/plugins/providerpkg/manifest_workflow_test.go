@@ -115,20 +115,18 @@ func TestManifestWorkflow_RoundTripsUIPackage(t *testing.T) {
 
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "ui")
-	manifest := &providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindUI,
-		Source:  "github.com/acme/plugins/ui",
-		Version: "1.0.0",
-		Spec: &providermanifestv1.Spec{
-			AssetRoot: "ui/dist",
-			Routes: []providermanifestv1.UIRoute{
-				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
-				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
-			},
-		},
-	}
-
-	mustWriteManifestData(t, sourceDir, "manifest.yml", mustManifestYAML(t, manifest))
+	mustWriteManifestData(t, sourceDir, "manifest.yml", []byte(`
+kind: ui
+source: github.com/acme/plugins/ui
+version: 1.0.0
+spec:
+  assetRoot: ui/dist
+  routes:
+    - path: /admin/*
+      allowedRoles: [admin]
+    - path: /*
+      allowedRoles: [viewer, admin]
+`))
 	mustWriteFile(t, filepath.Join(sourceDir, "ui", "dist", "index.html"), []byte("<!doctype html><title>ui</title>"), 0o644)
 
 	_, manifest, gotPath, err := LoadManifestFromPath(sourceDir)
@@ -222,15 +220,9 @@ func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 				case "manifest.yaml":
 					source = "github.com/acme/plugins/yaml-first"
 				}
-				manifest := &providermanifestv1.Manifest{
-					Kind:    providermanifestv1.KindUI,
-					Source:  source,
-					Version: "1.0.0",
-					Spec:    &providermanifestv1.Spec{AssetRoot: "ui"},
-				}
-				data := mustManifestYAML(t, manifest)
+				data := []byte(fmt.Sprintf("kind: ui\nsource: %s\nversion: 1.0.0\nspec:\n  assetRoot: ui\n", source))
 				if filepath.Ext(name) == ".json" {
-					data = mustManifestJSON(t, manifest)
+					data = []byte(fmt.Sprintf(`{"kind":"ui","source":%q,"version":"1.0.0","spec":{"assetRoot":"ui"}}`, source))
 				}
 				mustWriteManifestData(t, dir, name, data)
 			}
@@ -443,7 +435,31 @@ func TestManifestWorkflow_SourceUIBuildValidation(t *testing.T) {
 		wantErr    string
 	}{
 		{
-			name: "source ui may use build output without asset root",
+			name: "source ui rejects asset root",
+			manifest: `
+kind: ui
+source: github.com/acme/plugins/source-ui
+version: 1.0.0
+spec:
+  assetRoot: dist
+`,
+			readSource: true,
+			wantErr:    "spec.assetRoot is not allowed in source ui manifests; use build.output",
+		},
+		{
+			name: "source ui requires build output",
+			manifest: `
+kind: ui
+source: github.com/acme/plugins/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
+`,
+			readSource: true,
+			wantErr:    "build.output is required for source ui manifests",
+		},
+		{
+			name: "source ui uses build output",
 			manifest: `
 kind: ui
 source: github.com/acme/plugins/source-ui
@@ -453,6 +469,16 @@ build:
   output: dist
 `,
 			readSource: true,
+		},
+		{
+			name: "released ui uses asset root",
+			manifest: `
+kind: ui
+source: github.com/acme/plugins/released-ui
+version: 1.0.0
+spec:
+  assetRoot: dist
+`,
 		},
 		{
 			name: "released ui rejects build metadata",
@@ -469,7 +495,7 @@ spec:
 			wantErr: "build metadata is only allowed in source ui manifests",
 		},
 		{
-			name: "source ui rejects build and release build together",
+			name: "source ui rejects release metadata",
 			manifest: `
 kind: ui
 source: github.com/acme/plugins/source-ui
@@ -480,26 +506,9 @@ build:
 release:
   build:
     command: [npm, run, build]
-spec:
-  assetRoot: dist
 `,
 			readSource: true,
-			wantErr:    "build and release.build may not both be set",
-		},
-		{
-			name: "source ui rejects mismatched build output",
-			manifest: `
-kind: ui
-source: github.com/acme/plugins/source-ui
-version: 1.0.0
-build:
-  command: [npm, run, build]
-  output: dist
-spec:
-  assetRoot: out
-`,
-			readSource: true,
-			wantErr:    "build.output \"dist\" must match spec.assetRoot \"out\"",
+			wantErr:    "release metadata is not supported for source ui manifests; use build instead",
 		},
 		{
 			name: "source ui rejects input globs",
@@ -526,12 +535,11 @@ build:
 			dir := t.TempDir()
 			manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(tc.manifest))
 
-			var manifest *providermanifestv1.Manifest
 			var err error
 			if tc.readSource {
-				_, manifest, err = ReadSourceManifestFile(manifestPath)
+				_, _, err = ReadSourceManifestFile(manifestPath)
 			} else {
-				_, manifest, err = ReadManifestFile(manifestPath)
+				_, _, err = ReadManifestFile(manifestPath)
 			}
 			if tc.wantErr != "" {
 				if err == nil {
@@ -544,9 +552,6 @@ build:
 			}
 			if err != nil {
 				t.Fatalf("read manifest: %v", err)
-			}
-			if got := EffectiveUIAssetRoot(manifest); got != "dist" {
-				t.Fatalf("EffectiveUIAssetRoot = %q, want dist", got)
 			}
 		})
 	}

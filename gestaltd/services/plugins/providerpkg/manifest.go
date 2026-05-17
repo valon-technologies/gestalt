@@ -74,8 +74,8 @@ func ManifestEqual(a, b *providermanifestv1.Manifest) bool {
 	return packageio.ManifestEqual(a, b)
 }
 
-func EffectiveUIAssetRoot(manifest *providermanifestv1.Manifest) string {
-	return packageio.EffectiveUIAssetRoot(manifest)
+func SourceUIBuildOutput(manifest *providermanifestv1.Manifest) string {
+	return packageio.SourceUIBuildOutput(manifest)
 }
 
 func cloneManifest(manifest *providermanifestv1.Manifest) (*providermanifestv1.Manifest, error) {

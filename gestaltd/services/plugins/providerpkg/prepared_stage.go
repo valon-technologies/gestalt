@@ -291,7 +291,7 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 	manifest.Version = version
 	manifest.Release = nil
 	if manifest.Kind == providermanifestv1.KindUI {
-		if assetRoot := EffectiveUIAssetRoot(srcManifest); assetRoot != "" {
+		if assetRoot := SourceUIBuildOutput(srcManifest); assetRoot != "" {
 			if manifest.Spec == nil {
 				manifest.Spec = &providermanifestv1.Spec{}
 			}

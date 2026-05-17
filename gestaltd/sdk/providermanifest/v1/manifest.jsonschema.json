@@ -97,7 +97,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "command"
+        "command",
+        "output"
       ],
       "properties": {
         "workdir": {

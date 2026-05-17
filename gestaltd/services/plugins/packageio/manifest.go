@@ -147,17 +147,20 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 			return err
 		}
 	}
+	kind, err := ManifestKind(manifest)
+	if err != nil {
+		return err
+	}
 	if manifest.Release != nil {
 		if !sourceMode {
 			return fmt.Errorf("release metadata is only allowed in source manifests")
 		}
+		if kind == providermanifestv1.KindUI {
+			return fmt.Errorf("release metadata is not supported for source ui manifests; use build instead")
+		}
 		if err := validateReleaseMetadata(manifest.Release); err != nil {
 			return err
 		}
-	}
-	kind, err := ManifestKind(manifest)
-	if err != nil {
-		return err
 	}
 	if manifest.Build != nil {
 		if !sourceMode {
@@ -165,9 +168,6 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		}
 		if kind != providermanifestv1.KindUI {
 			return fmt.Errorf("build metadata is only supported for ui manifests")
-		}
-		if manifest.Release != nil && manifest.Release.Build != nil {
-			return fmt.Errorf("build and release.build may not both be set")
 		}
 		if err := validateSourceBuild(manifest.Build); err != nil {
 			return err
@@ -259,13 +259,16 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if spec != nil {
 			assetRoot = spec.AssetRoot
 		}
-		buildOutput := ""
-		if manifest.Build != nil {
-			buildOutput = manifest.Build.Output
-		}
+		buildOutput := SourceUIBuildOutput(manifest)
 		if sourceMode {
-			if assetRoot == "" && buildOutput == "" {
-				return fmt.Errorf("spec.assetRoot or build.output is required for source ui manifests")
+			if assetRoot != "" {
+				return fmt.Errorf("spec.assetRoot is not allowed in source ui manifests; use build.output")
+			}
+			if manifest.Build == nil {
+				return fmt.Errorf("build is required for source ui manifests")
+			}
+			if buildOutput == "" {
+				return fmt.Errorf("build.output is required for source ui manifests")
 			}
 		} else if assetRoot == "" {
 			return fmt.Errorf("spec.assetRoot is required for ui manifests")
@@ -279,9 +282,6 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 			if err := validateRelativePackagePath(buildOutput, "build.output"); err != nil {
 				return err
 			}
-		}
-		if assetRoot != "" && buildOutput != "" && assetRoot != buildOutput {
-			return fmt.Errorf("build.output %q must match spec.assetRoot %q", buildOutput, assetRoot)
 		}
 		if spec != nil {
 			if err := validateUIRoutes(spec.Routes); err != nil {
@@ -502,12 +502,9 @@ func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
 	return nil
 }
 
-func EffectiveUIAssetRoot(manifest *providermanifestv1.Manifest) string {
+func SourceUIBuildOutput(manifest *providermanifestv1.Manifest) string {
 	if manifest == nil {
 		return ""
-	}
-	if manifest.Spec != nil && manifest.Spec.AssetRoot != "" {
-		return manifest.Spec.AssetRoot
 	}
 	if manifest.Build != nil {
 		return manifest.Build.Output
