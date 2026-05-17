@@ -61,6 +61,9 @@ message KeyRange {
 message RecordRequest {
   string store = 1;
   Record record = 2;
+  // connection_id scopes this operation to a database connection returned by
+  // OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+  bytes connection_id = 100;
 }
 
 // RecordResponse wraps one row payload.
@@ -82,17 +85,26 @@ message KeysResponse {
 message ObjectStoreRequest {
   string store = 1;
   string id = 2;
+  // connection_id scopes this operation to a database connection returned by
+  // OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+  bytes connection_id = 100;
 }
 
 // ObjectStoreNameRequest addresses an object store without a specific row key.
 message ObjectStoreNameRequest {
   string store = 1;
+  // connection_id scopes this operation to a database connection returned by
+  // OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+  bytes connection_id = 100;
 }
 
 // ObjectStoreRangeRequest addresses an object store plus an optional key range.
 message ObjectStoreRangeRequest {
   string store = 1;
   optional KeyRange range = 2;
+  // connection_id scopes this operation to a database connection returned by
+  // OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+  bytes connection_id = 100;
 }
 
 // CreateObjectStoreRequest creates a new object store.
@@ -113,6 +125,9 @@ message IndexQueryRequest {
   string index = 2;
   repeated TypedValue values = 3;
   optional KeyRange range = 4;
+  // connection_id scopes this operation to a database connection returned by
+  // OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+  bytes connection_id = 100;
 }
 
 // CountResponse reports how many rows matched a query.
@@ -139,6 +154,9 @@ message OpenCursorRequest {
   string index = 5;
   // values selects a compound index key prefix when index is set.
   repeated TypedValue values = 6;
+  // connection_id scopes this cursor to a database connection returned by
+  // OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+  bytes connection_id = 100;
 }
 
 // KeyValue represents a single IndexedDB key, which can be a scalar
@@ -221,11 +239,192 @@ enum TransactionDurabilityHint {
   TRANSACTION_DURABILITY_RELAXED = 2;
 }
 
+// VersionChangeReason identifies why a live database connection received a
+// versionchange notification.
+enum VersionChangeReason {
+  VERSION_CHANGE_REASON_UNSPECIFIED = 0;
+  VERSION_CHANGE_REASON_UPGRADE = 1;
+  VERSION_CHANGE_REASON_DELETE = 2;
+}
+
+// VersionChangeInfo notifies an existing connection that an open or delete
+// request needs that connection to close before it can proceed.
+message VersionChangeInfo {
+  string name = 1;
+  uint64 old_version = 2;
+  optional uint64 new_version = 3;
+  VersionChangeReason reason = 4;
+}
+
+// BlockedInfo reports that open/delete is waiting for incumbent connections or
+// operations to drain.
+message BlockedInfo {
+  string name = 1;
+  uint64 old_version = 2;
+  optional uint64 new_version = 3;
+  VersionChangeReason reason = 4;
+  int32 open_connections = 5;
+  int32 active_operations = 6;
+}
+
+// OpenDatabaseRequest starts a database open flow. version absent opens the
+// current version, creating version 1 when missing. require_existing is used by
+// OpenCurrent and fails instead of creating a missing database.
+message OpenDatabaseRequest {
+  string name = 1;
+  optional uint64 version = 2;
+  bool require_existing = 3;
+}
+
+// UpgradeStarted starts the exclusive upgrade phase for an open request.
+message UpgradeStarted {
+  string name = 1;
+  uint64 old_version = 2;
+  uint64 new_version = 3;
+  repeated string object_store_names = 4;
+}
+
+// OpenDatabaseSuccess returns the live connection token and database metadata.
+message OpenDatabaseSuccess {
+  bytes connection_id = 1;
+  string name = 2;
+  uint64 version = 3;
+  repeated string object_store_names = 4;
+}
+
+message CloseDatabaseRequest {}
+
+message CloseDatabaseResponse {}
+
+// DeleteDatabaseRequest starts a database delete flow.
+message DeleteDatabaseRequest {
+  string name = 1;
+}
+
+// DeleteDatabaseResponse reports the deleted database version. Missing
+// databases succeed with old_version 0.
+message DeleteDatabaseResponse {
+  string name = 1;
+  uint64 old_version = 2;
+}
+
+message DatabasesRequest {}
+
+// DatabaseInfo mirrors IDBFactory.databases() and intentionally exposes only
+// name and version.
+message DatabaseInfo {
+  string name = 1;
+  uint64 version = 2;
+}
+
+message DatabasesResponse {
+  repeated DatabaseInfo databases = 1;
+}
+
+// CompareKeysRequest compares two IndexedDB keys encoded with KeyValue.
+message CompareKeysRequest {
+  KeyValue first = 1;
+  KeyValue second = 2;
+}
+
+message CompareKeysResponse {
+  int32 cmp = 1;
+}
+
+message UpgradeCreateObjectStoreRequest {
+  string name = 1;
+  ObjectStoreSchema schema = 2;
+}
+
+message UpgradeDeleteObjectStoreRequest {
+  string name = 1;
+}
+
+message UpgradeCreateIndexRequest {
+  string store = 1;
+  string name = 2;
+  repeated string key_path = 3;
+  bool unique = 4;
+}
+
+message UpgradeDeleteIndexRequest {
+  string store = 1;
+  string name = 2;
+}
+
+message UpgradeObjectStoreNamesRequest {}
+
+message FinishUpgradeRequest {}
+
+message AbortUpgradeRequest {
+  string reason = 1;
+}
+
+// UpgradeOperation is one ordered schema operation in an open upgrade phase.
+// Clients send one operation and wait for its matching response before sending
+// the next operation.
+message UpgradeOperation {
+  uint64 request_id = 1;
+  oneof op {
+    UpgradeCreateObjectStoreRequest create_object_store = 10;
+    UpgradeDeleteObjectStoreRequest delete_object_store = 11;
+    UpgradeCreateIndexRequest create_index = 12;
+    UpgradeDeleteIndexRequest delete_index = 13;
+    UpgradeObjectStoreNamesRequest object_store_names = 14;
+    FinishUpgradeRequest finish_upgrade = 15;
+    AbortUpgradeRequest abort_upgrade = 16;
+  }
+}
+
+// UpgradeOperationResponse is terminal for the open flow when error is non-OK.
+message UpgradeOperationResponse {
+  uint64 request_id = 1;
+  google.rpc.Status error = 2;
+  repeated string object_store_names = 3;
+}
+
+// OpenDatabaseClientMessage is one frame in the open/connection lifetime
+// stream. The first frame must be OpenDatabaseRequest.
+message OpenDatabaseClientMessage {
+  oneof msg {
+    OpenDatabaseRequest open = 1;
+    UpgradeOperation upgrade_operation = 2;
+    CloseDatabaseRequest close = 3;
+  }
+}
+
+// OpenDatabaseServerMessage carries open progress, connection events, and
+// terminal application errors.
+message OpenDatabaseServerMessage {
+  oneof msg {
+    UpgradeStarted upgrade_started = 1;
+    UpgradeOperationResponse upgrade_operation_response = 2;
+    OpenDatabaseSuccess opened = 3;
+    VersionChangeInfo versionchange = 4;
+    BlockedInfo blocked = 5;
+    CloseDatabaseResponse closed = 6;
+    google.rpc.Status error = 7;
+  }
+}
+
+// DeleteDatabaseServerMessage streams blocked progress and the final delete
+// result. A terminal error frame is followed by an OK transport close.
+message DeleteDatabaseServerMessage {
+  oneof msg {
+    BlockedInfo blocked = 1;
+    DeleteDatabaseResponse deleted = 2;
+    google.rpc.Status error = 3;
+  }
+}
+
 // BeginTransactionRequest starts an IndexedDB transaction stream.
 message BeginTransactionRequest {
   repeated string stores = 1;
   TransactionMode mode = 2;
   TransactionDurabilityHint durability_hint = 3;
+  // connection_id scopes this transaction to a database connection returned by
+  // OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+  bytes connection_id = 100;
 }
 
 message TransactionBeginResponse {}
@@ -310,7 +509,13 @@ message TransactionServerMessage {
 
 // IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 service IndexedDB {
-  // Lifecycle
+  // Factory lifecycle
+  rpc OpenDatabase(stream OpenDatabaseClientMessage) returns (stream OpenDatabaseServerMessage);
+  rpc DeleteDatabase(DeleteDatabaseRequest) returns (stream DeleteDatabaseServerMessage);
+  rpc Databases(DatabasesRequest) returns (DatabasesResponse);
+  rpc CompareKeys(CompareKeysRequest) returns (CompareKeysResponse);
+
+  // Legacy object-store lifecycle
   rpc CreateObjectStore(CreateObjectStoreRequest) returns (google.protobuf.Empty);
   rpc DeleteObjectStore(DeleteObjectStoreRequest) returns (google.protobuf.Empty);
 

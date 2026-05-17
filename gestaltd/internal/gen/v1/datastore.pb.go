@@ -176,6 +176,57 @@ func (TransactionDurabilityHint) EnumDescriptor() ([]byte, []int) {
 	return file_v1_datastore_proto_rawDescGZIP(), []int{2}
 }
 
+// VersionChangeReason identifies why a live database connection received a
+// versionchange notification.
+type VersionChangeReason int32
+
+const (
+	VersionChangeReason_VERSION_CHANGE_REASON_UNSPECIFIED VersionChangeReason = 0
+	VersionChangeReason_VERSION_CHANGE_REASON_UPGRADE     VersionChangeReason = 1
+	VersionChangeReason_VERSION_CHANGE_REASON_DELETE      VersionChangeReason = 2
+)
+
+// Enum value maps for VersionChangeReason.
+var (
+	VersionChangeReason_name = map[int32]string{
+		0: "VERSION_CHANGE_REASON_UNSPECIFIED",
+		1: "VERSION_CHANGE_REASON_UPGRADE",
+		2: "VERSION_CHANGE_REASON_DELETE",
+	}
+	VersionChangeReason_value = map[string]int32{
+		"VERSION_CHANGE_REASON_UNSPECIFIED": 0,
+		"VERSION_CHANGE_REASON_UPGRADE":     1,
+		"VERSION_CHANGE_REASON_DELETE":      2,
+	}
+)
+
+func (x VersionChangeReason) Enum() *VersionChangeReason {
+	p := new(VersionChangeReason)
+	*p = x
+	return p
+}
+
+func (x VersionChangeReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (VersionChangeReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_datastore_proto_enumTypes[3].Descriptor()
+}
+
+func (VersionChangeReason) Type() protoreflect.EnumType {
+	return &file_v1_datastore_proto_enumTypes[3]
+}
+
+func (x VersionChangeReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use VersionChangeReason.Descriptor instead.
+func (VersionChangeReason) EnumDescriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{3}
+}
+
 // TypedValue stores one scalar or structured value in an IndexedDB record.
 type TypedValue struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -663,9 +714,12 @@ func (x *KeyRange) GetUpperOpen() bool {
 
 // RecordRequest addresses one object store and carries one row payload.
 type RecordRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Record        *Record                `protobuf:"bytes,2,opt,name=record,proto3" json:"record,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Store  string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Record *Record                `protobuf:"bytes,2,opt,name=record,proto3" json:"record,omitempty"`
+	// connection_id scopes this operation to a database connection returned by
+	// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+	ConnectionId  []byte `protobuf:"bytes,100,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -710,6 +764,13 @@ func (x *RecordRequest) GetStore() string {
 func (x *RecordRequest) GetRecord() *Record {
 	if x != nil {
 		return x.Record
+	}
+	return nil
+}
+
+func (x *RecordRequest) GetConnectionId() []byte {
+	if x != nil {
+		return x.ConnectionId
 	}
 	return nil
 }
@@ -851,9 +912,12 @@ func (x *KeysResponse) GetKeys() []string {
 
 // ObjectStoreRequest addresses one object store row by primary key.
 type ObjectStoreRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Store string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Id    string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// connection_id scopes this operation to a database connection returned by
+	// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+	ConnectionId  []byte `protobuf:"bytes,100,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -902,10 +966,20 @@ func (x *ObjectStoreRequest) GetId() string {
 	return ""
 }
 
+func (x *ObjectStoreRequest) GetConnectionId() []byte {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return nil
+}
+
 // ObjectStoreNameRequest addresses an object store without a specific row key.
 type ObjectStoreNameRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Store string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	// connection_id scopes this operation to a database connection returned by
+	// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+	ConnectionId  []byte `protobuf:"bytes,100,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -947,11 +1021,21 @@ func (x *ObjectStoreNameRequest) GetStore() string {
 	return ""
 }
 
+func (x *ObjectStoreNameRequest) GetConnectionId() []byte {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return nil
+}
+
 // ObjectStoreRangeRequest addresses an object store plus an optional key range.
 type ObjectStoreRangeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Range         *KeyRange              `protobuf:"bytes,2,opt,name=range,proto3,oneof" json:"range,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Store string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Range *KeyRange              `protobuf:"bytes,2,opt,name=range,proto3,oneof" json:"range,omitempty"`
+	// connection_id scopes this operation to a database connection returned by
+	// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+	ConnectionId  []byte `protobuf:"bytes,100,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -996,6 +1080,13 @@ func (x *ObjectStoreRangeRequest) GetStore() string {
 func (x *ObjectStoreRangeRequest) GetRange() *KeyRange {
 	if x != nil {
 		return x.Range
+	}
+	return nil
+}
+
+func (x *ObjectStoreRangeRequest) GetConnectionId() []byte {
+	if x != nil {
+		return x.ConnectionId
 	}
 	return nil
 }
@@ -1101,11 +1192,14 @@ func (x *DeleteObjectStoreRequest) GetName() string {
 // IndexQueryRequest addresses a secondary index plus optional key values and
 // range constraints.
 type IndexQueryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Index         string                 `protobuf:"bytes,2,opt,name=index,proto3" json:"index,omitempty"`
-	Values        []*TypedValue          `protobuf:"bytes,3,rep,name=values,proto3" json:"values,omitempty"`
-	Range         *KeyRange              `protobuf:"bytes,4,opt,name=range,proto3,oneof" json:"range,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Store  string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Index  string                 `protobuf:"bytes,2,opt,name=index,proto3" json:"index,omitempty"`
+	Values []*TypedValue          `protobuf:"bytes,3,rep,name=values,proto3" json:"values,omitempty"`
+	Range  *KeyRange              `protobuf:"bytes,4,opt,name=range,proto3,oneof" json:"range,omitempty"`
+	// connection_id scopes this operation to a database connection returned by
+	// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+	ConnectionId  []byte `protobuf:"bytes,100,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1168,6 +1262,13 @@ func (x *IndexQueryRequest) GetRange() *KeyRange {
 	return nil
 }
 
+func (x *IndexQueryRequest) GetConnectionId() []byte {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return nil
+}
+
 // CountResponse reports how many rows matched a query.
 type CountResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1224,7 +1325,10 @@ type OpenCursorRequest struct {
 	// index selects a secondary index when non-empty.
 	Index string `protobuf:"bytes,5,opt,name=index,proto3" json:"index,omitempty"`
 	// values selects a compound index key prefix when index is set.
-	Values        []*TypedValue `protobuf:"bytes,6,rep,name=values,proto3" json:"values,omitempty"`
+	Values []*TypedValue `protobuf:"bytes,6,rep,name=values,proto3" json:"values,omitempty"`
+	// connection_id scopes this cursor to a database connection returned by
+	// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+	ConnectionId  []byte `protobuf:"bytes,100,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1297,6 +1401,13 @@ func (x *OpenCursorRequest) GetIndex() string {
 func (x *OpenCursorRequest) GetValues() []*TypedValue {
 	if x != nil {
 		return x.Values
+	}
+	return nil
+}
+
+func (x *OpenCursorRequest) GetConnectionId() []byte {
+	if x != nil {
+		return x.ConnectionId
 	}
 	return nil
 }
@@ -1941,19 +2052,1711 @@ func (x *KeyResponse) GetKey() string {
 	return ""
 }
 
+// VersionChangeInfo notifies an existing connection that an open or delete
+// request needs that connection to close before it can proceed.
+type VersionChangeInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	OldVersion    uint64                 `protobuf:"varint,2,opt,name=old_version,json=oldVersion,proto3" json:"old_version,omitempty"`
+	NewVersion    *uint64                `protobuf:"varint,3,opt,name=new_version,json=newVersion,proto3,oneof" json:"new_version,omitempty"`
+	Reason        VersionChangeReason    `protobuf:"varint,4,opt,name=reason,proto3,enum=gestalt.provider.v1.VersionChangeReason" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VersionChangeInfo) Reset() {
+	*x = VersionChangeInfo{}
+	mi := &file_v1_datastore_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VersionChangeInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VersionChangeInfo) ProtoMessage() {}
+
+func (x *VersionChangeInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VersionChangeInfo.ProtoReflect.Descriptor instead.
+func (*VersionChangeInfo) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *VersionChangeInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *VersionChangeInfo) GetOldVersion() uint64 {
+	if x != nil {
+		return x.OldVersion
+	}
+	return 0
+}
+
+func (x *VersionChangeInfo) GetNewVersion() uint64 {
+	if x != nil && x.NewVersion != nil {
+		return *x.NewVersion
+	}
+	return 0
+}
+
+func (x *VersionChangeInfo) GetReason() VersionChangeReason {
+	if x != nil {
+		return x.Reason
+	}
+	return VersionChangeReason_VERSION_CHANGE_REASON_UNSPECIFIED
+}
+
+// BlockedInfo reports that open/delete is waiting for incumbent connections or
+// operations to drain.
+type BlockedInfo struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	OldVersion       uint64                 `protobuf:"varint,2,opt,name=old_version,json=oldVersion,proto3" json:"old_version,omitempty"`
+	NewVersion       *uint64                `protobuf:"varint,3,opt,name=new_version,json=newVersion,proto3,oneof" json:"new_version,omitempty"`
+	Reason           VersionChangeReason    `protobuf:"varint,4,opt,name=reason,proto3,enum=gestalt.provider.v1.VersionChangeReason" json:"reason,omitempty"`
+	OpenConnections  int32                  `protobuf:"varint,5,opt,name=open_connections,json=openConnections,proto3" json:"open_connections,omitempty"`
+	ActiveOperations int32                  `protobuf:"varint,6,opt,name=active_operations,json=activeOperations,proto3" json:"active_operations,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BlockedInfo) Reset() {
+	*x = BlockedInfo{}
+	mi := &file_v1_datastore_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockedInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockedInfo) ProtoMessage() {}
+
+func (x *BlockedInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockedInfo.ProtoReflect.Descriptor instead.
+func (*BlockedInfo) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *BlockedInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *BlockedInfo) GetOldVersion() uint64 {
+	if x != nil {
+		return x.OldVersion
+	}
+	return 0
+}
+
+func (x *BlockedInfo) GetNewVersion() uint64 {
+	if x != nil && x.NewVersion != nil {
+		return *x.NewVersion
+	}
+	return 0
+}
+
+func (x *BlockedInfo) GetReason() VersionChangeReason {
+	if x != nil {
+		return x.Reason
+	}
+	return VersionChangeReason_VERSION_CHANGE_REASON_UNSPECIFIED
+}
+
+func (x *BlockedInfo) GetOpenConnections() int32 {
+	if x != nil {
+		return x.OpenConnections
+	}
+	return 0
+}
+
+func (x *BlockedInfo) GetActiveOperations() int32 {
+	if x != nil {
+		return x.ActiveOperations
+	}
+	return 0
+}
+
+// OpenDatabaseRequest starts a database open flow. version absent opens the
+// current version, creating version 1 when missing. require_existing is used by
+// OpenCurrent and fails instead of creating a missing database.
+type OpenDatabaseRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version         *uint64                `protobuf:"varint,2,opt,name=version,proto3,oneof" json:"version,omitempty"`
+	RequireExisting bool                   `protobuf:"varint,3,opt,name=require_existing,json=requireExisting,proto3" json:"require_existing,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *OpenDatabaseRequest) Reset() {
+	*x = OpenDatabaseRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenDatabaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenDatabaseRequest) ProtoMessage() {}
+
+func (x *OpenDatabaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenDatabaseRequest.ProtoReflect.Descriptor instead.
+func (*OpenDatabaseRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *OpenDatabaseRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *OpenDatabaseRequest) GetVersion() uint64 {
+	if x != nil && x.Version != nil {
+		return *x.Version
+	}
+	return 0
+}
+
+func (x *OpenDatabaseRequest) GetRequireExisting() bool {
+	if x != nil {
+		return x.RequireExisting
+	}
+	return false
+}
+
+// UpgradeStarted starts the exclusive upgrade phase for an open request.
+type UpgradeStarted struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	OldVersion       uint64                 `protobuf:"varint,2,opt,name=old_version,json=oldVersion,proto3" json:"old_version,omitempty"`
+	NewVersion       uint64                 `protobuf:"varint,3,opt,name=new_version,json=newVersion,proto3" json:"new_version,omitempty"`
+	ObjectStoreNames []string               `protobuf:"bytes,4,rep,name=object_store_names,json=objectStoreNames,proto3" json:"object_store_names,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *UpgradeStarted) Reset() {
+	*x = UpgradeStarted{}
+	mi := &file_v1_datastore_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpgradeStarted) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpgradeStarted) ProtoMessage() {}
+
+func (x *UpgradeStarted) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpgradeStarted.ProtoReflect.Descriptor instead.
+func (*UpgradeStarted) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *UpgradeStarted) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UpgradeStarted) GetOldVersion() uint64 {
+	if x != nil {
+		return x.OldVersion
+	}
+	return 0
+}
+
+func (x *UpgradeStarted) GetNewVersion() uint64 {
+	if x != nil {
+		return x.NewVersion
+	}
+	return 0
+}
+
+func (x *UpgradeStarted) GetObjectStoreNames() []string {
+	if x != nil {
+		return x.ObjectStoreNames
+	}
+	return nil
+}
+
+// OpenDatabaseSuccess returns the live connection token and database metadata.
+type OpenDatabaseSuccess struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ConnectionId     []byte                 `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	Name             string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Version          uint64                 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	ObjectStoreNames []string               `protobuf:"bytes,4,rep,name=object_store_names,json=objectStoreNames,proto3" json:"object_store_names,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *OpenDatabaseSuccess) Reset() {
+	*x = OpenDatabaseSuccess{}
+	mi := &file_v1_datastore_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenDatabaseSuccess) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenDatabaseSuccess) ProtoMessage() {}
+
+func (x *OpenDatabaseSuccess) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenDatabaseSuccess.ProtoReflect.Descriptor instead.
+func (*OpenDatabaseSuccess) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *OpenDatabaseSuccess) GetConnectionId() []byte {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return nil
+}
+
+func (x *OpenDatabaseSuccess) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *OpenDatabaseSuccess) GetVersion() uint64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *OpenDatabaseSuccess) GetObjectStoreNames() []string {
+	if x != nil {
+		return x.ObjectStoreNames
+	}
+	return nil
+}
+
+type CloseDatabaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseDatabaseRequest) Reset() {
+	*x = CloseDatabaseRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseDatabaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseDatabaseRequest) ProtoMessage() {}
+
+func (x *CloseDatabaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseDatabaseRequest.ProtoReflect.Descriptor instead.
+func (*CloseDatabaseRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{32}
+}
+
+type CloseDatabaseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseDatabaseResponse) Reset() {
+	*x = CloseDatabaseResponse{}
+	mi := &file_v1_datastore_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseDatabaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseDatabaseResponse) ProtoMessage() {}
+
+func (x *CloseDatabaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseDatabaseResponse.ProtoReflect.Descriptor instead.
+func (*CloseDatabaseResponse) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{33}
+}
+
+// DeleteDatabaseRequest starts a database delete flow.
+type DeleteDatabaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteDatabaseRequest) Reset() {
+	*x = DeleteDatabaseRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteDatabaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteDatabaseRequest) ProtoMessage() {}
+
+func (x *DeleteDatabaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteDatabaseRequest.ProtoReflect.Descriptor instead.
+func (*DeleteDatabaseRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *DeleteDatabaseRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+// DeleteDatabaseResponse reports the deleted database version. Missing
+// databases succeed with old_version 0.
+type DeleteDatabaseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	OldVersion    uint64                 `protobuf:"varint,2,opt,name=old_version,json=oldVersion,proto3" json:"old_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteDatabaseResponse) Reset() {
+	*x = DeleteDatabaseResponse{}
+	mi := &file_v1_datastore_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteDatabaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteDatabaseResponse) ProtoMessage() {}
+
+func (x *DeleteDatabaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteDatabaseResponse.ProtoReflect.Descriptor instead.
+func (*DeleteDatabaseResponse) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *DeleteDatabaseResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DeleteDatabaseResponse) GetOldVersion() uint64 {
+	if x != nil {
+		return x.OldVersion
+	}
+	return 0
+}
+
+type DatabasesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatabasesRequest) Reset() {
+	*x = DatabasesRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatabasesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatabasesRequest) ProtoMessage() {}
+
+func (x *DatabasesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatabasesRequest.ProtoReflect.Descriptor instead.
+func (*DatabasesRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{36}
+}
+
+// DatabaseInfo mirrors IDBFactory.databases() and intentionally exposes only
+// name and version.
+type DatabaseInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatabaseInfo) Reset() {
+	*x = DatabaseInfo{}
+	mi := &file_v1_datastore_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatabaseInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatabaseInfo) ProtoMessage() {}
+
+func (x *DatabaseInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatabaseInfo.ProtoReflect.Descriptor instead.
+func (*DatabaseInfo) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *DatabaseInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DatabaseInfo) GetVersion() uint64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+type DatabasesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Databases     []*DatabaseInfo        `protobuf:"bytes,1,rep,name=databases,proto3" json:"databases,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatabasesResponse) Reset() {
+	*x = DatabasesResponse{}
+	mi := &file_v1_datastore_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatabasesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatabasesResponse) ProtoMessage() {}
+
+func (x *DatabasesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatabasesResponse.ProtoReflect.Descriptor instead.
+func (*DatabasesResponse) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *DatabasesResponse) GetDatabases() []*DatabaseInfo {
+	if x != nil {
+		return x.Databases
+	}
+	return nil
+}
+
+// CompareKeysRequest compares two IndexedDB keys encoded with KeyValue.
+type CompareKeysRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	First         *KeyValue              `protobuf:"bytes,1,opt,name=first,proto3" json:"first,omitempty"`
+	Second        *KeyValue              `protobuf:"bytes,2,opt,name=second,proto3" json:"second,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompareKeysRequest) Reset() {
+	*x = CompareKeysRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompareKeysRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompareKeysRequest) ProtoMessage() {}
+
+func (x *CompareKeysRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompareKeysRequest.ProtoReflect.Descriptor instead.
+func (*CompareKeysRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *CompareKeysRequest) GetFirst() *KeyValue {
+	if x != nil {
+		return x.First
+	}
+	return nil
+}
+
+func (x *CompareKeysRequest) GetSecond() *KeyValue {
+	if x != nil {
+		return x.Second
+	}
+	return nil
+}
+
+type CompareKeysResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cmp           int32                  `protobuf:"varint,1,opt,name=cmp,proto3" json:"cmp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompareKeysResponse) Reset() {
+	*x = CompareKeysResponse{}
+	mi := &file_v1_datastore_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompareKeysResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompareKeysResponse) ProtoMessage() {}
+
+func (x *CompareKeysResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompareKeysResponse.ProtoReflect.Descriptor instead.
+func (*CompareKeysResponse) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *CompareKeysResponse) GetCmp() int32 {
+	if x != nil {
+		return x.Cmp
+	}
+	return 0
+}
+
+type UpgradeCreateObjectStoreRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Schema        *ObjectStoreSchema     `protobuf:"bytes,2,opt,name=schema,proto3" json:"schema,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpgradeCreateObjectStoreRequest) Reset() {
+	*x = UpgradeCreateObjectStoreRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpgradeCreateObjectStoreRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpgradeCreateObjectStoreRequest) ProtoMessage() {}
+
+func (x *UpgradeCreateObjectStoreRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpgradeCreateObjectStoreRequest.ProtoReflect.Descriptor instead.
+func (*UpgradeCreateObjectStoreRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *UpgradeCreateObjectStoreRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UpgradeCreateObjectStoreRequest) GetSchema() *ObjectStoreSchema {
+	if x != nil {
+		return x.Schema
+	}
+	return nil
+}
+
+type UpgradeDeleteObjectStoreRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpgradeDeleteObjectStoreRequest) Reset() {
+	*x = UpgradeDeleteObjectStoreRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpgradeDeleteObjectStoreRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpgradeDeleteObjectStoreRequest) ProtoMessage() {}
+
+func (x *UpgradeDeleteObjectStoreRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpgradeDeleteObjectStoreRequest.ProtoReflect.Descriptor instead.
+func (*UpgradeDeleteObjectStoreRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *UpgradeDeleteObjectStoreRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type UpgradeCreateIndexRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	KeyPath       []string               `protobuf:"bytes,3,rep,name=key_path,json=keyPath,proto3" json:"key_path,omitempty"`
+	Unique        bool                   `protobuf:"varint,4,opt,name=unique,proto3" json:"unique,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpgradeCreateIndexRequest) Reset() {
+	*x = UpgradeCreateIndexRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpgradeCreateIndexRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpgradeCreateIndexRequest) ProtoMessage() {}
+
+func (x *UpgradeCreateIndexRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpgradeCreateIndexRequest.ProtoReflect.Descriptor instead.
+func (*UpgradeCreateIndexRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *UpgradeCreateIndexRequest) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
+}
+
+func (x *UpgradeCreateIndexRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UpgradeCreateIndexRequest) GetKeyPath() []string {
+	if x != nil {
+		return x.KeyPath
+	}
+	return nil
+}
+
+func (x *UpgradeCreateIndexRequest) GetUnique() bool {
+	if x != nil {
+		return x.Unique
+	}
+	return false
+}
+
+type UpgradeDeleteIndexRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpgradeDeleteIndexRequest) Reset() {
+	*x = UpgradeDeleteIndexRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpgradeDeleteIndexRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpgradeDeleteIndexRequest) ProtoMessage() {}
+
+func (x *UpgradeDeleteIndexRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpgradeDeleteIndexRequest.ProtoReflect.Descriptor instead.
+func (*UpgradeDeleteIndexRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *UpgradeDeleteIndexRequest) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
+}
+
+func (x *UpgradeDeleteIndexRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type UpgradeObjectStoreNamesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpgradeObjectStoreNamesRequest) Reset() {
+	*x = UpgradeObjectStoreNamesRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpgradeObjectStoreNamesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpgradeObjectStoreNamesRequest) ProtoMessage() {}
+
+func (x *UpgradeObjectStoreNamesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpgradeObjectStoreNamesRequest.ProtoReflect.Descriptor instead.
+func (*UpgradeObjectStoreNamesRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{45}
+}
+
+type FinishUpgradeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FinishUpgradeRequest) Reset() {
+	*x = FinishUpgradeRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FinishUpgradeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FinishUpgradeRequest) ProtoMessage() {}
+
+func (x *FinishUpgradeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FinishUpgradeRequest.ProtoReflect.Descriptor instead.
+func (*FinishUpgradeRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{46}
+}
+
+type AbortUpgradeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reason        string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AbortUpgradeRequest) Reset() {
+	*x = AbortUpgradeRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AbortUpgradeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AbortUpgradeRequest) ProtoMessage() {}
+
+func (x *AbortUpgradeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AbortUpgradeRequest.ProtoReflect.Descriptor instead.
+func (*AbortUpgradeRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *AbortUpgradeRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// UpgradeOperation is one ordered schema operation in an open upgrade phase.
+// Clients send one operation and wait for its matching response before sending
+// the next operation.
+type UpgradeOperation struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	RequestId uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// Types that are valid to be assigned to Op:
+	//
+	//	*UpgradeOperation_CreateObjectStore
+	//	*UpgradeOperation_DeleteObjectStore
+	//	*UpgradeOperation_CreateIndex
+	//	*UpgradeOperation_DeleteIndex
+	//	*UpgradeOperation_ObjectStoreNames
+	//	*UpgradeOperation_FinishUpgrade
+	//	*UpgradeOperation_AbortUpgrade
+	Op            isUpgradeOperation_Op `protobuf_oneof:"op"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpgradeOperation) Reset() {
+	*x = UpgradeOperation{}
+	mi := &file_v1_datastore_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpgradeOperation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpgradeOperation) ProtoMessage() {}
+
+func (x *UpgradeOperation) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpgradeOperation.ProtoReflect.Descriptor instead.
+func (*UpgradeOperation) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *UpgradeOperation) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+func (x *UpgradeOperation) GetOp() isUpgradeOperation_Op {
+	if x != nil {
+		return x.Op
+	}
+	return nil
+}
+
+func (x *UpgradeOperation) GetCreateObjectStore() *UpgradeCreateObjectStoreRequest {
+	if x != nil {
+		if x, ok := x.Op.(*UpgradeOperation_CreateObjectStore); ok {
+			return x.CreateObjectStore
+		}
+	}
+	return nil
+}
+
+func (x *UpgradeOperation) GetDeleteObjectStore() *UpgradeDeleteObjectStoreRequest {
+	if x != nil {
+		if x, ok := x.Op.(*UpgradeOperation_DeleteObjectStore); ok {
+			return x.DeleteObjectStore
+		}
+	}
+	return nil
+}
+
+func (x *UpgradeOperation) GetCreateIndex() *UpgradeCreateIndexRequest {
+	if x != nil {
+		if x, ok := x.Op.(*UpgradeOperation_CreateIndex); ok {
+			return x.CreateIndex
+		}
+	}
+	return nil
+}
+
+func (x *UpgradeOperation) GetDeleteIndex() *UpgradeDeleteIndexRequest {
+	if x != nil {
+		if x, ok := x.Op.(*UpgradeOperation_DeleteIndex); ok {
+			return x.DeleteIndex
+		}
+	}
+	return nil
+}
+
+func (x *UpgradeOperation) GetObjectStoreNames() *UpgradeObjectStoreNamesRequest {
+	if x != nil {
+		if x, ok := x.Op.(*UpgradeOperation_ObjectStoreNames); ok {
+			return x.ObjectStoreNames
+		}
+	}
+	return nil
+}
+
+func (x *UpgradeOperation) GetFinishUpgrade() *FinishUpgradeRequest {
+	if x != nil {
+		if x, ok := x.Op.(*UpgradeOperation_FinishUpgrade); ok {
+			return x.FinishUpgrade
+		}
+	}
+	return nil
+}
+
+func (x *UpgradeOperation) GetAbortUpgrade() *AbortUpgradeRequest {
+	if x != nil {
+		if x, ok := x.Op.(*UpgradeOperation_AbortUpgrade); ok {
+			return x.AbortUpgrade
+		}
+	}
+	return nil
+}
+
+type isUpgradeOperation_Op interface {
+	isUpgradeOperation_Op()
+}
+
+type UpgradeOperation_CreateObjectStore struct {
+	CreateObjectStore *UpgradeCreateObjectStoreRequest `protobuf:"bytes,10,opt,name=create_object_store,json=createObjectStore,proto3,oneof"`
+}
+
+type UpgradeOperation_DeleteObjectStore struct {
+	DeleteObjectStore *UpgradeDeleteObjectStoreRequest `protobuf:"bytes,11,opt,name=delete_object_store,json=deleteObjectStore,proto3,oneof"`
+}
+
+type UpgradeOperation_CreateIndex struct {
+	CreateIndex *UpgradeCreateIndexRequest `protobuf:"bytes,12,opt,name=create_index,json=createIndex,proto3,oneof"`
+}
+
+type UpgradeOperation_DeleteIndex struct {
+	DeleteIndex *UpgradeDeleteIndexRequest `protobuf:"bytes,13,opt,name=delete_index,json=deleteIndex,proto3,oneof"`
+}
+
+type UpgradeOperation_ObjectStoreNames struct {
+	ObjectStoreNames *UpgradeObjectStoreNamesRequest `protobuf:"bytes,14,opt,name=object_store_names,json=objectStoreNames,proto3,oneof"`
+}
+
+type UpgradeOperation_FinishUpgrade struct {
+	FinishUpgrade *FinishUpgradeRequest `protobuf:"bytes,15,opt,name=finish_upgrade,json=finishUpgrade,proto3,oneof"`
+}
+
+type UpgradeOperation_AbortUpgrade struct {
+	AbortUpgrade *AbortUpgradeRequest `protobuf:"bytes,16,opt,name=abort_upgrade,json=abortUpgrade,proto3,oneof"`
+}
+
+func (*UpgradeOperation_CreateObjectStore) isUpgradeOperation_Op() {}
+
+func (*UpgradeOperation_DeleteObjectStore) isUpgradeOperation_Op() {}
+
+func (*UpgradeOperation_CreateIndex) isUpgradeOperation_Op() {}
+
+func (*UpgradeOperation_DeleteIndex) isUpgradeOperation_Op() {}
+
+func (*UpgradeOperation_ObjectStoreNames) isUpgradeOperation_Op() {}
+
+func (*UpgradeOperation_FinishUpgrade) isUpgradeOperation_Op() {}
+
+func (*UpgradeOperation_AbortUpgrade) isUpgradeOperation_Op() {}
+
+// UpgradeOperationResponse is terminal for the open flow when error is non-OK.
+type UpgradeOperationResponse struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	RequestId        uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	Error            *status.Status         `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	ObjectStoreNames []string               `protobuf:"bytes,3,rep,name=object_store_names,json=objectStoreNames,proto3" json:"object_store_names,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *UpgradeOperationResponse) Reset() {
+	*x = UpgradeOperationResponse{}
+	mi := &file_v1_datastore_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpgradeOperationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpgradeOperationResponse) ProtoMessage() {}
+
+func (x *UpgradeOperationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpgradeOperationResponse.ProtoReflect.Descriptor instead.
+func (*UpgradeOperationResponse) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *UpgradeOperationResponse) GetRequestId() uint64 {
+	if x != nil {
+		return x.RequestId
+	}
+	return 0
+}
+
+func (x *UpgradeOperationResponse) GetError() *status.Status {
+	if x != nil {
+		return x.Error
+	}
+	return nil
+}
+
+func (x *UpgradeOperationResponse) GetObjectStoreNames() []string {
+	if x != nil {
+		return x.ObjectStoreNames
+	}
+	return nil
+}
+
+// OpenDatabaseClientMessage is one frame in the open/connection lifetime
+// stream. The first frame must be OpenDatabaseRequest.
+type OpenDatabaseClientMessage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*OpenDatabaseClientMessage_Open
+	//	*OpenDatabaseClientMessage_UpgradeOperation
+	//	*OpenDatabaseClientMessage_Close
+	Msg           isOpenDatabaseClientMessage_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenDatabaseClientMessage) Reset() {
+	*x = OpenDatabaseClientMessage{}
+	mi := &file_v1_datastore_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenDatabaseClientMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenDatabaseClientMessage) ProtoMessage() {}
+
+func (x *OpenDatabaseClientMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenDatabaseClientMessage.ProtoReflect.Descriptor instead.
+func (*OpenDatabaseClientMessage) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *OpenDatabaseClientMessage) GetMsg() isOpenDatabaseClientMessage_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *OpenDatabaseClientMessage) GetOpen() *OpenDatabaseRequest {
+	if x != nil {
+		if x, ok := x.Msg.(*OpenDatabaseClientMessage_Open); ok {
+			return x.Open
+		}
+	}
+	return nil
+}
+
+func (x *OpenDatabaseClientMessage) GetUpgradeOperation() *UpgradeOperation {
+	if x != nil {
+		if x, ok := x.Msg.(*OpenDatabaseClientMessage_UpgradeOperation); ok {
+			return x.UpgradeOperation
+		}
+	}
+	return nil
+}
+
+func (x *OpenDatabaseClientMessage) GetClose() *CloseDatabaseRequest {
+	if x != nil {
+		if x, ok := x.Msg.(*OpenDatabaseClientMessage_Close); ok {
+			return x.Close
+		}
+	}
+	return nil
+}
+
+type isOpenDatabaseClientMessage_Msg interface {
+	isOpenDatabaseClientMessage_Msg()
+}
+
+type OpenDatabaseClientMessage_Open struct {
+	Open *OpenDatabaseRequest `protobuf:"bytes,1,opt,name=open,proto3,oneof"`
+}
+
+type OpenDatabaseClientMessage_UpgradeOperation struct {
+	UpgradeOperation *UpgradeOperation `protobuf:"bytes,2,opt,name=upgrade_operation,json=upgradeOperation,proto3,oneof"`
+}
+
+type OpenDatabaseClientMessage_Close struct {
+	Close *CloseDatabaseRequest `protobuf:"bytes,3,opt,name=close,proto3,oneof"`
+}
+
+func (*OpenDatabaseClientMessage_Open) isOpenDatabaseClientMessage_Msg() {}
+
+func (*OpenDatabaseClientMessage_UpgradeOperation) isOpenDatabaseClientMessage_Msg() {}
+
+func (*OpenDatabaseClientMessage_Close) isOpenDatabaseClientMessage_Msg() {}
+
+// OpenDatabaseServerMessage carries open progress, connection events, and
+// terminal application errors.
+type OpenDatabaseServerMessage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*OpenDatabaseServerMessage_UpgradeStarted
+	//	*OpenDatabaseServerMessage_UpgradeOperationResponse
+	//	*OpenDatabaseServerMessage_Opened
+	//	*OpenDatabaseServerMessage_Versionchange
+	//	*OpenDatabaseServerMessage_Blocked
+	//	*OpenDatabaseServerMessage_Closed
+	//	*OpenDatabaseServerMessage_Error
+	Msg           isOpenDatabaseServerMessage_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenDatabaseServerMessage) Reset() {
+	*x = OpenDatabaseServerMessage{}
+	mi := &file_v1_datastore_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenDatabaseServerMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenDatabaseServerMessage) ProtoMessage() {}
+
+func (x *OpenDatabaseServerMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenDatabaseServerMessage.ProtoReflect.Descriptor instead.
+func (*OpenDatabaseServerMessage) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *OpenDatabaseServerMessage) GetMsg() isOpenDatabaseServerMessage_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *OpenDatabaseServerMessage) GetUpgradeStarted() *UpgradeStarted {
+	if x != nil {
+		if x, ok := x.Msg.(*OpenDatabaseServerMessage_UpgradeStarted); ok {
+			return x.UpgradeStarted
+		}
+	}
+	return nil
+}
+
+func (x *OpenDatabaseServerMessage) GetUpgradeOperationResponse() *UpgradeOperationResponse {
+	if x != nil {
+		if x, ok := x.Msg.(*OpenDatabaseServerMessage_UpgradeOperationResponse); ok {
+			return x.UpgradeOperationResponse
+		}
+	}
+	return nil
+}
+
+func (x *OpenDatabaseServerMessage) GetOpened() *OpenDatabaseSuccess {
+	if x != nil {
+		if x, ok := x.Msg.(*OpenDatabaseServerMessage_Opened); ok {
+			return x.Opened
+		}
+	}
+	return nil
+}
+
+func (x *OpenDatabaseServerMessage) GetVersionchange() *VersionChangeInfo {
+	if x != nil {
+		if x, ok := x.Msg.(*OpenDatabaseServerMessage_Versionchange); ok {
+			return x.Versionchange
+		}
+	}
+	return nil
+}
+
+func (x *OpenDatabaseServerMessage) GetBlocked() *BlockedInfo {
+	if x != nil {
+		if x, ok := x.Msg.(*OpenDatabaseServerMessage_Blocked); ok {
+			return x.Blocked
+		}
+	}
+	return nil
+}
+
+func (x *OpenDatabaseServerMessage) GetClosed() *CloseDatabaseResponse {
+	if x != nil {
+		if x, ok := x.Msg.(*OpenDatabaseServerMessage_Closed); ok {
+			return x.Closed
+		}
+	}
+	return nil
+}
+
+func (x *OpenDatabaseServerMessage) GetError() *status.Status {
+	if x != nil {
+		if x, ok := x.Msg.(*OpenDatabaseServerMessage_Error); ok {
+			return x.Error
+		}
+	}
+	return nil
+}
+
+type isOpenDatabaseServerMessage_Msg interface {
+	isOpenDatabaseServerMessage_Msg()
+}
+
+type OpenDatabaseServerMessage_UpgradeStarted struct {
+	UpgradeStarted *UpgradeStarted `protobuf:"bytes,1,opt,name=upgrade_started,json=upgradeStarted,proto3,oneof"`
+}
+
+type OpenDatabaseServerMessage_UpgradeOperationResponse struct {
+	UpgradeOperationResponse *UpgradeOperationResponse `protobuf:"bytes,2,opt,name=upgrade_operation_response,json=upgradeOperationResponse,proto3,oneof"`
+}
+
+type OpenDatabaseServerMessage_Opened struct {
+	Opened *OpenDatabaseSuccess `protobuf:"bytes,3,opt,name=opened,proto3,oneof"`
+}
+
+type OpenDatabaseServerMessage_Versionchange struct {
+	Versionchange *VersionChangeInfo `protobuf:"bytes,4,opt,name=versionchange,proto3,oneof"`
+}
+
+type OpenDatabaseServerMessage_Blocked struct {
+	Blocked *BlockedInfo `protobuf:"bytes,5,opt,name=blocked,proto3,oneof"`
+}
+
+type OpenDatabaseServerMessage_Closed struct {
+	Closed *CloseDatabaseResponse `protobuf:"bytes,6,opt,name=closed,proto3,oneof"`
+}
+
+type OpenDatabaseServerMessage_Error struct {
+	Error *status.Status `protobuf:"bytes,7,opt,name=error,proto3,oneof"`
+}
+
+func (*OpenDatabaseServerMessage_UpgradeStarted) isOpenDatabaseServerMessage_Msg() {}
+
+func (*OpenDatabaseServerMessage_UpgradeOperationResponse) isOpenDatabaseServerMessage_Msg() {}
+
+func (*OpenDatabaseServerMessage_Opened) isOpenDatabaseServerMessage_Msg() {}
+
+func (*OpenDatabaseServerMessage_Versionchange) isOpenDatabaseServerMessage_Msg() {}
+
+func (*OpenDatabaseServerMessage_Blocked) isOpenDatabaseServerMessage_Msg() {}
+
+func (*OpenDatabaseServerMessage_Closed) isOpenDatabaseServerMessage_Msg() {}
+
+func (*OpenDatabaseServerMessage_Error) isOpenDatabaseServerMessage_Msg() {}
+
+// DeleteDatabaseServerMessage streams blocked progress and the final delete
+// result. A terminal error frame is followed by an OK transport close.
+type DeleteDatabaseServerMessage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*DeleteDatabaseServerMessage_Blocked
+	//	*DeleteDatabaseServerMessage_Deleted
+	//	*DeleteDatabaseServerMessage_Error
+	Msg           isDeleteDatabaseServerMessage_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteDatabaseServerMessage) Reset() {
+	*x = DeleteDatabaseServerMessage{}
+	mi := &file_v1_datastore_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteDatabaseServerMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteDatabaseServerMessage) ProtoMessage() {}
+
+func (x *DeleteDatabaseServerMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteDatabaseServerMessage.ProtoReflect.Descriptor instead.
+func (*DeleteDatabaseServerMessage) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *DeleteDatabaseServerMessage) GetMsg() isDeleteDatabaseServerMessage_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *DeleteDatabaseServerMessage) GetBlocked() *BlockedInfo {
+	if x != nil {
+		if x, ok := x.Msg.(*DeleteDatabaseServerMessage_Blocked); ok {
+			return x.Blocked
+		}
+	}
+	return nil
+}
+
+func (x *DeleteDatabaseServerMessage) GetDeleted() *DeleteDatabaseResponse {
+	if x != nil {
+		if x, ok := x.Msg.(*DeleteDatabaseServerMessage_Deleted); ok {
+			return x.Deleted
+		}
+	}
+	return nil
+}
+
+func (x *DeleteDatabaseServerMessage) GetError() *status.Status {
+	if x != nil {
+		if x, ok := x.Msg.(*DeleteDatabaseServerMessage_Error); ok {
+			return x.Error
+		}
+	}
+	return nil
+}
+
+type isDeleteDatabaseServerMessage_Msg interface {
+	isDeleteDatabaseServerMessage_Msg()
+}
+
+type DeleteDatabaseServerMessage_Blocked struct {
+	Blocked *BlockedInfo `protobuf:"bytes,1,opt,name=blocked,proto3,oneof"`
+}
+
+type DeleteDatabaseServerMessage_Deleted struct {
+	Deleted *DeleteDatabaseResponse `protobuf:"bytes,2,opt,name=deleted,proto3,oneof"`
+}
+
+type DeleteDatabaseServerMessage_Error struct {
+	Error *status.Status `protobuf:"bytes,3,opt,name=error,proto3,oneof"`
+}
+
+func (*DeleteDatabaseServerMessage_Blocked) isDeleteDatabaseServerMessage_Msg() {}
+
+func (*DeleteDatabaseServerMessage_Deleted) isDeleteDatabaseServerMessage_Msg() {}
+
+func (*DeleteDatabaseServerMessage_Error) isDeleteDatabaseServerMessage_Msg() {}
+
 // BeginTransactionRequest starts an IndexedDB transaction stream.
 type BeginTransactionRequest struct {
 	state          protoimpl.MessageState    `protogen:"open.v1"`
 	Stores         []string                  `protobuf:"bytes,1,rep,name=stores,proto3" json:"stores,omitempty"`
 	Mode           TransactionMode           `protobuf:"varint,2,opt,name=mode,proto3,enum=gestalt.provider.v1.TransactionMode" json:"mode,omitempty"`
 	DurabilityHint TransactionDurabilityHint `protobuf:"varint,3,opt,name=durability_hint,json=durabilityHint,proto3,enum=gestalt.provider.v1.TransactionDurabilityHint" json:"durability_hint,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// connection_id scopes this transaction to a database connection returned by
+	// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+	ConnectionId  []byte `protobuf:"bytes,100,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BeginTransactionRequest) Reset() {
 	*x = BeginTransactionRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[27]
+	mi := &file_v1_datastore_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1965,7 +3768,7 @@ func (x *BeginTransactionRequest) String() string {
 func (*BeginTransactionRequest) ProtoMessage() {}
 
 func (x *BeginTransactionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[27]
+	mi := &file_v1_datastore_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1978,7 +3781,7 @@ func (x *BeginTransactionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginTransactionRequest.ProtoReflect.Descriptor instead.
 func (*BeginTransactionRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{27}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *BeginTransactionRequest) GetStores() []string {
@@ -2002,6 +3805,13 @@ func (x *BeginTransactionRequest) GetDurabilityHint() TransactionDurabilityHint 
 	return TransactionDurabilityHint_TRANSACTION_DURABILITY_DEFAULT
 }
 
+func (x *BeginTransactionRequest) GetConnectionId() []byte {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return nil
+}
+
 type TransactionBeginResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -2010,7 +3820,7 @@ type TransactionBeginResponse struct {
 
 func (x *TransactionBeginResponse) Reset() {
 	*x = TransactionBeginResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[28]
+	mi := &file_v1_datastore_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2022,7 +3832,7 @@ func (x *TransactionBeginResponse) String() string {
 func (*TransactionBeginResponse) ProtoMessage() {}
 
 func (x *TransactionBeginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[28]
+	mi := &file_v1_datastore_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2035,7 +3845,7 @@ func (x *TransactionBeginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionBeginResponse.ProtoReflect.Descriptor instead.
 func (*TransactionBeginResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{28}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{54}
 }
 
 type TransactionCommitRequest struct {
@@ -2046,7 +3856,7 @@ type TransactionCommitRequest struct {
 
 func (x *TransactionCommitRequest) Reset() {
 	*x = TransactionCommitRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[29]
+	mi := &file_v1_datastore_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2058,7 +3868,7 @@ func (x *TransactionCommitRequest) String() string {
 func (*TransactionCommitRequest) ProtoMessage() {}
 
 func (x *TransactionCommitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[29]
+	mi := &file_v1_datastore_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2071,7 +3881,7 @@ func (x *TransactionCommitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionCommitRequest.ProtoReflect.Descriptor instead.
 func (*TransactionCommitRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{29}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{55}
 }
 
 // TransactionCommitResponse carries a non-OK status when commit failed after
@@ -2085,7 +3895,7 @@ type TransactionCommitResponse struct {
 
 func (x *TransactionCommitResponse) Reset() {
 	*x = TransactionCommitResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[30]
+	mi := &file_v1_datastore_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2097,7 +3907,7 @@ func (x *TransactionCommitResponse) String() string {
 func (*TransactionCommitResponse) ProtoMessage() {}
 
 func (x *TransactionCommitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[30]
+	mi := &file_v1_datastore_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2110,7 +3920,7 @@ func (x *TransactionCommitResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionCommitResponse.ProtoReflect.Descriptor instead.
 func (*TransactionCommitResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{30}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *TransactionCommitResponse) GetError() *status.Status {
@@ -2129,7 +3939,7 @@ type TransactionAbortRequest struct {
 
 func (x *TransactionAbortRequest) Reset() {
 	*x = TransactionAbortRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[31]
+	mi := &file_v1_datastore_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2141,7 +3951,7 @@ func (x *TransactionAbortRequest) String() string {
 func (*TransactionAbortRequest) ProtoMessage() {}
 
 func (x *TransactionAbortRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[31]
+	mi := &file_v1_datastore_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2154,7 +3964,7 @@ func (x *TransactionAbortRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionAbortRequest.ProtoReflect.Descriptor instead.
 func (*TransactionAbortRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{31}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *TransactionAbortRequest) GetReason() string {
@@ -2174,7 +3984,7 @@ type TransactionAbortResponse struct {
 
 func (x *TransactionAbortResponse) Reset() {
 	*x = TransactionAbortResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[32]
+	mi := &file_v1_datastore_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2186,7 +3996,7 @@ func (x *TransactionAbortResponse) String() string {
 func (*TransactionAbortResponse) ProtoMessage() {}
 
 func (x *TransactionAbortResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[32]
+	mi := &file_v1_datastore_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2199,7 +4009,7 @@ func (x *TransactionAbortResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionAbortResponse.ProtoReflect.Descriptor instead.
 func (*TransactionAbortResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{32}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *TransactionAbortResponse) GetError() *status.Status {
@@ -2240,7 +4050,7 @@ type TransactionOperation struct {
 
 func (x *TransactionOperation) Reset() {
 	*x = TransactionOperation{}
-	mi := &file_v1_datastore_proto_msgTypes[33]
+	mi := &file_v1_datastore_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2252,7 +4062,7 @@ func (x *TransactionOperation) String() string {
 func (*TransactionOperation) ProtoMessage() {}
 
 func (x *TransactionOperation) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[33]
+	mi := &file_v1_datastore_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2265,7 +4075,7 @@ func (x *TransactionOperation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionOperation.ProtoReflect.Descriptor instead.
 func (*TransactionOperation) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{33}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *TransactionOperation) GetRequestId() uint64 {
@@ -2548,7 +4358,7 @@ type TransactionOperationResponse struct {
 
 func (x *TransactionOperationResponse) Reset() {
 	*x = TransactionOperationResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[34]
+	mi := &file_v1_datastore_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2560,7 +4370,7 @@ func (x *TransactionOperationResponse) String() string {
 func (*TransactionOperationResponse) ProtoMessage() {}
 
 func (x *TransactionOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[34]
+	mi := &file_v1_datastore_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2573,7 +4383,7 @@ func (x *TransactionOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionOperationResponse.ProtoReflect.Descriptor instead.
 func (*TransactionOperationResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{34}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *TransactionOperationResponse) GetRequestId() uint64 {
@@ -2723,7 +4533,7 @@ type TransactionClientMessage struct {
 
 func (x *TransactionClientMessage) Reset() {
 	*x = TransactionClientMessage{}
-	mi := &file_v1_datastore_proto_msgTypes[35]
+	mi := &file_v1_datastore_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2735,7 +4545,7 @@ func (x *TransactionClientMessage) String() string {
 func (*TransactionClientMessage) ProtoMessage() {}
 
 func (x *TransactionClientMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[35]
+	mi := &file_v1_datastore_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2748,7 +4558,7 @@ func (x *TransactionClientMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionClientMessage.ProtoReflect.Descriptor instead.
 func (*TransactionClientMessage) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{35}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *TransactionClientMessage) GetMsg() isTransactionClientMessage_Msg {
@@ -2837,7 +4647,7 @@ type TransactionServerMessage struct {
 
 func (x *TransactionServerMessage) Reset() {
 	*x = TransactionServerMessage{}
-	mi := &file_v1_datastore_proto_msgTypes[36]
+	mi := &file_v1_datastore_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2849,7 +4659,7 @@ func (x *TransactionServerMessage) String() string {
 func (*TransactionServerMessage) ProtoMessage() {}
 
 func (x *TransactionServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[36]
+	mi := &file_v1_datastore_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2862,7 +4672,7 @@ func (x *TransactionServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionServerMessage.ProtoReflect.Descriptor instead.
 func (*TransactionServerMessage) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{36}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *TransactionServerMessage) GetMsg() isTransactionServerMessage_Msg {
@@ -2983,45 +4793,51 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\n" +
 	"lower_open\x18\x03 \x01(\bR\tlowerOpen\x12\x1d\n" +
 	"\n" +
-	"upper_open\x18\x04 \x01(\bR\tupperOpen\"Z\n" +
+	"upper_open\x18\x04 \x01(\bR\tupperOpen\"\x7f\n" +
 	"\rRecordRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x123\n" +
-	"\x06record\x18\x02 \x01(\v2\x1b.gestalt.provider.v1.RecordR\x06record\"E\n" +
+	"\x06record\x18\x02 \x01(\v2\x1b.gestalt.provider.v1.RecordR\x06record\x12#\n" +
+	"\rconnection_id\x18d \x01(\fR\fconnectionId\"E\n" +
 	"\x0eRecordResponse\x123\n" +
 	"\x06record\x18\x01 \x01(\v2\x1b.gestalt.provider.v1.RecordR\x06record\"H\n" +
 	"\x0fRecordsResponse\x125\n" +
 	"\arecords\x18\x01 \x03(\v2\x1b.gestalt.provider.v1.RecordR\arecords\"\"\n" +
 	"\fKeysResponse\x12\x12\n" +
-	"\x04keys\x18\x01 \x03(\tR\x04keys\":\n" +
+	"\x04keys\x18\x01 \x03(\tR\x04keys\"_\n" +
 	"\x12ObjectStoreRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\".\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12#\n" +
+	"\rconnection_id\x18d \x01(\fR\fconnectionId\"S\n" +
 	"\x16ObjectStoreNameRequest\x12\x14\n" +
-	"\x05store\x18\x01 \x01(\tR\x05store\"s\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\x12#\n" +
+	"\rconnection_id\x18d \x01(\fR\fconnectionId\"\x98\x01\n" +
 	"\x17ObjectStoreRangeRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x128\n" +
-	"\x05range\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01B\b\n" +
+	"\x05range\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x12#\n" +
+	"\rconnection_id\x18d \x01(\fR\fconnectionIdB\b\n" +
 	"\x06_range\"n\n" +
 	"\x18CreateObjectStoreRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12>\n" +
 	"\x06schema\x18\x02 \x01(\v2&.gestalt.provider.v1.ObjectStoreSchemaR\x06schema\".\n" +
 	"\x18DeleteObjectStoreRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\xbc\x01\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\xe1\x01\n" +
 	"\x11IndexQueryRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\tR\x05index\x127\n" +
 	"\x06values\x18\x03 \x03(\v2\x1f.gestalt.provider.v1.TypedValueR\x06values\x128\n" +
-	"\x05range\x18\x04 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01B\b\n" +
+	"\x05range\x18\x04 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x12#\n" +
+	"\rconnection_id\x18d \x01(\fR\fconnectionIdB\b\n" +
 	"\x06_range\"%\n" +
 	"\rCountResponse\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x03R\x05count\"\x9d\x02\n" +
+	"\x05count\x18\x01 \x01(\x03R\x05count\"\xc2\x02\n" +
 	"\x11OpenCursorRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x128\n" +
 	"\x05range\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x12B\n" +
 	"\tdirection\x18\x03 \x01(\x0e2$.gestalt.provider.v1.CursorDirectionR\tdirection\x12\x1b\n" +
 	"\tkeys_only\x18\x04 \x01(\bR\bkeysOnly\x12\x14\n" +
 	"\x05index\x18\x05 \x01(\tR\x05index\x127\n" +
-	"\x06values\x18\x06 \x03(\v2\x1f.gestalt.provider.v1.TypedValueR\x06valuesB\b\n" +
+	"\x06values\x18\x06 \x03(\v2\x1f.gestalt.provider.v1.TypedValueR\x06values\x12#\n" +
+	"\rconnection_id\x18d \x01(\fR\fconnectionIdB\b\n" +
 	"\x06_range\"\x89\x01\n" +
 	"\bKeyValue\x129\n" +
 	"\x06scalar\x18\x01 \x01(\v2\x1f.gestalt.provider.v1.TypedValueH\x00R\x06scalar\x12:\n" +
@@ -3055,11 +4871,120 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\x0eDeleteResponse\x12\x18\n" +
 	"\adeleted\x18\x01 \x01(\x03R\adeleted\"\x1f\n" +
 	"\vKeyResponse\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"\xc4\x01\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"\xc0\x01\n" +
+	"\x11VersionChangeInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
+	"\vold_version\x18\x02 \x01(\x04R\n" +
+	"oldVersion\x12$\n" +
+	"\vnew_version\x18\x03 \x01(\x04H\x00R\n" +
+	"newVersion\x88\x01\x01\x12@\n" +
+	"\x06reason\x18\x04 \x01(\x0e2(.gestalt.provider.v1.VersionChangeReasonR\x06reasonB\x0e\n" +
+	"\f_new_version\"\x92\x02\n" +
+	"\vBlockedInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
+	"\vold_version\x18\x02 \x01(\x04R\n" +
+	"oldVersion\x12$\n" +
+	"\vnew_version\x18\x03 \x01(\x04H\x00R\n" +
+	"newVersion\x88\x01\x01\x12@\n" +
+	"\x06reason\x18\x04 \x01(\x0e2(.gestalt.provider.v1.VersionChangeReasonR\x06reason\x12)\n" +
+	"\x10open_connections\x18\x05 \x01(\x05R\x0fopenConnections\x12+\n" +
+	"\x11active_operations\x18\x06 \x01(\x05R\x10activeOperationsB\x0e\n" +
+	"\f_new_version\"\x7f\n" +
+	"\x13OpenDatabaseRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
+	"\aversion\x18\x02 \x01(\x04H\x00R\aversion\x88\x01\x01\x12)\n" +
+	"\x10require_existing\x18\x03 \x01(\bR\x0frequireExistingB\n" +
+	"\n" +
+	"\b_version\"\x94\x01\n" +
+	"\x0eUpgradeStarted\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
+	"\vold_version\x18\x02 \x01(\x04R\n" +
+	"oldVersion\x12\x1f\n" +
+	"\vnew_version\x18\x03 \x01(\x04R\n" +
+	"newVersion\x12,\n" +
+	"\x12object_store_names\x18\x04 \x03(\tR\x10objectStoreNames\"\x96\x01\n" +
+	"\x13OpenDatabaseSuccess\x12#\n" +
+	"\rconnection_id\x18\x01 \x01(\fR\fconnectionId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\x04R\aversion\x12,\n" +
+	"\x12object_store_names\x18\x04 \x03(\tR\x10objectStoreNames\"\x16\n" +
+	"\x14CloseDatabaseRequest\"\x17\n" +
+	"\x15CloseDatabaseResponse\"+\n" +
+	"\x15DeleteDatabaseRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"M\n" +
+	"\x16DeleteDatabaseResponse\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
+	"\vold_version\x18\x02 \x01(\x04R\n" +
+	"oldVersion\"\x12\n" +
+	"\x10DatabasesRequest\"<\n" +
+	"\fDatabaseInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x04R\aversion\"T\n" +
+	"\x11DatabasesResponse\x12?\n" +
+	"\tdatabases\x18\x01 \x03(\v2!.gestalt.provider.v1.DatabaseInfoR\tdatabases\"\x80\x01\n" +
+	"\x12CompareKeysRequest\x123\n" +
+	"\x05first\x18\x01 \x01(\v2\x1d.gestalt.provider.v1.KeyValueR\x05first\x125\n" +
+	"\x06second\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.KeyValueR\x06second\"'\n" +
+	"\x13CompareKeysResponse\x12\x10\n" +
+	"\x03cmp\x18\x01 \x01(\x05R\x03cmp\"u\n" +
+	"\x1fUpgradeCreateObjectStoreRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12>\n" +
+	"\x06schema\x18\x02 \x01(\v2&.gestalt.provider.v1.ObjectStoreSchemaR\x06schema\"5\n" +
+	"\x1fUpgradeDeleteObjectStoreRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"x\n" +
+	"\x19UpgradeCreateIndexRequest\x12\x14\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x19\n" +
+	"\bkey_path\x18\x03 \x03(\tR\akeyPath\x12\x16\n" +
+	"\x06unique\x18\x04 \x01(\bR\x06unique\"E\n" +
+	"\x19UpgradeDeleteIndexRequest\x12\x14\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\" \n" +
+	"\x1eUpgradeObjectStoreNamesRequest\"\x16\n" +
+	"\x14FinishUpgradeRequest\"-\n" +
+	"\x13AbortUpgradeRequest\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xbb\x05\n" +
+	"\x10UpgradeOperation\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\x12f\n" +
+	"\x13create_object_store\x18\n" +
+	" \x01(\v24.gestalt.provider.v1.UpgradeCreateObjectStoreRequestH\x00R\x11createObjectStore\x12f\n" +
+	"\x13delete_object_store\x18\v \x01(\v24.gestalt.provider.v1.UpgradeDeleteObjectStoreRequestH\x00R\x11deleteObjectStore\x12S\n" +
+	"\fcreate_index\x18\f \x01(\v2..gestalt.provider.v1.UpgradeCreateIndexRequestH\x00R\vcreateIndex\x12S\n" +
+	"\fdelete_index\x18\r \x01(\v2..gestalt.provider.v1.UpgradeDeleteIndexRequestH\x00R\vdeleteIndex\x12c\n" +
+	"\x12object_store_names\x18\x0e \x01(\v23.gestalt.provider.v1.UpgradeObjectStoreNamesRequestH\x00R\x10objectStoreNames\x12R\n" +
+	"\x0efinish_upgrade\x18\x0f \x01(\v2).gestalt.provider.v1.FinishUpgradeRequestH\x00R\rfinishUpgrade\x12O\n" +
+	"\rabort_upgrade\x18\x10 \x01(\v2(.gestalt.provider.v1.AbortUpgradeRequestH\x00R\fabortUpgradeB\x04\n" +
+	"\x02op\"\x91\x01\n" +
+	"\x18UpgradeOperationResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\x04R\trequestId\x12(\n" +
+	"\x05error\x18\x02 \x01(\v2\x12.google.rpc.StatusR\x05error\x12,\n" +
+	"\x12object_store_names\x18\x03 \x03(\tR\x10objectStoreNames\"\xfb\x01\n" +
+	"\x19OpenDatabaseClientMessage\x12>\n" +
+	"\x04open\x18\x01 \x01(\v2(.gestalt.provider.v1.OpenDatabaseRequestH\x00R\x04open\x12T\n" +
+	"\x11upgrade_operation\x18\x02 \x01(\v2%.gestalt.provider.v1.UpgradeOperationH\x00R\x10upgradeOperation\x12A\n" +
+	"\x05close\x18\x03 \x01(\v2).gestalt.provider.v1.CloseDatabaseRequestH\x00R\x05closeB\x05\n" +
+	"\x03msg\"\xa5\x04\n" +
+	"\x19OpenDatabaseServerMessage\x12N\n" +
+	"\x0fupgrade_started\x18\x01 \x01(\v2#.gestalt.provider.v1.UpgradeStartedH\x00R\x0eupgradeStarted\x12m\n" +
+	"\x1aupgrade_operation_response\x18\x02 \x01(\v2-.gestalt.provider.v1.UpgradeOperationResponseH\x00R\x18upgradeOperationResponse\x12B\n" +
+	"\x06opened\x18\x03 \x01(\v2(.gestalt.provider.v1.OpenDatabaseSuccessH\x00R\x06opened\x12N\n" +
+	"\rversionchange\x18\x04 \x01(\v2&.gestalt.provider.v1.VersionChangeInfoH\x00R\rversionchange\x12<\n" +
+	"\ablocked\x18\x05 \x01(\v2 .gestalt.provider.v1.BlockedInfoH\x00R\ablocked\x12D\n" +
+	"\x06closed\x18\x06 \x01(\v2*.gestalt.provider.v1.CloseDatabaseResponseH\x00R\x06closed\x12*\n" +
+	"\x05error\x18\a \x01(\v2\x12.google.rpc.StatusH\x00R\x05errorB\x05\n" +
+	"\x03msg\"\xd7\x01\n" +
+	"\x1bDeleteDatabaseServerMessage\x12<\n" +
+	"\ablocked\x18\x01 \x01(\v2 .gestalt.provider.v1.BlockedInfoH\x00R\ablocked\x12G\n" +
+	"\adeleted\x18\x02 \x01(\v2+.gestalt.provider.v1.DeleteDatabaseResponseH\x00R\adeleted\x12*\n" +
+	"\x05error\x18\x03 \x01(\v2\x12.google.rpc.StatusH\x00R\x05errorB\x05\n" +
+	"\x03msg\"\xe9\x01\n" +
 	"\x17BeginTransactionRequest\x12\x16\n" +
 	"\x06stores\x18\x01 \x03(\tR\x06stores\x128\n" +
 	"\x04mode\x18\x02 \x01(\x0e2$.gestalt.provider.v1.TransactionModeR\x04mode\x12W\n" +
-	"\x0fdurability_hint\x18\x03 \x01(\x0e2..gestalt.provider.v1.TransactionDurabilityHintR\x0edurabilityHint\"\x1a\n" +
+	"\x0fdurability_hint\x18\x03 \x01(\x0e2..gestalt.provider.v1.TransactionDurabilityHintR\x0edurabilityHint\x12#\n" +
+	"\rconnection_id\x18d \x01(\fR\fconnectionId\"\x1a\n" +
 	"\x18TransactionBeginResponse\"\x1a\n" +
 	"\x18TransactionCommitRequest\"E\n" +
 	"\x19TransactionCommitResponse\x12(\n" +
@@ -3127,8 +5052,16 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\x19TransactionDurabilityHint\x12\"\n" +
 	"\x1eTRANSACTION_DURABILITY_DEFAULT\x10\x00\x12!\n" +
 	"\x1dTRANSACTION_DURABILITY_STRICT\x10\x01\x12\"\n" +
-	"\x1eTRANSACTION_DURABILITY_RELAXED\x10\x022\xfb\r\n" +
-	"\tIndexedDB\x12Z\n" +
+	"\x1eTRANSACTION_DURABILITY_RELAXED\x10\x02*\x81\x01\n" +
+	"\x13VersionChangeReason\x12%\n" +
+	"!VERSION_CHANGE_REASON_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dVERSION_CHANGE_REASON_UPGRADE\x10\x01\x12 \n" +
+	"\x1cVERSION_CHANGE_REASON_DELETE\x10\x022\x9f\x11\n" +
+	"\tIndexedDB\x12r\n" +
+	"\fOpenDatabase\x12..gestalt.provider.v1.OpenDatabaseClientMessage\x1a..gestalt.provider.v1.OpenDatabaseServerMessage(\x010\x01\x12p\n" +
+	"\x0eDeleteDatabase\x12*.gestalt.provider.v1.DeleteDatabaseRequest\x1a0.gestalt.provider.v1.DeleteDatabaseServerMessage0\x01\x12Z\n" +
+	"\tDatabases\x12%.gestalt.provider.v1.DatabasesRequest\x1a&.gestalt.provider.v1.DatabasesResponse\x12`\n" +
+	"\vCompareKeys\x12'.gestalt.provider.v1.CompareKeysRequest\x1a(.gestalt.provider.v1.CompareKeysResponse\x12Z\n" +
 	"\x11CreateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12Z\n" +
 	"\x11DeleteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12S\n" +
 	"\x03Get\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a#.gestalt.provider.v1.RecordResponse\x12S\n" +
@@ -3166,168 +5099,230 @@ func file_v1_datastore_proto_rawDescGZIP() []byte {
 	return file_v1_datastore_proto_rawDescData
 }
 
-var file_v1_datastore_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_v1_datastore_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_v1_datastore_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_v1_datastore_proto_msgTypes = make([]protoimpl.MessageInfo, 64)
 var file_v1_datastore_proto_goTypes = []any{
-	(CursorDirection)(0),                 // 0: gestalt.provider.v1.CursorDirection
-	(TransactionMode)(0),                 // 1: gestalt.provider.v1.TransactionMode
-	(TransactionDurabilityHint)(0),       // 2: gestalt.provider.v1.TransactionDurabilityHint
-	(*TypedValue)(nil),                   // 3: gestalt.provider.v1.TypedValue
-	(*Record)(nil),                       // 4: gestalt.provider.v1.Record
-	(*ObjectStoreSchema)(nil),            // 5: gestalt.provider.v1.ObjectStoreSchema
-	(*IndexSchema)(nil),                  // 6: gestalt.provider.v1.IndexSchema
-	(*ColumnDef)(nil),                    // 7: gestalt.provider.v1.ColumnDef
-	(*KeyRange)(nil),                     // 8: gestalt.provider.v1.KeyRange
-	(*RecordRequest)(nil),                // 9: gestalt.provider.v1.RecordRequest
-	(*RecordResponse)(nil),               // 10: gestalt.provider.v1.RecordResponse
-	(*RecordsResponse)(nil),              // 11: gestalt.provider.v1.RecordsResponse
-	(*KeysResponse)(nil),                 // 12: gestalt.provider.v1.KeysResponse
-	(*ObjectStoreRequest)(nil),           // 13: gestalt.provider.v1.ObjectStoreRequest
-	(*ObjectStoreNameRequest)(nil),       // 14: gestalt.provider.v1.ObjectStoreNameRequest
-	(*ObjectStoreRangeRequest)(nil),      // 15: gestalt.provider.v1.ObjectStoreRangeRequest
-	(*CreateObjectStoreRequest)(nil),     // 16: gestalt.provider.v1.CreateObjectStoreRequest
-	(*DeleteObjectStoreRequest)(nil),     // 17: gestalt.provider.v1.DeleteObjectStoreRequest
-	(*IndexQueryRequest)(nil),            // 18: gestalt.provider.v1.IndexQueryRequest
-	(*CountResponse)(nil),                // 19: gestalt.provider.v1.CountResponse
-	(*OpenCursorRequest)(nil),            // 20: gestalt.provider.v1.OpenCursorRequest
-	(*KeyValue)(nil),                     // 21: gestalt.provider.v1.KeyValue
-	(*KeyValueArray)(nil),                // 22: gestalt.provider.v1.KeyValueArray
-	(*CursorKeyTarget)(nil),              // 23: gestalt.provider.v1.CursorKeyTarget
-	(*CursorCommand)(nil),                // 24: gestalt.provider.v1.CursorCommand
-	(*CursorClientMessage)(nil),          // 25: gestalt.provider.v1.CursorClientMessage
-	(*CursorEntry)(nil),                  // 26: gestalt.provider.v1.CursorEntry
-	(*CursorResponse)(nil),               // 27: gestalt.provider.v1.CursorResponse
-	(*DeleteResponse)(nil),               // 28: gestalt.provider.v1.DeleteResponse
-	(*KeyResponse)(nil),                  // 29: gestalt.provider.v1.KeyResponse
-	(*BeginTransactionRequest)(nil),      // 30: gestalt.provider.v1.BeginTransactionRequest
-	(*TransactionBeginResponse)(nil),     // 31: gestalt.provider.v1.TransactionBeginResponse
-	(*TransactionCommitRequest)(nil),     // 32: gestalt.provider.v1.TransactionCommitRequest
-	(*TransactionCommitResponse)(nil),    // 33: gestalt.provider.v1.TransactionCommitResponse
-	(*TransactionAbortRequest)(nil),      // 34: gestalt.provider.v1.TransactionAbortRequest
-	(*TransactionAbortResponse)(nil),     // 35: gestalt.provider.v1.TransactionAbortResponse
-	(*TransactionOperation)(nil),         // 36: gestalt.provider.v1.TransactionOperation
-	(*TransactionOperationResponse)(nil), // 37: gestalt.provider.v1.TransactionOperationResponse
-	(*TransactionClientMessage)(nil),     // 38: gestalt.provider.v1.TransactionClientMessage
-	(*TransactionServerMessage)(nil),     // 39: gestalt.provider.v1.TransactionServerMessage
-	nil,                                  // 40: gestalt.provider.v1.Record.FieldsEntry
-	(structpb.NullValue)(0),              // 41: google.protobuf.NullValue
-	(*timestamppb.Timestamp)(nil),        // 42: google.protobuf.Timestamp
-	(*structpb.Value)(nil),               // 43: google.protobuf.Value
-	(*status.Status)(nil),                // 44: google.rpc.Status
-	(*emptypb.Empty)(nil),                // 45: google.protobuf.Empty
+	(CursorDirection)(0),                    // 0: gestalt.provider.v1.CursorDirection
+	(TransactionMode)(0),                    // 1: gestalt.provider.v1.TransactionMode
+	(TransactionDurabilityHint)(0),          // 2: gestalt.provider.v1.TransactionDurabilityHint
+	(VersionChangeReason)(0),                // 3: gestalt.provider.v1.VersionChangeReason
+	(*TypedValue)(nil),                      // 4: gestalt.provider.v1.TypedValue
+	(*Record)(nil),                          // 5: gestalt.provider.v1.Record
+	(*ObjectStoreSchema)(nil),               // 6: gestalt.provider.v1.ObjectStoreSchema
+	(*IndexSchema)(nil),                     // 7: gestalt.provider.v1.IndexSchema
+	(*ColumnDef)(nil),                       // 8: gestalt.provider.v1.ColumnDef
+	(*KeyRange)(nil),                        // 9: gestalt.provider.v1.KeyRange
+	(*RecordRequest)(nil),                   // 10: gestalt.provider.v1.RecordRequest
+	(*RecordResponse)(nil),                  // 11: gestalt.provider.v1.RecordResponse
+	(*RecordsResponse)(nil),                 // 12: gestalt.provider.v1.RecordsResponse
+	(*KeysResponse)(nil),                    // 13: gestalt.provider.v1.KeysResponse
+	(*ObjectStoreRequest)(nil),              // 14: gestalt.provider.v1.ObjectStoreRequest
+	(*ObjectStoreNameRequest)(nil),          // 15: gestalt.provider.v1.ObjectStoreNameRequest
+	(*ObjectStoreRangeRequest)(nil),         // 16: gestalt.provider.v1.ObjectStoreRangeRequest
+	(*CreateObjectStoreRequest)(nil),        // 17: gestalt.provider.v1.CreateObjectStoreRequest
+	(*DeleteObjectStoreRequest)(nil),        // 18: gestalt.provider.v1.DeleteObjectStoreRequest
+	(*IndexQueryRequest)(nil),               // 19: gestalt.provider.v1.IndexQueryRequest
+	(*CountResponse)(nil),                   // 20: gestalt.provider.v1.CountResponse
+	(*OpenCursorRequest)(nil),               // 21: gestalt.provider.v1.OpenCursorRequest
+	(*KeyValue)(nil),                        // 22: gestalt.provider.v1.KeyValue
+	(*KeyValueArray)(nil),                   // 23: gestalt.provider.v1.KeyValueArray
+	(*CursorKeyTarget)(nil),                 // 24: gestalt.provider.v1.CursorKeyTarget
+	(*CursorCommand)(nil),                   // 25: gestalt.provider.v1.CursorCommand
+	(*CursorClientMessage)(nil),             // 26: gestalt.provider.v1.CursorClientMessage
+	(*CursorEntry)(nil),                     // 27: gestalt.provider.v1.CursorEntry
+	(*CursorResponse)(nil),                  // 28: gestalt.provider.v1.CursorResponse
+	(*DeleteResponse)(nil),                  // 29: gestalt.provider.v1.DeleteResponse
+	(*KeyResponse)(nil),                     // 30: gestalt.provider.v1.KeyResponse
+	(*VersionChangeInfo)(nil),               // 31: gestalt.provider.v1.VersionChangeInfo
+	(*BlockedInfo)(nil),                     // 32: gestalt.provider.v1.BlockedInfo
+	(*OpenDatabaseRequest)(nil),             // 33: gestalt.provider.v1.OpenDatabaseRequest
+	(*UpgradeStarted)(nil),                  // 34: gestalt.provider.v1.UpgradeStarted
+	(*OpenDatabaseSuccess)(nil),             // 35: gestalt.provider.v1.OpenDatabaseSuccess
+	(*CloseDatabaseRequest)(nil),            // 36: gestalt.provider.v1.CloseDatabaseRequest
+	(*CloseDatabaseResponse)(nil),           // 37: gestalt.provider.v1.CloseDatabaseResponse
+	(*DeleteDatabaseRequest)(nil),           // 38: gestalt.provider.v1.DeleteDatabaseRequest
+	(*DeleteDatabaseResponse)(nil),          // 39: gestalt.provider.v1.DeleteDatabaseResponse
+	(*DatabasesRequest)(nil),                // 40: gestalt.provider.v1.DatabasesRequest
+	(*DatabaseInfo)(nil),                    // 41: gestalt.provider.v1.DatabaseInfo
+	(*DatabasesResponse)(nil),               // 42: gestalt.provider.v1.DatabasesResponse
+	(*CompareKeysRequest)(nil),              // 43: gestalt.provider.v1.CompareKeysRequest
+	(*CompareKeysResponse)(nil),             // 44: gestalt.provider.v1.CompareKeysResponse
+	(*UpgradeCreateObjectStoreRequest)(nil), // 45: gestalt.provider.v1.UpgradeCreateObjectStoreRequest
+	(*UpgradeDeleteObjectStoreRequest)(nil), // 46: gestalt.provider.v1.UpgradeDeleteObjectStoreRequest
+	(*UpgradeCreateIndexRequest)(nil),       // 47: gestalt.provider.v1.UpgradeCreateIndexRequest
+	(*UpgradeDeleteIndexRequest)(nil),       // 48: gestalt.provider.v1.UpgradeDeleteIndexRequest
+	(*UpgradeObjectStoreNamesRequest)(nil),  // 49: gestalt.provider.v1.UpgradeObjectStoreNamesRequest
+	(*FinishUpgradeRequest)(nil),            // 50: gestalt.provider.v1.FinishUpgradeRequest
+	(*AbortUpgradeRequest)(nil),             // 51: gestalt.provider.v1.AbortUpgradeRequest
+	(*UpgradeOperation)(nil),                // 52: gestalt.provider.v1.UpgradeOperation
+	(*UpgradeOperationResponse)(nil),        // 53: gestalt.provider.v1.UpgradeOperationResponse
+	(*OpenDatabaseClientMessage)(nil),       // 54: gestalt.provider.v1.OpenDatabaseClientMessage
+	(*OpenDatabaseServerMessage)(nil),       // 55: gestalt.provider.v1.OpenDatabaseServerMessage
+	(*DeleteDatabaseServerMessage)(nil),     // 56: gestalt.provider.v1.DeleteDatabaseServerMessage
+	(*BeginTransactionRequest)(nil),         // 57: gestalt.provider.v1.BeginTransactionRequest
+	(*TransactionBeginResponse)(nil),        // 58: gestalt.provider.v1.TransactionBeginResponse
+	(*TransactionCommitRequest)(nil),        // 59: gestalt.provider.v1.TransactionCommitRequest
+	(*TransactionCommitResponse)(nil),       // 60: gestalt.provider.v1.TransactionCommitResponse
+	(*TransactionAbortRequest)(nil),         // 61: gestalt.provider.v1.TransactionAbortRequest
+	(*TransactionAbortResponse)(nil),        // 62: gestalt.provider.v1.TransactionAbortResponse
+	(*TransactionOperation)(nil),            // 63: gestalt.provider.v1.TransactionOperation
+	(*TransactionOperationResponse)(nil),    // 64: gestalt.provider.v1.TransactionOperationResponse
+	(*TransactionClientMessage)(nil),        // 65: gestalt.provider.v1.TransactionClientMessage
+	(*TransactionServerMessage)(nil),        // 66: gestalt.provider.v1.TransactionServerMessage
+	nil,                                     // 67: gestalt.provider.v1.Record.FieldsEntry
+	(structpb.NullValue)(0),                 // 68: google.protobuf.NullValue
+	(*timestamppb.Timestamp)(nil),           // 69: google.protobuf.Timestamp
+	(*structpb.Value)(nil),                  // 70: google.protobuf.Value
+	(*status.Status)(nil),                   // 71: google.rpc.Status
+	(*emptypb.Empty)(nil),                   // 72: google.protobuf.Empty
 }
 var file_v1_datastore_proto_depIdxs = []int32{
-	41, // 0: gestalt.provider.v1.TypedValue.null_value:type_name -> google.protobuf.NullValue
-	42, // 1: gestalt.provider.v1.TypedValue.time_value:type_name -> google.protobuf.Timestamp
-	43, // 2: gestalt.provider.v1.TypedValue.json_value:type_name -> google.protobuf.Value
-	40, // 3: gestalt.provider.v1.Record.fields:type_name -> gestalt.provider.v1.Record.FieldsEntry
-	6,  // 4: gestalt.provider.v1.ObjectStoreSchema.indexes:type_name -> gestalt.provider.v1.IndexSchema
-	7,  // 5: gestalt.provider.v1.ObjectStoreSchema.columns:type_name -> gestalt.provider.v1.ColumnDef
-	3,  // 6: gestalt.provider.v1.KeyRange.lower:type_name -> gestalt.provider.v1.TypedValue
-	3,  // 7: gestalt.provider.v1.KeyRange.upper:type_name -> gestalt.provider.v1.TypedValue
-	4,  // 8: gestalt.provider.v1.RecordRequest.record:type_name -> gestalt.provider.v1.Record
-	4,  // 9: gestalt.provider.v1.RecordResponse.record:type_name -> gestalt.provider.v1.Record
-	4,  // 10: gestalt.provider.v1.RecordsResponse.records:type_name -> gestalt.provider.v1.Record
-	8,  // 11: gestalt.provider.v1.ObjectStoreRangeRequest.range:type_name -> gestalt.provider.v1.KeyRange
-	5,  // 12: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
-	3,  // 13: gestalt.provider.v1.IndexQueryRequest.values:type_name -> gestalt.provider.v1.TypedValue
-	8,  // 14: gestalt.provider.v1.IndexQueryRequest.range:type_name -> gestalt.provider.v1.KeyRange
-	8,  // 15: gestalt.provider.v1.OpenCursorRequest.range:type_name -> gestalt.provider.v1.KeyRange
-	0,  // 16: gestalt.provider.v1.OpenCursorRequest.direction:type_name -> gestalt.provider.v1.CursorDirection
-	3,  // 17: gestalt.provider.v1.OpenCursorRequest.values:type_name -> gestalt.provider.v1.TypedValue
-	3,  // 18: gestalt.provider.v1.KeyValue.scalar:type_name -> gestalt.provider.v1.TypedValue
-	22, // 19: gestalt.provider.v1.KeyValue.array:type_name -> gestalt.provider.v1.KeyValueArray
-	21, // 20: gestalt.provider.v1.KeyValueArray.elements:type_name -> gestalt.provider.v1.KeyValue
-	21, // 21: gestalt.provider.v1.CursorKeyTarget.key:type_name -> gestalt.provider.v1.KeyValue
-	23, // 22: gestalt.provider.v1.CursorCommand.continue_to_key:type_name -> gestalt.provider.v1.CursorKeyTarget
-	4,  // 23: gestalt.provider.v1.CursorCommand.update:type_name -> gestalt.provider.v1.Record
-	20, // 24: gestalt.provider.v1.CursorClientMessage.open:type_name -> gestalt.provider.v1.OpenCursorRequest
-	24, // 25: gestalt.provider.v1.CursorClientMessage.command:type_name -> gestalt.provider.v1.CursorCommand
-	21, // 26: gestalt.provider.v1.CursorEntry.key:type_name -> gestalt.provider.v1.KeyValue
-	4,  // 27: gestalt.provider.v1.CursorEntry.record:type_name -> gestalt.provider.v1.Record
-	26, // 28: gestalt.provider.v1.CursorResponse.entry:type_name -> gestalt.provider.v1.CursorEntry
-	1,  // 29: gestalt.provider.v1.BeginTransactionRequest.mode:type_name -> gestalt.provider.v1.TransactionMode
-	2,  // 30: gestalt.provider.v1.BeginTransactionRequest.durability_hint:type_name -> gestalt.provider.v1.TransactionDurabilityHint
-	44, // 31: gestalt.provider.v1.TransactionCommitResponse.error:type_name -> google.rpc.Status
-	44, // 32: gestalt.provider.v1.TransactionAbortResponse.error:type_name -> google.rpc.Status
-	13, // 33: gestalt.provider.v1.TransactionOperation.get:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	13, // 34: gestalt.provider.v1.TransactionOperation.get_key:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	9,  // 35: gestalt.provider.v1.TransactionOperation.add:type_name -> gestalt.provider.v1.RecordRequest
-	9,  // 36: gestalt.provider.v1.TransactionOperation.put:type_name -> gestalt.provider.v1.RecordRequest
-	13, // 37: gestalt.provider.v1.TransactionOperation.delete:type_name -> gestalt.provider.v1.ObjectStoreRequest
-	14, // 38: gestalt.provider.v1.TransactionOperation.clear:type_name -> gestalt.provider.v1.ObjectStoreNameRequest
-	15, // 39: gestalt.provider.v1.TransactionOperation.get_all:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 40: gestalt.provider.v1.TransactionOperation.get_all_keys:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 41: gestalt.provider.v1.TransactionOperation.count:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 42: gestalt.provider.v1.TransactionOperation.delete_range:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 43: gestalt.provider.v1.TransactionOperation.index_get:type_name -> gestalt.provider.v1.IndexQueryRequest
-	18, // 44: gestalt.provider.v1.TransactionOperation.index_get_key:type_name -> gestalt.provider.v1.IndexQueryRequest
-	18, // 45: gestalt.provider.v1.TransactionOperation.index_get_all:type_name -> gestalt.provider.v1.IndexQueryRequest
-	18, // 46: gestalt.provider.v1.TransactionOperation.index_get_all_keys:type_name -> gestalt.provider.v1.IndexQueryRequest
-	18, // 47: gestalt.provider.v1.TransactionOperation.index_count:type_name -> gestalt.provider.v1.IndexQueryRequest
-	18, // 48: gestalt.provider.v1.TransactionOperation.index_delete:type_name -> gestalt.provider.v1.IndexQueryRequest
-	44, // 49: gestalt.provider.v1.TransactionOperationResponse.error:type_name -> google.rpc.Status
-	45, // 50: gestalt.provider.v1.TransactionOperationResponse.empty:type_name -> google.protobuf.Empty
-	10, // 51: gestalt.provider.v1.TransactionOperationResponse.record:type_name -> gestalt.provider.v1.RecordResponse
-	11, // 52: gestalt.provider.v1.TransactionOperationResponse.records:type_name -> gestalt.provider.v1.RecordsResponse
-	29, // 53: gestalt.provider.v1.TransactionOperationResponse.key:type_name -> gestalt.provider.v1.KeyResponse
-	12, // 54: gestalt.provider.v1.TransactionOperationResponse.keys:type_name -> gestalt.provider.v1.KeysResponse
-	19, // 55: gestalt.provider.v1.TransactionOperationResponse.count:type_name -> gestalt.provider.v1.CountResponse
-	28, // 56: gestalt.provider.v1.TransactionOperationResponse.delete:type_name -> gestalt.provider.v1.DeleteResponse
-	30, // 57: gestalt.provider.v1.TransactionClientMessage.begin:type_name -> gestalt.provider.v1.BeginTransactionRequest
-	36, // 58: gestalt.provider.v1.TransactionClientMessage.operation:type_name -> gestalt.provider.v1.TransactionOperation
-	32, // 59: gestalt.provider.v1.TransactionClientMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitRequest
-	34, // 60: gestalt.provider.v1.TransactionClientMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortRequest
-	31, // 61: gestalt.provider.v1.TransactionServerMessage.begin:type_name -> gestalt.provider.v1.TransactionBeginResponse
-	37, // 62: gestalt.provider.v1.TransactionServerMessage.operation:type_name -> gestalt.provider.v1.TransactionOperationResponse
-	33, // 63: gestalt.provider.v1.TransactionServerMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitResponse
-	35, // 64: gestalt.provider.v1.TransactionServerMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortResponse
-	3,  // 65: gestalt.provider.v1.Record.FieldsEntry.value:type_name -> gestalt.provider.v1.TypedValue
-	16, // 66: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
-	17, // 67: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
-	13, // 68: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	13, // 69: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	9,  // 70: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
-	9,  // 71: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
-	13, // 72: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	14, // 73: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
-	15, // 74: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 75: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 76: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 77: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	18, // 78: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
-	18, // 79: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
-	18, // 80: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
-	18, // 81: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
-	18, // 82: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
-	18, // 83: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
-	25, // 84: gestalt.provider.v1.IndexedDB.OpenCursor:input_type -> gestalt.provider.v1.CursorClientMessage
-	38, // 85: gestalt.provider.v1.IndexedDB.Transaction:input_type -> gestalt.provider.v1.TransactionClientMessage
-	45, // 86: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
-	45, // 87: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
-	10, // 88: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
-	29, // 89: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
-	45, // 90: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
-	45, // 91: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
-	45, // 92: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
-	45, // 93: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
-	11, // 94: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	12, // 95: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	19, // 96: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
-	28, // 97: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
-	10, // 98: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
-	29, // 99: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
-	11, // 100: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	12, // 101: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	19, // 102: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
-	28, // 103: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
-	27, // 104: gestalt.provider.v1.IndexedDB.OpenCursor:output_type -> gestalt.provider.v1.CursorResponse
-	39, // 105: gestalt.provider.v1.IndexedDB.Transaction:output_type -> gestalt.provider.v1.TransactionServerMessage
-	86, // [86:106] is the sub-list for method output_type
-	66, // [66:86] is the sub-list for method input_type
-	66, // [66:66] is the sub-list for extension type_name
-	66, // [66:66] is the sub-list for extension extendee
-	0,  // [0:66] is the sub-list for field type_name
+	68,  // 0: gestalt.provider.v1.TypedValue.null_value:type_name -> google.protobuf.NullValue
+	69,  // 1: gestalt.provider.v1.TypedValue.time_value:type_name -> google.protobuf.Timestamp
+	70,  // 2: gestalt.provider.v1.TypedValue.json_value:type_name -> google.protobuf.Value
+	67,  // 3: gestalt.provider.v1.Record.fields:type_name -> gestalt.provider.v1.Record.FieldsEntry
+	7,   // 4: gestalt.provider.v1.ObjectStoreSchema.indexes:type_name -> gestalt.provider.v1.IndexSchema
+	8,   // 5: gestalt.provider.v1.ObjectStoreSchema.columns:type_name -> gestalt.provider.v1.ColumnDef
+	4,   // 6: gestalt.provider.v1.KeyRange.lower:type_name -> gestalt.provider.v1.TypedValue
+	4,   // 7: gestalt.provider.v1.KeyRange.upper:type_name -> gestalt.provider.v1.TypedValue
+	5,   // 8: gestalt.provider.v1.RecordRequest.record:type_name -> gestalt.provider.v1.Record
+	5,   // 9: gestalt.provider.v1.RecordResponse.record:type_name -> gestalt.provider.v1.Record
+	5,   // 10: gestalt.provider.v1.RecordsResponse.records:type_name -> gestalt.provider.v1.Record
+	9,   // 11: gestalt.provider.v1.ObjectStoreRangeRequest.range:type_name -> gestalt.provider.v1.KeyRange
+	6,   // 12: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
+	4,   // 13: gestalt.provider.v1.IndexQueryRequest.values:type_name -> gestalt.provider.v1.TypedValue
+	9,   // 14: gestalt.provider.v1.IndexQueryRequest.range:type_name -> gestalt.provider.v1.KeyRange
+	9,   // 15: gestalt.provider.v1.OpenCursorRequest.range:type_name -> gestalt.provider.v1.KeyRange
+	0,   // 16: gestalt.provider.v1.OpenCursorRequest.direction:type_name -> gestalt.provider.v1.CursorDirection
+	4,   // 17: gestalt.provider.v1.OpenCursorRequest.values:type_name -> gestalt.provider.v1.TypedValue
+	4,   // 18: gestalt.provider.v1.KeyValue.scalar:type_name -> gestalt.provider.v1.TypedValue
+	23,  // 19: gestalt.provider.v1.KeyValue.array:type_name -> gestalt.provider.v1.KeyValueArray
+	22,  // 20: gestalt.provider.v1.KeyValueArray.elements:type_name -> gestalt.provider.v1.KeyValue
+	22,  // 21: gestalt.provider.v1.CursorKeyTarget.key:type_name -> gestalt.provider.v1.KeyValue
+	24,  // 22: gestalt.provider.v1.CursorCommand.continue_to_key:type_name -> gestalt.provider.v1.CursorKeyTarget
+	5,   // 23: gestalt.provider.v1.CursorCommand.update:type_name -> gestalt.provider.v1.Record
+	21,  // 24: gestalt.provider.v1.CursorClientMessage.open:type_name -> gestalt.provider.v1.OpenCursorRequest
+	25,  // 25: gestalt.provider.v1.CursorClientMessage.command:type_name -> gestalt.provider.v1.CursorCommand
+	22,  // 26: gestalt.provider.v1.CursorEntry.key:type_name -> gestalt.provider.v1.KeyValue
+	5,   // 27: gestalt.provider.v1.CursorEntry.record:type_name -> gestalt.provider.v1.Record
+	27,  // 28: gestalt.provider.v1.CursorResponse.entry:type_name -> gestalt.provider.v1.CursorEntry
+	3,   // 29: gestalt.provider.v1.VersionChangeInfo.reason:type_name -> gestalt.provider.v1.VersionChangeReason
+	3,   // 30: gestalt.provider.v1.BlockedInfo.reason:type_name -> gestalt.provider.v1.VersionChangeReason
+	41,  // 31: gestalt.provider.v1.DatabasesResponse.databases:type_name -> gestalt.provider.v1.DatabaseInfo
+	22,  // 32: gestalt.provider.v1.CompareKeysRequest.first:type_name -> gestalt.provider.v1.KeyValue
+	22,  // 33: gestalt.provider.v1.CompareKeysRequest.second:type_name -> gestalt.provider.v1.KeyValue
+	6,   // 34: gestalt.provider.v1.UpgradeCreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
+	45,  // 35: gestalt.provider.v1.UpgradeOperation.create_object_store:type_name -> gestalt.provider.v1.UpgradeCreateObjectStoreRequest
+	46,  // 36: gestalt.provider.v1.UpgradeOperation.delete_object_store:type_name -> gestalt.provider.v1.UpgradeDeleteObjectStoreRequest
+	47,  // 37: gestalt.provider.v1.UpgradeOperation.create_index:type_name -> gestalt.provider.v1.UpgradeCreateIndexRequest
+	48,  // 38: gestalt.provider.v1.UpgradeOperation.delete_index:type_name -> gestalt.provider.v1.UpgradeDeleteIndexRequest
+	49,  // 39: gestalt.provider.v1.UpgradeOperation.object_store_names:type_name -> gestalt.provider.v1.UpgradeObjectStoreNamesRequest
+	50,  // 40: gestalt.provider.v1.UpgradeOperation.finish_upgrade:type_name -> gestalt.provider.v1.FinishUpgradeRequest
+	51,  // 41: gestalt.provider.v1.UpgradeOperation.abort_upgrade:type_name -> gestalt.provider.v1.AbortUpgradeRequest
+	71,  // 42: gestalt.provider.v1.UpgradeOperationResponse.error:type_name -> google.rpc.Status
+	33,  // 43: gestalt.provider.v1.OpenDatabaseClientMessage.open:type_name -> gestalt.provider.v1.OpenDatabaseRequest
+	52,  // 44: gestalt.provider.v1.OpenDatabaseClientMessage.upgrade_operation:type_name -> gestalt.provider.v1.UpgradeOperation
+	36,  // 45: gestalt.provider.v1.OpenDatabaseClientMessage.close:type_name -> gestalt.provider.v1.CloseDatabaseRequest
+	34,  // 46: gestalt.provider.v1.OpenDatabaseServerMessage.upgrade_started:type_name -> gestalt.provider.v1.UpgradeStarted
+	53,  // 47: gestalt.provider.v1.OpenDatabaseServerMessage.upgrade_operation_response:type_name -> gestalt.provider.v1.UpgradeOperationResponse
+	35,  // 48: gestalt.provider.v1.OpenDatabaseServerMessage.opened:type_name -> gestalt.provider.v1.OpenDatabaseSuccess
+	31,  // 49: gestalt.provider.v1.OpenDatabaseServerMessage.versionchange:type_name -> gestalt.provider.v1.VersionChangeInfo
+	32,  // 50: gestalt.provider.v1.OpenDatabaseServerMessage.blocked:type_name -> gestalt.provider.v1.BlockedInfo
+	37,  // 51: gestalt.provider.v1.OpenDatabaseServerMessage.closed:type_name -> gestalt.provider.v1.CloseDatabaseResponse
+	71,  // 52: gestalt.provider.v1.OpenDatabaseServerMessage.error:type_name -> google.rpc.Status
+	32,  // 53: gestalt.provider.v1.DeleteDatabaseServerMessage.blocked:type_name -> gestalt.provider.v1.BlockedInfo
+	39,  // 54: gestalt.provider.v1.DeleteDatabaseServerMessage.deleted:type_name -> gestalt.provider.v1.DeleteDatabaseResponse
+	71,  // 55: gestalt.provider.v1.DeleteDatabaseServerMessage.error:type_name -> google.rpc.Status
+	1,   // 56: gestalt.provider.v1.BeginTransactionRequest.mode:type_name -> gestalt.provider.v1.TransactionMode
+	2,   // 57: gestalt.provider.v1.BeginTransactionRequest.durability_hint:type_name -> gestalt.provider.v1.TransactionDurabilityHint
+	71,  // 58: gestalt.provider.v1.TransactionCommitResponse.error:type_name -> google.rpc.Status
+	71,  // 59: gestalt.provider.v1.TransactionAbortResponse.error:type_name -> google.rpc.Status
+	14,  // 60: gestalt.provider.v1.TransactionOperation.get:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	14,  // 61: gestalt.provider.v1.TransactionOperation.get_key:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	10,  // 62: gestalt.provider.v1.TransactionOperation.add:type_name -> gestalt.provider.v1.RecordRequest
+	10,  // 63: gestalt.provider.v1.TransactionOperation.put:type_name -> gestalt.provider.v1.RecordRequest
+	14,  // 64: gestalt.provider.v1.TransactionOperation.delete:type_name -> gestalt.provider.v1.ObjectStoreRequest
+	15,  // 65: gestalt.provider.v1.TransactionOperation.clear:type_name -> gestalt.provider.v1.ObjectStoreNameRequest
+	16,  // 66: gestalt.provider.v1.TransactionOperation.get_all:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	16,  // 67: gestalt.provider.v1.TransactionOperation.get_all_keys:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	16,  // 68: gestalt.provider.v1.TransactionOperation.count:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	16,  // 69: gestalt.provider.v1.TransactionOperation.delete_range:type_name -> gestalt.provider.v1.ObjectStoreRangeRequest
+	19,  // 70: gestalt.provider.v1.TransactionOperation.index_get:type_name -> gestalt.provider.v1.IndexQueryRequest
+	19,  // 71: gestalt.provider.v1.TransactionOperation.index_get_key:type_name -> gestalt.provider.v1.IndexQueryRequest
+	19,  // 72: gestalt.provider.v1.TransactionOperation.index_get_all:type_name -> gestalt.provider.v1.IndexQueryRequest
+	19,  // 73: gestalt.provider.v1.TransactionOperation.index_get_all_keys:type_name -> gestalt.provider.v1.IndexQueryRequest
+	19,  // 74: gestalt.provider.v1.TransactionOperation.index_count:type_name -> gestalt.provider.v1.IndexQueryRequest
+	19,  // 75: gestalt.provider.v1.TransactionOperation.index_delete:type_name -> gestalt.provider.v1.IndexQueryRequest
+	71,  // 76: gestalt.provider.v1.TransactionOperationResponse.error:type_name -> google.rpc.Status
+	72,  // 77: gestalt.provider.v1.TransactionOperationResponse.empty:type_name -> google.protobuf.Empty
+	11,  // 78: gestalt.provider.v1.TransactionOperationResponse.record:type_name -> gestalt.provider.v1.RecordResponse
+	12,  // 79: gestalt.provider.v1.TransactionOperationResponse.records:type_name -> gestalt.provider.v1.RecordsResponse
+	30,  // 80: gestalt.provider.v1.TransactionOperationResponse.key:type_name -> gestalt.provider.v1.KeyResponse
+	13,  // 81: gestalt.provider.v1.TransactionOperationResponse.keys:type_name -> gestalt.provider.v1.KeysResponse
+	20,  // 82: gestalt.provider.v1.TransactionOperationResponse.count:type_name -> gestalt.provider.v1.CountResponse
+	29,  // 83: gestalt.provider.v1.TransactionOperationResponse.delete:type_name -> gestalt.provider.v1.DeleteResponse
+	57,  // 84: gestalt.provider.v1.TransactionClientMessage.begin:type_name -> gestalt.provider.v1.BeginTransactionRequest
+	63,  // 85: gestalt.provider.v1.TransactionClientMessage.operation:type_name -> gestalt.provider.v1.TransactionOperation
+	59,  // 86: gestalt.provider.v1.TransactionClientMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitRequest
+	61,  // 87: gestalt.provider.v1.TransactionClientMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortRequest
+	58,  // 88: gestalt.provider.v1.TransactionServerMessage.begin:type_name -> gestalt.provider.v1.TransactionBeginResponse
+	64,  // 89: gestalt.provider.v1.TransactionServerMessage.operation:type_name -> gestalt.provider.v1.TransactionOperationResponse
+	60,  // 90: gestalt.provider.v1.TransactionServerMessage.commit:type_name -> gestalt.provider.v1.TransactionCommitResponse
+	62,  // 91: gestalt.provider.v1.TransactionServerMessage.abort:type_name -> gestalt.provider.v1.TransactionAbortResponse
+	4,   // 92: gestalt.provider.v1.Record.FieldsEntry.value:type_name -> gestalt.provider.v1.TypedValue
+	54,  // 93: gestalt.provider.v1.IndexedDB.OpenDatabase:input_type -> gestalt.provider.v1.OpenDatabaseClientMessage
+	38,  // 94: gestalt.provider.v1.IndexedDB.DeleteDatabase:input_type -> gestalt.provider.v1.DeleteDatabaseRequest
+	40,  // 95: gestalt.provider.v1.IndexedDB.Databases:input_type -> gestalt.provider.v1.DatabasesRequest
+	43,  // 96: gestalt.provider.v1.IndexedDB.CompareKeys:input_type -> gestalt.provider.v1.CompareKeysRequest
+	17,  // 97: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
+	18,  // 98: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
+	14,  // 99: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	14,  // 100: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	10,  // 101: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
+	10,  // 102: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
+	14,  // 103: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	15,  // 104: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
+	16,  // 105: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	16,  // 106: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	16,  // 107: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	16,  // 108: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	19,  // 109: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
+	19,  // 110: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
+	19,  // 111: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
+	19,  // 112: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
+	19,  // 113: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
+	19,  // 114: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
+	26,  // 115: gestalt.provider.v1.IndexedDB.OpenCursor:input_type -> gestalt.provider.v1.CursorClientMessage
+	65,  // 116: gestalt.provider.v1.IndexedDB.Transaction:input_type -> gestalt.provider.v1.TransactionClientMessage
+	55,  // 117: gestalt.provider.v1.IndexedDB.OpenDatabase:output_type -> gestalt.provider.v1.OpenDatabaseServerMessage
+	56,  // 118: gestalt.provider.v1.IndexedDB.DeleteDatabase:output_type -> gestalt.provider.v1.DeleteDatabaseServerMessage
+	42,  // 119: gestalt.provider.v1.IndexedDB.Databases:output_type -> gestalt.provider.v1.DatabasesResponse
+	44,  // 120: gestalt.provider.v1.IndexedDB.CompareKeys:output_type -> gestalt.provider.v1.CompareKeysResponse
+	72,  // 121: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
+	72,  // 122: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
+	11,  // 123: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
+	30,  // 124: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
+	72,  // 125: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
+	72,  // 126: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
+	72,  // 127: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
+	72,  // 128: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
+	12,  // 129: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	13,  // 130: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	20,  // 131: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
+	29,  // 132: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
+	11,  // 133: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
+	30,  // 134: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
+	12,  // 135: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	13,  // 136: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	20,  // 137: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
+	29,  // 138: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
+	28,  // 139: gestalt.provider.v1.IndexedDB.OpenCursor:output_type -> gestalt.provider.v1.CursorResponse
+	66,  // 140: gestalt.provider.v1.IndexedDB.Transaction:output_type -> gestalt.provider.v1.TransactionServerMessage
+	117, // [117:141] is the sub-list for method output_type
+	93,  // [93:117] is the sub-list for method input_type
+	93,  // [93:93] is the sub-list for extension type_name
+	93,  // [93:93] is the sub-list for extension extendee
+	0,   // [0:93] is the sub-list for field type_name
 }
 
 func init() { file_v1_datastore_proto_init() }
@@ -3368,7 +5363,38 @@ func file_v1_datastore_proto_init() {
 		(*CursorResponse_Entry)(nil),
 		(*CursorResponse_Done)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[33].OneofWrappers = []any{
+	file_v1_datastore_proto_msgTypes[27].OneofWrappers = []any{}
+	file_v1_datastore_proto_msgTypes[28].OneofWrappers = []any{}
+	file_v1_datastore_proto_msgTypes[29].OneofWrappers = []any{}
+	file_v1_datastore_proto_msgTypes[48].OneofWrappers = []any{
+		(*UpgradeOperation_CreateObjectStore)(nil),
+		(*UpgradeOperation_DeleteObjectStore)(nil),
+		(*UpgradeOperation_CreateIndex)(nil),
+		(*UpgradeOperation_DeleteIndex)(nil),
+		(*UpgradeOperation_ObjectStoreNames)(nil),
+		(*UpgradeOperation_FinishUpgrade)(nil),
+		(*UpgradeOperation_AbortUpgrade)(nil),
+	}
+	file_v1_datastore_proto_msgTypes[50].OneofWrappers = []any{
+		(*OpenDatabaseClientMessage_Open)(nil),
+		(*OpenDatabaseClientMessage_UpgradeOperation)(nil),
+		(*OpenDatabaseClientMessage_Close)(nil),
+	}
+	file_v1_datastore_proto_msgTypes[51].OneofWrappers = []any{
+		(*OpenDatabaseServerMessage_UpgradeStarted)(nil),
+		(*OpenDatabaseServerMessage_UpgradeOperationResponse)(nil),
+		(*OpenDatabaseServerMessage_Opened)(nil),
+		(*OpenDatabaseServerMessage_Versionchange)(nil),
+		(*OpenDatabaseServerMessage_Blocked)(nil),
+		(*OpenDatabaseServerMessage_Closed)(nil),
+		(*OpenDatabaseServerMessage_Error)(nil),
+	}
+	file_v1_datastore_proto_msgTypes[52].OneofWrappers = []any{
+		(*DeleteDatabaseServerMessage_Blocked)(nil),
+		(*DeleteDatabaseServerMessage_Deleted)(nil),
+		(*DeleteDatabaseServerMessage_Error)(nil),
+	}
+	file_v1_datastore_proto_msgTypes[59].OneofWrappers = []any{
 		(*TransactionOperation_Get)(nil),
 		(*TransactionOperation_GetKey)(nil),
 		(*TransactionOperation_Add)(nil),
@@ -3386,7 +5412,7 @@ func file_v1_datastore_proto_init() {
 		(*TransactionOperation_IndexCount)(nil),
 		(*TransactionOperation_IndexDelete)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[34].OneofWrappers = []any{
+	file_v1_datastore_proto_msgTypes[60].OneofWrappers = []any{
 		(*TransactionOperationResponse_Empty)(nil),
 		(*TransactionOperationResponse_Record)(nil),
 		(*TransactionOperationResponse_Records)(nil),
@@ -3395,13 +5421,13 @@ func file_v1_datastore_proto_init() {
 		(*TransactionOperationResponse_Count)(nil),
 		(*TransactionOperationResponse_Delete)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[35].OneofWrappers = []any{
+	file_v1_datastore_proto_msgTypes[61].OneofWrappers = []any{
 		(*TransactionClientMessage_Begin)(nil),
 		(*TransactionClientMessage_Operation)(nil),
 		(*TransactionClientMessage_Commit)(nil),
 		(*TransactionClientMessage_Abort)(nil),
 	}
-	file_v1_datastore_proto_msgTypes[36].OneofWrappers = []any{
+	file_v1_datastore_proto_msgTypes[62].OneofWrappers = []any{
 		(*TransactionServerMessage_Begin)(nil),
 		(*TransactionServerMessage_Operation)(nil),
 		(*TransactionServerMessage_Commit)(nil),
@@ -3412,8 +5438,8 @@ func file_v1_datastore_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_datastore_proto_rawDesc), len(file_v1_datastore_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   38,
+			NumEnums:      4,
+			NumMessages:   64,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

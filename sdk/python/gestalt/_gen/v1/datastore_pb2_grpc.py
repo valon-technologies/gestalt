@@ -36,6 +36,26 @@ class IndexedDBStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.OpenDatabase = channel.stream_stream(
+                '/gestalt.provider.v1.IndexedDB/OpenDatabase',
+                request_serializer=v1_dot_datastore__pb2.OpenDatabaseClientMessage.SerializeToString,
+                response_deserializer=v1_dot_datastore__pb2.OpenDatabaseServerMessage.FromString,
+                _registered_method=True)
+        self.DeleteDatabase = channel.unary_stream(
+                '/gestalt.provider.v1.IndexedDB/DeleteDatabase',
+                request_serializer=v1_dot_datastore__pb2.DeleteDatabaseRequest.SerializeToString,
+                response_deserializer=v1_dot_datastore__pb2.DeleteDatabaseServerMessage.FromString,
+                _registered_method=True)
+        self.Databases = channel.unary_unary(
+                '/gestalt.provider.v1.IndexedDB/Databases',
+                request_serializer=v1_dot_datastore__pb2.DatabasesRequest.SerializeToString,
+                response_deserializer=v1_dot_datastore__pb2.DatabasesResponse.FromString,
+                _registered_method=True)
+        self.CompareKeys = channel.unary_unary(
+                '/gestalt.provider.v1.IndexedDB/CompareKeys',
+                request_serializer=v1_dot_datastore__pb2.CompareKeysRequest.SerializeToString,
+                response_deserializer=v1_dot_datastore__pb2.CompareKeysResponse.FromString,
+                _registered_method=True)
         self.CreateObjectStore = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/CreateObjectStore',
                 request_serializer=v1_dot_datastore__pb2.CreateObjectStoreRequest.SerializeToString,
@@ -142,8 +162,33 @@ class IndexedDBServicer(object):
     """IndexedDB models the shared Gestalt IndexedDB-provider protocol.
     """
 
+    def OpenDatabase(self, request_iterator, context):
+        """Factory lifecycle
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteDatabase(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Databases(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CompareKeys(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def CreateObjectStore(self, request, context):
-        """Lifecycle
+        """Legacy object-store lifecycle
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -272,6 +317,26 @@ class IndexedDBServicer(object):
 
 def add_IndexedDBServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'OpenDatabase': grpc.stream_stream_rpc_method_handler(
+                    servicer.OpenDatabase,
+                    request_deserializer=v1_dot_datastore__pb2.OpenDatabaseClientMessage.FromString,
+                    response_serializer=v1_dot_datastore__pb2.OpenDatabaseServerMessage.SerializeToString,
+            ),
+            'DeleteDatabase': grpc.unary_stream_rpc_method_handler(
+                    servicer.DeleteDatabase,
+                    request_deserializer=v1_dot_datastore__pb2.DeleteDatabaseRequest.FromString,
+                    response_serializer=v1_dot_datastore__pb2.DeleteDatabaseServerMessage.SerializeToString,
+            ),
+            'Databases': grpc.unary_unary_rpc_method_handler(
+                    servicer.Databases,
+                    request_deserializer=v1_dot_datastore__pb2.DatabasesRequest.FromString,
+                    response_serializer=v1_dot_datastore__pb2.DatabasesResponse.SerializeToString,
+            ),
+            'CompareKeys': grpc.unary_unary_rpc_method_handler(
+                    servicer.CompareKeys,
+                    request_deserializer=v1_dot_datastore__pb2.CompareKeysRequest.FromString,
+                    response_serializer=v1_dot_datastore__pb2.CompareKeysResponse.SerializeToString,
+            ),
             'CreateObjectStore': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateObjectStore,
                     request_deserializer=v1_dot_datastore__pb2.CreateObjectStoreRequest.FromString,
@@ -383,6 +448,114 @@ def add_IndexedDBServicer_to_server(servicer, server):
 class IndexedDB(object):
     """IndexedDB models the shared Gestalt IndexedDB-provider protocol.
     """
+
+    @staticmethod
+    def OpenDatabase(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            '/gestalt.provider.v1.IndexedDB/OpenDatabase',
+            v1_dot_datastore__pb2.OpenDatabaseClientMessage.SerializeToString,
+            v1_dot_datastore__pb2.OpenDatabaseServerMessage.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteDatabase(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/gestalt.provider.v1.IndexedDB/DeleteDatabase',
+            v1_dot_datastore__pb2.DeleteDatabaseRequest.SerializeToString,
+            v1_dot_datastore__pb2.DeleteDatabaseServerMessage.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Databases(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.IndexedDB/Databases',
+            v1_dot_datastore__pb2.DatabasesRequest.SerializeToString,
+            v1_dot_datastore__pb2.DatabasesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CompareKeys(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.IndexedDB/CompareKeys',
+            v1_dot_datastore__pb2.CompareKeysRequest.SerializeToString,
+            v1_dot_datastore__pb2.CompareKeysResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def CreateObjectStore(request,

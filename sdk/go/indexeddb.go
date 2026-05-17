@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -60,6 +61,11 @@ var (
 	ErrNotFound = fmt.Errorf("indexeddb: not found")
 	// ErrAlreadyExists indicates that a record or object store already exists.
 	ErrAlreadyExists = fmt.Errorf("indexeddb: already exists")
+	// ErrAbort indicates that an IndexedDB lifecycle operation was aborted.
+	ErrAbort = fmt.Errorf("indexeddb: operation aborted")
+	// ErrBlocked indicates that an IndexedDB lifecycle operation is blocked by
+	// open connections or active operations.
+	ErrBlocked = fmt.Errorf("indexeddb: operation blocked")
 	// ErrKeysOnly indicates that the current cursor was opened in key-only mode
 	// and therefore has no value payload.
 	ErrKeysOnly = fmt.Errorf("indexeddb: value not available on key-only cursor")
@@ -109,6 +115,77 @@ const (
 
 type TransactionOptions struct {
 	DurabilityHint TransactionDurabilityHint
+}
+
+type DatabaseInfo struct {
+	Name    string
+	Version uint64
+}
+
+type VersionChangeReason string
+
+const (
+	VersionChangeUpgrade VersionChangeReason = "upgrade"
+	VersionChangeDelete  VersionChangeReason = "delete"
+)
+
+type VersionChangeInfo struct {
+	Name       string
+	OldVersion uint64
+	NewVersion *uint64
+	Reason     VersionChangeReason
+}
+
+type BlockedInfo struct {
+	Name               string
+	OldVersion         uint64
+	NewVersion         *uint64
+	Reason             VersionChangeReason
+	OpenConnections    int
+	ActiveTransactions int
+}
+
+type BlockedAction int
+
+const (
+	BlockedFail BlockedAction = iota
+	BlockedWait
+)
+
+type OpenOptions struct {
+	Version         *uint64
+	Upgrade         func(context.Context, UpgradeContext) error
+	OnVersionChange func(context.Context, VersionChangeInfo) error
+	OnBlocked       func(context.Context, BlockedInfo) (BlockedAction, error)
+}
+
+type DeleteOptions struct {
+	OnBlocked func(context.Context, BlockedInfo) (BlockedAction, error)
+}
+
+type DeleteDatabaseResult struct {
+	Name       string
+	OldVersion uint64
+}
+
+type UpgradeContext interface {
+	OldVersion() uint64
+	NewVersion() uint64
+	Database() UpgradeDatabase
+	ObjectStoreNames(ctx context.Context) ([]string, error)
+	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
+	DeleteObjectStore(ctx context.Context, name string) error
+	CreateIndex(ctx context.Context, store string, index IndexSchema) error
+	DeleteIndex(ctx context.Context, store string, name string) error
+}
+
+type UpgradeDatabase interface {
+	Name() string
+	ObjectStoreNames(ctx context.Context) ([]string, error)
+	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
+	DeleteObjectStore(ctx context.Context, name string) error
+	CreateIndex(ctx context.Context, store string, index IndexSchema) error
+	DeleteIndex(ctx context.Context, store string, name string) error
 }
 
 // KeyRange constrains range queries and cursors by lower and upper bounds.
@@ -304,24 +381,359 @@ func (db *IndexedDBClient) Close() error {
 	return db.conn.Close()
 }
 
-// CreateObjectStore creates a named object store with the supplied schema.
-func (db *IndexedDBClient) CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error {
-	indexes := make([]*proto.IndexSchema, len(schema.Indexes))
-	for i, idx := range schema.Indexes {
-		indexes[i] = &proto.IndexSchema{Name: idx.Name, KeyPath: idx.KeyPath, Unique: idx.Unique}
+// Open opens a database connection, optionally running an upgrade callback when
+// a higher version is requested or the database needs to be created.
+func (db *IndexedDBClient) Open(ctx context.Context, name string, opts OpenOptions) (*DatabaseClient, error) {
+	return db.openDatabase(ctx, &proto.OpenDatabaseRequest{Name: name, Version: opts.Version}, opts)
+}
+
+// OpenCurrent opens an existing database at its current version. It fails if
+// the database does not exist.
+func (db *IndexedDBClient) OpenCurrent(ctx context.Context, name string, opts OpenOptions) (*DatabaseClient, error) {
+	opts.Version = nil
+	return db.openDatabase(ctx, &proto.OpenDatabaseRequest{Name: name, RequireExisting: true}, opts)
+}
+
+func (db *IndexedDBClient) openDatabase(ctx context.Context, req *proto.OpenDatabaseRequest, opts OpenOptions) (*DatabaseClient, error) {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	columns := make([]*proto.ColumnDef, len(schema.Columns))
-	for i, col := range schema.Columns {
-		columns[i] = &proto.ColumnDef{
-			Name:       col.Name,
-			Type:       int32(col.Type),
-			PrimaryKey: col.PrimaryKey,
-			NotNull:    col.NotNull,
-			Unique:     col.Unique,
+	streamCtx, cancel := context.WithCancel(ctx)
+	stream, err := db.client.OpenDatabase(streamCtx)
+	if err != nil {
+		cancel()
+		return nil, grpcErr(err)
+	}
+	if err := stream.Send(&proto.OpenDatabaseClientMessage{Msg: &proto.OpenDatabaseClientMessage_Open{Open: req}}); err != nil {
+		_ = stream.CloseSend()
+		cancel()
+		return nil, grpcErr(err)
+	}
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			_ = stream.CloseSend()
+			cancel()
+			return nil, grpcErr(err)
+		}
+		switch body := msg.GetMsg().(type) {
+		case *proto.OpenDatabaseServerMessage_UpgradeStarted:
+			upgrade := &remoteUpgradeContext{stream: stream, started: body.UpgradeStarted}
+			if opts.Upgrade == nil {
+				if err := upgrade.finish(ctx); err != nil {
+					_ = stream.CloseSend()
+					cancel()
+					return nil, err
+				}
+				continue
+			}
+			if err := opts.Upgrade(ctx, upgrade); err != nil {
+				abortErr := upgrade.abort(ctx, err.Error())
+				_ = stream.CloseSend()
+				cancel()
+				if abortErr != nil && !errors.Is(abortErr, ErrAbort) {
+					return nil, errors.Join(err, abortErr)
+				}
+				return nil, err
+			}
+			if !upgrade.finished {
+				if err := upgrade.finish(ctx); err != nil {
+					_ = stream.CloseSend()
+					cancel()
+					return nil, err
+				}
+			}
+		case *proto.OpenDatabaseServerMessage_Blocked:
+			action := BlockedWait
+			if opts.OnBlocked != nil {
+				var callbackErr error
+				action, callbackErr = opts.OnBlocked(ctx, blockedInfoFromProto(body.Blocked))
+				if callbackErr != nil {
+					_ = stream.CloseSend()
+					cancel()
+					return nil, fmt.Errorf("%w: %v", ErrAbort, callbackErr)
+				}
+			}
+			if action == BlockedFail {
+				_ = stream.CloseSend()
+				cancel()
+				return nil, ErrBlocked
+			}
+		case *proto.OpenDatabaseServerMessage_Opened:
+			opened := &DatabaseClient{
+				client:           db.client,
+				stream:           stream,
+				cancel:           cancel,
+				connectionID:     append([]byte(nil), body.Opened.GetConnectionId()...),
+				name:             body.Opened.GetName(),
+				version:          body.Opened.GetVersion(),
+				objectStoreNames: append([]string(nil), body.Opened.GetObjectStoreNames()...),
+				onVersionChange:  opts.OnVersionChange,
+				closed:           make(chan struct{}),
+			}
+			go opened.recvLifecycle()
+			return opened, nil
+		case *proto.OpenDatabaseServerMessage_Error:
+			_ = stream.CloseSend()
+			cancel()
+			return nil, rpcStatusErr(body.Error)
+		default:
+			_ = stream.CloseSend()
+			cancel()
+			return nil, fmt.Errorf("indexeddb: unexpected open database message")
 		}
 	}
+}
+
+// DeleteDatabase deletes a database and returns the previous version. Deleting
+// a missing database succeeds with old version 0.
+func (db *IndexedDBClient) DeleteDatabase(ctx context.Context, name string, opts DeleteOptions) (DeleteDatabaseResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	stream, err := db.client.DeleteDatabase(ctx, &proto.DeleteDatabaseRequest{Name: name})
+	if err != nil {
+		return DeleteDatabaseResult{}, grpcErr(err)
+	}
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			return DeleteDatabaseResult{}, grpcErr(err)
+		}
+		switch body := msg.GetMsg().(type) {
+		case *proto.DeleteDatabaseServerMessage_Blocked:
+			action := BlockedWait
+			if opts.OnBlocked != nil {
+				var callbackErr error
+				action, callbackErr = opts.OnBlocked(ctx, blockedInfoFromProto(body.Blocked))
+				if callbackErr != nil {
+					return DeleteDatabaseResult{}, fmt.Errorf("%w: %v", ErrAbort, callbackErr)
+				}
+			}
+			if action == BlockedFail {
+				return DeleteDatabaseResult{}, ErrBlocked
+			}
+		case *proto.DeleteDatabaseServerMessage_Deleted:
+			return DeleteDatabaseResult{Name: body.Deleted.GetName(), OldVersion: body.Deleted.GetOldVersion()}, nil
+		case *proto.DeleteDatabaseServerMessage_Error:
+			return DeleteDatabaseResult{}, rpcStatusErr(body.Error)
+		default:
+			return DeleteDatabaseResult{}, fmt.Errorf("indexeddb: unexpected delete database message")
+		}
+	}
+}
+
+// Databases returns visible database names and versions.
+func (db *IndexedDBClient) Databases(ctx context.Context) ([]DatabaseInfo, error) {
+	resp, err := db.client.Databases(ctx, &proto.DatabasesRequest{})
+	if err != nil {
+		return nil, grpcErr(err)
+	}
+	out := make([]DatabaseInfo, len(resp.GetDatabases()))
+	for i, info := range resp.GetDatabases() {
+		out[i] = DatabaseInfo{Name: info.GetName(), Version: info.GetVersion()}
+	}
+	return out, nil
+}
+
+// CompareKeys compares two IndexedDB keys using provider key semantics.
+func (db *IndexedDBClient) CompareKeys(ctx context.Context, first any, second any) (int, error) {
+	firstKey, err := anyToKeyValue(first)
+	if err != nil {
+		return 0, err
+	}
+	secondKey, err := anyToKeyValue(second)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := db.client.CompareKeys(ctx, &proto.CompareKeysRequest{First: firstKey, Second: secondKey})
+	if err != nil {
+		return 0, grpcErr(err)
+	}
+	return int(resp.GetCmp()), nil
+}
+
+// DatabaseClient is a live database connection returned from Open.
+type DatabaseClient struct {
+	client           proto.IndexedDBClient
+	stream           proto.IndexedDB_OpenDatabaseClient
+	cancel           context.CancelFunc
+	connectionID     []byte
+	name             string
+	version          uint64
+	objectStoreNames []string
+	onVersionChange  func(context.Context, VersionChangeInfo) error
+	closeOnce        sync.Once
+	closed           chan struct{}
+}
+
+func (db *DatabaseClient) Name() string { return db.name }
+
+func (db *DatabaseClient) Version() uint64 { return db.version }
+
+func (db *DatabaseClient) ObjectStoreNames(context.Context) ([]string, error) {
+	return append([]string(nil), db.objectStoreNames...), nil
+}
+
+func (db *DatabaseClient) ObjectStore(name string) *ObjectStoreClient {
+	return &ObjectStoreClient{client: db.client, connectionID: db.connectionID, store: name}
+}
+
+func (db *DatabaseClient) Transaction(ctx context.Context, stores []string, mode TransactionMode, opts TransactionOptions) (*Transaction, error) {
+	return beginTransaction(ctx, db.client, db.connectionID, stores, mode, opts)
+}
+
+func (db *DatabaseClient) Close() error {
+	db.closeOnce.Do(func() {
+		if db.stream != nil {
+			_ = db.stream.Send(&proto.OpenDatabaseClientMessage{Msg: &proto.OpenDatabaseClientMessage_Close{Close: &proto.CloseDatabaseRequest{}}})
+			_ = db.stream.CloseSend()
+		}
+		if db.cancel != nil {
+			db.cancel()
+		}
+		<-db.closed
+	})
+	return nil
+}
+
+func (db *DatabaseClient) recvLifecycle() {
+	defer close(db.closed)
+	for {
+		msg, err := db.stream.Recv()
+		if err != nil {
+			return
+		}
+		switch body := msg.GetMsg().(type) {
+		case *proto.OpenDatabaseServerMessage_Versionchange:
+			if db.onVersionChange != nil {
+				info := versionChangeInfoFromProto(body.Versionchange)
+				go func() { _ = db.onVersionChange(context.Background(), info) }()
+			}
+		case *proto.OpenDatabaseServerMessage_Closed, *proto.OpenDatabaseServerMessage_Error:
+			return
+		}
+	}
+}
+
+type remoteUpgradeContext struct {
+	stream   proto.IndexedDB_OpenDatabaseClient
+	started  *proto.UpgradeStarted
+	nextID   uint64
+	finished bool
+}
+
+func (u *remoteUpgradeContext) OldVersion() uint64 { return u.started.GetOldVersion() }
+
+func (u *remoteUpgradeContext) NewVersion() uint64 { return u.started.GetNewVersion() }
+
+func (u *remoteUpgradeContext) Database() UpgradeDatabase {
+	return (*remoteUpgradeDatabase)(u)
+}
+
+func (u *remoteUpgradeContext) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	resp, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_ObjectStoreNames{ObjectStoreNames: &proto.UpgradeObjectStoreNamesRequest{}}})
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), resp.GetObjectStoreNames()...), nil
+}
+
+func (u *remoteUpgradeContext) CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_CreateObjectStore{CreateObjectStore: &proto.UpgradeCreateObjectStoreRequest{
+		Name:   name,
+		Schema: objectStoreSchemaToProto(schema),
+	}}})
+	return err
+}
+
+func (u *remoteUpgradeContext) DeleteObjectStore(ctx context.Context, name string) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_DeleteObjectStore{DeleteObjectStore: &proto.UpgradeDeleteObjectStoreRequest{Name: name}}})
+	return err
+}
+
+func (u *remoteUpgradeContext) CreateIndex(ctx context.Context, store string, index IndexSchema) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_CreateIndex{CreateIndex: &proto.UpgradeCreateIndexRequest{
+		Store:   store,
+		Name:    index.Name,
+		KeyPath: index.KeyPath,
+		Unique:  index.Unique,
+	}}})
+	return err
+}
+
+func (u *remoteUpgradeContext) DeleteIndex(ctx context.Context, store string, name string) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_DeleteIndex{DeleteIndex: &proto.UpgradeDeleteIndexRequest{Store: store, Name: name}}})
+	return err
+}
+
+func (u *remoteUpgradeContext) finish(ctx context.Context) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_FinishUpgrade{FinishUpgrade: &proto.FinishUpgradeRequest{}}})
+	if err == nil {
+		u.finished = true
+	}
+	return err
+}
+
+func (u *remoteUpgradeContext) abort(ctx context.Context, reason string) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_AbortUpgrade{AbortUpgrade: &proto.AbortUpgradeRequest{Reason: reason}}})
+	if err == nil {
+		u.finished = true
+	}
+	return err
+}
+
+func (u *remoteUpgradeContext) send(ctx context.Context, op *proto.UpgradeOperation) (*proto.UpgradeOperationResponse, error) {
+	u.nextID++
+	op.RequestId = u.nextID
+	if err := u.stream.Send(&proto.OpenDatabaseClientMessage{Msg: &proto.OpenDatabaseClientMessage_UpgradeOperation{UpgradeOperation: op}}); err != nil {
+		return nil, grpcErr(err)
+	}
+	resp, err := u.stream.Recv()
+	if err != nil {
+		return nil, grpcErr(err)
+	}
+	opResp := resp.GetUpgradeOperationResponse()
+	if opResp == nil {
+		return nil, fmt.Errorf("indexeddb: expected upgrade operation response")
+	}
+	if opResp.GetRequestId() != op.GetRequestId() {
+		return nil, fmt.Errorf("indexeddb: upgrade response request id mismatch")
+	}
+	if err := rpcStatusErr(opResp.GetError()); err != nil {
+		return nil, err
+	}
+	return opResp, ctx.Err()
+}
+
+type remoteUpgradeDatabase remoteUpgradeContext
+
+func (db *remoteUpgradeDatabase) Name() string { return db.started.GetName() }
+
+func (db *remoteUpgradeDatabase) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	return (*remoteUpgradeContext)(db).ObjectStoreNames(ctx)
+}
+
+func (db *remoteUpgradeDatabase) CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error {
+	return (*remoteUpgradeContext)(db).CreateObjectStore(ctx, name, schema)
+}
+
+func (db *remoteUpgradeDatabase) DeleteObjectStore(ctx context.Context, name string) error {
+	return (*remoteUpgradeContext)(db).DeleteObjectStore(ctx, name)
+}
+
+func (db *remoteUpgradeDatabase) CreateIndex(ctx context.Context, store string, index IndexSchema) error {
+	return (*remoteUpgradeContext)(db).CreateIndex(ctx, store, index)
+}
+
+func (db *remoteUpgradeDatabase) DeleteIndex(ctx context.Context, store string, name string) error {
+	return (*remoteUpgradeContext)(db).DeleteIndex(ctx, store, name)
+}
+
+// CreateObjectStore creates a named object store with the supplied schema.
+func (db *IndexedDBClient) CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error {
 	_, err := db.client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{
-		Name: name, Schema: &proto.ObjectStoreSchema{Indexes: indexes, Columns: columns},
+		Name: name, Schema: objectStoreSchemaToProto(schema),
 	})
 	return grpcErr(err)
 }
@@ -340,17 +752,22 @@ func (db *IndexedDBClient) ObjectStore(name string) *ObjectStoreClient {
 // Transaction starts an explicit IndexedDB transaction over the supplied object
 // store scope.
 func (db *IndexedDBClient) Transaction(ctx context.Context, stores []string, mode TransactionMode, opts TransactionOptions) (*Transaction, error) {
+	return beginTransaction(ctx, db.client, nil, stores, mode, opts)
+}
+
+func beginTransaction(ctx context.Context, client proto.IndexedDBClient, connectionID []byte, stores []string, mode TransactionMode, opts TransactionOptions) (*Transaction, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	streamCtx, cancel := context.WithCancel(ctx)
-	stream, err := db.client.Transaction(streamCtx)
+	stream, err := client.Transaction(streamCtx)
 	if err != nil {
 		cancel()
 		return nil, grpcErr(err)
 	}
 	if err := stream.Send(&proto.TransactionClientMessage{
 		Msg: &proto.TransactionClientMessage_Begin{Begin: &proto.BeginTransactionRequest{
+			ConnectionId:   connectionID,
 			Stores:         stores,
 			Mode:           transactionModeToProto(mode),
 			DurabilityHint: durabilityHintToProto(opts.DurabilityHint),
@@ -377,13 +794,14 @@ func (db *IndexedDBClient) Transaction(ctx context.Context, stores []string, mod
 // ObjectStoreClient provides CRUD, range-query, and cursor access to one
 // object store.
 type ObjectStoreClient struct {
-	client proto.IndexedDBClient
-	store  string
+	client       proto.IndexedDBClient
+	connectionID []byte
+	store        string
 }
 
 // Get loads one record by primary key.
 func (o *ObjectStoreClient) Get(ctx context.Context, id string) (Record, error) {
-	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
+	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{ConnectionId: o.connectionID, Store: o.store, Id: id})
 	if err != nil {
 		return nil, grpcErr(err)
 	}
@@ -396,7 +814,7 @@ func (o *ObjectStoreClient) Get(ctx context.Context, id string) (Record, error) 
 
 // GetKey resolves the primary key for the supplied lookup id.
 func (o *ObjectStoreClient) GetKey(ctx context.Context, id string) (string, error) {
-	resp, err := o.client.GetKey(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
+	resp, err := o.client.GetKey(ctx, &proto.ObjectStoreRequest{ConnectionId: o.connectionID, Store: o.store, Id: id})
 	if err != nil {
 		return "", grpcErr(err)
 	}
@@ -409,7 +827,7 @@ func (o *ObjectStoreClient) Add(ctx context.Context, record Record) error {
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Add(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
+	_, err = o.client.Add(ctx, &proto.RecordRequest{ConnectionId: o.connectionID, Store: o.store, Record: pbRecord})
 	return grpcErr(err)
 }
 
@@ -419,19 +837,19 @@ func (o *ObjectStoreClient) Put(ctx context.Context, record Record) error {
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Put(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
+	_, err = o.client.Put(ctx, &proto.RecordRequest{ConnectionId: o.connectionID, Store: o.store, Record: pbRecord})
 	return grpcErr(err)
 }
 
 // Delete removes one record by primary key.
 func (o *ObjectStoreClient) Delete(ctx context.Context, id string) error {
-	_, err := o.client.Delete(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
+	_, err := o.client.Delete(ctx, &proto.ObjectStoreRequest{ConnectionId: o.connectionID, Store: o.store, Id: id})
 	return grpcErr(err)
 }
 
 // Clear removes every record from the object store.
 func (o *ObjectStoreClient) Clear(ctx context.Context) error {
-	_, err := o.client.Clear(ctx, &proto.ObjectStoreNameRequest{Store: o.store})
+	_, err := o.client.Clear(ctx, &proto.ObjectStoreNameRequest{ConnectionId: o.connectionID, Store: o.store})
 	return grpcErr(err)
 }
 
@@ -441,7 +859,7 @@ func (o *ObjectStoreClient) GetAll(ctx context.Context, r *KeyRange) ([]Record, 
 	if err != nil {
 		return nil, err
 	}
-	resp, err := o.client.GetAll(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.GetAll(ctx, &proto.ObjectStoreRangeRequest{ConnectionId: o.connectionID, Store: o.store, Range: kr})
 	if err != nil {
 		return nil, grpcErr(err)
 	}
@@ -458,7 +876,7 @@ func (o *ObjectStoreClient) GetAllKeys(ctx context.Context, r *KeyRange) ([]stri
 	if err != nil {
 		return nil, err
 	}
-	resp, err := o.client.GetAllKeys(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.GetAllKeys(ctx, &proto.ObjectStoreRangeRequest{ConnectionId: o.connectionID, Store: o.store, Range: kr})
 	if err != nil {
 		return nil, grpcErr(err)
 	}
@@ -471,7 +889,7 @@ func (o *ObjectStoreClient) Count(ctx context.Context, r *KeyRange) (int64, erro
 	if err != nil {
 		return 0, err
 	}
-	resp, err := o.client.Count(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.Count(ctx, &proto.ObjectStoreRangeRequest{ConnectionId: o.connectionID, Store: o.store, Range: kr})
 	if err != nil {
 		return 0, grpcErr(err)
 	}
@@ -485,7 +903,7 @@ func (o *ObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64,
 	if err != nil {
 		return 0, err
 	}
-	resp, err := o.client.DeleteRange(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.DeleteRange(ctx, &proto.ObjectStoreRangeRequest{ConnectionId: o.connectionID, Store: o.store, Range: kr})
 	if err != nil {
 		return 0, grpcErr(err)
 	}
@@ -494,24 +912,25 @@ func (o *ObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64,
 
 // OpenCursor opens a full-value cursor over the object store.
 func (o *ObjectStoreClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
-	return openCursor(ctx, o.client, o.store, "", r, dir, false, nil)
+	return openCursor(ctx, o.client, o.connectionID, o.store, "", r, dir, false, nil)
 }
 
 // OpenKeyCursor opens a key-only cursor over the object store.
 func (o *ObjectStoreClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
-	return openCursor(ctx, o.client, o.store, "", r, dir, true, nil)
+	return openCursor(ctx, o.client, o.connectionID, o.store, "", r, dir, true, nil)
 }
 
 // Index returns a typed handle for a secondary index on the object store.
 func (o *ObjectStoreClient) Index(name string) *IndexClient {
-	return &IndexClient{client: o.client, store: o.store, index: name}
+	return &IndexClient{client: o.client, connectionID: o.connectionID, store: o.store, index: name}
 }
 
 // IndexClient provides lookup and cursor access through one secondary index.
 type IndexClient struct {
-	client proto.IndexedDBClient
-	store  string
-	index  string
+	client       proto.IndexedDBClient
+	connectionID []byte
+	store        string
+	index        string
 }
 
 // Get loads the first record that matches the supplied index key.
@@ -521,7 +940,7 @@ func (idx *IndexClient) Get(ctx context.Context, values ...any) (Record, error) 
 		return nil, err
 	}
 	resp, err := idx.client.IndexGet(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: vals,
 	})
 	if err != nil {
 		return nil, grpcErr(err)
@@ -540,7 +959,7 @@ func (idx *IndexClient) GetKey(ctx context.Context, values ...any) (string, erro
 		return "", err
 	}
 	resp, err := idx.client.IndexGetKey(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: vals,
 	})
 	if err != nil {
 		return "", grpcErr(err)
@@ -559,7 +978,7 @@ func (idx *IndexClient) GetAll(ctx context.Context, r *KeyRange, values ...any) 
 		return nil, err
 	}
 	resp, err := idx.client.IndexGetAll(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: vals, Range: kr,
 	})
 	if err != nil {
 		return nil, grpcErr(err)
@@ -582,7 +1001,7 @@ func (idx *IndexClient) GetAllKeys(ctx context.Context, r *KeyRange, values ...a
 		return nil, err
 	}
 	resp, err := idx.client.IndexGetAllKeys(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: vals, Range: kr,
 	})
 	if err != nil {
 		return nil, grpcErr(err)
@@ -601,7 +1020,7 @@ func (idx *IndexClient) Count(ctx context.Context, r *KeyRange, values ...any) (
 		return 0, err
 	}
 	resp, err := idx.client.IndexCount(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: vals, Range: kr,
 	})
 	if err != nil {
 		return 0, grpcErr(err)
@@ -625,7 +1044,7 @@ func (idx *IndexClient) DeleteRange(ctx context.Context, r *KeyRange, values ...
 		return 0, err
 	}
 	resp, err := idx.client.IndexDelete(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: vals, Range: kr,
 	})
 	if err != nil {
 		return 0, grpcErr(err)
@@ -635,12 +1054,12 @@ func (idx *IndexClient) DeleteRange(ctx context.Context, r *KeyRange, values ...
 
 // OpenCursor opens a full-value cursor over one secondary index.
 func (idx *IndexClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
-	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, false, values)
+	return openCursor(ctx, idx.client, idx.connectionID, idx.store, idx.index, r, dir, false, values)
 }
 
 // OpenKeyCursor opens a key-only cursor over one secondary index.
 func (idx *IndexClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
-	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
+	return openCursor(ctx, idx.client, idx.connectionID, idx.store, idx.index, r, dir, true, values)
 }
 
 // Transaction is an explicit IndexedDB transaction over a fixed store scope.
@@ -1276,7 +1695,7 @@ func cursorDirectionToProto(dir CursorDirection) proto.CursorDirection {
 	}
 }
 
-func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index string, r *KeyRange, dir CursorDirection, keysOnly bool, values []any) (*Cursor, error) {
+func openCursor(ctx context.Context, client proto.IndexedDBClient, connectionID []byte, store, index string, r *KeyRange, dir CursorDirection, keysOnly bool, values []any) (*Cursor, error) {
 	kr, err := krToProto(r)
 	if err != nil {
 		return nil, err
@@ -1297,12 +1716,13 @@ func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index 
 	err = stream.Send(&proto.CursorClientMessage{
 		Msg: &proto.CursorClientMessage_Open{
 			Open: &proto.OpenCursorRequest{
-				Store:     store,
-				Range:     kr,
-				Direction: cursorDirectionToProto(dir),
-				KeysOnly:  keysOnly,
-				Index:     index,
-				Values:    vals,
+				ConnectionId: connectionID,
+				Store:        store,
+				Range:        kr,
+				Direction:    cursorDirectionToProto(dir),
+				KeysOnly:     keysOnly,
+				Index:        index,
+				Values:       vals,
 			},
 		},
 	})
@@ -1383,6 +1803,43 @@ func rpcStatusErr(st *rpcstatus.Status) error {
 	return grpcErr(status.Error(codes.Code(st.GetCode()), st.GetMessage()))
 }
 
+func versionChangeInfoFromProto(info *proto.VersionChangeInfo) VersionChangeInfo {
+	if info == nil {
+		return VersionChangeInfo{}
+	}
+	return VersionChangeInfo{
+		Name:       info.GetName(),
+		OldVersion: info.GetOldVersion(),
+		NewVersion: info.NewVersion,
+		Reason:     versionChangeReasonFromProto(info.GetReason()),
+	}
+}
+
+func blockedInfoFromProto(info *proto.BlockedInfo) BlockedInfo {
+	if info == nil {
+		return BlockedInfo{}
+	}
+	return BlockedInfo{
+		Name:               info.GetName(),
+		OldVersion:         info.GetOldVersion(),
+		NewVersion:         info.NewVersion,
+		Reason:             versionChangeReasonFromProto(info.GetReason()),
+		OpenConnections:    int(info.GetOpenConnections()),
+		ActiveTransactions: int(info.GetActiveOperations()),
+	}
+}
+
+func versionChangeReasonFromProto(reason proto.VersionChangeReason) VersionChangeReason {
+	switch reason {
+	case proto.VersionChangeReason_VERSION_CHANGE_REASON_DELETE:
+		return VersionChangeDelete
+	case proto.VersionChangeReason_VERSION_CHANGE_REASON_UPGRADE:
+		return VersionChangeUpgrade
+	default:
+		return ""
+	}
+}
+
 func grpcErr(err error) error {
 	if err == nil {
 		return nil
@@ -1396,12 +1853,17 @@ func grpcErr(err error) error {
 		return ErrNotFound
 	case codes.AlreadyExists:
 		return ErrAlreadyExists
+	case codes.Canceled:
+		return ErrAbort
 	case codes.InvalidArgument:
 		if strings.Contains(st.Message(), "invalid transaction") {
 			return ErrInvalidTransaction
 		}
 		return err
 	case codes.FailedPrecondition:
+		if strings.Contains(st.Message(), "blocked") {
+			return ErrBlocked
+		}
 		if strings.Contains(st.Message(), "readonly") {
 			return ErrReadOnly
 		}

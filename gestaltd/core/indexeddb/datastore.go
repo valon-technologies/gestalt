@@ -8,6 +8,8 @@ import (
 var (
 	ErrNotFound           = errors.New("datastore: not found")
 	ErrAlreadyExists      = errors.New("datastore: already exists")
+	ErrAbort              = errors.New("datastore: operation aborted")
+	ErrBlocked            = errors.New("datastore: operation blocked")
 	ErrKeysOnly           = errors.New("datastore: value not available on key-only cursor")
 	ErrReadOnly           = errors.New("datastore: transaction is readonly")
 	ErrTransactionDone    = errors.New("datastore: transaction is already finished")
@@ -46,6 +48,98 @@ const (
 
 type TransactionOptions struct {
 	DurabilityHint TransactionDurabilityHint
+}
+
+type DatabaseInfo struct {
+	Name    string
+	Version uint64
+}
+
+type VersionChangeReason string
+
+const (
+	VersionChangeUpgrade VersionChangeReason = "upgrade"
+	VersionChangeDelete  VersionChangeReason = "delete"
+)
+
+type VersionChangeInfo struct {
+	Name       string
+	OldVersion uint64
+	NewVersion *uint64
+	Reason     VersionChangeReason
+}
+
+type BlockedInfo struct {
+	Name               string
+	OldVersion         uint64
+	NewVersion         *uint64
+	Reason             VersionChangeReason
+	OpenConnections    int
+	ActiveTransactions int
+}
+
+type BlockedAction int
+
+const (
+	BlockedFail BlockedAction = iota
+	BlockedWait
+)
+
+type OpenOptions struct {
+	Version         *uint64
+	Upgrade         func(context.Context, UpgradeContext) error
+	OnVersionChange func(context.Context, VersionChangeInfo) error
+	OnBlocked       func(context.Context, BlockedInfo) (BlockedAction, error)
+}
+
+type DeleteOptions struct {
+	OnBlocked func(context.Context, BlockedInfo) (BlockedAction, error)
+}
+
+type DeleteDatabaseResult struct {
+	Name       string
+	OldVersion uint64
+}
+
+// Factory models the IndexedDB factory/open/delete lifecycle. Implementations
+// own connection queues, blocked/versionchange delivery, and exclusive upgrade
+// execution for each database name.
+type Factory interface {
+	Open(ctx context.Context, name string, opts OpenOptions) (Database, error)
+	OpenCurrent(ctx context.Context, name string, opts OpenOptions) (Database, error)
+	DeleteDatabase(ctx context.Context, name string, opts DeleteOptions) (DeleteDatabaseResult, error)
+	Databases(ctx context.Context) ([]DatabaseInfo, error)
+	CompareKeys(first any, second any) (int, error)
+	Close() error
+}
+
+type Database interface {
+	Name() string
+	Version() uint64
+	ObjectStoreNames(ctx context.Context) ([]string, error)
+	ObjectStore(name string) ObjectStore
+	Transaction(ctx context.Context, stores []string, mode TransactionMode, opts TransactionOptions) (Transaction, error)
+	Close() error
+}
+
+type UpgradeContext interface {
+	OldVersion() uint64
+	NewVersion() uint64
+	Database() UpgradeDatabase
+	ObjectStoreNames(ctx context.Context) ([]string, error)
+	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
+	DeleteObjectStore(ctx context.Context, name string) error
+	CreateIndex(ctx context.Context, store string, index IndexSchema) error
+	DeleteIndex(ctx context.Context, store string, name string) error
+}
+
+type UpgradeDatabase interface {
+	Name() string
+	ObjectStoreNames(ctx context.Context) ([]string, error)
+	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
+	DeleteObjectStore(ctx context.Context, name string) error
+	CreateIndex(ctx context.Context, store string, index IndexSchema) error
+	DeleteIndex(ctx context.Context, store string, name string) error
 }
 
 // Datastore is the IndexedDB-inspired interface every provider implements.

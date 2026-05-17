@@ -2,9 +2,11 @@ package indexeddb
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	coreindexeddb "github.com/valon-technologies/gestalt/server/core/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
@@ -17,14 +19,63 @@ import (
 
 type indexedDBServer struct {
 	proto.UnimplementedIndexedDBServer
-	ds      coreindexeddb.IndexedDB
-	db      string
-	plugin  string
-	allowed map[string]struct{}
+	ds               coreindexeddb.IndexedDB
+	factory          coreindexeddb.Factory
+	db               string
+	plugin           string
+	allowed          map[string]struct{}
+	allowedDatabases map[string]struct{}
+	mu               sync.Mutex
+	connections      map[string]*databaseConnection
+}
+
+type databaseConnection struct {
+	db      coreindexeddb.Database
+	mu      sync.Mutex
+	cond    *sync.Cond
+	active  int
+	closing bool
+}
+
+func newDatabaseConnection(db coreindexeddb.Database) *databaseConnection {
+	conn := &databaseConnection{db: db}
+	conn.cond = sync.NewCond(&conn.mu)
+	return conn
+}
+
+func (c *databaseConnection) acquire() (coreindexeddb.Database, func(), error) {
+	c.mu.Lock()
+	if c.closing {
+		c.mu.Unlock()
+		return nil, nil, status.Error(codes.FailedPrecondition, "indexeddb database connection is closing")
+	}
+	c.active++
+	c.mu.Unlock()
+	return c.db, c.release, nil
+}
+
+func (c *databaseConnection) release() {
+	c.mu.Lock()
+	c.active--
+	if c.active == 0 {
+		c.cond.Broadcast()
+	}
+	c.mu.Unlock()
+}
+
+func (c *databaseConnection) close() {
+	c.mu.Lock()
+	c.closing = true
+	for c.active > 0 {
+		c.cond.Wait()
+	}
+	c.mu.Unlock()
+	_ = c.db.Close()
 }
 
 type ServerOptions struct {
-	AllowedStores []string
+	AllowedStores    []string
+	AllowedDatabases []string
 }
 
 func NewServer(ds coreindexeddb.IndexedDB, pluginName string, opts ServerOptions) proto.IndexedDBServer {
@@ -35,11 +86,25 @@ func NewServer(ds coreindexeddb.IndexedDB, pluginName string, opts ServerOptions
 	if len(allowed) == 0 {
 		allowed = nil
 	}
+	allowedDatabases := make(map[string]struct{}, len(opts.AllowedDatabases))
+	for _, database := range opts.AllowedDatabases {
+		allowedDatabases[database] = struct{}{}
+	}
+	if len(allowedDatabases) == 0 {
+		allowedDatabases = nil
+	}
+	var factory coreindexeddb.Factory
+	if candidate, ok := metricutil.UnwrapIndexedDB(ds).(coreindexeddb.Factory); ok {
+		factory = candidate
+	}
 	return &indexedDBServer{
-		ds:      ds,
-		db:      metricutil.IndexedDBName(ds),
-		plugin:  pluginName,
-		allowed: allowed,
+		ds:               ds,
+		factory:          factory,
+		db:               metricutil.IndexedDBName(ds),
+		plugin:           pluginName,
+		allowed:          allowed,
+		allowedDatabases: allowedDatabases,
+		connections:      make(map[string]*databaseConnection),
 	}
 }
 
@@ -57,9 +122,89 @@ func (s *indexedDBServer) ensureAllowedStore(name string) error {
 	return coreindexeddb.ErrNotFound
 }
 
-func (s *indexedDBServer) objectStore(name string) (coreindexeddb.ObjectStore, error) {
+func (s *indexedDBServer) filterStoreNames(names []string) []string {
+	if len(s.allowed) == 0 {
+		return append([]string(nil), names...)
+	}
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		if _, ok := s.allowed[name]; ok {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func (s *indexedDBServer) ensureAllowedDatabase(name string) error {
+	if len(s.allowedDatabases) == 0 {
+		return nil
+	}
+	if _, ok := s.allowedDatabases[name]; ok {
+		return nil
+	}
+	return coreindexeddb.ErrNotFound
+}
+
+func (s *indexedDBServer) registerDatabase(db coreindexeddb.Database) ([]byte, error) {
+	for range 8 {
+		id := make([]byte, 16)
+		if _, err := rand.Read(id); err != nil {
+			return nil, err
+		}
+		key := string(id)
+		s.mu.Lock()
+		if _, exists := s.connections[key]; !exists {
+			s.connections[key] = newDatabaseConnection(db)
+			s.mu.Unlock()
+			return id, nil
+		}
+		s.mu.Unlock()
+	}
+	return nil, status.Error(codes.Internal, "could not allocate database connection id")
+}
+
+func (s *indexedDBServer) databaseForConnection(connectionID []byte) (coreindexeddb.Database, func(), error) {
+	if len(connectionID) == 0 {
+		return nil, func() {}, nil
+	}
+	s.mu.Lock()
+	conn := s.connections[string(connectionID)]
+	s.mu.Unlock()
+	if conn == nil {
+		return nil, nil, coreindexeddb.ErrNotFound
+	}
+	return conn.acquire()
+}
+
+func (s *indexedDBServer) closeConnection(connectionID []byte) {
+	if len(connectionID) == 0 {
+		return
+	}
+	key := string(connectionID)
+	s.mu.Lock()
+	conn := s.connections[key]
+	delete(s.connections, key)
+	s.mu.Unlock()
+	if conn != nil {
+		conn.close()
+	}
+}
+
+func (s *indexedDBServer) objectStoreFor(connectionID []byte, name string) (coreindexeddb.ObjectStore, func(), error) {
 	if err := s.ensureAllowedStore(name); err != nil {
-		return nil, err
+		return nil, func() {}, err
+	}
+	if db, release, err := s.databaseForConnection(connectionID); err != nil {
+		return nil, func() {}, err
+	} else if db != nil {
+		return metricutil.InstrumentObjectStore(
+			db.ObjectStore(s.storeName(name)),
+			metricutil.IndexedDBMetricLabels{
+				DB:           db.Name(),
+				ProviderName: s.plugin,
+				ObjectStore:  name,
+			},
+		), release, nil
 	}
 	return metricutil.InstrumentObjectStore(
 		metricutil.UnwrapIndexedDB(s.ds).ObjectStore(s.storeName(name)),
@@ -68,7 +213,7 @@ func (s *indexedDBServer) objectStore(name string) (coreindexeddb.ObjectStore, e
 			ProviderName: s.plugin,
 			ObjectStore:  name,
 		},
-	), nil
+	), func() {}, nil
 }
 
 func (s *indexedDBServer) CreateObjectStore(ctx context.Context, req *proto.CreateObjectStoreRequest) (*emptypb.Empty, error) {
@@ -92,11 +237,308 @@ func (s *indexedDBServer) DeleteObjectStore(ctx context.Context, req *proto.Dele
 	return &emptypb.Empty{}, nil
 }
 
-func (s *indexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
-	store, err := s.objectStore(req.GetStore())
+func (s *indexedDBServer) OpenDatabase(stream proto.IndexedDB_OpenDatabaseServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	openReq := first.GetOpen()
+	if openReq == nil {
+		return status.Error(codes.InvalidArgument, "first message must be OpenDatabaseRequest")
+	}
+	if s.factory == nil {
+		_ = stream.Send(&proto.OpenDatabaseServerMessage{
+			Msg: &proto.OpenDatabaseServerMessage_Error{Error: rpcStatusFromError(status.Error(codes.Unimplemented, "indexeddb factory lifecycle is not supported"))},
+		})
+		return nil
+	}
+	if err := s.ensureAllowedDatabase(openReq.GetName()); err != nil {
+		_ = stream.Send(&proto.OpenDatabaseServerMessage{
+			Msg: &proto.OpenDatabaseServerMessage_Error{Error: rpcStatusFromError(err)},
+		})
+		return nil
+	}
+
+	var opened coreindexeddb.Database
+	var connectionID []byte
+	events := make(chan *proto.OpenDatabaseServerMessage, 16)
+	opts := coreindexeddb.OpenOptions{
+		Version: openReq.Version,
+		Upgrade: func(ctx context.Context, upgrade coreindexeddb.UpgradeContext) error {
+			return s.runUpgrade(ctx, stream, upgrade)
+		},
+		OnVersionChange: func(ctx context.Context, info coreindexeddb.VersionChangeInfo) error {
+			msg := &proto.OpenDatabaseServerMessage{
+				Msg: &proto.OpenDatabaseServerMessage_Versionchange{Versionchange: versionChangeInfoToProto(info)},
+			}
+			select {
+			case events <- msg:
+				return nil
+			default:
+				if len(connectionID) != 0 {
+					go s.closeConnection(connectionID)
+				} else if opened != nil {
+					_ = opened.Close()
+				}
+				return nil
+			}
+		},
+		OnBlocked: func(ctx context.Context, info coreindexeddb.BlockedInfo) (coreindexeddb.BlockedAction, error) {
+			if err := stream.Send(&proto.OpenDatabaseServerMessage{
+				Msg: &proto.OpenDatabaseServerMessage_Blocked{Blocked: blockedInfoToProto(info)},
+			}); err != nil {
+				return coreindexeddb.BlockedFail, err
+			}
+			return coreindexeddb.BlockedWait, nil
+		},
+	}
+
+	var db coreindexeddb.Database
+	if openReq.GetRequireExisting() {
+		db, err = s.factory.OpenCurrent(stream.Context(), openReq.GetName(), opts)
+	} else {
+		db, err = s.factory.Open(stream.Context(), openReq.GetName(), opts)
+	}
+	if err != nil {
+		_ = stream.Send(&proto.OpenDatabaseServerMessage{
+			Msg: &proto.OpenDatabaseServerMessage_Error{Error: rpcStatusFromError(err)},
+		})
+		return nil
+	}
+	opened = db
+	connectionID, err = s.registerDatabase(db)
+	if err != nil {
+		_ = db.Close()
+		return err
+	}
+	defer s.closeConnection(connectionID)
+
+	names, err := db.ObjectStoreNames(stream.Context())
+	if err != nil {
+		_ = stream.Send(&proto.OpenDatabaseServerMessage{
+			Msg: &proto.OpenDatabaseServerMessage_Error{Error: rpcStatusFromError(err)},
+		})
+		return nil
+	}
+	names = s.filterStoreNames(names)
+	if err := stream.Send(&proto.OpenDatabaseServerMessage{
+		Msg: &proto.OpenDatabaseServerMessage_Opened{Opened: &proto.OpenDatabaseSuccess{
+			ConnectionId:     connectionID,
+			Name:             db.Name(),
+			Version:          db.Version(),
+			ObjectStoreNames: names,
+		}},
+	}); err != nil {
+		return err
+	}
+
+	recvCh := make(chan *proto.OpenDatabaseClientMessage, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		for {
+			msg, recvErr := stream.Recv()
+			if recvErr != nil {
+				errCh <- recvErr
+				return
+			}
+			recvCh <- msg
+		}
+	}()
+
+	for {
+		select {
+		case msg := <-events:
+			if err := stream.Send(msg); err != nil {
+				return err
+			}
+		case msg := <-recvCh:
+			switch msg.GetMsg().(type) {
+			case *proto.OpenDatabaseClientMessage_Close:
+				if err := stream.Send(&proto.OpenDatabaseServerMessage{
+					Msg: &proto.OpenDatabaseServerMessage_Closed{Closed: &proto.CloseDatabaseResponse{}},
+				}); err != nil {
+					return err
+				}
+				return nil
+			default:
+				return status.Error(codes.InvalidArgument, "expected CloseDatabaseRequest after open")
+			}
+		case recvErr := <-errCh:
+			if errors.Is(recvErr, io.EOF) {
+				return nil
+			}
+			return recvErr
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		}
+	}
+}
+
+func (s *indexedDBServer) DeleteDatabase(req *proto.DeleteDatabaseRequest, stream proto.IndexedDB_DeleteDatabaseServer) error {
+	if s.factory == nil {
+		_ = stream.Send(&proto.DeleteDatabaseServerMessage{
+			Msg: &proto.DeleteDatabaseServerMessage_Error{Error: rpcStatusFromError(status.Error(codes.Unimplemented, "indexeddb factory lifecycle is not supported"))},
+		})
+		return nil
+	}
+	if err := s.ensureAllowedDatabase(req.GetName()); err != nil {
+		_ = stream.Send(&proto.DeleteDatabaseServerMessage{
+			Msg: &proto.DeleteDatabaseServerMessage_Error{Error: rpcStatusFromError(err)},
+		})
+		return nil
+	}
+	result, err := s.factory.DeleteDatabase(stream.Context(), req.GetName(), coreindexeddb.DeleteOptions{
+		OnBlocked: func(ctx context.Context, info coreindexeddb.BlockedInfo) (coreindexeddb.BlockedAction, error) {
+			if err := stream.Send(&proto.DeleteDatabaseServerMessage{
+				Msg: &proto.DeleteDatabaseServerMessage_Blocked{Blocked: blockedInfoToProto(info)},
+			}); err != nil {
+				return coreindexeddb.BlockedFail, err
+			}
+			return coreindexeddb.BlockedWait, nil
+		},
+	})
+	if err != nil {
+		_ = stream.Send(&proto.DeleteDatabaseServerMessage{
+			Msg: &proto.DeleteDatabaseServerMessage_Error{Error: rpcStatusFromError(err)},
+		})
+		return nil
+	}
+	return stream.Send(&proto.DeleteDatabaseServerMessage{
+		Msg: &proto.DeleteDatabaseServerMessage_Deleted{Deleted: &proto.DeleteDatabaseResponse{
+			Name:       result.Name,
+			OldVersion: result.OldVersion,
+		}},
+	})
+}
+
+func (s *indexedDBServer) Databases(ctx context.Context, _ *proto.DatabasesRequest) (*proto.DatabasesResponse, error) {
+	if s.factory == nil {
+		return nil, status.Error(codes.Unimplemented, "indexeddb factory lifecycle is not supported")
+	}
+	infos, err := s.factory.Databases(ctx)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	resp := &proto.DatabasesResponse{Databases: make([]*proto.DatabaseInfo, 0, len(infos))}
+	for _, info := range infos {
+		if err := s.ensureAllowedDatabase(info.Name); err != nil {
+			continue
+		}
+		resp.Databases = append(resp.Databases, &proto.DatabaseInfo{Name: info.Name, Version: info.Version})
+	}
+	return resp, nil
+}
+
+func (s *indexedDBServer) CompareKeys(ctx context.Context, req *proto.CompareKeysRequest) (*proto.CompareKeysResponse, error) {
+	if s.factory == nil {
+		return nil, status.Error(codes.Unimplemented, "indexeddb factory lifecycle is not supported")
+	}
+	first, err := keyValueToAny(req.GetFirst())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal first key: %v", err)
+	}
+	second, err := keyValueToAny(req.GetSecond())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal second key: %v", err)
+	}
+	cmp, err := s.factory.CompareKeys(first, second)
+	if err != nil {
+		return nil, indexeddbToGRPCErr(err)
+	}
+	return &proto.CompareKeysResponse{Cmp: int32(cmp)}, nil
+}
+
+func (s *indexedDBServer) runUpgrade(ctx context.Context, stream proto.IndexedDB_OpenDatabaseServer, upgrade coreindexeddb.UpgradeContext) error {
+	names, err := upgrade.ObjectStoreNames(ctx)
+	if err != nil {
+		return err
+	}
+	if err := stream.Send(&proto.OpenDatabaseServerMessage{
+		Msg: &proto.OpenDatabaseServerMessage_UpgradeStarted{UpgradeStarted: &proto.UpgradeStarted{
+			Name:             upgrade.Database().Name(),
+			OldVersion:       upgrade.OldVersion(),
+			NewVersion:       upgrade.NewVersion(),
+			ObjectStoreNames: s.filterStoreNames(names),
+		}},
+	}); err != nil {
+		return err
+	}
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			return err
+		}
+		op := msg.GetUpgradeOperation()
+		if op == nil {
+			if msg.GetClose() != nil {
+				return coreindexeddb.ErrAbort
+			}
+			return status.Error(codes.InvalidArgument, "expected UpgradeOperation during upgrade")
+		}
+		resp, terminal, opErr := s.executeUpgradeOperation(ctx, upgrade, op)
+		if err := stream.Send(&proto.OpenDatabaseServerMessage{
+			Msg: &proto.OpenDatabaseServerMessage_UpgradeOperationResponse{UpgradeOperationResponse: resp},
+		}); err != nil {
+			return err
+		}
+		if opErr != nil {
+			return opErr
+		}
+		if terminal {
+			return nil
+		}
+	}
+}
+
+func (s *indexedDBServer) executeUpgradeOperation(ctx context.Context, upgrade coreindexeddb.UpgradeContext, op *proto.UpgradeOperation) (*proto.UpgradeOperationResponse, bool, error) {
+	resp := &proto.UpgradeOperationResponse{RequestId: op.GetRequestId()}
+	var err error
+	terminal := false
+	switch body := op.GetOp().(type) {
+	case *proto.UpgradeOperation_CreateObjectStore:
+		if err = s.ensureAllowedStore(body.CreateObjectStore.GetName()); err == nil {
+			err = upgrade.CreateObjectStore(ctx, s.storeName(body.CreateObjectStore.GetName()), protoToSchema(body.CreateObjectStore.GetSchema()))
+		}
+	case *proto.UpgradeOperation_DeleteObjectStore:
+		if err = s.ensureAllowedStore(body.DeleteObjectStore.GetName()); err == nil {
+			err = upgrade.DeleteObjectStore(ctx, s.storeName(body.DeleteObjectStore.GetName()))
+		}
+	case *proto.UpgradeOperation_CreateIndex:
+		if err = s.ensureAllowedStore(body.CreateIndex.GetStore()); err == nil {
+			err = upgrade.CreateIndex(ctx, s.storeName(body.CreateIndex.GetStore()), coreindexeddb.IndexSchema{
+				Name:    body.CreateIndex.GetName(),
+				KeyPath: body.CreateIndex.GetKeyPath(),
+				Unique:  body.CreateIndex.GetUnique(),
+			})
+		}
+	case *proto.UpgradeOperation_DeleteIndex:
+		if err = s.ensureAllowedStore(body.DeleteIndex.GetStore()); err == nil {
+			err = upgrade.DeleteIndex(ctx, s.storeName(body.DeleteIndex.GetStore()), body.DeleteIndex.GetName())
+		}
+	case *proto.UpgradeOperation_ObjectStoreNames:
+		var names []string
+		names, err = upgrade.ObjectStoreNames(ctx)
+		resp.ObjectStoreNames = s.filterStoreNames(names)
+	case *proto.UpgradeOperation_FinishUpgrade:
+		terminal = true
+	case *proto.UpgradeOperation_AbortUpgrade:
+		err = fmt.Errorf("%w: %s", coreindexeddb.ErrAbort, body.AbortUpgrade.GetReason())
+	default:
+		err = status.Error(codes.InvalidArgument, "unknown upgrade operation")
+	}
+	if err != nil {
+		resp.Error = rpcStatusFromError(err)
+		return resp, true, err
+	}
+	return resp, terminal, nil
+}
+
+func (s *indexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
+	if err != nil {
+		return nil, indexeddbToGRPCErr(err)
+	}
+	defer release()
 	rec, err := store.Get(ctx, req.GetId())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -105,10 +547,11 @@ func (s *indexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest
 }
 
 func (s *indexedDBServer) GetKey(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.KeyResponse, error) {
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	key, err := store.GetKey(ctx, req.GetId())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -121,10 +564,11 @@ func (s *indexedDBServer) Add(ctx context.Context, req *proto.RecordRequest) (*e
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	if err := store.Add(ctx, record); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -136,10 +580,11 @@ func (s *indexedDBServer) Put(ctx context.Context, req *proto.RecordRequest) (*e
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	if err := store.Put(ctx, record); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -147,10 +592,11 @@ func (s *indexedDBServer) Put(ctx context.Context, req *proto.RecordRequest) (*e
 }
 
 func (s *indexedDBServer) Delete(ctx context.Context, req *proto.ObjectStoreRequest) (*emptypb.Empty, error) {
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	if err := store.Delete(ctx, req.GetId()); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -158,10 +604,11 @@ func (s *indexedDBServer) Delete(ctx context.Context, req *proto.ObjectStoreRequ
 }
 
 func (s *indexedDBServer) Clear(ctx context.Context, req *proto.ObjectStoreNameRequest) (*emptypb.Empty, error) {
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	if err := store.Clear(ctx); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -173,10 +620,11 @@ func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRang
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	recs, err := store.GetAll(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -189,10 +637,11 @@ func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStore
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	keys, err := store.GetAllKeys(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -205,10 +654,11 @@ func (s *indexedDBServer) Count(ctx context.Context, req *proto.ObjectStoreRange
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	count, err := store.Count(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -224,10 +674,11 @@ func (s *indexedDBServer) DeleteRange(ctx context.Context, req *proto.ObjectStor
 	if kr == nil {
 		return nil, status.Error(codes.InvalidArgument, "key range is required for DeleteRange")
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	deleted, err := store.DeleteRange(ctx, *kr)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -240,10 +691,11 @@ func (s *indexedDBServer) IndexGet(ctx context.Context, req *proto.IndexQueryReq
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	rec, err := store.Index(req.GetIndex()).Get(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -256,10 +708,11 @@ func (s *indexedDBServer) IndexGetKey(ctx context.Context, req *proto.IndexQuery
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	key, err := store.Index(req.GetIndex()).GetKey(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -276,10 +729,11 @@ func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQuery
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	recs, err := store.Index(req.GetIndex()).GetAll(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -296,10 +750,11 @@ func (s *indexedDBServer) IndexGetAllKeys(ctx context.Context, req *proto.IndexQ
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	keys, err := store.Index(req.GetIndex()).GetAllKeys(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -316,10 +771,11 @@ func (s *indexedDBServer) IndexCount(ctx context.Context, req *proto.IndexQueryR
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	count, err := store.Index(req.GetIndex()).Count(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -336,10 +792,11 @@ func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQuery
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	store, err := s.objectStore(req.GetStore())
+	store, release, err := s.objectStoreFor(req.GetConnectionId(), req.GetStore())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	defer release()
 	deleted, err := store.Index(req.GetIndex()).DeleteRange(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
@@ -360,12 +817,25 @@ func (s *indexedDBServer) Transaction(stream proto.IndexedDB_TransactionServer) 
 	if err != nil {
 		return indexeddbToGRPCErr(err)
 	}
-	tx, err := metricutil.UnwrapIndexedDB(s.ds).Transaction(
-		stream.Context(),
-		stores,
-		protoTransactionMode(begin.GetMode()),
-		coreindexeddb.TransactionOptions{DurabilityHint: protoDurabilityHint(begin.GetDurabilityHint())},
-	)
+	var tx coreindexeddb.Transaction
+	if db, release, connErr := s.databaseForConnection(begin.GetConnectionId()); connErr != nil {
+		return indexeddbToGRPCErr(connErr)
+	} else if db != nil {
+		defer release()
+		tx, err = db.Transaction(
+			stream.Context(),
+			stores,
+			protoTransactionMode(begin.GetMode()),
+			coreindexeddb.TransactionOptions{DurabilityHint: protoDurabilityHint(begin.GetDurabilityHint())},
+		)
+	} else {
+		tx, err = metricutil.UnwrapIndexedDB(s.ds).Transaction(
+			stream.Context(),
+			stores,
+			protoTransactionMode(begin.GetMode()),
+			coreindexeddb.TransactionOptions{DurabilityHint: protoDurabilityHint(begin.GetDurabilityHint())},
+		)
+	}
 	if err != nil {
 		return indexeddbToGRPCErr(err)
 	}
@@ -760,6 +1230,37 @@ func rpcStatusFromError(err error) *rpcstatus.Status {
 	return &rpcstatus.Status{Code: int32(st.Code()), Message: st.Message()}
 }
 
+func versionChangeInfoToProto(info coreindexeddb.VersionChangeInfo) *proto.VersionChangeInfo {
+	return &proto.VersionChangeInfo{
+		Name:       info.Name,
+		OldVersion: info.OldVersion,
+		NewVersion: info.NewVersion,
+		Reason:     versionChangeReasonToProto(info.Reason),
+	}
+}
+
+func blockedInfoToProto(info coreindexeddb.BlockedInfo) *proto.BlockedInfo {
+	return &proto.BlockedInfo{
+		Name:             info.Name,
+		OldVersion:       info.OldVersion,
+		NewVersion:       info.NewVersion,
+		Reason:           versionChangeReasonToProto(info.Reason),
+		OpenConnections:  int32(info.OpenConnections),
+		ActiveOperations: int32(info.ActiveTransactions),
+	}
+}
+
+func versionChangeReasonToProto(reason coreindexeddb.VersionChangeReason) proto.VersionChangeReason {
+	switch reason {
+	case coreindexeddb.VersionChangeDelete:
+		return proto.VersionChangeReason_VERSION_CHANGE_REASON_DELETE
+	case coreindexeddb.VersionChangeUpgrade:
+		return proto.VersionChangeReason_VERSION_CHANGE_REASON_UPGRADE
+	default:
+		return proto.VersionChangeReason_VERSION_CHANGE_REASON_UNSPECIFIED
+	}
+}
+
 func protoCursorDirection(d proto.CursorDirection) coreindexeddb.CursorDirection {
 	switch d {
 	case proto.CursorDirection_CURSOR_NEXT_UNIQUE:
@@ -791,10 +1292,11 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 	ctx := stream.Context()
 
 	var cursor coreindexeddb.Cursor
-	store, err := s.objectStore(openReq.GetStore())
+	store, release, err := s.objectStoreFor(openReq.GetConnectionId(), openReq.GetStore())
 	if err != nil {
 		return indexeddbToGRPCErr(err)
 	}
+	defer release()
 
 	if openReq.GetIndex() != "" {
 		values, vErr := protoValuesToAny(openReq.GetValues())
@@ -1049,11 +1551,20 @@ func indexeddbToGRPCErr(err error) error {
 	if err == nil {
 		return nil
 	}
+	if _, ok := status.FromError(err); ok {
+		return err
+	}
 	if errors.Is(err, coreindexeddb.ErrNotFound) {
 		return status.Error(codes.NotFound, err.Error())
 	}
 	if errors.Is(err, coreindexeddb.ErrAlreadyExists) {
 		return status.Error(codes.AlreadyExists, err.Error())
+	}
+	if errors.Is(err, coreindexeddb.ErrAbort) {
+		return status.Error(codes.Canceled, err.Error())
+	}
+	if errors.Is(err, coreindexeddb.ErrBlocked) {
+		return status.Error(codes.FailedPrecondition, err.Error())
 	}
 	if errors.Is(err, coreindexeddb.ErrInvalidTransaction) {
 		return status.Error(codes.InvalidArgument, err.Error())

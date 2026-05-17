@@ -2,6 +2,7 @@ package indexeddb
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -66,17 +67,22 @@ func (r *remoteIndexedDB) ObjectStore(name string) coreindexeddb.ObjectStore {
 }
 
 func (r *remoteIndexedDB) Transaction(ctx context.Context, stores []string, mode coreindexeddb.TransactionMode, opts coreindexeddb.TransactionOptions) (coreindexeddb.Transaction, error) {
+	return beginRemoteTransaction(ctx, r.client, nil, stores, mode, opts)
+}
+
+func beginRemoteTransaction(ctx context.Context, client proto.IndexedDBClient, connectionID []byte, stores []string, mode coreindexeddb.TransactionMode, opts coreindexeddb.TransactionOptions) (coreindexeddb.Transaction, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	streamCtx, cancel := context.WithCancel(ctx)
-	stream, err := r.client.Transaction(streamCtx)
+	stream, err := client.Transaction(streamCtx)
 	if err != nil {
 		cancel()
 		return nil, grpcToDatastoreErr(err)
 	}
 	if err := stream.Send(&proto.TransactionClientMessage{
 		Msg: &proto.TransactionClientMessage_Begin{Begin: &proto.BeginTransactionRequest{
+			ConnectionId:   connectionID,
 			Stores:         stores,
 			Mode:           transactionModeToProto(mode),
 			DurabilityHint: durabilityHintToProto(opts.DurabilityHint),
@@ -103,19 +109,8 @@ func (r *remoteIndexedDB) Transaction(ctx context.Context, stores []string, mode
 func (r *remoteIndexedDB) CreateObjectStore(ctx context.Context, name string, schema coreindexeddb.ObjectStoreSchema) error {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	indexes := make([]*proto.IndexSchema, len(schema.Indexes))
-	for i, idx := range schema.Indexes {
-		indexes[i] = &proto.IndexSchema{Name: idx.Name, KeyPath: idx.KeyPath, Unique: idx.Unique}
-	}
-	columns := make([]*proto.ColumnDef, len(schema.Columns))
-	for i, col := range schema.Columns {
-		columns[i] = &proto.ColumnDef{
-			Name: col.Name, Type: int32(col.Type),
-			PrimaryKey: col.PrimaryKey, NotNull: col.NotNull, Unique: col.Unique,
-		}
-	}
 	_, err := r.client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{
-		Name: name, Schema: &proto.ObjectStoreSchema{Indexes: indexes, Columns: columns},
+		Name: name, Schema: schemaToProto(schema),
 	})
 	return grpcToDatastoreErr(err)
 }
@@ -141,17 +136,361 @@ func (r *remoteIndexedDB) Close() error {
 	return r.closer.Close()
 }
 
+func (r *remoteIndexedDB) Open(ctx context.Context, name string, opts coreindexeddb.OpenOptions) (coreindexeddb.Database, error) {
+	return r.openDatabase(ctx, &proto.OpenDatabaseRequest{Name: name, Version: opts.Version}, opts)
+}
+
+func (r *remoteIndexedDB) OpenCurrent(ctx context.Context, name string, opts coreindexeddb.OpenOptions) (coreindexeddb.Database, error) {
+	opts.Version = nil
+	return r.openDatabase(ctx, &proto.OpenDatabaseRequest{Name: name, RequireExisting: true}, opts)
+}
+
+func (r *remoteIndexedDB) openDatabase(ctx context.Context, req *proto.OpenDatabaseRequest, opts coreindexeddb.OpenOptions) (coreindexeddb.Database, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	stream, err := r.client.OpenDatabase(streamCtx)
+	if err != nil {
+		cancel()
+		return nil, grpcToDatastoreErr(err)
+	}
+	if err := stream.Send(&proto.OpenDatabaseClientMessage{Msg: &proto.OpenDatabaseClientMessage_Open{Open: req}}); err != nil {
+		_ = stream.CloseSend()
+		cancel()
+		return nil, grpcToDatastoreErr(err)
+	}
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			_ = stream.CloseSend()
+			cancel()
+			return nil, grpcToDatastoreErr(err)
+		}
+		switch body := msg.GetMsg().(type) {
+		case *proto.OpenDatabaseServerMessage_UpgradeStarted:
+			upgrade := &remoteUpgradeContext{stream: stream, started: body.UpgradeStarted}
+			if opts.Upgrade == nil {
+				if err := upgrade.finish(ctx); err != nil {
+					_ = stream.CloseSend()
+					cancel()
+					return nil, err
+				}
+				continue
+			}
+			if err := opts.Upgrade(ctx, upgrade); err != nil {
+				abortErr := upgrade.abort(ctx, err.Error())
+				_ = stream.CloseSend()
+				cancel()
+				if abortErr != nil && !errors.Is(abortErr, coreindexeddb.ErrAbort) {
+					return nil, errors.Join(err, abortErr)
+				}
+				return nil, err
+			}
+			if !upgrade.finished {
+				if err := upgrade.finish(ctx); err != nil {
+					_ = stream.CloseSend()
+					cancel()
+					return nil, err
+				}
+			}
+		case *proto.OpenDatabaseServerMessage_Blocked:
+			action := coreindexeddb.BlockedWait
+			if opts.OnBlocked != nil {
+				var callbackErr error
+				action, callbackErr = opts.OnBlocked(ctx, blockedInfoFromProto(body.Blocked))
+				if callbackErr != nil {
+					_ = stream.CloseSend()
+					cancel()
+					return nil, fmt.Errorf("%w: %v", coreindexeddb.ErrAbort, callbackErr)
+				}
+			}
+			if action == coreindexeddb.BlockedFail {
+				_ = stream.CloseSend()
+				cancel()
+				return nil, coreindexeddb.ErrBlocked
+			}
+		case *proto.OpenDatabaseServerMessage_Opened:
+			db := &remoteDatabase{
+				client:           r.client,
+				stream:           stream,
+				cancel:           cancel,
+				connectionID:     append([]byte(nil), body.Opened.GetConnectionId()...),
+				name:             body.Opened.GetName(),
+				version:          body.Opened.GetVersion(),
+				objectStoreNames: append([]string(nil), body.Opened.GetObjectStoreNames()...),
+				onVersionChange:  opts.OnVersionChange,
+				closed:           make(chan struct{}),
+			}
+			go db.recvLifecycle()
+			return db, nil
+		case *proto.OpenDatabaseServerMessage_Error:
+			_ = stream.CloseSend()
+			cancel()
+			return nil, rpcStatusToDatastoreErr(body.Error)
+		default:
+			_ = stream.CloseSend()
+			cancel()
+			return nil, fmt.Errorf("indexeddb open: unexpected server message")
+		}
+	}
+}
+
+func (r *remoteIndexedDB) DeleteDatabase(ctx context.Context, name string, opts coreindexeddb.DeleteOptions) (coreindexeddb.DeleteDatabaseResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	stream, err := r.client.DeleteDatabase(ctx, &proto.DeleteDatabaseRequest{Name: name})
+	if err != nil {
+		return coreindexeddb.DeleteDatabaseResult{}, grpcToDatastoreErr(err)
+	}
+	for {
+		msg, err := stream.Recv()
+		if err != nil {
+			return coreindexeddb.DeleteDatabaseResult{}, grpcToDatastoreErr(err)
+		}
+		switch body := msg.GetMsg().(type) {
+		case *proto.DeleteDatabaseServerMessage_Blocked:
+			action := coreindexeddb.BlockedWait
+			if opts.OnBlocked != nil {
+				var callbackErr error
+				action, callbackErr = opts.OnBlocked(ctx, blockedInfoFromProto(body.Blocked))
+				if callbackErr != nil {
+					return coreindexeddb.DeleteDatabaseResult{}, fmt.Errorf("%w: %v", coreindexeddb.ErrAbort, callbackErr)
+				}
+			}
+			if action == coreindexeddb.BlockedFail {
+				return coreindexeddb.DeleteDatabaseResult{}, coreindexeddb.ErrBlocked
+			}
+		case *proto.DeleteDatabaseServerMessage_Deleted:
+			return coreindexeddb.DeleteDatabaseResult{Name: body.Deleted.GetName(), OldVersion: body.Deleted.GetOldVersion()}, nil
+		case *proto.DeleteDatabaseServerMessage_Error:
+			return coreindexeddb.DeleteDatabaseResult{}, rpcStatusToDatastoreErr(body.Error)
+		default:
+			return coreindexeddb.DeleteDatabaseResult{}, fmt.Errorf("indexeddb delete database: unexpected server message")
+		}
+	}
+}
+
+func (r *remoteIndexedDB) Databases(ctx context.Context) ([]coreindexeddb.DatabaseInfo, error) {
+	ctx, cancel := runtimehost.ProviderCallContext(ctx)
+	defer cancel()
+	resp, err := r.client.Databases(ctx, &proto.DatabasesRequest{})
+	if err != nil {
+		return nil, grpcToDatastoreErr(err)
+	}
+	out := make([]coreindexeddb.DatabaseInfo, len(resp.GetDatabases()))
+	for i, info := range resp.GetDatabases() {
+		out[i] = coreindexeddb.DatabaseInfo{Name: info.GetName(), Version: info.GetVersion()}
+	}
+	return out, nil
+}
+
+func (r *remoteIndexedDB) CompareKeys(first any, second any) (int, error) {
+	firstKey, err := anyToKeyValue(first)
+	if err != nil {
+		return 0, err
+	}
+	secondKey, err := anyToKeyValue(second)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := r.client.CompareKeys(context.Background(), &proto.CompareKeysRequest{First: firstKey, Second: secondKey})
+	if err != nil {
+		return 0, grpcToDatastoreErr(err)
+	}
+	return int(resp.GetCmp()), nil
+}
+
 // --- ObjectStore ---
 
+type remoteDatabase struct {
+	client           proto.IndexedDBClient
+	stream           proto.IndexedDB_OpenDatabaseClient
+	cancel           context.CancelFunc
+	connectionID     []byte
+	name             string
+	version          uint64
+	objectStoreNames []string
+	onVersionChange  func(context.Context, coreindexeddb.VersionChangeInfo) error
+	closeOnce        sync.Once
+	closed           chan struct{}
+}
+
+func (db *remoteDatabase) Name() string { return db.name }
+
+func (db *remoteDatabase) Version() uint64 { return db.version }
+
+func (db *remoteDatabase) ObjectStoreNames(context.Context) ([]string, error) {
+	return append([]string(nil), db.objectStoreNames...), nil
+}
+
+func (db *remoteDatabase) ObjectStore(name string) coreindexeddb.ObjectStore {
+	return &remoteObjectStore{client: db.client, connectionID: db.connectionID, store: name}
+}
+
+func (db *remoteDatabase) Transaction(ctx context.Context, stores []string, mode coreindexeddb.TransactionMode, opts coreindexeddb.TransactionOptions) (coreindexeddb.Transaction, error) {
+	return beginRemoteTransaction(ctx, db.client, db.connectionID, stores, mode, opts)
+}
+
+func (db *remoteDatabase) Close() error {
+	db.closeOnce.Do(func() {
+		if db.stream != nil {
+			_ = db.stream.Send(&proto.OpenDatabaseClientMessage{Msg: &proto.OpenDatabaseClientMessage_Close{Close: &proto.CloseDatabaseRequest{}}})
+			_ = db.stream.CloseSend()
+		}
+		if db.cancel != nil {
+			db.cancel()
+		}
+		<-db.closed
+	})
+	return nil
+}
+
+func (db *remoteDatabase) recvLifecycle() {
+	defer close(db.closed)
+	for {
+		msg, err := db.stream.Recv()
+		if err != nil {
+			return
+		}
+		switch body := msg.GetMsg().(type) {
+		case *proto.OpenDatabaseServerMessage_Versionchange:
+			if db.onVersionChange != nil {
+				info := versionChangeInfoFromProto(body.Versionchange)
+				go func() { _ = db.onVersionChange(context.Background(), info) }()
+			}
+		case *proto.OpenDatabaseServerMessage_Closed, *proto.OpenDatabaseServerMessage_Error:
+			return
+		}
+	}
+}
+
+type remoteUpgradeContext struct {
+	stream   proto.IndexedDB_OpenDatabaseClient
+	started  *proto.UpgradeStarted
+	nextID   uint64
+	finished bool
+}
+
+func (u *remoteUpgradeContext) OldVersion() uint64 { return u.started.GetOldVersion() }
+
+func (u *remoteUpgradeContext) NewVersion() uint64 { return u.started.GetNewVersion() }
+
+func (u *remoteUpgradeContext) Database() coreindexeddb.UpgradeDatabase {
+	return (*remoteUpgradeDatabase)(u)
+}
+
+func (u *remoteUpgradeContext) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	resp, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_ObjectStoreNames{ObjectStoreNames: &proto.UpgradeObjectStoreNamesRequest{}}})
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), resp.GetObjectStoreNames()...), nil
+}
+
+func (u *remoteUpgradeContext) CreateObjectStore(ctx context.Context, name string, schema coreindexeddb.ObjectStoreSchema) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_CreateObjectStore{CreateObjectStore: &proto.UpgradeCreateObjectStoreRequest{
+		Name:   name,
+		Schema: schemaToProto(schema),
+	}}})
+	return err
+}
+
+func (u *remoteUpgradeContext) DeleteObjectStore(ctx context.Context, name string) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_DeleteObjectStore{DeleteObjectStore: &proto.UpgradeDeleteObjectStoreRequest{Name: name}}})
+	return err
+}
+
+func (u *remoteUpgradeContext) CreateIndex(ctx context.Context, store string, index coreindexeddb.IndexSchema) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_CreateIndex{CreateIndex: &proto.UpgradeCreateIndexRequest{
+		Store:   store,
+		Name:    index.Name,
+		KeyPath: index.KeyPath,
+		Unique:  index.Unique,
+	}}})
+	return err
+}
+
+func (u *remoteUpgradeContext) DeleteIndex(ctx context.Context, store string, name string) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_DeleteIndex{DeleteIndex: &proto.UpgradeDeleteIndexRequest{Store: store, Name: name}}})
+	return err
+}
+
+func (u *remoteUpgradeContext) finish(ctx context.Context) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_FinishUpgrade{FinishUpgrade: &proto.FinishUpgradeRequest{}}})
+	if err == nil {
+		u.finished = true
+	}
+	return err
+}
+
+func (u *remoteUpgradeContext) abort(ctx context.Context, reason string) error {
+	_, err := u.send(ctx, &proto.UpgradeOperation{Op: &proto.UpgradeOperation_AbortUpgrade{AbortUpgrade: &proto.AbortUpgradeRequest{Reason: reason}}})
+	if err == nil {
+		u.finished = true
+	}
+	return err
+}
+
+func (u *remoteUpgradeContext) send(ctx context.Context, op *proto.UpgradeOperation) (*proto.UpgradeOperationResponse, error) {
+	u.nextID++
+	requestID := u.nextID
+	op.RequestId = requestID
+	if err := u.stream.Send(&proto.OpenDatabaseClientMessage{Msg: &proto.OpenDatabaseClientMessage_UpgradeOperation{UpgradeOperation: op}}); err != nil {
+		return nil, grpcToDatastoreErr(err)
+	}
+	resp, err := u.stream.Recv()
+	if err != nil {
+		return nil, grpcToDatastoreErr(err)
+	}
+	opResp := resp.GetUpgradeOperationResponse()
+	if opResp == nil {
+		return nil, fmt.Errorf("indexeddb upgrade: expected operation response")
+	}
+	if opResp.GetRequestId() != requestID {
+		return nil, fmt.Errorf("indexeddb upgrade: response request id mismatch")
+	}
+	if err := rpcStatusToDatastoreErr(opResp.GetError()); err != nil {
+		return nil, err
+	}
+	return opResp, ctx.Err()
+}
+
+type remoteUpgradeDatabase remoteUpgradeContext
+
+func (db *remoteUpgradeDatabase) Name() string { return db.started.GetName() }
+
+func (db *remoteUpgradeDatabase) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	return (*remoteUpgradeContext)(db).ObjectStoreNames(ctx)
+}
+
+func (db *remoteUpgradeDatabase) CreateObjectStore(ctx context.Context, name string, schema coreindexeddb.ObjectStoreSchema) error {
+	return (*remoteUpgradeContext)(db).CreateObjectStore(ctx, name, schema)
+}
+
+func (db *remoteUpgradeDatabase) DeleteObjectStore(ctx context.Context, name string) error {
+	return (*remoteUpgradeContext)(db).DeleteObjectStore(ctx, name)
+}
+
+func (db *remoteUpgradeDatabase) CreateIndex(ctx context.Context, store string, index coreindexeddb.IndexSchema) error {
+	return (*remoteUpgradeContext)(db).CreateIndex(ctx, store, index)
+}
+
+func (db *remoteUpgradeDatabase) DeleteIndex(ctx context.Context, store string, name string) error {
+	return (*remoteUpgradeContext)(db).DeleteIndex(ctx, store, name)
+}
+
 type remoteObjectStore struct {
-	client proto.IndexedDBClient
-	store  string
+	client       proto.IndexedDBClient
+	connectionID []byte
+	store        string
 }
 
 func (o *remoteObjectStore) Get(ctx context.Context, id string) (coreindexeddb.Record, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
+	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{ConnectionId: o.connectionID, Store: o.store, Id: id})
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
@@ -165,7 +504,7 @@ func (o *remoteObjectStore) Get(ctx context.Context, id string) (coreindexeddb.R
 func (o *remoteObjectStore) GetKey(ctx context.Context, id string) (string, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := o.client.GetKey(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
+	resp, err := o.client.GetKey(ctx, &proto.ObjectStoreRequest{ConnectionId: o.connectionID, Store: o.store, Id: id})
 	if err != nil {
 		return "", grpcToDatastoreErr(err)
 	}
@@ -179,7 +518,7 @@ func (o *remoteObjectStore) Add(ctx context.Context, record coreindexeddb.Record
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Add(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
+	_, err = o.client.Add(ctx, &proto.RecordRequest{ConnectionId: o.connectionID, Store: o.store, Record: pbRecord})
 	return grpcToDatastoreErr(err)
 }
 
@@ -190,21 +529,21 @@ func (o *remoteObjectStore) Put(ctx context.Context, record coreindexeddb.Record
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Put(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
+	_, err = o.client.Put(ctx, &proto.RecordRequest{ConnectionId: o.connectionID, Store: o.store, Record: pbRecord})
 	return grpcToDatastoreErr(err)
 }
 
 func (o *remoteObjectStore) Delete(ctx context.Context, id string) error {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	_, err := o.client.Delete(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
+	_, err := o.client.Delete(ctx, &proto.ObjectStoreRequest{ConnectionId: o.connectionID, Store: o.store, Id: id})
 	return grpcToDatastoreErr(err)
 }
 
 func (o *remoteObjectStore) Clear(ctx context.Context) error {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	_, err := o.client.Clear(ctx, &proto.ObjectStoreNameRequest{Store: o.store})
+	_, err := o.client.Clear(ctx, &proto.ObjectStoreNameRequest{ConnectionId: o.connectionID, Store: o.store})
 	return grpcToDatastoreErr(err)
 }
 
@@ -215,7 +554,7 @@ func (o *remoteObjectStore) GetAll(ctx context.Context, r *coreindexeddb.KeyRang
 	if err != nil {
 		return nil, err
 	}
-	resp, err := o.client.GetAll(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.GetAll(ctx, &proto.ObjectStoreRangeRequest{ConnectionId: o.connectionID, Store: o.store, Range: kr})
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
@@ -233,7 +572,7 @@ func (o *remoteObjectStore) GetAllKeys(ctx context.Context, r *coreindexeddb.Key
 	if err != nil {
 		return nil, err
 	}
-	resp, err := o.client.GetAllKeys(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.GetAllKeys(ctx, &proto.ObjectStoreRangeRequest{ConnectionId: o.connectionID, Store: o.store, Range: kr})
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
@@ -247,7 +586,7 @@ func (o *remoteObjectStore) Count(ctx context.Context, r *coreindexeddb.KeyRange
 	if err != nil {
 		return 0, err
 	}
-	resp, err := o.client.Count(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.Count(ctx, &proto.ObjectStoreRangeRequest{ConnectionId: o.connectionID, Store: o.store, Range: kr})
 	if err != nil {
 		return 0, grpcToDatastoreErr(err)
 	}
@@ -261,7 +600,7 @@ func (o *remoteObjectStore) DeleteRange(ctx context.Context, r coreindexeddb.Key
 	if err != nil {
 		return 0, err
 	}
-	resp, err := o.client.DeleteRange(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.DeleteRange(ctx, &proto.ObjectStoreRangeRequest{ConnectionId: o.connectionID, Store: o.store, Range: kr})
 	if err != nil {
 		return 0, grpcToDatastoreErr(err)
 	}
@@ -269,23 +608,24 @@ func (o *remoteObjectStore) DeleteRange(ctx context.Context, r coreindexeddb.Key
 }
 
 func (o *remoteObjectStore) Index(name string) coreindexeddb.Index {
-	return &remoteIndex{client: o.client, store: o.store, index: name}
+	return &remoteIndex{client: o.client, connectionID: o.connectionID, store: o.store, index: name}
 }
 
 func (o *remoteObjectStore) OpenCursor(ctx context.Context, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection) (coreindexeddb.Cursor, error) {
-	return openRemoteCursor(ctx, o.client, o.store, "", r, dir, false, nil)
+	return openRemoteCursor(ctx, o.client, o.connectionID, o.store, "", r, dir, false, nil)
 }
 
 func (o *remoteObjectStore) OpenKeyCursor(ctx context.Context, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection) (coreindexeddb.Cursor, error) {
-	return openRemoteCursor(ctx, o.client, o.store, "", r, dir, true, nil)
+	return openRemoteCursor(ctx, o.client, o.connectionID, o.store, "", r, dir, true, nil)
 }
 
 // --- Index ---
 
 type remoteIndex struct {
-	client proto.IndexedDBClient
-	store  string
-	index  string
+	client       proto.IndexedDBClient
+	connectionID []byte
+	store        string
+	index        string
 }
 
 func (idx *remoteIndex) Get(ctx context.Context, values ...any) (coreindexeddb.Record, error) {
@@ -296,7 +636,7 @@ func (idx *remoteIndex) Get(ctx context.Context, values ...any) (coreindexeddb.R
 		return nil, err
 	}
 	resp, err := idx.client.IndexGet(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: pbValues,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: pbValues,
 	})
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
@@ -316,7 +656,7 @@ func (idx *remoteIndex) GetKey(ctx context.Context, values ...any) (string, erro
 		return "", err
 	}
 	resp, err := idx.client.IndexGetKey(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: pbValues,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: pbValues,
 	})
 	if err != nil {
 		return "", grpcToDatastoreErr(err)
@@ -336,7 +676,7 @@ func (idx *remoteIndex) GetAll(ctx context.Context, r *coreindexeddb.KeyRange, v
 		return nil, err
 	}
 	resp, err := idx.client.IndexGetAll(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: pbValues, Range: kr,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: pbValues, Range: kr,
 	})
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
@@ -360,7 +700,7 @@ func (idx *remoteIndex) GetAllKeys(ctx context.Context, r *coreindexeddb.KeyRang
 		return nil, err
 	}
 	resp, err := idx.client.IndexGetAllKeys(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: pbValues, Range: kr,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: pbValues, Range: kr,
 	})
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
@@ -380,7 +720,7 @@ func (idx *remoteIndex) Count(ctx context.Context, r *coreindexeddb.KeyRange, va
 		return 0, err
 	}
 	resp, err := idx.client.IndexCount(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: pbValues, Range: kr,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: pbValues, Range: kr,
 	})
 	if err != nil {
 		return 0, grpcToDatastoreErr(err)
@@ -389,11 +729,11 @@ func (idx *remoteIndex) Count(ctx context.Context, r *coreindexeddb.KeyRange, va
 }
 
 func (idx *remoteIndex) OpenCursor(ctx context.Context, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection, values ...any) (coreindexeddb.Cursor, error) {
-	return openRemoteCursor(ctx, idx.client, idx.store, idx.index, r, dir, false, values)
+	return openRemoteCursor(ctx, idx.client, idx.connectionID, idx.store, idx.index, r, dir, false, values)
 }
 
 func (idx *remoteIndex) OpenKeyCursor(ctx context.Context, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection, values ...any) (coreindexeddb.Cursor, error) {
-	return openRemoteCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
+	return openRemoteCursor(ctx, idx.client, idx.connectionID, idx.store, idx.index, r, dir, true, values)
 }
 
 func (idx *remoteIndex) Delete(ctx context.Context, values ...any) (int64, error) {
@@ -412,7 +752,7 @@ func (idx *remoteIndex) DeleteRange(ctx context.Context, r *coreindexeddb.KeyRan
 		return 0, err
 	}
 	resp, err := idx.client.IndexDelete(ctx, &proto.IndexQueryRequest{
-		Store: idx.store, Index: idx.index, Values: pbValues, Range: kr,
+		ConnectionId: idx.connectionID, Store: idx.store, Index: idx.index, Values: pbValues, Range: kr,
 	})
 	if err != nil {
 		return 0, grpcToDatastoreErr(err)
@@ -781,6 +1121,24 @@ func toProtoValues(values []any) ([]*proto.TypedValue, error) {
 	return typedValuesFromAny(values)
 }
 
+func schemaToProto(schema coreindexeddb.ObjectStoreSchema) *proto.ObjectStoreSchema {
+	indexes := make([]*proto.IndexSchema, len(schema.Indexes))
+	for i, idx := range schema.Indexes {
+		indexes[i] = &proto.IndexSchema{Name: idx.Name, KeyPath: idx.KeyPath, Unique: idx.Unique}
+	}
+	columns := make([]*proto.ColumnDef, len(schema.Columns))
+	for i, col := range schema.Columns {
+		columns[i] = &proto.ColumnDef{
+			Name:       col.Name,
+			Type:       int32(col.Type),
+			PrimaryKey: col.PrimaryKey,
+			NotNull:    col.NotNull,
+			Unique:     col.Unique,
+		}
+	}
+	return &proto.ObjectStoreSchema{Indexes: indexes, Columns: columns}
+}
+
 func transactionModeToProto(mode coreindexeddb.TransactionMode) proto.TransactionMode {
 	if mode == coreindexeddb.TransactionReadwrite {
 		return proto.TransactionMode_TRANSACTION_READWRITE
@@ -804,6 +1162,43 @@ func rpcStatusToDatastoreErr(st *rpcstatus.Status) error {
 		return nil
 	}
 	return grpcToDatastoreErr(status.Error(codes.Code(st.GetCode()), st.GetMessage()))
+}
+
+func versionChangeInfoFromProto(info *proto.VersionChangeInfo) coreindexeddb.VersionChangeInfo {
+	if info == nil {
+		return coreindexeddb.VersionChangeInfo{}
+	}
+	return coreindexeddb.VersionChangeInfo{
+		Name:       info.GetName(),
+		OldVersion: info.GetOldVersion(),
+		NewVersion: info.NewVersion,
+		Reason:     versionChangeReasonFromProto(info.GetReason()),
+	}
+}
+
+func blockedInfoFromProto(info *proto.BlockedInfo) coreindexeddb.BlockedInfo {
+	if info == nil {
+		return coreindexeddb.BlockedInfo{}
+	}
+	return coreindexeddb.BlockedInfo{
+		Name:               info.GetName(),
+		OldVersion:         info.GetOldVersion(),
+		NewVersion:         info.NewVersion,
+		Reason:             versionChangeReasonFromProto(info.GetReason()),
+		OpenConnections:    int(info.GetOpenConnections()),
+		ActiveTransactions: int(info.GetActiveOperations()),
+	}
+}
+
+func versionChangeReasonFromProto(reason proto.VersionChangeReason) coreindexeddb.VersionChangeReason {
+	switch reason {
+	case proto.VersionChangeReason_VERSION_CHANGE_REASON_DELETE:
+		return coreindexeddb.VersionChangeDelete
+	case proto.VersionChangeReason_VERSION_CHANGE_REASON_UPGRADE:
+		return coreindexeddb.VersionChangeUpgrade
+	default:
+		return ""
+	}
 }
 
 func keyRangeToProto(r *coreindexeddb.KeyRange) (*proto.KeyRange, error) {
@@ -844,12 +1239,17 @@ func grpcToDatastoreErr(err error) error {
 		return coreindexeddb.ErrNotFound
 	case codes.AlreadyExists:
 		return coreindexeddb.ErrAlreadyExists
+	case codes.Canceled:
+		return coreindexeddb.ErrAbort
 	case codes.InvalidArgument:
 		if strings.Contains(st.Message(), "invalid transaction") {
 			return coreindexeddb.ErrInvalidTransaction
 		}
 		return err
 	case codes.FailedPrecondition:
+		if strings.Contains(st.Message(), "blocked") {
+			return coreindexeddb.ErrBlocked
+		}
 		if strings.Contains(st.Message(), "readonly") {
 			return coreindexeddb.ErrReadOnly
 		}
@@ -877,7 +1277,7 @@ func cursorDirectionToProto(dir coreindexeddb.CursorDirection) proto.CursorDirec
 	}
 }
 
-func openRemoteCursor(ctx context.Context, client proto.IndexedDBClient, store, index string, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection, keysOnly bool, values []any) (*remoteCursor, error) {
+func openRemoteCursor(ctx context.Context, client proto.IndexedDBClient, connectionID []byte, store, index string, r *coreindexeddb.KeyRange, dir coreindexeddb.CursorDirection, keysOnly bool, values []any) (*remoteCursor, error) {
 	kr, err := keyRangeToProto(r)
 	if err != nil {
 		return nil, err
@@ -900,12 +1300,13 @@ func openRemoteCursor(ctx context.Context, client proto.IndexedDBClient, store, 
 	}
 	if err := stream.Send(&proto.CursorClientMessage{
 		Msg: &proto.CursorClientMessage_Open{Open: &proto.OpenCursorRequest{
-			Store:     store,
-			Range:     kr,
-			Direction: cursorDirectionToProto(dir),
-			KeysOnly:  keysOnly,
-			Index:     index,
-			Values:    pbValues,
+			ConnectionId: connectionID,
+			Store:        store,
+			Range:        kr,
+			Direction:    cursorDirectionToProto(dir),
+			KeysOnly:     keysOnly,
+			Index:        index,
+			Values:       pbValues,
 		}},
 	}); err != nil {
 		_ = stream.CloseSend()
@@ -1188,6 +1589,10 @@ func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
 	return indexeddbcodec.KeyValuesToAny(kvs)
 }
 
+func keyValueToAny(kv *proto.KeyValue) (any, error) {
+	return indexeddbcodec.KeyValueToAny(kv)
+}
+
 func anyToKeyValue(v any) (*proto.KeyValue, error) {
 	return indexeddbcodec.AnyToKeyValue(v)
 }
@@ -1197,3 +1602,4 @@ func cursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
 }
 
 var _ coreindexeddb.IndexedDB = (*remoteIndexedDB)(nil)
+var _ coreindexeddb.Factory = (*remoteIndexedDB)(nil)

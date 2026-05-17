@@ -2,15 +2,30 @@ package gestalt
 
 import "context"
 
-// IndexedDBProvider is implemented by providers that serve an IndexedDB-style
-// datastore. The SDK owns the gRPC/protobuf transport adapter; provider code
-// implements this typed interface instead of importing generated protobuf
-// bindings.
+// IndexedDBProvider is implemented by providers that expose IndexedDB-style
+// factory lifecycle semantics: named databases, versioned open, upgrade
+// callbacks, deletion, and scoped database connections.
 type IndexedDBProvider interface {
 	Provider
-	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
-	DeleteObjectStore(ctx context.Context, name string) error
+	OpenDatabase(ctx context.Context, name string, opts OpenOptions) (IndexedDBDatabase, error)
+	OpenCurrentDatabase(ctx context.Context, name string, opts OpenOptions) (IndexedDBDatabase, error)
+	DeleteDatabase(ctx context.Context, name string, opts DeleteOptions) (DeleteDatabaseResult, error)
+	Databases(ctx context.Context) ([]DatabaseInfo, error)
+	CompareKeys(ctx context.Context, first any, second any) (int, error)
+}
 
+// IndexedDBDatabase is an opened database connection returned by an
+// [IndexedDBProvider]. Store, index, cursor, and transaction operations
+// are scoped to this connection by the SDK transport adapter.
+type IndexedDBDatabase interface {
+	Name() string
+	Version() uint64
+	ObjectStoreNames(ctx context.Context) ([]string, error)
+	IndexedDBOperations
+	Close() error
+}
+
+type IndexedDBOperations interface {
 	Get(ctx context.Context, req IndexedDBObjectStoreRequest) (Record, error)
 	GetKey(ctx context.Context, req IndexedDBObjectStoreRequest) (string, error)
 	Add(ctx context.Context, req IndexedDBRecordRequest) error

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +15,8 @@ import (
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestServeIndexedDBProvider_NativeCursorAndErrors(t *testing.T) {
@@ -24,7 +27,7 @@ func TestServeIndexedDBProvider_NativeCursorAndErrors(t *testing.T) {
 	t.Setenv(proto.EnvProviderSocket, socket)
 	t.Setenv(gestalt.EnvIndexedDBSocket, socket)
 
-	provider := newNativeIndexedDBProvider()
+	provider := newNativeIndexedDBRootProvider()
 	serveErr := make(chan error, 1)
 	go func() {
 		serveErr <- gestalt.ServeIndexedDBProvider(ctx, provider)
@@ -38,25 +41,30 @@ func TestServeIndexedDBProvider_NativeCursorAndErrors(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	store := "native_cursor"
-	err = client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{
-		Indexes: []gestalt.IndexSchema{
-			{Name: "by_pair", KeyPath: []string{"status", "priority"}},
+	db, err := client.Open(ctx, "cursor-db", gestalt.OpenOptions{
+		Upgrade: func(ctx context.Context, upgrade gestalt.UpgradeContext) error {
+			return upgrade.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{
+				Indexes: []gestalt.IndexSchema{
+					{Name: "by_pair", KeyPath: []string{"status", "priority"}},
+				},
+			})
 		},
 	})
 	if err != nil {
-		t.Fatalf("CreateObjectStore: %v", err)
+		t.Fatalf("Open: %v", err)
 	}
+	defer func() { _ = db.Close() }()
 	for _, record := range []gestalt.Record{
 		{"id": "a", "status": "active", "priority": int64(2), "name": "A"},
 		{"id": "b", "status": "active", "priority": int64(1), "name": "B"},
 		{"id": "c", "status": "inactive", "priority": int64(1), "name": "C"},
 	} {
-		if err := client.ObjectStore(store).Put(ctx, record); err != nil {
+		if err := db.ObjectStore(store).Put(ctx, record); err != nil {
 			t.Fatalf("Put: %v", err)
 		}
 	}
 
-	cursor, err := client.ObjectStore(store).Index("by_pair").OpenCursor(ctx, nil, gestalt.CursorNext)
+	cursor, err := db.ObjectStore(store).Index("by_pair").OpenCursor(ctx, nil, gestalt.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -78,9 +86,105 @@ func TestServeIndexedDBProvider_NativeCursorAndErrors(t *testing.T) {
 		t.Fatalf("cursor keys = %#v, want %#v", keys, wantKeys)
 	}
 
-	_, err = client.ObjectStore(store).Get(ctx, "missing")
+	_, err = db.ObjectStore(store).Get(ctx, "missing")
 	if !errors.Is(err, gestalt.ErrNotFound) {
 		t.Fatalf("missing Get error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestServeIndexedDBProvider_OpenUpgradeAndScopedOperations(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	socket := nativeIndexedDBSocket(t, "provider-open")
+	t.Setenv(proto.EnvProviderSocket, socket)
+	t.Setenv(gestalt.EnvIndexedDBSocket, socket)
+
+	provider := newNativeIndexedDBRootProvider()
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- gestalt.ServeIndexedDBProvider(ctx, provider)
+	}()
+	waitForSocket(t, socket, serveErr)
+
+	client, err := gestalt.IndexedDB()
+	if err != nil {
+		t.Fatalf("IndexedDB: %v", err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+
+	if _, err := client.OpenCurrent(ctx, "missing", gestalt.OpenOptions{}); !errors.Is(err, gestalt.ErrNotFound) {
+		t.Fatalf("OpenCurrent missing = %v, want ErrNotFound", err)
+	}
+
+	version := uint64(2)
+	sawUpgrade := false
+	db, err := client.Open(ctx, "app", gestalt.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade gestalt.UpgradeContext) error {
+			sawUpgrade = true
+			if upgrade.OldVersion() != 0 || upgrade.NewVersion() != version {
+				t.Fatalf("upgrade versions = %d -> %d, want 0 -> %d", upgrade.OldVersion(), upgrade.NewVersion(), version)
+			}
+			names, err := upgrade.ObjectStoreNames(ctx)
+			if err != nil {
+				return err
+			}
+			if len(names) != 0 {
+				t.Fatalf("initial object store names = %v, want empty", names)
+			}
+			return upgrade.CreateObjectStore(ctx, "items", gestalt.ObjectStoreSchema{
+				Indexes: []gestalt.IndexSchema{{Name: "by_status", KeyPath: []string{"status"}}},
+			})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	if !sawUpgrade {
+		t.Fatal("Open did not run upgrade callback")
+	}
+	if db.Name() != "app" || db.Version() != version {
+		t.Fatalf("database metadata = %q v%d, want app v%d", db.Name(), db.Version(), version)
+	}
+	names, err := db.ObjectStoreNames(ctx)
+	if err != nil {
+		t.Fatalf("ObjectStoreNames: %v", err)
+	}
+	if !reflect.DeepEqual(names, []string{"items"}) {
+		t.Fatalf("ObjectStoreNames = %v, want [items]", names)
+	}
+
+	if err := db.ObjectStore("items").Put(ctx, gestalt.Record{"id": "row-1", "status": "active"}); err != nil {
+		t.Fatalf("Put via database handle: %v", err)
+	}
+	record, err := db.ObjectStore("items").Get(ctx, "row-1")
+	if err != nil {
+		t.Fatalf("Get via database handle: %v", err)
+	}
+	if record["status"] != "active" {
+		t.Fatalf("record status = %v, want active", record["status"])
+	}
+
+	infos, err := client.Databases(ctx)
+	if err != nil {
+		t.Fatalf("Databases: %v", err)
+	}
+	if !reflect.DeepEqual(infos, []gestalt.DatabaseInfo{{Name: "app", Version: version}}) {
+		t.Fatalf("Databases = %#v, want app v%d", infos, version)
+	}
+	cmp, err := client.CompareKeys(ctx, "a", "b")
+	if err != nil {
+		t.Fatalf("CompareKeys: %v", err)
+	}
+	if cmp >= 0 {
+		t.Fatalf("CompareKeys(a,b) = %d, want negative", cmp)
+	}
+
+	_, err = client.ObjectStore("items").Get(ctx, "row-1")
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("no-connection Get on provider = %v, want FailedPrecondition", err)
 	}
 }
 
@@ -124,6 +228,212 @@ func newNativeIndexedDBProvider() *nativeIndexedDBProvider {
 
 func (p *nativeIndexedDBProvider) Configure(context.Context, string, map[string]any) error {
 	return nil
+}
+
+type nativeIndexedDBRootProvider struct {
+	mu        sync.Mutex
+	databases map[string]*nativeIndexedDBDatabase
+}
+
+type nativeIndexedDBDatabase struct {
+	*nativeIndexedDBProvider
+	name    string
+	version uint64
+}
+
+func newNativeIndexedDBRootProvider() *nativeIndexedDBRootProvider {
+	return &nativeIndexedDBRootProvider{
+		databases: map[string]*nativeIndexedDBDatabase{},
+	}
+}
+
+func (p *nativeIndexedDBRootProvider) Configure(context.Context, string, map[string]any) error {
+	return nil
+}
+
+func (p *nativeIndexedDBRootProvider) OpenDatabase(ctx context.Context, name string, opts gestalt.OpenOptions) (gestalt.IndexedDBDatabase, error) {
+	p.mu.Lock()
+	db := p.databases[name]
+	oldVersion := uint64(0)
+	if db != nil {
+		oldVersion = db.version
+	}
+	newVersion := uint64(1)
+	if opts.Version != nil {
+		newVersion = *opts.Version
+	} else if db != nil {
+		newVersion = oldVersion
+	}
+	if newVersion < oldVersion {
+		p.mu.Unlock()
+		return nil, gestalt.InvalidArgument("indexeddb open version is lower than current version")
+	}
+	if db == nil {
+		db = &nativeIndexedDBDatabase{
+			nativeIndexedDBProvider: newNativeIndexedDBProvider(),
+			name:                    name,
+			version:                 newVersion,
+		}
+		p.databases[name] = db
+	} else {
+		db.version = newVersion
+	}
+	needsUpgrade := oldVersion == 0 || newVersion > oldVersion
+	p.mu.Unlock()
+
+	if needsUpgrade && opts.Upgrade != nil {
+		if err := opts.Upgrade(ctx, &nativeIndexedDBUpgradeContext{
+			db:         db,
+			oldVersion: oldVersion,
+			newVersion: newVersion,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return db, nil
+}
+
+func (p *nativeIndexedDBRootProvider) OpenCurrentDatabase(_ context.Context, name string, _ gestalt.OpenOptions) (gestalt.IndexedDBDatabase, error) {
+	p.mu.Lock()
+	db := p.databases[name]
+	p.mu.Unlock()
+	if db == nil {
+		return nil, gestalt.ErrNotFound
+	}
+	return db, nil
+}
+
+func (p *nativeIndexedDBRootProvider) DeleteDatabase(_ context.Context, name string, _ gestalt.DeleteOptions) (gestalt.DeleteDatabaseResult, error) {
+	p.mu.Lock()
+	db := p.databases[name]
+	delete(p.databases, name)
+	p.mu.Unlock()
+	if db == nil {
+		return gestalt.DeleteDatabaseResult{Name: name}, nil
+	}
+	return gestalt.DeleteDatabaseResult{Name: name, OldVersion: db.version}, nil
+}
+
+func (p *nativeIndexedDBRootProvider) Databases(context.Context) ([]gestalt.DatabaseInfo, error) {
+	p.mu.Lock()
+	out := make([]gestalt.DatabaseInfo, 0, len(p.databases))
+	for _, db := range p.databases {
+		out = append(out, gestalt.DatabaseInfo{Name: db.name, Version: db.version})
+	}
+	p.mu.Unlock()
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+func (p *nativeIndexedDBRootProvider) CompareKeys(_ context.Context, first any, second any) (int, error) {
+	left := fmt.Sprint(first)
+	right := fmt.Sprint(second)
+	return strings.Compare(left, right), nil
+}
+
+func (db *nativeIndexedDBDatabase) Name() string { return db.name }
+
+func (db *nativeIndexedDBDatabase) Version() uint64 { return db.version }
+
+func (db *nativeIndexedDBDatabase) ObjectStoreNames(context.Context) ([]string, error) {
+	db.mu.Lock()
+	names := make([]string, 0, len(db.schemas))
+	for name := range db.schemas {
+		names = append(names, name)
+	}
+	db.mu.Unlock()
+	sort.Strings(names)
+	return names, nil
+}
+
+func (db *nativeIndexedDBDatabase) Close() error { return nil }
+
+func (db *nativeIndexedDBDatabase) CreateIndex(_ context.Context, store string, index gestalt.IndexSchema) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	schema, ok := db.schemas[store]
+	if !ok {
+		return gestalt.ErrNotFound
+	}
+	schema.Indexes = append(schema.Indexes, index)
+	db.schemas[store] = schema
+	return nil
+}
+
+func (db *nativeIndexedDBDatabase) DeleteIndex(_ context.Context, store string, name string) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	schema, ok := db.schemas[store]
+	if !ok {
+		return gestalt.ErrNotFound
+	}
+	filtered := schema.Indexes[:0]
+	for _, index := range schema.Indexes {
+		if index.Name != name {
+			filtered = append(filtered, index)
+		}
+	}
+	schema.Indexes = filtered
+	db.schemas[store] = schema
+	return nil
+}
+
+type nativeIndexedDBUpgradeContext struct {
+	db         *nativeIndexedDBDatabase
+	oldVersion uint64
+	newVersion uint64
+}
+
+func (u *nativeIndexedDBUpgradeContext) OldVersion() uint64 { return u.oldVersion }
+
+func (u *nativeIndexedDBUpgradeContext) NewVersion() uint64 { return u.newVersion }
+
+func (u *nativeIndexedDBUpgradeContext) Database() gestalt.UpgradeDatabase {
+	return (*nativeIndexedDBUpgradeDatabase)(u)
+}
+
+func (u *nativeIndexedDBUpgradeContext) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	return u.db.ObjectStoreNames(ctx)
+}
+
+func (u *nativeIndexedDBUpgradeContext) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreSchema) error {
+	return u.db.CreateObjectStore(ctx, name, schema)
+}
+
+func (u *nativeIndexedDBUpgradeContext) DeleteObjectStore(ctx context.Context, name string) error {
+	return u.db.DeleteObjectStore(ctx, name)
+}
+
+func (u *nativeIndexedDBUpgradeContext) CreateIndex(ctx context.Context, store string, index gestalt.IndexSchema) error {
+	return u.db.CreateIndex(ctx, store, index)
+}
+
+func (u *nativeIndexedDBUpgradeContext) DeleteIndex(ctx context.Context, store string, name string) error {
+	return u.db.DeleteIndex(ctx, store, name)
+}
+
+type nativeIndexedDBUpgradeDatabase nativeIndexedDBUpgradeContext
+
+func (db *nativeIndexedDBUpgradeDatabase) Name() string { return db.db.name }
+
+func (db *nativeIndexedDBUpgradeDatabase) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	return (*nativeIndexedDBUpgradeContext)(db).ObjectStoreNames(ctx)
+}
+
+func (db *nativeIndexedDBUpgradeDatabase) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreSchema) error {
+	return (*nativeIndexedDBUpgradeContext)(db).CreateObjectStore(ctx, name, schema)
+}
+
+func (db *nativeIndexedDBUpgradeDatabase) DeleteObjectStore(ctx context.Context, name string) error {
+	return (*nativeIndexedDBUpgradeContext)(db).DeleteObjectStore(ctx, name)
+}
+
+func (db *nativeIndexedDBUpgradeDatabase) CreateIndex(ctx context.Context, store string, index gestalt.IndexSchema) error {
+	return (*nativeIndexedDBUpgradeContext)(db).CreateIndex(ctx, store, index)
+}
+
+func (db *nativeIndexedDBUpgradeDatabase) DeleteIndex(ctx context.Context, store string, name string) error {
+	return (*nativeIndexedDBUpgradeContext)(db).DeleteIndex(ctx, store, name)
 }
 
 func (p *nativeIndexedDBProvider) CreateObjectStore(_ context.Context, name string, schema gestalt.ObjectStoreSchema) error {
@@ -617,7 +927,7 @@ func TestServeIndexedDBProvider_NativeReadonlySentinel(t *testing.T) {
 	t.Setenv(proto.EnvProviderSocket, socket)
 	t.Setenv(gestalt.EnvIndexedDBSocket, socket)
 
-	provider := newNativeIndexedDBProvider()
+	provider := newNativeIndexedDBRootProvider()
 	serveErr := make(chan error, 1)
 	go func() {
 		serveErr <- gestalt.ServeIndexedDBProvider(ctx, provider)
@@ -631,10 +941,16 @@ func TestServeIndexedDBProvider_NativeReadonlySentinel(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	store := "readonly_native"
-	if err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
-		t.Fatalf("CreateObjectStore: %v", err)
+	db, err := client.Open(ctx, "readonly-db", gestalt.OpenOptions{
+		Upgrade: func(ctx context.Context, upgrade gestalt.UpgradeContext) error {
+			return upgrade.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
 	}
-	tx, err := client.Transaction(ctx, []string{store}, gestalt.TransactionReadonly, gestalt.TransactionOptions{})
+	defer func() { _ = db.Close() }()
+	tx, err := db.Transaction(ctx, []string{store}, gestalt.TransactionReadonly, gestalt.TransactionOptions{})
 	if err != nil {
 		t.Fatalf("Transaction: %v", err)
 	}

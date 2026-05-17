@@ -973,6 +973,7 @@ impl IndexedDB {
         tx.send(pb::TransactionClientMessage {
             msg: Some(pb::transaction_client_message::Msg::Begin(
                 pb::BeginTransactionRequest {
+                    connection_id: vec![],
                     stores: stores.iter().map(|store| store.to_string()).collect(),
                     mode: mode.to_proto(),
                     durability_hint: options.durability_hint.to_proto(),
@@ -1177,6 +1178,7 @@ impl TransactionObjectStore<'_> {
             .tx
             .send_operation(pb::transaction_operation::Operation::Get(
                 pb::ObjectStoreRequest {
+                    connection_id: vec![],
                     store: self.store.clone(),
                     id: id.to_string(),
                 },
@@ -1198,6 +1200,7 @@ impl TransactionObjectStore<'_> {
             .tx
             .send_operation(pb::transaction_operation::Operation::GetKey(
                 pb::ObjectStoreRequest {
+                    connection_id: vec![],
                     store: self.store.clone(),
                     id: id.to_string(),
                 },
@@ -1214,6 +1217,7 @@ impl TransactionObjectStore<'_> {
         self.tx
             .send_operation(pb::transaction_operation::Operation::Add(
                 pb::RecordRequest {
+                    connection_id: vec![],
                     store: self.store.clone(),
                     record: Some(record_to_pb_record(record)),
                 },
@@ -1227,6 +1231,7 @@ impl TransactionObjectStore<'_> {
         self.tx
             .send_operation(pb::transaction_operation::Operation::Put(
                 pb::RecordRequest {
+                    connection_id: vec![],
                     store: self.store.clone(),
                     record: Some(record_to_pb_record(record)),
                 },
@@ -1240,6 +1245,7 @@ impl TransactionObjectStore<'_> {
         self.tx
             .send_operation(pb::transaction_operation::Operation::Delete(
                 pb::ObjectStoreRequest {
+                    connection_id: vec![],
                     store: self.store.clone(),
                     id: id.to_string(),
                 },
@@ -1253,6 +1259,7 @@ impl TransactionObjectStore<'_> {
         self.tx
             .send_operation(pb::transaction_operation::Operation::Clear(
                 pb::ObjectStoreNameRequest {
+                    connection_id: vec![],
                     store: self.store.clone(),
                 },
             ))
@@ -1269,6 +1276,7 @@ impl TransactionObjectStore<'_> {
             .tx
             .send_operation(pb::transaction_operation::Operation::GetAll(
                 pb::ObjectStoreRangeRequest {
+                    connection_id: vec![],
                     store: self.store.clone(),
                     range: range.map(key_range_to_pb),
                 },
@@ -1291,6 +1299,7 @@ impl TransactionObjectStore<'_> {
             .tx
             .send_operation(pb::transaction_operation::Operation::GetAllKeys(
                 pb::ObjectStoreRangeRequest {
+                    connection_id: vec![],
                     store: self.store.clone(),
                     range: range.map(key_range_to_pb),
                 },
@@ -1308,6 +1317,7 @@ impl TransactionObjectStore<'_> {
             .tx
             .send_operation(pb::transaction_operation::Operation::Count(
                 pb::ObjectStoreRangeRequest {
+                    connection_id: vec![],
                     store: self.store.clone(),
                     range: range.map(key_range_to_pb),
                 },
@@ -1325,6 +1335,7 @@ impl TransactionObjectStore<'_> {
             .tx
             .send_operation(pb::transaction_operation::Operation::DeleteRange(
                 pb::ObjectStoreRangeRequest {
+                    connection_id: vec![],
                     store: self.store.clone(),
                     range: Some(key_range_to_pb(range)),
                 },
@@ -1469,6 +1480,7 @@ impl TransactionIndexClient<'_> {
         range: Option<KeyRange>,
     ) -> pb::IndexQueryRequest {
         pb::IndexQueryRequest {
+            connection_id: vec![],
             store: self.store.clone(),
             index: self.index.clone(),
             values: values.iter().map(json_to_typed_value).collect(),
@@ -1538,6 +1550,7 @@ impl ObjectStore {
         let resp = self
             .client
             .get(pb::ObjectStoreRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 id: id.to_string(),
             })
@@ -1556,6 +1569,7 @@ impl ObjectStore {
         let resp = self
             .client
             .get_key(pb::ObjectStoreRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 id: id.to_string(),
             })
@@ -1568,6 +1582,7 @@ impl ObjectStore {
     pub async fn add(&mut self, record: Record) -> Result<(), IndexedDBError> {
         self.client
             .add(pb::RecordRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 record: Some(record_to_pb_record(record)),
             })
@@ -1580,6 +1595,7 @@ impl ObjectStore {
     pub async fn put(&mut self, record: Record) -> Result<(), IndexedDBError> {
         self.client
             .put(pb::RecordRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 record: Some(record_to_pb_record(record)),
             })
@@ -1592,6 +1608,7 @@ impl ObjectStore {
     pub async fn delete(&mut self, id: &str) -> Result<(), IndexedDBError> {
         self.client
             .delete(pb::ObjectStoreRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 id: id.to_string(),
             })
@@ -1604,6 +1621,7 @@ impl ObjectStore {
     pub async fn clear(&mut self) -> Result<(), IndexedDBError> {
         self.client
             .clear(pb::ObjectStoreNameRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
             })
             .await
@@ -1619,6 +1637,7 @@ impl ObjectStore {
         let resp = self
             .client
             .get_all(pb::ObjectStoreRangeRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 range: range.map(key_range_to_pb),
             })
@@ -1640,6 +1659,7 @@ impl ObjectStore {
         let resp = self
             .client
             .get_all_keys(pb::ObjectStoreRangeRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 range: range.map(key_range_to_pb),
             })
@@ -1653,6 +1673,7 @@ impl ObjectStore {
         let resp = self
             .client
             .count(pb::ObjectStoreRangeRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 range: range.map(key_range_to_pb),
             })
@@ -1666,6 +1687,7 @@ impl ObjectStore {
         let resp = self
             .client
             .delete_range(pb::ObjectStoreRangeRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 range: Some(key_range_to_pb(range)),
             })
@@ -1690,6 +1712,7 @@ impl ObjectStore {
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
         let req = pb::OpenCursorRequest {
+            connection_id: vec![],
             store: self.store.clone(),
             range: range.map(key_range_to_pb),
             direction: direction.to_proto(),
@@ -1707,6 +1730,7 @@ impl ObjectStore {
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
         let req = pb::OpenCursorRequest {
+            connection_id: vec![],
             store: self.store.clone(),
             range: range.map(key_range_to_pb),
             direction: direction.to_proto(),
@@ -1731,6 +1755,7 @@ impl IndexClient {
         let resp = self
             .client
             .index_get(pb::IndexQueryRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 index: self.index.clone(),
                 values: values.iter().map(json_to_typed_value).collect(),
@@ -1754,6 +1779,7 @@ impl IndexClient {
         let resp = self
             .client
             .index_get_key(pb::IndexQueryRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 index: self.index.clone(),
                 values: values.iter().map(json_to_typed_value).collect(),
@@ -1773,6 +1799,7 @@ impl IndexClient {
         let resp = self
             .client
             .index_get_all(pb::IndexQueryRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 index: self.index.clone(),
                 values: values.iter().map(json_to_typed_value).collect(),
@@ -1797,6 +1824,7 @@ impl IndexClient {
         let resp = self
             .client
             .index_get_all_keys(pb::IndexQueryRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 index: self.index.clone(),
                 values: values.iter().map(json_to_typed_value).collect(),
@@ -1816,6 +1844,7 @@ impl IndexClient {
         let resp = self
             .client
             .index_count(pb::IndexQueryRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 index: self.index.clone(),
                 values: values.iter().map(json_to_typed_value).collect(),
@@ -1831,6 +1860,7 @@ impl IndexClient {
         let resp = self
             .client
             .index_delete(pb::IndexQueryRequest {
+                connection_id: vec![],
                 store: self.store.clone(),
                 index: self.index.clone(),
                 values: values.iter().map(json_to_typed_value).collect(),
@@ -1849,6 +1879,7 @@ impl IndexClient {
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
         let req = pb::OpenCursorRequest {
+            connection_id: vec![],
             store: self.store.clone(),
             range: range.map(key_range_to_pb),
             direction: direction.to_proto(),
@@ -1867,6 +1898,7 @@ impl IndexClient {
         direction: CursorDirection,
     ) -> Result<Cursor, IndexedDBError> {
         let req = pb::OpenCursorRequest {
+            connection_id: vec![],
             store: self.store.clone(),
             range: range.map(key_range_to_pb),
             direction: direction.to_proto(),
