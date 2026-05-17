@@ -103,14 +103,11 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 
 Plugins that back mounted apps may declare their UI artifact in the plugin manifest. Deployment config still chooses whether to mount the app, which public path to use, and which authorization policy to bind. The manifest only says which UI bundle belongs to the plugin.
 
-`spec.ui` supports two mutually exclusive forms:
+`spec.ui` supports a path reference:
 
-| Field        | Type   | Purpose                                                                                                                                                                            |
-| ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`       | string | Relative path to a co-packaged `kind: ui` manifest. Source releases may point at sibling UI packages; `gestaltd provider release` rewrites them into the archive automatically. |
-| `ref`        | string | Managed provider source ref for the owned UI bundle.                                                                                                                               |
-| `version`    | string | Optional version for `ref`. Defaults to the plugin manifest version when omitted.                                                                                                  |
-| `auth.token` | string | Optional source token used when resolving a private managed `ref`. Only valid with `ref`.                                                                                          |
+| Field  | Type   | Purpose                                                                                                                                                                         |
+| ------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path` | string | Relative path to a co-packaged `kind: ui` manifest. Source releases may point at sibling UI packages; `gestaltd provider release` rewrites them into the archive automatically. |
 
 When a deployment sets `plugins.<name>.ui.path` and omits `plugins.<name>.ui.bundle`, Gestalt synthesizes the mounted UI binding from this block.
 
@@ -131,28 +128,8 @@ spec:
     path: ../ui/manifest.yaml
 ```
 
-Published-manifest example:
-
-```yaml
-kind: plugin
-source: github.com/acme/plugins/roadmap-review
-version: 1.0.0
-spec:
-  auth:
-    provider: server
-  connections:
-    default:
-      auth:
-        type: none
-  ui:
-    ref: github.com/acme/web/roadmap-review
-    version: 1.0.0
-    auth:
-      token:
-        secret:
-          provider: default
-          name: roadmap-review-ui-source-token
-```
+Released plugin manifests keep the same `spec.ui.path` shape, but the path is
+rewritten to the co-packaged UI manifest inside the archive.
 
 ### Connections
 
@@ -534,15 +511,13 @@ artifacts:
 ## UI Metadata
 
 The `spec` block for a `kind: ui` manifest describes a static UI package.
-Source UI manifests should normally declare top-level `build.output` to
-generate static assets during preparation. They may point at checked-in static
-assets with `spec.assetRoot` when the bundle is intentionally prebuilt.
-Released and prepared UI manifests always contain `spec.assetRoot` and do not
-contain top-level `build`.
+Source UI manifests must declare top-level `build.command` and `build.output`.
+Generated assets should stay out of source control. Released and prepared UI
+manifests always contain `spec.assetRoot` and do not contain top-level `build`.
 
 | Field       | Type         | Required | Purpose                                                                                                                     |
 | ----------- | ------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `assetRoot` | string       | released: yes; source: when `build.output` is absent | Directory containing the built static assets.                                                                               |
+| `assetRoot` | string       | released: yes; source: no | Directory containing the built static assets in released and prepared packages. Source UI manifests use `build.output` instead. |
 | `routes`    | UIRoute[] | no       | Optional route-level authorization rules used when a deployment binds this UI to `providers.ui.<name>.authorizationPolicy`. |
 
 Each `spec.routes` entry declares a mounted path and the allowed human roles for that path. Path matching is exact or longest-prefix with a terminal `/*`. When a deployment sets `authorizationPolicy`, route definitions must have non-empty `allowedRoles`, and the manifest must include a route that covers `/`.
@@ -584,7 +559,7 @@ TypeScript, React, Next.js static export, Vite, or similar frontend source.
 | ----------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
 | `command`   | string[] | yes      | Command argv to run before preparing the static assets.                                           |
 | `workdir`   | string   | no       | Manifest-relative directory where `command` runs. Defaults to the manifest directory.             |
-| `output`    | string   | source UI: yes when `spec.assetRoot` is absent | Manifest-relative directory containing generated static assets. Must match `spec.assetRoot` when both are set. |
+| `output`    | string   | source UI: yes | Manifest-relative directory containing generated static assets. |
 | `inputs`    | string[] | no       | Literal manifest-relative files or directories used to fingerprint local source UI builds. Glob syntax is not supported. |
 
 ## Artifacts
@@ -884,7 +859,7 @@ authoring flow.
   </Tabs.Tab>
 </Tabs>
 
-Source UI build steps should be declared with top-level `build`. Gestalt runs
+Source UI build steps must be declared with top-level `build`. Gestalt runs
 that command before source-manifest preparation during lock, sync, dev, and
 release packaging. This lets UI packages generate static bundles without
 checking built artifacts into source control.
@@ -910,9 +885,8 @@ spec:
       allowedRoles: [viewer, admin]
 ```
 
-`release.build` remains supported as a legacy build hook for source manifests,
-but new UI manifests should prefer top-level `build`. A manifest may not set
-both `build` and `release.build`.
+`release.build` remains supported for non-UI source manifests. UI source
+manifests must use top-level `build` instead.
 
 ## Release
 

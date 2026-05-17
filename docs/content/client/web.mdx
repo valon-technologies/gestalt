@@ -45,8 +45,8 @@ Public UI bundles are configured through the `providers.ui` map.
 
 - Omit `providers.ui` to run headless with no public UI bundles.
 - Add `ui.<name>` entries with `source` and explicit `path` fields to mount static SPAs under public URL prefixes.
-- New custom UI bundles should usually check in frontend source and declare
-  top-level `build` in the UI manifest. Gestalt prepares the generated
+- New custom UI bundles should check in frontend source and declare top-level
+  `build.command` and `build.output` in the UI manifest. Gestalt prepares the generated
   `out`, `dist`, or `build` directory, records it as `spec.assetRoot`, and
   serves those static assets.
 - Gestalt does not serve frontend source directories at runtime. `serve --locked`

@@ -30,6 +30,9 @@ func EffectiveSourceBuild(manifest *providermanifestv1.Manifest) *ResolvedSource
 			Inputs:  append([]string(nil), manifest.Build.Inputs...),
 		}
 	}
+	if providermanifestv1.NormalizeKind(manifest.Kind) == providermanifestv1.KindUI {
+		return nil
+	}
 	if manifest.Release != nil && manifest.Release.Build != nil {
 		return &ResolvedSourceBuild{
 			Label:   "release.build",

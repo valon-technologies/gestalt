@@ -1921,9 +1921,12 @@ func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1
 		Source:      "github.com/test/ui/roadmap-review",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Roadmap Review UI",
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"go", "version"},
+			Output:  "dist",
+		},
 		Spec: &providermanifestv1.Spec{
-			AssetRoot: "dist",
-			Routes:    routes,
+			Routes: routes,
 		},
 	})
 
@@ -2008,7 +2011,10 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 		Source:      "github.com/test/ui/default",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Default Gestalt UI",
-		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"go", "version"},
+			Output:  "dist",
+		},
 	})
 
 	return providersDir

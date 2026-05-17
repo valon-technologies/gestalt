@@ -231,11 +231,17 @@ func writeLocalUIManifest(t *testing.T, dir, name, source, version string, spec 
 		}
 	}
 	manifestPath := filepath.Join(root, "manifest.yaml")
+	build := &providermanifestv1.SourceBuild{Command: []string{"go", "version"}, Output: "dist"}
+	if spec != nil && spec.AssetRoot != "" {
+		build.Output = spec.AssetRoot
+		spec.AssetRoot = ""
+	}
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindUI,
 		Source:      source,
 		Version:     version,
 		DisplayName: testDisplayName(name),
+		Build:       build,
 		Spec:        spec,
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -1442,7 +1448,10 @@ plugins:
 				if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
 					t.Fatalf("WriteFile index.html: %v", err)
 				}
-				spec = &providermanifestv1.Spec{AssetRoot: "dist"}
+				build = &providermanifestv1.SourceBuild{
+					Command: []string{"go", "version"},
+					Output:  "dist",
+				}
 			}
 			if tc.wantPolicy != "" {
 				if spec == nil {
@@ -1596,7 +1605,10 @@ func TestLoadForExecutionAtPath_RejectsLockedExplicitLocalUIWithoutPreparedUILoc
 		Source:      "github.com/testowner/web/roadmap",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Roadmap UI",
-		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"go", "version"},
+			Output:  "dist",
+		},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
@@ -3457,7 +3469,7 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(assetRoot, "index.html"), []byte("<html></html>"), 0o644); err != nil {
 				t.Fatalf("WriteFile(asset): %v", err)
 			}
-			manifest += "spec:\n  assetRoot: assets\n"
+			manifest += "build:\n  command: [go, version]\n  output: assets\n"
 		}
 		if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", manifestPath, err)

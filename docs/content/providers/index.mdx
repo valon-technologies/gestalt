@@ -500,9 +500,10 @@ packaging.
 
 #### Source UI builds
 
-Source UI manifests should normally define top-level `build`. Gestalt runs it
-before source-manifest preparation, which lets UI packages generate static
-assets without checking built files into source control. The environment running
+Source UI manifests must define top-level `build.command` and `build.output`.
+Gestalt runs the command before source-manifest preparation, which lets UI
+packages generate static assets without checking built files into source
+control. The environment running
 `gestaltd lock`, `gestaltd sync --locked`, `gestaltd serve --path`, or
 `gestaltd provider release` must have the command's build tools available.
 `gestaltd serve --locked` only serves prepared static assets.
@@ -530,8 +531,7 @@ spec:
 
 Released UI packages still contain a concrete `spec.assetRoot`; Gestalt adds it
 to the prepared manifest from `build.output` and strips build metadata.
-`release.build` remains supported as a legacy source build hook, but new UI
-manifests should use top-level `build` and must not set both.
+`release.build` is not supported for UI source manifests.
 
 #### Release manifest for an executable provider
 

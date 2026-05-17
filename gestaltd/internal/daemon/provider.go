@@ -560,7 +560,7 @@ func releaseIncludesBuiltPluginArtifact(archives []releaseArchive) bool {
 	return false
 }
 func validateReleaseOutputDir(manifest *providermanifestv1.Manifest, sourceDir, outputDir string) error {
-	assetRootValue := providerpkg.EffectiveUIAssetRoot(manifest)
+	assetRootValue := providerpkg.SourceUIBuildOutput(manifest)
 	if manifest == nil || assetRootValue == "" {
 		return nil
 	}

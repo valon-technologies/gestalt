@@ -2213,7 +2213,7 @@ func fingerprintLocalUIBuildInputs(sourceDir, manifestPath string, manifest *pro
 		return "", fmt.Errorf("digest manifest: %w", err)
 	}
 
-	assetRoot := providerpkg.EffectiveUIAssetRoot(manifest)
+	assetRoot := providerpkg.SourceUIBuildOutput(manifest)
 	outputAbs := ""
 	if assetRoot != "" {
 		outputAbs = filepath.Clean(filepath.Join(sourceDir, filepath.FromSlash(assetRoot)))
@@ -3997,7 +3997,13 @@ func equivalentProviderManifestPath(current, expected string) bool {
 		return false
 	}
 	_, currentManifest, currentErr := providerpkg.ReadManifestFile(current)
+	if currentErr != nil {
+		_, currentManifest, currentErr = providerpkg.ReadSourceManifestFile(current)
+	}
 	_, expectedManifest, expectedErr := providerpkg.ReadManifestFile(expected)
+	if expectedErr != nil {
+		_, expectedManifest, expectedErr = providerpkg.ReadSourceManifestFile(expected)
+	}
 	if currentErr != nil || expectedErr != nil {
 		return false
 	}
