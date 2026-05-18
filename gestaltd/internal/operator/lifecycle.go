@@ -907,7 +907,7 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) && !configRequiresCommittedLock(cfg) {
 			lock = newLockfile()
 		} else {
 			if paths.pluginScope != "" {
@@ -1108,7 +1108,7 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePat
 
 	lock, err := ReadLockfile(paths.lockfilePath)
 	validatedDuringPrepare := false
-	if locked && err != nil && os.IsNotExist(err) {
+	if locked && err != nil && os.IsNotExist(err) && !configRequiresCommittedLock(cfg) {
 		lock = newLockfile()
 		err = nil
 	}
@@ -2771,33 +2771,40 @@ func stageLocalSourceInstall(kind, name, manifestPath, destDir string) (*prepare
 	}
 
 	commitInstall := func() error {
-		backupDir := ""
-		if _, err := os.Stat(destDir); err == nil {
-			backupDir = destDir + ".backup-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-			if err := os.Rename(destDir, backupDir); err != nil {
-				return fmt.Errorf("stage existing provider cache at %s: %w", destDir, err)
-			}
-		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("inspect existing provider cache at %s: %w", destDir, err)
-		}
-		if err := os.Rename(tempDir, destDir); err != nil {
-			if backupDir != "" {
-				if restoreErr := os.Rename(backupDir, destDir); restoreErr != nil {
-					return fmt.Errorf("activate prepared install at %s: %w (rollback failed: %v)", destDir, err, restoreErr)
-				}
-			}
-			return fmt.Errorf("activate prepared install at %s: %w", destDir, err)
+		if err := activatePreparedInstallDir(destDir, tempDir); err != nil {
+			return err
 		}
 		cleanupDir = ""
-		if backupDir != "" {
-			if err := os.RemoveAll(backupDir); err != nil {
-				return fmt.Errorf("remove staged provider cache backup at %s: %w", backupDir, err)
-			}
-		}
 		return nil
 	}
 
 	return install, cleanupInstall, commitInstall, nil
+}
+
+func activatePreparedInstallDir(destDir, tempDir string) error {
+	backupDir := ""
+	if _, err := os.Stat(destDir); err == nil {
+		backupDir = destDir + ".backup-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+		if err := os.Rename(destDir, backupDir); err != nil {
+			return fmt.Errorf("stage existing provider cache at %s: %w", destDir, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect existing provider cache at %s: %w", destDir, err)
+	}
+	if err := os.Rename(tempDir, destDir); err != nil {
+		if backupDir != "" {
+			if restoreErr := os.Rename(backupDir, destDir); restoreErr != nil {
+				return fmt.Errorf("activate prepared install at %s: %w (rollback failed: %v)", destDir, err, restoreErr)
+			}
+		}
+		return fmt.Errorf("activate prepared install at %s: %w", destDir, err)
+	}
+	if backupDir != "" {
+		if err := os.RemoveAll(backupDir); err != nil {
+			return fmt.Errorf("remove staged provider cache backup at %s: %w", backupDir, err)
+		}
+	}
+	return nil
 }
 
 func relativePreparedPath(artifactsDir, path string) (string, error) {
@@ -3290,27 +3297,8 @@ func installLockedPackageAtomic(packagePath, destDir string) (*installedPackage,
 		return nil, nil, nil, err
 	}
 	commit := func() error {
-		backupDir := ""
-		if _, err := os.Stat(destDir); err == nil {
-			backupDir = destDir + ".backup-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-			if err := os.Rename(destDir, backupDir); err != nil {
-				return fmt.Errorf("stage existing provider cache at %s: %w", destDir, err)
-			}
-		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("inspect existing provider cache at %s: %w", destDir, err)
-		}
-		if err := os.Rename(tempDir, destDir); err != nil {
-			if backupDir != "" {
-				if restoreErr := os.Rename(backupDir, destDir); restoreErr != nil {
-					return fmt.Errorf("activate prepared install at %s: %w (rollback failed: %v)", destDir, err, restoreErr)
-				}
-			}
-			return fmt.Errorf("activate prepared install at %s: %w", destDir, err)
-		}
-		if backupDir != "" {
-			if err := os.RemoveAll(backupDir); err != nil {
-				return fmt.Errorf("remove staged provider cache backup at %s: %w", backupDir, err)
-			}
+		if err := activatePreparedInstallDir(destDir, tempDir); err != nil {
+			return err
 		}
 		cleanupDir = ""
 		return nil
@@ -4193,35 +4181,35 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 	return install, nil
 }
 
+func bindPreparedProviderInstall(paths lifecyclePaths, name string, plugin *config.ProviderEntry, configMap map[string]any, install *preparedInstall) error {
+	if err := bindResolvedProviderManifest(name, plugin, install.manifestPath, install.manifest, configMap); err != nil {
+		return err
+	}
+	if install.executablePath == "" {
+		return nil
+	}
+	if _, err := os.Stat(install.executablePath); err != nil {
+		return preparedArtifactStaleError(paths, "prepared executable for provider %q not found at %s", name, install.executablePath)
+	}
+	args, err := providerEntrypointArgs(install.manifest)
+	if err != nil {
+		return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
+	}
+	plugin.Command = install.executablePath
+	plugin.Args = append([]string(nil), args...)
+	return nil
+}
+
 func (l *Lifecycle) applyLocalProviderEntry(paths lifecyclePaths, name string, plugin *config.ProviderEntry, configMap map[string]any, mode artifactMode) error {
 	subject := "provider " + strconv.Quote(name)
 	install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindPlugin, name, plugin, configMap, providerDestDir(paths, name), subject, mode)
 	if err != nil {
 		return err
 	}
-	if err := bindResolvedProviderManifest(name, plugin, install.manifestPath, install.manifest, configMap); err != nil {
-		return err
-	}
-	if install.executablePath != "" {
-		if _, err := os.Stat(install.executablePath); err != nil {
-			return preparedArtifactStaleError(paths, "prepared executable for provider %q not found at %s", name, install.executablePath)
-		}
-		args, err := providerEntrypointArgs(install.manifest)
-		if err != nil {
-			return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
-		}
-		plugin.Command = install.executablePath
-		plugin.Args = append([]string(nil), args...)
-	}
-	return nil
+	return bindPreparedProviderInstall(paths, name, plugin, configMap, install)
 }
 
-func (l *Lifecycle) applyLocalComponentEntry(paths lifecyclePaths, kind, name string, plugin *config.ProviderEntry, configMap map[string]any, destDir string, mode artifactMode) error {
-	subject := fmt.Sprintf("%s %q", kind, name)
-	install, err := l.ensureLocalPreparedInstall(paths, kind, name, plugin, configMap, destDir, subject, mode)
-	if err != nil {
-		return err
-	}
+func bindPreparedComponentInstall(paths lifecyclePaths, kind, name string, plugin *config.ProviderEntry, configMap map[string]any, destDir string, install *preparedInstall) error {
 	if install.executablePath == "" {
 		return preparedArtifactStaleError(paths, "prepared executable for %s %q not found in %s", kind, name, destDir)
 	}
@@ -4240,11 +4228,16 @@ func (l *Lifecycle) applyLocalComponentEntry(paths lifecyclePaths, kind, name st
 	return nil
 }
 
-func (l *Lifecycle) applyLocalUIProvider(paths lifecyclePaths, provider *config.ProviderEntry, logicalName, subject, destDir string, configMap map[string]any, mode artifactMode) (string, error) {
-	install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindUI, logicalName, provider, configMap, destDir, subject, mode)
+func (l *Lifecycle) applyLocalComponentEntry(paths lifecyclePaths, kind, name string, plugin *config.ProviderEntry, configMap map[string]any, destDir string, mode artifactMode) error {
+	subject := fmt.Sprintf("%s %q", kind, name)
+	install, err := l.ensureLocalPreparedInstall(paths, kind, name, plugin, configMap, destDir, subject, mode)
 	if err != nil {
-		return "", err
+		return err
 	}
+	return bindPreparedComponentInstall(paths, kind, name, plugin, configMap, destDir, install)
+}
+
+func bindPreparedUIInstall(provider *config.ProviderEntry, subject, destDir string, configMap map[string]any, install *preparedInstall) (string, error) {
 	if install.assetRootPath == "" {
 		return "", fmt.Errorf("prepared asset root for %s not found in %s", subject, destDir)
 	}
@@ -4255,6 +4248,14 @@ func (l *Lifecycle) applyLocalUIProvider(paths lifecyclePaths, provider *config.
 		return "", err
 	}
 	return install.assetRootPath, nil
+}
+
+func (l *Lifecycle) applyLocalUIProvider(paths lifecyclePaths, provider *config.ProviderEntry, logicalName, subject, destDir string, configMap map[string]any, mode artifactMode) (string, error) {
+	install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindUI, logicalName, provider, configMap, destDir, subject, mode)
+	if err != nil {
+		return "", err
+	}
+	return bindPreparedUIInstall(provider, subject, destDir, configMap, install)
 }
 
 func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *LockEntry, provider *config.ProviderEntry, logicalName, subject, destDir string, mode artifactMode) (string, error) {
@@ -4345,16 +4346,7 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 				return "", fmt.Errorf("read prepared manifest for %s: %w", subject, err)
 			}
 		}
-		if install.assetRootPath == "" {
-			return "", fmt.Errorf("prepared asset root for %s not found in %s", subject, destDir)
-		}
-		if _, err := os.Stat(install.assetRootPath); err != nil {
-			return "", fmt.Errorf("prepared asset root for %s not found at %s", subject, install.assetRootPath)
-		}
-		if err := bindResolvedUIManifest(provider, install.manifestPath, install.manifest, configMap); err != nil {
-			return "", err
-		}
-		return install.assetRootPath, nil
+		return bindPreparedUIInstall(provider, subject, destDir, configMap, install)
 	default:
 		return "", nil
 	}
@@ -4486,21 +4478,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			return fmt.Errorf("read prepared manifest for provider %q: %w", name, err)
 		}
 	}
-	if err := bindResolvedProviderManifest(name, plugin, install.manifestPath, install.manifest, configMap); err != nil {
-		return err
-	}
-	if install.executablePath != "" {
-		if _, err := os.Stat(install.executablePath); err != nil {
-			return preparedArtifactStaleError(paths, "prepared executable for provider %q not found at %s", name, install.executablePath)
-		}
-		args, err := providerEntrypointArgs(install.manifest)
-		if err != nil {
-			return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
-		}
-		plugin.Command = install.executablePath
-		plugin.Args = append([]string(nil), args...)
-	}
-	return nil
+	return bindPreparedProviderInstall(paths, name, plugin, configMap, install)
 }
 
 func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockEntry, kind, name string, plugin *config.ProviderEntry, configMap map[string]any, destDir string, mode artifactMode) error {
@@ -4589,22 +4567,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 			return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
 		}
 	}
-	if install.executablePath == "" {
-		return preparedArtifactStaleError(paths, "prepared executable for %s %q not found in %s", kind, name, destDir)
-	}
-	if err := bindResolvedComponentManifest(kind, name, plugin, install.manifestPath, install.manifest, configMap); err != nil {
-		return err
-	}
-	if _, err := os.Stat(install.executablePath); err != nil {
-		return preparedArtifactStaleError(paths, "prepared executable for %s %q not found at %s", kind, name, install.executablePath)
-	}
-	args, err := componentEntrypointArgs(install.manifest, kind)
-	if err != nil {
-		return fmt.Errorf("resolve entrypoint for %s %q: %w", kind, name, err)
-	}
-	plugin.Command = install.executablePath
-	plugin.Args = append([]string(nil), args...)
-	return nil
+	return bindPreparedComponentInstall(paths, kind, name, plugin, configMap, destDir, install)
 }
 
 func bindResolvedProviderManifest(name string, plugin *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
