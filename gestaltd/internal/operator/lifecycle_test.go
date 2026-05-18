@@ -1589,7 +1589,7 @@ plugins:
 	}
 }
 
-func TestLoadForExecutionAtPath_RejectsLockedExplicitLocalUIWithoutPreparedUILockEntry(t *testing.T) {
+func TestLoadForExecutionAtPath_AllowsLockedExplicitLocalUIWithoutPreparedUILockEntry(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1644,8 +1644,12 @@ server:
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 
-	if _, _, err := lc.LoadForExecutionAtPath(cfgPath, true); err == nil || !strings.Contains(err.Error(), `lock entry for ui "roadmap" is missing or stale`) {
-		t.Fatalf("LoadForExecutionAtPath locked error = %v, want missing lock entry", err)
+	cfgLoaded, _, err := lc.LoadForExecutionAtPath(cfgPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath locked: %v", err)
+	}
+	if cfgLoaded.Providers.UI["roadmap"].ResolvedManifest == nil {
+		t.Fatal(`Providers.UI["roadmap"].ResolvedManifest = nil`)
 	}
 }
 

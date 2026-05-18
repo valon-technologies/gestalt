@@ -287,6 +287,10 @@ func providerLifecycleRowFor(kind providerLifecycleKind, name string, entry *con
 		row.Status = "builtin"
 		return row
 	}
+	if entry.Source.IsLocal() {
+		row.Status = "source"
+		return row
+	}
 	if !providerSourceBacked(entry) {
 		return row
 	}

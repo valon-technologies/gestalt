@@ -235,8 +235,56 @@ plugins:
 	}
 
 	lc := NewLifecycle()
-	if _, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+	lock, err := lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
 		t.Fatalf("LockAtPathsWithStatePaths: %v", err)
+	}
+	if _, ok := lock.Providers["alpha"]; ok {
+		t.Fatalf("local source provider lock entry should be omitted: %#v", lock.Providers)
+	}
+	if _, ok := lock.UIs["roadmap"]; ok {
+		t.Fatalf("local source ui lock entry should be omitted: %#v", lock.UIs)
+	}
+	lockPath := filepath.Join(dir, LockfileName)
+	for _, schemaVersion := range []int{5, 6, 7} {
+		legacyEntry := portableLockEntry{
+			InputDigest: "legacy-local",
+			Kind:        providermanifestv1.KindPlugin,
+			Runtime:     providerReleaseRuntimeExecutable,
+		}
+		if schemaVersion == 7 {
+			legacyEntry.SourceRef = &LockSourceRef{Type: "legacy-local"}
+		}
+		if err := writeJSONFile(lockPath, providerLockfile{
+			Schema:        providerLockSchemaName,
+			SchemaVersion: schemaVersion,
+			Revision:      providerLockRevision,
+			Providers: providerLockBuckets{
+				Plugin: map[string]portableLockEntry{"alpha": legacyEntry},
+				UI: map[string]portableLockEntry{
+					"roadmap": {
+						InputDigest: "legacy-local",
+						Kind:        providermanifestv1.KindUI,
+						Runtime:     providerReleaseRuntimeUI,
+					},
+				},
+			},
+		}); err != nil {
+			t.Fatalf("write schema v%d legacy local source lockfile: %v", schemaVersion, err)
+		}
+		if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, nil); err == nil || !strings.Contains(err.Error(), "lockfile is out of date") {
+			t.Fatalf("CheckLockAtPathsWithStatePaths with schema v%d legacy local entries error = %v, want out of date", schemaVersion, err)
+		}
+	}
+	lock, err = lc.LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("restore canonical LockAtPathsWithStatePaths: %v", err)
+	}
+	if _, ok := lock.Providers["alpha"]; ok {
+		t.Fatalf("restored local source provider lock entry should be omitted: %#v", lock.Providers)
+	}
+	if _, ok := lock.UIs["roadmap"]; ok {
+		t.Fatalf("restored local source ui lock entry should be omitted: %#v", lock.UIs)
 	}
 	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		t.Fatalf("SyncAtPathsWithStatePaths: %v", err)
@@ -261,10 +309,6 @@ plugins:
 	preparedUIMetadata := filepath.Join(filepath.Dir(preparedUI), preparedLockMetadataFile)
 	if _, err := os.Stat(preparedUIMetadata); err != nil {
 		t.Fatalf("prepared ui lock metadata missing before source removal: %v", err)
-	}
-	uiMetadata, err := os.ReadFile(preparedUIMetadata)
-	if err != nil {
-		t.Fatalf("read prepared ui lock metadata before source removal: %v", err)
 	}
 	if err := os.RemoveAll(filepath.Join(dir, "plugins")); err != nil {
 		t.Fatalf("remove plugin source tree: %v", err)
@@ -291,29 +335,11 @@ plugins:
 	if got, want := filepath.ToSlash(ui.ResolvedAssetRoot), filepath.ToSlash(preparedUI); got != want {
 		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, want)
 	}
-	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
-		t.Fatalf("CheckSyncAtPathsWithStatePaths without local source tree: %v", err)
+	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) {
+		t.Fatalf("CheckSyncAtPathsWithStatePaths without local source tree error = %v, want stale provider artifact", err)
 	}
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePaths without local source tree: %v", err)
-	}
-	if err := os.Remove(preparedProviderMetadata); err != nil {
-		t.Fatalf("remove prepared provider lock metadata without source tree: %v", err)
-	}
-	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "lockfile is out of date") {
-		t.Fatalf("CheckSyncAtPathsWithStatePaths without source tree or provider metadata error = %v, want stale lockfile", err)
-	}
-	if err := os.WriteFile(preparedProviderMetadata, providerMetadata, 0o644); err != nil {
-		t.Fatalf("restore prepared provider lock metadata without source tree: %v", err)
-	}
-	if err := os.Remove(preparedUIMetadata); err != nil {
-		t.Fatalf("remove prepared ui lock metadata without source tree: %v", err)
-	}
-	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), "lockfile is out of date") {
-		t.Fatalf("CheckSyncAtPathsWithStatePaths without source tree or ui metadata error = %v, want stale lockfile", err)
-	}
-	if err := os.WriteFile(preparedUIMetadata, uiMetadata, 0o644); err != nil {
-		t.Fatalf("restore prepared ui lock metadata without source tree: %v", err)
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), `manifest for plugin "alpha" not found`) {
+		t.Fatalf("SyncAtPathsWithStatePaths without local source tree error = %v, want missing source manifest", err)
 	}
 
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
@@ -400,6 +426,12 @@ func TestLoadForExecutionPluginScopeIgnoresUnrelatedLocalSources(t *testing.T) {
 
 	dir := t.TempDir()
 	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+	externalCredentialsManifestPath := writeExecutableSourceManifest(t, dir, "external-credentials-local", "github.com/acme/tools/external-credentials/local", "0.1.0", providermanifestv1.KindExternalCredentials, []localExecutableManifestArtifact{{
+		goos:       runtime.GOOS,
+		goarch:     runtime.GOARCH,
+		binaryName: "external-credentials-local",
+		data:       []byte("external-credentials-local-binary"),
+	}})
 
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
@@ -425,6 +457,10 @@ workflows:
           id: test
           kind: test
 %s
+  externalCredentials:
+    local:
+      source:
+        path: %s
   secrets:
     runtime_env:
       source: env
@@ -447,6 +483,7 @@ workflows:
 server:
   providers:
     indexeddb: sqlite
+    externalCredentials: local
     secrets: runtime_env
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -463,7 +500,7 @@ plugins:
     connections:
       default:
         ref: ${GESTALT_SCOPED_PLUGIN_TEST_MISSING_CONNECTION_REF}
-`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(artifactsDir))
+`, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), externalCredentialsManifestPath, filepath.ToSlash(artifactsDir))
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -506,11 +543,17 @@ plugins:
 	if err != nil {
 		t.Fatalf("read scoped lockfile: %v", err)
 	}
-	if _, ok := lock.Providers["alpha"]; !ok {
-		t.Fatalf("scoped lock missing alpha provider: %+v", lock.Providers)
+	if len(lock.Providers) != 0 {
+		t.Fatalf("scoped local-source lock should not include providers: %+v", lock.Providers)
 	}
 	if _, ok := lock.Providers["beta"]; ok {
 		t.Fatalf("scoped lock should not include beta provider: %+v", lock.Providers)
+	}
+	if err := os.Remove(scopedLockPath); err != nil {
+		t.Fatalf("remove empty scoped lockfile: %v", err)
+	}
+	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, nil); err != nil {
+		t.Fatalf("CheckLockAtPathsWithStatePaths should allow missing local-only scoped lockfile: %v", err)
 	}
 
 	explicitArtifactsDir := filepath.Join(dir, "explicit-artifacts")
@@ -606,8 +649,9 @@ plugins:
 	if err == nil {
 		t.Fatal("locked scoped load unexpectedly succeeded without scoped state")
 	}
-	if !strings.Contains(err.Error(), `scoped local plugin state is missing or stale for plugin "alpha"`) {
-		t.Fatalf("error = %v, want scoped local plugin state guidance", err)
+	if !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) ||
+		!strings.Contains(err.Error(), `scoped local state for plugin "alpha"`) {
+		t.Fatalf("error = %v, want scoped prepared artifact guidance", err)
 	}
 }
 
@@ -1100,6 +1144,60 @@ func writeProviderReleaseMetadataFile(t *testing.T, path string, metadata provid
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write metadata: %v", err)
+	}
+}
+
+func TestFingerprintLocalReleaseMetadataIgnoresAdjacentSourceTree(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	sourceDir := filepath.Join(dir, "provider")
+	writeSourceProviderTree(t, sourceDir, "github.com/acme/providers/alpha", "1.0.0", "alpha-binary")
+	metadataPath := filepath.Join(sourceDir, "dist", "provider-release.yaml")
+	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
+		Schema:        providerReleaseSchemaName,
+		SchemaVersion: providerReleaseSchemaVersion,
+		Package:       "github.com/acme/providers/alpha",
+		Kind:          providermanifestv1.KindPlugin,
+		Runtime:       providerReleaseRuntimeExecutable,
+		Version:       "1.0.0",
+		Artifacts: map[string]providerReleaseArtifact{
+			platformKeyGeneric: {Path: "alpha.tar.gz", SHA256: "abc123"},
+		},
+	})
+
+	first, err := fingerprintLocalReleaseMetadataDigest(metadataPath)
+	if err != nil {
+		t.Fatalf("fingerprintLocalReleaseMetadataDigest first: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "provider.go"), []byte("source changed\n"), 0o644); err != nil {
+		t.Fatalf("mutate adjacent source tree: %v", err)
+	}
+	second, err := fingerprintLocalReleaseMetadataDigest(metadataPath)
+	if err != nil {
+		t.Fatalf("fingerprintLocalReleaseMetadataDigest second: %v", err)
+	}
+	if second != first {
+		t.Fatalf("local release metadata digest changed after adjacent source edit: %q != %q", second, first)
+	}
+
+	writeProviderReleaseMetadataFile(t, metadataPath, providerReleaseMetadata{
+		Schema:        providerReleaseSchemaName,
+		SchemaVersion: providerReleaseSchemaVersion,
+		Package:       "github.com/acme/providers/alpha",
+		Kind:          providermanifestv1.KindPlugin,
+		Runtime:       providerReleaseRuntimeExecutable,
+		Version:       "1.0.1",
+		Artifacts: map[string]providerReleaseArtifact{
+			platformKeyGeneric: {Path: "alpha.tar.gz", SHA256: "abc123"},
+		},
+	})
+	third, err := fingerprintLocalReleaseMetadataDigest(metadataPath)
+	if err != nil {
+		t.Fatalf("fingerprintLocalReleaseMetadataDigest third: %v", err)
+	}
+	if third == first {
+		t.Fatalf("local release metadata digest did not change after metadata edit: %q", third)
 	}
 }
 
@@ -4801,14 +4899,8 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
-	if len(lock.IndexedDBs) != 2 {
-		t.Fatalf("lock.IndexedDBs = %#v, want 2 entries", lock.IndexedDBs)
-	}
-	if _, ok := lock.IndexedDBs["main"]; !ok {
-		t.Fatal(`lock.IndexedDBs["main"] not found`)
-	}
-	if _, ok := lock.IndexedDBs["archive"]; !ok {
-		t.Fatal(`lock.IndexedDBs["archive"] not found`)
+	if len(lock.IndexedDBs) != 0 {
+		t.Fatalf("lock.IndexedDBs = %#v, want no local source entries", lock.IndexedDBs)
 	}
 
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
@@ -4816,6 +4908,10 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
 
+	wantBinaries := map[string]string{
+		"main":    "indexeddb-main",
+		"archive": "indexeddb-archive",
+	}
 	for _, name := range []string{"main", "archive"} {
 		entry := cfg.Providers.IndexedDB[name]
 		if entry == nil {
@@ -4826,7 +4922,7 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 			t.Fatalf("cfg.Providers.IndexedDB[%q].ResolvedManifest = nil", name)
 			return
 		}
-		wantCommand := resolveLockPath(artifactsDir, lock.IndexedDBs[name].Executable)
+		wantCommand := filepath.Join(artifactsDir, "indexeddb", name, "artifacts", runtime.GOOS, runtime.GOARCH, wantBinaries[name])
 		if entry.Command != wantCommand {
 			t.Fatalf("cfg.Providers.IndexedDB[%q].Command = %q, want %q", name, entry.Command, wantCommand)
 		}
@@ -4906,14 +5002,8 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareAtPath: %v", err)
 	}
-	if len(lock.Caches) != 2 {
-		t.Fatalf("lock.Caches = %#v, want 2 entries", lock.Caches)
-	}
-	if _, ok := lock.Caches["session"]; !ok {
-		t.Fatal(`lock.Caches["session"] not found`)
-	}
-	if _, ok := lock.Caches["rate_limit"]; !ok {
-		t.Fatal(`lock.Caches["rate_limit"] not found`)
+	if len(lock.Caches) != 0 {
+		t.Fatalf("lock.Caches = %#v, want no local source entries", lock.Caches)
 	}
 	lockPath := filepath.Join(dir, LockfileName)
 	lockData, err := os.ReadFile(lockPath)
@@ -4924,11 +5014,8 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	if err := json.Unmarshal(lockData, &diskLock); err != nil {
 		t.Fatalf("Unmarshal lockfile: %v", err)
 	}
-	if _, ok := diskLock.Providers.Cache["session"]; !ok {
-		t.Fatal(`disk lock cache["session"] not found`)
-	}
-	if _, ok := diskLock.Providers.Cache["rate_limit"]; !ok {
-		t.Fatal(`disk lock cache["rate_limit"] not found`)
+	if len(diskLock.Providers.Cache) != 0 {
+		t.Fatalf("disk lock cache entries = %#v, want no local source entries", diskLock.Providers.Cache)
 	}
 
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
@@ -4940,6 +5027,10 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 		"session":    "generated-secret-value",
 		"rate_limit": "ghp_inline_auth_source_token",
 	}
+	wantBinaries := map[string]string{
+		"session":    "cache-session",
+		"rate_limit": "cache-rate-limit",
+	}
 	for _, name := range []string{"session", "rate_limit"} {
 		entry := cfg.Providers.Cache[name]
 		if entry == nil {
@@ -4950,7 +5041,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 			t.Fatalf("cfg.Providers.Cache[%q].ResolvedManifest = nil", name)
 			return
 		}
-		wantCommand := resolveLockPath(artifactsDir, lock.Caches[name].Executable)
+		wantCommand := filepath.Join(artifactsDir, ".gestaltd", "cache", name, "artifacts", runtime.GOOS, runtime.GOARCH, wantBinaries[name])
 		if entry.Command != wantCommand {
 			t.Fatalf("cfg.Providers.Cache[%q].Command = %q, want %q", name, entry.Command, wantCommand)
 		}
