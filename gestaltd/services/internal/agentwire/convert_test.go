@@ -30,7 +30,7 @@ func TestToolRefProtoRoundTripCarriesRunAs(t *testing.T) {
 	}
 
 	encoded := ToolRefToProto(ref)
-	if got := encoded.GetRunAs().GetSubjectKind(); got != "service_account" {
+	if got := encoded.GetRunAs().GetKind(); got != "service_account" {
 		t.Fatalf("encoded runAs subject kind = %q, want service_account", got)
 	}
 	if got := encoded.GetRunAs().GetCredentialSubjectId(); got != "service_account:gestalt-support-notion" {
@@ -52,8 +52,8 @@ func TestToolRefFromProtoDropsMalformedRunAsExternalIdentity(t *testing.T) {
 	decoded := ToolRefFromProto(&proto.AgentToolRef{
 		Plugin:    "notion",
 		Operation: "search",
-		RunAs: &proto.AgentSubjectContext{
-			SubjectId: "service_account:gestalt-support-notion",
+		RunAs: &proto.SubjectContext{
+			Id: "service_account:gestalt-support-notion",
 		},
 		RunAsExternalIdentity: &proto.ExternalIdentityContext{
 			Type: "notion_workspace",

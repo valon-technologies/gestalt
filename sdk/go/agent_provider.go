@@ -147,14 +147,6 @@ type AgentActor struct {
 	AuthSource  string
 }
 
-type AgentSubjectContext struct {
-	SubjectID           string
-	SubjectKind         string
-	CredentialSubjectID string
-	DisplayName         string
-	AuthSource          string
-}
-
 type AgentPreparedWorkspace struct {
 	Root string
 	Cwd  string
@@ -175,7 +167,7 @@ type AgentToolRef struct {
 	Title                 string
 	Description           string
 	System                string
-	RunAs                 *AgentSubjectContext
+	RunAs                 *Subject
 	RunAsExternalIdentity *ExternalIdentity
 }
 
@@ -229,7 +221,7 @@ type CreateAgentProviderSessionRequest struct {
 	ClientRef         string
 	Metadata          map[string]any
 	CreatedBy         *AgentActor
-	Subject           *AgentSubjectContext
+	Subject           *Subject
 	SessionStart      *AgentSessionStartConfig
 	PreparedWorkspace *AgentPreparedWorkspace
 }
@@ -255,11 +247,11 @@ type AgentSessionStartHookOutput struct {
 
 type GetAgentProviderSessionRequest struct {
 	SessionID string
-	Subject   *AgentSubjectContext
+	Subject   *Subject
 }
 
 type ListAgentProviderSessionsRequest struct {
-	Subject     *AgentSubjectContext
+	Subject     *Subject
 	SessionIDs  []string
 	State       AgentSessionState
 	Limit       int32
@@ -275,7 +267,7 @@ type UpdateAgentProviderSessionRequest struct {
 	ClientRef string
 	State     AgentSessionState
 	Metadata  map[string]any
-	Subject   *AgentSubjectContext
+	Subject   *Subject
 }
 
 type AgentTurn struct {
@@ -324,7 +316,7 @@ type CreateAgentProviderTurnRequest struct {
 	ExecutionRef      string
 	ToolRefs          []AgentToolRef
 	ToolSource        AgentToolSourceMode
-	Subject           *AgentSubjectContext
+	Subject           *Subject
 	ModelOptions      map[string]any
 	RunGrant          string
 	TimeoutSeconds    int32
@@ -332,12 +324,12 @@ type CreateAgentProviderTurnRequest struct {
 
 type GetAgentProviderTurnRequest struct {
 	TurnID  string
-	Subject *AgentSubjectContext
+	Subject *Subject
 }
 
 type ListAgentProviderTurnsRequest struct {
 	SessionID   string
-	Subject     *AgentSubjectContext
+	Subject     *Subject
 	TurnIDs     []string
 	Status      AgentExecutionStatus
 	Limit       int32
@@ -351,7 +343,7 @@ type ListAgentProviderTurnsResponse struct {
 type CancelAgentProviderTurnRequest struct {
 	TurnID  string
 	Reason  string
-	Subject *AgentSubjectContext
+	Subject *Subject
 }
 
 type AgentTurnEvent struct {
@@ -370,7 +362,7 @@ type ListAgentProviderTurnEventsRequest struct {
 	TurnID   string
 	AfterSeq int64
 	Limit    int32
-	Subject  *AgentSubjectContext
+	Subject  *Subject
 }
 
 type ListAgentProviderTurnEventsResponse struct {
@@ -379,12 +371,12 @@ type ListAgentProviderTurnEventsResponse struct {
 
 type GetAgentProviderInteractionRequest struct {
 	InteractionID string
-	Subject       *AgentSubjectContext
+	Subject       *Subject
 }
 
 type ListAgentProviderInteractionsRequest struct {
 	TurnID  string
-	Subject *AgentSubjectContext
+	Subject *Subject
 }
 
 type ListAgentProviderInteractionsResponse struct {
@@ -394,7 +386,7 @@ type ListAgentProviderInteractionsResponse struct {
 type ResolveAgentProviderInteractionRequest struct {
 	InteractionID string
 	Resolution    map[string]any
-	Subject       *AgentSubjectContext
+	Subject       *Subject
 }
 
 type ExecuteAgentToolRequest struct {

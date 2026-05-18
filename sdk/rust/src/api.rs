@@ -15,6 +15,8 @@ pub struct Subject {
     pub id: String,
     /// Subject kind, such as user or service account.
     pub kind: String,
+    /// Subject id used for credential lookup, when different from the actor.
+    pub credential_subject_id: String,
     /// Human-readable display name.
     pub display_name: String,
     /// Authentication source that produced the subject.

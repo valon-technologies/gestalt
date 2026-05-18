@@ -65,10 +65,16 @@ import {
   type UpdateAgentProviderSessionRequest as ProtoUpdateAgentProviderSessionRequest,
 } from "./internal/gen/v1/agent_pb.ts";
 import {
-  type AgentSubjectContext as ProtoAgentSubjectContext,
+  type SubjectContext as ProtoSubjectContext,
   type AgentToolRef as ProtoAgentToolRef,
 } from "./internal/gen/v1/plugin_pb.ts";
-import { errorMessage, type ExternalIdentity, type MaybePromise } from "./api.ts";
+import {
+  errorMessage,
+  type ExternalIdentity,
+  type MaybePromise,
+  type Subject,
+  type SubjectInput,
+} from "./api.ts";
 import {
   agentActorFromProto,
   agentActorToProto,
@@ -199,14 +205,6 @@ export interface AgentActor {
   authSource?: string | undefined;
 }
 
-export interface AgentSubjectContext {
-  subjectId?: string | undefined;
-  subjectKind?: string | undefined;
-  credentialSubjectId?: string | undefined;
-  displayName?: string | undefined;
-  authSource?: string | undefined;
-}
-
 export interface AgentToolRef {
   plugin?: string | undefined;
   operation?: string | undefined;
@@ -215,7 +213,7 @@ export interface AgentToolRef {
   title?: string | undefined;
   description?: string | undefined;
   system?: string | undefined;
-  runAs?: AgentSubjectContext | undefined;
+  runAs?: SubjectInput | undefined;
   runAsExternalIdentity?: ExternalIdentity | undefined;
 }
 
@@ -284,18 +282,18 @@ export interface CreateAgentProviderSessionRequest {
   clientRef: string;
   metadata?: JsonObjectInput | undefined;
   createdBy?: AgentActor | undefined;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
   sessionStart?: AgentSessionStartConfig | undefined;
   preparedWorkspace?: AgentPreparedWorkspace | undefined;
 }
 
 export interface GetAgentProviderSessionRequest {
   sessionId: string;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
 }
 
 export interface ListAgentProviderSessionsRequest {
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
   sessionIds: readonly string[];
   state: AgentSessionState;
   limit: number;
@@ -311,7 +309,7 @@ export interface UpdateAgentProviderSessionRequest {
   clientRef: string;
   state: AgentSessionState;
   metadata?: JsonObjectInput | undefined;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
 }
 
 export interface AgentTurn {
@@ -359,7 +357,7 @@ export interface CreateAgentProviderTurnRequest {
   executionRef: string;
   toolRefs: readonly AgentToolRef[];
   toolSource: AgentToolSourceMode;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
   modelOptions?: JsonObjectInput | undefined;
   runGrant: string;
   timeoutSeconds: number;
@@ -367,12 +365,12 @@ export interface CreateAgentProviderTurnRequest {
 
 export interface GetAgentProviderTurnRequest {
   turnId: string;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
 }
 
 export interface ListAgentProviderTurnsRequest {
   sessionId: string;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
   turnIds: readonly string[];
   status: AgentExecutionStatus;
   limit: number;
@@ -386,7 +384,7 @@ export interface ListAgentProviderTurnsResponse {
 export interface CancelAgentProviderTurnRequest {
   turnId: string;
   reason: string;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
 }
 
 export interface AgentTurnEvent {
@@ -405,7 +403,7 @@ export interface ListAgentProviderTurnEventsRequest {
   turnId: string;
   afterSeq: bigint;
   limit: number;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
 }
 
 export interface ListAgentProviderTurnEventsResponse {
@@ -428,12 +426,12 @@ export interface AgentInteraction {
 
 export interface GetAgentProviderInteractionRequest {
   interactionId: string;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
 }
 
 export interface ListAgentProviderInteractionsRequest {
   turnId: string;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
 }
 
 export interface ListAgentProviderInteractionsResponse {
@@ -443,7 +441,7 @@ export interface ListAgentProviderInteractionsResponse {
 export interface ResolveAgentProviderInteractionRequest {
   interactionId: string;
   resolution?: JsonObjectInput | undefined;
-  subject?: AgentSubjectContext | undefined;
+  subject?: Subject | undefined;
 }
 
 export interface GetAgentProviderCapabilitiesRequest {}
@@ -1015,17 +1013,18 @@ function resolvedAgentToolFromProto(tool: ProtoResolvedAgentTool): ResolvedAgent
 }
 
 function agentSubjectFromProto(
-  subject?: ProtoAgentSubjectContext | undefined,
-): AgentSubjectContext | undefined {
+  subject?: ProtoSubjectContext | undefined,
+): Subject | undefined {
   if (subject === undefined) {
     return undefined;
   }
   return {
-    subjectId: subject.subjectId,
-    subjectKind: subject.subjectKind,
+    id: subject.id,
+    kind: subject.kind,
     credentialSubjectId: subject.credentialSubjectId,
     displayName: subject.displayName,
     authSource: subject.authSource,
+    email: subject.email,
   };
 }
 

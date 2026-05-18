@@ -178,7 +178,7 @@ message CreateAgentProviderSessionRequest {
   string client_ref = 4;
   google.protobuf.Struct metadata = 5;
   AgentActor created_by = 7;
-  AgentSubjectContext subject = 8;
+  SubjectContext subject = 8;
   AgentSessionStartConfig session_start = 9;
   PreparedAgentWorkspace prepared_workspace = 10;
 }
@@ -204,11 +204,11 @@ message AgentSessionStartHookOutput {
 
 message GetAgentProviderSessionRequest {
   string session_id = 1;
-  AgentSubjectContext subject = 2;
+  SubjectContext subject = 2;
 }
 
 message ListAgentProviderSessionsRequest {
-  AgentSubjectContext subject = 1;
+  SubjectContext subject = 1;
   repeated string session_ids = 2;
   AgentSessionState state = 3;
   // When non-zero and bounded_list_hydration is supported, cap results after
@@ -228,7 +228,7 @@ message UpdateAgentProviderSessionRequest {
   string client_ref = 2;
   AgentSessionState state = 3;
   google.protobuf.Struct metadata = 4;
-  AgentSubjectContext subject = 5;
+  SubjectContext subject = 5;
 }
 
 message AgentTurn {
@@ -279,7 +279,7 @@ message CreateAgentProviderTurnRequest {
   string execution_ref = 11;
   repeated AgentToolRef tool_refs = 12;
   AgentToolSourceMode tool_source = 13;
-  AgentSubjectContext subject = 14;
+  SubjectContext subject = 14;
   google.protobuf.Struct model_options = 16;
   string run_grant = 17;
   int32 timeout_seconds = 18;
@@ -287,12 +287,12 @@ message CreateAgentProviderTurnRequest {
 
 message GetAgentProviderTurnRequest {
   string turn_id = 1;
-  AgentSubjectContext subject = 2;
+  SubjectContext subject = 2;
 }
 
 message ListAgentProviderTurnsRequest {
   string session_id = 1;
-  AgentSubjectContext subject = 2;
+  SubjectContext subject = 2;
   repeated string turn_ids = 3;
   AgentExecutionStatus status = 4;
   // When non-zero and bounded_list_hydration is supported, cap results after
@@ -311,7 +311,7 @@ message ListAgentProviderTurnsResponse {
 message CancelAgentProviderTurnRequest {
   string turn_id = 1;
   string reason = 2;
-  AgentSubjectContext subject = 3;
+  SubjectContext subject = 3;
 }
 
 message AgentTurnEvent {
@@ -330,7 +330,7 @@ message ListAgentProviderTurnEventsRequest {
   string turn_id = 1;
   int64 after_seq = 2;
   int32 limit = 3;
-  AgentSubjectContext subject = 4;
+  SubjectContext subject = 4;
 }
 
 message ListAgentProviderTurnEventsResponse {
@@ -339,12 +339,12 @@ message ListAgentProviderTurnEventsResponse {
 
 message GetAgentProviderInteractionRequest {
   string interaction_id = 1;
-  AgentSubjectContext subject = 2;
+  SubjectContext subject = 2;
 }
 
 message ListAgentProviderInteractionsRequest {
   string turn_id = 1;
-  AgentSubjectContext subject = 2;
+  SubjectContext subject = 2;
 }
 
 message ListAgentProviderInteractionsResponse {
@@ -354,7 +354,7 @@ message ListAgentProviderInteractionsResponse {
 message ResolveAgentProviderInteractionRequest {
   string interaction_id = 1;
   google.protobuf.Struct resolution = 2;
-  AgentSubjectContext subject = 3;
+  SubjectContext subject = 3;
 }
 
 message ExecuteAgentToolRequest {

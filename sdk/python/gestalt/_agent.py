@@ -8,7 +8,7 @@ from typing import Any, TypeAlias
 
 import grpc
 
-from ._api import ExternalIdentity
+from ._api import ExternalIdentity, Subject
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._gen.v1 import plugin_pb2 as _plugin_pb
@@ -243,15 +243,6 @@ class AgentActor:
 
 
 @dataclass(slots=True)
-class AgentSubjectContext:
-    subject_id: str = ""
-    subject_kind: str = ""
-    credential_subject_id: str = ""
-    display_name: str = ""
-    auth_source: str = ""
-
-
-@dataclass(slots=True)
 class AgentToolRef:
     plugin: str = ""
     operation: str = ""
@@ -260,7 +251,7 @@ class AgentToolRef:
     title: str = ""
     description: str = ""
     system: str = ""
-    run_as: AgentSubjectContext | None = None
+    run_as: Subject | None = None
     run_as_external_identity: ExternalIdentity | None = None
 
 
@@ -331,7 +322,7 @@ class CreateAgentProviderSessionRequest:
     client_ref: str = ""
     metadata: JsonObject | None = None
     created_by: AgentActor | None = None
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
     session_start: AgentSessionStartConfig | None = None
     prepared_workspace: AgentPreparedWorkspace | None = None
 
@@ -339,12 +330,12 @@ class CreateAgentProviderSessionRequest:
 @dataclass(slots=True)
 class GetAgentProviderSessionRequest:
     session_id: str = ""
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
 
 
 @dataclass(slots=True)
 class ListAgentProviderSessionsRequest:
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
     session_ids: Iterable[str] = field(default_factory=list)
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
     limit: int = 0
@@ -362,7 +353,7 @@ class UpdateAgentProviderSessionRequest:
     client_ref: str = ""
     state: int = AGENT_SESSION_STATE_UNSPECIFIED
     metadata: JsonObject | None = None
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
 
 
 @dataclass(slots=True)
@@ -421,7 +412,7 @@ class CreateAgentProviderTurnRequest:
     execution_ref: str = ""
     tool_refs: Iterable[AgentToolRef] = field(default_factory=list)
     tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
     model_options: JsonObject | None = None
     run_grant: str = ""
     timeout_seconds: int = 0
@@ -430,13 +421,13 @@ class CreateAgentProviderTurnRequest:
 @dataclass(slots=True)
 class GetAgentProviderTurnRequest:
     turn_id: str = ""
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
 
 
 @dataclass(slots=True)
 class ListAgentProviderTurnsRequest:
     session_id: str = ""
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
     turn_ids: Iterable[str] = field(default_factory=list)
     status: int = AGENT_EXECUTION_STATUS_UNSPECIFIED
     limit: int = 0
@@ -452,7 +443,7 @@ class ListAgentProviderTurnsResponse:
 class CancelAgentProviderTurnRequest:
     turn_id: str = ""
     reason: str = ""
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
 
 
 @dataclass(slots=True)
@@ -473,7 +464,7 @@ class ListAgentProviderTurnEventsRequest:
     turn_id: str = ""
     after_seq: int = 0
     limit: int = 0
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
 
 
 @dataclass(slots=True)
@@ -499,13 +490,13 @@ class AgentInteraction:
 @dataclass(slots=True)
 class GetAgentProviderInteractionRequest:
     interaction_id: str = ""
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
 
 
 @dataclass(slots=True)
 class ListAgentProviderInteractionsRequest:
     turn_id: str = ""
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
 
 
 @dataclass(slots=True)
@@ -519,7 +510,7 @@ class ListAgentProviderInteractionsResponse:
 class ResolveAgentProviderInteractionRequest:
     interaction_id: str = ""
     resolution: JsonObject | None = None
-    subject: AgentSubjectContext | None = None
+    subject: Subject | None = None
 
 
 @dataclass(slots=True)
@@ -616,7 +607,7 @@ def create_agent_provider_session_request_from_proto(
         created_by=agent_actor_from_proto(request.created_by)
         if has_field(request, "created_by")
         else None,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
         session_start=agent_session_start_config_from_proto(request.session_start)
@@ -633,7 +624,7 @@ def get_agent_provider_session_request_from_proto(
 ) -> GetAgentProviderSessionRequest:
     return GetAgentProviderSessionRequest(
         session_id=request.session_id,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
     )
@@ -643,7 +634,7 @@ def list_agent_provider_sessions_request_from_proto(
     request: Any,
 ) -> ListAgentProviderSessionsRequest:
     return ListAgentProviderSessionsRequest(
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
         session_ids=list(request.session_ids),
@@ -663,7 +654,7 @@ def update_agent_provider_session_request_from_proto(
         metadata=struct_to_dict(request.metadata)
         if has_field(request, "metadata")
         else None,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
     )
@@ -691,7 +682,7 @@ def create_agent_provider_turn_request_from_proto(
         execution_ref=request.execution_ref,
         tool_refs=[agent_tool_ref_from_proto(ref) for ref in request.tool_refs],
         tool_source=request.tool_source,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
         model_options=struct_to_dict(request.model_options)
@@ -707,7 +698,7 @@ def get_agent_provider_turn_request_from_proto(
 ) -> GetAgentProviderTurnRequest:
     return GetAgentProviderTurnRequest(
         turn_id=request.turn_id,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
     )
@@ -718,7 +709,7 @@ def list_agent_provider_turns_request_from_proto(
 ) -> ListAgentProviderTurnsRequest:
     return ListAgentProviderTurnsRequest(
         session_id=request.session_id,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
         turn_ids=list(request.turn_ids),
@@ -734,7 +725,7 @@ def cancel_agent_provider_turn_request_from_proto(
     return CancelAgentProviderTurnRequest(
         turn_id=request.turn_id,
         reason=request.reason,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
     )
@@ -747,7 +738,7 @@ def list_agent_provider_turn_events_request_from_proto(
         turn_id=request.turn_id,
         after_seq=request.after_seq,
         limit=request.limit,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
     )
@@ -758,7 +749,7 @@ def get_agent_provider_interaction_request_from_proto(
 ) -> GetAgentProviderInteractionRequest:
     return GetAgentProviderInteractionRequest(
         interaction_id=request.interaction_id,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
     )
@@ -769,7 +760,7 @@ def list_agent_provider_interactions_request_from_proto(
 ) -> ListAgentProviderInteractionsRequest:
     return ListAgentProviderInteractionsRequest(
         turn_id=request.turn_id,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
     )
@@ -783,7 +774,7 @@ def resolve_agent_provider_interaction_request_from_proto(
         resolution=struct_to_dict(request.resolution)
         if has_field(request, "resolution")
         else None,
-        subject=agent_subject_context_from_proto(request.subject)
+        subject=subject_from_proto(request.subject)
         if has_field(request, "subject")
         else None,
     )
@@ -1068,28 +1059,30 @@ def agent_actor_to_proto(value: AgentActor | Mapping[str, Any] | None) -> Any | 
     )
 
 
-def agent_subject_context_from_proto(value: Any) -> AgentSubjectContext:
-    return AgentSubjectContext(
-        subject_id=getattr(value, "subject_id", "") or getattr(value, "id", ""),
-        subject_kind=getattr(value, "subject_kind", "") or getattr(value, "kind", ""),
+def subject_from_proto(value: Any) -> Subject:
+    return Subject(
+        id=value.id,
+        kind=value.kind,
         credential_subject_id=value.credential_subject_id,
         display_name=value.display_name,
         auth_source=value.auth_source,
+        email=value.email,
     )
 
 
-def agent_subject_context_to_proto(
-    value: AgentSubjectContext | Mapping[str, Any] | None,
+def subject_to_proto(
+    value: Subject | Mapping[str, Any] | None,
 ) -> Any | None:
     if value is None:
         return None
-    subject = _coerce(value, AgentSubjectContext, "AgentSubjectContext")
-    return _plugin_pb.AgentSubjectContext(
-        subject_id=subject.subject_id,
-        subject_kind=subject.subject_kind,
+    subject = _coerce(value, Subject, "Subject")
+    return _plugin_pb.SubjectContext(
+        id=subject.id,
+        kind=subject.kind,
         credential_subject_id=subject.credential_subject_id,
         display_name=subject.display_name,
         auth_source=subject.auth_source,
+        email=subject.email,
     )
 
 
@@ -1140,7 +1133,7 @@ def agent_tool_ref_from_proto(value: Any) -> AgentToolRef:
         title=value.title,
         description=value.description,
         system=value.system,
-        run_as=agent_subject_context_from_proto(value.run_as)
+        run_as=subject_from_proto(value.run_as)
         if has_field(value, "run_as")
         else None,
         run_as_external_identity=external_identity_from_proto(
@@ -1166,7 +1159,7 @@ def agent_tool_ref_to_proto(
         description=ref.description,
         system=ref.system,
     )
-    _copy_message(message, "run_as", agent_subject_context_to_proto(ref.run_as))
+    _copy_message(message, "run_as", subject_to_proto(ref.run_as))
     _copy_message(
         message,
         "run_as_external_identity",
@@ -1518,31 +1511,33 @@ def agent_actor_from_dict(value: Mapping[str, Any] | None) -> Any:
     )
 
 
-def agent_subject_context_to_dict(subject: Any) -> dict[str, Any]:
-    """Convert an ``AgentSubjectContext`` value to a dictionary."""
+def subject_to_dict(subject: Any) -> dict[str, Any]:
+    """Convert an ``Subject`` value to a dictionary."""
 
     return _message_fields(
         subject,
         (
-            "subject_id",
-            "subject_kind",
+            "id",
+            "kind",
             "credential_subject_id",
             "display_name",
             "auth_source",
+            "email",
         ),
     )
 
 
-def agent_subject_context_from_dict(value: Mapping[str, Any] | None) -> Any:
-    """Create an ``AgentSubjectContext`` from a dictionary."""
+def subject_from_dict(value: Mapping[str, Any] | None) -> Any:
+    """Create an ``Subject`` from a dictionary."""
 
     data = dict(value or {})
-    return AgentSubjectContext(
-        subject_id=data.get("subject_id", ""),
-        subject_kind=data.get("subject_kind", ""),
+    return Subject(
+        id=data.get("id", ""),
+        kind=data.get("kind", ""),
         credential_subject_id=data.get("credential_subject_id", ""),
         display_name=data.get("display_name", ""),
         auth_source=data.get("auth_source", ""),
+        email=data.get("email", ""),
     )
 
 
@@ -1583,7 +1578,7 @@ def agent_tool_ref_to_dict(tool_ref: Any) -> dict[str, Any]:
     if isinstance(tool_ref, Mapping):
         run_as = tool_ref.get("run_as")
     if run_as is not None:
-        value["run_as"] = agent_subject_context_to_dict(run_as)
+        value["run_as"] = subject_to_dict(run_as)
     run_as_external_identity = getattr(tool_ref, "run_as_external_identity", None)
     if isinstance(tool_ref, Mapping):
         run_as_external_identity = tool_ref.get("run_as_external_identity")
@@ -1606,7 +1601,7 @@ def agent_tool_ref_from_dict(value: Mapping[str, Any] | None) -> Any:
         title=data.get("title", ""),
         description=data.get("description", ""),
         system=data.get("system", ""),
-        run_as=agent_subject_context_from_dict(data.get("run_as"))
+        run_as=subject_from_dict(data.get("run_as"))
         if data.get("run_as") is not None
         else None,
         run_as_external_identity=external_identity_from_dict(

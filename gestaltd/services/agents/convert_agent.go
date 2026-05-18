@@ -64,13 +64,13 @@ func agentActorFromProto(actor *proto.AgentActor) coreagent.Actor {
 	}
 }
 
-func agentSubjectContextToProto(subject coreagent.SubjectContext) *proto.AgentSubjectContext {
+func subjectToProto(subject coreagent.SubjectContext) *proto.SubjectContext {
 	if subject == (coreagent.SubjectContext{}) {
 		return nil
 	}
-	return &proto.AgentSubjectContext{
-		SubjectId:           subject.SubjectID,
-		SubjectKind:         subject.SubjectKind,
+	return &proto.SubjectContext{
+		Id:                  subject.SubjectID,
+		Kind:                subject.SubjectKind,
 		CredentialSubjectId: subject.CredentialSubjectID,
 		DisplayName:         subject.DisplayName,
 		AuthSource:          subject.AuthSource,

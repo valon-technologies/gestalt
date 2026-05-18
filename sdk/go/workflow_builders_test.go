@@ -131,9 +131,9 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	input := AgentToolRef{
 		Plugin:    "notion",
 		Operation: "search",
-		RunAs: &AgentSubjectContext{
-			SubjectID:           "service_account:gestalt-support-notion",
-			SubjectKind:         "service_account",
+		RunAs: &Subject{
+			ID:                  "service_account:gestalt-support-notion",
+			Kind:                "service_account",
 			CredentialSubjectID: "service_account:notion-credential",
 			DisplayName:         "Gestalt Support Notion",
 			AuthSource:          "notion_service_account",
@@ -145,9 +145,9 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	}
 
 	copied := NewAgentToolRef(input)
-	input.RunAs.SubjectID = "changed"
+	input.RunAs.ID = "changed"
 	input.RunAsExternalIdentity.ID = "changed"
-	if copied.RunAs == nil || copied.RunAs.SubjectID != "service_account:gestalt-support-notion" {
+	if copied.RunAs == nil || copied.RunAs.ID != "service_account:gestalt-support-notion" {
 		t.Fatalf("copied runAs = %#v, want independent copy", copied.RunAs)
 	}
 	if copied.RunAsExternalIdentity == nil || copied.RunAsExternalIdentity.ID != "valon-support" {
@@ -155,7 +155,7 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	}
 
 	encoded := agentToolRefToProto(*copied)
-	if got := encoded.GetRunAs().GetSubjectId(); got != "service_account:gestalt-support-notion" {
+	if got := encoded.GetRunAs().GetId(); got != "service_account:gestalt-support-notion" {
 		t.Fatalf("encoded runAs subject = %q", got)
 	}
 	if got := encoded.GetRunAsExternalIdentity().GetId(); got != "valon-support" {

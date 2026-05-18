@@ -311,7 +311,6 @@ export {
   type AgentSessionStartConfig,
   type AgentSessionStartHook,
   type AgentSessionStartHookOutput,
-  type AgentSubjectContext,
   type AgentToolAnnotations,
   type AgentToolRef,
   type AgentTurn,

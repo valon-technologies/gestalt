@@ -240,16 +240,31 @@ func agentActorToProto(value *AgentActor) *proto.AgentActor {
 	}
 }
 
-func agentSubjectContextFromProto(value *proto.AgentSubjectContext) *AgentSubjectContext {
+func subjectFromProto(value *proto.SubjectContext) *Subject {
 	if value == nil {
 		return nil
 	}
-	return &AgentSubjectContext{
-		SubjectID:           value.GetSubjectId(),
-		SubjectKind:         value.GetSubjectKind(),
+	return &Subject{
+		ID:                  value.GetId(),
+		Kind:                value.GetKind(),
 		CredentialSubjectID: value.GetCredentialSubjectId(),
 		DisplayName:         value.GetDisplayName(),
 		AuthSource:          value.GetAuthSource(),
+		Email:               value.GetEmail(),
+	}
+}
+
+func subjectToProto(value *Subject) *proto.SubjectContext {
+	if value == nil {
+		return nil
+	}
+	return &proto.SubjectContext{
+		Id:                  value.ID,
+		Kind:                value.Kind,
+		CredentialSubjectId: value.CredentialSubjectID,
+		DisplayName:         value.DisplayName,
+		AuthSource:          value.AuthSource,
+		Email:               value.Email,
 	}
 }
 
@@ -298,7 +313,7 @@ func agentToolRefFromProto(value *proto.AgentToolRef) AgentToolRef {
 		Title:                 value.GetTitle(),
 		Description:           value.GetDescription(),
 		System:                value.GetSystem(),
-		RunAs:                 agentRunAsSubjectFromProto(value.GetRunAs()),
+		RunAs:                 subjectFromProto(value.GetRunAs()),
 		RunAsExternalIdentity: externalIdentityFromProto(value.GetRunAsExternalIdentity()),
 	}
 }
@@ -335,34 +350,8 @@ func agentToolRefToProto(value AgentToolRef) *proto.AgentToolRef {
 		Title:                 value.Title,
 		Description:           value.Description,
 		System:                value.System,
-		RunAs:                 agentRunAsSubjectToProto(value.RunAs),
+		RunAs:                 subjectToProto(value.RunAs),
 		RunAsExternalIdentity: externalIdentityToProto(value.RunAsExternalIdentity),
-	}
-}
-
-func agentRunAsSubjectFromProto(value *proto.AgentSubjectContext) *AgentSubjectContext {
-	if value == nil {
-		return nil
-	}
-	return &AgentSubjectContext{
-		SubjectID:           value.GetSubjectId(),
-		SubjectKind:         value.GetSubjectKind(),
-		CredentialSubjectID: value.GetCredentialSubjectId(),
-		DisplayName:         value.GetDisplayName(),
-		AuthSource:          value.GetAuthSource(),
-	}
-}
-
-func agentRunAsSubjectToProto(value *AgentSubjectContext) *proto.AgentSubjectContext {
-	if value == nil {
-		return nil
-	}
-	return &proto.AgentSubjectContext{
-		SubjectId:           value.SubjectID,
-		SubjectKind:         value.SubjectKind,
-		CredentialSubjectId: value.CredentialSubjectID,
-		DisplayName:         value.DisplayName,
-		AuthSource:          value.AuthSource,
 	}
 }
 
@@ -522,7 +511,7 @@ func createAgentProviderSessionRequestFromProto(req *proto.CreateAgentProviderSe
 		ClientRef:         req.GetClientRef(),
 		Metadata:          mapFromStruct(req.GetMetadata()),
 		CreatedBy:         agentActorFromProto(req.GetCreatedBy()),
-		Subject:           agentSubjectContextFromProto(req.GetSubject()),
+		Subject:           subjectFromProto(req.GetSubject()),
 		SessionStart:      agentSessionStartConfigFromProto(req.GetSessionStart()),
 		PreparedWorkspace: agentPreparedWorkspaceFromProto(req.GetPreparedWorkspace()),
 	}
@@ -570,7 +559,7 @@ func getAgentProviderSessionRequestFromProto(req *proto.GetAgentProviderSessionR
 	}
 	return &GetAgentProviderSessionRequest{
 		SessionID: req.GetSessionId(),
-		Subject:   agentSubjectContextFromProto(req.GetSubject()),
+		Subject:   subjectFromProto(req.GetSubject()),
 	}
 }
 
@@ -579,7 +568,7 @@ func listAgentProviderSessionsRequestFromProto(req *proto.ListAgentProviderSessi
 		return &ListAgentProviderSessionsRequest{}
 	}
 	return &ListAgentProviderSessionsRequest{
-		Subject:     agentSubjectContextFromProto(req.GetSubject()),
+		Subject:     subjectFromProto(req.GetSubject()),
 		SessionIDs:  append([]string(nil), req.GetSessionIds()...),
 		State:       AgentSessionState(req.GetState()),
 		Limit:       req.GetLimit(),
@@ -607,7 +596,7 @@ func updateAgentProviderSessionRequestFromProto(req *proto.UpdateAgentProviderSe
 		ClientRef: req.GetClientRef(),
 		State:     AgentSessionState(req.GetState()),
 		Metadata:  mapFromStruct(req.GetMetadata()),
-		Subject:   agentSubjectContextFromProto(req.GetSubject()),
+		Subject:   subjectFromProto(req.GetSubject()),
 	}
 }
 
@@ -718,7 +707,7 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		ExecutionRef:      req.GetExecutionRef(),
 		ToolRefs:          agentToolRefsFromProto(req.GetToolRefs()),
 		ToolSource:        AgentToolSourceMode(req.GetToolSource()),
-		Subject:           agentSubjectContextFromProto(req.GetSubject()),
+		Subject:           subjectFromProto(req.GetSubject()),
 		ModelOptions:      mapFromStruct(req.GetModelOptions()),
 		RunGrant:          req.GetRunGrant(),
 		TimeoutSeconds:    req.GetTimeoutSeconds(),
@@ -731,7 +720,7 @@ func getAgentProviderTurnRequestFromProto(req *proto.GetAgentProviderTurnRequest
 	}
 	return &GetAgentProviderTurnRequest{
 		TurnID:  req.GetTurnId(),
-		Subject: agentSubjectContextFromProto(req.GetSubject()),
+		Subject: subjectFromProto(req.GetSubject()),
 	}
 }
 
@@ -741,7 +730,7 @@ func listAgentProviderTurnsRequestFromProto(req *proto.ListAgentProviderTurnsReq
 	}
 	return &ListAgentProviderTurnsRequest{
 		SessionID:   req.GetSessionId(),
-		Subject:     agentSubjectContextFromProto(req.GetSubject()),
+		Subject:     subjectFromProto(req.GetSubject()),
 		TurnIDs:     append([]string(nil), req.GetTurnIds()...),
 		Status:      AgentExecutionStatus(req.GetStatus()),
 		Limit:       req.GetLimit(),
@@ -767,7 +756,7 @@ func cancelAgentProviderTurnRequestFromProto(req *proto.CancelAgentProviderTurnR
 	return &CancelAgentProviderTurnRequest{
 		TurnID:  req.GetTurnId(),
 		Reason:  req.GetReason(),
-		Subject: agentSubjectContextFromProto(req.GetSubject()),
+		Subject: subjectFromProto(req.GetSubject()),
 	}
 }
 
@@ -906,7 +895,7 @@ func listAgentProviderTurnEventsRequestFromProto(req *proto.ListAgentProviderTur
 		TurnID:   req.GetTurnId(),
 		AfterSeq: req.GetAfterSeq(),
 		Limit:    req.GetLimit(),
-		Subject:  agentSubjectContextFromProto(req.GetSubject()),
+		Subject:  subjectFromProto(req.GetSubject()),
 	}
 }
 
@@ -927,7 +916,7 @@ func getAgentProviderInteractionRequestFromProto(req *proto.GetAgentProviderInte
 	}
 	return &GetAgentProviderInteractionRequest{
 		InteractionID: req.GetInteractionId(),
-		Subject:       agentSubjectContextFromProto(req.GetSubject()),
+		Subject:       subjectFromProto(req.GetSubject()),
 	}
 }
 
@@ -937,7 +926,7 @@ func listAgentProviderInteractionsRequestFromProto(req *proto.ListAgentProviderI
 	}
 	return &ListAgentProviderInteractionsRequest{
 		TurnID:  req.GetTurnId(),
-		Subject: agentSubjectContextFromProto(req.GetSubject()),
+		Subject: subjectFromProto(req.GetSubject()),
 	}
 }
 
@@ -1042,7 +1031,7 @@ func resolveAgentProviderInteractionRequestFromProto(req *proto.ResolveAgentProv
 	return &ResolveAgentProviderInteractionRequest{
 		InteractionID: req.GetInteractionId(),
 		Resolution:    mapFromStruct(req.GetResolution()),
-		Subject:       agentSubjectContextFromProto(req.GetSubject()),
+		Subject:       subjectFromProto(req.GetSubject()),
 	}
 }
 

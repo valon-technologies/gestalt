@@ -95,9 +95,9 @@ class WorkflowHelperTests(unittest.TestCase):
                 gestalt.AgentToolRef(
                     plugin="notion",
                     operation="search",
-                    run_as=gestalt.AgentSubjectContext(
-                        subject_id="service_account:gestalt-support-notion",
-                        subject_kind="service_account",
+                    run_as=gestalt.Subject(
+                        id="service_account:gestalt-support-notion",
+                        kind="service_account",
                         credential_subject_id="service_account:notion-credential",
                         display_name="Gestalt Support Notion",
                         auth_source="notion_service_account",
@@ -111,7 +111,7 @@ class WorkflowHelperTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            target.tool_refs[0].run_as.subject_id,
+            target.tool_refs[0].run_as.id,
             "service_account:gestalt-support-notion",
         )
         self.assertEqual(
