@@ -131,6 +131,10 @@ func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundW
 	if err != nil {
 		return nil, err
 	}
+	steps, err := workflowAgentStepsToProto(target.Steps)
+	if err != nil {
+		return nil, err
+	}
 	return &proto.BoundWorkflowAgentTarget{
 		ProviderName:         target.ProviderName,
 		Model:                target.Model,
@@ -143,6 +147,7 @@ func workflowAgentTargetToProto(target *coreworkflow.AgentTarget) (*proto.BoundW
 		TimeoutSeconds:       int32(target.TimeoutSeconds),
 		OutputDelivery:       outputDelivery,
 		SessionReadyDelivery: sessionReadyDelivery,
+		Steps:                steps,
 	}, nil
 }
 
@@ -162,6 +167,109 @@ func workflowAgentTargetFromProto(target *proto.BoundWorkflowAgentTarget) *corew
 		TimeoutSeconds:       int(target.GetTimeoutSeconds()),
 		OutputDelivery:       workflowOutputDeliveryFromProto(target.GetOutputDelivery()),
 		SessionReadyDelivery: workflowOutputDeliveryFromProto(target.GetSessionReadyDelivery()),
+		Steps:                workflowAgentStepsFromProto(target.GetSteps()),
+	}
+}
+
+func workflowAgentStepsToProto(steps []coreworkflow.AgentStep) ([]*proto.WorkflowAgentStep, error) {
+	if len(steps) == 0 {
+		return nil, nil
+	}
+	out := make([]*proto.WorkflowAgentStep, 0, len(steps))
+	for i := range steps {
+		step := steps[i]
+		messages, err := agentwire.MessagesToProto(step.Messages)
+		if err != nil {
+			return nil, fmt.Errorf("workflow agent steps[%d].messages: %w", i, err)
+		}
+		responseSchema, err := structFromMap(step.ResponseSchema)
+		if err != nil {
+			return nil, fmt.Errorf("workflow agent steps[%d].response_schema: %w", i, err)
+		}
+		modelOptions, err := structFromMap(step.ModelOptions)
+		if err != nil {
+			return nil, fmt.Errorf("workflow agent steps[%d].model_options: %w", i, err)
+		}
+		metadata, err := structFromMap(step.Metadata)
+		if err != nil {
+			return nil, fmt.Errorf("workflow agent steps[%d].metadata: %w", i, err)
+		}
+		outputDelivery, err := workflowOutputDeliveryToProto(step.OutputDelivery, fmt.Sprintf("steps[%d].output_delivery", i))
+		if err != nil {
+			return nil, err
+		}
+		when, err := workflowAgentStepWhenToProto(step.When)
+		if err != nil {
+			return nil, fmt.Errorf("workflow agent steps[%d].when: %w", i, err)
+		}
+		out = append(out, &proto.WorkflowAgentStep{
+			Id:             step.ID,
+			Prompt:         step.Prompt,
+			Messages:       messages,
+			ToolRefs:       agentwire.ToolRefsToProto(step.ToolRefs),
+			ResponseSchema: responseSchema,
+			ModelOptions:   modelOptions,
+			Metadata:       metadata,
+			TimeoutSeconds: int32(step.TimeoutSeconds),
+			OutputDelivery: outputDelivery,
+			When:           when,
+		})
+	}
+	return out, nil
+}
+
+func workflowAgentStepsFromProto(steps []*proto.WorkflowAgentStep) []coreworkflow.AgentStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]coreworkflow.AgentStep, 0, len(steps))
+	for _, step := range steps {
+		if step == nil {
+			continue
+		}
+		out = append(out, coreworkflow.AgentStep{
+			ID:             strings.TrimSpace(step.GetId()),
+			Prompt:         step.GetPrompt(),
+			Messages:       agentwire.MessagesFromProto(step.GetMessages()),
+			ToolRefs:       agentwire.ToolRefsFromProto(step.GetToolRefs()),
+			ResponseSchema: mapFromStruct(step.GetResponseSchema()),
+			ModelOptions:   mapFromStruct(step.GetModelOptions()),
+			Metadata:       mapFromStruct(step.GetMetadata()),
+			TimeoutSeconds: int(step.GetTimeoutSeconds()),
+			OutputDelivery: workflowOutputDeliveryFromProto(step.GetOutputDelivery()),
+			When:           workflowAgentStepWhenFromProto(step.GetWhen()),
+		})
+	}
+	return out
+}
+
+func workflowAgentStepWhenToProto(when *coreworkflow.AgentStepWhen) (*proto.WorkflowAgentStepWhen, error) {
+	if when == nil {
+		return nil, nil
+	}
+	if !when.EqualsSet {
+		return nil, fmt.Errorf("equals is required")
+	}
+	equals, err := protoValueFromAny(when.Equals)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.WorkflowAgentStepWhen{
+		StepId:     when.StepID,
+		OutputPath: when.OutputPath,
+		Equals:     equals,
+	}, nil
+}
+
+func workflowAgentStepWhenFromProto(when *proto.WorkflowAgentStepWhen) *coreworkflow.AgentStepWhen {
+	if when == nil {
+		return nil
+	}
+	return &coreworkflow.AgentStepWhen{
+		StepID:     strings.TrimSpace(when.GetStepId()),
+		OutputPath: strings.TrimSpace(when.GetOutputPath()),
+		Equals:     protoValueToAny(when.GetEquals()),
+		EqualsSet:  when.Equals != nil,
 	}
 }
 

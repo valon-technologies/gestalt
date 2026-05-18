@@ -19,6 +19,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -399,6 +400,9 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 			slog.WarnContext(ctx, "workflow agent session-ready delivery failed", attrs...)
 		}
 	}
+	if len(agentTarget.Steps) > 0 {
+		return r.invokeAgentSteps(runCtx, ctx, req, agentManager, invoker, principalValue, callerPluginName, agentTarget, session, metadata)
+	}
 	messages := append([]coreagent.Message(nil), agentTarget.Messages...)
 	if prompt := strings.TrimSpace(agentTarget.Prompt); prompt != "" {
 		messages = append(messages, coreagent.Message{Role: "user", Text: prompt})
@@ -420,6 +424,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		ResponseSchemaSet: len(agentTarget.ResponseSchema) > 0,
 		Metadata:          metadata,
 		ModelOptions:      maps.Clone(agentTarget.ModelOptions),
+		TimeoutSeconds:    agentTarget.TimeoutSeconds,
 		IdempotencyKey:    workflowAgentTurnIdempotencyKey(req),
 	})
 	if err != nil {
@@ -464,6 +469,268 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		attrs = append(attrs, "status_message", strings.TrimSpace(turn.StatusMessage))
 		slog.WarnContext(ctx, "workflow agent turn failed", attrs...)
 		return nil, fmt.Errorf("workflow agent turn %q finished with status %q: %s", turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
+	}
+}
+
+type workflowAgentStepResult struct {
+	ID            string `json:"id"`
+	Status        string `json:"status"`
+	TurnID        string `json:"turn_id,omitempty"`
+	SkippedReason string `json:"skipped_reason,omitempty"`
+	Error         string `json:"error,omitempty"`
+}
+
+type workflowAgentStepOutput struct {
+	Text             string         `json:"text,omitempty"`
+	StructuredOutput map[string]any `json:"structured_output,omitempty"`
+}
+
+type workflowAgentStepsResult struct {
+	Steps           []workflowAgentStepResult          `json:"steps"`
+	Outputs         map[string]workflowAgentStepOutput `json:"outputs"`
+	FinalOutputText string                             `json:"final_output_text,omitempty"`
+}
+
+func (r *workflowRuntime) invokeAgentSteps(runCtx, rootCtx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, invoker invocation.Invoker, p *principal.Principal, callerPluginName string, agentTarget coreworkflow.AgentTarget, session *coreagent.Session, metadata map[string]any) (*coreworkflow.InvokeOperationResponse, error) {
+	result := workflowAgentStepsResult{
+		Steps:   make([]workflowAgentStepResult, 0, len(agentTarget.Steps)),
+		Outputs: map[string]workflowAgentStepOutput{},
+	}
+	for i := range agentTarget.Steps {
+		step := agentTarget.Steps[i]
+		stepID := strings.TrimSpace(step.ID)
+		if step.When != nil {
+			ok, err := workflowAgentStepWhenMatches(step.When, result.Outputs)
+			if err != nil {
+				result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", Error: err.Error()})
+				return nil, err
+			}
+			if !ok {
+				result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "skipped", SkippedReason: "when_false"})
+				continue
+			}
+		}
+		stepCtx := runCtx
+		cancelStep := func() {}
+		if step.TimeoutSeconds > 0 {
+			stepCtx, cancelStep = context.WithTimeout(runCtx, workflowAgentTimeout(step.TimeoutSeconds))
+		}
+		messages := workflowAgentStepMessages(step, req.Signals, result.Outputs)
+		stepMetadata := workflowAgentStepMetadata(metadata, step.Metadata)
+		turnCtx := stepCtx
+		if inheritedDelivery := workflowInheritedOutputDelivery(step.OutputDelivery, workflowOutputDeliverySignal(req.Signals)); inheritedDelivery != nil {
+			turnCtx = agentmanager.WithInheritedOutputDelivery(turnCtx, inheritedDelivery)
+		}
+		turn, err := agentManager.CreateTurn(turnCtx, p, coreagent.ManagerCreateTurnRequest{
+			CallerPluginName:  callerPluginName,
+			SessionID:         session.ID,
+			Model:             agentTarget.Model,
+			Messages:          messages,
+			ToolRefs:          append([]coreagent.ToolRef(nil), step.ToolRefs...),
+			ToolRefsSet:       true,
+			ResponseSchema:    maps.Clone(step.ResponseSchema),
+			ResponseSchemaSet: len(step.ResponseSchema) > 0,
+			Metadata:          stepMetadata,
+			ModelOptions:      maps.Clone(step.ModelOptions),
+			TimeoutSeconds:    step.TimeoutSeconds,
+			IdempotencyKey:    workflowAgentStepTurnIdempotencyKey(req, stepID),
+		})
+		if err != nil {
+			cancelStep()
+			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", Error: err.Error()})
+			attrs := workflowAgentLogAttrs(req, p, &agentTarget, session, nil)
+			attrs = append(attrs, "workflow_agent_step_id", stepID, "error", err)
+			slog.WarnContext(rootCtx, "workflow agent step turn create failed", attrs...)
+			return nil, err
+		}
+		slog.InfoContext(rootCtx, "workflow agent step turn created", append(workflowAgentLogAttrs(req, p, &agentTarget, session, turn), "workflow_agent_step_id", stepID)...)
+		turn, err = waitForWorkflowAgentTurn(stepCtx, agentManager, p, turn)
+		cancelStep()
+		if err != nil {
+			if turn != nil && strings.TrimSpace(turn.ID) != "" {
+				_, _ = agentManager.CancelTurn(context.WithoutCancel(rootCtx), p, turn.ID, err.Error())
+			}
+			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", TurnID: workflowAgentTurnID(turn), Error: err.Error()})
+			attrs := workflowAgentLogAttrs(req, p, &agentTarget, session, turn)
+			attrs = append(attrs, "workflow_agent_step_id", stepID, "error", err)
+			slog.WarnContext(rootCtx, "workflow agent step turn wait failed", attrs...)
+			return nil, err
+		}
+		switch turn.Status {
+		case coreagent.ExecutionStatusSucceeded:
+			output := workflowAgentStepOutput{
+				Text:             turn.OutputText,
+				StructuredOutput: maps.Clone(turn.StructuredOutput),
+			}
+			result.Outputs[stepID] = output
+			result.FinalOutputText = turn.OutputText
+			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "succeeded", TurnID: turn.ID})
+			if step.OutputDelivery != nil {
+				if err := r.deliverWorkflowAgentDelivery(rootCtx, req, invoker, p, step.OutputDelivery, session, turn, "steps["+stepID+"].output_delivery", workflowAgentStepOutputDeliveryIdempotencyKey(req, stepID)); err != nil {
+					return nil, err
+				}
+			}
+		case coreagent.ExecutionStatusCanceled:
+			err := fmt.Errorf("workflow agent step %q turn %q was canceled: %s", stepID, turn.ID, strings.TrimSpace(turn.StatusMessage))
+			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", TurnID: turn.ID, Error: err.Error()})
+			return nil, err
+		case coreagent.ExecutionStatusWaitingForInput:
+			_, _ = agentManager.CancelTurn(context.WithoutCancel(rootCtx), p, turn.ID, "workflow agent step turn cannot wait for input")
+			err := fmt.Errorf("workflow agent step %q turn %q is waiting for input", stepID, turn.ID)
+			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", TurnID: turn.ID, Error: err.Error()})
+			return nil, err
+		default:
+			err := fmt.Errorf("workflow agent step %q turn %q finished with status %q: %s", stepID, turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
+			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", TurnID: turn.ID, Error: err.Error()})
+			return nil, err
+		}
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	return &coreworkflow.InvokeOperationResponse{Status: http.StatusOK, Body: string(body)}, nil
+}
+
+func workflowAgentTurnID(turn *coreagent.Turn) string {
+	if turn == nil {
+		return ""
+	}
+	return strings.TrimSpace(turn.ID)
+}
+
+func workflowAgentStepMessages(step coreworkflow.AgentStep, signals []coreworkflow.Signal, outputs map[string]workflowAgentStepOutput) []coreagent.Message {
+	messages := make([]coreagent.Message, 0, len(step.Messages)+3)
+	messages = append(messages, step.Messages...)
+	if len(outputs) > 0 {
+		messages = append(messages, workflowAgentPriorStepOutputsMessage(outputs))
+	}
+	if prompt := strings.TrimSpace(step.Prompt); prompt != "" {
+		messages = append(messages, coreagent.Message{Role: "user", Text: prompt})
+	}
+	if signalMessage := workflowSignalMessage(signals); signalMessage != nil {
+		messages = append(messages, *signalMessage)
+	}
+	return messages
+}
+
+func workflowAgentStepMetadata(base map[string]any, step map[string]any) map[string]any {
+	out := maps.Clone(base)
+	if out == nil {
+		out = map[string]any{}
+	}
+	if len(step) > 0 {
+		stepMetadata := maps.Clone(step)
+		out["workflow_step"] = stepMetadata
+	}
+	return out
+}
+
+const (
+	workflowAgentStepOutputsMessagePrefix   = "Prior workflow agent step outputs:\n"
+	workflowAgentStepOutputsMessageMaxBytes = 64 * 1024
+)
+
+func workflowAgentPriorStepOutputsMessage(outputs map[string]workflowAgentStepOutput) coreagent.Message {
+	body, err := json.MarshalIndent(map[string]any{"outputs": outputs}, "", "  ")
+	if err != nil {
+		body = []byte(fmt.Sprintf("%#v", outputs))
+	}
+	textMaxBytes := workflowAgentStepOutputsMessageMaxBytes - len(workflowAgentStepOutputsMessagePrefix)
+	return coreagent.Message{
+		Role: "user",
+		Text: workflowAgentStepOutputsMessagePrefix + truncateWorkflowString(string(body), textMaxBytes),
+		Metadata: map[string]any{
+			"gestalt.workflow.prior_step_outputs": true,
+		},
+	}
+}
+
+func workflowAgentStepWhenMatches(when *coreworkflow.AgentStepWhen, outputs map[string]workflowAgentStepOutput) (bool, error) {
+	if when == nil {
+		return true, nil
+	}
+	stepID := strings.TrimSpace(when.StepID)
+	output, ok := outputs[stepID]
+	if !ok {
+		return false, fmt.Errorf("%w: workflow agent step when references missing or skipped step %q", invocation.ErrInvalidInvocation, stepID)
+	}
+	value, ok, err := workflowAgentStepOutputPathValue(output, when.OutputPath)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, fmt.Errorf("%w: workflow agent step when output path %q did not resolve for step %q", invocation.ErrInvalidInvocation, strings.TrimSpace(when.OutputPath), stepID)
+	}
+	if !jsonvalue.IsScalar(value) || !jsonvalue.IsScalar(when.Equals) {
+		return false, fmt.Errorf("%w: workflow agent step when values must be scalar JSON values", invocation.ErrInvalidInvocation)
+	}
+	return workflowAgentScalarEqual(value, when.Equals), nil
+}
+
+func workflowAgentStepOutputPathValue(output workflowAgentStepOutput, path string) (any, bool, error) {
+	path = strings.TrimSpace(path)
+	values := map[string]any{
+		"text":              output.Text,
+		"output_text":       output.Text,
+		"outputText":        output.Text,
+		"structured_output": output.StructuredOutput,
+		"structuredOutput":  output.StructuredOutput,
+	}
+	if value, ok := values[path]; ok {
+		return value, true, nil
+	}
+	return workflowMapPathValue(values, path)
+}
+
+func workflowAgentScalarEqual(left, right any) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	if leftString, ok := left.(string); ok {
+		rightString, ok := right.(string)
+		return ok && leftString == rightString
+	}
+	if leftBool, ok := left.(bool); ok {
+		rightBool, ok := right.(bool)
+		return ok && leftBool == rightBool
+	}
+	leftNumber, leftOK := workflowAgentNumber(left)
+	rightNumber, rightOK := workflowAgentNumber(right)
+	return leftOK && rightOK && leftNumber == rightNumber
+}
+
+func workflowAgentNumber(value any) (float64, bool) {
+	switch v := value.(type) {
+	case int:
+		return float64(v), true
+	case int8:
+		return float64(v), true
+	case int16:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint8:
+		return float64(v), true
+	case uint16:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	case uint64:
+		return float64(v), true
+	case float32:
+		return float64(v), true
+	case float64:
+		return v, true
+	case json.Number:
+		parsed, err := v.Float64()
+		return parsed, err == nil
+	default:
+		return 0, false
 	}
 }
 
@@ -724,6 +991,15 @@ func workflowAgentTurnIdempotencyKey(req coreworkflow.InvokeOperationRequest) st
 	return workflowAgentIdempotencyKey(req, "turn:"+batchID)
 }
 
+func workflowAgentStepTurnIdempotencyKey(req coreworkflow.InvokeOperationRequest, stepID string) string {
+	batchID := workflowSignalBatchID(req.Signals)
+	suffix := "step:" + strings.TrimSpace(stepID) + ":turn"
+	if batchID != "" {
+		suffix += ":" + batchID
+	}
+	return workflowAgentIdempotencyKey(req, suffix)
+}
+
 func workflowAgentSessionReadyDeliveryIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {
 	batchID := workflowSignalBatchID(req.Signals)
 	if batchID == "" {
@@ -738,6 +1014,15 @@ func workflowAgentOutputDeliveryIdempotencyKey(req coreworkflow.InvokeOperationR
 		return workflowAgentIdempotencyKey(req, "output")
 	}
 	return workflowAgentIdempotencyKey(req, "output:"+batchID)
+}
+
+func workflowAgentStepOutputDeliveryIdempotencyKey(req coreworkflow.InvokeOperationRequest, stepID string) string {
+	batchID := workflowSignalBatchID(req.Signals)
+	suffix := "step:" + strings.TrimSpace(stepID) + ":output"
+	if batchID != "" {
+		suffix += ":" + batchID
+	}
+	return workflowAgentIdempotencyKey(req, suffix)
 }
 
 func workflowSignalBatchID(signals []coreworkflow.Signal) string {

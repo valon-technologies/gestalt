@@ -15,6 +15,7 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
@@ -939,6 +940,49 @@ func workflowSystemToolAgentSchema() map[string]any {
 		"metadata":       map[string]any{"type": "object"},
 		"modelOptions":   map[string]any{"type": "object"},
 		"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0},
+		"steps":          map[string]any{"type": "array", "items": workflowSystemToolAgentStepSchema()},
+	})
+}
+
+func workflowSystemToolAgentStepSchema() map[string]any {
+	return workflowSystemToolObjectSchema([]string{"id"}, map[string]any{
+		"id":             workflowSystemToolStringSchema("Stable step ID."),
+		"prompt":         workflowSystemToolStringSchema("Agent step prompt."),
+		"messages":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+		"toolRefs":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+		"responseSchema": map[string]any{"type": "object"},
+		"metadata":       map[string]any{"type": "object"},
+		"modelOptions":   map[string]any{"type": "object"},
+		"timeoutSeconds": map[string]any{"type": "integer", "minimum": 0},
+		"outputDelivery": workflowSystemToolOutputDeliverySchema(),
+		"when": workflowSystemToolObjectSchema([]string{"stepId", "outputPath", "equals"}, map[string]any{
+			"stepId":     workflowSystemToolStringSchema("Earlier step ID."),
+			"outputPath": workflowSystemToolStringSchema("Dot path in the earlier step output."),
+			"equals":     map[string]any{},
+		}),
+	})
+}
+
+func workflowSystemToolOutputDeliverySchema() map[string]any {
+	return workflowSystemToolObjectSchema([]string{"target"}, map[string]any{
+		"target": workflowSystemToolObjectSchema([]string{"name", "operation"}, map[string]any{
+			"name":       workflowSystemToolStringSchema("Delivery plugin name."),
+			"operation":  workflowSystemToolStringSchema("Delivery plugin operation."),
+			"connection": workflowSystemToolStringSchema("Connection name."),
+			"instance":   workflowSystemToolStringSchema("Instance name."),
+			"input":      map[string]any{"type": "object"},
+		}),
+		"inputBindings": map[string]any{"type": "array", "items": workflowSystemToolObjectSchema([]string{"inputField", "value"}, map[string]any{
+			"inputField": workflowSystemToolStringSchema("Delivery input field."),
+			"value": workflowSystemToolObjectSchema([]string{}, map[string]any{
+				"agentOutput":    workflowSystemToolStringSchema("Path in the agent step output."),
+				"signalPayload":  workflowSystemToolStringSchema("Path in the workflow signal payload."),
+				"signalMetadata": workflowSystemToolStringSchema("Path in the workflow signal metadata."),
+				"agentSession":   workflowSystemToolStringSchema("Path in the agent session."),
+				"literal":        map[string]any{},
+			}),
+		})},
+		"credentialMode": workflowSystemToolStringSchema("Optional delivery credential mode."),
 	})
 }
 
@@ -1015,7 +1059,11 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 	if !ok {
 		return coreworkflow.Target{}, fmt.Errorf("%w: target.agent must be an object", invocation.ErrInvalidInvocation)
 	}
-	if err := workflowSystemToolRejectUnknownKeys(agentMap, "target.agent", "provider", "model", "prompt", "messages", "toolRefs", "responseSchema", "metadata", "modelOptions", "timeoutSeconds"); err != nil {
+	if err := workflowSystemToolRejectUnknownKeys(agentMap, "target.agent", "provider", "model", "prompt", "messages", "toolRefs", "responseSchema", "metadata", "modelOptions", "timeoutSeconds", "steps"); err != nil {
+		return coreworkflow.Target{}, err
+	}
+	steps, err := workflowSystemToolAgentStepsFromValue(agentMap["steps"])
+	if err != nil {
 		return coreworkflow.Target{}, err
 	}
 	toolRefs, err := workflowSystemToolRefsFromValue(agentMap["toolRefs"])
@@ -1048,25 +1096,228 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 		Metadata:       metadata,
 		ModelOptions:   modelOptions,
 		TimeoutSeconds: workflowSystemToolIntArg(agentMap, "timeoutSeconds"),
+		Steps:          steps,
 	}}, nil
 }
 
+func workflowSystemToolAgentStepsFromValue(value any) ([]coreworkflow.AgentStep, error) {
+	if value == nil {
+		return nil, nil
+	}
+	items, ok := value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: target.agent.steps must be an array", invocation.ErrInvalidInvocation)
+	}
+	out := make([]coreworkflow.AgentStep, 0, len(items))
+	for i, item := range items {
+		stepMap, ok := workflowSystemToolMap(item)
+		if !ok {
+			return nil, fmt.Errorf("%w: target.agent.steps[%d] must be an object", invocation.ErrInvalidInvocation, i)
+		}
+		path := fmt.Sprintf("target.agent.steps[%d]", i)
+		if err := workflowSystemToolRejectUnknownKeys(stepMap, path, "id", "prompt", "messages", "toolRefs", "responseSchema", "metadata", "modelOptions", "timeoutSeconds", "outputDelivery", "when"); err != nil {
+			return nil, err
+		}
+		toolRefs, err := workflowSystemToolRefsFromValue(stepMap["toolRefs"])
+		if err != nil {
+			return nil, err
+		}
+		messages, err := workflowSystemToolMessagesFromValue(stepMap["messages"])
+		if err != nil {
+			return nil, err
+		}
+		responseSchema, err := workflowSystemToolObjectArg(stepMap, "responseSchema", path)
+		if err != nil {
+			return nil, err
+		}
+		metadata, err := workflowSystemToolObjectArg(stepMap, "metadata", path)
+		if err != nil {
+			return nil, err
+		}
+		modelOptions, err := workflowSystemToolObjectArg(stepMap, "modelOptions", path)
+		if err != nil {
+			return nil, err
+		}
+		outputDelivery, err := workflowSystemToolOutputDeliveryFromValue(stepMap["outputDelivery"], path+".outputDelivery")
+		if err != nil {
+			return nil, err
+		}
+		when, err := workflowSystemToolAgentStepWhenFromValue(stepMap["when"], path+".when")
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, coreworkflow.AgentStep{
+			ID:             workflowSystemToolStringArg(stepMap, "id"),
+			Prompt:         workflowSystemToolStringArg(stepMap, "prompt"),
+			Messages:       messages,
+			ToolRefs:       toolRefs,
+			ResponseSchema: responseSchema,
+			Metadata:       metadata,
+			ModelOptions:   modelOptions,
+			TimeoutSeconds: workflowSystemToolIntArg(stepMap, "timeoutSeconds"),
+			OutputDelivery: outputDelivery,
+			When:           when,
+		})
+	}
+	return out, nil
+}
+
+func workflowSystemToolOutputDeliveryFromValue(value any, path string) (*coreworkflow.OutputDelivery, error) {
+	if value == nil {
+		return nil, nil
+	}
+	deliveryMap, ok := workflowSystemToolMap(value)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s must be an object", invocation.ErrInvalidInvocation, path)
+	}
+	if err := workflowSystemToolRejectUnknownKeys(deliveryMap, path, "target", "inputBindings", "credentialMode"); err != nil {
+		return nil, err
+	}
+	targetValue, ok := deliveryMap["target"]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s.target is required", invocation.ErrInvalidInvocation, path)
+	}
+	targetMap, ok := workflowSystemToolMap(targetValue)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s.target must be an object", invocation.ErrInvalidInvocation, path)
+	}
+	if err := workflowSystemToolRejectUnknownKeys(targetMap, path+".target", "name", "operation", "connection", "instance", "input"); err != nil {
+		return nil, err
+	}
+	input, err := workflowSystemToolObjectArg(targetMap, "input", path+".target")
+	if err != nil {
+		return nil, err
+	}
+	bindings, err := workflowSystemToolOutputBindingsFromValue(deliveryMap["inputBindings"], path+".inputBindings")
+	if err != nil {
+		return nil, err
+	}
+	return &coreworkflow.OutputDelivery{
+		Target: coreworkflow.PluginTarget{
+			PluginName: workflowSystemToolStringArg(targetMap, "name"),
+			Operation:  workflowSystemToolStringArg(targetMap, "operation"),
+			Connection: workflowSystemToolStringArg(targetMap, "connection"),
+			Instance:   workflowSystemToolStringArg(targetMap, "instance"),
+			Input:      input,
+		},
+		InputBindings:  bindings,
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(workflowSystemToolStringArg(deliveryMap, "credentialMode"))),
+	}, nil
+}
+
+func workflowSystemToolOutputBindingsFromValue(value any, path string) ([]coreworkflow.OutputBinding, error) {
+	if value == nil {
+		return nil, nil
+	}
+	items, ok := value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s must be an array", invocation.ErrInvalidInvocation, path)
+	}
+	out := make([]coreworkflow.OutputBinding, 0, len(items))
+	for i, item := range items {
+		bindingMap, ok := workflowSystemToolMap(item)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s[%d] must be an object", invocation.ErrInvalidInvocation, path, i)
+		}
+		bindingPath := fmt.Sprintf("%s[%d]", path, i)
+		if err := workflowSystemToolRejectUnknownKeys(bindingMap, bindingPath, "inputField", "value"); err != nil {
+			return nil, err
+		}
+		valueSource, err := workflowSystemToolOutputValueSourceFromValue(bindingMap["value"], bindingPath+".value")
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, coreworkflow.OutputBinding{
+			InputField: workflowSystemToolStringArg(bindingMap, "inputField"),
+			Value:      valueSource,
+		})
+	}
+	return out, nil
+}
+
+func workflowSystemToolOutputValueSourceFromValue(value any, path string) (coreworkflow.OutputValueSource, error) {
+	valueMap, ok := workflowSystemToolMap(value)
+	if !ok {
+		return coreworkflow.OutputValueSource{}, fmt.Errorf("%w: %s must be an object", invocation.ErrInvalidInvocation, path)
+	}
+	if err := workflowSystemToolRejectUnknownKeys(valueMap, path, "agentOutput", "signalPayload", "signalMetadata", "agentSession", "literal"); err != nil {
+		return coreworkflow.OutputValueSource{}, err
+	}
+	source := coreworkflow.OutputValueSource{
+		AgentOutput:    workflowSystemToolStringArg(valueMap, "agentOutput"),
+		SignalPayload:  workflowSystemToolStringArg(valueMap, "signalPayload"),
+		SignalMetadata: workflowSystemToolStringArg(valueMap, "signalMetadata"),
+		AgentSession:   workflowSystemToolStringArg(valueMap, "agentSession"),
+	}
+	if literal, ok := valueMap["literal"]; ok {
+		source.Literal = workflowSystemToolValueDeepClone(literal)
+	}
+	return source, nil
+}
+
+func workflowSystemToolAgentStepWhenFromValue(value any, path string) (*coreworkflow.AgentStepWhen, error) {
+	if value == nil {
+		return nil, nil
+	}
+	whenMap, ok := workflowSystemToolMap(value)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s must be an object", invocation.ErrInvalidInvocation, path)
+	}
+	if err := workflowSystemToolRejectUnknownKeys(whenMap, path, "stepId", "outputPath", "equals"); err != nil {
+		return nil, err
+	}
+	equals, ok := whenMap["equals"]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s.equals is required", invocation.ErrInvalidInvocation, path)
+	}
+	if !jsonvalue.IsScalar(equals) {
+		return nil, fmt.Errorf("%w: %s.equals must be a scalar JSON value", invocation.ErrInvalidInvocation, path)
+	}
+	return &coreworkflow.AgentStepWhen{
+		StepID:     workflowSystemToolStringArg(whenMap, "stepId"),
+		OutputPath: workflowSystemToolStringArg(whenMap, "outputPath"),
+		Equals:     equals,
+		EqualsSet:  true,
+	}, nil
+}
+
 func workflowSystemToolInheritAgentToolRefs(req agentSystemToolExecutionRequest, target *coreworkflow.Target) {
-	if target == nil || target.Agent == nil || target.Agent.ToolRefs != nil {
+	if target == nil || target.Agent == nil {
 		return
 	}
-	target.Agent.ToolRefs = workflowSystemToolInheritedAgentToolRefs(req)
+	if len(target.Agent.Steps) == 0 && target.Agent.ToolRefs == nil {
+		target.Agent.ToolRefs = workflowSystemToolInheritedAgentToolRefs(req)
+	}
+	for i := range target.Agent.Steps {
+		if target.Agent.Steps[i].ToolRefs == nil {
+			target.Agent.Steps[i].ToolRefs = workflowSystemToolInheritedAgentToolRefs(req)
+		}
+	}
 }
 
 func workflowSystemToolApplyInheritedOutputDelivery(req agentSystemToolExecutionRequest, target *coreworkflow.Target) error {
 	if target == nil || target.Agent == nil {
 		return fmt.Errorf("%w: deliverResultToCaller requires a direct agent target", invocation.ErrInvalidInvocation)
 	}
-	if target.Agent.OutputDelivery != nil || target.Agent.SessionReadyDelivery != nil {
-		return fmt.Errorf("%w: deliverResultToCaller cannot override an agent delivery target", invocation.ErrInvalidInvocation)
-	}
 	if req.InheritedOutputDelivery == nil {
 		return fmt.Errorf("%w: no caller output delivery is available for this turn", invocation.ErrInvalidInvocation)
+	}
+	if len(target.Agent.Steps) > 0 {
+		if target.Agent.OutputDelivery != nil {
+			return fmt.Errorf("%w: deliverResultToCaller cannot override an agent delivery target", invocation.ErrInvalidInvocation)
+		}
+		lastStep := &target.Agent.Steps[len(target.Agent.Steps)-1]
+		if lastStep.OutputDelivery != nil {
+			return fmt.Errorf("%w: deliverResultToCaller cannot override final agent step delivery target", invocation.ErrInvalidInvocation)
+		}
+		if lastStep.When != nil {
+			return fmt.Errorf("%w: deliverResultToCaller requires an unconditional final agent step; configure explicit outputDelivery for conditional final steps", invocation.ErrInvalidInvocation)
+		}
+		lastStep.OutputDelivery = coreworkflow.CloneOutputDelivery(req.InheritedOutputDelivery)
+		return nil
+	}
+	if target.Agent.OutputDelivery != nil || target.Agent.SessionReadyDelivery != nil {
+		return fmt.Errorf("%w: deliverResultToCaller cannot override an agent delivery target", invocation.ErrInvalidInvocation)
 	}
 	target.Agent.OutputDelivery = coreworkflow.CloneOutputDelivery(req.InheritedOutputDelivery)
 	return nil
@@ -1200,7 +1451,8 @@ func workflowSystemToolValidateCreateScope(req agentSystemToolExecutionRequest, 
 	for i := range target.Agent.ToolRefs {
 		ref := target.Agent.ToolRefs[i]
 		if strings.TrimSpace(ref.System) != "" {
-			if err := workflowSystemToolValidateFutureSystemRef(i, ref, req); err != nil {
+			path := fmt.Sprintf("target.agent.toolRefs[%d]", i)
+			if err := workflowSystemToolValidateFutureSystemRef(path, ref, req); err != nil {
 				return err
 			}
 			continue
@@ -1218,15 +1470,39 @@ func workflowSystemToolValidateCreateScope(req agentSystemToolExecutionRequest, 
 			return fmt.Errorf("%w: target.agent.toolRefs[%d] %s.%s is outside the current agent tool scope", invocation.ErrScopeDenied, i, ref.Plugin, ref.Operation)
 		}
 	}
+	for stepIndex := range target.Agent.Steps {
+		for i := range target.Agent.Steps[stepIndex].ToolRefs {
+			ref := target.Agent.Steps[stepIndex].ToolRefs[i]
+			if strings.TrimSpace(ref.System) != "" {
+				path := fmt.Sprintf("target.agent.steps[%d].toolRefs[%d]", stepIndex, i)
+				if err := workflowSystemToolValidateFutureSystemRef(path, ref, req); err != nil {
+					return err
+				}
+				continue
+			}
+			if strings.TrimSpace(ref.Plugin) == "" || strings.TrimSpace(ref.Plugin) == "*" || strings.TrimSpace(ref.Operation) == "" {
+				return fmt.Errorf("%w: target.agent.steps[%d].toolRefs[%d] must be an exact plugin operation", invocation.ErrInvalidInvocation, stepIndex, i)
+			}
+			if ref.CredentialMode != "" {
+				return fmt.Errorf("%w: target.agent.steps[%d].toolRefs[%d] credentialMode is not supported for scheduled agent targets", invocation.ErrInvalidInvocation, stepIndex, i)
+			}
+			if ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
+				return fmt.Errorf("%w: target.agent.steps[%d].toolRefs[%d] runAs is not supported for scheduled agent targets", invocation.ErrInvalidInvocation, stepIndex, i)
+			}
+			if !workflowSystemToolAgentPluginRefAllowed(ref, req.ToolRefs, req.Tools) {
+				return fmt.Errorf("%w: target.agent.steps[%d].toolRefs[%d] %s.%s is outside the current agent tool scope", invocation.ErrScopeDenied, stepIndex, i, ref.Plugin, ref.Operation)
+			}
+		}
+	}
 	return nil
 }
 
-func workflowSystemToolValidateFutureSystemRef(index int, ref coreagent.ToolRef, req agentSystemToolExecutionRequest) error {
+func workflowSystemToolValidateFutureSystemRef(path string, ref coreagent.ToolRef, req agentSystemToolExecutionRequest) error {
 	if strings.TrimSpace(ref.System) != coreagent.SystemToolWorkflow || strings.TrimSpace(ref.Operation) == "" {
-		return fmt.Errorf("%w: target.agent.toolRefs[%d] workflow system refs require an exact operation", invocation.ErrInvalidInvocation, index)
+		return fmt.Errorf("%w: %s workflow system refs require an exact operation", invocation.ErrInvalidInvocation, path)
 	}
 	if strings.TrimSpace(ref.Plugin) != "" || strings.TrimSpace(ref.Connection) != "" || strings.TrimSpace(ref.Instance) != "" || ref.CredentialMode != "" || ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
-		return fmt.Errorf("%w: target.agent.toolRefs[%d] system refs cannot include plugin, connection, instance, credentialMode, or runAs", invocation.ErrInvalidInvocation, index)
+		return fmt.Errorf("%w: %s system refs cannot include plugin, connection, instance, credentialMode, or runAs", invocation.ErrInvalidInvocation, path)
 	}
 	for i := range req.ToolRefs {
 		if strings.TrimSpace(req.ToolRefs[i].System) == coreagent.SystemToolWorkflow && strings.TrimSpace(req.ToolRefs[i].Operation) == strings.TrimSpace(ref.Operation) {
@@ -1238,7 +1514,7 @@ func workflowSystemToolValidateFutureSystemRef(index int, ref coreagent.ToolRef,
 			return nil
 		}
 	}
-	return fmt.Errorf("%w: target.agent.toolRefs[%d] workflow.%s is outside the current agent tool scope", invocation.ErrScopeDenied, index, ref.Operation)
+	return fmt.Errorf("%w: %s workflow.%s is outside the current agent tool scope", invocation.ErrScopeDenied, path, ref.Operation)
 }
 
 func workflowSystemToolAgentPluginRefAllowed(target coreagent.ToolRef, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
@@ -1384,6 +1660,18 @@ func workflowSystemToolPermissionsForTarget(target coreworkflow.Target, defaultA
 		}
 		if delivery := target.Agent.SessionReadyDelivery; delivery != nil {
 			addOperation(delivery.Target.PluginName, delivery.Target.Operation)
+		}
+		for i := range target.Agent.Steps {
+			step := target.Agent.Steps[i]
+			for j := range step.ToolRefs {
+				ref := step.ToolRefs[j]
+				if strings.TrimSpace(ref.System) == "" {
+					addOperation(ref.Plugin, ref.Operation)
+				}
+			}
+			if delivery := step.OutputDelivery; delivery != nil {
+				addOperation(delivery.Target.PluginName, delivery.Target.Operation)
+			}
 		}
 	}
 	if len(operationsByPlugin) == 0 {
@@ -1612,6 +1900,38 @@ func workflowSystemToolTargetInfo(target coreworkflow.Target) map[string]any {
 			})
 		}
 		agent["messages"] = messages
+	}
+	if len(agentTarget.Steps) > 0 {
+		steps := make([]map[string]any, 0, len(agentTarget.Steps))
+		for i := range agentTarget.Steps {
+			step := agentTarget.Steps[i]
+			stepInfo := map[string]any{
+				"id":             step.ID,
+				"prompt":         step.Prompt,
+				"toolRefs":       workflowSystemToolRefsInfo(step.ToolRefs),
+				"timeoutSeconds": step.TimeoutSeconds,
+			}
+			if len(step.Messages) > 0 {
+				messages := make([]map[string]any, 0, len(step.Messages))
+				for _, message := range step.Messages {
+					messages = append(messages, map[string]any{
+						"role":     message.Role,
+						"text":     message.Text,
+						"metadata": maps.Clone(message.Metadata),
+					})
+				}
+				stepInfo["messages"] = messages
+			}
+			if step.When != nil {
+				stepInfo["when"] = map[string]any{
+					"stepId":     step.When.StepID,
+					"outputPath": step.When.OutputPath,
+					"equals":     step.When.Equals,
+				}
+			}
+			steps = append(steps, stepInfo)
+		}
+		agent["steps"] = steps
 	}
 	value["agent"] = agent
 	return value

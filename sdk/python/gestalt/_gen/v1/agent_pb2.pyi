@@ -452,6 +452,7 @@ class CreateAgentProviderTurnRequest(_message.Message):
     SUBJECT_FIELD_NUMBER: _ClassVar[int]
     MODEL_OPTIONS_FIELD_NUMBER: _ClassVar[int]
     RUN_GRANT_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
     turn_id: str
     session_id: str
     idempotency_key: str
@@ -467,7 +468,8 @@ class CreateAgentProviderTurnRequest(_message.Message):
     subject: _plugin_pb2.AgentSubjectContext
     model_options: _struct_pb2.Struct
     run_grant: str
-    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by: _Optional[_Union[AgentActor, _Mapping]] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_plugin_pb2.AgentSubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., run_grant: _Optional[str] = ...) -> None: ...
+    timeout_seconds: int
+    def __init__(self, turn_id: _Optional[str] = ..., session_id: _Optional[str] = ..., idempotency_key: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[ResolvedAgentTool, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by: _Optional[_Union[AgentActor, _Mapping]] = ..., execution_ref: _Optional[str] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., subject: _Optional[_Union[_plugin_pb2.AgentSubjectContext, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., run_grant: _Optional[str] = ..., timeout_seconds: _Optional[int] = ...) -> None: ...
 
 class GetAgentProviderTurnRequest(_message.Message):
     __slots__ = ()
@@ -773,6 +775,8 @@ class AgentManagerCreateTurnRequest(_message.Message):
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     MODEL_OPTIONS_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    TOOL_REFS_SET_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     model: str
     messages: _containers.RepeatedCompositeFieldContainer[AgentMessage]
@@ -783,7 +787,9 @@ class AgentManagerCreateTurnRequest(_message.Message):
     idempotency_key: str
     invocation_token: str
     model_options: _struct_pb2.Struct
-    def __init__(self, session_id: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., invocation_token: _Optional[str] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    timeout_seconds: int
+    tool_refs_set: bool
+    def __init__(self, session_id: _Optional[str] = ..., model: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., tool_source: _Optional[_Union[AgentToolSourceMode, str]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., invocation_token: _Optional[str] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., tool_refs_set: _Optional[bool] = ...) -> None: ...
 
 class AgentManagerGetTurnRequest(_message.Message):
     __slots__ = ()

@@ -58,6 +58,27 @@ type AgentTarget struct {
 	TimeoutSeconds       int
 	OutputDelivery       *OutputDelivery
 	SessionReadyDelivery *OutputDelivery
+	Steps                []AgentStep
+}
+
+type AgentStep struct {
+	ID             string
+	Prompt         string
+	Messages       []coreagent.Message
+	ToolRefs       []coreagent.ToolRef
+	ResponseSchema map[string]any
+	ModelOptions   map[string]any
+	Metadata       map[string]any
+	TimeoutSeconds int
+	OutputDelivery *OutputDelivery
+	When           *AgentStepWhen
+}
+
+type AgentStepWhen struct {
+	StepID     string
+	OutputPath string
+	Equals     any
+	EqualsSet  bool
 }
 
 type OutputDelivery struct {
@@ -390,6 +411,30 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 		}
 		agentTarget.OutputDelivery = normalizedOutputDelivery(agentTarget.OutputDelivery)
 		agentTarget.SessionReadyDelivery = normalizedOutputDelivery(agentTarget.SessionReadyDelivery)
+		if len(agentTarget.Steps) == 0 {
+			agentTarget.Steps = nil
+		} else {
+			agentTarget.Steps = append([]AgentStep(nil), agentTarget.Steps...)
+			for i := range agentTarget.Steps {
+				step := &agentTarget.Steps[i]
+				if len(step.Messages) == 0 {
+					step.Messages = nil
+				}
+				if len(step.ToolRefs) == 0 {
+					step.ToolRefs = nil
+				}
+				if len(step.ResponseSchema) == 0 {
+					step.ResponseSchema = nil
+				}
+				if len(step.ModelOptions) == 0 {
+					step.ModelOptions = nil
+				}
+				if len(step.Metadata) == 0 {
+					step.Metadata = nil
+				}
+				step.OutputDelivery = normalizedOutputDelivery(step.OutputDelivery)
+			}
+		}
 		out.Agent = &agentTarget
 		return out
 	}

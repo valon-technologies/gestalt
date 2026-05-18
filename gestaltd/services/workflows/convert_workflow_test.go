@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -166,6 +167,79 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	}
 	if got := roundTrip.Agent.SessionReadyDelivery.InputBindings[0].Value.AgentSession; got != "id" {
 		t.Fatalf("round trip agent session source = %q, want id", got)
+	}
+}
+
+func TestWorkflowAgentTargetStepsProtoRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	target, err := workflowTargetToProto(coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		ProviderName: "managed",
+		Model:        "deep",
+		Metadata:     map[string]any{"route": "datadog"},
+		Steps: []coreworkflow.AgentStep{
+			{
+				ID:       "diagnosis",
+				Prompt:   "Diagnose the alert.",
+				Messages: []coreagent.Message{{Role: "system", Text: "Use concise replies."}},
+				ToolRefs: []coreagent.ToolRef{{Plugin: "datadog", Operation: "queryLogs"}},
+				ResponseSchema: map[string]any{
+					"type":       "object",
+					"properties": map[string]any{"actionable_for_pr": map[string]any{"type": "boolean"}},
+				},
+				ModelOptions:   map[string]any{"temperature": 0},
+				Metadata:       map[string]any{"kind": "diagnosis"},
+				TimeoutSeconds: 45,
+				OutputDelivery: &coreworkflow.OutputDelivery{
+					Target: coreworkflow.PluginTarget{PluginName: "slack", Operation: "reply"},
+					InputBindings: []coreworkflow.OutputBinding{
+						{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+					},
+				},
+			},
+			{
+				ID:       "pr_fix",
+				Prompt:   "Open the PR.",
+				ToolRefs: []coreagent.ToolRef{{Plugin: "github", Operation: "createPullRequest"}},
+				When: &coreworkflow.AgentStepWhen{
+					StepID:     "diagnosis",
+					OutputPath: "structured_output.actionable_for_pr",
+					Equals:     true,
+					EqualsSet:  true,
+				},
+			},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("workflowTargetToProto: %v", err)
+	}
+	if got := target.GetAgent().GetSteps()[0].GetResponseSchema().AsMap()["type"]; got != "object" {
+		t.Fatalf("step response schema = %#v, want object", got)
+	}
+	if got := target.GetAgent().GetSteps()[1].GetWhen().GetEquals().GetBoolValue(); got != true {
+		t.Fatalf("step when equals = %v, want true", got)
+	}
+
+	roundTrip := workflowTargetFromProto(target)
+	if roundTrip.Agent == nil || len(roundTrip.Agent.Steps) != 2 {
+		t.Fatalf("round trip agent steps = %#v", roundTrip.Agent)
+	}
+	diagnosis := roundTrip.Agent.Steps[0]
+	if diagnosis.ID != "diagnosis" || diagnosis.Prompt != "Diagnose the alert." || diagnosis.TimeoutSeconds != 45 {
+		t.Fatalf("round trip diagnosis step = %#v", diagnosis)
+	}
+	if len(diagnosis.Messages) != 1 || diagnosis.Messages[0].Role != "system" {
+		t.Fatalf("round trip diagnosis messages = %#v", diagnosis.Messages)
+	}
+	if len(diagnosis.ToolRefs) != 1 || diagnosis.ToolRefs[0].Plugin != "datadog" || diagnosis.ToolRefs[0].Operation != "queryLogs" {
+		t.Fatalf("round trip diagnosis tool refs = %#v", diagnosis.ToolRefs)
+	}
+	if diagnosis.OutputDelivery == nil || diagnosis.OutputDelivery.Target.PluginName != "slack" {
+		t.Fatalf("round trip diagnosis output delivery = %#v", diagnosis.OutputDelivery)
+	}
+	prFix := roundTrip.Agent.Steps[1]
+	if prFix.When == nil || prFix.When.StepID != "diagnosis" || prFix.When.OutputPath != "structured_output.actionable_for_pr" || prFix.When.Equals != true {
+		t.Fatalf("round trip pr_fix when = %#v", prFix.When)
 	}
 }
 

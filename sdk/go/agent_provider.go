@@ -327,6 +327,7 @@ type CreateAgentProviderTurnRequest struct {
 	Subject           *AgentSubjectContext
 	ModelOptions      map[string]any
 	RunGrant          string
+	TimeoutSeconds    int32
 }
 
 type GetAgentProviderTurnRequest struct {

@@ -1073,6 +1073,13 @@ func addWorkflowTargetRefs(refs workflowPluginRefs, target *WorkflowTargetConfig
 	}
 	addWorkflowOutputDeliveryRefs(refs, target.Agent.OutputDelivery)
 	addWorkflowOutputDeliveryRefs(refs, target.Agent.SessionReadyDelivery)
+	for i := range target.Agent.Steps {
+		step := &target.Agent.Steps[i]
+		for _, tool := range step.Tools {
+			refs.Add(tool.Plugin)
+		}
+		addWorkflowOutputDeliveryRefs(refs, step.OutputDelivery)
+	}
 }
 
 func addWorkflowOutputDeliveryRefs(refs workflowPluginRefs, delivery *WorkflowOutputDeliveryConfig) {

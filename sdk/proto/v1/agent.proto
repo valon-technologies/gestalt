@@ -282,6 +282,7 @@ message CreateAgentProviderTurnRequest {
   AgentSubjectContext subject = 14;
   google.protobuf.Struct model_options = 16;
   string run_grant = 17;
+  int32 timeout_seconds = 18;
 }
 
 message GetAgentProviderTurnRequest {
@@ -480,6 +481,8 @@ message AgentManagerCreateTurnRequest {
   string idempotency_key = 10;
   string invocation_token = 11;
   google.protobuf.Struct model_options = 12;
+  int32 timeout_seconds = 13;
+  bool tool_refs_set = 14;
 }
 
 message AgentManagerGetTurnRequest {

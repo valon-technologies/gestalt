@@ -150,6 +150,79 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertIsInstance(copied.tool_refs[0], gestalt.AgentToolRef)
         self.assertEqual(copied.tool_refs[0].plugin, "github")
 
+    def test_agent_target_steps_round_trip(self) -> None:
+        self.assertIsNotNone(gestalt.workflow_agent_step)
+        self.assertIsNotNone(gestalt.workflow_agent_step_when)
+
+        target = gestalt.bound_workflow_agent_target(
+            provider_name="claude",
+            steps=[
+                gestalt.WorkflowAgentStep(
+                    id="diagnosis",
+                    prompt="Diagnose the alert.",
+                    messages=[
+                        gestalt.AgentMessage(
+                            role="system",
+                            text="Use concise replies.",
+                        )
+                    ],
+                    tool_refs=[
+                        gestalt.AgentToolRef(
+                            plugin="datadog",
+                            operation="queryLogs",
+                        )
+                    ],
+                    response_schema={"type": "object"},
+                    model_options={"temperature": 0},
+                    timeout_seconds=45,
+                    output_delivery=gestalt.WorkflowOutputDelivery(
+                        target=gestalt.BoundWorkflowPluginTarget(
+                            plugin_name="slack",
+                            operation="reply",
+                        ),
+                        input_bindings=[
+                            gestalt.WorkflowOutputBinding(
+                                input_field="text",
+                                value=gestalt.WorkflowOutputValueSource(
+                                    agent_output="text",
+                                ),
+                            )
+                        ],
+                    ),
+                    metadata={"kind": "diagnosis"},
+                ),
+                gestalt.WorkflowAgentStep(
+                    id="pr_fix",
+                    prompt="Open a PR.",
+                    tool_refs=[
+                        gestalt.AgentToolRef(
+                            plugin="github",
+                            operation="createPullRequest",
+                        )
+                    ],
+                    when=gestalt.WorkflowAgentStepWhen(
+                        step_id="diagnosis",
+                        output_path="structured_output.actionable_for_pr",
+                        equals=True,
+                    ),
+                ),
+            ],
+        )
+
+        self.assertEqual(target.steps[0].tool_refs[0].plugin, "datadog")
+        self.assertEqual(target.steps[1].when.equals.bool_value, True)
+        copied = gestalt.bound_workflow_agent_target_input_from_target(target)
+        self.assertIsInstance(copied.steps[0].messages[0], gestalt.AgentMessage)
+        self.assertEqual(copied.steps[0].response_schema["type"], "object")
+        self.assertEqual(
+            copied.steps[0].output_delivery.target.plugin_name,
+            "slack",
+        )
+        self.assertEqual(
+            copied.steps[1].when.output_path,
+            "structured_output.actionable_for_pr",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

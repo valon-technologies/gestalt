@@ -470,6 +470,8 @@ class _AgentManagerServicer(agent_pb2_grpc.AgentManagerHostServicer):
                 "interaction_id": "",
                 "reason": "",
                 "tool_source": request.tool_source,
+                "tool_refs_set": request.tool_refs_set,
+                "timeout_seconds": request.timeout_seconds,
                 "has_response_schema": request.HasField("response_schema"),
             }
         )
@@ -1289,6 +1291,8 @@ class AgentTransportTests(unittest.TestCase):
                     "interaction_id": "",
                     "reason": "",
                     "tool_source": agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
+                    "tool_refs_set": False,
+                    "timeout_seconds": 0,
                     "has_response_schema": True,
                 },
                 {
@@ -1394,10 +1398,12 @@ class AgentTransportTests(unittest.TestCase):
                             connection="default",
                         )
                     ],
+                    tool_refs_set=True,
                     tool_source=agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
                     response_schema={"type": "object"},
                     metadata={"request": "native"},
                     model_options={"temperature": 0},
+                    timeout_seconds=120,
                 )
             )
             resolved = manager.resolve_interaction(
@@ -1422,6 +1428,8 @@ class AgentTransportTests(unittest.TestCase):
             ["create_turn", "resolve_interaction"],
         )
         self.assertEqual(_manager_requests[0]["tool_source"], agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE)
+        self.assertTrue(_manager_requests[0]["tool_refs_set"])
+        self.assertEqual(_manager_requests[0]["timeout_seconds"], 120)
         self.assertTrue(_manager_requests[0]["has_response_schema"])
 
 
