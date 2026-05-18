@@ -6,11 +6,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
 )
 
 var (
@@ -104,9 +104,87 @@ func buildBootstrapTestBinary(dir, target, output string, sdkModule bool) error 
 		return testutil.BuildSDKTestMainBinary(dir, output)
 	}
 	if target == "" {
-		return providerpkg.BuildGoProviderBinary(dir, output, filepath.Base(dir), runtime.GOOS, runtime.GOARCH)
+		return buildBootstrapGoProviderFixture(dir, output)
 	}
 	return runGoCommand(dir, "build", "-o", output, target)
+}
+
+func buildBootstrapGoProviderFixture(dir, output string) error {
+	buildDir, err := os.MkdirTemp("", "bootstrap-provider-*")
+	if err != nil {
+		return err
+	}
+	if err := copyBootstrapFixtureTree(dir, buildDir); err != nil {
+		return err
+	}
+	goModPath := filepath.Join(buildDir, "go.mod")
+	goMod, err := os.ReadFile(goModPath)
+	if err != nil {
+		return err
+	}
+	root, err := repoRootForBootstrapTests()
+	if err != nil {
+		return err
+	}
+	replaced := strings.Replace(string(goMod), "replace github.com/valon-technologies/gestalt/sdk/go => ../../../../../sdk/go", "replace github.com/valon-technologies/gestalt/sdk/go => "+filepath.Join(root, "sdk", "go"), 1)
+	if err := os.WriteFile(goModPath, []byte(replaced), 0o644); err != nil {
+		return err
+	}
+	mainDir := filepath.Join(buildDir, "cmd", "provider")
+	if err := os.MkdirAll(mainDir, 0o755); err != nil {
+		return err
+	}
+	mainSource := fmt.Sprintf(`package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	providerpkg %q
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router.WithName(%q)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %%v\n", err)
+		os.Exit(1)
+	}
+}
+`, "github.com/valon-technologies/gestalt/testdata/provider-go", filepath.Base(dir))
+	if err := os.WriteFile(filepath.Join(mainDir, "main.go"), []byte(mainSource), 0o644); err != nil {
+		return err
+	}
+	return runGoCommand(buildDir, "build", "-o", output, "./cmd/provider")
+}
+
+func copyBootstrapFixtureTree(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode())
+	})
 }
 
 func runGoCommand(dir string, args ...string) error {

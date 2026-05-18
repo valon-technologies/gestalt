@@ -2325,6 +2325,7 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 				},
 			},
 		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.ToSlash(filepath.Join(".venv", "bin", "python"))},
 	}
 	manifestData, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -2333,11 +2334,6 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 	manifestPath := filepath.Join(root, "manifest.yaml")
 	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
 		t.Fatalf("WriteFile(manifest.yaml): %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
-provider = "provider"
-`), 0o644); err != nil {
-		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}
 	catalogData, err := yaml.Marshal(&catalog.Catalog{
 		Name: "python-source",

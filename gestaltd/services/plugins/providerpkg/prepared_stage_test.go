@@ -4,9 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -14,22 +14,28 @@ func TestStageSourcePreparedInstallDir_BuildsHostBinaryWhenSourcePackageExists(t
 	t.Parallel()
 
 	root := t.TempDir()
-	testutil.CopyExampleProviderPlugin(t, root)
-
-	staleArtifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
-	mustWriteFile(t, filepath.Join(root, filepath.FromSlash(staleArtifactPath)), []byte("stale-binary"), 0o755)
+	artifactPath := ".gestalt/build/provider"
+	buildScript := `mkdir -p .gestalt/build
+cat > .gestalt/build/provider <<'SH'
+#!/bin/sh
+if [ -n "$GESTALT_PLUGIN_WRITE_CATALOG" ]; then
+  printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+fi
+SH
+chmod +x .gestalt/build/provider
+`
+	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindPlugin,
 		Source:      "github.com/test/plugins/provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Example Provider",
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{{
-			OS:   runtime.GOOS,
-			Arch: runtime.GOARCH,
-			Path: staleArtifactPath,
-		}},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: staleArtifactPath},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}))
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
@@ -43,22 +49,21 @@ func TestStageSourcePreparedInstallDir_BuildsHostBinaryWhenSourcePackageExists(t
 		t.Fatalf("StageSourcePreparedInstallDir: %v", err)
 	}
 
-	wantBinary := stagedReleaseBinaryName("prepared-stage-test", runtime.GOOS)
-	if staged.Manifest == nil || staged.Manifest.Entrypoint == nil || staged.Manifest.Entrypoint.ArtifactPath != wantBinary {
+	if staged.Manifest == nil || staged.Manifest.Entrypoint == nil || staged.Manifest.Entrypoint.ArtifactPath != artifactPath {
 		var entrypoint any
 		if staged.Manifest != nil {
 			entrypoint = staged.Manifest.Entrypoint
 		}
-		t.Fatalf("staged manifest entrypoint = %#v, want artifact path %q", entrypoint, wantBinary)
+		t.Fatalf("staged manifest entrypoint = %#v, want artifact path %q", entrypoint, artifactPath)
 	}
 
-	stagedBinaryPath := filepath.Join(stagingDir, wantBinary)
+	stagedBinaryPath := filepath.Join(stagingDir, filepath.FromSlash(artifactPath))
 	data, err := os.ReadFile(stagedBinaryPath)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", stagedBinaryPath, err)
 	}
-	if string(data) == "stale-binary" {
-		t.Fatalf("staged binary reused stale checked-in artifact")
+	if !strings.Contains(string(data), "GESTALT_PLUGIN_WRITE_CATALOG") {
+		t.Fatalf("staged binary did not come from declared build command")
 	}
 
 	catalogData, err := os.ReadFile(filepath.Join(stagingDir, StaticCatalogFile))
@@ -70,11 +75,89 @@ func TestStageSourcePreparedInstallDir_BuildsHostBinaryWhenSourcePackageExists(t
 	}
 }
 
-func TestStagePreparedInstallDir_WithBuildKindCopiesGeneratedCatalog(t *testing.T) {
+func TestStageSourcePreparedInstallDir_GeneratesCatalogBeforeTargetBuild(t *testing.T) {
+	t.Parallel()
+
+	targetGOOS, targetGOARCH := "darwin", "amd64"
+	if runtime.GOOS == targetGOOS && runtime.GOARCH == targetGOARCH {
+		targetGOOS, targetGOARCH = "linux", "amd64"
+	}
+
+	root := t.TempDir()
+	artifactPath := ".gestalt/build/provider"
+	hostPlatform := runtime.GOOS + "/" + runtime.GOARCH
+	buildScript := `set -eu
+mkdir -p .gestalt/build
+if [ "${GOOS:-}/` + "${GOARCH:-}" + `" = "` + hostPlatform + `" ]; then
+  cat > .gestalt/build/provider <<'SH'
+#!/bin/sh
+if [ -n "$GESTALT_PLUGIN_WRITE_CATALOG" ]; then
+  printf 'name: provider\noperations:\n  - id: host_catalog\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+fi
+SH
+else
+  cat > .gestalt/build/provider <<'SH'
+#!/bin/sh
+if [ -n "$GESTALT_PLUGIN_WRITE_CATALOG" ]; then
+  echo "target artifact should not generate catalogs" >&2
+  exit 42
+fi
+echo target artifact
+SH
+fi
+chmod +x .gestalt/build/provider
+`
+	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
+	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      "github.com/test/plugins/provider",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Example Provider",
+		Spec:        &providermanifestv1.Spec{},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+	}))
+
+	stagingDir := filepath.Join(t.TempDir(), "prepared")
+	_, err := StageSourcePreparedInstallDir(manifestPath, stagingDir, StageSourcePreparedInstallOptions{
+		Kind:       providermanifestv1.KindPlugin,
+		PluginName: "prepared-stage-test",
+		GOOS:       targetGOOS,
+		GOARCH:     targetGOARCH,
+	})
+	if err != nil {
+		t.Fatalf("StageSourcePreparedInstallDir: %v", err)
+	}
+
+	catalogData, err := os.ReadFile(filepath.Join(stagingDir, StaticCatalogFile))
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", filepath.Join(stagingDir, StaticCatalogFile), err)
+	}
+	if !strings.Contains(string(catalogData), "host_catalog") {
+		t.Fatalf("staged catalog was not generated by host artifact: %s", catalogData)
+	}
+
+	stagedBinary, err := os.ReadFile(filepath.Join(stagingDir, filepath.FromSlash(artifactPath)))
+	if err != nil {
+		t.Fatalf("ReadFile(staged binary): %v", err)
+	}
+	if !strings.Contains(string(stagedBinary), "target artifact") {
+		t.Fatalf("staged binary did not come from target build: %s", stagedBinary)
+	}
+}
+
+func TestStagePreparedInstallDir_WithEntrypointCopiesGeneratedCatalog(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	testutil.CopyExampleProviderPlugin(t, root)
+	mustWriteFile(t, filepath.Join(root, "provider"), []byte(`#!/bin/sh
+if [ -n "$GESTALT_PLUGIN_WRITE_CATALOG" ]; then
+  printf 'name: provider\noperations:\n  - id: echo\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+fi
+`), 0o755)
 
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindPlugin,
@@ -82,11 +165,11 @@ func TestStagePreparedInstallDir_WithBuildKindCopiesGeneratedCatalog(t *testing.
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Example Provider",
 		Spec:        &providermanifestv1.Spec{},
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
 	}))
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
 	_, err := StagePreparedInstallDir(manifestPath, stagingDir, StagePreparedInstallOptions{
-		BuildKind:  providermanifestv1.KindPlugin,
 		PluginName: "prepared-stage-test",
 		GOOS:       runtime.GOOS,
 		GOARCH:     runtime.GOARCH,

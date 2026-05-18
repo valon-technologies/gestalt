@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -1002,32 +1001,12 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			}
 			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
 		}
-		rootDir := filepath.Dir(entry.ResolvedManifestPath)
-		command, args, cleanup, err = providerpkg.SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
-		if errors.Is(err, providerpkg.ErrNoSourceProviderPackage) {
-			if runtimeOwned {
-				_ = runtimeProvider.Close()
-			}
-			return nil, fmt.Errorf("prepare synthesized source provider execution: no Go or Python provider source found")
-		}
+		command, args, err = providerpkg.SourceManifestExecutionCommand(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
 		if err != nil {
 			if runtimeOwned {
 				_ = runtimeProvider.Close()
 			}
 			return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
-		}
-		execEnv, err := providerpkg.SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
-		if err != nil {
-			if runtimeOwned {
-				_ = runtimeProvider.Close()
-			}
-			return nil, fmt.Errorf("prepare synthesized source provider environment: %w", err)
-		}
-		if len(execEnv) > 0 {
-			if env == nil {
-				env = make(map[string]string, len(execEnv))
-			}
-			maps.Copy(env, execEnv)
 		}
 	}
 	launch, err := prepareHostedProcessLaunch(providermanifestv1.KindPlugin, name, entry, command, args, cleanup, runtimeConfig)
