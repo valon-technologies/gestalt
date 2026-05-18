@@ -242,6 +242,7 @@ func (d *databaseBackedIndexedDB) upgrade(ctx context.Context, fn func(context.C
 	}
 	version := d.db.Version() + 1
 	_ = d.db.Close()
+	d.db = nil
 	db, err := d.factory.Open(ctx, d.dbName, indexeddb.OpenOptions{
 		Version: &version,
 		Upgrade: fn,
