@@ -196,7 +196,7 @@ func (l *Lifecycle) LockAtPathsWithStatePaths(configPaths []string, state StateP
 }
 
 func (l *Lifecycle) LockAtPathsWithPlatforms(configPaths []string, state StatePaths, platforms []struct{ GOOS, GOARCH string }) (*Lockfile, error) {
-	lock, cfg, paths, cleanup, err := l.prepareLockAtPathsInScratch(configPaths, state)
+	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state)
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -217,7 +217,7 @@ func (l *Lifecycle) LockAtPathsWithPlatforms(configPaths []string, state StatePa
 }
 
 func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state StatePaths, platforms []struct{ GOOS, GOARCH string }) error {
-	lock, cfg, paths, cleanup, err := l.prepareLockAtPathsInScratch(configPaths, state)
+	lock, cfg, paths, cleanup, err := l.prepareCommittedLockAtPathsInScratch(configPaths, state)
 	if cleanup != nil {
 		defer cleanup()
 	}
@@ -319,6 +319,64 @@ func (l *Lifecycle) prepareLockAtPathsInScratch(configPaths []string, state Stat
 	return lock, cfg, paths, cleanup, nil
 }
 
+func (l *Lifecycle) prepareCommittedLockAtPathsInScratch(configPaths []string, state StatePaths) (*Lockfile, *config.Config, lifecyclePaths, func(), error) {
+	scratchDir, err := os.MkdirTemp("", "gestaltd-lock-*")
+	if err != nil {
+		return nil, nil, lifecyclePaths{}, nil, fmt.Errorf("create lock scratch dir: %w", err)
+	}
+	cleanup := func() { _ = os.RemoveAll(scratchDir) }
+	scratchState := state
+	scratchState.ArtifactsDir = scratchDir
+	lock, cfg, paths, err := l.prepareCommittedLockAtPaths(configPaths, scratchState, state)
+	if err != nil {
+		return nil, nil, lifecyclePaths{}, cleanup, err
+	}
+	actualPaths := resolveLifecyclePaths(configPaths, cfg, state)
+	paths.lockfilePath = actualPaths.lockfilePath
+	paths.lockFlags = actualPaths.lockFlags
+	return lock, cfg, paths, cleanup, nil
+}
+
+func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
+	cfg, err := loadConfigForLifecycle(configPaths, state, true)
+	if err != nil {
+		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
+	}
+	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
+		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
+	}
+	if err := applyPluginScope(cfg, state); err != nil {
+		return nil, nil, lifecyclePaths{}, err
+	}
+	paths := resolveLifecyclePaths(configPaths, cfg, state)
+	if len(displayState) > 0 {
+		paths.configFlags = formatConfigStateFlags(configPaths, displayState[0])
+	}
+	if l.sourceAuthSecretResolver == nil {
+		if err := requireSourceAuthSecretResolver(cfg); err != nil {
+			return nil, nil, lifecyclePaths{}, err
+		}
+	}
+	if err := rejectLocalSourceSecretsForSourceAuthLock(cfg); err != nil {
+		return nil, nil, lifecyclePaths{}, err
+	}
+	lock, err := l.prepareCommittedRuntimeLockFromLoadedConfig(context.Background(), paths, cfg)
+	if err != nil {
+		return nil, nil, lifecyclePaths{}, err
+	}
+	if err := validateResolvedStructureForCommittedLock(paths, cfg); err != nil {
+		return nil, nil, lifecyclePaths{}, err
+	}
+	catalogs, err := effectiveCatalogsForCommittedLock(context.Background(), cfg, lock)
+	if err != nil {
+		return nil, nil, lifecyclePaths{}, err
+	}
+	if err := attachStaticValidationMetadata(lock, cfg, catalogs); err != nil {
+		return nil, nil, lifecyclePaths{}, err
+	}
+	return lock, cfg, paths, nil
+}
+
 func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, displayState ...StatePaths) (*Lockfile, *config.Config, lifecyclePaths, error) {
 	cfg, err := loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
@@ -356,6 +414,160 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, d
 
 func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, paths lifecyclePaths, cfg *config.Config) (*Lockfile, error) {
 	return l.prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx, paths, cfg, configSecretResolutionAll)
+}
+
+func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Context, paths lifecyclePaths, cfg *config.Config) (*Lockfile, error) {
+	secretsEntries, err := l.primeSecretsProviderForConfigResolution(ctx, paths, cfg, nil, artifactModeMaterialize, configSecretResolutionSourceAuth)
+	if err != nil {
+		return nil, err
+	}
+	if err := l.resolveConfigSecretsForMode(ctx, cfg, configSecretResolutionSourceAuth); err != nil {
+		return nil, err
+	}
+	if err := l.resolvePackageSources(ctx, cfg); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
+		return nil, fmt.Errorf("creating providers dir: %w", err)
+	}
+
+	lock := newLockfile()
+	for name, entry := range cfg.Plugins {
+		if !providerRequiresCommittedLock(entry) {
+			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode provider config for provider %q: %w", name, err)
+		}
+		lockEntry, err := l.lockCommittedProviderEntryForSource(ctx, cfg, paths, name, entry, configMap)
+		if err != nil {
+			return nil, err
+		}
+		lock.Providers[name] = lockEntry
+		if err := l.applyLockedProviderEntry(paths, lock, name, entry, configMap, artifactModeCheck); err != nil {
+			return nil, err
+		}
+	}
+
+	existingUIEntries := make(map[string]struct{}, len(cfg.Providers.UI))
+	for name := range cfg.Providers.UI {
+		existingUIEntries[name] = struct{}{}
+	}
+	if err := synthesizeCommittedPluginOwnedUIEntries(cfg); err != nil {
+		return nil, err
+	}
+	for name := range secretsEntries {
+		if providerRequiresCommittedLock(cfg.Providers.Secrets[name]) {
+			lock.Secrets[name] = secretsEntries[name]
+		}
+	}
+	for _, collection := range hostProviderCollections(cfg) {
+		for name, entry := range collection.entries {
+			if !providerRequiresCommittedLock(entry) {
+				continue
+			}
+			if collection.kind == config.HostProviderKindSecrets {
+				if _, alreadyPrepared := secretsEntries[name]; alreadyPrepared {
+					continue
+				}
+			}
+			kind := providerManifestKind(collection.kind)
+			destDir := componentDestDir(paths, collection.kind, name)
+			configMap, err := config.NodeToMap(entry.Config)
+			if err != nil {
+				return nil, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
+			}
+			lockEntry, err := l.lockCommittedComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, entry, configMap)
+			if err != nil {
+				return nil, err
+			}
+			lockEntriesForKind(lock, collection.kind)[name] = lockEntry
+			if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, entry, configMap, destDir, artifactModeCheck); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for name, entry := range cfg.Runtime.Providers {
+		if !runtimeRequiresCommittedLock(entry) {
+			continue
+		}
+		kind := providermanifestv1.KindRuntime
+		destDir := runtimeDestDir(paths, name)
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
+		}
+		lockEntry, err := l.lockCommittedComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, &entry.ProviderEntry, configMap)
+		if err != nil {
+			return nil, err
+		}
+		lock.Runtimes[name] = lockEntry
+		if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, &entry.ProviderEntry, configMap, destDir, artifactModeCheck); err != nil {
+			return nil, err
+		}
+	}
+	for name, def := range cfg.Providers.IndexedDB {
+		if !providerRequiresCommittedLock(def) {
+			continue
+		}
+		kind := providermanifestv1.KindIndexedDB
+		destDir := indexeddbDestDir(paths, name)
+		configMap, err := config.NodeToMap(def.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
+		}
+		lockEntry, err := l.lockCommittedComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, def, configMap)
+		if err != nil {
+			return nil, err
+		}
+		lock.IndexedDBs[name] = lockEntry
+		if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, def, configMap, destDir, artifactModeCheck); err != nil {
+			return nil, err
+		}
+	}
+	for name, def := range cfg.Providers.S3 {
+		if !providerRequiresCommittedLock(def) {
+			continue
+		}
+		kind := providermanifestv1.KindS3
+		destDir := s3DestDir(paths, name)
+		configMap, err := config.NodeToMap(def.Config)
+		if err != nil {
+			return nil, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
+		}
+		lockEntry, err := l.lockCommittedComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, def, configMap)
+		if err != nil {
+			return nil, err
+		}
+		lock.S3[name] = lockEntry
+		if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, def, configMap, destDir, artifactModeCheck); err != nil {
+			return nil, err
+		}
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil {
+			continue
+		}
+		if _, existed := existingUIEntries[name]; !existed && entry.HasLocalSource() && pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
+			if _, err := l.applyConfiguredUIProvider(paths, nil, &entry.ProviderEntry, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), artifactModeCheck); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if !providerRequiresCommittedLock(&entry.ProviderEntry) {
+			continue
+		}
+		lockEntry, err := l.lockCommittedNamedUIProviderArtifact(ctx, cfg, paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
+		if err != nil {
+			return nil, err
+		}
+		lock.UIs[name] = lockEntry
+		if _, err := l.applyConfiguredUIProvider(paths, &lockEntry, &entry.ProviderEntry, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), artifactModeCheck); err != nil {
+			return nil, err
+		}
+	}
+	return lock, nil
 }
 
 func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context.Context, paths lifecyclePaths, cfg *config.Config, secretMode configSecretResolutionMode) (*Lockfile, error) {
@@ -1055,6 +1267,56 @@ func secretsProviderMetadataDependencies(name string, provider *config.ProviderE
 		return nil, nil
 	}
 	return deps, nil
+}
+
+func rejectLocalSourceSecretsForSourceAuthLock(cfg *config.Config) error {
+	roots, err := config.ReferencedSourceAuthSecretProviders(cfg)
+	if err != nil {
+		return err
+	}
+	if len(roots) == 0 {
+		return nil
+	}
+	visiting := map[string]struct{}{}
+	visited := map[string]struct{}{}
+	var visit func(string, []string) error
+	visit = func(name string, path []string) error {
+		if _, ok := visited[name]; ok {
+			return nil
+		}
+		if _, ok := visiting[name]; ok {
+			return nil
+		}
+		provider := cfg.Providers.Secrets[name]
+		if provider == nil {
+			return fmt.Errorf("config validation: secret refs reference unknown secrets provider %q", name)
+		}
+		nextPath := append(slices.Clone(path), name)
+		if provider.HasLocalSource() {
+			return fmt.Errorf("source auth secret provider %q uses source.path; gestaltd lock cannot materialize local source secrets providers (dependency path: %s)", name, strings.Join(nextPath, " -> "))
+		}
+		visiting[name] = struct{}{}
+		deps, err := secretsProviderMetadataDependencies(name, provider, configSecretResolutionSourceAuth)
+		if err != nil {
+			delete(visiting, name)
+			return err
+		}
+		for _, dep := range slices.Sorted(maps.Keys(deps)) {
+			if err := visit(dep, nextPath); err != nil {
+				delete(visiting, name)
+				return err
+			}
+		}
+		delete(visiting, name)
+		visited[name] = struct{}{}
+		return nil
+	}
+	for _, name := range slices.Sorted(maps.Keys(roots)) {
+		if err := visit(name, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name string, provider *config.ProviderEntry, available map[string]*config.ProviderEntry, mode configSecretResolutionMode) error {
@@ -2980,10 +3242,24 @@ func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Conf
 	return written, nil
 }
 
+func (l *Lifecycle) lockCommittedProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+	if !providerRequiresCommittedLock(plugin) {
+		return LockEntry{}, fmt.Errorf("provider %q does not require committed lock metadata", name)
+	}
+	return l.lockProviderEntryForSource(ctx, cfg, paths, name, plugin, configMap)
+}
+
 func (l *Lifecycle) writeComponentArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry, configNode yaml.Node) (LockEntry, error) {
 	configMap, err := config.NodeToMap(configNode)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
+	}
+	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, plugin, configMap)
+}
+
+func (l *Lifecycle) lockCommittedComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+	if !providerRequiresCommittedLock(plugin) {
+		return LockEntry{}, fmt.Errorf("%s %q does not require committed lock metadata", kind, name)
 	}
 	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, plugin, configMap)
 }
@@ -3165,6 +3441,13 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, cfg *confi
 	entry.Manifest = filepath.ToSlash(manifestPath)
 	entry.AssetRoot = filepath.ToSlash(assetRoot)
 	return entry, nil
+}
+
+func (l *Lifecycle) lockCommittedNamedUIProviderArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, plugin *config.ProviderEntry, destDir string, subject string) (LockEntry, error) {
+	if !providerRequiresCommittedLock(plugin) {
+		return LockEntry{}, fmt.Errorf("%s does not require committed lock metadata", subject)
+	}
+	return l.writeNamedUIProviderArtifact(ctx, cfg, paths, name, plugin, destDir, subject)
 }
 
 func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode) error {
@@ -3372,6 +3655,80 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		}
 	}
 	return nil
+}
+
+func validateResolvedStructureForCommittedLock(paths lifecyclePaths, cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	validation := &config.Config{
+		Plugins: make(map[string]*config.ProviderEntry),
+		Providers: config.ProvidersConfig{
+			UI: make(map[string]*config.UIEntry),
+		},
+	}
+	for name, entry := range cfg.Plugins {
+		if providerRequiresCommittedLock(entry) {
+			validation.Plugins[name] = entry
+		}
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil {
+			continue
+		}
+		if providerRequiresCommittedLock(&entry.ProviderEntry) || synthesizedCommittedOwnedUIEntry(paths, cfg, name, entry) {
+			validation.Providers.UI[name] = entry
+		}
+	}
+	return config.ValidateResolvedStructure(validation)
+}
+
+func effectiveCatalogsForCommittedLock(ctx context.Context, cfg *config.Config, lock *Lockfile) (map[string]pluginservice.EffectiveCatalogResult, error) {
+	if cfg == nil || lock == nil || len(lock.Providers) == 0 {
+		return nil, nil
+	}
+	validation := &pluginservice.ValidationConfig{
+		Plugins: make(map[string]*pluginservice.ValidationPlugin, len(cfg.Plugins)),
+	}
+	for name, entry := range cfg.Plugins {
+		if entry == nil {
+			continue
+		}
+		if _, locked := lock.Providers[name]; locked {
+			validation.Plugins[name] = config.PluginValidationEntry(entry)
+			continue
+		}
+		if entry.HasLocalSource() {
+			validation.Plugins[name] = &pluginservice.ValidationPlugin{
+				EffectiveCatalogAvailable: true,
+				StaticMetadataUnavailable: true,
+			}
+		}
+	}
+	results, err := pluginservice.EffectiveCatalogsAndDependencies(ctx, validation)
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range slices.Sorted(maps.Keys(results)) {
+		if _, locked := lock.Providers[name]; !locked {
+			delete(results, name)
+		}
+	}
+	return results, nil
+}
+
+func synthesizedCommittedOwnedUIEntry(paths lifecyclePaths, cfg *config.Config, name string, entry *config.UIEntry) bool {
+	if cfg == nil || entry == nil || !entry.HasLocalSource() {
+		return false
+	}
+	if !pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
+		return false
+	}
+	owner := strings.TrimSpace(entry.OwnerPlugin)
+	if owner == "" {
+		owner = name
+	}
+	return providerRequiresCommittedLock(cfg.Plugins[owner])
 }
 
 func portableStaticValidationManifest(manifest *providermanifestv1.Manifest, manifestPath string) *providermanifestv1.Manifest {
@@ -4021,6 +4378,18 @@ func (l *Lifecycle) resolveConfiguredPlugins(paths lifecyclePaths, lock *Lockfil
 }
 
 func synthesizePluginOwnedUIEntries(cfg *config.Config) error {
+	return synthesizePluginOwnedUIEntriesMatching(cfg, func(_ string, _ *config.ProviderEntry) bool {
+		return true
+	})
+}
+
+func synthesizeCommittedPluginOwnedUIEntries(cfg *config.Config) error {
+	return synthesizePluginOwnedUIEntriesMatching(cfg, func(_ string, plugin *config.ProviderEntry) bool {
+		return providerRequiresCommittedLock(plugin)
+	})
+}
+
+func synthesizePluginOwnedUIEntriesMatching(cfg *config.Config, include func(string, *config.ProviderEntry) bool) error {
 	if cfg == nil || len(cfg.Plugins) == 0 {
 		return nil
 	}
@@ -4031,7 +4400,7 @@ func synthesizePluginOwnedUIEntries(cfg *config.Config) error {
 	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
 	for _, pluginName := range pluginNames {
 		plugin := cfg.Plugins[pluginName]
-		if plugin == nil || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" {
+		if plugin == nil || (include != nil && !include(pluginName, plugin)) || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" {
 			continue
 		}
 		manifestSpec := plugin.ManifestSpec()
