@@ -106,6 +106,7 @@ type Spec struct {
 	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
 	Surfaces          *ProviderSurfaces                     `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
 	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
+	OperationSets     map[string]*ManifestOperationSet      `json:"operationSets,omitempty" yaml:"operationSets,omitempty"`
 	DefaultConnection string                                `json:"defaultConnection,omitempty" yaml:"defaultConnection,omitempty"`
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
@@ -404,6 +405,11 @@ type ManifestOperationOverride struct {
 	Pagination   *ManifestPaginationConfig `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 }
 
+type ManifestOperationSet struct {
+	Description string                                `json:"description,omitempty" yaml:"description,omitempty"`
+	Operations  map[string]*ManifestOperationOverride `json:"operations,omitempty" yaml:"operations,omitempty"`
+}
+
 type ManifestConnectionDef struct {
 	DisplayName       string                             `json:"displayName,omitempty" yaml:"displayName,omitempty"`
 	Mode              ConnectionMode                     `json:"mode,omitempty" yaml:"mode,omitempty"`
@@ -597,6 +603,7 @@ type specJSONWire struct {
 	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty"`
 	Surfaces          *ProviderSurfaces                     `json:"surfaces,omitempty"`
 	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty"`
+	OperationSets     map[string]*ManifestOperationSet      `json:"operationSets,omitempty"`
 	DefaultConnection string                                `json:"defaultConnection,omitempty"`
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty"`
@@ -617,6 +624,7 @@ type specYAMLWire struct {
 	ManagedParameters []ManagedParameter                    `yaml:"managedParameters,omitempty"`
 	Surfaces          *ProviderSurfaces                     `yaml:"surfaces,omitempty"`
 	AllowedOperations map[string]*ManifestOperationOverride `yaml:"allowedOperations,omitempty"`
+	OperationSets     map[string]*ManifestOperationSet      `yaml:"operationSets,omitempty"`
 	DefaultConnection string                                `yaml:"defaultConnection,omitempty"`
 	Connections       map[string]*ManifestConnectionDef     `yaml:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `yaml:"responseMapping,omitempty"`
@@ -637,6 +645,7 @@ type specWire struct {
 	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
 	Surfaces          *ProviderSurfaces                     `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
 	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
+	OperationSets     map[string]*ManifestOperationSet      `json:"operationSets,omitempty" yaml:"operationSets,omitempty"`
 	DefaultConnection string                                `json:"defaultConnection,omitempty" yaml:"defaultConnection,omitempty"`
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
@@ -667,6 +676,7 @@ func (s *Spec) UnmarshalJSON(data []byte) error {
 		ManagedParameters: raw.ManagedParameters,
 		Surfaces:          raw.Surfaces,
 		AllowedOperations: raw.AllowedOperations,
+		OperationSets:     raw.OperationSets,
 		DefaultConnection: raw.DefaultConnection,
 		Connections:       raw.Connections,
 		ResponseMapping:   raw.ResponseMapping,
@@ -716,6 +726,7 @@ func (s *Spec) UnmarshalYAML(value *yaml.Node) error {
 		ManagedParameters: raw.ManagedParameters,
 		Surfaces:          raw.Surfaces,
 		AllowedOperations: raw.AllowedOperations,
+		OperationSets:     raw.OperationSets,
 		DefaultConnection: raw.DefaultConnection,
 		Connections:       raw.Connections,
 		ResponseMapping:   raw.ResponseMapping,
@@ -748,6 +759,7 @@ func (s Spec) canonicalWire() (specWire, error) {
 		ManagedParameters: s.ManagedParameters,
 		Surfaces:          s.Surfaces,
 		AllowedOperations: s.AllowedOperations,
+		OperationSets:     s.OperationSets,
 		DefaultConnection: s.DefaultConnection,
 		Connections:       cloneManifestConnections(s.Connections),
 		ResponseMapping:   s.ResponseMapping,
@@ -1011,6 +1023,7 @@ var specWireFields = map[string]struct{}{
 	"managedParameters": {},
 	"surfaces":          {},
 	"allowedOperations": {},
+	"operationSets":     {},
 	"defaultConnection": {},
 	"connections":       {},
 	"responseMapping":   {},

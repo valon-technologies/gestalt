@@ -175,6 +175,12 @@
             "$ref": "#/$defs/manifestOperationOverride"
           }
         },
+        "operationSets": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/manifestOperationSet"
+          }
+        },
         "surfaces": {
           "$ref": "#/$defs/surfaces"
         },
@@ -1282,6 +1288,24 @@
         },
         "pagination": {
           "$ref": "#/$defs/paginationConfig"
+        }
+      }
+    },
+    "manifestOperationSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operations"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "operations": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/manifestOperationOverride"
+          }
         }
       }
     },

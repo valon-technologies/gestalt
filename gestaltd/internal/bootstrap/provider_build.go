@@ -356,9 +356,9 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 		return nil, fmt.Errorf("integration %q must resolve to a provider manifest", name)
 	}
 
-	allowedOperations := entry.AllowedOperations
-	if allowedOperations == nil {
-		allowedOperations = maps.Clone(manifestPlugin.AllowedOperations)
+	allowedOperations, err := entry.EffectiveAllowedOperations()
+	if err != nil {
+		return nil, fmt.Errorf("resolve allowed operations for %q: %w", name, err)
 	}
 
 	switch {
@@ -409,9 +409,10 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	if err != nil {
 		return nil, err
 	}
-	allowedOperations := entry.AllowedOperations
-	if allowedOperations == nil && manifestPlugin != nil {
-		allowedOperations = maps.Clone(manifestPlugin.AllowedOperations)
+	allowedOperations, err := entry.EffectiveAllowedOperations()
+	if err != nil {
+		closeIfPossible(pluginProv)
+		return nil, fmt.Errorf("resolve allowed operations for %q: %w", name, err)
 	}
 	staticAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 

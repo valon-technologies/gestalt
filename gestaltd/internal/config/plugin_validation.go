@@ -19,10 +19,11 @@ func PluginValidationEntry(entry *ProviderEntry) *pluginservice.ValidationPlugin
 	if entry == nil {
 		return nil
 	}
+	allowedOperations, _ := entry.EffectiveAllowedOperations()
 	return &pluginservice.ValidationPlugin{
 		Manifest:                    entry.ResolvedManifest,
 		ManifestPath:                entry.ResolvedManifestPath,
-		AllowedOperations:           entry.AllowedOperations,
+		AllowedOperations:           allowedOperations,
 		Invokes:                     pluginInvocationDependencies(entry.Invokes),
 		SurfaceURLOverrides:         pluginSurfaceURLOverrides(entry),
 		EffectiveCatalog:            entry.ResolvedCatalog,

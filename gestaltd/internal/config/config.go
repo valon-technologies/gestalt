@@ -496,18 +496,20 @@ type ProviderEntry struct {
 	Dev                 *ProviderEntryDevConfig `yaml:"dev,omitempty"`
 
 	// Plugin-specific runtime fields populated from the canonical ui object.
-	MountPath         string                        `yaml:"-"`
-	UI                string                        `yaml:"-"`
-	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
-	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
-	Invokes           []PluginInvocationDependency  `yaml:"invokes,omitempty"`
-	Capabilities      *PluginCapabilitiesConfig     `yaml:"capabilities,omitempty"`
-	IndexedDB         *HostIndexedDBBindingConfig   `yaml:"indexeddb,omitempty"`
-	Cache             []string                      `yaml:"cache,omitempty"`
-	S3                []string                      `yaml:"s3,omitempty"`
-	Runtime           *RuntimePlacementConfig       `yaml:"runtime,omitempty"`
-	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
-	MCP               bool                          `yaml:"mcp,omitempty"`
+	MountPath           string                        `yaml:"-"`
+	UI                  string                        `yaml:"-"`
+	Connections         map[string]*ConnectionDef     `yaml:"connections,omitempty"`
+	AllowedOperations   map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
+	AllowedOperationSet string                        `yaml:"allowedOperationSet,omitempty"`
+	DefaultAllowedRoles []string                      `yaml:"defaultAllowedRoles,omitempty"`
+	Invokes             []PluginInvocationDependency  `yaml:"invokes,omitempty"`
+	Capabilities        *PluginCapabilitiesConfig     `yaml:"capabilities,omitempty"`
+	IndexedDB           *HostIndexedDBBindingConfig   `yaml:"indexeddb,omitempty"`
+	Cache               []string                      `yaml:"cache,omitempty"`
+	S3                  []string                      `yaml:"s3,omitempty"`
+	Runtime             *RuntimePlacementConfig       `yaml:"runtime,omitempty"`
+	Surfaces            *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
+	MCP                 bool                          `yaml:"mcp,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
 	Command                    string                                `yaml:"-"`
@@ -1668,6 +1670,70 @@ func (e *ProviderEntry) ManifestSpec() *providermanifestv1.Spec {
 		return nil
 	}
 	return e.ResolvedManifest.Spec
+}
+
+func (e *ProviderEntry) EffectiveAllowedOperations() (map[string]*OperationOverride, error) {
+	if e == nil {
+		return nil, nil
+	}
+	spec := e.ManifestSpec()
+	allowed := e.AllowedOperations
+	switch {
+	case allowed != nil:
+		allowed = cloneOperationOverrides(allowed)
+	case strings.TrimSpace(e.AllowedOperationSet) != "":
+		if spec == nil {
+			return nil, fmt.Errorf("allowedOperationSet %q requires a resolved provider manifest", e.AllowedOperationSet)
+		}
+		operationSet, ok := spec.OperationSets[strings.TrimSpace(e.AllowedOperationSet)]
+		if !ok || operationSet == nil {
+			return nil, fmt.Errorf("allowedOperationSet %q is not defined by the provider manifest", e.AllowedOperationSet)
+		}
+		allowed = cloneOperationOverrides(operationSet.Operations)
+	case spec != nil && spec.OperationSets != nil && spec.OperationSets["default"] != nil:
+		allowed = cloneOperationOverrides(spec.OperationSets["default"].Operations)
+	case spec != nil:
+		allowed = cloneOperationOverrides(spec.AllowedOperations)
+	}
+	if len(e.DefaultAllowedRoles) > 0 {
+		allowed = applyDefaultAllowedRoles(allowed, e.DefaultAllowedRoles)
+	}
+	return allowed, nil
+}
+
+func cloneOperationOverrides(src map[string]*OperationOverride) map[string]*OperationOverride {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]*OperationOverride, len(src))
+	for name, override := range src {
+		if override == nil {
+			dst[name] = nil
+			continue
+		}
+		clone := *override
+		clone.AllowedRoles = slices.Clone(override.AllowedRoles)
+		clone.Tags = slices.Clone(override.Tags)
+		dst[name] = &clone
+	}
+	return dst
+}
+
+func applyDefaultAllowedRoles(allowed map[string]*OperationOverride, roles []string) map[string]*OperationOverride {
+	if allowed == nil {
+		return nil
+	}
+	defaultRoles := trimStringSlice(roles)
+	for name, override := range allowed {
+		if override == nil {
+			override = &OperationOverride{}
+			allowed[name] = override
+		}
+		if override.AllowedRoles == nil {
+			override.AllowedRoles = slices.Clone(defaultRoles)
+		}
+	}
+	return allowed
 }
 
 func (e *ProviderEntry) EffectiveHTTPSecuritySchemes() map[string]*HTTPSecurityScheme {

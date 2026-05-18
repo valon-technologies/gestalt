@@ -3244,21 +3244,29 @@ func catalogFromStaticOperationIDs(ids []string, available bool) *catalog.Catalo
 
 func staticCatalogInputFingerprint(entry *config.ProviderEntry) (string, error) {
 	type input struct {
-		AllowedOperations map[string]*config.OperationOverride `json:"allowedOperations,omitempty"`
-		GraphQLSurfaceURL string                               `json:"graphqlSurfaceUrl,omitempty"`
-		MCPSurfaceURL     string                               `json:"mcpSurfaceUrl,omitempty"`
+		AllowedOperations   map[string]*config.OperationOverride `json:"allowedOperations,omitempty"`
+		AllowedOperationSet string                               `json:"allowedOperationSet,omitempty"`
+		DefaultAllowedRoles []string                             `json:"defaultAllowedRoles,omitempty"`
+		GraphQLSurfaceURL   string                               `json:"graphqlSurfaceUrl,omitempty"`
+		MCPSurfaceURL       string                               `json:"mcpSurfaceUrl,omitempty"`
 	}
 	var allowed map[string]*config.OperationOverride
+	var allowedOperationSet string
+	var defaultAllowedRoles []string
 	var graphQLURL, mcpURL string
 	if entry != nil {
 		allowed = entry.AllowedOperations
+		allowedOperationSet = entry.AllowedOperationSet
+		defaultAllowedRoles = entry.DefaultAllowedRoles
 		graphQLURL = config.ProviderSurfaceURLOverride(entry, config.SpecSurfaceGraphQL)
 		mcpURL = config.ProviderSurfaceURLOverride(entry, config.SpecSurfaceMCP)
 	}
 	payload, err := json.Marshal(input{
-		AllowedOperations: allowed,
-		GraphQLSurfaceURL: graphQLURL,
-		MCPSurfaceURL:     mcpURL,
+		AllowedOperations:   allowed,
+		AllowedOperationSet: allowedOperationSet,
+		DefaultAllowedRoles: defaultAllowedRoles,
+		GraphQLSurfaceURL:   graphQLURL,
+		MCPSurfaceURL:       mcpURL,
 	})
 	if err != nil {
 		return "", err

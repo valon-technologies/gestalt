@@ -45,6 +45,84 @@ func withDefaultConfigAPIVersion(content string) string {
 	return "\napiVersion: " + ConfigAPIVersion + "\n" + strings.TrimLeft(content, "\r\n")
 }
 
+func TestProviderEntryEffectiveAllowedOperationsUsesOperationSetDefaultRoles(t *testing.T) {
+	t.Parallel()
+
+	entry := &ProviderEntry{
+		AllowedOperationSet: "default",
+		DefaultAllowedRoles: []string{"user"},
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				OperationSets: map[string]*providermanifestv1.ManifestOperationSet{
+					"default": {
+						Operations: map[string]*providermanifestv1.ManifestOperationOverride{
+							"Companies.List": {},
+							"Employees.Get":  {AllowedRoles: []string{"admin"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	allowed, err := entry.EffectiveAllowedOperations()
+	if err != nil {
+		t.Fatalf("EffectiveAllowedOperations() error = %v", err)
+	}
+	if got, want := allowed["Companies.List"].AllowedRoles, []string{"user"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Companies.List AllowedRoles = %#v, want %#v", got, want)
+	}
+	if got, want := allowed["Employees.Get"].AllowedRoles, []string{"admin"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Employees.Get AllowedRoles = %#v, want %#v", got, want)
+	}
+}
+
+func TestProviderEntryEffectiveAllowedOperationsFallsBackToDefaultOperationSet(t *testing.T) {
+	t.Parallel()
+
+	entry := &ProviderEntry{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				OperationSets: map[string]*providermanifestv1.ManifestOperationSet{
+					"default": {
+						Operations: map[string]*providermanifestv1.ManifestOperationOverride{
+							"Companies.List": {Description: "List companies"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	allowed, err := entry.EffectiveAllowedOperations()
+	if err != nil {
+		t.Fatalf("EffectiveAllowedOperations() error = %v", err)
+	}
+	if got, want := allowed["Companies.List"].Description, "List companies"; got != want {
+		t.Fatalf("Companies.List Description = %q, want %q", got, want)
+	}
+}
+
+func TestProviderEntryEffectiveAllowedOperationsRejectsUnknownSet(t *testing.T) {
+	t.Parallel()
+
+	entry := &ProviderEntry{
+		AllowedOperationSet: "restricted",
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				OperationSets: map[string]*providermanifestv1.ManifestOperationSet{
+					"default": {Operations: map[string]*providermanifestv1.ManifestOperationOverride{}},
+				},
+			},
+		},
+	}
+
+	_, err := entry.EffectiveAllowedOperations()
+	if err == nil || !strings.Contains(err.Error(), `allowedOperationSet "restricted"`) {
+		t.Fatalf("EffectiveAllowedOperations() error = %v, want unknown set error", err)
+	}
+}
+
 func TestValidateStructureRejectsPlatformOAuth2RefreshToken(t *testing.T) {
 	t.Parallel()
 
