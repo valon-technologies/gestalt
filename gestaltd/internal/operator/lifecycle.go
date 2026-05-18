@@ -116,6 +116,28 @@ type StatePaths struct {
 	PluginScope  []string
 }
 
+type SyncOptions struct {
+	Parallelism int
+}
+
+func DefaultSyncParallelism() int {
+	parallelism := runtime.GOMAXPROCS(0)
+	if parallelism > 4 {
+		parallelism = 4
+	}
+	if parallelism < 1 {
+		parallelism = 1
+	}
+	return parallelism
+}
+
+func normalizeSyncOptions(opts SyncOptions) SyncOptions {
+	if opts.Parallelism == 0 {
+		opts.Parallelism = DefaultSyncParallelism()
+	}
+	return opts
+}
+
 type artifactMode int
 
 const (
@@ -252,11 +274,19 @@ func (l *Lifecycle) CheckLockAtPathsWithStatePaths(configPaths []string, state S
 }
 
 func (l *Lifecycle) SyncAtPathsWithStatePaths(configPaths []string, state StatePaths) error {
-	return l.syncAtPathsWithStatePaths(configPaths, state, artifactModeMaterialize)
+	return l.SyncAtPathsWithStatePathsOptions(configPaths, state, SyncOptions{})
 }
 
 func (l *Lifecycle) CheckSyncAtPathsWithStatePaths(configPaths []string, state StatePaths) error {
-	return l.syncAtPathsWithStatePaths(configPaths, state, artifactModeCheck)
+	return l.CheckSyncAtPathsWithStatePathsOptions(configPaths, state, SyncOptions{})
+}
+
+func (l *Lifecycle) SyncAtPathsWithStatePathsOptions(configPaths []string, state StatePaths, opts SyncOptions) error {
+	return l.syncAtPathsWithStatePaths(configPaths, state, artifactModeMaterialize, opts)
+}
+
+func (l *Lifecycle) CheckSyncAtPathsWithStatePathsOptions(configPaths []string, state StatePaths, opts SyncOptions) error {
+	return l.syncAtPathsWithStatePaths(configPaths, state, artifactModeCheck, opts)
 }
 
 // PrepareAtPathWithPlatforms runs preparation and additionally downloads and hashes
@@ -396,7 +426,7 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, d
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
-	if err := l.applyPreparedProviders(paths, lock, cfg, artifactModeMaterialize); err != nil {
+	if err := l.applyPreparedProviders(paths, lock, cfg, artifactModeMaterialize, SyncOptions{Parallelism: 1}); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
@@ -1028,7 +1058,7 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 	if err := config.ValidateRuntime(cfg); err != nil {
 		return nil, err
 	}
-	if err := l.applyPreparedProviders(paths, lock, cfg, artifactModeMaterialize); err != nil {
+	if err := l.applyPreparedProviders(paths, lock, cfg, artifactModeMaterialize, SyncOptions{Parallelism: 1}); err != nil {
 		return nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
@@ -1105,7 +1135,8 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 	return cfg, nil
 }
 
-func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StatePaths, mode artifactMode) error {
+func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StatePaths, mode artifactMode, opts SyncOptions) error {
+	opts = normalizeSyncOptions(opts)
 	cfg, err := loadConfigForLifecycle(configPaths, state, true)
 	if err != nil {
 		return fmt.Errorf("loading config: %v", err)
@@ -1143,7 +1174,7 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if err := config.ValidateRuntime(cfg); err != nil {
 		return err
 	}
-	if err := l.applyPreparedProviders(paths, lock, cfg, mode); err != nil {
+	if err := l.applyPreparedProviders(paths, lock, cfg, mode, opts); err != nil {
 		return err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
@@ -3460,7 +3491,7 @@ func (l *Lifecycle) lockCommittedNamedUIProviderArtifact(ctx context.Context, cf
 	return l.writeNamedUIProviderArtifact(ctx, cfg, paths, name, plugin, destDir, subject)
 }
 
-func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode) error {
+func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode, opts SyncOptions) error {
 	if !configHasProviderLoading(cfg) {
 		return nil
 	}
@@ -3516,9 +3547,30 @@ func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile,
 			}
 		}
 	}
-	for name, entry := range cfg.Providers.UI {
+	return l.applyPreparedUIProviders(paths, lock, cfg, mode, opts)
+}
+
+type preparedUIWork struct {
+	name      string
+	entry     *config.UIEntry
+	lockEntry *LockEntry
+	configMap map[string]any
+	subject   string
+	destDir   string
+	install   *preparedInstall
+}
+
+func (l *Lifecycle) applyPreparedUIProviders(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode, opts SyncOptions) error {
+	var localWork []*preparedUIWork
+	var ordered []*preparedUIWork
+	for _, name := range slices.Sorted(maps.Keys(cfg.Providers.UI)) {
+		entry := cfg.Providers.UI[name]
 		if entry == nil {
 			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return fmt.Errorf("decode ui %q config: %w", name, err)
 		}
 		var lockEntry *LockEntry
 		if lock != nil {
@@ -3526,14 +3578,117 @@ func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile,
 				lockEntry = &le
 			}
 		}
-		resolvedAssetRoot, err := l.applyConfiguredUIProvider(paths, lockEntry, &entry.ProviderEntry, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), mode)
+		work := &preparedUIWork{
+			name:      name,
+			entry:     entry,
+			lockEntry: lockEntry,
+			configMap: configMap,
+			subject:   "ui " + strconv.Quote(name),
+			destDir:   uiDestDir(paths, name),
+		}
+		ordered = append(ordered, work)
+		if localUIParallelPrepareCandidate(paths, entry, mode) {
+			localWork = append(localWork, work)
+		}
+	}
+
+	if err := l.prepareLocalUIProviders(paths, localWork, opts); err != nil {
+		return err
+	}
+
+	for _, work := range ordered {
+		if work.install != nil {
+			resolvedAssetRoot, err := bindPreparedUIInstall(&work.entry.ProviderEntry, work.subject, work.destDir, work.configMap, work.install)
+			if err != nil {
+				return err
+			}
+			work.entry.ResolvedAssetRoot = resolvedAssetRoot
+			continue
+		}
+		resolvedAssetRoot, err := l.applyConfiguredUIProvider(paths, work.lockEntry, &work.entry.ProviderEntry, work.name, work.subject, work.destDir, mode)
 		if err != nil {
 			return err
 		}
-		entry.ResolvedAssetRoot = resolvedAssetRoot
+		work.entry.ResolvedAssetRoot = resolvedAssetRoot
 	}
-
 	return nil
+}
+
+func localUIParallelPrepareCandidate(paths lifecyclePaths, entry *config.UIEntry, mode artifactMode) bool {
+	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() {
+		return false
+	}
+	if strings.TrimSpace(entry.OwnerPlugin) != "" {
+		return false
+	}
+	if pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
+		return false
+	}
+	return true
+}
+
+func (l *Lifecycle) prepareLocalUIProviders(paths lifecyclePaths, work []*preparedUIWork, opts SyncOptions) error {
+	if len(work) == 0 {
+		return nil
+	}
+	opts = normalizeSyncOptions(opts)
+	tasks := make([]pathDomainTask, 0, len(work))
+	for _, work := range work {
+		work := work
+		domains, err := localUISourcePathDomains(paths, work.name, work.entry, work.destDir)
+		if err != nil {
+			return err
+		}
+		tasks = append(tasks, pathDomainTask{
+			name:    work.name,
+			domains: domains,
+			run: func() error {
+				install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindUI, work.name, &work.entry.ProviderEntry, work.configMap, work.destDir, work.subject, artifactModeMaterialize)
+				if err != nil {
+					return err
+				}
+				work.install = install
+				return nil
+			},
+		})
+	}
+	slices.SortFunc(tasks, func(a, b pathDomainTask) int {
+		return cmp.Compare(a.name, b.name)
+	})
+	return runPathDomainTasks(tasks, opts.Parallelism)
+}
+
+func localUISourcePathDomains(paths lifecyclePaths, name string, entry *config.UIEntry, destDir string) ([]string, error) {
+	if entry == nil {
+		return nil, nil
+	}
+	normalized, err := normalizeLocalSource(entry.SourcePath())
+	if err != nil {
+		return nil, fmt.Errorf("manifest for ui %q not found at %s: %w", name, entry.SourcePath(), err)
+	}
+	domainPaths := []string{
+		normalized.sourceDir,
+		normalized.manifestPath,
+		destDir,
+	}
+	_, manifest, err := providerpkg.ReadSourceManifestFile(normalized.manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", normalized.manifestPath, err)
+	}
+	build := providerpkg.EffectiveSourceBuild(manifest)
+	if build != nil {
+		workdir := normalized.sourceDir
+		if build.Workdir != "" && build.Workdir != "." {
+			workdir = filepath.Join(normalized.sourceDir, filepath.FromSlash(build.Workdir))
+		}
+		domainPaths = append(domainPaths, workdir)
+		outputRel, _, err := providerpkg.SourceBuildOutput(manifest)
+		if err != nil {
+			return nil, err
+		}
+		domainPaths = append(domainPaths, filepath.Join(normalized.sourceDir, filepath.FromSlash(outputRel)))
+	}
+	return normalizePathDomains(domainPaths...)
 }
 
 func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths, cfg *config.Config, locked bool, bootstrapLock *Lockfile, mode artifactMode) (bool, error) {
@@ -3565,7 +3720,7 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths,
 		}
 		return false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-plugin development, use `gestaltd serve --plugin NAME` or `gestaltd serve --path PATH`; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
-	if err := l.applyPreparedProviders(paths, lock, cfg, mode); err != nil {
+	if err := l.applyPreparedProviders(paths, lock, cfg, mode, SyncOptions{Parallelism: 1}); err != nil {
 		return false, err
 	}
 	return validatedDuringPrepare, nil

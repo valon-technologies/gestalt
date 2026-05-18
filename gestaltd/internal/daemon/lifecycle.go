@@ -48,11 +48,15 @@ func lockConfigWithStatePaths(configFlags []string, state operator.StatePaths, p
 }
 
 func syncConfigWithStatePaths(configFlags []string, state operator.StatePaths, check bool) error {
+	return syncConfigWithStatePathsOptions(configFlags, state, check, operator.SyncOptions{Parallelism: 1})
+}
+
+func syncConfigWithStatePathsOptions(configFlags []string, state operator.StatePaths, check bool, opts operator.SyncOptions) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
 	if check {
-		return operatorLifecycle().CheckSyncAtPathsWithStatePaths(configPaths, state)
+		return operatorLifecycle().CheckSyncAtPathsWithStatePathsOptions(configPaths, state, opts)
 	}
-	return operatorLifecycle().SyncAtPathsWithStatePaths(configPaths, state)
+	return operatorLifecycle().SyncAtPathsWithStatePathsOptions(configPaths, state, opts)
 }
 
 func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool) (*config.Config, error) {

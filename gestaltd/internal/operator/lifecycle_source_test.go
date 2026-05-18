@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -190,6 +192,222 @@ server:
 	}
 	if got, want := filepath.ToSlash(ui.ResolvedAssetRoot), filepath.ToSlash(filepath.Join(artifactsDir, ".gestaltd", "ui", "roadmap", "dist")); got != want {
 		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, want)
+	}
+}
+
+func TestLifecycleSyncLockedPreparesIndependentLocalUIsInParallel(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("source UI build fixture uses POSIX shell")
+	}
+
+	dir := t.TempDir()
+	syncDir := filepath.Join(dir, "sync")
+	if err := os.MkdirAll(syncDir, 0o755); err != nil {
+		t.Fatalf("mkdir sync dir: %v", err)
+	}
+	alphaDir := filepath.Join(dir, "ui", "alpha")
+	betaDir := filepath.Join(dir, "ui", "beta")
+	writeBlockingSourceUITree(t, alphaDir, "github.com/acme/ui/alpha", "1.2.3", fmt.Sprintf(`#!/bin/sh
+set -eu
+touch %s/alpha.started
+i=0
+while [ ! -f %s/beta.started ]; do
+  i=$((i + 1))
+  if [ "$i" -gt 100 ]; then
+    echo "timed out waiting for beta" >&2
+    exit 42
+  fi
+  sleep 0.05
+done
+mkdir -p dist
+printf '<html>alpha</html>\n' > dist/index.html
+`, syncDir, syncDir))
+	writeBlockingSourceUITree(t, betaDir, "github.com/acme/ui/beta", "1.2.3", fmt.Sprintf(`#!/bin/sh
+set -eu
+touch %s/beta.started
+i=0
+while [ ! -f %s/alpha.started ]; do
+  i=$((i + 1))
+  if [ "$i" -gt 100 ]; then
+    echo "timed out waiting for alpha" >&2
+    exit 42
+  fi
+  sleep 0.05
+done
+mkdir -p dist
+printf '<html>beta</html>\n' > dist/index.html
+`, syncDir, syncDir))
+
+	configPath := writeLocalUITestConfig(t, dir, map[string]string{
+		"alpha": filepath.Join(alphaDir, "manifest.yaml"),
+		"beta":  filepath.Join(betaDir, "manifest.yaml"),
+	})
+	if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+	}
+	for _, name := range []string{"alpha", "beta"} {
+		if _, err := os.Stat(filepath.Join(dir, "artifacts", ".gestaltd", "ui", name, "dist", "index.html")); err != nil {
+			t.Fatalf("prepared ui %s not found: %v", name, err)
+		}
+	}
+}
+
+func TestLifecycleSyncLockedParallelismOnePreparesLocalUIsSequentially(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("source UI build fixture uses POSIX shell")
+	}
+
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "build.log")
+	alphaDir := filepath.Join(dir, "ui", "alpha")
+	betaDir := filepath.Join(dir, "ui", "beta")
+	writeBlockingSourceUITree(t, alphaDir, "github.com/acme/ui/alpha", "1.2.3", fmt.Sprintf(`#!/bin/sh
+set -eu
+printf 'alpha start\n' >> %s
+mkdir -p dist
+printf '<html>alpha</html>\n' > dist/index.html
+printf 'alpha end\n' >> %s
+`, logPath, logPath))
+	writeBlockingSourceUITree(t, betaDir, "github.com/acme/ui/beta", "1.2.3", fmt.Sprintf(`#!/bin/sh
+set -eu
+printf 'beta start\n' >> %s
+mkdir -p dist
+printf '<html>beta</html>\n' > dist/index.html
+printf 'beta end\n' >> %s
+`, logPath, logPath))
+
+	configPath := writeLocalUITestConfig(t, dir, map[string]string{
+		"alpha": filepath.Join(alphaDir, "manifest.yaml"),
+		"beta":  filepath.Join(betaDir, "manifest.yaml"),
+	})
+	if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 1}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read build log: %v", err)
+	}
+	want := "alpha start\nalpha end\nbeta start\nbeta end\n"
+	if string(data) != want {
+		t.Fatalf("build log = %q, want %q", data, want)
+	}
+}
+
+func TestLifecycleSyncLockedSerializesLocalUIsWithSharedOutput(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("source UI build fixture uses POSIX shell")
+	}
+
+	dir := t.TempDir()
+	uiDir := filepath.Join(dir, "ui", "shared")
+	if err := os.MkdirAll(uiDir, 0o755); err != nil {
+		t.Fatalf("mkdir ui dir: %v", err)
+	}
+	writeNamedBlockingSourceUIManifest(t, uiDir, "manifest-alpha.yaml", "github.com/acme/ui/alpha", "1.2.3", "build-alpha.sh")
+	writeNamedBlockingSourceUIManifest(t, uiDir, "manifest-beta.yaml", "github.com/acme/ui/beta", "1.2.3", "build-beta.sh")
+	script := `#!/bin/sh
+set -eu
+if [ -f running ]; then
+  echo overlap > overlap
+  exit 43
+fi
+touch running
+sleep 0.2
+rm running
+mkdir -p dist
+printf '<html>ok</html>\n' > dist/index.html
+`
+	if err := os.WriteFile(filepath.Join(uiDir, "build-alpha.sh"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write alpha build: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(uiDir, "build-beta.sh"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write beta build: %v", err)
+	}
+
+	configPath := writeLocalUITestConfig(t, dir, map[string]string{
+		"alpha": filepath.Join(uiDir, "manifest-alpha.yaml"),
+		"beta":  filepath.Join(uiDir, "manifest-beta.yaml"),
+	})
+	if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2}); err != nil {
+		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(uiDir, "overlap")); !os.IsNotExist(err) {
+		t.Fatalf("shared-output builds overlapped, stat overlap err=%v", err)
+	}
+}
+
+func TestLifecycleCheckSyncWithParallelismDoesNotMaterializeLocalUI(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("source UI build fixture uses POSIX shell")
+	}
+
+	dir := t.TempDir()
+	startedPath := filepath.Join(dir, "started")
+	uiDir := filepath.Join(dir, "ui", "alpha")
+	writeBlockingSourceUITree(t, uiDir, "github.com/acme/ui/alpha", "1.2.3", fmt.Sprintf(`#!/bin/sh
+set -eu
+touch %s
+mkdir -p dist
+printf '<html>alpha</html>\n' > dist/index.html
+`, startedPath))
+	configPath := writeLocalUITestConfig(t, dir, map[string]string{
+		"alpha": filepath.Join(uiDir, "manifest.yaml"),
+	})
+	err := NewLifecycle().CheckSyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2})
+	if err == nil || !strings.Contains(err.Error(), `prepared artifact`) {
+		t.Fatalf("CheckSyncAtPathsWithStatePathsOptions error = %v, want stale prepared artifact", err)
+	}
+	if _, err := os.Stat(startedPath); !os.IsNotExist(err) {
+		t.Fatalf("sync --check materialized local ui, stat started err=%v", err)
+	}
+}
+
+func TestLocalUIParallelPrepareCandidateScope(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	paths := lifecyclePaths{artifactsDir: filepath.Join(dir, "artifacts")}
+	localEntry := &config.UIEntry{
+		ProviderEntry: config.ProviderEntry{
+			Source: config.ProviderSource{Path: filepath.Join(dir, "ui", "manifest.yaml")},
+		},
+	}
+	if !localUIParallelPrepareCandidate(paths, localEntry, artifactModeMaterialize) {
+		t.Fatal("configured local source ui should be eligible")
+	}
+	if localUIParallelPrepareCandidate(paths, localEntry, artifactModeCheck) {
+		t.Fatal("check mode local source ui should not be eligible")
+	}
+	ownedEntry := &config.UIEntry{
+		ProviderEntry: localEntry.ProviderEntry,
+		OwnerPlugin:   "plugin",
+	}
+	if localUIParallelPrepareCandidate(paths, ownedEntry, artifactModeMaterialize) {
+		t.Fatal("plugin-owned ui should not be eligible")
+	}
+	preparedEntry := &config.UIEntry{
+		ProviderEntry: config.ProviderEntry{
+			Source: config.ProviderSource{Path: filepath.Join(paths.artifactsDir, ".gestaltd", "ui", "plugin", "manifest.yaml")},
+		},
+	}
+	if localUIParallelPrepareCandidate(paths, preparedEntry, artifactModeMaterialize) {
+		t.Fatal("prepared path-backed ui should not be eligible")
+	}
+	gitEntry := &config.UIEntry{
+		ProviderEntry: config.ProviderEntry{
+			Source: config.ProviderSource{Git: &config.GitSourceDef{Repo: "file:///tmp/repo", Ref: "HEAD", Path: "ui/manifest.yaml"}},
+		},
+	}
+	if localUIParallelPrepareCandidate(paths, gitEntry, artifactModeMaterialize) {
+		t.Fatal("source.git ui should not be eligible")
 	}
 }
 
@@ -1119,6 +1337,66 @@ func writeSourceUITree(t *testing.T, dir, source, version string) {
 	if err := os.WriteFile(filepath.Join(dir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
 		t.Fatalf("write ui build script: %v", err)
 	}
+}
+
+func writeBlockingSourceUITree(t *testing.T, dir, source, version, buildScript string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir source ui dir: %v", err)
+	}
+	writeNamedBlockingSourceUIManifest(t, dir, "manifest.yaml", source, version, "build.sh")
+	if err := os.WriteFile(filepath.Join(dir, "build.sh"), []byte(buildScript), 0o755); err != nil {
+		t.Fatalf("write ui build script: %v", err)
+	}
+}
+
+func writeNamedBlockingSourceUIManifest(t *testing.T, dir, manifestName, source, version, buildScript string) {
+	t.Helper()
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindUI,
+		Source:  source,
+		Version: version,
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./" + buildScript},
+			Inputs:  []string{buildScript},
+		},
+		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
+	}
+	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("encode ui manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, manifestName), data, 0o644); err != nil {
+		t.Fatalf("write ui manifest: %v", err)
+	}
+}
+
+func writeLocalUITestConfig(t *testing.T, dir string, uiManifests map[string]string) string {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("apiVersion: gestaltd.config/v5\n")
+	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
+	b.WriteString("  ui:\n")
+	for _, name := range slices.Sorted(maps.Keys(uiManifests)) {
+		b.WriteString("    " + name + ":\n")
+		b.WriteString("      source:\n")
+		b.WriteString("        path: " + filepath.ToSlash(uiManifests[name]) + "\n")
+		b.WriteString("      path: /" + name + "\n")
+	}
+	b.WriteString("server:\n")
+	b.WriteString("  providers:\n")
+	b.WriteString("    indexeddb: sqlite\n")
+	b.WriteString("  artifactsDir: " + filepath.ToSlash(filepath.Join(dir, "artifacts")) + "\n")
+	b.WriteString("  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	if err := os.WriteFile(configPath, []byte(b.String()), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if _, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
+		t.Fatalf("write lockfile: %v", err)
+	}
+	return configPath
 }
 
 func runGitTestCommand(t *testing.T, dir string, args ...string) {
