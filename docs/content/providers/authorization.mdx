@@ -72,6 +72,37 @@ If static and dynamic grants both match the same subject and resource, static
 wins. For example, if config grants Alice `admin` on the admin policy, Gestalt
 does not ask the provider for Alice's admin role.
 
+## Grant Dynamic Plugin Access
+
+Use the `gestalt authorization` CLI to grant plugin access after the server is
+running. Built-in Gestalt admins can manage every plugin. Plugin admins can
+manage members for plugins they administer.
+
+```sh
+gestalt authorization plugins list
+gestalt authorization plugins members list github
+
+gestalt authorization plugins members set github \
+  --email operator@example.com \
+  --role viewer
+
+gestalt authorization plugins members set github \
+  --subject-id service_account:release-bot \
+  --role editor
+```
+
+Create service account subjects first, then grant those subjects plugin roles:
+
+```sh
+gestalt authorization subjects create release-bot \
+  --display-name "Release Bot"
+gestalt authorization subjects grants set service_account:release-bot github \
+  --role viewer
+```
+
+Deployments that split public and management listeners may need `--url` set to
+the management base URL for these admin commands.
+
 ## Where Gestalt Uses Authorization
 
 Gestalt checks authorization before serving protected surfaces:
