@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"net/mail"
-	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -141,8 +140,8 @@ func adminAuthorizationPluginMemberRoutePlugin(r *http.Request) (string, bool) {
 	default:
 		return "", false
 	}
-	plugin, err := url.PathUnescape(pluginSegment)
-	if err != nil || strings.TrimSpace(plugin) == "" {
+	plugin := strings.TrimSpace(pluginSegment)
+	if plugin == "" {
 		return "", false
 	}
 	return plugin, true

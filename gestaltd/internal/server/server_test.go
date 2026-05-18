@@ -4278,6 +4278,8 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	pluginDefs := map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
 		"other_plugin":  {AuthorizationPolicy: "other_policy"},
+		"a/b":           {AuthorizationPolicy: "slash_policy"},
+		"a%2Fb":         {AuthorizationPolicy: "escaped_policy"},
 	}
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -4290,6 +4292,10 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 			},
 			"sample_policy": {Default: "deny"},
 			"other_policy":  {Default: "deny"},
+			"slash_policy":  {Default: "deny"},
+			"escaped_policy": {
+				Default: "deny",
+			},
 		},
 	}, pluginDefs)
 
@@ -4298,6 +4304,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
 	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-admin@example.test", "admin")
 	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-viewer@example.test", "viewer")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "a/b", "slash-plugin-admin@example.test", "admin")
 	dynamicUser := seedUser(t, svc, "dynamic@example.test")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -4315,6 +4322,8 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 					return &core.UserIdentity{Email: "plugin-admin@example.test"}, nil
 				case "plugin-viewer-session":
 					return &core.UserIdentity{Email: "plugin-viewer@example.test"}, nil
+				case "slash-plugin-admin-session":
+					return &core.UserIdentity{Email: "slash-plugin-admin@example.test"}, nil
 				default:
 					return nil, fmt.Errorf("invalid token")
 				}
@@ -4386,8 +4395,8 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&plugins); err != nil {
 		t.Fatalf("decoding plugins: %v", err)
 	}
-	if len(plugins) != 2 || plugins[0]["name"] != "other_plugin" || plugins[1]["name"] != "sample_plugin" {
-		t.Fatalf("plugins = %+v, want other_plugin and sample_plugin", plugins)
+	if len(plugins) != 4 || plugins[0]["name"] != "a%2Fb" || plugins[1]["name"] != "a/b" || plugins[2]["name"] != "other_plugin" || plugins[3]["name"] != "sample_plugin" {
+		t.Fatalf("plugins = %+v, want escaped, slash, other_plugin, and sample_plugin", plugins)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
@@ -4435,6 +4444,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	}{
 		{name: "plugin admin cannot manage other plugin", session: "plugin-admin-session", path: "/admin/api/v1/authorization/plugins/other_plugin/members"},
 		{name: "plugin viewer cannot manage plugin", session: "plugin-viewer-session", path: "/admin/api/v1/authorization/plugins/sample_plugin/members"},
+		{name: "escaped plugin key is authorized literally", session: "slash-plugin-admin-session", path: "/admin/api/v1/authorization/plugins/a%2Fb/members"},
 		{name: "plugin admin cannot manage gestaltd admins", session: "plugin-admin-session", path: "/admin/api/v1/authorization/admins/members"},
 	} {
 		req, _ = http.NewRequest(http.MethodGet, ts.URL+tc.path, nil)
