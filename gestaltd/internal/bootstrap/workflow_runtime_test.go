@@ -43,14 +43,25 @@ func testWorkflowPluginTarget(pluginName, operation string) coreworkflow.Target 
 
 func testWorkflowPluginTargetWithPayload(pluginName, operation, connection, instance string, input map[string]any) coreworkflow.Target {
 	return coreworkflow.Target{
-		Plugin: &coreworkflow.PluginTarget{
-			PluginName: pluginName,
+		Steps: []coreworkflow.Step{{ID: operation, Plugin: &coreworkflow.PluginCall{
+			Name:       pluginName,
 			Operation:  operation,
 			Connection: connection,
 			Instance:   instance,
-			Input:      input,
-		},
+			Input:      testWorkflowValueObject(input),
+		}}},
 	}
+}
+
+func testWorkflowValueObject(input map[string]any) coreworkflow.Value {
+	if input == nil {
+		return coreworkflow.Value{}
+	}
+	out := make(map[string]coreworkflow.Value, len(input))
+	for key, value := range input {
+		out[key] = coreworkflow.Value{Literal: value, LiteralSet: true}
+	}
+	return coreworkflow.Value{Object: out}
 }
 
 func (f funcInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
@@ -131,52 +142,52 @@ func cloneRuntimeExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflo
 }
 
 func cloneRuntimeTarget(target coreworkflow.Target) coreworkflow.Target {
-	clone := coreworkflow.Target{}
-	if target.Plugin != nil {
-		plugin := *target.Plugin
-		plugin.Input = cloneMapAny(plugin.Input)
-		clone.Plugin = &plugin
-	}
-	if target.Agent != nil {
-		agent := *target.Agent
-		agent.Messages = slices.Clone(agent.Messages)
-		agent.ToolRefs = slices.Clone(agent.ToolRefs)
-		agent.ResponseSchema = cloneMapAny(agent.ResponseSchema)
-		agent.ModelOptions = cloneMapAny(agent.ModelOptions)
-		agent.Metadata = cloneMapAny(agent.Metadata)
-		agent.Steps = slices.Clone(agent.Steps)
-		for i := range agent.Steps {
-			agent.Steps[i].Messages = slices.Clone(agent.Steps[i].Messages)
-			agent.Steps[i].ToolRefs = slices.Clone(agent.Steps[i].ToolRefs)
-			agent.Steps[i].ResponseSchema = cloneMapAny(agent.Steps[i].ResponseSchema)
-			agent.Steps[i].ModelOptions = cloneMapAny(agent.Steps[i].ModelOptions)
-			agent.Steps[i].Metadata = cloneMapAny(agent.Steps[i].Metadata)
-			if agent.Steps[i].OutputDelivery != nil {
-				delivery := *agent.Steps[i].OutputDelivery
-				delivery.Target.Input = cloneMapAny(delivery.Target.Input)
-				delivery.InputBindings = slices.Clone(delivery.InputBindings)
-				agent.Steps[i].OutputDelivery = &delivery
+	clone := coreworkflow.Target{Steps: slices.Clone(target.Steps)}
+	for i := range clone.Steps {
+		step := &clone.Steps[i]
+		step.Inputs = cloneWorkflowValues(step.Inputs)
+		if step.Plugin != nil {
+			plugin := *step.Plugin
+			plugin.Input = coreworkflow.CloneValue(step.Plugin.Input)
+			step.Plugin = &plugin
+		}
+		if step.Agent != nil {
+			agent := *step.Agent
+			agent.Prompt = cloneWorkflowText(agent.Prompt)
+			agent.Messages = slices.Clone(agent.Messages)
+			for j := range agent.Messages {
+				agent.Messages[j].Text = cloneWorkflowText(agent.Messages[j].Text)
+				agent.Messages[j].Metadata = cloneMapAny(agent.Messages[j].Metadata)
 			}
-			if agent.Steps[i].When != nil {
-				when := *agent.Steps[i].When
-				agent.Steps[i].When = &when
-			}
+			agent.ToolRefs = slices.Clone(agent.ToolRefs)
+			agent.ResponseSchema = cloneMapAny(agent.ResponseSchema)
+			agent.ModelOptions = cloneMapAny(agent.ModelOptions)
+			step.Agent = &agent
 		}
-		if agent.OutputDelivery != nil {
-			delivery := *agent.OutputDelivery
-			delivery.Target.Input = cloneMapAny(delivery.Target.Input)
-			delivery.InputBindings = slices.Clone(delivery.InputBindings)
-			agent.OutputDelivery = &delivery
+		if step.When != nil {
+			when := *step.When
+			when.Value = coreworkflow.CloneValue(step.When.Value)
+			step.When = &when
 		}
-		if agent.SessionReadyDelivery != nil {
-			delivery := *agent.SessionReadyDelivery
-			delivery.Target.Input = cloneMapAny(delivery.Target.Input)
-			delivery.InputBindings = slices.Clone(delivery.InputBindings)
-			agent.SessionReadyDelivery = &delivery
-		}
-		clone.Agent = &agent
+		step.OutputDelivery = coreworkflow.CloneStepDelivery(step.OutputDelivery)
+		step.Metadata = cloneMapAny(step.Metadata)
 	}
 	return clone
+}
+
+func cloneWorkflowValues(values map[string]coreworkflow.Value) map[string]coreworkflow.Value {
+	if values == nil {
+		return nil
+	}
+	out := make(map[string]coreworkflow.Value, len(values))
+	for key, value := range values {
+		out[key] = coreworkflow.CloneValue(value)
+	}
+	return out
+}
+
+func cloneWorkflowText(value coreworkflow.Text) coreworkflow.Text {
+	return coreworkflow.Text{Template: value.Template}
 }
 
 func cloneMapAny(value map[string]any) map[string]any {
@@ -213,7 +224,7 @@ type workflowRuntimeAgentManagerStub struct {
 	createSessionRequests           []coreagent.ManagerCreateSessionRequest
 	createSessionDeadlines          []time.Duration
 	createTurnRequests              []coreagent.ManagerCreateTurnRequest
-	createTurnInheritedDeliveries   []*coreworkflow.OutputDelivery
+	createTurnInheritedDeliveries   []*coreworkflow.StepDelivery
 	createTurnDeadlines             []time.Duration
 	createTurnProviderCallDeadlines []time.Duration
 	getTurnDeadlines                []time.Duration
@@ -492,7 +503,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if resp.Status != http.StatusAccepted || resp.Body != `{"ok":true}` {
+	if resp.Status != http.StatusOK || !strings.Contains(resp.Body, `"finalStepId":"sync"`) {
 		t.Fatalf("response = %#v", resp)
 	}
 	if gotPrincipal == nil || gotPrincipal.SubjectID != "system:config" {
@@ -507,11 +518,11 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if gotProvider != "roadmap" {
 		t.Fatalf("provider = %q, want %q", gotProvider, "roadmap")
 	}
-	if gotInstance != "" {
-		t.Fatalf("instance = %q, want empty instance for non-user invocations", gotInstance)
+	if gotInstance != "tenant-a" {
+		t.Fatalf("instance = %q, want tenant-a", gotInstance)
 	}
-	if gotConnection != "" {
-		t.Fatalf("connection = %q, want empty connection for non-user invocations", gotConnection)
+	if gotConnection != "analytics" {
+		t.Fatalf("connection = %q, want analytics", gotConnection)
 	}
 	if gotOperation != "sync" {
 		t.Fatalf("operation = %q, want %q", gotOperation, "sync")
@@ -543,22 +554,16 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 		t.Fatalf("workflow createdBy = %#v", roundTripProvider.workflowContext["createdBy"])
 	}
 	target, ok := roundTripProvider.workflowContext["target"].(map[string]any)
-	if !ok || target["kind"] != "plugin" {
+	if !ok || target["kind"] != "steps" {
 		t.Fatalf("workflow target = %#v", roundTripProvider.workflowContext["target"])
 	}
-	plugin, ok := target["plugin"].(map[string]any)
-	if !ok || plugin["pluginName"] != "roadmap" || plugin["operation"] != "sync" {
-		t.Fatalf("workflow target plugin = %#v", target["plugin"])
+	steps, ok := target["steps"].([]any)
+	if !ok || len(steps) != 1 {
+		t.Fatalf("workflow target steps = %#v", target["steps"])
 	}
-	if got := plugin["connection"]; got != "analytics" {
-		t.Fatalf("workflow target connection = %#v, want %q", got, "analytics")
-	}
-	if got := plugin["instance"]; got != "tenant-a" {
-		t.Fatalf("workflow target instance = %#v, want %q", got, "tenant-a")
-	}
-	pluginInput, ok := plugin["input"].(map[string]any)
-	if !ok || pluginInput["mode"] != "full" || pluginInput["source"] != "scheduled" {
-		t.Fatalf("workflow target input = %#v", plugin["input"])
+	step, ok := steps[0].(map[string]any)
+	if !ok || step["kind"] != "plugin" || step["plugin"] != "roadmap" || step["operation"] != "sync" {
+		t.Fatalf("workflow target step = %#v", steps[0])
 	}
 	trigger, ok := roundTripProvider.workflowContext["trigger"].(map[string]any)
 	if !ok || trigger["kind"] != "schedule" || trigger["scheduleId"] != "sched-1" {
@@ -588,7 +593,7 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	if !ok {
 		t.Fatalf("workflow signal agent_request = %#v", signalPayload["agent_request"])
 	}
-	if prompt, _ := agentRequest["user_prompt"].(string); !strings.Contains(prompt, "please inspect") || len(prompt) > workflowSignalContextMaxStringBytes {
+	if prompt, _ := agentRequest["user_prompt"].(string); !strings.Contains(prompt, "please inspect") {
 		t.Fatalf("workflow signal user_prompt = %q", prompt)
 	}
 	webhookPolicy, ok := signalPayload["webhook_policy"].(map[string]any)
@@ -611,6 +616,68 @@ func TestWorkflowRuntimeInvokeMergesConfiguredAndPerRunInput(t *testing.T) {
 	}
 	if checkRun["name"] != "CI" {
 		t.Fatalf("workflow signal check_run.name = %#v", checkRun["name"])
+	}
+}
+
+func TestWorkflowRuntimeInvokeRejectsUnresolvedPluginInput(t *testing.T) {
+	t.Parallel()
+
+	runtime := &workflowRuntime{}
+	invoked := false
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+			invoked = true
+			return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+		},
+	})
+	p := principal.Canonicalize(&principal.Principal{SubjectID: principal.UserSubjectID("ada")})
+
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-missing-plugin-input",
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID: "reply",
+			Plugin: &coreworkflow.PluginCall{
+				Name:      "notification",
+				Operation: "reply",
+				Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+					"reply_ref": {SignalPayload: "reply_ref"},
+				}},
+			},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if invoked {
+		t.Fatal("plugin was invoked with unresolved input")
+	}
+	if resp.Status != http.StatusInternalServerError || !strings.Contains(resp.Body, "workflow step plugin input did not resolve") {
+		t.Fatalf("response = %#v, want unresolved plugin input failure", resp)
+	}
+}
+
+func TestWorkflowStepIdempotencyKeyIncludesSignalIdentity(t *testing.T) {
+	t.Parallel()
+
+	first := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		RunID:        "run-1",
+		Signals: []coreworkflow.Signal{{
+			ID: "signal-1",
+		}},
+	}
+	second := first
+	second.Signals = []coreworkflow.Signal{{ID: "signal-2"}}
+
+	firstKey := workflowStepIdempotencyKey(first, workflowStepInvocationScope(first), "diagnosis", "agent-turn")
+	secondKey := workflowStepIdempotencyKey(second, workflowStepInvocationScope(second), "diagnosis", "agent-turn")
+	if firstKey == secondKey {
+		t.Fatalf("signal-scoped idempotency keys matched: %q", firstKey)
+	}
+	want := "workflow:temporal:run-1:invocation:signal-id:signal-1:step:diagnosis:agent-turn"
+	if firstKey != want {
+		t.Fatalf("first key = %q, want %q", firstKey, want)
 	}
 }
 
@@ -650,13 +717,16 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	req := coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		RunID:        "run-agent-123",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName:   "managed",
-			Model:          "deep",
-			Prompt:         "Send the status summary",
-			ToolRefs:       []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
-			TimeoutSeconds: 5,
-		}},
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID:             "agent",
+			TimeoutSeconds: 60,
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "managed",
+				Model:        "deep",
+				Prompt:       coreworkflow.Text{Template: "Send the status summary"},
+				ToolRefs:     []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
+			},
+		}}},
 		Trigger: coreworkflow.RunTrigger{Manual: true},
 		Signals: []coreworkflow.Signal{{
 			ID:       "signal-agent-1",
@@ -692,38 +762,32 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+	if resp.Status != http.StatusOK {
 		t.Fatalf("response = %#v", resp)
 	}
 	if len(agentProvider.createSessionRequests) != 1 {
 		t.Fatalf("session requests = %d, want 1", len(agentProvider.createSessionRequests))
 	}
-	if got := agentProvider.createSessionRequests[0].IdempotencyKey; got != "workflow:temporal:run-agent-123:session" {
+	if got := agentProvider.createSessionRequests[0].IdempotencyKey; got != "workflow:temporal:run-agent-123:invocation:signal-id:signal-agent-1:step:agent:agent-session:agent" {
 		t.Fatalf("session idempotency key = %q", got)
 	}
 	if len(agentProvider.createTurnRequests) != 1 {
 		t.Fatalf("turn requests = %d, want 1", len(agentProvider.createTurnRequests))
 	}
 	turnReq := agentProvider.createTurnRequests[0]
-	if got := turnReq.IdempotencyKey; !strings.HasPrefix(got, "workflow:temporal:run-agent-123:turn:signal-batch-") {
-		t.Fatalf("turn idempotency key = %q, want workflow signal batch prefix", got)
+	if got := turnReq.IdempotencyKey; got != "workflow:temporal:run-agent-123:invocation:signal-id:signal-agent-1:step:agent:agent-turn" {
+		t.Fatalf("turn idempotency key = %q", got)
 	}
-	if len(turnReq.Messages) != 2 || turnReq.Messages[0].Text != "Send the status summary" {
+	if len(turnReq.Messages) != 1 || turnReq.Messages[0].Text != "Send the status summary" {
 		t.Fatalf("turn messages = %#v", turnReq.Messages)
 	}
-	if !strings.Contains(turnReq.Messages[1].Text, "Review the opened pull request") {
-		t.Fatalf("signal message text = %q", turnReq.Messages[1].Text)
-	}
-	if strings.Contains(turnReq.Messages[1].Text, "_gestalt_payload_preview_json") || strings.Contains(turnReq.Messages[1].Text, "raw-webhook") {
-		t.Fatalf("signal message retained raw payload: %q", turnReq.Messages[1].Text)
-	}
-	workflowMetadata, ok := turnReq.Metadata["workflow"].(map[string]any)
+	sessionMetadata, ok := agentProvider.createSessionRequests[0].Metadata["workflow"].(map[string]any)
 	if !ok {
-		t.Fatalf("turn workflow metadata = %#v", turnReq.Metadata["workflow"])
+		t.Fatalf("session workflow metadata = %#v", agentProvider.createSessionRequests[0].Metadata["workflow"])
 	}
-	metadataSignals := workflowSignalsFromTestContext(workflowMetadata["signals"])
+	metadataSignals := workflowSignalsFromTestContext(sessionMetadata["signals"])
 	if len(metadataSignals) != 1 {
-		t.Fatalf("turn workflow signals = %#v", workflowMetadata["signals"])
+		t.Fatalf("session workflow signals = %#v", sessionMetadata["signals"])
 	}
 	metadataPayload, ok := metadataSignals[0]["payload"].(map[string]any)
 	if !ok {
@@ -763,11 +827,14 @@ func TestWorkflowRuntimeInvokeAgentTargetUsesWorkflowKeyForSessionIdempotency(t 
 		Metadata: map[string]any{
 			"workflow_key": "slack:T123:C123:1778255568.567059",
 		},
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "managed",
-			Model:        "deep",
-			Prompt:       "Continue the Slack thread",
-		}},
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID: "agent",
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "managed",
+				Model:        "deep",
+				Prompt:       coreworkflow.Text{Template: "Continue the Slack thread"},
+			},
+		}}},
 		Signals: []coreworkflow.Signal{{
 			ID:             "signal-agent-2",
 			Name:           "slack.event",
@@ -783,14 +850,14 @@ func TestWorkflowRuntimeInvokeAgentTargetUsesWorkflowKeyForSessionIdempotency(t 
 	if len(agentManager.createSessionRequests) != 1 {
 		t.Fatalf("session requests = %d, want 1", len(agentManager.createSessionRequests))
 	}
-	if got, want := agentManager.createSessionRequests[0].IdempotencyKey, "workflow:temporal:workflow-key:slack:T123:C123:1778255568.567059:session"; got != want {
+	if got, want := agentManager.createSessionRequests[0].IdempotencyKey, "workflow:temporal:run-agent-thread-reply-2:invocation:signal-id:signal-agent-2:step:agent:agent-session:agent"; got != want {
 		t.Fatalf("session idempotency key = %q, want %q", got, want)
 	}
 	if len(agentManager.createTurnRequests) != 1 {
 		t.Fatalf("turn requests = %d, want 1", len(agentManager.createTurnRequests))
 	}
-	if got := agentManager.createTurnRequests[0].IdempotencyKey; !strings.HasPrefix(got, "workflow:temporal:run-agent-thread-reply-2:turn:signal-batch-") {
-		t.Fatalf("turn idempotency key = %q, want run-scoped signal batch key", got)
+	if got := agentManager.createTurnRequests[0].IdempotencyKey; got != "workflow:temporal:run-agent-thread-reply-2:invocation:signal-id:signal-agent-2:step:agent:agent-turn" {
+		t.Fatalf("turn idempotency key = %q", got)
 	}
 }
 
@@ -808,11 +875,15 @@ func TestWorkflowRuntimeInvokeAgentTargetMarksProviderCallsWithWorkflowDeadline(
 	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		RunID:        "run-agent-default-timeout",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "managed",
-			Model:        "deep",
-			Prompt:       "Send the status summary",
-		}},
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID:             "agent",
+			TimeoutSeconds: 60,
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "managed",
+				Model:        "deep",
+				Prompt:       coreworkflow.Text{Template: "Send the status summary"},
+			},
+		}}},
 	})
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
@@ -826,8 +897,8 @@ func TestWorkflowRuntimeInvokeAgentTargetMarksProviderCallsWithWorkflowDeadline(
 	if got := agentManager.createSessionDeadlines[0]; got <= runtimehost.ProviderRPCTimeout {
 		t.Fatalf("CreateSession remaining deadline = %s, want workflow deadline above provider RPC timeout %s", got, runtimehost.ProviderRPCTimeout)
 	}
-	if got := agentManager.createSessionDeadlines[0]; got > workflowAgentTimeout(0) {
-		t.Fatalf("CreateSession remaining deadline = %s, want at most workflow timeout %s", got, workflowAgentTimeout(0))
+	if got := agentManager.createSessionDeadlines[0]; got > 60*time.Second {
+		t.Fatalf("CreateSession remaining deadline = %s, want at most workflow step timeout", got)
 	}
 	if len(agentManager.createTurnDeadlines) != 1 {
 		t.Fatalf("create turn deadlines = %#v, want one", agentManager.createTurnDeadlines)
@@ -875,24 +946,27 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 	req := coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		RunID:        "run-agent-delivery-123",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "managed",
-			Prompt:       "Summarize the request",
-			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName: "notification",
-					Operation:  "reply",
-					Input:      map[string]any{"format": "plain"},
-				},
-				CredentialMode: core.ConnectionModeNone,
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-					{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
-					{InputField: "event_type", Value: coreworkflow.OutputValueSource{SignalMetadata: "event.type"}},
-					{InputField: "source", Value: coreworkflow.OutputValueSource{Literal: "workflow"}},
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID: "agent",
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "managed",
+				Prompt:       coreworkflow.Text{Template: "Summarize the request"},
+			},
+			OutputDelivery: &coreworkflow.StepDelivery{
+				Plugin: &coreworkflow.PluginCall{
+					Name:           "notification",
+					Operation:      "reply",
+					CredentialMode: core.ConnectionModeNone,
+					Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+						"format":     {Literal: "plain", LiteralSet: true},
+						"text":       {StepOutput: &coreworkflow.StepOutputSource{StepID: "agent", Path: "agent.text"}},
+						"reply_ref":  {SignalPayload: "reply_ref"},
+						"event_type": {SignalMetadata: "event.type"},
+						"source":     {Literal: "workflow", LiteralSet: true},
+					}},
 				},
 			},
-		}},
+		}}},
 		Signals: []coreworkflow.Signal{
 			{
 				ID:             "signal-1",
@@ -921,7 +995,7 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+	if resp.Status != http.StatusOK {
 		t.Fatalf("response = %#v", resp)
 	}
 	if gotProvider != "notification" || gotOperation != "reply" {
@@ -930,14 +1004,14 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 	if gotParams["format"] != "plain" || gotParams["text"] != "turn completed" || gotParams["reply_ref"] != "newer-ref" || gotParams["event_type"] != "app_mention" || gotParams["source"] != "workflow" {
 		t.Fatalf("delivery params = %#v", gotParams)
 	}
-	if !strings.HasPrefix(gotIdempotencyKey, "workflow:temporal:run-agent-delivery-123:output:signal-batch-") {
+	if gotIdempotencyKey != "workflow:temporal:run-agent-delivery-123:invocation:signal-id:signal-2:step:agent:output_delivery" {
 		t.Fatalf("delivery idempotency key = %q", gotIdempotencyKey)
 	}
 	if gotCredentialMode != core.ConnectionModeNone {
 		t.Fatalf("delivery credential mode = %q, want %q", gotCredentialMode, core.ConnectionModeNone)
 	}
 
-	req.Target.Agent.OutputDelivery.CredentialMode = ""
+	req.Target.Steps[0].OutputDelivery.Plugin.CredentialMode = ""
 	gotCredentialMode = core.ConnectionMode("unexpected")
 	resp, err = runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
 	if err != nil {
@@ -948,210 +1022,6 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 	}
 	if gotCredentialMode != "" {
 		t.Fatalf("delivery credential mode without override = %q, want empty", gotCredentialMode)
-	}
-}
-
-func TestWorkflowRuntimeInvokeAgentTargetCarriesMaterializedInheritedOutputDelivery(t *testing.T) {
-	t.Parallel()
-
-	agentManager := &workflowRuntimeAgentManagerStub{}
-	runtime := &workflowRuntime{}
-	runtime.SetAgentManager(agentManager)
-	runtime.SetInvoker(funcInvoker{
-		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
-			return &core.OperationResult{Status: http.StatusOK}, nil
-		},
-	})
-	req := coreworkflow.InvokeOperationRequest{
-		ProviderName: "temporal",
-		RunID:        "run-agent-delivery-inherit",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "managed",
-			Prompt:       "Start a child workflow if this takes a while.",
-			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName: "notification",
-					Operation:  "reply",
-					Input:      map[string]any{"format": "plain"},
-				},
-				CredentialMode: core.ConnectionModeNone,
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-					{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
-					{InputField: "event_type", Value: coreworkflow.OutputValueSource{SignalMetadata: "event.type"}},
-					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
-				},
-			},
-		}},
-		Signals: []coreworkflow.Signal{{
-			ID:       "signal-1",
-			Payload:  map[string]any{"reply_ref": "signed-parent-reply-ref"},
-			Metadata: map[string]any{"event": map[string]any{"type": "app_mention"}},
-		}},
-	}
-	p := principal.Canonicalize(&principal.Principal{SubjectID: principal.UserSubjectID("ada")})
-
-	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if resp.Status != http.StatusOK {
-		t.Fatalf("response = %#v", resp)
-	}
-	if len(agentManager.createTurnInheritedDeliveries) != 1 {
-		t.Fatalf("inherited deliveries = %d, want 1", len(agentManager.createTurnInheritedDeliveries))
-	}
-	delivery := agentManager.createTurnInheritedDeliveries[0]
-	if delivery == nil {
-		t.Fatal("inherited delivery is nil")
-	}
-	if delivery.Target.PluginName != "notification" || delivery.Target.Operation != "reply" || delivery.CredentialMode != core.ConnectionModeNone {
-		t.Fatalf("inherited delivery target = %#v", delivery)
-	}
-	if got := delivery.InputBindings[0].Value.AgentOutput; got != "text" {
-		t.Fatalf("agent output binding = %q, want text", got)
-	}
-	if got := delivery.InputBindings[1].Value.Literal; got != "signed-parent-reply-ref" {
-		t.Fatalf("reply_ref binding = %#v, want signed-parent-reply-ref", got)
-	}
-	if got := delivery.InputBindings[2].Value.Literal; got != "app_mention" {
-		t.Fatalf("event_type binding = %#v, want app_mention", got)
-	}
-	if got := delivery.InputBindings[3].Value.AgentSession; got != "id" {
-		t.Fatalf("agent session binding = %q, want id", got)
-	}
-}
-
-func TestWorkflowRuntimeInheritedOutputDeliverySkipsNilSignalValues(t *testing.T) {
-	t.Parallel()
-
-	delivery := workflowInheritedOutputDelivery(&coreworkflow.OutputDelivery{
-		Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
-		InputBindings: []coreworkflow.OutputBinding{
-			{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
-		},
-	}, &coreworkflow.Signal{Payload: map[string]any{"reply_ref": nil}})
-	if delivery != nil {
-		t.Fatalf("delivery = %#v, want nil for unmaterializable nil signal value", delivery)
-	}
-}
-
-func TestWorkflowRuntimeInvokeAgentTargetDeliversSessionReadyBeforeTurn(t *testing.T) {
-	t.Parallel()
-
-	agentManager := &workflowRuntimeAgentManagerStub{}
-	runtime := &workflowRuntime{}
-	runtime.SetAgentManager(agentManager)
-
-	var gotSessionReadyParams map[string]any
-	var gotSessionReadyIdempotencyKey string
-	var gotSessionReadyCredentialMode core.ConnectionMode
-	var gotOutputParams map[string]any
-	runtime.SetInvoker(funcInvoker{
-		invoke: func(ctx context.Context, _ *principal.Principal, providerName, _ string, operation string, params map[string]any) (*core.OperationResult, error) {
-			if providerName != "notification" {
-				t.Fatalf("delivery provider = %q, want notification", providerName)
-			}
-			switch operation {
-			case "started":
-				agentManager.events = append(agentManager.events, "session-ready-delivery")
-				gotSessionReadyParams = maps.Clone(params)
-				gotSessionReadyIdempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
-				gotSessionReadyCredentialMode = invocation.CredentialModeOverrideFromContext(ctx)
-			case "reply":
-				agentManager.events = append(agentManager.events, "output-delivery")
-				gotOutputParams = maps.Clone(params)
-			default:
-				t.Fatalf("delivery operation = %q", operation)
-			}
-			return &core.OperationResult{Status: http.StatusOK, Body: `{"delivered":true}`}, nil
-		},
-	})
-
-	req := coreworkflow.InvokeOperationRequest{
-		ProviderName: "temporal",
-		RunID:        "run-agent-session-ready-123",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "managed",
-			Model:        "deep",
-			Prompt:       "Summarize the request",
-			SessionReadyDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName: "notification",
-					Operation:  "started",
-					Input:      map[string]any{"format": "plain"},
-				},
-				CredentialMode: core.ConnectionModeNone,
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{SignalPayload: "reply_ref"}},
-					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
-					{InputField: "provider_name", Value: coreworkflow.OutputValueSource{AgentSession: "provider_name"}},
-					{InputField: "model", Value: coreworkflow.OutputValueSource{AgentSession: "model"}},
-					{InputField: "event_type", Value: coreworkflow.OutputValueSource{SignalMetadata: "event.type"}},
-				},
-			},
-			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName: "notification",
-					Operation:  "reply",
-				},
-				CredentialMode: core.ConnectionModeNone,
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
-				},
-			},
-		}},
-		Signals: []coreworkflow.Signal{
-			{
-				ID:             "signal-1",
-				IdempotencyKey: "evt-1",
-				Payload:        map[string]any{"reply_ref": "older-ref"},
-				Metadata:       map[string]any{"event": map[string]any{"type": "message"}},
-			},
-			{
-				ID:             "signal-2",
-				IdempotencyKey: "evt-2",
-				Payload:        map[string]any{"reply_ref": "newer-ref"},
-				Metadata:       map[string]any{"event": map[string]any{"type": "app_mention"}},
-			},
-		},
-	}
-	p := principal.Canonicalize(&principal.Principal{
-		SubjectID:           principal.UserSubjectID("ada"),
-		CredentialSubjectID: principal.UserSubjectID("ada"),
-		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-			Plugin:     "notification",
-			Operations: []string{"started", "reply"},
-		}}),
-	})
-
-	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
-		t.Fatalf("response = %#v", resp)
-	}
-	if !slices.Equal(agentManager.events, []string{"create-session", "session-ready-delivery", "create-turn", "output-delivery"}) {
-		t.Fatalf("events = %#v", agentManager.events)
-	}
-	if gotSessionReadyParams["format"] != "plain" ||
-		gotSessionReadyParams["reply_ref"] != "newer-ref" ||
-		gotSessionReadyParams["session_id"] != "session-1" ||
-		gotSessionReadyParams["provider_name"] != "managed" ||
-		gotSessionReadyParams["model"] != "deep" ||
-		gotSessionReadyParams["event_type"] != "app_mention" {
-		t.Fatalf("session ready params = %#v", gotSessionReadyParams)
-	}
-	if !strings.HasPrefix(gotSessionReadyIdempotencyKey, "workflow:temporal:run-agent-session-ready-123:session-ready:signal-batch-") {
-		t.Fatalf("session ready idempotency key = %q", gotSessionReadyIdempotencyKey)
-	}
-	if gotSessionReadyCredentialMode != core.ConnectionModeNone {
-		t.Fatalf("session ready credential mode = %q, want %q", gotSessionReadyCredentialMode, core.ConnectionModeNone)
-	}
-	if gotOutputParams["text"] != "turn completed" || gotOutputParams["session_id"] != "session-1" {
-		t.Fatalf("output delivery params = %#v", gotOutputParams)
 	}
 }
 
@@ -1208,57 +1078,71 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 	req := coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		RunID:        "run-agent-steps-123",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "managed",
-			Model:        "deep",
-			SessionReadyDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "started"},
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
-				},
-			},
-			Steps: []coreworkflow.AgentStep{
-				{
-					ID:             "diagnosis",
-					Prompt:         "Diagnose the Slack request.",
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{
+			{
+				ID:             "diagnosis",
+				TimeoutSeconds: 30,
+				Agent: &coreworkflow.AgentTurn{
+					ProviderName:   "managed",
+					Model:          "deep",
+					SessionKey:     "shared",
+					Prompt:         coreworkflow.Text{Template: "Diagnose the Slack request."},
 					ToolRefs:       []coreagent.ToolRef{{Plugin: "datadog", Operation: "queryLogs"}},
 					ResponseSchema: map[string]any{"type": "object"},
-					TimeoutSeconds: 30,
-					OutputDelivery: &coreworkflow.OutputDelivery{
-						Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "diagnosis_reply"},
-						InputBindings: []coreworkflow.OutputBinding{
-							{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-						},
+				},
+				OutputDelivery: &coreworkflow.StepDelivery{
+					Plugin: &coreworkflow.PluginCall{
+						Name:      "notification",
+						Operation: "diagnosis_reply",
+						Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+							"text": {StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.text"}},
+						}},
 					},
 				},
-				{
-					ID:             "pr_fix",
-					Prompt:         "Use the diagnosis to open a PR.",
-					Messages:       []coreagent.Message{{Role: "system", Text: "Keep route system instructions first."}},
-					ToolRefs:       []coreagent.ToolRef{{Plugin: "github", Operation: "createPullRequest"}},
-					TimeoutSeconds: 120,
-					When: &coreworkflow.AgentStepWhen{
-						StepID:     "diagnosis",
-						OutputPath: "structured_output.actionable_for_pr",
-						Equals:     true,
-						EqualsSet:  true,
-					},
-					OutputDelivery: &coreworkflow.OutputDelivery{
-						Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "pr_reply"},
-						InputBindings: []coreworkflow.OutputBinding{
-							{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-						},
+			},
+			{
+				ID:             "pr_fix",
+				TimeoutSeconds: 120,
+				Inputs: map[string]coreworkflow.Value{
+					"root_cause": {StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.structuredOutput.root_cause"}},
+				},
+				When: &coreworkflow.StepWhen{
+					Value:     coreworkflow.Value{StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.structuredOutput.actionable_for_pr"}},
+					Equals:    true,
+					EqualsSet: true,
+				},
+				Agent: &coreworkflow.AgentTurn{
+					ProviderName: "managed",
+					Model:        "deep",
+					SessionKey:   "shared",
+					Prompt:       coreworkflow.Text{Template: "Use the diagnosis (${inputs.root_cause}) to open a PR."},
+					Messages: []coreworkflow.AgentMessage{{
+						Role: "system",
+						Text: coreworkflow.Text{Template: "Keep route system instructions first."},
+					}},
+					ToolRefs: []coreagent.ToolRef{{Plugin: "github", Operation: "createPullRequest"}},
+				},
+				OutputDelivery: &coreworkflow.StepDelivery{
+					Plugin: &coreworkflow.PluginCall{
+						Name:      "notification",
+						Operation: "pr_reply",
+						Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+							"text": {StepOutput: &coreworkflow.StepOutputSource{StepID: "pr_fix", Path: "agent.text"}},
+						}},
 					},
 				},
-				{
-					ID:     "not_needed",
-					Prompt: "This should not run.",
-					When: &coreworkflow.AgentStepWhen{
-						StepID:     "diagnosis",
-						OutputPath: "structured_output.actionable_for_pr",
-						Equals:     false,
-						EqualsSet:  true,
-					},
+			},
+			{
+				ID: "not_needed",
+				When: &coreworkflow.StepWhen{
+					Value:     coreworkflow.Value{StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.structuredOutput.actionable_for_pr"}},
+					Equals:    false,
+					EqualsSet: true,
+				},
+				Agent: &coreworkflow.AgentTurn{
+					ProviderName: "managed",
+					Model:        "deep",
+					Prompt:       coreworkflow.Text{Template: "This should not run."},
 				},
 			},
 		}},
@@ -1277,7 +1161,7 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 	if resp.Status != http.StatusOK {
 		t.Fatalf("response status = %d, want 200", resp.Status)
 	}
-	var result workflowAgentStepsResult
+	var result workflowStepsResult
 	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
 		t.Fatalf("response body json: %v\n%s", err, resp.Body)
 	}
@@ -1293,11 +1177,16 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 	if result.Steps[2].ID != "not_needed" || result.Steps[2].Status != "skipped" || result.Steps[2].SkippedReason != "when_false" {
 		t.Fatalf("skipped step result = %#v", result.Steps[2])
 	}
-	if result.FinalOutputText != "opened PR" {
-		t.Fatalf("final output text = %q, want opened PR", result.FinalOutputText)
+	finalOutput, _ := result.FinalOutput.(map[string]any)
+	finalAgent, _ := finalOutput["agent"].(map[string]any)
+	if finalAgent["text"] != "opened PR" {
+		t.Fatalf("final output = %#v, want opened PR", result.FinalOutput)
 	}
-	if got := result.Outputs["diagnosis"].StructuredOutput["root_cause"]; got != "missing credential" {
-		t.Fatalf("diagnosis structured output = %#v", result.Outputs["diagnosis"].StructuredOutput)
+	diagnosisOutput, _ := result.Outputs["diagnosis"].(map[string]any)
+	diagnosisAgent, _ := diagnosisOutput["agent"].(map[string]any)
+	diagnosisStructured, _ := diagnosisAgent["structuredOutput"].(map[string]any)
+	if got := diagnosisStructured["root_cause"]; got != "missing credential" {
+		t.Fatalf("diagnosis structured output = %#v", diagnosisStructured)
 	}
 	if len(agentManager.createTurnRequests) != 2 {
 		t.Fatalf("turn requests = %d, want 2", len(agentManager.createTurnRequests))
@@ -1313,85 +1202,29 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 	if !firstTurn.ToolRefsSet || !secondTurn.ToolRefsSet {
 		t.Fatalf("tool refs set = %v/%v, want both true", firstTurn.ToolRefsSet, secondTurn.ToolRefsSet)
 	}
-	if got := firstTurn.IdempotencyKey; !strings.HasPrefix(got, "workflow:temporal:run-agent-steps-123:step:diagnosis:turn:signal-batch-") {
+	if got := firstTurn.IdempotencyKey; got != "workflow:temporal:run-agent-steps-123:invocation:signal-id:signal-1:step:diagnosis:agent-turn" {
 		t.Fatalf("diagnosis turn idempotency key = %q", got)
 	}
-	if got := secondTurn.IdempotencyKey; !strings.HasPrefix(got, "workflow:temporal:run-agent-steps-123:step:pr_fix:turn:signal-batch-") {
+	if got := secondTurn.IdempotencyKey; got != "workflow:temporal:run-agent-steps-123:invocation:signal-id:signal-1:step:pr_fix:agent-turn" {
 		t.Fatalf("pr_fix turn idempotency key = %q", got)
 	}
-	if len(secondTurn.Messages) < 3 || secondTurn.Messages[0].Role != "system" || secondTurn.Messages[0].Text != "Keep route system instructions first." {
+	if len(secondTurn.Messages) != 2 || secondTurn.Messages[0].Role != "system" || secondTurn.Messages[0].Text != "Keep route system instructions first." {
 		t.Fatalf("pr_fix messages = %#v", secondTurn.Messages)
 	}
-	if !strings.HasPrefix(secondTurn.Messages[1].Text, workflowAgentStepOutputsMessagePrefix) || !strings.Contains(secondTurn.Messages[1].Text, "missing credential") {
+	if !strings.Contains(secondTurn.Messages[1].Text, "missing credential") {
 		t.Fatalf("pr_fix messages = %#v", secondTurn.Messages)
 	}
-	if !slices.Equal(deliveryOperations, []string{"started", "diagnosis_reply", "pr_reply"}) {
+	if !slices.Equal(deliveryOperations, []string{"diagnosis_reply", "pr_reply"}) {
 		t.Fatalf("delivery operations = %#v", deliveryOperations)
 	}
-	if !strings.HasPrefix(deliveryIdempotencyKeys[1], "workflow:temporal:run-agent-steps-123:step:diagnosis:output:signal-batch-") ||
-		!strings.HasPrefix(deliveryIdempotencyKeys[2], "workflow:temporal:run-agent-steps-123:step:pr_fix:output:signal-batch-") {
+	if deliveryIdempotencyKeys[0] != "workflow:temporal:run-agent-steps-123:invocation:signal-id:signal-1:step:diagnosis:output_delivery" ||
+		deliveryIdempotencyKeys[1] != "workflow:temporal:run-agent-steps-123:invocation:signal-id:signal-1:step:pr_fix:output_delivery" {
 		t.Fatalf("delivery idempotency keys = %#v", deliveryIdempotencyKeys)
 	}
-	if deliveryParams[1]["text"] != "diagnosis ready" || deliveryParams[2]["text"] != "opened PR" {
+	if deliveryParams[0]["text"] != "diagnosis ready" || deliveryParams[1]["text"] != "opened PR" {
 		t.Fatalf("delivery params = %#v", deliveryParams)
 	}
-	if !slices.Equal(agentManager.events, []string{"create-session", "delivery:started", "create-turn", "delivery:diagnosis_reply", "create-turn", "delivery:pr_reply"}) {
-		t.Fatalf("events = %#v", agentManager.events)
-	}
-}
-
-func TestWorkflowRuntimeInvokeAgentTargetSessionReadyDeliveryFailureIsBestEffort(t *testing.T) {
-	t.Parallel()
-
-	agentManager := &workflowRuntimeAgentManagerStub{}
-	runtime := &workflowRuntime{}
-	runtime.SetAgentManager(agentManager)
-	runtime.SetInvoker(funcInvoker{
-		invoke: func(_ context.Context, _ *principal.Principal, _, _, operation string, _ map[string]any) (*core.OperationResult, error) {
-			switch operation {
-			case "started":
-				agentManager.events = append(agentManager.events, "session-ready-delivery")
-				return &core.OperationResult{Status: http.StatusPreconditionFailed, Body: `{"error":"missing base url"}`}, nil
-			case "reply":
-				agentManager.events = append(agentManager.events, "output-delivery")
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"delivered":true}`}, nil
-			default:
-				t.Fatalf("delivery operation = %q", operation)
-				return nil, nil
-			}
-		},
-	})
-
-	req := coreworkflow.InvokeOperationRequest{
-		ProviderName: "temporal",
-		RunID:        "run-agent-session-ready-failure",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "managed",
-			Prompt:       "Summarize the request",
-			SessionReadyDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "started"},
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
-				},
-			},
-			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-				},
-			},
-		}},
-	}
-	p := principal.Canonicalize(&principal.Principal{SubjectID: principal.UserSubjectID("ada")})
-
-	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
-	if err != nil {
-		t.Fatalf("Invoke: %v", err)
-	}
-	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
-		t.Fatalf("response = %#v", resp)
-	}
-	if !slices.Equal(agentManager.events, []string{"create-session", "session-ready-delivery", "create-turn", "output-delivery"}) {
+	if !slices.Equal(agentManager.events, []string{"create-session", "create-turn", "delivery:diagnosis_reply", "create-turn", "delivery:pr_reply"}) {
 		t.Fatalf("events = %#v", agentManager.events)
 	}
 }
@@ -1414,22 +1247,31 @@ func TestWorkflowRuntimeInvokeAgentTargetFinalOutputDeliveryFailureFailsRun(t *t
 	req := coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		RunID:        "run-agent-output-failure",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "managed",
-			Prompt:       "Summarize the request",
-			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID: "agent",
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "managed",
+				Prompt:       coreworkflow.Text{Template: "Summarize the request"},
+			},
+			OutputDelivery: &coreworkflow.StepDelivery{
+				Plugin: &coreworkflow.PluginCall{
+					Name:      "notification",
+					Operation: "reply",
+					Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+						"text": {StepOutput: &coreworkflow.StepOutputSource{StepID: "agent", Path: "agent.text"}},
+					}},
 				},
 			},
-		}},
+		}}},
 	}
 	p := principal.Canonicalize(&principal.Principal{SubjectID: principal.UserSubjectID("ada")})
 
-	_, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
-	if err == nil || !strings.Contains(err.Error(), "workflow agent output_delivery returned status 502") {
-		t.Fatalf("Invoke error = %v, want output delivery failure", err)
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusInternalServerError || !strings.Contains(resp.Body, "workflow output_delivery plugin notification.reply returned status 502") {
+		t.Fatalf("response = %#v, want output delivery failure", resp)
 	}
 }
 
@@ -1437,12 +1279,15 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalTarget(
 	t.Parallel()
 
 	target := coreworkflow.Target{
-		Agent: &coreworkflow.AgentTarget{
-			ProviderName:   "managed",
-			Model:          "deep",
-			Prompt:         "Send the status summary",
+		Steps: []coreworkflow.Step{{
+			ID:             "agent",
 			TimeoutSeconds: 5,
-		},
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "managed",
+				Model:        "deep",
+				Prompt:       coreworkflow.Text{Template: "Send the status summary"},
+			},
+		}},
 	}
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
@@ -1476,7 +1321,7 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalTarget(
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if resp.Status != http.StatusOK || resp.Body != "turn completed" {
+	if resp.Status != http.StatusOK {
 		t.Fatalf("response = %#v", resp)
 	}
 	if len(agentManager.createTurnRequests) != 1 {
@@ -1486,10 +1331,10 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalTarget(
 	if turnReq.CallerPluginName != "slack" {
 		t.Fatalf("caller plugin = %q, want slack", turnReq.CallerPluginName)
 	}
-	if !strings.HasPrefix(turnReq.IdempotencyKey, "workflow:temporal:run-agent-123:turn:signal-batch-") {
+	if turnReq.IdempotencyKey != "workflow:temporal:run-agent-123:invocation:signal-id:sig-1:step:agent:agent-turn" {
 		t.Fatalf("turn idempotency key = %q", turnReq.IdempotencyKey)
 	}
-	if len(turnReq.Messages) != 2 || turnReq.Messages[0].Text != "Send the status summary" || !strings.Contains(turnReq.Messages[1].Text, `"name": "slack.message"`) {
+	if len(turnReq.Messages) != 1 || turnReq.Messages[0].Text != "Send the status summary" {
 		t.Fatalf("turn messages = %#v", turnReq.Messages)
 	}
 }
@@ -1505,18 +1350,24 @@ func TestWorkflowRuntimeInvokeAgentTargetHandlesMissingTurn(t *testing.T) {
 		CredentialSubjectID: principal.UserSubjectID("ada"),
 	})
 
-	_, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
+	resp, err := runtime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		RunID:        "run-agent-123",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName:   "managed",
-			Model:          "deep",
-			Prompt:         "Send the status summary",
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID:             "agent",
 			TimeoutSeconds: 5,
-		}},
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "managed",
+				Model:        "deep",
+				Prompt:       coreworkflow.Text{Template: "Send the status summary"},
+			},
+		}}},
 	})
-	if err == nil || !strings.Contains(err.Error(), "workflow agent turn is missing") {
-		t.Fatalf("Invoke error = %v, want missing turn error", err)
+	if err != nil {
+		t.Fatalf("Invoke error = %v", err)
+	}
+	if resp.Status != http.StatusInternalServerError || !strings.Contains(resp.Body, "workflow agent turn is missing") {
+		t.Fatalf("Invoke response = %#v, want missing turn failure", resp)
 	}
 	if len(agentManager.cancelTurnIDs) != 0 {
 		t.Fatalf("cancel turn IDs = %#v, want none for missing turn", agentManager.cancelTurnIDs)
@@ -1544,14 +1395,15 @@ func TestWorkflowRuntimeRejectsMixedAgentPluginTargetWithExecutionRef(t *testing
 		ProviderName: "temporal",
 		ExecutionRef: "plugin-ref",
 		RunID:        "run-123",
-		Target: coreworkflow.Target{
-			Plugin: target.Plugin,
-			Agent: &coreworkflow.AgentTarget{
-				ProviderName:   "managed",
-				Prompt:         "send reminder",
-				TimeoutSeconds: 5,
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID:     "mixed",
+			Plugin: target.Steps[0].Plugin,
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "managed",
+				Prompt:       coreworkflow.Text{Template: "send reminder"},
 			},
-		},
+			TimeoutSeconds: 5,
+		}}},
 	})
 	if err == nil {
 		t.Fatal("Invoke mixed agent/plugin target succeeded, want error")
@@ -1567,7 +1419,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 		t.Fatalf("FindOrCreateUser: %v", err)
 	}
 	target := testWorkflowPluginTargetWithPayload("roadmap", "sync", "analytics", "tenant-a", map[string]any{"mode": "full"})
-	target.Plugin.CredentialMode = core.ConnectionModeNone
+	target.Steps[0].Plugin.CredentialMode = core.ConnectionModeNone
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:                  "exec-ref-123",
@@ -1619,7 +1471,7 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if resp.Status != http.StatusAccepted || resp.Body != `{"ok":true}` {
+	if resp.Status != http.StatusOK || !strings.Contains(resp.Body, `"finalStepId":"sync"`) {
 		t.Fatalf("response = %#v", resp)
 	}
 	if gotPrincipal == nil || gotPrincipal.Kind != principal.KindUser || gotPrincipal.UserID != user.ID || gotPrincipal.SubjectID != principal.UserSubjectID(user.ID) {
@@ -1924,16 +1776,16 @@ func TestWorkflowRuntimeInvokeExecutionRefRechecksAuthorizationThroughBroker(t *
 	}
 	runtime.SetInvoker(invocation.NewBroker(&providers.Providers, services.Users, services.ExternalCredentials, invocation.WithAuthorizer(authz)))
 
-	_, err = runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
+	resp, err := runtime.Invoke(context.Background(), coreworkflow.InvokeOperationRequest{
 		ProviderName: "temporal",
 		ExecutionRef: "exec-ref-denied",
 		Target:       target,
 	})
-	if err == nil {
-		t.Fatal("expected authorization error, got nil")
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
 	}
-	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
-		t.Fatalf("error = %v, want ErrAuthorizationDenied", err)
+	if resp.Status != http.StatusInternalServerError || !strings.Contains(resp.Body, "authorization denied") {
+		t.Fatalf("Invoke response = %#v, want authorization failure", resp)
 	}
 	if executed {
 		t.Fatal("expected provider execution to be skipped")
@@ -1985,14 +1837,17 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 		providers: map[string]coreworkflow.Provider{"basic": refProvider},
 	}
 
-	_, err := runtime.Invoke(ctx, coreworkflow.InvokeOperationRequest{
+	resp, err := runtime.Invoke(ctx, coreworkflow.InvokeOperationRequest{
 		ProviderName: "basic",
 		RunID:        "run-123",
 		Target:       target,
 		ExecutionRef: "exec-ref-123",
 	})
-	if !errors.Is(err, invocation.ErrScopeDenied) {
-		t.Fatalf("Invoke error = %v, want scope denied", err)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusInternalServerError || !strings.Contains(resp.Body, "scope denied") {
+		t.Fatalf("Invoke response = %#v, want scope denied failure", resp)
 	}
 	if executed {
 		t.Fatal("expected provider Execute not to run when execution-ref permissions do not allow the operation")

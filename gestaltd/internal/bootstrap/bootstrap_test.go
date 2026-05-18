@@ -59,7 +59,10 @@ import (
 
 func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
-	pluginTarget := target.Plugin
+	var pluginTarget *coreworkflow.PluginCall
+	if len(target.Steps) > 0 {
+		pluginTarget = target.Steps[0].Plugin
+	}
 	if pluginTarget == nil {
 		t.Fatalf("workflow target plugin is nil: %#v", target)
 		return ""
@@ -78,7 +81,7 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 		Target:       target,
 		SubjectID:    "system:config",
 		Permissions: []core.AccessPermission{{
-			Plugin:     pluginTarget.PluginName,
+			Plugin:     pluginTarget.Name,
 			Operations: []string{pluginTarget.Operation},
 		}},
 	})
@@ -1585,20 +1588,39 @@ func cloneBootstrapWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *c
 }
 
 func cloneBootstrapWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
-	clone := coreworkflow.Target{}
-	if target.Plugin != nil {
-		plugin := *target.Plugin
-		plugin.Input = maps.Clone(plugin.Input)
-		clone.Plugin = &plugin
-	}
-	if target.Agent != nil {
-		agent := *target.Agent
-		agent.Messages = slices.Clone(agent.Messages)
-		agent.ToolRefs = slices.Clone(agent.ToolRefs)
-		agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
-		agent.ModelOptions = maps.Clone(agent.ModelOptions)
-		agent.Metadata = maps.Clone(agent.Metadata)
-		clone.Agent = &agent
+	clone := coreworkflow.Target{Steps: make([]coreworkflow.Step, len(target.Steps))}
+	for i := range target.Steps {
+		step := target.Steps[i]
+		if step.Inputs != nil {
+			step.Inputs = make(map[string]coreworkflow.Value, len(step.Inputs))
+			for key, value := range target.Steps[i].Inputs {
+				step.Inputs[key] = coreworkflow.CloneValue(value)
+			}
+		}
+		if step.Plugin != nil {
+			plugin := *step.Plugin
+			plugin.Input = coreworkflow.CloneValue(plugin.Input)
+			step.Plugin = &plugin
+		}
+		if step.Agent != nil {
+			agent := *step.Agent
+			agent.Messages = slices.Clone(agent.Messages)
+			for j := range agent.Messages {
+				agent.Messages[j].Metadata = maps.Clone(agent.Messages[j].Metadata)
+			}
+			agent.ToolRefs = slices.Clone(agent.ToolRefs)
+			agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
+			agent.ModelOptions = maps.Clone(agent.ModelOptions)
+			step.Agent = &agent
+		}
+		if step.When != nil {
+			when := *step.When
+			when.Value = coreworkflow.CloneValue(when.Value)
+			step.When = &when
+		}
+		step.OutputDelivery = coreworkflow.CloneStepDelivery(step.OutputDelivery)
+		step.Metadata = maps.Clone(step.Metadata)
+		clone.Steps[i] = step
 	}
 	return clone
 }
@@ -1916,47 +1938,56 @@ func setWorkflowFixture(cfg *config.Config, plugin string, workflow *workflowFix
 
 func workflowFixtureTarget(plugin, operation string, input map[string]any) *config.WorkflowTargetConfig {
 	return &config.WorkflowTargetConfig{
-		Plugin: &config.WorkflowPluginTargetConfig{
-			Name:      plugin,
-			Operation: operation,
-			Input:     maps.Clone(input),
-		},
+		Steps: []config.WorkflowStepConfig{{
+			ID: operation,
+			Plugin: &config.WorkflowStepPluginCallConfig{
+				Name:      plugin,
+				Operation: operation,
+				Input:     workflowFixtureValue(input),
+			},
+		}},
 	}
 }
 
-func requireCoreWorkflowPluginTarget(t *testing.T, target coreworkflow.Target) *coreworkflow.PluginTarget {
+func workflowFixtureValue(input map[string]any) config.WorkflowValueConfig {
+	if len(input) == 0 {
+		return config.WorkflowValueConfig{}
+	}
+	fields := make(map[string]config.WorkflowValueConfig, len(input))
+	for key, value := range input {
+		fields[key] = config.WorkflowValueConfig{Literal: value, LiteralSet: true}
+	}
+	return config.WorkflowValueConfig{Object: fields}
+}
+
+func requireCoreWorkflowPluginTarget(t *testing.T, target coreworkflow.Target) *coreworkflow.PluginCall {
 	t.Helper()
-	if target.Plugin == nil {
+	if len(target.Steps) == 0 || target.Steps[0].Plugin == nil {
 		t.Fatalf("target plugin is nil: %#v", target)
 	}
-	return target.Plugin
+	return target.Steps[0].Plugin
 }
 
 func coreWorkflowPluginTarget(pluginName, operation string) coreworkflow.Target {
 	return coreworkflow.Target{
-		Plugin: &coreworkflow.PluginTarget{
-			PluginName: pluginName,
-			Operation:  operation,
-		},
+		Steps: []coreworkflow.Step{{ID: operation, Plugin: &coreworkflow.PluginCall{Name: pluginName, Operation: operation}}},
 	}
 }
 
 func protoWorkflowPluginTarget(pluginName, operation string) *proto.BoundWorkflowTarget {
 	return &proto.BoundWorkflowTarget{
-		Kind: &proto.BoundWorkflowTarget_Plugin{
-			Plugin: &proto.BoundWorkflowPluginTarget{
-				PluginName: pluginName,
-				Operation:  operation,
-			},
-		},
+		Steps: []*proto.WorkflowStep{{
+			Id:     operation,
+			Action: &proto.WorkflowStep_Plugin{Plugin: &proto.WorkflowStepPluginCall{Name: pluginName, Operation: operation}},
+		}},
 	}
 }
 
 func workflowFixtureTargetPlugin(target *config.WorkflowTargetConfig) string {
-	if target == nil || target.Plugin == nil {
+	if target == nil || len(target.Steps) == 0 || target.Steps[0].Plugin == nil {
 		return ""
 	}
-	return target.Plugin.Name
+	return target.Steps[0].Plugin.Name
 }
 
 func transportSecretRef(name string) string {
@@ -4740,10 +4771,10 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 		t.Fatalf("schedule timing = %#v", got)
 	}
 	gotPlugin := requireCoreWorkflowPluginTarget(t, got.Target)
-	if gotPlugin.PluginName != "roadmap" || gotPlugin.Operation != "sync" {
+	if gotPlugin.Name != "roadmap" || gotPlugin.Operation != "sync" {
 		t.Fatalf("target = %#v", got.Target)
 	}
-	if gotPlugin.Input["source"] != "yaml" {
+	if gotPlugin.Input.Object["source"].Literal != "yaml" {
 		t.Fatalf("target input = %#v", gotPlugin.Input)
 	}
 	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
@@ -4923,10 +4954,10 @@ func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefresh
 	}
 	_ = result.Close(context.Background())
 	existingSchedule := sharedSchedules[workflowConfigScheduleID("nightly_sync")]
-	if existingSchedule == nil || existingSchedule.Target.Plugin == nil {
+	if existingSchedule == nil || len(existingSchedule.Target.Steps) == 0 || existingSchedule.Target.Steps[0].Plugin == nil {
 		t.Fatalf("existing schedule target = %#v", existingSchedule)
 	}
-	existingSchedule.Target.Plugin.Input = map[string]any{}
+	existingSchedule.Target.Steps[0].Plugin.Input = coreworkflow.Value{Object: map[string]coreworkflow.Value{}}
 
 	cfg = workflowStartupCallbackConfig("https://example.invalid")
 	cfg.Plugins["slack"] = &config.ProviderEntry{
@@ -5070,7 +5101,7 @@ func TestBootstrapAllowsConfiguredWorkflowScheduleCredentialModeNoneForUserCrede
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Target.Plugin.CredentialMode = providermanifestv1.ConnectionModeNone
+	nightly.Target.Steps[0].Plugin.CredentialMode = providermanifestv1.ConnectionModeNone
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 
 	factories := validFactories()
@@ -5249,7 +5280,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefa
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Target.Plugin.Connection = "bot"
+	nightly.Target.Steps[0].Plugin.Connection = "bot"
 	nightly.RunAs = &config.WorkflowRunAsConfig{
 		Subject: &config.WorkflowRunAsSubjectConfig{ID: "service_account:roadmap-sync"},
 	}
@@ -5871,7 +5902,7 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
 	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	provider.executionRefs[initialExecutionRef].Target.Plugin.Input["limit"] = float64(1)
+	provider.executionRefs[initialExecutionRef].Target.Steps[0].Plugin.Input.Object["limit"] = coreworkflow.Value{Literal: float64(1), LiteralSet: true}
 	_ = result.Close(context.Background())
 
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -6320,10 +6351,10 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 		t.Fatalf("match = %#v", got.Match)
 	}
 	gotPlugin := requireCoreWorkflowPluginTarget(t, got.Target)
-	if gotPlugin.PluginName != "roadmap" || gotPlugin.Operation != "sync" {
+	if gotPlugin.Name != "roadmap" || gotPlugin.Operation != "sync" {
 		t.Fatalf("target = %#v", got.Target)
 	}
-	if gotPlugin.Input["source"] != "yaml" {
+	if gotPlugin.Input.Object["source"].Literal != "yaml" {
 		t.Fatalf("target input = %#v", gotPlugin.Input)
 	}
 	if got.RequestedBy.SubjectID != "system:config" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
@@ -6412,14 +6443,17 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 	cfg.Providers.Agent = map[string]*config.ProviderEntry{
 		"managed": {Source: config.ProviderSource{Path: "stub"}},
 	}
-	agentTarget := &config.WorkflowTargetConfig{Agent: &config.WorkflowAgentConfig{
-		Provider: "managed",
-		Prompt:   "Inspect the workflow and sync the roadmap",
-		Tools: []config.WorkflowAgentToolRef{
-			{System: coreagent.SystemToolWorkflow, Operation: "schedules.list"},
-			{Plugin: "roadmap", Operation: "sync"},
+	agentTarget := &config.WorkflowTargetConfig{Steps: []config.WorkflowStepConfig{{
+		ID: "main",
+		Agent: &config.WorkflowStepAgentConfig{
+			Provider: "managed",
+			Prompt:   config.WorkflowTextConfig{Template: "Inspect the workflow and sync the roadmap"},
+			Tools: []config.WorkflowAgentToolRef{
+				{System: coreagent.SystemToolWorkflow, Operation: "schedules.list"},
+				{Plugin: "roadmap", Operation: "sync"},
+			},
 		},
-	}}
+	}}}
 	cfg.Workflows.Schedules = map[string]config.WorkflowScheduleConfig{
 		"agent_schedule": {
 			Provider: "temporal",
@@ -6471,14 +6505,14 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 		"schedule":      recorder.upsertedSchedules[0].Target,
 		"event trigger": recorder.upsertedEventTriggers[0].Target,
 	} {
-		if target.Agent == nil || len(target.Agent.ToolRefs) != 2 {
+		if len(target.Steps) == 0 || target.Steps[0].Agent == nil || len(target.Steps[0].Agent.ToolRefs) != 2 {
 			t.Fatalf("%s target = %#v", label, target)
 		}
-		if target.Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || target.Agent.ToolRefs[0].Operation != "schedules.list" {
-			t.Fatalf("%s workflow tool ref = %#v", label, target.Agent.ToolRefs[0])
+		if target.Steps[0].Agent.ToolRefs[0].System != coreagent.SystemToolWorkflow || target.Steps[0].Agent.ToolRefs[0].Operation != "schedules.list" {
+			t.Fatalf("%s workflow tool ref = %#v", label, target.Steps[0].Agent.ToolRefs[0])
 		}
-		if target.Agent.ToolRefs[1].Plugin != "roadmap" || target.Agent.ToolRefs[1].Operation != "sync" {
-			t.Fatalf("%s plugin tool ref = %#v", label, target.Agent.ToolRefs[1])
+		if target.Steps[0].Agent.ToolRefs[1].Plugin != "roadmap" || target.Steps[0].Agent.ToolRefs[1].Operation != "sync" {
+			t.Fatalf("%s plugin tool ref = %#v", label, target.Steps[0].Agent.ToolRefs[1])
 		}
 	}
 	for _, executionRef := range []string{
@@ -7020,7 +7054,7 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
 		}
-		if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{"ok":true}` {
+		if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
 			return nil, fmt.Errorf("startup callback response = %#v", resp)
 		}
 		return &stubWorkflowProvider{}, nil
@@ -7073,7 +7107,7 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
 		}
-		if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{"ok":true}` {
+		if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
 			return nil, fmt.Errorf("startup callback response = %#v", resp)
 		}
 		return &stubWorkflowProvider{}, nil
@@ -7667,7 +7701,7 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPl
 	if err != nil {
 		t.Fatalf("invoke workflow host callback: %v", err)
 	}
-	if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{"ok":true}` {
+	if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
 		t.Fatalf("workflow host callback response = %#v", resp)
 	}
 	if got, _ := requestPath.Load().(string); got != "/sync" {
@@ -7746,7 +7780,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				if err != nil {
 					return nil, fmt.Errorf("startup callback: %w", err)
 				}
-				if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{}` {
+				if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
 					return nil, fmt.Errorf("startup callback response = %#v", resp)
 				}
 				return &stubWorkflowProvider{}, nil
@@ -7847,7 +7881,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		if err != nil {
 			return nil, fmt.Errorf("workflow runtime invoke: %w", err)
 		}
-		if resp.Status != http.StatusOK || resp.Body != `{}` {
+		if resp.Status != http.StatusOK || !strings.Contains(resp.Body, `"finalStepId":"sync"`) {
 			return nil, fmt.Errorf("startup invoke response = %#v", resp)
 		}
 		return &stubWorkflowProvider{}, nil

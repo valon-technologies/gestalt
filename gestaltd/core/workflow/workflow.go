@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"maps"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -33,82 +32,114 @@ type Actor struct {
 }
 
 type Target struct {
-	Plugin *PluginTarget
-	Agent  *AgentTarget
+	Steps []Step
 }
 
-type PluginTarget struct {
-	PluginName     string
+type Step struct {
+	ID             string
+	Inputs         map[string]Value
+	Plugin         *PluginCall
+	Agent          *AgentTurn
+	When           *StepWhen
+	TimeoutSeconds int
+	OutputDelivery *StepDelivery
+	Metadata       map[string]any
+}
+
+type PluginCall struct {
+	Name           string
 	Operation      string
 	Connection     string
 	Instance       string
 	CredentialMode core.ConnectionMode `json:",omitempty"`
-	Input          map[string]any
+	Input          Value
 }
 
-type AgentTarget struct {
-	ProviderName         string
-	Model                string
-	Prompt               string
-	Messages             []coreagent.Message
-	ToolRefs             []coreagent.ToolRef
-	ResponseSchema       map[string]any
-	ModelOptions         map[string]any
-	Metadata             map[string]any
-	TimeoutSeconds       int
-	OutputDelivery       *OutputDelivery
-	SessionReadyDelivery *OutputDelivery
-	Steps                []AgentStep
-}
-
-type AgentStep struct {
-	ID             string
-	Prompt         string
-	Messages       []coreagent.Message
+type AgentTurn struct {
+	ProviderName   string
+	Model          string
+	SessionKey     string
+	Prompt         Text
+	Messages       []AgentMessage
 	ToolRefs       []coreagent.ToolRef
 	ResponseSchema map[string]any
 	ModelOptions   map[string]any
-	Metadata       map[string]any
-	TimeoutSeconds int
-	OutputDelivery *OutputDelivery
-	When           *AgentStepWhen
 }
 
-type AgentStepWhen struct {
-	StepID     string
-	OutputPath string
-	Equals     any
-	EqualsSet  bool
+type AgentMessage struct {
+	Role     string
+	Text     Text
+	Metadata map[string]any
 }
 
-type OutputDelivery struct {
-	Target         PluginTarget
-	InputBindings  []OutputBinding
-	CredentialMode core.ConnectionMode
+type Text struct {
+	Template string
 }
 
-// CloneOutputDelivery returns a detached shallow clone of delivery.
-func CloneOutputDelivery(delivery *OutputDelivery) *OutputDelivery {
+type StepWhen struct {
+	Value     Value
+	EqualsSet bool
+	Equals    any
+}
+
+type Value struct {
+	Literal         any
+	LiteralSet      bool
+	Object          map[string]Value
+	Array           []Value
+	Template        *Text
+	RunInput        string
+	SignalPayload   string
+	SignalMetadata  string
+	WorkflowContext string
+	StepOutput      *StepOutputSource
+}
+
+type StepOutputSource struct {
+	StepID string
+	Path   string
+}
+
+type StepDelivery struct {
+	Plugin *PluginCall
+}
+
+func CloneValue(value Value) Value {
+	out := value
+	if value.Object != nil {
+		out.Object = make(map[string]Value, len(value.Object))
+		for key, child := range value.Object {
+			out.Object[key] = CloneValue(child)
+		}
+	}
+	if value.Array != nil {
+		out.Array = make([]Value, len(value.Array))
+		for i := range value.Array {
+			out.Array[i] = CloneValue(value.Array[i])
+		}
+	}
+	if value.Template != nil {
+		template := *value.Template
+		out.Template = &template
+	}
+	if value.StepOutput != nil {
+		source := *value.StepOutput
+		out.StepOutput = &source
+	}
+	return out
+}
+
+func CloneStepDelivery(delivery *StepDelivery) *StepDelivery {
 	if delivery == nil {
 		return nil
 	}
 	out := *delivery
-	out.Target.Input = maps.Clone(delivery.Target.Input)
-	out.InputBindings = append([]OutputBinding(nil), delivery.InputBindings...)
+	if delivery.Plugin != nil {
+		plugin := *delivery.Plugin
+		plugin.Input = CloneValue(delivery.Plugin.Input)
+		out.Plugin = &plugin
+	}
 	return &out
-}
-
-type OutputBinding struct {
-	InputField string
-	Value      OutputValueSource
-}
-
-type OutputValueSource struct {
-	AgentOutput    string
-	SignalPayload  string
-	SignalMetadata string
-	AgentSession   string
-	Literal        any
 }
 
 type ExecutionReference struct {
@@ -365,9 +396,6 @@ type Host interface {
 }
 
 func TargetsEqual(left, right Target) bool {
-	if (left.Agent != nil && left.Plugin != nil) || (right.Agent != nil && right.Plugin != nil) {
-		return false
-	}
 	leftJSON, leftErr := json.Marshal(normalizedTargetComparisonPayload(left))
 	if leftErr != nil {
 		return false
@@ -386,78 +414,64 @@ func TargetFingerprint(target Target) (string, error) {
 }
 
 type targetComparisonPayload struct {
-	Plugin *PluginTarget
-	Agent  *AgentTarget
+	Steps []Step
 }
 
 func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
-	out := targetComparisonPayload{}
-	if target.Agent != nil {
-		agentTarget := *target.Agent
-		if len(agentTarget.Messages) == 0 {
-			agentTarget.Messages = nil
+	out := targetComparisonPayload{Steps: append([]Step(nil), target.Steps...)}
+	for i := range out.Steps {
+		step := &out.Steps[i]
+		if len(step.Inputs) == 0 {
+			step.Inputs = nil
 		}
-		if len(agentTarget.ToolRefs) == 0 {
-			agentTarget.ToolRefs = nil
+		if step.Plugin != nil {
+			plugin := *step.Plugin
+			plugin.Input = normalizedWorkflowValue(plugin.Input)
+			step.Plugin = &plugin
 		}
-		if len(agentTarget.ResponseSchema) == 0 {
-			agentTarget.ResponseSchema = nil
-		}
-		if len(agentTarget.ModelOptions) == 0 {
-			agentTarget.ModelOptions = nil
-		}
-		if len(agentTarget.Metadata) == 0 {
-			agentTarget.Metadata = nil
-		}
-		agentTarget.OutputDelivery = normalizedOutputDelivery(agentTarget.OutputDelivery)
-		agentTarget.SessionReadyDelivery = normalizedOutputDelivery(agentTarget.SessionReadyDelivery)
-		if len(agentTarget.Steps) == 0 {
-			agentTarget.Steps = nil
-		} else {
-			agentTarget.Steps = append([]AgentStep(nil), agentTarget.Steps...)
-			for i := range agentTarget.Steps {
-				step := &agentTarget.Steps[i]
-				if len(step.Messages) == 0 {
-					step.Messages = nil
-				}
-				if len(step.ToolRefs) == 0 {
-					step.ToolRefs = nil
-				}
-				if len(step.ResponseSchema) == 0 {
-					step.ResponseSchema = nil
-				}
-				if len(step.ModelOptions) == 0 {
-					step.ModelOptions = nil
-				}
-				if len(step.Metadata) == 0 {
-					step.Metadata = nil
-				}
-				step.OutputDelivery = normalizedOutputDelivery(step.OutputDelivery)
+		if step.Agent != nil {
+			agent := *step.Agent
+			if len(agent.Messages) == 0 {
+				agent.Messages = nil
 			}
+			if len(agent.ToolRefs) == 0 {
+				agent.ToolRefs = nil
+			}
+			if len(agent.ResponseSchema) == 0 {
+				agent.ResponseSchema = nil
+			}
+			if len(agent.ModelOptions) == 0 {
+				agent.ModelOptions = nil
+			}
+			step.Agent = &agent
 		}
-		out.Agent = &agentTarget
-		return out
-	}
-	if target.Plugin != nil {
-		pluginTarget := *target.Plugin
-		if len(pluginTarget.Input) == 0 {
-			pluginTarget.Input = nil
+		if len(step.Metadata) == 0 {
+			step.Metadata = nil
 		}
-		out.Plugin = &pluginTarget
+		step.OutputDelivery = normalizedStepDelivery(step.OutputDelivery)
 	}
 	return out
 }
 
-func normalizedOutputDelivery(delivery *OutputDelivery) *OutputDelivery {
+func normalizedWorkflowValue(value Value) Value {
+	if len(value.Object) == 0 {
+		value.Object = nil
+	}
+	if len(value.Array) == 0 {
+		value.Array = nil
+	}
+	return value
+}
+
+func normalizedStepDelivery(delivery *StepDelivery) *StepDelivery {
 	if delivery == nil {
 		return nil
 	}
 	out := *delivery
-	if len(out.Target.Input) == 0 {
-		out.Target.Input = nil
-	}
-	if len(out.InputBindings) == 0 {
-		out.InputBindings = nil
+	if out.Plugin != nil {
+		plugin := *out.Plugin
+		plugin.Input = normalizedWorkflowValue(plugin.Input)
+		out.Plugin = &plugin
 	}
 	return &out
 }

@@ -838,68 +838,86 @@ type WorkflowInvokeConfig struct {
 }
 
 type WorkflowTargetConfig struct {
-	Plugin *WorkflowPluginTargetConfig `yaml:"plugin,omitempty"`
-	Agent  *WorkflowAgentConfig        `yaml:"agent,omitempty"`
+	Steps []WorkflowStepConfig `yaml:"steps,omitempty"`
 }
 
-type WorkflowPluginTargetConfig struct {
+type WorkflowStepConfig struct {
+	ID             string                         `yaml:"id,omitempty"`
+	Inputs         map[string]WorkflowValueConfig `yaml:"inputs,omitempty"`
+	Plugin         *WorkflowStepPluginCallConfig  `yaml:"plugin,omitempty"`
+	Agent          *WorkflowStepAgentConfig       `yaml:"agent,omitempty"`
+	When           *WorkflowStepWhenConfig        `yaml:"when,omitempty"`
+	Timeout        string                         `yaml:"timeout,omitempty"`
+	OutputDelivery *WorkflowStepDeliveryConfig    `yaml:"outputDelivery,omitempty"`
+	Metadata       map[string]any                 `yaml:"metadata,omitempty"`
+}
+
+type WorkflowStepPluginCallConfig struct {
 	Name           string                            `yaml:"name,omitempty"`
 	Operation      string                            `yaml:"operation,omitempty"`
 	Connection     string                            `yaml:"connection,omitempty"`
 	Instance       string                            `yaml:"instance,omitempty"`
 	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
-	Input          map[string]any                    `yaml:"input,omitempty"`
+	Input          WorkflowValueConfig               `yaml:"input,omitempty"`
 }
 
-type WorkflowAgentConfig struct {
-	Provider             string                        `yaml:"provider,omitempty"`
-	Model                string                        `yaml:"model,omitempty"`
-	Prompt               string                        `yaml:"prompt,omitempty"`
-	Messages             []WorkflowAgentMessage        `yaml:"messages,omitempty"`
-	Tools                []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
-	OutputDelivery       *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
-	SessionReadyDelivery *WorkflowOutputDeliveryConfig `yaml:"sessionReadyDelivery,omitempty"`
-	ResponseSchema       map[string]any                `yaml:"responseSchema,omitempty"`
-	Metadata             map[string]any                `yaml:"metadata,omitempty"`
-	ModelOptions         map[string]any                `yaml:"modelOptions,omitempty"`
-	Timeout              string                        `yaml:"timeout,omitempty"`
-	Steps                []WorkflowAgentStepConfig     `yaml:"steps,omitempty"`
+type WorkflowStepDeliveryConfig struct {
+	Plugin *WorkflowStepPluginCallConfig `yaml:"plugin,omitempty"`
 }
 
-type WorkflowAgentStepConfig struct {
-	ID             string                        `yaml:"id,omitempty"`
-	Prompt         string                        `yaml:"prompt,omitempty"`
-	Messages       []WorkflowAgentMessage        `yaml:"messages,omitempty"`
-	Tools          []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
-	OutputDelivery *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
-	ResponseSchema map[string]any                `yaml:"responseSchema,omitempty"`
-	Metadata       map[string]any                `yaml:"metadata,omitempty"`
-	ModelOptions   map[string]any                `yaml:"modelOptions,omitempty"`
-	Timeout        string                        `yaml:"timeout,omitempty"`
-	When           *WorkflowAgentStepWhenConfig  `yaml:"when,omitempty"`
+type WorkflowStepAgentConfig struct {
+	Provider       string                 `yaml:"provider,omitempty"`
+	Model          string                 `yaml:"model,omitempty"`
+	SessionKey     string                 `yaml:"sessionKey,omitempty"`
+	Prompt         WorkflowTextConfig     `yaml:"prompt,omitempty"`
+	Messages       []WorkflowAgentMessage `yaml:"messages,omitempty"`
+	Tools          []WorkflowAgentToolRef `yaml:"tools,omitempty"`
+	ResponseSchema map[string]any         `yaml:"responseSchema,omitempty"`
+	ModelOptions   map[string]any         `yaml:"modelOptions,omitempty"`
 }
 
-type WorkflowAgentStepWhenConfig struct {
-	StepID     string `yaml:"stepId,omitempty"`
-	OutputPath string `yaml:"outputPath,omitempty"`
-	Equals     any    `yaml:"equals,omitempty"`
+type WorkflowAgentMessage struct {
+	Role     string             `yaml:"role,omitempty"`
+	Text     WorkflowTextConfig `yaml:"text,omitempty"`
+	Metadata map[string]any     `yaml:"metadata,omitempty"`
+}
+
+type WorkflowTextConfig struct {
+	Template string `yaml:"template,omitempty"`
+}
+
+func (c *WorkflowTextConfig) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		c.Template = value.Value
+		return nil
+	}
+	type workflowTextConfig WorkflowTextConfig
+	var out workflowTextConfig
+	if err := value.Decode(&out); err != nil {
+		return err
+	}
+	*c = WorkflowTextConfig(out)
+	return nil
+}
+
+type WorkflowStepWhenConfig struct {
+	Value  WorkflowValueConfig `yaml:"value,omitempty"`
+	Equals any                 `yaml:"equals,omitempty"`
 
 	equalsSet bool
 }
 
-func (c *WorkflowAgentStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
-	type workflowAgentStepWhenConfig struct {
-		StepID     string `yaml:"stepId,omitempty"`
-		OutputPath string `yaml:"outputPath,omitempty"`
-		Equals     any    `yaml:"equals,omitempty"`
+func (c *WorkflowStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
+	type workflowStepWhenConfig struct {
+		Value  WorkflowValueConfig `yaml:"value,omitempty"`
+		Equals any                 `yaml:"equals,omitempty"`
 	}
-	var out workflowAgentStepWhenConfig
+	var out workflowStepWhenConfig
 	if err := value.Decode(&out); err != nil {
 		return err
 	}
 
-	c.StepID = out.StepID
-	c.OutputPath = out.OutputPath
+	c.Value = out.Value
 	c.Equals = out.Equals
 	c.equalsSet = false
 	if value.Kind != yaml.MappingNode {
@@ -914,29 +932,108 @@ func (c *WorkflowAgentStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-type WorkflowOutputDeliveryConfig struct {
-	Target         WorkflowPluginTargetConfig        `yaml:"target,omitempty"`
-	InputBindings  []WorkflowOutputBindingConfig     `yaml:"inputBindings,omitempty"`
-	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
+type WorkflowValueConfig struct {
+	Literal         any
+	LiteralSet      bool
+	Object          map[string]WorkflowValueConfig
+	Array           []WorkflowValueConfig
+	Template        *WorkflowTextConfig
+	RunInput        string
+	SignalPayload   string
+	SignalMetadata  string
+	WorkflowContext string
+	StepOutput      *WorkflowStepOutputSourceConfig
 }
 
-type WorkflowOutputBindingConfig struct {
-	InputField string                          `yaml:"inputField,omitempty"`
-	Value      WorkflowOutputValueSourceConfig `yaml:"value,omitempty"`
+type WorkflowStepOutputSourceConfig struct {
+	StepID string `yaml:"stepId,omitempty"`
+	Path   string `yaml:"path,omitempty"`
 }
 
-type WorkflowOutputValueSourceConfig struct {
-	AgentOutput    string `yaml:"agentOutput,omitempty"`
-	SignalPayload  string `yaml:"signalPayload,omitempty"`
-	SignalMetadata string `yaml:"signalMetadata,omitempty"`
-	AgentSession   string `yaml:"agentSession,omitempty"`
-	Literal        any    `yaml:"literal,omitempty"`
+func (c *WorkflowValueConfig) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.MappingNode:
+		if len(value.Content) == 2 {
+			key := value.Content[0].Value
+			node := value.Content[1]
+			switch key {
+			case "literal":
+				var out any
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.Literal = out
+				c.LiteralSet = true
+				return nil
+			case "object":
+				var out map[string]WorkflowValueConfig
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.Object = out
+				return nil
+			case "array":
+				var out []WorkflowValueConfig
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.Array = out
+				return nil
+			case "template":
+				var out WorkflowTextConfig
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.Template = &out
+				return nil
+			case "runInput":
+				return workflowValuePathSource(node, &c.RunInput)
+			case "signalPayload":
+				return workflowValuePathSource(node, &c.SignalPayload)
+			case "signalMetadata":
+				return workflowValuePathSource(node, &c.SignalMetadata)
+			case "workflowContext":
+				return workflowValuePathSource(node, &c.WorkflowContext)
+			case "stepOutput":
+				var out WorkflowStepOutputSourceConfig
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.StepOutput = &out
+				return nil
+			}
+		}
+		var out map[string]WorkflowValueConfig
+		if err := value.Decode(&out); err != nil {
+			return err
+		}
+		c.Object = out
+		return nil
+	case yaml.SequenceNode:
+		var out []WorkflowValueConfig
+		if err := value.Decode(&out); err != nil {
+			return err
+		}
+		c.Array = out
+		return nil
+	default:
+		var out any
+		if err := value.Decode(&out); err != nil {
+			return err
+		}
+		c.Literal = out
+		c.LiteralSet = true
+		return nil
+	}
 }
 
-type WorkflowAgentMessage struct {
-	Role     string         `yaml:"role,omitempty"`
-	Text     string         `yaml:"text,omitempty"`
-	Metadata map[string]any `yaml:"metadata,omitempty"`
+func workflowValuePathSource(node *yaml.Node, target *string) error {
+	var out string
+	if err := node.Decode(&out); err != nil {
+		return err
+	}
+	*target = out
+	return nil
 }
 
 type WorkflowAgentToolRef struct {

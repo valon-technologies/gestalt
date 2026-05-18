@@ -49,7 +49,8 @@ type agentSystemToolExecutionRequest struct {
 	IdempotencyKey          string
 	ToolRefs                []coreagent.ToolRef
 	Tools                   []coreagent.Tool
-	InheritedOutputDelivery *coreworkflow.OutputDelivery
+	Permissions             []core.AccessPermission
+	InheritedOutputDelivery *coreworkflow.StepDelivery
 }
 
 type agentSystemToolExecutor interface {
@@ -368,7 +369,8 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 			IdempotencyKey:          idempotencyKey,
 			ToolRefs:                append([]coreagent.ToolRef(nil), grant.ToolRefs...),
 			Tools:                   append([]coreagent.Tool(nil), grant.Tools...),
-			InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(grant.InheritedOutputDelivery),
+			Permissions:             append([]core.AccessPermission(nil), grant.Permissions...),
+			InheritedOutputDelivery: coreworkflow.CloneStepDelivery(grant.InheritedOutputDelivery),
 		})
 	}
 	if invoker == nil {

@@ -84,12 +84,13 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	run, err := workflowClient.StartRun(rpcCtx, &proto.StartWorkflowProviderRunRequest{
 		IdempotencyKey: "run-1",
 		Target: &proto.BoundWorkflowTarget{
-			Kind: &proto.BoundWorkflowTarget_Plugin{
-				Plugin: &proto.BoundWorkflowPluginTarget{
-					PluginName: "github",
-					Operation:  "issues.create",
-				},
-			},
+			Steps: []*proto.WorkflowStep{{
+				Id: "create_issue",
+				Action: &proto.WorkflowStep_Plugin{Plugin: &proto.WorkflowStepPluginCall{
+					Name:      "github",
+					Operation: "issues.create",
+				}},
+			}},
 		},
 	})
 	if err != nil {

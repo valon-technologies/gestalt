@@ -1005,12 +1005,13 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		Timezone:        "UTC",
 		IdempotencyKey:  "workflow-manager-roundtrip",
 		Target: &proto.BoundWorkflowTarget{
-			Kind: &proto.BoundWorkflowTarget_Plugin{
-				Plugin: &proto.BoundWorkflowPluginTarget{
-					PluginName: "roadmap",
-					Operation:  "sync",
-				},
-			},
+			Steps: []*proto.WorkflowStep{{
+				Id: "sync",
+				Action: &proto.WorkflowStep_Plugin{Plugin: &proto.WorkflowStepPluginCall{
+					Name:      "roadmap",
+					Operation: "sync",
+				}},
+			}},
 		},
 	})
 	if err != nil {
@@ -1032,7 +1033,7 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		"provider_name": created.GetProviderName(),
 		"schedule_id":   scheduleID,
 		"cron":          fetched.GetSchedule().GetCron(),
-		"operation":     fetched.GetSchedule().GetTarget().GetPlugin().GetOperation(),
+		"operation":     fetched.GetSchedule().GetTarget().GetSteps()[0].GetPlugin().GetOperation(),
 	}, nil
 }
 
@@ -2173,20 +2174,39 @@ func cloneManagedRun(value *workflowmanager.ManagedRun) *workflowmanager.Managed
 }
 
 func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
-	out := coreworkflow.Target{}
-	if value.Plugin != nil {
-		plugin := *value.Plugin
-		plugin.Input = maps.Clone(plugin.Input)
-		out.Plugin = &plugin
-	}
-	if value.Agent != nil {
-		agent := *value.Agent
-		agent.Messages = slices.Clone(agent.Messages)
-		agent.ToolRefs = slices.Clone(agent.ToolRefs)
-		agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
-		agent.ModelOptions = maps.Clone(agent.ModelOptions)
-		agent.Metadata = maps.Clone(agent.Metadata)
-		out.Agent = &agent
+	out := coreworkflow.Target{Steps: make([]coreworkflow.Step, len(value.Steps))}
+	for i := range value.Steps {
+		step := value.Steps[i]
+		if step.Inputs != nil {
+			step.Inputs = make(map[string]coreworkflow.Value, len(step.Inputs))
+			for key, item := range value.Steps[i].Inputs {
+				step.Inputs[key] = coreworkflow.CloneValue(item)
+			}
+		}
+		if step.Plugin != nil {
+			plugin := *step.Plugin
+			plugin.Input = coreworkflow.CloneValue(plugin.Input)
+			step.Plugin = &plugin
+		}
+		if step.Agent != nil {
+			agent := *step.Agent
+			agent.Messages = slices.Clone(agent.Messages)
+			for j := range agent.Messages {
+				agent.Messages[j].Metadata = maps.Clone(agent.Messages[j].Metadata)
+			}
+			agent.ToolRefs = slices.Clone(agent.ToolRefs)
+			agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
+			agent.ModelOptions = maps.Clone(agent.ModelOptions)
+			step.Agent = &agent
+		}
+		if step.When != nil {
+			when := *step.When
+			when.Value = coreworkflow.CloneValue(when.Value)
+			step.When = &when
+		}
+		step.OutputDelivery = coreworkflow.CloneStepDelivery(step.OutputDelivery)
+		step.Metadata = maps.Clone(step.Metadata)
+		out.Steps[i] = step
 	}
 	return out
 }
@@ -8036,11 +8056,11 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	if len(schedules) != 1 {
 		t.Fatalf("manager schedules len = %d, want 1", len(schedules))
 	}
-	scheduleTarget := schedules[0].Schedule.Target.Plugin
-	if scheduleTarget == nil {
-		t.Fatalf("stored target plugin is nil: %#v", schedules[0].Schedule.Target)
+	if len(schedules[0].Schedule.Target.Steps) == 0 || schedules[0].Schedule.Target.Steps[0].Plugin == nil {
+		t.Fatalf("stored target plugin step is missing: %#v", schedules[0].Schedule.Target)
 		return
 	}
+	scheduleTarget := schedules[0].Schedule.Target.Steps[0].Plugin
 	if got := scheduleTarget.Operation; got != "sync" {
 		t.Fatalf("stored target operation = %q, want %q", got, "sync")
 	}

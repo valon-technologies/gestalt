@@ -784,13 +784,16 @@ func workflowManagerFromContext(ctx context.Context, invocationToken string) (*g
 
 func workflowTargetInput(target workflowScheduleTargetInput) (*gestalt.BoundWorkflowTarget, error) {
 	return &gestalt.BoundWorkflowTarget{
-		Plugin: &gestalt.BoundWorkflowPluginTarget{
-			PluginName: target.Plugin,
-			Operation:  target.Operation,
-			Connection: target.Connection,
-			Instance:   target.Instance,
-			Input:      target.Input,
-		},
+		Steps: []gestalt.WorkflowStep{{
+			ID: strings.TrimSpace(target.Operation),
+			Plugin: &gestalt.WorkflowStepPluginCall{
+				Name:       target.Plugin,
+				Operation:  target.Operation,
+				Connection: target.Connection,
+				Instance:   target.Instance,
+				Input:      workflowValueObject(target.Input),
+			},
+		}},
 	}, nil
 }
 
@@ -856,10 +859,9 @@ func managedWorkflowScheduleBody(value *gestalt.WorkflowManagerSchedule) map[str
 			"input":      map[string]any{},
 		},
 	}
-	if target != nil && target.Plugin != nil {
-		pluginTarget := target.Plugin
+	if pluginTarget := workflowFirstPluginStep(target); pluginTarget != nil {
 		body["schedule"].(map[string]any)["target"] = map[string]any{
-			"plugin":     pluginTarget.PluginName,
+			"plugin":     pluginTarget.Name,
 			"operation":  pluginTarget.Operation,
 			"connection": pluginTarget.Connection,
 			"instance":   pluginTarget.Instance,
@@ -907,10 +909,9 @@ func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerEventTrigger) map[
 			"subject": match.Subject,
 		}
 	}
-	if target != nil && target.Plugin != nil {
-		pluginTarget := target.Plugin
+	if pluginTarget := workflowFirstPluginStep(target); pluginTarget != nil {
 		body["trigger"].(map[string]any)["target"] = map[string]any{
-			"plugin":     pluginTarget.PluginName,
+			"plugin":     pluginTarget.Name,
 			"operation":  pluginTarget.Operation,
 			"connection": pluginTarget.Connection,
 			"instance":   pluginTarget.Instance,
@@ -920,11 +921,69 @@ func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerEventTrigger) map[
 	return body
 }
 
-func workflowPluginTargetInputMap(target *gestalt.BoundWorkflowPluginTarget) map[string]any {
-	if target == nil || target.Input == nil {
+func workflowFirstPluginStep(target *gestalt.BoundWorkflowTarget) *gestalt.WorkflowStepPluginCall {
+	if target == nil || len(target.Steps) == 0 {
+		return nil
+	}
+	return target.Steps[0].Plugin
+}
+
+func workflowPluginTargetInputMap(target *gestalt.WorkflowStepPluginCall) map[string]any {
+	if target == nil || target.Input.Object == nil {
 		return map[string]any{}
 	}
-	return anyMap(target.Input)
+	out := make(map[string]any, len(target.Input.Object))
+	for key, value := range target.Input.Object {
+		out[key] = workflowValueToAny(value)
+	}
+	return out
+}
+
+func workflowValueObject(input map[string]any) gestalt.WorkflowValue {
+	if input == nil {
+		return gestalt.WorkflowValue{}
+	}
+	out := make(map[string]gestalt.WorkflowValue, len(input))
+	for key, value := range input {
+		out[key] = workflowValueFromAny(value)
+	}
+	return gestalt.WorkflowValue{Object: out}
+}
+
+func workflowValueFromAny(value any) gestalt.WorkflowValue {
+	switch typed := value.(type) {
+	case map[string]any:
+		return workflowValueObject(typed)
+	case []any:
+		out := make([]gestalt.WorkflowValue, 0, len(typed))
+		for _, value := range typed {
+			out = append(out, workflowValueFromAny(value))
+		}
+		return gestalt.WorkflowValue{Array: out}
+	default:
+		return gestalt.WorkflowValue{Literal: value, LiteralSet: true}
+	}
+}
+
+func workflowValueToAny(value gestalt.WorkflowValue) any {
+	switch {
+	case value.LiteralSet:
+		return value.Literal
+	case value.Object != nil:
+		out := make(map[string]any, len(value.Object))
+		for key, nested := range value.Object {
+			out[key] = workflowValueToAny(nested)
+		}
+		return out
+	case value.Array != nil:
+		out := make([]any, 0, len(value.Array))
+		for _, nested := range value.Array {
+			out = append(out, workflowValueToAny(nested))
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func workflowEventBody(value *gestalt.WorkflowEvent) map[string]any {

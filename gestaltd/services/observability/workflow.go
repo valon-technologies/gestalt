@@ -26,6 +26,7 @@ const (
 
 	WorkflowTargetKindPlugin  = "plugin"
 	WorkflowTargetKindAgent   = "agent"
+	WorkflowTargetKindSteps   = "steps"
 	WorkflowTargetKindUnknown = "unknown"
 
 	WorkflowRunStatusPending   = "pending"

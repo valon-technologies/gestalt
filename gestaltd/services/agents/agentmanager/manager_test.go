@@ -1175,11 +1175,14 @@ func TestManagerCreateTurnCarriesInheritedOutputDeliveryInRunGrant(t *testing.T)
 	if err != nil {
 		t.Fatalf("CreateSession: %v", err)
 	}
-	ctx := WithInheritedOutputDelivery(context.Background(), &coreworkflow.OutputDelivery{
-		Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
-		InputBindings: []coreworkflow.OutputBinding{
-			{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-			{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{Literal: "signed-ref"}},
+	ctx := WithInheritedOutputDelivery(context.Background(), &coreworkflow.StepDelivery{
+		Plugin: &coreworkflow.PluginCall{
+			Name:      "notification",
+			Operation: "reply",
+			Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+				"text":      {StepOutput: &coreworkflow.StepOutputSource{StepID: "final", Path: "agent.text"}},
+				"reply_ref": {Literal: "signed-ref", LiteralSet: true},
+			}},
 		},
 	})
 	_, err = manager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
@@ -1197,7 +1200,7 @@ func TestManagerCreateTurnCarriesInheritedOutputDeliveryInRunGrant(t *testing.T)
 	if err != nil {
 		t.Fatalf("Resolve run grant: %v", err)
 	}
-	if grant.InheritedOutputDelivery == nil || grant.InheritedOutputDelivery.Target.PluginName != "notification" || grant.InheritedOutputDelivery.Target.Operation != "reply" {
+	if grant.InheritedOutputDelivery == nil || grant.InheritedOutputDelivery.Plugin == nil || grant.InheritedOutputDelivery.Plugin.Name != "notification" || grant.InheritedOutputDelivery.Plugin.Operation != "reply" {
 		t.Fatalf("inherited output delivery = %#v", grant.InheritedOutputDelivery)
 	}
 	if got := grant.ToolRefs; len(got) != 1 || got[0].Plugin != "roadmap" || got[0].Operation != "sync" {

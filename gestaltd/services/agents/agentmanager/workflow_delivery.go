@@ -8,17 +8,17 @@ import (
 
 type inheritedOutputDeliveryKey struct{}
 
-func WithInheritedOutputDelivery(ctx context.Context, delivery *coreworkflow.OutputDelivery) context.Context {
+func WithInheritedOutputDelivery(ctx context.Context, delivery *coreworkflow.StepDelivery) context.Context {
 	if delivery == nil {
 		return ctx
 	}
-	return context.WithValue(ctx, inheritedOutputDeliveryKey{}, coreworkflow.CloneOutputDelivery(delivery))
+	return context.WithValue(ctx, inheritedOutputDeliveryKey{}, coreworkflow.CloneStepDelivery(delivery))
 }
 
-func InheritedOutputDeliveryFromContext(ctx context.Context) *coreworkflow.OutputDelivery {
+func InheritedOutputDeliveryFromContext(ctx context.Context) *coreworkflow.StepDelivery {
 	if ctx == nil {
 		return nil
 	}
-	delivery, _ := ctx.Value(inheritedOutputDeliveryKey{}).(*coreworkflow.OutputDelivery)
-	return coreworkflow.CloneOutputDelivery(delivery)
+	delivery, _ := ctx.Value(inheritedOutputDeliveryKey{}).(*coreworkflow.StepDelivery)
+	return coreworkflow.CloneStepDelivery(delivery)
 }

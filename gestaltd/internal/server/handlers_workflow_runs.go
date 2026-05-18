@@ -80,7 +80,7 @@ func (s *Server) listGlobalWorkflowRuns(w http.ResponseWriter, r *http.Request) 
 		if managed == nil || managed.Run == nil {
 			continue
 		}
-		if pluginFilter != "" && (managed.Run.Target.Plugin == nil || strings.TrimSpace(managed.Run.Target.Plugin.PluginName) != pluginFilter) {
+		if pluginFilter != "" && workflowRunTargetFirstPlugin(managed.Run.Target) != pluginFilter {
 			continue
 		}
 		if statusFilter != "" && strings.TrimSpace(string(managed.Run.Status)) != statusFilter {
@@ -89,6 +89,15 @@ func (s *Server) listGlobalWorkflowRuns(w http.ResponseWriter, r *http.Request) 
 		out = append(out, workflowRunInfoFromManaged(managed))
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+func workflowRunTargetFirstPlugin(target coreworkflow.Target) string {
+	for i := range target.Steps {
+		if target.Steps[i].Plugin != nil {
+			return strings.TrimSpace(target.Steps[i].Plugin.Name)
+		}
+	}
+	return ""
 }
 
 func (s *Server) getGlobalWorkflowRun(w http.ResponseWriter, r *http.Request) {

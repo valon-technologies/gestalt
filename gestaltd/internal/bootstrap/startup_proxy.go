@@ -700,10 +700,12 @@ func (p *startupWorkflowProviderProxy) awaitForContextPlugin(ctx context.Context
 }
 
 func startupWorkflowTargetPluginName(target coreworkflow.Target) string {
-	if target.Plugin == nil {
-		return ""
+	for i := range target.Steps {
+		if target.Steps[i].Plugin != nil {
+			return strings.TrimSpace(target.Steps[i].Plugin.Name)
+		}
 	}
-	return strings.TrimSpace(target.Plugin.PluginName)
+	return ""
 }
 
 func (p *startupWorkflowProviderProxy) beginPluginWait(pluginName string) (func(), error) {
@@ -757,20 +759,68 @@ func cloneStartupWorkflowExecutionRef(ref *coreworkflow.ExecutionReference) *cor
 }
 
 func cloneStartupWorkflowTarget(target coreworkflow.Target) coreworkflow.Target {
-	clone := coreworkflow.Target{}
-	if target.Plugin != nil {
-		plugin := *target.Plugin
-		plugin.Input = maps.Clone(plugin.Input)
-		clone.Plugin = &plugin
-	}
-	if target.Agent != nil {
-		agent := *target.Agent
-		agent.Messages = slices.Clone(agent.Messages)
-		agent.ToolRefs = slices.Clone(agent.ToolRefs)
-		agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
-		agent.Metadata = maps.Clone(agent.Metadata)
-		agent.ModelOptions = maps.Clone(agent.ModelOptions)
-		clone.Agent = &agent
+	clone := coreworkflow.Target{Steps: slices.Clone(target.Steps)}
+	for i := range clone.Steps {
+		step := &clone.Steps[i]
+		step.Inputs = cloneStartupWorkflowValues(step.Inputs)
+		if step.Plugin != nil {
+			plugin := *step.Plugin
+			plugin.Input = cloneStartupWorkflowValue(plugin.Input)
+			step.Plugin = &plugin
+		}
+		if step.Agent != nil {
+			agent := *step.Agent
+			agent.Messages = slices.Clone(agent.Messages)
+			agent.ToolRefs = slices.Clone(agent.ToolRefs)
+			agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
+			agent.ModelOptions = maps.Clone(agent.ModelOptions)
+			step.Agent = &agent
+		}
+		if step.When != nil {
+			when := *step.When
+			when.Value = cloneStartupWorkflowValue(when.Value)
+			step.When = &when
+		}
+		if step.OutputDelivery != nil {
+			delivery := *step.OutputDelivery
+			if delivery.Plugin != nil {
+				plugin := *delivery.Plugin
+				plugin.Input = cloneStartupWorkflowValue(plugin.Input)
+				delivery.Plugin = &plugin
+			}
+			step.OutputDelivery = &delivery
+		}
+		step.Metadata = maps.Clone(step.Metadata)
 	}
 	return clone
+}
+
+func cloneStartupWorkflowValues(values map[string]coreworkflow.Value) map[string]coreworkflow.Value {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]coreworkflow.Value, len(values))
+	for key, value := range values {
+		out[key] = cloneStartupWorkflowValue(value)
+	}
+	return out
+}
+
+func cloneStartupWorkflowValue(value coreworkflow.Value) coreworkflow.Value {
+	value.Object = cloneStartupWorkflowValues(value.Object)
+	if value.Array != nil {
+		value.Array = slices.Clone(value.Array)
+		for i := range value.Array {
+			value.Array[i] = cloneStartupWorkflowValue(value.Array[i])
+		}
+	}
+	if value.Template != nil {
+		text := *value.Template
+		value.Template = &text
+	}
+	if value.StepOutput != nil {
+		stepOutput := *value.StepOutput
+		value.StepOutput = &stepOutput
+	}
+	return value
 }

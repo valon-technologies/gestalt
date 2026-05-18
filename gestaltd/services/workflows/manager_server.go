@@ -709,24 +709,13 @@ func workflowManagerTargetOrDefinition(targetProto *proto.BoundWorkflowTarget, d
 }
 
 func workflowManagerTargetProtoIsSet(targetProto *proto.BoundWorkflowTarget) bool {
-	return targetProto != nil && (targetProto.GetPlugin() != nil || targetProto.GetAgent() != nil)
+	return targetProto != nil && len(targetProto.GetSteps()) > 0
 }
 
 func workflowManagerTarget(targetProto *proto.BoundWorkflowTarget) (coreworkflow.Target, error) {
 	target := workflowTargetFromProto(targetProto)
-	if target.Agent == nil {
-		if target.Plugin == nil {
-			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
-		}
-		pluginTarget := *target.Plugin
-		if strings.TrimSpace(pluginTarget.PluginName) == "" {
-			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.plugin.plugin_name is required")
-		}
-		if strings.TrimSpace(pluginTarget.Operation) == "" {
-			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.plugin.operation is required")
-		}
-	} else if strings.TrimSpace(target.Agent.ProviderName) == "" {
-		return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.agent.provider_name is required")
+	if len(target.Steps) == 0 {
+		return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.steps is required")
 	}
 	return target, nil
 }

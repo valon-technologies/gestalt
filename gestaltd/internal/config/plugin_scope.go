@@ -890,14 +890,21 @@ func addWorkflowProviderRefs(cfg *Config, refs *pluginScopeProviderRefs, workflo
 	} else if err := addSelectedWorkflowProviderRef(cfg, refs.Workflow); err != nil {
 		return err
 	}
-	if target == nil || target.Agent == nil {
+	if target == nil {
 		return nil
 	}
-	if strings.TrimSpace(target.Agent.Provider) != "" {
-		addProviderRef(refs.Agent, target.Agent.Provider)
-		return nil
+	for i := range target.Steps {
+		step := &target.Steps[i]
+		if step.Agent == nil {
+			continue
+		}
+		if strings.TrimSpace(step.Agent.Provider) != "" {
+			addProviderRef(refs.Agent, step.Agent.Provider)
+			return nil
+		}
+		return addSelectedAgentProviderRef(cfg, refs.Agent)
 	}
-	return addSelectedAgentProviderRef(cfg, refs.Agent)
+	return nil
 }
 
 func addProviderEntryDependencies(cfg *Config, entries map[string]*ProviderEntry, keep map[string]struct{}, refs *pluginScopeProviderRefs) error {
@@ -1011,11 +1018,18 @@ func workflowsTargetingPluginClosure(cfg *Config, keepPlugins map[string]struct{
 }
 
 func workflowTargetInPluginClosure(target *WorkflowTargetConfig, keepPlugins map[string]struct{}) bool {
-	if target == nil || target.Plugin == nil {
+	if target == nil {
 		return false
 	}
-	_, ok := keepPlugins[strings.TrimSpace(target.Plugin.Name)]
-	return ok
+	for i := range target.Steps {
+		if target.Steps[i].Plugin == nil {
+			continue
+		}
+		if _, ok := keepPlugins[strings.TrimSpace(target.Steps[i].Plugin.Name)]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func filterWorkflowConfig(workflows *WorkflowsConfig, keep map[string]workflowPluginRefs) {
@@ -1062,31 +1076,25 @@ func addWorkflowTargetRefs(refs workflowPluginRefs, target *WorkflowTargetConfig
 	if target == nil {
 		return
 	}
-	if target.Plugin != nil {
-		refs.Add(target.Plugin.Name)
-	}
-	if target.Agent == nil {
-		return
-	}
-	for _, tool := range target.Agent.Tools {
-		refs.Add(tool.Plugin)
-	}
-	addWorkflowOutputDeliveryRefs(refs, target.Agent.OutputDelivery)
-	addWorkflowOutputDeliveryRefs(refs, target.Agent.SessionReadyDelivery)
-	for i := range target.Agent.Steps {
-		step := &target.Agent.Steps[i]
-		for _, tool := range step.Tools {
-			refs.Add(tool.Plugin)
+	for i := range target.Steps {
+		step := &target.Steps[i]
+		if step.Plugin != nil {
+			refs.Add(step.Plugin.Name)
+		}
+		if step.Agent != nil {
+			for _, tool := range step.Agent.Tools {
+				refs.Add(tool.Plugin)
+			}
 		}
 		addWorkflowOutputDeliveryRefs(refs, step.OutputDelivery)
 	}
 }
 
-func addWorkflowOutputDeliveryRefs(refs workflowPluginRefs, delivery *WorkflowOutputDeliveryConfig) {
-	if delivery == nil {
+func addWorkflowOutputDeliveryRefs(refs workflowPluginRefs, delivery *WorkflowStepDeliveryConfig) {
+	if delivery == nil || delivery.Plugin == nil {
 		return
 	}
-	refs.Add(delivery.Target.Name)
+	refs.Add(delivery.Plugin.Name)
 }
 
 func addWorkflowInvokeRefs(refs workflowPluginRefs, invokes []WorkflowInvokeConfig) {

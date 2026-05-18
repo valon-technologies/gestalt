@@ -2789,12 +2789,14 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
-          credentialMode: none
-          input:
-            source: yaml
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: nightly_sync
+              credentialMode: none
+              input:
+                source: yaml
       permissions:
         - plugin: slack
           operations:
@@ -2807,11 +2809,13 @@ workflows:
         type: roadmap.task.updated
         source: roadmap
       target:
-        plugin:
-          name: roadmap
-          operation: backfill_items
-          input:
-            source: event
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: backfill_items
+              input:
+                source: event
       permissions:
         - plugin: slack
           operations:
@@ -2838,16 +2842,9 @@ server:
 		}
 		wantSchedule := WorkflowScheduleConfig{
 			Provider: "temporal",
-			Target: &WorkflowTargetConfig{
-				Plugin: &WorkflowPluginTargetConfig{
-					Name:           "roadmap",
-					Operation:      "nightly_sync",
-					CredentialMode: providermanifestv1.ConnectionModeNone,
-					Input: map[string]any{
-						"source": "yaml",
-					},
-				},
-			},
+			Target: workflowTestPluginTargetConfig("roadmap", "nightly_sync", providermanifestv1.ConnectionModeNone, map[string]any{
+				"source": "yaml",
+			}),
 			Permissions: []core.AccessPermission{{
 				Plugin: "slack",
 				Operations: []string{
@@ -2863,15 +2860,9 @@ server:
 		}
 		wantTrigger := WorkflowEventTriggerConfig{
 			Provider: "temporal",
-			Target: &WorkflowTargetConfig{
-				Plugin: &WorkflowPluginTargetConfig{
-					Name:      "roadmap",
-					Operation: "backfill_items",
-					Input: map[string]any{
-						"source": "event",
-					},
-				},
-			},
+			Target: workflowTestPluginTargetConfig("roadmap", "backfill_items", "", map[string]any{
+				"source": "event",
+			}),
 			Permissions: []core.AccessPermission{{
 				Plugin:     "slack",
 				Operations: []string{"chat.postMessage"},
@@ -2904,9 +2895,11 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
-          name: missing
-          operation: nightly_sync
+        steps:
+          - id: main
+            plugin:
+              name: missing
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -2915,7 +2908,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.plugin.name references unknown plugin "missing"`,
+				want: `workflows.schedules.nightly.target.steps[0].plugin.name references unknown plugin "missing"`,
 			},
 			{
 				name: "unknown schedule permission plugin",
@@ -2930,9 +2923,11 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: nightly_sync
       permissions:
         - plugin: missing
           operations: [conversations.list]
@@ -2962,9 +2957,11 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: nightly_sync
       permissions:
         - plugin: slack
 providers:
@@ -2990,10 +2987,12 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
-          credentialMode: platform
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: nightly_sync
+              credentialMode: platform
 providers:
   workflow:
     temporal:
@@ -3002,7 +3001,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.plugin.credentialMode "platform" is not supported`,
+				want: `workflows.schedules.nightly.target.steps[0].plugin.credentialMode "platform" is not supported`,
 			},
 			{
 				name: "agent output delivery rejects nested target credential mode",
@@ -3017,14 +3016,16 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        agent:
-          provider: simple
-          prompt: "reply"
-          outputDelivery:
-            target:
-              name: slack
-              operation: chat.postMessage
-              credentialMode: none
+        steps:
+          - id: reply
+            agent:
+              provider: simple
+              prompt: "reply"
+            outputDelivery:
+              plugin:
+                name: slack
+                operation: chat.postMessage
+                credentialMode: none
 providers:
   agent:
     simple:
@@ -3037,10 +3038,10 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.agent.outputDelivery.target.credentialMode is not supported`,
+				want: `workflows.schedules.nightly.target.steps[0].outputDelivery.plugin.credentialMode is not supported`,
 			},
 			{
-				name: "agent session ready delivery rejects nested target credential mode",
+				name: "plugin delivery rejects nested target credential mode",
 				yaml: `
 plugins:
   slack:
@@ -3052,14 +3053,16 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        agent:
-          provider: simple
-          prompt: "reply"
-          sessionReadyDelivery:
-            target:
-              name: slack
-              operation: events.replySessionStarted
-              credentialMode: none
+        steps:
+          - id: reply
+            agent:
+              provider: simple
+              prompt: "reply"
+            outputDelivery:
+              plugin:
+                name: slack
+                operation: events.replySessionStarted
+                credentialMode: none
 providers:
   agent:
     simple:
@@ -3072,10 +3075,10 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.agent.sessionReadyDelivery.target.credentialMode is not supported`,
+				want: `workflows.schedules.nightly.target.steps[0].outputDelivery.plugin.credentialMode is not supported`,
 			},
 			{
-				name: "agent session ready delivery rejects agent output source",
+				name: "step output delivery plugin requires a target",
 				yaml: `
 plugins:
   slack:
@@ -3087,17 +3090,12 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        agent:
-          provider: simple
-          prompt: "reply"
-          sessionReadyDelivery:
-            target:
-              name: slack
-              operation: events.replySessionStarted
-            inputBindings:
-              - inputField: text
-                value:
-                  agentOutput: text
+        steps:
+          - id: reply
+            agent:
+              provider: simple
+              prompt: "reply"
+            outputDelivery: {}
 providers:
   agent:
     simple:
@@ -3110,7 +3108,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.agent.sessionReadyDelivery.inputBindings[0].value.agentOutput is not available before the agent turn starts`,
+				want: `workflows.schedules.nightly.target.steps[0].outputDelivery.plugin is required`,
 			},
 			{
 				name: "agent step when rejects self reference",
@@ -3121,15 +3119,17 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        agent:
-          provider: simple
-          steps:
-            - id: diagnosis
+        steps:
+          - id: diagnosis
+            agent:
+              provider: simple
               prompt: "diagnose"
-              when:
-                stepId: diagnosis
-                outputPath: structured_output.actionable_for_pr
-                equals: true
+            when:
+              value:
+                stepOutput:
+                  stepId: diagnosis
+                  path: agent.structuredOutput.actionable_for_pr
+              equals: true
 providers:
   agent:
     simple:
@@ -3142,7 +3142,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.agent.steps[0].when.stepId "diagnosis" must reference an earlier step`,
+				want: `workflows.schedules.nightly.target.steps[0].when.value.stepOutput.stepId "diagnosis" must reference an earlier step`,
 			},
 			{
 				name: "agent step when requires equals",
@@ -3153,16 +3153,20 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        agent:
-          provider: simple
-          steps:
-            - id: diagnosis
+        steps:
+          - id: diagnosis
+            agent:
+              provider: simple
               prompt: "diagnose"
-            - id: pr_fix
+          - id: pr_fix
+            agent:
+              provider: simple
               prompt: "fix"
-              when:
-                stepId: diagnosis
-                outputPath: structured_output.actionable_for_pr
+            when:
+              value:
+                stepOutput:
+                  stepId: diagnosis
+                  path: agent.structuredOutput.actionable_for_pr
 providers:
   agent:
     simple:
@@ -3175,7 +3179,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.agent.steps[1].when.equals is required`,
+				want: `workflows.schedules.nightly.target.steps[1].when.equals is required`,
 			},
 			{
 				name: "event trigger agent missing provider",
@@ -3187,8 +3191,10 @@ workflows:
       match:
         type: roadmap.task.updated
       target:
-        agent:
-          model: gpt-5.5
+        steps:
+          - id: run
+            agent:
+              model: gpt-5.5
 providers:
   workflow:
     temporal:
@@ -3197,7 +3203,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.eventTriggers.task_updated.target.agent.provider is required`,
+				want: `workflows.eventTriggers.task_updated.target.steps[0].agent.provider is required`,
 			},
 		}
 
@@ -3231,9 +3237,11 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3316,9 +3324,11 @@ workflows:
       provider: missing
       cron: "0 2 * * *"
       target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3357,9 +3367,11 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3403,9 +3415,11 @@ workflows:
       provider: temporal
       cron: "*/5 * * * *"
       target:
-        plugin:
-          name: roadmap
-          operation: backfill_items
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: backfill_items
 providers:
   workflow:
     temporal:
@@ -3442,9 +3456,11 @@ workflows:
       match:
         type: roadmap.task.updated
       target:
-        plugin:
-          name: roadmap
-          operation: backfill_items
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: backfill_items
 providers:
   workflow:
     temporal:
@@ -3481,9 +3497,11 @@ workflows:
       match:
         source: roadmap
       target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -3523,9 +3541,11 @@ workflows:
       cron: "0 0 0 * * *"
       timezone: Mars/Olympus
       target:
-        plugin:
-          name: roadmap
-          operation: nightly_sync
+        steps:
+          - id: main
+            plugin:
+              name: roadmap
+              operation: nightly_sync
 providers:
   workflow:
     temporal:
@@ -6481,13 +6501,13 @@ func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
 			Schedules: map[string]WorkflowScheduleConfig{
 				"kept": {
 					Provider: "temporal",
-					Target:   &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "alpha"}},
+					Target:   workflowTestPluginTargetConfig("alpha", "", "", nil),
 				},
 				"dropped": {
-					Target: &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "gamma"}},
+					Target: workflowTestPluginTargetConfig("gamma", "", "", nil),
 				},
 				"dependency_only": {
-					Target:  &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "gamma"}},
+					Target:  workflowTestPluginTargetConfig("gamma", "", "", nil),
 					Invokes: []WorkflowInvokeConfig{{Plugin: "alpha", Operation: "ping"}},
 				},
 			},
@@ -6691,7 +6711,7 @@ func TestApplyPluginScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
 		Workflows: WorkflowsConfig{
 			Schedules: map[string]WorkflowScheduleConfig{
 				"fanout": {
-					Target: &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "alpha"}},
+					Target: workflowTestPluginTargetConfig("alpha", "", "", nil),
 					Invokes: []WorkflowInvokeConfig{{
 						Plugin:    "beta",
 						Operation: "ping",
@@ -6699,7 +6719,7 @@ func TestApplyPluginScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
 					Permissions: []core.AccessPermission{{Plugin: "gamma"}},
 				},
 				"dependency_target": {
-					Target: &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "beta"}},
+					Target: workflowTestPluginTargetConfig("beta", "", "", nil),
 					Invokes: []WorkflowInvokeConfig{{
 						Plugin:    "delta",
 						Operation: "pong",
@@ -6728,6 +6748,30 @@ func TestApplyPluginScopeRejectsUnknownPlugin(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `unknown plugin "missing"`) {
 		t.Fatalf("ApplyPluginScope error = %v, want unknown plugin", err)
 	}
+}
+
+func workflowTestPluginTargetConfig(name, operation string, credentialMode providermanifestv1.ConnectionMode, input map[string]any) *WorkflowTargetConfig {
+	step := WorkflowStepConfig{
+		ID: "main",
+		Plugin: &WorkflowStepPluginCallConfig{
+			Name:           name,
+			Operation:      operation,
+			CredentialMode: credentialMode,
+			Input:          workflowTestLiteralObjectValueConfig(input),
+		},
+	}
+	return &WorkflowTargetConfig{Steps: []WorkflowStepConfig{step}}
+}
+
+func workflowTestLiteralObjectValueConfig(input map[string]any) WorkflowValueConfig {
+	if len(input) == 0 {
+		return WorkflowValueConfig{}
+	}
+	fields := make(map[string]WorkflowValueConfig, len(input))
+	for key, value := range input {
+		fields[key] = WorkflowValueConfig{Literal: value, LiteralSet: true}
+	}
+	return WorkflowValueConfig{Object: fields}
 }
 
 func sortedProviderEntryKeys(entries map[string]*ProviderEntry) []string {
