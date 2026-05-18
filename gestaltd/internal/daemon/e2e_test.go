@@ -816,7 +816,36 @@ func TestE2EValidatePlatformUsesLockedStaticMetadataWithoutArchiveDownload(t *te
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := writeValidValidateConfig(t, dir)
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
+	pluginDir := setupPrebuiltPluginDir(t, dir)
+	if err := writeLocalProviderReleaseMetadata(pluginDir); err != nil {
+		t.Fatalf("write plugin provider-release metadata: %v", err)
+	}
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+server:
+  baseUrl: %s
+  encryptionKey: valid-config-e2e-key
+  providers:
+    indexeddb: inmem
+    externalCredentials: default
+providers:
+  externalCredentials:
+    default:
+      source:
+        path: %s
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+plugins:
+  example:
+    source: %s
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, filepath.Join(pluginDir, "provider-release.yaml"))
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
 	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err != nil {
@@ -872,7 +901,11 @@ func TestE2EValidateStaticRejectsStaleCatalogExposureMetadata(t *testing.T) {
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	callerManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "caller")))
-	targetManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "target")))
+	targetDir := setupPrebuiltPluginDir(t, filepath.Join(dir, "target"))
+	if err := writeLocalProviderReleaseMetadata(targetDir); err != nil {
+		t.Fatalf("write target provider-release metadata: %v", err)
+	}
+	targetReleaseMetadata := filepath.Join(targetDir, "provider-release.yaml")
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
 	cfgPath := filepath.Join(dir, "config.yaml")
 	writeConfig := func(targetOperation string) {
@@ -901,11 +934,10 @@ plugins:
       - plugin: target
         operation: echo
   target:
-    source:
-      path: %s
+    source: %s
     allowedOperations:
       %s: {}
-`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, callerManifest, targetManifest, targetOperation)
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, callerManifest, targetReleaseMetadata, targetOperation)
 		if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 			t.Fatalf("write config: %v", err)
 		}
@@ -3080,28 +3112,24 @@ func TestE2ELockSyncLocalProviders(t *testing.T) {
 	if err == nil {
 		t.Fatalf("gestaltd sync --check with stale lock unexpectedly succeeded\noutput: %s", out)
 	}
-	if !strings.Contains(string(out), "gestaltd lock") {
-		t.Fatalf("stale lock output should point at lock, got: %s", out)
+	if !strings.Contains(string(out), "prepared artifact for provider") ||
+		!strings.Contains(string(out), "renamed") ||
+		!strings.Contains(string(out), "gestaltd sync --locked") {
+		t.Fatalf("stale local source output should point at sync, got: %s", out)
 	}
-	if strings.Contains(string(out), "--artifacts-dir") {
-		t.Fatalf("lock remediation should not include --artifacts-dir, got: %s", out)
+	if !strings.Contains(string(out), "--artifacts-dir") {
+		t.Fatalf("sync remediation should include --artifacts-dir, got: %s", out)
 	}
 	if strings.Contains(string(out), "--lockfile") {
-		t.Fatalf("lock remediation should not include default --lockfile, got: %s", out)
+		t.Fatalf("sync remediation should not include default --lockfile, got: %s", out)
 	}
 	staleArtifactsDir := filepath.Join(dir, "prepared-stale")
 	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", staleCfgPath, "--artifacts-dir", staleArtifactsDir).CombinedOutput()
-	if err == nil {
-		t.Fatalf("gestaltd sync with stale lock unexpectedly succeeded\noutput: %s", out)
+	if err != nil {
+		t.Fatalf("gestaltd sync with renamed local provider should materialize from source: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "lockfile is out of date") || !strings.Contains(string(out), "gestaltd lock") {
-		t.Fatalf("stale lock materialize output should point at lock, got: %s", out)
-	}
-	if strings.Contains(string(out), "lock entry for provider") {
-		t.Fatalf("stale lock materialize should fail before per-provider materialization, got: %s", out)
-	}
-	if _, err := os.Stat(staleArtifactsDir); !os.IsNotExist(err) {
-		t.Fatalf("stale sync should not create artifacts dir, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(staleArtifactsDir, ".gestaltd", "providers", "renamed")); err != nil {
+		t.Fatalf("renamed local provider should be prepared from source, stat err=%v", err)
 	}
 
 	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", staleCfgPath, "--lockfile", lockPath, "--artifacts-dir", filepath.Join(dir, "prepared")).CombinedOutput()
@@ -3109,10 +3137,10 @@ func TestE2ELockSyncLocalProviders(t *testing.T) {
 		t.Fatalf("gestaltd sync --check with stale lock unexpectedly succeeded\noutput: %s", out)
 	}
 	if !strings.Contains(string(out), "--lockfile "+lockPath) {
-		t.Fatalf("lock remediation should preserve explicit --lockfile, got: %s", out)
+		t.Fatalf("sync remediation should preserve explicit --lockfile, got: %s", out)
 	}
-	if strings.Contains(string(out), "--artifacts-dir") {
-		t.Fatalf("lock remediation should not include --artifacts-dir, got: %s", out)
+	if !strings.Contains(string(out), "--artifacts-dir") {
+		t.Fatalf("sync remediation should include --artifacts-dir, got: %s", out)
 	}
 
 	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", cfgPath).CombinedOutput()
