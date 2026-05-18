@@ -58,7 +58,6 @@ const (
 	agentDefaultToolNarrowingK   = 200
 	AgentListSummaryDefaultLimit = 100
 	AgentListMaxLimit            = 500
-	agentReadHydrationTimeout    = 750 * time.Millisecond
 )
 
 type AgentProviderNotAvailableError struct {
@@ -379,9 +378,7 @@ func (m *Manager) GetSession(ctx context.Context, p *principal.Principal, sessio
 	ctx, finish := startAgentOperation(ctx, "get_session")
 	defer func() { finish(err) }()
 
-	hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-	owned, err := m.findAccessibleSession(hydrationCtx, p, sessionID, "")
-	cancel()
+	owned, err := m.findAccessibleSession(ctx, p, sessionID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -417,14 +414,12 @@ func (m *Manager) ListSessions(ctx context.Context, p *principal.Principal, req 
 				return nil, err
 			}
 		}
-		hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-		sessions, err := candidate.provider.ListSessions(hydrationCtx, coreagent.ListSessionsRequest{
+		sessions, err := candidate.provider.ListSessions(ctx, coreagent.ListSessionsRequest{
 			Subject:     agentSubjectFromPrincipal(p),
 			State:       req.State,
 			Limit:       limit,
 			SummaryOnly: req.SummaryOnly,
 		})
-		cancel()
 		if err != nil {
 			return nil, err
 		}
@@ -623,9 +618,7 @@ func (m *Manager) GetTurn(ctx context.Context, p *principal.Principal, turnID st
 	ctx, finish := startAgentOperation(ctx, "get_turn")
 	defer func() { finish(err) }()
 
-	hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-	owned, err := m.findAccessibleTurn(hydrationCtx, p, turnID, "", "")
-	cancel()
+	owned, err := m.findAccessibleTurn(ctx, p, turnID, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -641,9 +634,7 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req cor
 	if err != nil {
 		return nil, err
 	}
-	hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-	ownedSession, err := m.findAccessibleSession(hydrationCtx, p, req.SessionID, "")
-	cancel()
+	ownedSession, err := m.findAccessibleSession(ctx, p, req.SessionID, "")
 	if err != nil {
 		return nil, err
 	}
@@ -653,15 +644,13 @@ func (m *Manager) ListTurns(ctx context.Context, p *principal.Principal, req cor
 			return nil, err
 		}
 	}
-	hydrationCtx, cancel = context.WithTimeout(ctx, agentReadHydrationTimeout)
-	turns, err = ownedSession.provider.ListTurns(hydrationCtx, coreagent.ListTurnsRequest{
+	turns, err = ownedSession.provider.ListTurns(ctx, coreagent.ListTurnsRequest{
 		SessionID:   ownedSession.session.ID,
 		Subject:     agentSubjectFromPrincipal(p),
 		Status:      req.Status,
 		Limit:       limit,
 		SummaryOnly: req.SummaryOnly,
 	})
-	cancel()
 	if err != nil {
 		return nil, err
 	}
@@ -736,21 +725,17 @@ func (m *Manager) ListTurnEvents(ctx context.Context, p *principal.Principal, tu
 	ctx, finish := startAgentOperation(ctx, "list_turn_events")
 	defer func() { finish(err) }()
 
-	hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-	owned, err := m.findAccessibleTurn(hydrationCtx, p, turnID, "", "")
-	cancel()
+	owned, err := m.findAccessibleTurn(ctx, p, turnID, "", "")
 	if err != nil {
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
-	hydrationCtx, cancel = context.WithTimeout(ctx, agentReadHydrationTimeout)
-	events, err = owned.provider.ListTurnEvents(hydrationCtx, coreagent.ListTurnEventsRequest{
+	events, err = owned.provider.ListTurnEvents(ctx, coreagent.ListTurnEventsRequest{
 		TurnID:   owned.turn.ID,
 		AfterSeq: afterSeq,
 		Limit:    limit,
 		Subject:  agentSubjectFromPrincipal(p),
 	})
-	cancel()
 	if err != nil {
 		return nil, err
 	}
@@ -761,19 +746,15 @@ func (m *Manager) ListInteractions(ctx context.Context, p *principal.Principal, 
 	ctx, finish := startAgentOperation(ctx, "list_interactions")
 	defer func() { finish(err) }()
 
-	hydrationCtx, cancel := context.WithTimeout(ctx, agentReadHydrationTimeout)
-	owned, err := m.findAccessibleTurn(hydrationCtx, p, turnID, "", "")
-	cancel()
+	owned, err := m.findAccessibleTurn(ctx, p, turnID, "", "")
 	if err != nil {
 		return nil, err
 	}
 	observability.SetSpanAttributes(ctx, observability.AttrAgentProvider.String(owned.providerName))
-	hydrationCtx, cancel = context.WithTimeout(ctx, agentReadHydrationTimeout)
-	interactions, err := owned.provider.ListInteractions(hydrationCtx, coreagent.ListInteractionsRequest{
+	interactions, err := owned.provider.ListInteractions(ctx, coreagent.ListInteractionsRequest{
 		TurnID:  owned.turn.ID,
 		Subject: agentSubjectFromPrincipal(p),
 	})
-	cancel()
 	if err != nil {
 		return nil, err
 	}
