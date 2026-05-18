@@ -52,7 +52,6 @@ import {
 } from "../src/internal/gen/v1/cache_pb.ts";
 import {
   AccessContextSchema,
-  AgentSubjectContextSchema,
   AgentToolRefSchema,
   CredentialContextSchema,
   ExecuteRequestSchema,
@@ -917,6 +916,7 @@ test("integration provider service resolves hosted HTTP subjects through the plu
     subject: {
       id: "system:http_binding:agent:command",
       kind: "system",
+      credentialSubjectId: "",
       displayName: "",
       authSource: "http_binding",
       email: "",
@@ -2237,9 +2237,9 @@ test("integration provider request context includes workflow metadata", async ()
           create(AgentToolRefSchema, {
             plugin: "github",
             operation: "bot.getPullRequest",
-            runAs: create(AgentSubjectContextSchema, {
-              subjectId: "service_account:github-review",
-              subjectKind: "service_account",
+            runAs: create(SubjectContextSchema, {
+              id: "service_account:github-review",
+              kind: "service_account",
               credentialSubjectId: "service_account:github-review",
               displayName: "GitHub Review",
               authSource: "managed_subject",
@@ -2306,11 +2306,12 @@ test("integration provider request context includes workflow metadata", async ()
         description: "",
         system: "",
         runAs: {
-          subjectId: "service_account:github-review",
-          subjectKind: "service_account",
+          id: "service_account:github-review",
+          kind: "service_account",
           credentialSubjectId: "service_account:github-review",
           displayName: "GitHub Review",
           authSource: "managed_subject",
+          email: "",
         },
         runAsExternalIdentity: {
           type: "github_identity",

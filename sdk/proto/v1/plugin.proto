@@ -170,6 +170,7 @@ message SubjectContext {
   string display_name = 3;
   string auth_source = 4;
   string email = 5;
+  string credential_subject_id = 6;
 }
 
 // ExternalIdentityContext identifies the caller in a provider-owned external
@@ -177,14 +178,6 @@ message SubjectContext {
 message ExternalIdentityContext {
   string type = 1;
   string id = 2;
-}
-
-message AgentSubjectContext {
-  string subject_id = 1;
-  string subject_kind = 2;
-  string credential_subject_id = 3;
-  string display_name = 4;
-  string auth_source = 5;
 }
 
 message AgentToolRef {
@@ -198,7 +191,7 @@ message AgentToolRef {
   string title = 5;
   string description = 6;
   string system = 8;
-  AgentSubjectContext run_as = 9;
+  SubjectContext run_as = 9;
   ExternalIdentityContext run_as_external_identity = 10;
 }
 

@@ -6,6 +6,7 @@ import type { AgentToolRef } from "./agent.ts";
 export interface Subject {
   id: string;
   kind: string;
+  credentialSubjectId: string;
   displayName: string;
   authSource: string;
   email: string;
@@ -17,6 +18,7 @@ export interface Subject {
 export interface SubjectInput {
   id: string;
   kind: string;
+  credentialSubjectId?: string | undefined;
   displayName: string;
   authSource: string;
   email?: string | undefined;
@@ -156,6 +158,7 @@ export function request(
     subject: {
       id: subject.id ?? "",
       kind: subject.kind ?? "",
+      credentialSubjectId: subject.credentialSubjectId ?? "",
       displayName: subject.displayName ?? "",
       authSource: subject.authSource ?? "",
       email: subject.email ?? "",
@@ -163,6 +166,7 @@ export function request(
     agentSubject: {
       id: agentSubject.id ?? "",
       kind: agentSubject.kind ?? "",
+      credentialSubjectId: agentSubject.credentialSubjectId ?? "",
       displayName: agentSubject.displayName ?? "",
       authSource: agentSubject.authSource ?? "",
       email: agentSubject.email ?? "",

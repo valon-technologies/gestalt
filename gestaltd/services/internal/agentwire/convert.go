@@ -76,7 +76,7 @@ func ToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 		Instance:    ref.GetInstance(),
 		Title:       ref.GetTitle(),
 		Description: ref.GetDescription(),
-		RunAs:       agentRunAsSubjectFromProto(ref.GetRunAs()),
+		RunAs:       RunAsSubjectFromProto(ref.GetRunAs()),
 		RunAsExternalIdentity: externalIdentityRefFromProto(
 			ref.GetRunAsExternalIdentity(),
 		),
@@ -92,34 +92,34 @@ func ToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 		Instance:    ref.Instance,
 		Title:       ref.Title,
 		Description: ref.Description,
-		RunAs:       agentRunAsSubjectToProto(ref.RunAs),
+		RunAs:       RunAsSubjectToProto(ref.RunAs),
 		RunAsExternalIdentity: externalIdentityRefToProto(
 			ref.RunAsExternalIdentity,
 		),
 	}
 }
 
-func agentRunAsSubjectFromProto(subject *proto.AgentSubjectContext) *core.RunAsSubject {
+func RunAsSubjectFromProto(subject *proto.SubjectContext) *core.RunAsSubject {
 	if subject == nil {
 		return nil
 	}
 	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID:           subject.GetSubjectId(),
-		SubjectKind:         subject.GetSubjectKind(),
+		SubjectID:           subject.GetId(),
+		SubjectKind:         subject.GetKind(),
 		CredentialSubjectID: subject.GetCredentialSubjectId(),
 		DisplayName:         subject.GetDisplayName(),
 		AuthSource:          subject.GetAuthSource(),
 	})
 }
 
-func agentRunAsSubjectToProto(subject *core.RunAsSubject) *proto.AgentSubjectContext {
+func RunAsSubjectToProto(subject *core.RunAsSubject) *proto.SubjectContext {
 	normalized := core.NormalizeRunAsSubject(subject)
 	if normalized == nil {
 		return nil
 	}
-	return &proto.AgentSubjectContext{
-		SubjectId:           normalized.SubjectID,
-		SubjectKind:         normalized.SubjectKind,
+	return &proto.SubjectContext{
+		Id:                  normalized.SubjectID,
+		Kind:                normalized.SubjectKind,
 		CredentialSubjectId: normalized.CredentialSubjectID,
 		DisplayName:         normalized.DisplayName,
 		AuthSource:          normalized.AuthSource,

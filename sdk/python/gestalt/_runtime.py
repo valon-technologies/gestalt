@@ -1633,6 +1633,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                 subject=plugin_pb2.SubjectContext(
                     id=subject.id,
                     kind=subject.kind,
+                    credential_subject_id=subject.credential_subject_id,
                     display_name=subject.display_name,
                     auth_source=subject.auth_source,
                     email=subject.email,
@@ -2166,6 +2167,7 @@ def _subject_from_proto(request_context: Any, field_name: str) -> Subject:
     return Subject(
         id=getattr(subject, "id", ""),
         kind=getattr(subject, "kind", ""),
+        credential_subject_id=getattr(subject, "credential_subject_id", ""),
         display_name=getattr(subject, "display_name", ""),
         auth_source=getattr(subject, "auth_source", ""),
         email=getattr(subject, "email", ""),

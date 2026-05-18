@@ -70,8 +70,8 @@ test("agent workflow tool refs carry runAs subjects", () => {
           plugin: "notion",
           operation: "search",
           runAs: {
-            subjectId: "service_account:gestalt-support-notion",
-            subjectKind: "service_account",
+            id: "service_account:gestalt-support-notion",
+            kind: "service_account",
             credentialSubjectId: "service_account:notion-credential",
             displayName: "Gestalt Support Notion",
             authSource: "notion_service_account",
@@ -94,7 +94,7 @@ test("agent workflow tool refs carry runAs subjects", () => {
   if (ref === undefined) {
     throw new Error("expected agent tool ref");
   }
-  expect(ref.runAs?.subjectId).toBe("service_account:gestalt-support-notion");
+  expect(ref.runAs?.id).toBe("service_account:gestalt-support-notion");
   expect(ref.runAsExternalIdentity?.id).toBe("valon-support");
 
   const copied = boundWorkflowTargetFromTarget(target);

@@ -153,7 +153,7 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 		ctx = principal.WithPrincipal(ctx, principalFromProto(subject))
 	}
 	if agentSubject := reqCtx.GetAgentSubject(); agentSubject != nil {
-		ctx = invocation.WithRunAsAudit(ctx, runAsSubjectFromProto(agentSubject), runAsSubjectFromProto(reqCtx.GetSubject()))
+		ctx = invocation.WithRunAsAudit(ctx, agentwire.RunAsSubjectFromProto(agentSubject), agentwire.RunAsSubjectFromProto(reqCtx.GetSubject()))
 	}
 	if identity := reqCtx.GetAgentExternalIdentity(); identity != nil {
 		ctx = invocation.WithAgentExternalIdentityContext(ctx, invocation.ExternalIdentityContext{
@@ -193,18 +193,6 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 		ctx = invocation.WithToolRefsContext(ctx, requestToolRefsFromProto(reqCtx.GetToolRefs()))
 	}
 	return ctx
-}
-
-func runAsSubjectFromProto(subject *proto.SubjectContext) *core.RunAsSubject {
-	if subject == nil {
-		return nil
-	}
-	return core.NormalizeRunAsSubject(&core.RunAsSubject{
-		SubjectID:   subject.GetId(),
-		SubjectKind: subject.GetKind(),
-		DisplayName: subject.GetDisplayName(),
-		AuthSource:  subject.GetAuthSource(),
-	})
 }
 
 func requestToolRefsFromProto(refs []*proto.AgentToolRef) []coreagent.ToolRef {

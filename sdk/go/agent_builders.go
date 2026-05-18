@@ -118,7 +118,7 @@ func NewAgentMessagePartImageRef(input AgentMessagePartImageRef) *AgentMessagePa
 
 // NewAgentToolRef creates an agent tool reference.
 func NewAgentToolRef(input AgentToolRef) *AgentToolRef {
-	var runAs *AgentSubjectContext
+	var runAs *Subject
 	if input.RunAs != nil {
 		copied := *input.RunAs
 		runAs = &copied
@@ -146,7 +146,7 @@ func AgentToolRefFromRef(value *AgentToolRef) AgentToolRef {
 	if value == nil {
 		return AgentToolRef{}
 	}
-	var runAs *AgentSubjectContext
+	var runAs *Subject
 	if value.RunAs != nil {
 		copied := *value.RunAs
 		runAs = &copied

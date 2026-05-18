@@ -30,8 +30,8 @@ use gestalt::{
     AgentManagerListInteractions, AgentManagerListSessions, AgentManagerListTurnEvents,
     AgentManagerListTurns, AgentManagerResolveInteraction, AgentManagerUpdateSession, AgentMessage,
     AgentMessagePart, AgentMessagePartType as NativeAgentMessagePartType, AgentSessionState,
-    AgentSubjectContext, AgentToolRef, AgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET,
-    ExternalIdentity, Request,
+    AgentToolRef, AgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET, ExternalIdentity, Request,
+    Subject,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -699,12 +699,13 @@ async fn agent_manager_create_turn_accepts_native_values() {
                 plugin: "github".to_string(),
                 operation: "issues.get".to_string(),
                 connection: "default".to_string(),
-                run_as: Some(AgentSubjectContext {
-                    subject_id: "service_account:gestalt-support-github".to_string(),
-                    subject_kind: "service_account".to_string(),
+                run_as: Some(Subject {
+                    id: "service_account:gestalt-support-github".to_string(),
+                    kind: "service_account".to_string(),
                     credential_subject_id: "service_account:github-credential".to_string(),
                     display_name: "Gestalt Support GitHub".to_string(),
                     auth_source: "github_app".to_string(),
+                    email: String::new(),
                 }),
                 run_as_external_identity: Some(ExternalIdentity {
                     r#type: "github_app_installation".to_string(),
@@ -758,7 +759,7 @@ async fn agent_manager_create_turn_accepts_native_values() {
         .run_as
         .as_ref()
         .expect("tool ref run_as");
-    assert_eq!(run_as.subject_id, "service_account:gestalt-support-github");
+    assert_eq!(run_as.id, "service_account:gestalt-support-github");
     assert_eq!(run_as.display_name, "Gestalt Support GitHub");
     let external_identity = request.tool_refs[0]
         .run_as_external_identity

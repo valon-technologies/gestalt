@@ -42,6 +42,7 @@ class Subject:
 
     id: str = ""
     kind: str = ""
+    credential_subject_id: str = ""
     display_name: str = ""
     auth_source: str = ""
     email: str = ""

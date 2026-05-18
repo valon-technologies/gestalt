@@ -218,7 +218,6 @@ timezone-aware ``datetime`` values. The runtime owns transport serialization.
    :nosignatures:
 
    AgentActor
-   AgentSubjectContext
    AgentPreparedWorkspace
    AgentToolRef
    ResolvedAgentTool
@@ -245,8 +244,6 @@ timezone-aware ``datetime`` values. The runtime owns transport serialization.
    ResolvedAgentConnection
 
 .. autoclass:: AgentActor
-
-.. autoclass:: AgentSubjectContext
 
 .. autoclass:: AgentPreparedWorkspace
 
@@ -309,8 +306,8 @@ lower-snake-case dictionaries.
 
    agent_actor_to_dict
    agent_actor_from_dict
-   agent_subject_context_to_dict
-   agent_subject_context_from_dict
+   subject_to_dict
+   subject_from_dict
    prepared_workspace_to_dict
    prepared_workspace_from_dict
    agent_tool_ref_to_dict
@@ -326,9 +323,9 @@ lower-snake-case dictionaries.
 
 .. autofunction:: agent_actor_from_dict
 
-.. autofunction:: agent_subject_context_to_dict
+.. autofunction:: subject_to_dict
 
-.. autofunction:: agent_subject_context_from_dict
+.. autofunction:: subject_from_dict
 
 .. autofunction:: prepared_workspace_to_dict
 
