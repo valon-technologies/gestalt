@@ -2,13 +2,17 @@ package gestalt
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"testing"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 )
 
@@ -37,6 +41,34 @@ func TestIndexedDBClientLifecycleNilStatusErrorFramesReturnError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "missing non-OK status") {
 		t.Fatalf("DeleteDatabase nil status error = %v, want missing non-OK status", err)
+	}
+}
+
+func TestIndexedDBClientCanceledStatusMapping(t *testing.T) {
+	t.Parallel()
+
+	err := grpcErr(status.Error(codes.Canceled, context.Canceled.Error()))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("transport canceled error = %v, want context.Canceled", err)
+	}
+	if errors.Is(err, ErrAbort) {
+		t.Fatalf("transport canceled error = %v, should not match ErrAbort", err)
+	}
+
+	err = rpcStatusErr(&rpcstatus.Status{Code: int32(codes.Canceled), Message: ErrAbort.Error() + ": user callback"})
+	if !errors.Is(err, ErrAbort) {
+		t.Fatalf("abort application status error = %v, want ErrAbort", err)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Fatalf("abort application status error = %v, should not match context.Canceled", err)
+	}
+
+	err = rpcStatusErr(&rpcstatus.Status{Code: int32(codes.Canceled), Message: context.Canceled.Error()})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled application status error = %v, want context.Canceled", err)
+	}
+	if errors.Is(err, ErrAbort) {
+		t.Fatalf("canceled application status error = %v, should not match ErrAbort", err)
 	}
 }
 

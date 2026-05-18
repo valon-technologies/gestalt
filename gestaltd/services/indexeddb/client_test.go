@@ -2,6 +2,7 @@ package indexeddb
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -9,7 +10,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -87,6 +91,34 @@ func TestRemoteIndexedDBLifecycleNilStatusErrorFramesReturnError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "missing non-OK status") {
 		t.Fatalf("DeleteDatabase nil status error = %v, want missing non-OK status", err)
+	}
+}
+
+func TestRemoteIndexedDBCanceledStatusMapping(t *testing.T) {
+	t.Parallel()
+
+	err := grpcToDatastoreErr(status.Error(codes.Canceled, context.Canceled.Error()))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("transport canceled error = %v, want context.Canceled", err)
+	}
+	if errors.Is(err, indexeddb.ErrAbort) {
+		t.Fatalf("transport canceled error = %v, should not match ErrAbort", err)
+	}
+
+	err = rpcStatusToDatastoreErr(&rpcstatus.Status{Code: int32(codes.Canceled), Message: indexeddb.ErrAbort.Error() + ": user callback"})
+	if !errors.Is(err, indexeddb.ErrAbort) {
+		t.Fatalf("abort application status error = %v, want ErrAbort", err)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Fatalf("abort application status error = %v, should not match context.Canceled", err)
+	}
+
+	err = rpcStatusToDatastoreErr(&rpcstatus.Status{Code: int32(codes.Canceled), Message: context.Canceled.Error()})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled application status error = %v, want context.Canceled", err)
+	}
+	if errors.Is(err, indexeddb.ErrAbort) {
+		t.Fatalf("canceled application status error = %v, should not match ErrAbort", err)
 	}
 }
 

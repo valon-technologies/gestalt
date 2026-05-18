@@ -1171,6 +1171,9 @@ func rpcStatusToDatastoreErr(st *rpcstatus.Status) error {
 	if st == nil || st.GetCode() == int32(codes.OK) {
 		return nil
 	}
+	if codes.Code(st.GetCode()) == codes.Canceled && isIndexedDBAbortMessage(st.GetMessage()) {
+		return coreindexeddb.ErrAbort
+	}
 	return grpcToDatastoreErr(status.Error(codes.Code(st.GetCode()), st.GetMessage()))
 }
 
@@ -1250,7 +1253,10 @@ func grpcToDatastoreErr(err error) error {
 	case codes.AlreadyExists:
 		return coreindexeddb.ErrAlreadyExists
 	case codes.Canceled:
-		return coreindexeddb.ErrAbort
+		if isIndexedDBAbortMessage(st.Message()) {
+			return coreindexeddb.ErrAbort
+		}
+		return context.Canceled
 	case codes.InvalidArgument:
 		if strings.Contains(st.Message(), "invalid transaction") {
 			return coreindexeddb.ErrInvalidTransaction
@@ -1270,6 +1276,10 @@ func grpcToDatastoreErr(err error) error {
 	default:
 		return err
 	}
+}
+
+func isIndexedDBAbortMessage(message string) bool {
+	return strings.Contains(message, coreindexeddb.ErrAbort.Error())
 }
 
 // --- Remote Cursor ---

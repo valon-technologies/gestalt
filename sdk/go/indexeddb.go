@@ -1811,6 +1811,9 @@ func rpcStatusErr(st *rpcstatus.Status) error {
 	if st == nil || st.GetCode() == int32(codes.OK) {
 		return nil
 	}
+	if codes.Code(st.GetCode()) == codes.Canceled && isIndexedDBAbortMessage(st.GetMessage()) {
+		return ErrAbort
+	}
 	return grpcErr(status.Error(codes.Code(st.GetCode()), st.GetMessage()))
 }
 
@@ -1865,7 +1868,10 @@ func grpcErr(err error) error {
 	case codes.AlreadyExists:
 		return ErrAlreadyExists
 	case codes.Canceled:
-		return ErrAbort
+		if isIndexedDBAbortMessage(st.Message()) {
+			return ErrAbort
+		}
+		return context.Canceled
 	case codes.InvalidArgument:
 		if strings.Contains(st.Message(), "invalid transaction") {
 			return ErrInvalidTransaction
@@ -1885,4 +1891,8 @@ func grpcErr(err error) error {
 	default:
 		return err
 	}
+}
+
+func isIndexedDBAbortMessage(message string) bool {
+	return strings.Contains(message, ErrAbort.Error())
 }
