@@ -18,10 +18,17 @@ func newIndexedDBStoreAllowlist(ds indexeddb.IndexedDB, opts indexedDBStoreAllow
 	for _, store := range opts.AllowedStores {
 		allowed[store] = struct{}{}
 	}
-	return &indexedDBStoreAllowlist{
+	base := &indexedDBStoreAllowlist{
 		inner:   ds,
 		allowed: allowed,
 	}
+	if factory, ok := ds.(indexeddb.Factory); ok {
+		return &indexedDBFactoryStoreAllowlist{
+			indexedDBStoreAllowlist: base,
+			factory:                 factory,
+		}
+	}
+	return base
 }
 
 type indexedDBStoreAllowlist struct {
@@ -78,53 +85,38 @@ func (d *indexedDBStoreAllowlist) Close() error {
 	return d.inner.Close()
 }
 
-func (d *indexedDBStoreAllowlist) Open(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
-	factory, ok := d.inner.(indexeddb.Factory)
-	if !ok {
-		return nil, indexeddb.ErrInvalidTransaction
-	}
+type indexedDBFactoryStoreAllowlist struct {
+	*indexedDBStoreAllowlist
+	factory indexeddb.Factory
+}
+
+func (d *indexedDBFactoryStoreAllowlist) Open(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
 	opts.Upgrade = d.wrapUpgrade(opts.Upgrade)
-	db, err := factory.Open(ctx, name, opts)
+	db, err := d.factory.Open(ctx, name, opts)
 	if err != nil {
 		return nil, err
 	}
-	return &indexedDBDatabaseAllowlist{allowlist: d, inner: db}, nil
+	return &indexedDBDatabaseAllowlist{allowlist: d.indexedDBStoreAllowlist, inner: db}, nil
 }
 
-func (d *indexedDBStoreAllowlist) OpenCurrent(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
-	factory, ok := d.inner.(indexeddb.Factory)
-	if !ok {
-		return nil, indexeddb.ErrInvalidTransaction
-	}
-	db, err := factory.OpenCurrent(ctx, name, opts)
+func (d *indexedDBFactoryStoreAllowlist) OpenCurrent(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
+	db, err := d.factory.OpenCurrent(ctx, name, opts)
 	if err != nil {
 		return nil, err
 	}
-	return &indexedDBDatabaseAllowlist{allowlist: d, inner: db}, nil
+	return &indexedDBDatabaseAllowlist{allowlist: d.indexedDBStoreAllowlist, inner: db}, nil
 }
 
-func (d *indexedDBStoreAllowlist) DeleteDatabase(ctx context.Context, name string, opts indexeddb.DeleteOptions) (indexeddb.DeleteDatabaseResult, error) {
-	factory, ok := d.inner.(indexeddb.Factory)
-	if !ok {
-		return indexeddb.DeleteDatabaseResult{}, indexeddb.ErrInvalidTransaction
-	}
-	return factory.DeleteDatabase(ctx, name, opts)
+func (d *indexedDBFactoryStoreAllowlist) DeleteDatabase(ctx context.Context, name string, opts indexeddb.DeleteOptions) (indexeddb.DeleteDatabaseResult, error) {
+	return d.factory.DeleteDatabase(ctx, name, opts)
 }
 
-func (d *indexedDBStoreAllowlist) Databases(ctx context.Context) ([]indexeddb.DatabaseInfo, error) {
-	factory, ok := d.inner.(indexeddb.Factory)
-	if !ok {
-		return nil, indexeddb.ErrInvalidTransaction
-	}
-	return factory.Databases(ctx)
+func (d *indexedDBFactoryStoreAllowlist) Databases(ctx context.Context) ([]indexeddb.DatabaseInfo, error) {
+	return d.factory.Databases(ctx)
 }
 
-func (d *indexedDBStoreAllowlist) CompareKeys(first any, second any) (int, error) {
-	factory, ok := d.inner.(indexeddb.Factory)
-	if !ok {
-		return 0, indexeddb.ErrInvalidTransaction
-	}
-	return factory.CompareKeys(first, second)
+func (d *indexedDBFactoryStoreAllowlist) CompareKeys(first any, second any) (int, error) {
+	return d.factory.CompareKeys(first, second)
 }
 
 func (d *indexedDBStoreAllowlist) wrapUpgrade(upgrade func(context.Context, indexeddb.UpgradeContext) error) func(context.Context, indexeddb.UpgradeContext) error {
@@ -138,9 +130,9 @@ func (d *indexedDBStoreAllowlist) wrapUpgrade(upgrade func(context.Context, inde
 
 func (d *indexedDBStoreAllowlist) filterStoreNames(names []string) []string {
 	if len(d.allowed) == 0 {
-		return names
+		return append([]string(nil), names...)
 	}
-	filtered := names[:0]
+	filtered := make([]string, 0, len(names))
 	for _, name := range names {
 		if _, ok := d.allowed[name]; ok {
 			filtered = append(filtered, name)

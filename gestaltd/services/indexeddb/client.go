@@ -227,7 +227,10 @@ func (r *remoteIndexedDB) openDatabase(ctx context.Context, req *proto.OpenDatab
 		case *proto.OpenDatabaseServerMessage_Error:
 			_ = stream.CloseSend()
 			cancel()
-			return nil, rpcStatusToDatastoreErr(body.Error)
+			if err := rpcStatusToDatastoreErr(body.Error); err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("indexeddb open: error frame missing non-OK status")
 		default:
 			_ = stream.CloseSend()
 			cancel()
@@ -269,7 +272,10 @@ func (r *remoteIndexedDB) DeleteDatabase(ctx context.Context, name string, opts 
 		case *proto.DeleteDatabaseServerMessage_Deleted:
 			return coreindexeddb.DeleteDatabaseResult{Name: body.Deleted.GetName(), OldVersion: body.Deleted.GetOldVersion()}, nil
 		case *proto.DeleteDatabaseServerMessage_Error:
-			return coreindexeddb.DeleteDatabaseResult{}, rpcStatusToDatastoreErr(body.Error)
+			if err := rpcStatusToDatastoreErr(body.Error); err != nil {
+				return coreindexeddb.DeleteDatabaseResult{}, err
+			}
+			return coreindexeddb.DeleteDatabaseResult{}, fmt.Errorf("indexeddb delete database: error frame missing non-OK status")
 		default:
 			return coreindexeddb.DeleteDatabaseResult{}, fmt.Errorf("indexeddb delete database: unexpected server message")
 		}
@@ -458,7 +464,7 @@ func (u *remoteUpgradeContext) send(ctx context.Context, op *proto.UpgradeOperat
 	if err := rpcStatusToDatastoreErr(opResp.GetError()); err != nil {
 		return nil, err
 	}
-	return opResp, ctx.Err()
+	return opResp, nil
 }
 
 type remoteUpgradeDatabase remoteUpgradeContext

@@ -183,6 +183,9 @@ func (d *databaseBackedIndexedDB) ObjectStore(name string) indexeddb.ObjectStore
 	d.mu.Lock()
 	db := d.db
 	d.mu.Unlock()
+	if db == nil {
+		return errObjectStore{err: indexeddb.ErrNotFound}
+	}
 	store := db.ObjectStore(name)
 	if d.metricDBName == "" {
 		return store
@@ -197,6 +200,9 @@ func (d *databaseBackedIndexedDB) Transaction(ctx context.Context, stores []stri
 	d.mu.Lock()
 	db := d.db
 	d.mu.Unlock()
+	if db == nil {
+		return nil, indexeddb.ErrNotFound
+	}
 	return db.Transaction(ctx, stores, mode, opts)
 }
 
@@ -256,6 +262,102 @@ func (d *databaseBackedIndexedDB) upgrade(ctx context.Context, fn func(context.C
 	}
 	d.db = db
 	return nil
+}
+
+type errObjectStore struct {
+	err error
+}
+
+func (s errObjectStore) Get(context.Context, string) (indexeddb.Record, error) {
+	return nil, s.err
+}
+
+func (s errObjectStore) GetKey(context.Context, string) (string, error) {
+	return "", s.err
+}
+
+func (s errObjectStore) Add(context.Context, indexeddb.Record) error {
+	return s.err
+}
+
+func (s errObjectStore) Put(context.Context, indexeddb.Record) error {
+	return s.err
+}
+
+func (s errObjectStore) Delete(context.Context, string) error {
+	return s.err
+}
+
+func (s errObjectStore) Clear(context.Context) error {
+	return s.err
+}
+
+func (s errObjectStore) GetAll(context.Context, *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+	return nil, s.err
+}
+
+func (s errObjectStore) GetAllKeys(context.Context, *indexeddb.KeyRange) ([]string, error) {
+	return nil, s.err
+}
+
+func (s errObjectStore) Count(context.Context, *indexeddb.KeyRange) (int64, error) {
+	return 0, s.err
+}
+
+func (s errObjectStore) DeleteRange(context.Context, indexeddb.KeyRange) (int64, error) {
+	return 0, s.err
+}
+
+func (s errObjectStore) Index(string) indexeddb.Index {
+	return errIndex(s)
+}
+
+func (s errObjectStore) OpenCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	return nil, s.err
+}
+
+func (s errObjectStore) OpenKeyCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	return nil, s.err
+}
+
+type errIndex struct {
+	err error
+}
+
+func (i errIndex) Get(context.Context, ...any) (indexeddb.Record, error) {
+	return nil, i.err
+}
+
+func (i errIndex) GetKey(context.Context, ...any) (string, error) {
+	return "", i.err
+}
+
+func (i errIndex) GetAll(context.Context, *indexeddb.KeyRange, ...any) ([]indexeddb.Record, error) {
+	return nil, i.err
+}
+
+func (i errIndex) GetAllKeys(context.Context, *indexeddb.KeyRange, ...any) ([]string, error) {
+	return nil, i.err
+}
+
+func (i errIndex) Count(context.Context, *indexeddb.KeyRange, ...any) (int64, error) {
+	return 0, i.err
+}
+
+func (i errIndex) Delete(context.Context, ...any) (int64, error) {
+	return 0, i.err
+}
+
+func (i errIndex) DeleteRange(context.Context, *indexeddb.KeyRange, ...any) (int64, error) {
+	return 0, i.err
+}
+
+func (i errIndex) OpenCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection, ...any) (indexeddb.Cursor, error) {
+	return nil, i.err
+}
+
+func (i errIndex) OpenKeyCursor(context.Context, *indexeddb.KeyRange, indexeddb.CursorDirection, ...any) (indexeddb.Cursor, error) {
+	return nil, i.err
 }
 
 func (s *Services) Ping(ctx context.Context) error {

@@ -2,6 +2,7 @@ package indexeddb
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,4 +60,51 @@ func TestRemoteIndexedDBSchemaChangesUseProviderRPCTimeout(t *testing.T) {
 	if err := db.DeleteObjectStore(context.Background(), "api_tokens"); err != nil {
 		t.Fatalf("DeleteObjectStore: %v", err)
 	}
+}
+
+func TestRemoteIndexedDBLifecycleNilStatusErrorFramesReturnError(t *testing.T) {
+	t.Parallel()
+
+	conn := newBufconnConn(t, func(s *grpc.Server) {
+		proto.RegisterIndexedDBServer(s, malformedLifecycleErrorIndexedDBServer{})
+	})
+	db := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+
+	opened, err := db.Open(context.Background(), "app", indexeddb.OpenOptions{})
+	if err == nil {
+		if opened != nil {
+			_ = opened.Close()
+		}
+		t.Fatal("Open nil status error frame returned nil error")
+	}
+	if !strings.Contains(err.Error(), "missing non-OK status") {
+		t.Fatalf("Open nil status error = %v, want missing non-OK status", err)
+	}
+
+	result, err := db.DeleteDatabase(context.Background(), "app", indexeddb.DeleteOptions{})
+	if err == nil {
+		t.Fatalf("DeleteDatabase nil status error frame returned nil error and result %#v", result)
+	}
+	if !strings.Contains(err.Error(), "missing non-OK status") {
+		t.Fatalf("DeleteDatabase nil status error = %v, want missing non-OK status", err)
+	}
+}
+
+type malformedLifecycleErrorIndexedDBServer struct {
+	proto.UnimplementedIndexedDBServer
+}
+
+func (malformedLifecycleErrorIndexedDBServer) OpenDatabase(stream proto.IndexedDB_OpenDatabaseServer) error {
+	if _, err := stream.Recv(); err != nil {
+		return err
+	}
+	return stream.Send(&proto.OpenDatabaseServerMessage{
+		Msg: &proto.OpenDatabaseServerMessage_Error{},
+	})
+}
+
+func (malformedLifecycleErrorIndexedDBServer) DeleteDatabase(_ *proto.DeleteDatabaseRequest, stream proto.IndexedDB_DeleteDatabaseServer) error {
+	return stream.Send(&proto.DeleteDatabaseServerMessage{
+		Msg: &proto.DeleteDatabaseServerMessage_Error{},
+	})
 }

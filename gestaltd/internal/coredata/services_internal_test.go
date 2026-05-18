@@ -33,6 +33,12 @@ func TestDatabaseBackedIndexedDBClearsClosedHandleWhenUpgradeRecoveryFails(t *te
 	if adapter.db != nil {
 		t.Fatalf("database handle after failed recovery = %#v, want nil", adapter.db)
 	}
+	if _, err := adapter.ObjectStore("sessions").Get(context.Background(), "session-1"); !errors.Is(err, indexeddb.ErrNotFound) {
+		t.Fatalf("ObjectStore after failed recovery error = %v, want ErrNotFound", err)
+	}
+	if _, err := adapter.Transaction(context.Background(), []string{"sessions"}, indexeddb.TransactionReadonly, indexeddb.TransactionOptions{}); !errors.Is(err, indexeddb.ErrNotFound) {
+		t.Fatalf("Transaction after failed recovery error = %v, want ErrNotFound", err)
+	}
 	if err := adapter.CreateObjectStore(context.Background(), "sessions", indexeddb.ObjectStoreSchema{}); !errors.Is(err, indexeddb.ErrNotFound) {
 		t.Fatalf("CreateObjectStore after failed recovery error = %v, want ErrNotFound", err)
 	}
