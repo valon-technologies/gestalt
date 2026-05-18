@@ -123,7 +123,7 @@ func recordsResponseToProto(operation string, records []Record, err error) (*pro
 	return &proto.RecordsResponse{Records: pbRecords}, nil
 }
 
-func sendCursorResult(stream grpc.BidiStreamingServer[proto.CursorClientMessage, proto.CursorResponse], entry *IndexedDBCursorEntry, indexCursor bool, err error) error {
+func sendCursorResult(stream grpc.BidiStreamingServer[proto.CursorClientMessage, proto.CursorResponse], entry *IDBCursorEntry, indexCursor bool, err error) error {
 	if err != nil {
 		return providerRPCError("indexeddb cursor", err)
 	}
@@ -137,7 +137,7 @@ func sendCursorResult(stream grpc.BidiStreamingServer[proto.CursorClientMessage,
 	return stream.Send(&proto.CursorResponse{Result: &proto.CursorResponse_Entry{Entry: pbEntry}})
 }
 
-func cursorEntryToProto(entry *IndexedDBCursorEntry, indexCursor bool) (*proto.CursorEntry, error) {
+func cursorEntryToProto(entry *IDBCursorEntry, indexCursor bool) (*proto.CursorEntry, error) {
 	key, err := cursorKeyToProto(entry.Key, indexCursor)
 	if err != nil {
 		return nil, err
@@ -205,7 +205,7 @@ func durabilityHintFromProto(hint proto.TransactionDurabilityHint) TransactionDu
 	}
 }
 
-func executeIndexedDBOperation(ctx context.Context, tx IndexedDBTransaction, op *proto.TransactionOperation) (*proto.TransactionOperationResponse, error) {
+func executeIndexedDBOperation(ctx context.Context, tx IDBTransaction, op *proto.TransactionOperation) (*proto.TransactionOperationResponse, error) {
 	if op == nil {
 		return nil, status.Error(codes.InvalidArgument, "transaction operation is required")
 	}

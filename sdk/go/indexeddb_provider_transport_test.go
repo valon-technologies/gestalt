@@ -171,7 +171,7 @@ func TestServeIndexedDBProvider_OpenUpgradeAndScopedOperations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Databases: %v", err)
 	}
-	if !reflect.DeepEqual(infos, []gestalt.DatabaseInfo{{Name: "app", Version: version}}) {
+	if !reflect.DeepEqual(infos, []gestalt.IDBDatabaseInfo{{Name: "app", Version: version}}) {
 		t.Fatalf("Databases = %#v, want app v%d", infos, version)
 	}
 	cmp, err := client.CompareKeys(ctx, "a", "b")
@@ -251,7 +251,7 @@ func (p *nativeIndexedDBRootProvider) Configure(context.Context, string, map[str
 	return nil
 }
 
-func (p *nativeIndexedDBRootProvider) OpenDatabase(ctx context.Context, name string, opts gestalt.OpenOptions) (gestalt.IndexedDBDatabase, error) {
+func (p *nativeIndexedDBRootProvider) OpenDatabase(ctx context.Context, name string, opts gestalt.OpenOptions) (gestalt.IDBDatabase, error) {
 	p.mu.Lock()
 	db := p.databases[name]
 	oldVersion := uint64(0)
@@ -293,7 +293,7 @@ func (p *nativeIndexedDBRootProvider) OpenDatabase(ctx context.Context, name str
 	return db, nil
 }
 
-func (p *nativeIndexedDBRootProvider) OpenCurrentDatabase(_ context.Context, name string, _ gestalt.OpenOptions) (gestalt.IndexedDBDatabase, error) {
+func (p *nativeIndexedDBRootProvider) OpenCurrentDatabase(_ context.Context, name string, _ gestalt.OpenOptions) (gestalt.IDBDatabase, error) {
 	p.mu.Lock()
 	db := p.databases[name]
 	p.mu.Unlock()
@@ -314,11 +314,11 @@ func (p *nativeIndexedDBRootProvider) DeleteDatabase(_ context.Context, name str
 	return gestalt.DeleteDatabaseResult{Name: name, OldVersion: db.version}, nil
 }
 
-func (p *nativeIndexedDBRootProvider) Databases(context.Context) ([]gestalt.DatabaseInfo, error) {
+func (p *nativeIndexedDBRootProvider) Databases(context.Context) ([]gestalt.IDBDatabaseInfo, error) {
 	p.mu.Lock()
-	out := make([]gestalt.DatabaseInfo, 0, len(p.databases))
+	out := make([]gestalt.IDBDatabaseInfo, 0, len(p.databases))
 	for _, db := range p.databases {
-		out = append(out, gestalt.DatabaseInfo{Name: db.name, Version: db.version})
+		out = append(out, gestalt.IDBDatabaseInfo{Name: db.name, Version: db.version})
 	}
 	p.mu.Unlock()
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -620,7 +620,7 @@ func (p *nativeIndexedDBProvider) IndexDelete(ctx context.Context, req gestalt.I
 	return int64(len(keys)), nil
 }
 
-func (p *nativeIndexedDBProvider) OpenCursor(_ context.Context, req gestalt.IndexedDBOpenCursorRequest) (gestalt.IndexedDBCursor, error) {
+func (p *nativeIndexedDBProvider) OpenCursor(_ context.Context, req gestalt.IndexedDBOpenCursorRequest) (gestalt.IDBCursor, error) {
 	var entries []gestalt.IndexedDBCursorSnapshotEntry
 	var err error
 	if req.Index == "" {
@@ -640,7 +640,7 @@ func (p *nativeIndexedDBProvider) OpenCursor(_ context.Context, req gestalt.Inde
 	return &nativeIndexedDBCursor{provider: p, store: req.Store, snapshot: snapshot}, nil
 }
 
-func (p *nativeIndexedDBProvider) BeginTransaction(_ context.Context, req gestalt.IndexedDBBeginTransactionRequest) (gestalt.IndexedDBTransaction, error) {
+func (p *nativeIndexedDBProvider) BeginTransaction(_ context.Context, req gestalt.IndexedDBBeginTransactionRequest) (gestalt.IDBTransaction, error) {
 	if len(req.Stores) == 0 {
 		return nil, fmt.Errorf("%w: at least one store is required", gestalt.ErrInvalidTransaction)
 	}
@@ -713,17 +713,17 @@ type nativeIndexedDBCursor struct {
 	snapshot gestalt.IndexedDBCursorSnapshot
 }
 
-func (c *nativeIndexedDBCursor) Next(context.Context) (*gestalt.IndexedDBCursorEntry, error) {
+func (c *nativeIndexedDBCursor) Next(context.Context) (*gestalt.IDBCursorEntry, error) {
 	entry, err := c.snapshot.Next()
 	return publicCursorEntry(entry), err
 }
 
-func (c *nativeIndexedDBCursor) ContinueToKey(_ context.Context, key any) (*gestalt.IndexedDBCursorEntry, error) {
+func (c *nativeIndexedDBCursor) ContinueToKey(_ context.Context, key any) (*gestalt.IDBCursorEntry, error) {
 	entry, err := c.snapshot.ContinueToKey(key)
 	return publicCursorEntry(entry), err
 }
 
-func (c *nativeIndexedDBCursor) Advance(_ context.Context, count int) (*gestalt.IndexedDBCursorEntry, error) {
+func (c *nativeIndexedDBCursor) Advance(_ context.Context, count int) (*gestalt.IDBCursorEntry, error) {
 	entry, err := c.snapshot.Advance(count)
 	return publicCursorEntry(entry), err
 }
@@ -736,7 +736,7 @@ func (c *nativeIndexedDBCursor) Delete(ctx context.Context) error {
 	return c.provider.Delete(ctx, gestalt.IndexedDBObjectStoreRequest{Store: c.store, ID: entry.PrimaryKey})
 }
 
-func (c *nativeIndexedDBCursor) Update(ctx context.Context, record gestalt.Record) (*gestalt.IndexedDBCursorEntry, error) {
+func (c *nativeIndexedDBCursor) Update(ctx context.Context, record gestalt.Record) (*gestalt.IDBCursorEntry, error) {
 	entry, err := c.snapshot.Current()
 	if err != nil {
 		return nil, err
@@ -868,11 +868,11 @@ func (tx *nativeIndexedDBTransaction) writeAllowed() error {
 	return nil
 }
 
-func publicCursorEntry(entry *gestalt.IndexedDBCursorSnapshotEntry) *gestalt.IndexedDBCursorEntry {
+func publicCursorEntry(entry *gestalt.IndexedDBCursorSnapshotEntry) *gestalt.IDBCursorEntry {
 	if entry == nil {
 		return nil
 	}
-	return &gestalt.IndexedDBCursorEntry{
+	return &gestalt.IDBCursorEntry{
 		Key:        entry.Key,
 		PrimaryKey: entry.PrimaryKey,
 		Record:     cloneRecord(entry.Record),

@@ -117,7 +117,8 @@ type TransactionOptions struct {
 	DurabilityHint TransactionDurabilityHint
 }
 
-type DatabaseInfo struct {
+// IDBDatabaseInfo describes one database returned from Databases.
+type IDBDatabaseInfo struct {
 	Name    string
 	Version uint64
 }
@@ -383,18 +384,18 @@ func (db *IndexedDBClient) Close() error {
 
 // Open opens a database connection, optionally running an upgrade callback when
 // a higher version is requested or the database needs to be created.
-func (db *IndexedDBClient) Open(ctx context.Context, name string, opts OpenOptions) (*DatabaseClient, error) {
+func (db *IndexedDBClient) Open(ctx context.Context, name string, opts OpenOptions) (*IDBDatabaseClient, error) {
 	return db.openDatabase(ctx, &proto.OpenDatabaseRequest{Name: name, Version: opts.Version}, opts)
 }
 
 // OpenCurrent opens an existing database at its current version. It fails if
 // the database does not exist.
-func (db *IndexedDBClient) OpenCurrent(ctx context.Context, name string, opts OpenOptions) (*DatabaseClient, error) {
+func (db *IndexedDBClient) OpenCurrent(ctx context.Context, name string, opts OpenOptions) (*IDBDatabaseClient, error) {
 	opts.Version = nil
 	return db.openDatabase(ctx, &proto.OpenDatabaseRequest{Name: name, RequireExisting: true}, opts)
 }
 
-func (db *IndexedDBClient) openDatabase(ctx context.Context, req *proto.OpenDatabaseRequest, opts OpenOptions) (*DatabaseClient, error) {
+func (db *IndexedDBClient) openDatabase(ctx context.Context, req *proto.OpenDatabaseRequest, opts OpenOptions) (*IDBDatabaseClient, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -460,7 +461,7 @@ func (db *IndexedDBClient) openDatabase(ctx context.Context, req *proto.OpenData
 				return nil, ErrBlocked
 			}
 		case *proto.OpenDatabaseServerMessage_Opened:
-			opened := &DatabaseClient{
+			opened := &IDBDatabaseClient{
 				client:           db.client,
 				stream:           stream,
 				cancel:           cancel,
@@ -524,14 +525,14 @@ func (db *IndexedDBClient) DeleteDatabase(ctx context.Context, name string, opts
 }
 
 // Databases returns visible database names and versions.
-func (db *IndexedDBClient) Databases(ctx context.Context) ([]DatabaseInfo, error) {
+func (db *IndexedDBClient) Databases(ctx context.Context) ([]IDBDatabaseInfo, error) {
 	resp, err := db.client.Databases(ctx, &proto.DatabasesRequest{})
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	out := make([]DatabaseInfo, len(resp.GetDatabases()))
+	out := make([]IDBDatabaseInfo, len(resp.GetDatabases()))
 	for i, info := range resp.GetDatabases() {
-		out[i] = DatabaseInfo{Name: info.GetName(), Version: info.GetVersion()}
+		out[i] = IDBDatabaseInfo{Name: info.GetName(), Version: info.GetVersion()}
 	}
 	return out, nil
 }
@@ -553,8 +554,8 @@ func (db *IndexedDBClient) CompareKeys(ctx context.Context, first any, second an
 	return int(resp.GetCmp()), nil
 }
 
-// DatabaseClient is a live database connection returned from Open.
-type DatabaseClient struct {
+// IDBDatabaseClient is a live database connection returned from Open.
+type IDBDatabaseClient struct {
 	client           proto.IndexedDBClient
 	stream           proto.IndexedDB_OpenDatabaseClient
 	cancel           context.CancelFunc
@@ -567,23 +568,23 @@ type DatabaseClient struct {
 	closed           chan struct{}
 }
 
-func (db *DatabaseClient) Name() string { return db.name }
+func (db *IDBDatabaseClient) Name() string { return db.name }
 
-func (db *DatabaseClient) Version() uint64 { return db.version }
+func (db *IDBDatabaseClient) Version() uint64 { return db.version }
 
-func (db *DatabaseClient) ObjectStoreNames(context.Context) ([]string, error) {
+func (db *IDBDatabaseClient) ObjectStoreNames(context.Context) ([]string, error) {
 	return append([]string(nil), db.objectStoreNames...), nil
 }
 
-func (db *DatabaseClient) ObjectStore(name string) *ObjectStoreClient {
-	return &ObjectStoreClient{client: db.client, connectionID: db.connectionID, store: name}
+func (db *IDBDatabaseClient) ObjectStore(name string) *IDBObjectStoreClient {
+	return &IDBObjectStoreClient{client: db.client, connectionID: db.connectionID, store: name}
 }
 
-func (db *DatabaseClient) Transaction(ctx context.Context, stores []string, mode TransactionMode, opts TransactionOptions) (*Transaction, error) {
+func (db *IDBDatabaseClient) Transaction(ctx context.Context, stores []string, mode TransactionMode, opts TransactionOptions) (*IDBTransactionClient, error) {
 	return beginTransaction(ctx, db.client, db.connectionID, stores, mode, opts)
 }
 
-func (db *DatabaseClient) Close() error {
+func (db *IDBDatabaseClient) Close() error {
 	db.closeOnce.Do(func() {
 		if db.stream != nil {
 			_ = db.stream.Send(&proto.OpenDatabaseClientMessage{Msg: &proto.OpenDatabaseClientMessage_Close{Close: &proto.CloseDatabaseRequest{}}})
@@ -597,7 +598,7 @@ func (db *DatabaseClient) Close() error {
 	return nil
 }
 
-func (db *DatabaseClient) recvLifecycle() {
+func (db *IDBDatabaseClient) recvLifecycle() {
 	defer close(db.closed)
 	for {
 		msg, err := db.stream.Recv()
@@ -745,17 +746,17 @@ func (db *IndexedDBClient) DeleteObjectStore(ctx context.Context, name string) e
 }
 
 // ObjectStore returns a typed handle for working with one object store.
-func (db *IndexedDBClient) ObjectStore(name string) *ObjectStoreClient {
-	return &ObjectStoreClient{client: db.client, store: name}
+func (db *IndexedDBClient) ObjectStore(name string) *IDBObjectStoreClient {
+	return &IDBObjectStoreClient{client: db.client, store: name}
 }
 
 // Transaction starts an explicit IndexedDB transaction over the supplied object
 // store scope.
-func (db *IndexedDBClient) Transaction(ctx context.Context, stores []string, mode TransactionMode, opts TransactionOptions) (*Transaction, error) {
+func (db *IndexedDBClient) Transaction(ctx context.Context, stores []string, mode TransactionMode, opts TransactionOptions) (*IDBTransactionClient, error) {
 	return beginTransaction(ctx, db.client, nil, stores, mode, opts)
 }
 
-func beginTransaction(ctx context.Context, client proto.IndexedDBClient, connectionID []byte, stores []string, mode TransactionMode, opts TransactionOptions) (*Transaction, error) {
+func beginTransaction(ctx context.Context, client proto.IndexedDBClient, connectionID []byte, stores []string, mode TransactionMode, opts TransactionOptions) (*IDBTransactionClient, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -788,19 +789,19 @@ func beginTransaction(ctx context.Context, client proto.IndexedDBClient, connect
 		cancel()
 		return nil, fmt.Errorf("indexeddb: expected transaction begin response")
 	}
-	return &Transaction{stream: stream, cancel: cancel}, nil
+	return &IDBTransactionClient{stream: stream, cancel: cancel}, nil
 }
 
-// ObjectStoreClient provides CRUD, range-query, and cursor access to one
+// IDBObjectStoreClient provides CRUD, range-query, and cursor access to one
 // object store.
-type ObjectStoreClient struct {
+type IDBObjectStoreClient struct {
 	client       proto.IndexedDBClient
 	connectionID []byte
 	store        string
 }
 
 // Get loads one record by primary key.
-func (o *ObjectStoreClient) Get(ctx context.Context, id string) (Record, error) {
+func (o *IDBObjectStoreClient) Get(ctx context.Context, id string) (Record, error) {
 	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{ConnectionId: o.connectionID, Store: o.store, Id: id})
 	if err != nil {
 		return nil, grpcErr(err)
@@ -813,7 +814,7 @@ func (o *ObjectStoreClient) Get(ctx context.Context, id string) (Record, error) 
 }
 
 // GetKey resolves the primary key for the supplied lookup id.
-func (o *ObjectStoreClient) GetKey(ctx context.Context, id string) (string, error) {
+func (o *IDBObjectStoreClient) GetKey(ctx context.Context, id string) (string, error) {
 	resp, err := o.client.GetKey(ctx, &proto.ObjectStoreRequest{ConnectionId: o.connectionID, Store: o.store, Id: id})
 	if err != nil {
 		return "", grpcErr(err)
@@ -822,7 +823,7 @@ func (o *ObjectStoreClient) GetKey(ctx context.Context, id string) (string, erro
 }
 
 // Add inserts a new record and fails if its primary key already exists.
-func (o *ObjectStoreClient) Add(ctx context.Context, record Record) error {
+func (o *IDBObjectStoreClient) Add(ctx context.Context, record Record) error {
 	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
@@ -832,7 +833,7 @@ func (o *ObjectStoreClient) Add(ctx context.Context, record Record) error {
 }
 
 // Put upserts a record by primary key.
-func (o *ObjectStoreClient) Put(ctx context.Context, record Record) error {
+func (o *IDBObjectStoreClient) Put(ctx context.Context, record Record) error {
 	pbRecord, err := recordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
@@ -842,19 +843,19 @@ func (o *ObjectStoreClient) Put(ctx context.Context, record Record) error {
 }
 
 // Delete removes one record by primary key.
-func (o *ObjectStoreClient) Delete(ctx context.Context, id string) error {
+func (o *IDBObjectStoreClient) Delete(ctx context.Context, id string) error {
 	_, err := o.client.Delete(ctx, &proto.ObjectStoreRequest{ConnectionId: o.connectionID, Store: o.store, Id: id})
 	return grpcErr(err)
 }
 
 // Clear removes every record from the object store.
-func (o *ObjectStoreClient) Clear(ctx context.Context) error {
+func (o *IDBObjectStoreClient) Clear(ctx context.Context) error {
 	_, err := o.client.Clear(ctx, &proto.ObjectStoreNameRequest{ConnectionId: o.connectionID, Store: o.store})
 	return grpcErr(err)
 }
 
 // GetAll loads all records that match r.
-func (o *ObjectStoreClient) GetAll(ctx context.Context, r *KeyRange) ([]Record, error) {
+func (o *IDBObjectStoreClient) GetAll(ctx context.Context, r *KeyRange) ([]Record, error) {
 	kr, err := krToProto(r)
 	if err != nil {
 		return nil, err
@@ -871,7 +872,7 @@ func (o *ObjectStoreClient) GetAll(ctx context.Context, r *KeyRange) ([]Record, 
 }
 
 // GetAllKeys loads the primary keys for all records that match r.
-func (o *ObjectStoreClient) GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error) {
+func (o *IDBObjectStoreClient) GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error) {
 	kr, err := krToProto(r)
 	if err != nil {
 		return nil, err
@@ -884,7 +885,7 @@ func (o *ObjectStoreClient) GetAllKeys(ctx context.Context, r *KeyRange) ([]stri
 }
 
 // Count returns the number of records that match r.
-func (o *ObjectStoreClient) Count(ctx context.Context, r *KeyRange) (int64, error) {
+func (o *IDBObjectStoreClient) Count(ctx context.Context, r *KeyRange) (int64, error) {
 	kr, err := krToProto(r)
 	if err != nil {
 		return 0, err
@@ -898,7 +899,7 @@ func (o *ObjectStoreClient) Count(ctx context.Context, r *KeyRange) (int64, erro
 
 // DeleteRange removes all records that match r and reports how many were
 // deleted.
-func (o *ObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64, error) {
+func (o *IDBObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64, error) {
 	kr, err := krToProto(&r)
 	if err != nil {
 		return 0, err
@@ -911,22 +912,22 @@ func (o *ObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64,
 }
 
 // OpenCursor opens a full-value cursor over the object store.
-func (o *ObjectStoreClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
+func (o *IDBObjectStoreClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*IDBCursorClient, error) {
 	return openCursor(ctx, o.client, o.connectionID, o.store, "", r, dir, false, nil)
 }
 
 // OpenKeyCursor opens a key-only cursor over the object store.
-func (o *ObjectStoreClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
+func (o *IDBObjectStoreClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*IDBCursorClient, error) {
 	return openCursor(ctx, o.client, o.connectionID, o.store, "", r, dir, true, nil)
 }
 
 // Index returns a typed handle for a secondary index on the object store.
-func (o *ObjectStoreClient) Index(name string) *IndexClient {
-	return &IndexClient{client: o.client, connectionID: o.connectionID, store: o.store, index: name}
+func (o *IDBObjectStoreClient) Index(name string) *IDBIndexClient {
+	return &IDBIndexClient{client: o.client, connectionID: o.connectionID, store: o.store, index: name}
 }
 
-// IndexClient provides lookup and cursor access through one secondary index.
-type IndexClient struct {
+// IDBIndexClient provides lookup and cursor access through one secondary index.
+type IDBIndexClient struct {
 	client       proto.IndexedDBClient
 	connectionID []byte
 	store        string
@@ -934,7 +935,7 @@ type IndexClient struct {
 }
 
 // Get loads the first record that matches the supplied index key.
-func (idx *IndexClient) Get(ctx context.Context, values ...any) (Record, error) {
+func (idx *IDBIndexClient) Get(ctx context.Context, values ...any) (Record, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
 		return nil, err
@@ -953,7 +954,7 @@ func (idx *IndexClient) Get(ctx context.Context, values ...any) (Record, error) 
 }
 
 // GetKey resolves the primary key for the first row that matches values.
-func (idx *IndexClient) GetKey(ctx context.Context, values ...any) (string, error) {
+func (idx *IDBIndexClient) GetKey(ctx context.Context, values ...any) (string, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
 		return "", err
@@ -968,7 +969,7 @@ func (idx *IndexClient) GetKey(ctx context.Context, values ...any) (string, erro
 }
 
 // GetAll loads every record that matches values and r.
-func (idx *IndexClient) GetAll(ctx context.Context, r *KeyRange, values ...any) ([]Record, error) {
+func (idx *IDBIndexClient) GetAll(ctx context.Context, r *KeyRange, values ...any) ([]Record, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
 		return nil, err
@@ -991,7 +992,7 @@ func (idx *IndexClient) GetAll(ctx context.Context, r *KeyRange, values ...any) 
 }
 
 // GetAllKeys loads every primary key that matches values and r.
-func (idx *IndexClient) GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error) {
+func (idx *IDBIndexClient) GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
 		return nil, err
@@ -1010,7 +1011,7 @@ func (idx *IndexClient) GetAllKeys(ctx context.Context, r *KeyRange, values ...a
 }
 
 // Count returns the number of rows that match values and r.
-func (idx *IndexClient) Count(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
+func (idx *IDBIndexClient) Count(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
 		return 0, err
@@ -1029,12 +1030,12 @@ func (idx *IndexClient) Count(ctx context.Context, r *KeyRange, values ...any) (
 }
 
 // Delete removes all rows that match values.
-func (idx *IndexClient) Delete(ctx context.Context, values ...any) (int64, error) {
+func (idx *IDBIndexClient) Delete(ctx context.Context, values ...any) (int64, error) {
 	return idx.DeleteRange(ctx, nil, values...)
 }
 
 // DeleteRange removes all rows that match values and r.
-func (idx *IndexClient) DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
+func (idx *IDBIndexClient) DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
 		return 0, err
@@ -1053,17 +1054,17 @@ func (idx *IndexClient) DeleteRange(ctx context.Context, r *KeyRange, values ...
 }
 
 // OpenCursor opens a full-value cursor over one secondary index.
-func (idx *IndexClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
+func (idx *IDBIndexClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*IDBCursorClient, error) {
 	return openCursor(ctx, idx.client, idx.connectionID, idx.store, idx.index, r, dir, false, values)
 }
 
 // OpenKeyCursor opens a key-only cursor over one secondary index.
-func (idx *IndexClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
+func (idx *IDBIndexClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*IDBCursorClient, error) {
 	return openCursor(ctx, idx.client, idx.connectionID, idx.store, idx.index, r, dir, true, values)
 }
 
-// Transaction is an explicit IndexedDB transaction over a fixed store scope.
-type Transaction struct {
+// IDBTransactionClient is an explicit IndexedDB transaction over a fixed store scope.
+type IDBTransactionClient struct {
 	stream proto.IndexedDB_TransactionClient
 	cancel context.CancelFunc
 	mu     sync.Mutex
@@ -1073,12 +1074,12 @@ type Transaction struct {
 }
 
 // ObjectStore returns a transaction-scoped object store handle.
-func (tx *Transaction) ObjectStore(name string) *TransactionObjectStore {
-	return &TransactionObjectStore{tx: tx, store: name}
+func (tx *IDBTransactionClient) ObjectStore(name string) *IDBTransactionObjectStoreClient {
+	return &IDBTransactionObjectStoreClient{tx: tx, store: name}
 }
 
 // Commit atomically commits all writes made in the transaction.
-func (tx *Transaction) Commit(ctx context.Context) error {
+func (tx *IDBTransactionClient) Commit(ctx context.Context) error {
 	_ = ctx
 	tx.mu.Lock()
 	if tx.done {
@@ -1116,7 +1117,7 @@ func (tx *Transaction) Commit(ctx context.Context) error {
 }
 
 // Abort rolls back the transaction.
-func (tx *Transaction) Abort(ctx context.Context) error {
+func (tx *IDBTransactionClient) Abort(ctx context.Context) error {
 	_ = ctx
 	tx.mu.Lock()
 	if tx.done {
@@ -1148,7 +1149,7 @@ func (tx *Transaction) Abort(ctx context.Context) error {
 	return nil
 }
 
-func (tx *Transaction) sendOperation(op *proto.TransactionOperation) (*proto.TransactionOperationResponse, error) {
+func (tx *IDBTransactionClient) sendOperation(op *proto.TransactionOperation) (*proto.TransactionOperationResponse, error) {
 	tx.mu.Lock()
 	if tx.done {
 		err := tx.err
@@ -1191,7 +1192,7 @@ func (tx *Transaction) sendOperation(op *proto.TransactionOperation) (*proto.Tra
 	return opResp, nil
 }
 
-func (tx *Transaction) failLocked(err error) error {
+func (tx *IDBTransactionClient) failLocked(err error) error {
 	tx.err = err
 	tx.done = true
 	tx.mu.Unlock()
@@ -1199,7 +1200,7 @@ func (tx *Transaction) failLocked(err error) error {
 	return err
 }
 
-func (tx *Transaction) cleanup() {
+func (tx *IDBTransactionClient) cleanup() {
 	if tx.stream != nil {
 		_ = tx.stream.CloseSend()
 		tx.stream = nil
@@ -1210,13 +1211,13 @@ func (tx *Transaction) cleanup() {
 	}
 }
 
-// TransactionObjectStore provides transaction-scoped object-store operations.
-type TransactionObjectStore struct {
-	tx    *Transaction
+// IDBTransactionObjectStoreClient provides transaction-scoped object-store operations.
+type IDBTransactionObjectStoreClient struct {
+	tx    *IDBTransactionClient
 	store string
 }
 
-func (s *TransactionObjectStore) Get(ctx context.Context, id string) (Record, error) {
+func (s *IDBTransactionObjectStoreClient) Get(ctx context.Context, id string) (Record, error) {
 	_ = ctx
 	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Get{Get: &proto.ObjectStoreRequest{Store: s.store, Id: id}}})
 	if err != nil {
@@ -1229,7 +1230,7 @@ func (s *TransactionObjectStore) Get(ctx context.Context, id string) (Record, er
 	return record, nil
 }
 
-func (s *TransactionObjectStore) GetKey(ctx context.Context, id string) (string, error) {
+func (s *IDBTransactionObjectStoreClient) GetKey(ctx context.Context, id string) (string, error) {
 	_ = ctx
 	resp, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_GetKey{GetKey: &proto.ObjectStoreRequest{Store: s.store, Id: id}}})
 	if err != nil {
@@ -1238,7 +1239,7 @@ func (s *TransactionObjectStore) GetKey(ctx context.Context, id string) (string,
 	return resp.GetKey().GetKey(), nil
 }
 
-func (s *TransactionObjectStore) Add(ctx context.Context, record Record) error {
+func (s *IDBTransactionObjectStoreClient) Add(ctx context.Context, record Record) error {
 	_ = ctx
 	pbRecord, err := recordToProto(record)
 	if err != nil {
@@ -1248,7 +1249,7 @@ func (s *TransactionObjectStore) Add(ctx context.Context, record Record) error {
 	return err
 }
 
-func (s *TransactionObjectStore) Put(ctx context.Context, record Record) error {
+func (s *IDBTransactionObjectStoreClient) Put(ctx context.Context, record Record) error {
 	_ = ctx
 	pbRecord, err := recordToProto(record)
 	if err != nil {
@@ -1258,19 +1259,19 @@ func (s *TransactionObjectStore) Put(ctx context.Context, record Record) error {
 	return err
 }
 
-func (s *TransactionObjectStore) Delete(ctx context.Context, id string) error {
+func (s *IDBTransactionObjectStoreClient) Delete(ctx context.Context, id string) error {
 	_ = ctx
 	_, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Delete{Delete: &proto.ObjectStoreRequest{Store: s.store, Id: id}}})
 	return err
 }
 
-func (s *TransactionObjectStore) Clear(ctx context.Context) error {
+func (s *IDBTransactionObjectStoreClient) Clear(ctx context.Context) error {
 	_ = ctx
 	_, err := s.tx.sendOperation(&proto.TransactionOperation{Operation: &proto.TransactionOperation_Clear{Clear: &proto.ObjectStoreNameRequest{Store: s.store}}})
 	return err
 }
 
-func (s *TransactionObjectStore) GetAll(ctx context.Context, r *KeyRange) ([]Record, error) {
+func (s *IDBTransactionObjectStoreClient) GetAll(ctx context.Context, r *KeyRange) ([]Record, error) {
 	_ = ctx
 	kr, err := krToProto(r)
 	if err != nil {
@@ -1287,7 +1288,7 @@ func (s *TransactionObjectStore) GetAll(ctx context.Context, r *KeyRange) ([]Rec
 	return records, nil
 }
 
-func (s *TransactionObjectStore) GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error) {
+func (s *IDBTransactionObjectStoreClient) GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error) {
 	_ = ctx
 	kr, err := krToProto(r)
 	if err != nil {
@@ -1300,7 +1301,7 @@ func (s *TransactionObjectStore) GetAllKeys(ctx context.Context, r *KeyRange) ([
 	return resp.GetKeys().GetKeys(), nil
 }
 
-func (s *TransactionObjectStore) Count(ctx context.Context, r *KeyRange) (int64, error) {
+func (s *IDBTransactionObjectStoreClient) Count(ctx context.Context, r *KeyRange) (int64, error) {
 	_ = ctx
 	kr, err := krToProto(r)
 	if err != nil {
@@ -1313,7 +1314,7 @@ func (s *TransactionObjectStore) Count(ctx context.Context, r *KeyRange) (int64,
 	return resp.GetCount().GetCount(), nil
 }
 
-func (s *TransactionObjectStore) DeleteRange(ctx context.Context, r KeyRange) (int64, error) {
+func (s *IDBTransactionObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64, error) {
 	_ = ctx
 	kr, err := krToProto(&r)
 	if err != nil {
@@ -1326,18 +1327,18 @@ func (s *TransactionObjectStore) DeleteRange(ctx context.Context, r KeyRange) (i
 	return resp.GetDelete().GetDeleted(), nil
 }
 
-func (s *TransactionObjectStore) Index(name string) *TransactionIndex {
-	return &TransactionIndex{tx: s.tx, store: s.store, index: name}
+func (s *IDBTransactionObjectStoreClient) Index(name string) *IDBTransactionIndexClient {
+	return &IDBTransactionIndexClient{tx: s.tx, store: s.store, index: name}
 }
 
-// TransactionIndex provides transaction-scoped index operations.
-type TransactionIndex struct {
-	tx    *Transaction
+// IDBTransactionIndexClient provides transaction-scoped index operations.
+type IDBTransactionIndexClient struct {
+	tx    *IDBTransactionClient
 	store string
 	index string
 }
 
-func (idx *TransactionIndex) Get(ctx context.Context, values ...any) (Record, error) {
+func (idx *IDBTransactionIndexClient) Get(ctx context.Context, values ...any) (Record, error) {
 	_ = ctx
 	req, err := idx.query(nil, values)
 	if err != nil {
@@ -1354,7 +1355,7 @@ func (idx *TransactionIndex) Get(ctx context.Context, values ...any) (Record, er
 	return record, nil
 }
 
-func (idx *TransactionIndex) GetKey(ctx context.Context, values ...any) (string, error) {
+func (idx *IDBTransactionIndexClient) GetKey(ctx context.Context, values ...any) (string, error) {
 	_ = ctx
 	req, err := idx.query(nil, values)
 	if err != nil {
@@ -1367,7 +1368,7 @@ func (idx *TransactionIndex) GetKey(ctx context.Context, values ...any) (string,
 	return resp.GetKey().GetKey(), nil
 }
 
-func (idx *TransactionIndex) GetAll(ctx context.Context, r *KeyRange, values ...any) ([]Record, error) {
+func (idx *IDBTransactionIndexClient) GetAll(ctx context.Context, r *KeyRange, values ...any) ([]Record, error) {
 	_ = ctx
 	req, err := idx.query(r, values)
 	if err != nil {
@@ -1384,7 +1385,7 @@ func (idx *TransactionIndex) GetAll(ctx context.Context, r *KeyRange, values ...
 	return records, nil
 }
 
-func (idx *TransactionIndex) GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error) {
+func (idx *IDBTransactionIndexClient) GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error) {
 	_ = ctx
 	req, err := idx.query(r, values)
 	if err != nil {
@@ -1397,7 +1398,7 @@ func (idx *TransactionIndex) GetAllKeys(ctx context.Context, r *KeyRange, values
 	return resp.GetKeys().GetKeys(), nil
 }
 
-func (idx *TransactionIndex) Count(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
+func (idx *IDBTransactionIndexClient) Count(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
 	_ = ctx
 	req, err := idx.query(r, values)
 	if err != nil {
@@ -1410,12 +1411,12 @@ func (idx *TransactionIndex) Count(ctx context.Context, r *KeyRange, values ...a
 	return resp.GetCount().GetCount(), nil
 }
 
-func (idx *TransactionIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+func (idx *IDBTransactionIndexClient) Delete(ctx context.Context, values ...any) (int64, error) {
 	return idx.DeleteRange(ctx, nil, values...)
 }
 
 // DeleteRange removes all transaction-scoped rows that match values and r.
-func (idx *TransactionIndex) DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
+func (idx *IDBTransactionIndexClient) DeleteRange(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
 	_ = ctx
 	req, err := idx.query(r, values)
 	if err != nil {
@@ -1428,7 +1429,7 @@ func (idx *TransactionIndex) DeleteRange(ctx context.Context, r *KeyRange, value
 	return resp.GetDelete().GetDeleted(), nil
 }
 
-func (idx *TransactionIndex) query(r *KeyRange, values []any) (*proto.IndexQueryRequest, error) {
+func (idx *IDBTransactionIndexClient) query(r *KeyRange, values []any) (*proto.IndexQueryRequest, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
 		return nil, err
@@ -1440,8 +1441,8 @@ func (idx *TransactionIndex) query(r *KeyRange, values []any) (*proto.IndexQuery
 	return &proto.IndexQueryRequest{Store: idx.store, Index: idx.index, Values: vals, Range: kr}, nil
 }
 
-// Cursor streams IndexedDB rows one at a time.
-type Cursor struct {
+// IDBCursorClient streams IndexedDB rows one at a time.
+type IDBCursorClient struct {
 	stream      proto.IndexedDB_OpenCursorClient
 	cancel      context.CancelFunc
 	keysOnly    bool
@@ -1452,7 +1453,7 @@ type Cursor struct {
 }
 
 // Continue advances the cursor by one row.
-func (c *Cursor) Continue() bool {
+func (c *IDBCursorClient) Continue() bool {
 	return c.sendAndRecv(&proto.CursorCommand{
 		Command: &proto.CursorCommand_Next{Next: true},
 	})
@@ -1460,7 +1461,7 @@ func (c *Cursor) Continue() bool {
 
 // ContinueToKey advances the cursor to the supplied key, or exhausts it if the
 // key does not exist.
-func (c *Cursor) ContinueToKey(key any) bool {
+func (c *IDBCursorClient) ContinueToKey(key any) bool {
 	kvs, err := cursorKeyToProto(key, c.indexCursor)
 	if err != nil {
 		c.err = err
@@ -1472,14 +1473,14 @@ func (c *Cursor) ContinueToKey(key any) bool {
 }
 
 // Advance skips count rows ahead.
-func (c *Cursor) Advance(count int) bool {
+func (c *IDBCursorClient) Advance(count int) bool {
 	return c.sendAndRecv(&proto.CursorCommand{
 		Command: &proto.CursorCommand_Advance{Advance: int32(count)},
 	})
 }
 
 // Key returns the current cursor key.
-func (c *Cursor) Key() any {
+func (c *IDBCursorClient) Key() any {
 	if c.entry == nil || len(c.entry.GetKey()) == 0 {
 		return nil
 	}
@@ -1495,7 +1496,7 @@ func (c *Cursor) Key() any {
 }
 
 // PrimaryKey returns the current record's primary key.
-func (c *Cursor) PrimaryKey() string {
+func (c *IDBCursorClient) PrimaryKey() string {
 	if c.entry == nil {
 		return ""
 	}
@@ -1503,7 +1504,7 @@ func (c *Cursor) PrimaryKey() string {
 }
 
 // Value returns the current record.
-func (c *Cursor) Value() (Record, error) {
+func (c *IDBCursorClient) Value() (Record, error) {
 	if c.keysOnly {
 		return nil, ErrKeysOnly
 	}
@@ -1514,7 +1515,7 @@ func (c *Cursor) Value() (Record, error) {
 }
 
 // Delete removes the current row and keeps the cursor open.
-func (c *Cursor) Delete() error {
+func (c *IDBCursorClient) Delete() error {
 	if c.err != nil {
 		return c.err
 	}
@@ -1553,7 +1554,7 @@ func (c *Cursor) Delete() error {
 }
 
 // Update replaces the current row and keeps the cursor open.
-func (c *Cursor) Update(value Record) error {
+func (c *IDBCursorClient) Update(value Record) error {
 	if c.err != nil {
 		return c.err
 	}
@@ -1598,11 +1599,11 @@ func (c *Cursor) Update(value Record) error {
 }
 
 // Err returns the terminal cursor error, if any.
-func (c *Cursor) Err() error {
+func (c *IDBCursorClient) Err() error {
 	return c.err
 }
 
-func (c *Cursor) cleanup() error {
+func (c *IDBCursorClient) cleanup() error {
 	var err error
 	if c.stream != nil {
 		err = grpcErr(c.stream.CloseSend())
@@ -1615,14 +1616,14 @@ func (c *Cursor) cleanup() error {
 	return err
 }
 
-func (c *Cursor) setErr(err error) error {
+func (c *IDBCursorClient) setErr(err error) error {
 	c.err = err
 	_ = c.cleanup()
 	return c.err
 }
 
 // Close closes the cursor stream and releases its transport resources.
-func (c *Cursor) Close() error {
+func (c *IDBCursorClient) Close() error {
 	c.done = true
 	c.entry = nil
 	if c.stream == nil {
@@ -1642,7 +1643,7 @@ func (c *Cursor) Close() error {
 	return closeErr
 }
 
-func (c *Cursor) sendAndRecv(cmd *proto.CursorCommand) bool {
+func (c *IDBCursorClient) sendAndRecv(cmd *proto.CursorCommand) bool {
 	if c.done || c.err != nil {
 		return false
 	}
@@ -1695,7 +1696,7 @@ func cursorDirectionToProto(dir CursorDirection) proto.CursorDirection {
 	}
 }
 
-func openCursor(ctx context.Context, client proto.IndexedDBClient, connectionID []byte, store, index string, r *KeyRange, dir CursorDirection, keysOnly bool, values []any) (*Cursor, error) {
+func openCursor(ctx context.Context, client proto.IndexedDBClient, connectionID []byte, store, index string, r *KeyRange, dir CursorDirection, keysOnly bool, values []any) (*IDBCursorClient, error) {
 	kr, err := krToProto(r)
 	if err != nil {
 		return nil, err
@@ -1749,7 +1750,7 @@ func openCursor(ctx context.Context, client proto.IndexedDBClient, connectionID 
 		streamCancel()
 		return nil, fmt.Errorf("indexeddb: unexpected cursor open ack")
 	}
-	return &Cursor{stream: stream, cancel: streamCancel, keysOnly: keysOnly, indexCursor: index != ""}, nil
+	return &IDBCursorClient{stream: stream, cancel: streamCancel, keysOnly: keysOnly, indexCursor: index != ""}, nil
 }
 
 func krToProto(r *KeyRange) (*proto.KeyRange, error) {

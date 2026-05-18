@@ -235,11 +235,11 @@ func (p *Provider) IndexDelete(_ context.Context, req gestalt.IndexedDBIndexQuer
 	return int64(len(toDelete)), nil
 }
 
-func (p *Provider) OpenCursor(context.Context, gestalt.IndexedDBOpenCursorRequest) (gestalt.IndexedDBCursor, error) {
+func (p *Provider) OpenCursor(context.Context, gestalt.IndexedDBOpenCursorRequest) (gestalt.IDBCursor, error) {
 	return nil, gestalt.Unimplemented("open cursor is not implemented")
 }
 
-func (p *Provider) BeginTransaction(context.Context, gestalt.IndexedDBBeginTransactionRequest) (gestalt.IndexedDBTransaction, error) {
+func (p *Provider) BeginTransaction(context.Context, gestalt.IndexedDBBeginTransactionRequest) (gestalt.IDBTransaction, error) {
 	return nil, gestalt.Unimplemented("transactions are not implemented")
 }
 

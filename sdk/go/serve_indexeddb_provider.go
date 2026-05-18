@@ -43,20 +43,20 @@ func newIndexedDBProviderServer(provider IndexedDBProvider) *indexedDBProviderSe
 }
 
 type indexedDBProviderConnection struct {
-	db      IndexedDBDatabase
+	db      IDBDatabase
 	mu      sync.Mutex
 	cond    *sync.Cond
 	active  int
 	closing bool
 }
 
-func newIndexedDBProviderConnection(db IndexedDBDatabase) *indexedDBProviderConnection {
+func newIndexedDBProviderConnection(db IDBDatabase) *indexedDBProviderConnection {
 	conn := &indexedDBProviderConnection{db: db}
 	conn.cond = sync.NewCond(&conn.mu)
 	return conn
 }
 
-func (c *indexedDBProviderConnection) acquire() (IndexedDBDatabase, func(), error) {
+func (c *indexedDBProviderConnection) acquire() (IDBDatabase, func(), error) {
 	c.mu.Lock()
 	if c.closing {
 		c.mu.Unlock()
@@ -86,7 +86,7 @@ func (c *indexedDBProviderConnection) close() {
 	_ = c.db.Close()
 }
 
-func (s *indexedDBProviderServer) registerDatabase(db IndexedDBDatabase) ([]byte, error) {
+func (s *indexedDBProviderServer) registerDatabase(db IDBDatabase) ([]byte, error) {
 	for range 8 {
 		id := make([]byte, 16)
 		if _, err := rand.Read(id); err != nil {
@@ -104,7 +104,7 @@ func (s *indexedDBProviderServer) registerDatabase(db IndexedDBDatabase) ([]byte
 	return nil, status.Error(codes.Internal, "generate indexeddb connection id: collision")
 }
 
-func (s *indexedDBProviderServer) databaseForConnection(connectionID []byte) (IndexedDBDatabase, func(), error) {
+func (s *indexedDBProviderServer) databaseForConnection(connectionID []byte) (IDBDatabase, func(), error) {
 	if len(connectionID) == 0 {
 		return nil, nil, status.Error(codes.FailedPrecondition, "indexeddb database connection_id is required")
 	}
@@ -145,7 +145,7 @@ func (s *indexedDBProviderServer) OpenDatabase(stream proto.IndexedDB_OpenDataba
 		return status.Error(codes.InvalidArgument, "first message must be OpenDatabaseRequest")
 	}
 
-	var opened IndexedDBDatabase
+	var opened IDBDatabase
 	var connectionID []byte
 	events := make(chan *proto.OpenDatabaseServerMessage, indexedDBLifecycleEventQueueSize)
 	opts := OpenOptions{
@@ -179,7 +179,7 @@ func (s *indexedDBProviderServer) OpenDatabase(stream proto.IndexedDB_OpenDataba
 		},
 	}
 
-	var db IndexedDBDatabase
+	var db IDBDatabase
 	if openReq.GetRequireExisting() {
 		db, err = s.provider.OpenCurrentDatabase(stream.Context(), openReq.GetName(), opts)
 	} else {
