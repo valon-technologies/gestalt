@@ -7,15 +7,14 @@ import (
 	"os/signal"
 	"syscall"
 
-	providerpkg {{printf "%q" .ImportPath}}
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	providerpkg "github.com/valon-technologies/gestalt/testdata/provider-go-indexeddb"
 )
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-
-	if err := {{.ServeCall}}; err != nil {
+	if err := gestalt.ServeIndexedDBProvider(ctx, providerpkg.New()); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

@@ -2657,100 +2657,6 @@ func TestMemoryAuthorizationProviderDoesNotGrantMixedSubjectAndSubjectSetTarget(
 	}
 }
 
-func TestAuthorizationProviderBackedReloadDropsLegacyAgentSessionGrants(t *testing.T) {
-	t.Parallel()
-
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	baseAuthz, err := newTestAuthorizer(config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"sample_policy": {Default: "deny"},
-		},
-	}, map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-	})
-	if err != nil {
-		t.Fatalf("authorization.New: %v", err)
-	}
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
-	editorGrant := &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:shared"},
-		Relation: "editor",
-		Resource: &core.ResourceRef{Type: "agent_session", Id: "agent-session-1"},
-	}
-	channelGrant := &core.Relationship{
-		Relation: "viewer",
-		Resource: &core.ResourceRef{Type: "agent_session", Id: "agent-session-1"},
-		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeSlackChannel, Id: "T123:C456"},
-			Relation: authorization.ProviderRelationMember,
-		}}},
-	}
-	parentGrant := &core.Relationship{
-		Relation: "parent",
-		Resource: &core.ResourceRef{Type: "agent_session", Id: "agent-session-child"},
-		Target:   &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Resource{Resource: &core.ResourceRef{Type: "agent_session", Id: "agent-session-1"}}},
-	}
-	invalidMixedGrant := &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: "user:invalid"},
-		Relation: "viewer",
-		Resource: &core.ResourceRef{Type: "agent_session", Id: "agent-session-1"},
-		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
-			Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypeSlackChannel, Id: "T999:C999"},
-			Relation: authorization.ProviderRelationMember,
-		}}},
-	}
-	if err := provider.WriteRelationships(context.Background(), &core.WriteRelationshipsRequest{Writes: []*core.Relationship{editorGrant, channelGrant, parentGrant, invalidMixedGrant}}); err != nil {
-		t.Fatalf("WriteRelationships: %v", err)
-	}
-	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
-		t.Fatalf("ReloadAuthorizationState: %v", err)
-	}
-	resp, err := provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-		Subject:  editorGrant.Subject,
-		Relation: editorGrant.Relation,
-		Resource: editorGrant.Resource,
-	})
-	if err != nil {
-		t.Fatalf("ReadRelationships: %v", err)
-	}
-	if len(resp.GetRelationships()) != 0 {
-		t.Fatalf("legacy agent session grants after reload = %+v, want removed editor grant", resp.GetRelationships())
-	}
-	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-		Target:   channelGrant.Target,
-		Relation: channelGrant.Relation,
-		Resource: channelGrant.Resource,
-	})
-	if err != nil {
-		t.Fatalf("ReadRelationships channel grant: %v", err)
-	}
-	if len(resp.GetRelationships()) != 0 {
-		t.Fatalf("legacy agent session channel grants after reload = %+v, want removed subject-set grant", resp.GetRelationships())
-	}
-	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-		Target:   parentGrant.Target,
-		Relation: parentGrant.Relation,
-		Resource: parentGrant.Resource,
-	})
-	if err != nil {
-		t.Fatalf("ReadRelationships parent grant: %v", err)
-	}
-	if len(resp.GetRelationships()) != 0 {
-		t.Fatalf("legacy agent session parent grants after reload = %+v, want removed resource-target grant", resp.GetRelationships())
-	}
-	resp, err = provider.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{
-		Target:   invalidMixedGrant.Target,
-		Relation: invalidMixedGrant.Relation,
-		Resource: invalidMixedGrant.Resource,
-	})
-	if err != nil {
-		t.Fatalf("ReadRelationships invalid mixed grant: %v", err)
-	}
-	if len(resp.GetRelationships()) != 0 {
-		t.Fatalf("invalid mixed subject/target grant after reload = %+v, want removed", resp.GetRelationships())
-	}
-}
-
 func testExternalIdentityResourceID(typ, id string) string {
 	typ = strings.TrimSpace(typ)
 	id = strings.TrimSpace(id)
@@ -4369,6 +4275,13 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
+	pluginDefs := map[string]*config.ProviderEntry{
+		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
+		"other_plugin":  {AuthorizationPolicy: "other_policy"},
+		"a/b":           {AuthorizationPolicy: "slash_policy"},
+		"a%2Fb":         {AuthorizationPolicy: "escaped_policy"},
+		"a%252Fb":       {AuthorizationPolicy: "double_escaped_policy"},
+	}
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
@@ -4379,14 +4292,26 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 				},
 			},
 			"sample_policy": {Default: "deny"},
+			"other_policy":  {Default: "deny"},
+			"slash_policy":  {Default: "deny"},
+			"escaped_policy": {
+				Default: "deny",
+			},
+			"double_escaped_policy": {
+				Default: "deny",
+			},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-	})
+	}, pluginDefs)
 
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-admin@example.test", "admin")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-viewer@example.test", "viewer")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "a/b", "slash-plugin-admin@example.test", "admin")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "a%2Fb", "escaped-plugin-admin@example.test", "admin")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "a%252Fb", "double-escaped-plugin-admin@example.test", "admin")
+	dynamicUser := seedUser(t, svc, "dynamic@example.test")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -4399,6 +4324,16 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 					return &core.UserIdentity{Email: "admin@example.test"}, nil
 				case "dynamic-admin-session":
 					return &core.UserIdentity{Email: "dynamic-admin@example.test"}, nil
+				case "plugin-admin-session":
+					return &core.UserIdentity{Email: "plugin-admin@example.test"}, nil
+				case "plugin-viewer-session":
+					return &core.UserIdentity{Email: "plugin-viewer@example.test"}, nil
+				case "slash-plugin-admin-session":
+					return &core.UserIdentity{Email: "slash-plugin-admin@example.test"}, nil
+				case "escaped-plugin-admin-session":
+					return &core.UserIdentity{Email: "escaped-plugin-admin@example.test"}, nil
+				case "double-escaped-plugin-admin-session":
+					return &core.UserIdentity{Email: "double-escaped-plugin-admin@example.test"}, nil
 				default:
 					return nil, fmt.Errorf("invalid token")
 				}
@@ -4407,9 +4342,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-		}
+		cfg.PluginDefs = pluginDefs
 		cfg.Admin = server.AdminRouteConfig{
 			AuthorizationPolicy: "admin_policy",
 			AllowedRoles:        []string{"admin"},
@@ -4472,8 +4405,82 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&plugins); err != nil {
 		t.Fatalf("decoding plugins: %v", err)
 	}
-	if len(plugins) != 1 || plugins[0]["name"] != "sample_plugin" {
-		t.Fatalf("plugins = %+v, want sample_plugin", plugins)
+	if len(plugins) != 5 || plugins[0]["name"] != "a%252Fb" || plugins[1]["name"] != "a%2Fb" || plugins[2]["name"] != "a/b" || plugins[3]["name"] != "other_plugin" || plugins[4]["name"] != "sample_plugin" {
+		t.Fatalf("plugins = %+v, want double escaped, escaped, slash, other_plugin, and sample_plugin", plugins)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("plugin admin GET plugin members: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("plugin admin get plugin members status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("plugin admin PUT plugin member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("plugin admin put plugin member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("plugin admin DELETE plugin member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("plugin admin delete plugin member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/a%252Fb/members", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "escaped-plugin-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("escaped plugin admin GET plugin members: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("escaped plugin admin get plugin members status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		session string
+		path    string
+	}{
+		{name: "plugin admin cannot manage other plugin", session: "plugin-admin-session", path: "/admin/api/v1/authorization/plugins/other_plugin/members"},
+		{name: "plugin viewer cannot manage plugin", session: "plugin-viewer-session", path: "/admin/api/v1/authorization/plugins/sample_plugin/members"},
+		{name: "escaped slash path does not authorize slash plugin", session: "slash-plugin-admin-session", path: "/admin/api/v1/authorization/plugins/a%2Fb/members"},
+		{name: "double escaped plugin admin cannot manage escaped plugin", session: "double-escaped-plugin-admin-session", path: "/admin/api/v1/authorization/plugins/a%252Fb/members"},
+		{name: "plugin admin cannot manage gestaltd admins", session: "plugin-admin-session", path: "/admin/api/v1/authorization/admins/members"},
+	} {
+		req, _ = http.NewRequest(http.MethodGet, ts.URL+tc.path, nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: tc.session})
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusForbidden {
+			respBody, _ := io.ReadAll(resp.Body)
+			t.Fatalf("%s status = %d, want 403: %s", tc.name, resp.StatusCode, respBody)
+		}
 	}
 }
 

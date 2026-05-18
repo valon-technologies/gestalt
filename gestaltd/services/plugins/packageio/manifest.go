@@ -151,37 +151,25 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 	if err != nil {
 		return err
 	}
-	if manifest.Release != nil {
-		if !sourceMode {
-			return fmt.Errorf("release metadata is only allowed in source manifests")
-		}
-		if kind == providermanifestv1.KindUI {
-			return fmt.Errorf("release metadata is not supported for source ui manifests; use build instead")
-		}
-		if err := validateReleaseMetadata(manifest.Release); err != nil {
-			return err
-		}
-	}
 	if manifest.Build != nil {
 		if !sourceMode {
-			return fmt.Errorf("build metadata is only allowed in source ui manifests")
-		}
-		if kind != providermanifestv1.KindUI {
-			return fmt.Errorf("build metadata is only supported for ui manifests")
+			return fmt.Errorf("build metadata is only allowed in source manifests")
 		}
 		if err := validateSourceBuild(manifest.Build); err != nil {
 			return err
 		}
 	}
 
-	allowsSourceEntrypointOmission := sourceMode && manifest.Entrypoint == nil
+	if sourceMode && len(manifest.Artifacts) > 0 {
+		return fmt.Errorf("artifacts are not allowed in source manifests; prepared and released manifests generate them")
+	}
 
 	needsArtifacts := len(manifest.Artifacts) > 0
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		needsArtifacts = needsArtifacts || manifest.Entrypoint != nil
 	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		needsArtifacts = needsArtifacts || !allowsSourceEntrypointOmission
+		needsArtifacts = needsArtifacts || !sourceMode
 	}
 
 	var artifactPaths map[string]struct{}
@@ -233,21 +221,22 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		}
 		switch {
 		case manifest.Entrypoint != nil:
-			if err := validateEntrypoint(kind, manifest.Entrypoint, artifactPaths); err != nil {
+			if err := validateEntrypoint(kind, manifest.Entrypoint, artifactPaths, sourceMode); err != nil {
 				return err
 			}
+		case manifest.Build != nil:
+			return fmt.Errorf("entrypoint is required when build is set")
 		case manifest.IsDeclarativeOnlyProvider():
 		case spec != nil && spec.IsSpecLoaded():
-		case allowsSourceEntrypointOmission:
 		default:
 			return fmt.Errorf("entrypoint is required")
 		}
 	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		if manifest.Entrypoint == nil && !allowsSourceEntrypointOmission {
+		if manifest.Entrypoint == nil {
 			return fmt.Errorf("entrypoint is required")
 		}
 		if manifest.Entrypoint != nil {
-			if err := validateEntrypoint(kind, manifest.Entrypoint, artifactPaths); err != nil {
+			if err := validateEntrypoint(kind, manifest.Entrypoint, artifactPaths, sourceMode); err != nil {
 				return err
 			}
 		}
@@ -259,27 +248,18 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if spec != nil {
 			assetRoot = spec.AssetRoot
 		}
-		buildOutput := SourceUIBuildOutput(manifest)
 		if sourceMode {
-			if assetRoot != "" {
-				return fmt.Errorf("spec.assetRoot is not allowed in source ui manifests; use build.output")
-			}
 			if manifest.Build == nil {
 				return fmt.Errorf("build is required for source ui manifests")
 			}
-			if buildOutput == "" {
-				return fmt.Errorf("build.output is required for source ui manifests")
+			if assetRoot == "" {
+				return fmt.Errorf("spec.assetRoot is required for source ui manifests")
 			}
 		} else if assetRoot == "" {
 			return fmt.Errorf("spec.assetRoot is required for ui manifests")
 		}
 		if assetRoot != "" {
 			if err := validateRelativePackagePath(assetRoot, "spec.assetRoot"); err != nil {
-				return err
-			}
-		}
-		if buildOutput != "" {
-			if err := validateRelativePackagePath(buildOutput, "build.output"); err != nil {
 				return err
 			}
 		}
@@ -389,7 +369,7 @@ func EnsureEntrypoint(manifest *providermanifestv1.Manifest) *providermanifestv1
 	return manifest.Entrypoint
 }
 
-func validateEntrypoint(_ string, entry *providermanifestv1.Entrypoint, artifactPaths map[string]struct{}) error {
+func validateEntrypoint(_ string, entry *providermanifestv1.Entrypoint, artifactPaths map[string]struct{}, sourceMode bool) error {
 	if entry == nil {
 		return fmt.Errorf("entrypoint is required")
 	}
@@ -398,6 +378,9 @@ func validateEntrypoint(_ string, entry *providermanifestv1.Entrypoint, artifact
 	}
 	if err := validateRelativePackagePath(entry.ArtifactPath, "entrypoint.artifactPath"); err != nil {
 		return err
+	}
+	if sourceMode && len(artifactPaths) == 0 {
+		return nil
 	}
 	if len(artifactPaths) == 0 {
 		return fmt.Errorf("entrypoint references unknown artifact %q", entry.ArtifactPath)
@@ -448,26 +431,6 @@ func validateRelativeSourcePath(value, label string) error {
 	return nil
 }
 
-func validateReleaseMetadata(release *providermanifestv1.ReleaseMetadata) error {
-	if release == nil || release.Build == nil {
-		return nil
-	}
-	if release.Build.Workdir != "" {
-		if err := validateRelativeSourcePath(release.Build.Workdir, "release.build.workdir"); err != nil {
-			return err
-		}
-	}
-	if len(release.Build.Command) == 0 {
-		return fmt.Errorf("release.build.command is required")
-	}
-	for i, arg := range release.Build.Command {
-		if strings.TrimSpace(arg) == "" {
-			return fmt.Errorf("release.build.command[%d] is required", i)
-		}
-	}
-	return nil
-}
-
 func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
 	if build == nil {
 		return nil
@@ -483,11 +446,6 @@ func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
 	for i, arg := range build.Command {
 		if strings.TrimSpace(arg) == "" {
 			return fmt.Errorf("build.command[%d] is required", i)
-		}
-	}
-	if build.Output != "" {
-		if err := validateRelativePackagePath(build.Output, "build.output"); err != nil {
-			return err
 		}
 	}
 	for i, input := range build.Inputs {
@@ -506,8 +464,8 @@ func SourceUIBuildOutput(manifest *providermanifestv1.Manifest) string {
 	if manifest == nil {
 		return ""
 	}
-	if manifest.Build != nil {
-		return manifest.Build.Output
+	if manifest.Spec != nil {
+		return manifest.Spec.AssetRoot
 	}
 	return ""
 }

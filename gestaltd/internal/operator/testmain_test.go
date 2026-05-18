@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -30,7 +31,7 @@ func TestMain(m *testing.M) {
 	}
 
 	binaryPath := filepath.Join(tmpDir, "external-credentials-provider")
-	if err := providerpkg.BuildGoComponentBinary(sourceDir, binaryPath, string(providermanifestv1.KindExternalCredentials), runtime.GOOS, runtime.GOARCH); err != nil {
+	if err := buildExternalCredentialsFixtureBinary(sourceDir, binaryPath); err != nil {
 		fmt.Fprintf(os.Stderr, "build external credentials fixture: %v\n", err)
 		_ = os.RemoveAll(tmpDir)
 		os.Exit(1)
@@ -89,6 +90,43 @@ func writeExternalCredentialsProviderFixture(baseDir string) (string, error) {
 	return fixtureDir, nil
 }
 
+func buildExternalCredentialsFixtureBinary(sourceDir, binaryPath string) error {
+	mainDir := filepath.Join(sourceDir, "cmd", "provider")
+	if err := os.MkdirAll(mainDir, 0o755); err != nil {
+		return err
+	}
+	mainSource := `package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	providerpkg "github.com/valon-technologies/gestalt/testdata/provider-go-externalcredentials"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := gestalt.ServeExternalCredentialProvider(ctx, providerpkg.New()); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(mainDir, "main.go"), []byte(mainSource), 0o644); err != nil {
+		return err
+	}
+	cmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/provider")
+	cmd.Dir = sourceDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 func writeDefaultProvidersDir(baseDir, binaryPath string) (string, error) {
 	providersDir := filepath.Join(baseDir, "providers")
 	dir := filepath.Join(providersDir, "externalcredentials", "default")
@@ -120,7 +158,7 @@ func writeDefaultProvidersDir(baseDir, binaryPath string) (string, error) {
 		}},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(dest)},
 	}
-	manifestData, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		return "", err
 	}

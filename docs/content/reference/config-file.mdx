@@ -1378,53 +1378,32 @@ same action. API tokens must carry `permissions[].actions:
 operation permissions do not grant attach, and the attach action does not grant
 operation invocation.
 
-Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider`.
+Source-backed executable plugins must declare how to build the runnable
+artifact and where that artifact will appear. Gestalt runs `build.command`
+before local execution or release packaging, then starts
+`entrypoint.artifactPath`. The command can call any runtime or compiler
+available in the preparation environment; Gestalt does not infer the provider
+language or synthesize executable wrappers.
 
-<Tabs items={['Go', 'Python', 'Rust']}>
-  <Tabs.Tab>
-    A local Go source plugin typically looks like:
-
-    ```text
-    my-plugin/
-      go.mod
-      manifest.yaml
-      provider.go
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    A local Python source plugin typically looks like:
-
-    ```toml
-    [project]
-    name = "my-plugin"
-    version = "0.0.1-alpha.1"
-    dependencies = ["gestalt-sdk"]
-
-    [tool.gestalt]
-    provider = "provider"
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    A local Rust source plugin typically has this layout:
-
-    ```text
-    my-plugin/
-      Cargo.toml
-      manifest.yaml
-      src/
-        lib.rs
-    ```
-
-    Add the SDK and schema dependencies with:
-
-    ```sh
-    cargo add gestalt-sdk --rename gestalt
-    cargo add schemars --features derive
-    cargo add serde --features derive
-    cargo add serde_json
-    ```
-  </Tabs.Tab>
-</Tabs>
+```yaml
+kind: plugin
+source: github.com/acme/plugins/my-plugin
+version: 1.0.0
+build:
+  command:
+    - ./scripts/build-provider.sh
+  inputs:
+    - scripts
+    - src
+    - package.json
+entrypoint:
+  artifactPath: .gestalt/build/provider
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+```
 
 | Field | Description |
 | --- | --- |

@@ -86,12 +86,12 @@ build:
     - npm
     - run
     - build
-  output: out
   inputs:
     - package.json
     - package-lock.json
     - src
 spec:
+  assetRoot: out
   routes:
     - path: /
       allowedRoles: [viewer, admin]

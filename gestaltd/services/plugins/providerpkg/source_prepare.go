@@ -2,12 +2,10 @@ package providerpkg
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -57,7 +55,12 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 	if err != nil {
 		return fmt.Errorf("resolve static catalog path %q: %w", catalogPath, err)
 	}
-	if err := generateSourceStaticCatalog(rootDir, absoluteCatalogPath); err != nil {
+	if _, err := os.Stat(absoluteCatalogPath); err == nil {
+		return nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("stat static catalog %q: %w", StaticCatalogFile, err)
+	}
+	if err := generateSourceStaticCatalog(rootDir, manifest, absoluteCatalogPath); err != nil {
 		return err
 	}
 	if _, err := os.Stat(absoluteCatalogPath); err != nil {
@@ -69,30 +72,19 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 	return nil
 }
 
-func generateSourceStaticCatalog(rootDir, catalogPath string) error {
-	command, args, cleanup, err := SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		if errors.Is(err, ErrNoSourceProviderPackage) {
-			return nil
-		}
-		return fmt.Errorf("prepare synthesized source provider for static catalog: %w", err)
-	}
-	if cleanup != nil {
-		defer cleanup()
+func generateSourceStaticCatalog(rootDir string, manifest *providermanifestv1.Manifest, catalogPath string) error {
+	entry := EntrypointForKind(manifest, providermanifestv1.KindPlugin)
+	if entry == nil || entry.ArtifactPath == "" {
+		return nil
 	}
 
+	command := filepath.Join(rootDir, filepath.FromSlash(entry.ArtifactPath))
+	args := append([]string(nil), entry.Args...)
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(
 		os.Environ(),
 		envWriteCatalog+"="+catalogPath,
 	)
-	execEnv, err := SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		return fmt.Errorf("prepare synthesized source provider environment for static catalog: %w", err)
-	}
-	for key, value := range execEnv {
-		cmd.Env = append(cmd.Env, key+"="+value)
-	}
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output

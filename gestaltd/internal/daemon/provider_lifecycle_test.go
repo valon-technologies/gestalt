@@ -469,9 +469,9 @@ func writeProviderLifecycleRelease(t *testing.T, dir, pkg, version string) strin
 		}},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: executableName},
 	}
-	manifestData, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
+	manifestData, err := providerpkg.EncodeManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+		t.Fatalf("EncodeManifestFormat: %v", err)
 	}
 	writeProviderLifecycleTestFile(t, filepath.Join(packageDir, "manifest.yaml"), string(manifestData))
 	writeProviderLifecycleTestFile(t, filepath.Join(packageDir, providerpkg.StaticCatalogFile), "name: alpha\noperations:\n  - id: echo\n    method: POST\n")

@@ -219,9 +219,12 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
       pyproject.toml
       manifest.yaml
       provider.py
+      scripts/
+        build-provider.sh
     ```
 
-    Point `pyproject.toml` at the module that Gestalt should load:
+    Keep Python dependency and package metadata in `pyproject.toml`; the
+    provider manifest points Gestalt at the built executable artifact:
 
     ```toml
     [project]
@@ -231,9 +234,18 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
 
     [tool.uv]
     package = false
+    ```
 
-    [tool.gestalt]
-    provider = "provider"
+    ```yaml
+    build:
+      command:
+        - ./scripts/build-provider.sh
+      inputs:
+        - pyproject.toml
+        - provider.py
+        - scripts
+    entrypoint:
+      artifactPath: .gestalt/build/slack
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -264,12 +276,13 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    You need Bun 1.3+ and a running `gestaltd` instance for testing.
+    You need the package manager and TypeScript runtime or compiler used by
+    your `build.command`, plus a running `gestaltd` instance for testing.
 
     ```sh
     mkdir slack && cd slack
-    bun init -y
-    bun add @valon-technologies/gestalt
+    npm init -y
+    npm install @valon-technologies/gestalt
     ```
 
     Recommended layout:
@@ -279,9 +292,12 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
       package.json
       manifest.yaml
       provider.ts
+      scripts/
+        build-provider.mjs
     ```
 
-    Point `package.json` at the source file Gestalt should load:
+    Put normal package metadata and scripts in `package.json`; the provider
+    manifest points Gestalt at the executable artifact produced by the build:
 
     ```json
     {
@@ -289,39 +305,35 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
       "version": "0.0.1",
       "private": true,
       "type": "module",
+      "scripts": {
+        "build": "node ./scripts/build-provider.mjs"
+      },
       "dependencies": {
         "@valon-technologies/gestalt": "latest"
-      },
-      "gestalt": {
-        "provider": {
-          "kind": "plugin",
-          "target": "./provider.ts#plugin"
-        }
       }
     }
     ```
 
-    A string `gestalt.provider` target defaults to a plugin provider. For authentication
-    or datastore providers, use an object with an explicit kind:
-
-    ```json
-    {
-      "gestalt": {
-        "provider": {
-          "kind": "authentication",
-          "target": "./auth.ts#provider"
-        }
-      }
-    }
+    ```yaml
+    build:
+      command:
+        - npm
+        - run
+        - build
+      inputs:
+        - package.json
+        - package-lock.json
+        - provider.ts
+        - scripts
+    entrypoint:
+      artifactPath: .gestalt/build/slack
     ```
-
-    Use `"plugin"` when you need to spell the plugin kind explicitly.
   </Tabs.Tab>
 </Tabs>
 
 ### Defining operations
 
-Operations are the callable units of a plugin. Each operation has an ID, an HTTP method, input and output types, and a handler function. You do not write an entrypoint. Gestalt synthesizes the executable wrapper automatically for local source execution and release.
+Operations are the callable units of a plugin. Each operation has an ID, an HTTP method, input and output types, and a handler function. Executable source plugins must declare `build.command` and `entrypoint.artifactPath`; Gestalt runs the build and then starts the declared artifact for local source execution and release.
 
 The following example defines a `conversations.getMessage` operation that fetches a single Slack message by channel and timestamp. The handler uses the resolved runtime token from the request context to call the Slack API.
 
@@ -483,10 +495,9 @@ The following example defines a `conversations.getMessage` operation that fetche
     });
     ```
 
-    The `package.json` field `gestalt.provider` points Gestalt at the provider
-    module and optional export. Use a string target such as
-    `./provider.ts#plugin` for plugin providers, or an object with `kind` and
-    `target` for authentication and datastore providers.
+    The manifest `build.command` packages this source into the executable file
+    declared by `entrypoint.artifactPath`; Gestalt starts that artifact for
+    local source execution and release packaging.
   </Tabs.Tab>
 </Tabs>
 

@@ -1792,12 +1792,9 @@ func preparedDirectoryDigest(root string) (string, error) {
 	return hex.EncodeToString(combined[:]), nil
 }
 
-func localSourceDigestForKind(kind string, provider *config.ProviderEntry) (string, error) {
+func localSourceDigest(provider *config.ProviderEntry) (string, error) {
 	if provider == nil || !provider.HasLocalSource() {
 		return "", fmt.Errorf("local source provider is required")
-	}
-	if providermanifestv1.NormalizeKind(kind) == providermanifestv1.KindUI {
-		return fingerprintLocalUISourceDigest(provider.SourcePath())
 	}
 	return fingerprintLocalSourceDigest(provider.SourcePath())
 }
@@ -1840,7 +1837,7 @@ func expectedPreparedLockMetadata(paths lifecyclePaths, install *preparedInstall
 		if err != nil {
 			return preparedLockMetadata{}, err
 		}
-		sourceDigest, err := localSourceDigestForKind(kind, provider)
+		sourceDigest, err := localSourceDigest(provider)
 		if err != nil {
 			return preparedLockMetadata{}, err
 		}
@@ -2173,12 +2170,7 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 			return "", err
 		}
 		input.Path = sourceIdentity
-		var digest string
-		if strings.HasPrefix(name, "ui:") {
-			digest, err = fingerprintLocalUISourceDigest(entry.SourcePath())
-		} else {
-			digest, err = fingerprintLocalSourceDigest(entry.SourcePath())
-		}
+		digest, err := fingerprintLocalSourceDigest(entry.SourcePath())
 		if err != nil {
 			return "", err
 		}
@@ -2362,34 +2354,22 @@ func fingerprintLocalSourceDigest(sourcePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	_, manifest, err := providerpkg.PrepareSourceManifest(normalized.manifestPath)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(normalized.manifestPath)
+	if err != nil {
+		return "", err
+	}
+	build := providerpkg.EffectiveSourceBuild(manifest)
+	if build != nil {
+		return fingerprintLocalBuildInputs(normalized.sourceDir, normalized.manifestPath, manifest, build)
+	}
+	_, manifest, err = providerpkg.PrepareSourceManifest(normalized.manifestPath)
 	if err != nil {
 		return "", err
 	}
 	return providerpkg.DirectoryDigest(normalized.sourceDir, normalized.manifestPath, manifest)
 }
 
-func fingerprintLocalUISourceDigest(sourcePath string) (string, error) {
-	normalized, err := normalizeLocalSource(sourcePath)
-	if err != nil {
-		return "", err
-	}
-	_, manifest, err := providerpkg.ReadSourceManifestFile(normalized.manifestPath)
-	if err != nil {
-		return "", err
-	}
-	kind, err := providerpkg.ManifestKind(manifest)
-	if err != nil {
-		return "", err
-	}
-	build := providerpkg.EffectiveSourceBuild(manifest)
-	if kind != providermanifestv1.KindUI || build == nil {
-		return providerpkg.DirectoryDigest(normalized.sourceDir, normalized.manifestPath, manifest)
-	}
-	return fingerprintLocalUIBuildInputs(normalized.sourceDir, normalized.manifestPath, manifest, build)
-}
-
-func fingerprintLocalUIBuildInputs(sourceDir, manifestPath string, manifest *providermanifestv1.Manifest, build *providerpkg.ResolvedSourceBuild) (string, error) {
+func fingerprintLocalBuildInputs(sourceDir, manifestPath string, manifest *providermanifestv1.Manifest, build *providerpkg.ResolvedSourceBuild) (string, error) {
 	var digests []string
 	seen := map[string]struct{}{}
 
@@ -2414,16 +2394,27 @@ func fingerprintLocalUIBuildInputs(sourceDir, manifestPath string, manifest *pro
 	if err := addFile(manifestPath); err != nil {
 		return "", fmt.Errorf("digest manifest: %w", err)
 	}
+	if err := fingerprintLocalPackageSupportFiles(sourceDir, manifest, addFile); err != nil {
+		return "", err
+	}
 
-	assetRoot := providerpkg.SourceUIBuildOutput(manifest)
 	outputAbs := ""
-	if assetRoot != "" {
-		outputAbs = filepath.Clean(filepath.Join(sourceDir, filepath.FromSlash(assetRoot)))
+	if outputRel, _, err := providerpkg.SourceBuildOutput(manifest); err == nil && outputRel != "" {
+		outputAbs = filepath.Clean(filepath.Join(sourceDir, filepath.FromSlash(outputRel)))
 	}
 	excludedDirs := map[string]struct{}{
-		".git":         {},
-		".gestaltd":    {},
-		"node_modules": {},
+		".git":          {},
+		".gestaltd":     {},
+		".next":         {},
+		".turbo":        {},
+		".cache":        {},
+		".pytest_cache": {},
+		".ruff_cache":   {},
+		".mypy_cache":   {},
+		".venv":         {},
+		"venv":          {},
+		"node_modules":  {},
+		"target":        {},
 	}
 	shouldSkip := func(path string, d os.DirEntry) bool {
 		cleanPath := filepath.Clean(path)
@@ -2488,6 +2479,25 @@ func fingerprintLocalUIBuildInputs(sourceDir, manifestPath string, manifest *pro
 	slices.Sort(digests)
 	combined := sha256.Sum256([]byte(strings.Join(digests, "\n")))
 	return hex.EncodeToString(combined[:]), nil
+}
+
+func fingerprintLocalPackageSupportFiles(sourceDir string, manifest *providermanifestv1.Manifest, addFile func(string) error) error {
+	for _, ref := range providerpkg.LocalPackageReferences(manifest) {
+		path := filepath.Clean(filepath.Join(sourceDir, filepath.FromSlash(ref.Path)))
+		if err := addFile(path); err != nil {
+			return fmt.Errorf("digest %s: %w", ref.Description, err)
+		}
+	}
+
+	staticCatalogPath := providerpkg.StaticCatalogPath(sourceDir)
+	if _, err := os.Stat(staticCatalogPath); err == nil {
+		if err := addFile(staticCatalogPath); err != nil {
+			return fmt.Errorf("digest provider static catalog: %w", err)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("digest provider static catalog: %w", err)
+	}
+	return nil
 }
 
 type fileInfoDirEntry struct {

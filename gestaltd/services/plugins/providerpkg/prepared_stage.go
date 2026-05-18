@@ -1,13 +1,13 @@
 package providerpkg
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -15,25 +15,23 @@ import (
 )
 
 const (
-	releaseOwnedUIRoot          = "_owned_ui"
-	preparedReleaseBinaryPrefix = "gestalt-plugin-"
-	windowsOS                   = "windows"
-	windowsExecutableSuffix     = ".exe"
+	releaseOwnedUIRoot = "_owned_ui"
+	windowsOS          = "windows"
 )
 
 type StagePreparedInstallOptions struct {
 	VersionOverride string
-	BuildKind       string
 	PluginName      string
 	GOOS            string
 	GOARCH          string
 }
 
 type StageSourcePreparedInstallOptions struct {
-	Kind       string
-	PluginName string
-	GOOS       string
-	GOARCH     string
+	Kind            string
+	VersionOverride string
+	PluginName      string
+	GOOS            string
+	GOARCH          string
 }
 
 type StagedPreparedInstall struct {
@@ -44,40 +42,82 @@ type StagedPreparedInstall struct {
 }
 
 // StageSourcePreparedInstallDir stages a source tree into its prepared-install layout.
-// It runs any source release build hook, determines whether a host-platform executable
-// build is needed, and then delegates to StagePreparedInstallDir for the final layout.
+// It runs any declared source build and then delegates to StagePreparedInstallDir for
+// the final prepared manifest and support-file layout.
 func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSourcePreparedInstallOptions) (*StagedPreparedInstall, error) {
 	if strings.TrimSpace(manifestPath) == "" {
 		return nil, fmt.Errorf("manifest path is required")
 	}
+	absoluteManifestPath, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve manifest path: %w", err)
+	}
+	manifestPath = absoluteManifestPath
+
 	_, manifest, err := ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", manifestPath, err)
 	}
-	if err := RunSourceReleaseBuild(manifestPath, manifest); err != nil {
-		return nil, err
-	}
-	_, manifest, err = ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		return nil, fmt.Errorf("read %s after release build: %w", manifestPath, err)
-	}
-	kind := strings.TrimSpace(opts.Kind)
-	if kind == "" {
-		kind, err = ManifestKind(manifest)
-		if err != nil {
+	if strings.TrimSpace(opts.Kind) == "" {
+		if _, err := ManifestKind(manifest); err != nil {
 			return nil, err
 		}
 	}
-	buildKind, err := resolvePreparedInstallBuildKind(filepath.Dir(manifestPath), manifest, kind)
+	targetOpts := SourceBuildOptions{GOOS: opts.GOOS, GOARCH: opts.GOARCH}
+	hostBuiltForCatalog, err := ensureHostBuildForSourceStaticCatalog(manifestPath, manifest)
 	if err != nil {
 		return nil, err
 	}
-	return StagePreparedInstallDir(manifestPath, stagingDir, StagePreparedInstallOptions{
-		BuildKind:  buildKind,
-		PluginName: opts.PluginName,
-		GOOS:       opts.GOOS,
-		GOARCH:     opts.GOARCH,
+	_, srcManifest, err := PrepareSourceManifest(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("prepare %s: %w", manifestPath, err)
+	}
+	if !hostBuiltForCatalog || !sourceBuildTargetsHost(targetOpts) {
+		if err := EnsureSourceBuildOutput(manifestPath, manifest, targetOpts); err != nil {
+			return nil, err
+		}
+	}
+	return stagePreparedInstallDir(manifestPath, stagingDir, srcManifest, StagePreparedInstallOptions{
+		VersionOverride: opts.VersionOverride,
+		PluginName:      opts.PluginName,
+		GOOS:            opts.GOOS,
+		GOARCH:          opts.GOARCH,
 	})
+}
+
+func ensureHostBuildForSourceStaticCatalog(manifestPath string, manifest *providermanifestv1.Manifest) (bool, error) {
+	mayGenerate, err := sourceStaticCatalogMayBeGenerated(manifestPath, manifest)
+	if err != nil {
+		return false, err
+	}
+	if EffectiveSourceBuild(manifest) == nil || !mayGenerate {
+		return false, nil
+	}
+	if err := EnsureSourceBuildOutput(manifestPath, manifest, SourceBuildOptions{}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func sourceStaticCatalogMayBeGenerated(manifestPath string, manifest *providermanifestv1.Manifest) (bool, error) {
+	if manifest == nil || manifest.Kind != providermanifestv1.KindPlugin {
+		return false, nil
+	}
+	entry := EntrypointForKind(manifest, providermanifestv1.KindPlugin)
+	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
+		return false, nil
+	}
+	if _, err := os.Stat(StaticCatalogPath(filepath.Dir(manifestPath))); err == nil {
+		return false, nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("stat static catalog %q: %w", StaticCatalogFile, err)
+	}
+	return true, nil
+}
+
+func sourceBuildTargetsHost(opts SourceBuildOptions) bool {
+	goos, goarch := SourceBuildTarget(opts)
+	return goos == runtime.GOOS && goarch == runtime.GOARCH
 }
 
 // StagePreparedInstallDir stages a source manifest into its prepared-install layout.
@@ -96,10 +136,6 @@ func StagePreparedInstallDir(manifestPath, stagingDir string, opts StagePrepared
 	}
 	manifestPath = absoluteManifestPath
 
-	sourceDir := filepath.Dir(manifestPath)
-	manifestFormat := ManifestFormatFromPath(manifestPath)
-	manifestFile := preparedManifestFileName(manifestFormat)
-
 	_, _, err = ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", manifestPath, err)
@@ -108,50 +144,42 @@ func StagePreparedInstallDir(manifestPath, stagingDir string, opts StagePrepared
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s: %w", manifestPath, err)
 	}
+	return stagePreparedInstallDir(manifestPath, stagingDir, srcManifest, opts)
+}
 
+func stagePreparedInstallDir(manifestPath, stagingDir string, srcManifest *providermanifestv1.Manifest, opts StagePreparedInstallOptions) (*StagedPreparedInstall, error) {
+	if strings.TrimSpace(stagingDir) == "" {
+		return nil, fmt.Errorf("staging directory is required")
+	}
+	sourceDir := filepath.Dir(manifestPath)
+	manifestFormat := ManifestFormatFromPath(manifestPath)
+	manifestFile := preparedManifestFileName(manifestFormat)
 	version := srcManifest.Version
 	if strings.TrimSpace(opts.VersionOverride) != "" {
 		version = strings.TrimSpace(opts.VersionOverride)
 	}
-	pluginName := strings.TrimSpace(opts.PluginName)
-	if pluginName == "" {
+	if strings.TrimSpace(opts.PluginName) == "" {
 		src, err := source.Parse(srcManifest.Source)
 		if err != nil {
 			return nil, fmt.Errorf("invalid source in manifest: %w", err)
 		}
-		pluginName = src.PluginName()
+		_ = src.PluginName()
 	}
 
-	var stagedManifest *providermanifestv1.Manifest
-	switch buildKind := strings.TrimSpace(opts.BuildKind); {
-	case buildKind != "":
-		if opts.GOOS == "" || opts.GOARCH == "" {
-			return nil, fmt.Errorf("goos and goarch are required when build kind is set")
-		}
-		binaryName := stagedReleaseBinaryName(pluginName, opts.GOOS)
-		binaryPath := filepath.Join(stagingDir, binaryName)
-		if _, err := buildPreparedInstallBinary(sourceDir, binaryPath, pluginName, buildKind, opts.GOOS, opts.GOARCH); err != nil {
-			return nil, err
-		}
-		digest, err := FileSHA256(binaryPath)
-		if err != nil {
-			return nil, fmt.Errorf("hash binary: %w", err)
-		}
-		stagedManifest, err = buildPreparedInstallManifest(srcManifest, version, binaryName, opts.GOOS, opts.GOARCH, digest)
-		if err != nil {
-			return nil, err
-		}
-		if err := copyPreparedInstallSupportFiles(stagedManifest, sourceDir, stagingDir, false); err != nil {
-			return nil, err
-		}
-	default:
-		stagedManifest, err = buildPreparedInstallSourceManifest(srcManifest, version, sourceDir)
-		if err != nil {
-			return nil, err
-		}
-		if err := copyPreparedInstallSupportFiles(stagedManifest, sourceDir, stagingDir, true); err != nil {
-			return nil, err
-		}
+	goos := opts.GOOS
+	if goos == "" {
+		goos = runtime.GOOS
+	}
+	goarch := opts.GOARCH
+	if goarch == "" {
+		goarch = runtime.GOARCH
+	}
+	stagedManifest, err := buildPreparedInstallSourceManifest(srcManifest, version, sourceDir, goos, goarch)
+	if err != nil {
+		return nil, err
+	}
+	if err := copyPreparedInstallSupportFiles(stagedManifest, sourceDir, stagingDir, true); err != nil {
+		return nil, err
 	}
 
 	stagedManifestPath := filepath.Join(stagingDir, manifestFile)
@@ -176,156 +204,31 @@ func preparedManifestFileName(format string) string {
 	}
 }
 
-func resolvePreparedInstallBuildKind(root string, manifest *providermanifestv1.Manifest, kind string) (string, error) {
-	kind = strings.TrimSpace(kind)
-	if kind == "" {
-		var err error
-		kind, err = ManifestKind(manifest)
-		if err != nil {
-			return "", err
-		}
+func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest, version, sourceDir, goos, goarch string) (*providermanifestv1.Manifest, error) {
+	manifest, err := cloneManifest(srcManifest)
+	if err != nil {
+		return nil, fmt.Errorf("clone manifest: %w", err)
 	}
-	if kind == providermanifestv1.KindUI {
-		return "", nil
-	}
+	manifest.Version = version
+	manifest.Build = nil
+	manifest.Artifacts = nil
 
-	if buildKind, err := resolvePreparedInstallBuildTarget(root, kind); err == nil {
-		return buildKind, nil
-	} else if !isMissingPreparedInstallBuildTarget(err, kind) {
-		return "", err
+	kind, err := ManifestKind(manifest)
+	if err != nil {
+		return nil, err
 	}
-
 	entry := EntrypointForKind(manifest, kind)
-	if artifactExistsForEntrypoint(root, entry) {
-		return "", nil
-	}
-
-	if preparedInstallRequiresBuild(manifest, kind) {
-		return "", missingPreparedInstallBuildTargetError(kind)
-	}
-	return "", nil
-}
-
-func preparedInstallRequiresBuild(manifest *providermanifestv1.Manifest, kind string) bool {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return manifest != nil && manifest.Entrypoint == nil && (manifest.Spec == nil || !manifest.Spec.IsManifestBacked())
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return EntrypointForKind(manifest, kind) == nil
-	default:
-		return false
-	}
-}
-
-func resolvePreparedInstallBuildTarget(root, kind string) (string, error) {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		ok, err := HasSourceProviderPackage(root)
+	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
+		artifactPath := entry.ArtifactPath
+		digest, err := FileSHA256(filepath.Join(sourceDir, filepath.FromSlash(artifactPath)))
 		if err != nil {
-			return "", err
+			return nil, fmt.Errorf("hash artifact %s: %w", artifactPath, err)
 		}
-		if !ok {
-			return "", ErrNoSourceProviderPackage
-		}
-		return kind, nil
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		ok, err := HasSourceComponentPackage(root, kind)
-		if err != nil {
-			return "", err
-		}
-		if !ok {
-			return "", ErrNoSourceComponentPackage
-		}
-		return kind, nil
-	default:
-		return "", fmt.Errorf("unsupported release build target kind %q", kind)
-	}
-}
-
-func isMissingPreparedInstallBuildTarget(err error, kind string) bool {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return errors.Is(err, ErrNoSourceProviderPackage)
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return errors.Is(err, ErrNoSourceComponentPackage)
-	default:
-		return false
-	}
-}
-
-func missingPreparedInstallBuildTargetError(kind string) error {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return ErrNoSourceProviderPackage
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return ErrNoSourceComponentPackage
-	default:
-		return fmt.Errorf("unsupported release build target kind %q", kind)
-	}
-}
-
-func artifactExistsForEntrypoint(root string, entry *providermanifestv1.Entrypoint) bool {
-	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-		return false
-	}
-	_, err := os.Stat(filepath.Join(root, filepath.FromSlash(entry.ArtifactPath)))
-	return err == nil
-}
-
-func buildPreparedInstallBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch)
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch)
-	default:
-		return "", fmt.Errorf("unsupported release build target kind %q", kind)
-	}
-}
-
-func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest, version, sourceDir string) (*providermanifestv1.Manifest, error) {
-	manifest, err := cloneManifest(srcManifest)
-	if err != nil {
-		return nil, fmt.Errorf("clone manifest: %w", err)
-	}
-	manifest.Version = version
-	manifest.Release = nil
-	if manifest.Kind == providermanifestv1.KindUI {
-		if assetRoot := SourceUIBuildOutput(srcManifest); assetRoot != "" {
-			if manifest.Spec == nil {
-				manifest.Spec = &providermanifestv1.Spec{}
-			}
-			manifest.Spec.AssetRoot = assetRoot
+		manifest.Artifacts = []providermanifestv1.Artifact{
+			{OS: goos, Arch: goarch, Path: artifactPath, SHA256: digest},
 		}
 	}
-	manifest.Build = nil
 
-	for i, artifact := range srcManifest.Artifacts {
-		digest, err := FileSHA256(filepath.Join(sourceDir, filepath.FromSlash(artifact.Path)))
-		if err != nil {
-			return nil, fmt.Errorf("hash artifact %s: %w", artifact.Path, err)
-		}
-		if artifact.SHA256 != "" && artifact.SHA256 != digest {
-			return nil, fmt.Errorf("artifact %s sha256 mismatch: manifest=%s actual=%s", artifact.Path, artifact.SHA256, digest)
-		}
-		manifest.Artifacts[i].SHA256 = digest
-	}
-
-	return manifest, nil
-}
-
-func buildPreparedInstallManifest(srcManifest *providermanifestv1.Manifest, version, binaryName, goos, goarch, digest string) (*providermanifestv1.Manifest, error) {
-	manifest, err := cloneManifest(srcManifest)
-	if err != nil {
-		return nil, fmt.Errorf("clone manifest: %w", err)
-	}
-	manifest.Version = version
-	manifest.Release = nil
-	manifest.Build = nil
-	manifest.Artifacts = []providermanifestv1.Artifact{
-		{OS: goos, Arch: goarch, Path: binaryName, SHA256: digest},
-	}
-	EnsureEntrypoint(manifest).ArtifactPath = binaryName
 	return manifest, nil
 }
 
@@ -467,15 +370,12 @@ func stagePreparedOwnedUI(manifest *providermanifestv1.Manifest, sourceDir, stag
 	}
 
 	uiManifestPath := filepath.Join(sourceDir, filepath.FromSlash(ownedUI.Path))
-	_, uiManifest, err := ReadSourceManifestFile(uiManifestPath)
+	_, _, err := ReadSourceManifestFile(uiManifestPath)
 	if err != nil {
 		return fmt.Errorf("read owned ui manifest %s: %w", ownedUI.Path, err)
 	}
-	if err := RunSourceReleaseBuild(uiManifestPath, uiManifest); err != nil {
-		return fmt.Errorf("build owned ui package %s: %w", ownedUI.Path, err)
-	}
 	packagedDir := filepath.Join(stagingDir, filepath.FromSlash(packagedOwnedUIDir(ownedUI.Path)))
-	staged, err := StagePreparedInstallDir(uiManifestPath, packagedDir, StagePreparedInstallOptions{})
+	staged, err := StageSourcePreparedInstallDir(uiManifestPath, packagedDir, StageSourcePreparedInstallOptions{})
 	if err != nil {
 		return fmt.Errorf("stage owned ui package %s: %w", ownedUI.Path, err)
 	}
@@ -511,12 +411,4 @@ func normalizePreparedInstallPath(rel string) (string, error) {
 		return "", fmt.Errorf("release path %q must stay within plugin root", rel)
 	}
 	return cleanPath, nil
-}
-
-func stagedReleaseBinaryName(pluginName, goos string) string {
-	binaryName := preparedReleaseBinaryPrefix + pluginName
-	if goos == windowsOS {
-		return binaryName + windowsExecutableSuffix
-	}
-	return binaryName
 }

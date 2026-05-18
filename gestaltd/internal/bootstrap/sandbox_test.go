@@ -146,7 +146,41 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	t.Parallel()
 
 	hostBin := buildGestaltdBinary(t)
-	manifestPath := filepath.Join(exampleProviderRoot(t), "manifest.yaml")
+	sourceRoot := t.TempDir()
+	artifactRel := ".gestalt/build/provider"
+	artifactPath := filepath.Join(sourceRoot, filepath.FromSlash(artifactRel))
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(artifact dir): %v", err)
+	}
+	binData, err := os.ReadFile(buildExampleProviderBinary(t))
+	if err != nil {
+		t.Fatalf("ReadFile(example provider binary): %v", err)
+	}
+	if err := os.WriteFile(artifactPath, binData, 0o755); err != nil {
+		t.Fatalf("WriteFile(artifact): %v", err)
+	}
+	catalogData, err := os.ReadFile(filepath.Join(exampleProviderRoot(t), providerpkg.StaticCatalogFile))
+	if err != nil {
+		t.Fatalf("ReadFile(catalog): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceRoot, providerpkg.StaticCatalogFile), catalogData, 0o644); err != nil {
+		t.Fatalf("WriteFile(catalog): %v", err)
+	}
+	manifestPath := filepath.Join(sourceRoot, "manifest.yaml")
+	manifestData, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      "github.com/test/plugins/provider",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Example Provider",
+		Spec:        &providermanifestv1.Spec{},
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest): %v", err)
+	}
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		t.Fatalf("ReadSourceManifestFile: %v", err)

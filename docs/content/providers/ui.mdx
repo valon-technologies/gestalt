@@ -124,12 +124,12 @@ build:
     - npm
     - run
     - build
-  output: dist
   inputs:
     - package.json
     - package-lock.json
     - src
 spec:
+  assetRoot: dist
   routes:
     - path: /
       allowedRoles: [viewer, admin]
@@ -137,10 +137,10 @@ spec:
       allowedRoles: [admin]
 ```
 
-`build.command` is an argv array. `build.output` is manifest-relative and points
-at the generated static files, commonly `out`, `dist`, or `build`. Frameworks
-that require a server at runtime are not compatible with UI bundles because
-Gestalt serves static assets only.
+`build.command` is an argv array. `spec.assetRoot` is manifest-relative and
+points at the generated static files, commonly `out`, `dist`, or `build`.
+Frameworks that require a server at runtime are not compatible with UI bundles
+because Gestalt serves static assets only.
 
 For the full UI manifest schema, see
 [Plugin Manifests](/reference/plugin-manifests#ui-metadata). For source UI

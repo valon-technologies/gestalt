@@ -62,32 +62,21 @@ func NormalizeKind(kind string) string {
 }
 
 type Manifest struct {
-	Kind        string           `json:"kind,omitempty" yaml:"kind,omitempty"`
-	Source      string           `json:"source,omitempty" yaml:"source,omitempty"`
-	Version     string           `json:"version" yaml:"version"`
-	DisplayName string           `json:"displayName,omitempty" yaml:"displayName,omitempty"`
-	Description string           `json:"description,omitempty" yaml:"description,omitempty"`
-	IconFile    string           `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
-	Release     *ReleaseMetadata `json:"release,omitempty" yaml:"release,omitempty"`
-	Build       *SourceBuild     `json:"build,omitempty" yaml:"build,omitempty"`
-	Artifacts   []Artifact       `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
-	Entrypoint  *Entrypoint      `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
-	Spec        *Spec            `json:"spec,omitempty" yaml:"spec,omitempty"`
-}
-
-type ReleaseMetadata struct {
-	Build *ReleaseBuild `json:"build,omitempty" yaml:"build,omitempty"`
-}
-
-type ReleaseBuild struct {
-	Workdir string   `json:"workdir,omitempty" yaml:"workdir,omitempty"`
-	Command []string `json:"command" yaml:"command"`
+	Kind        string       `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Source      string       `json:"source,omitempty" yaml:"source,omitempty"`
+	Version     string       `json:"version" yaml:"version"`
+	DisplayName string       `json:"displayName,omitempty" yaml:"displayName,omitempty"`
+	Description string       `json:"description,omitempty" yaml:"description,omitempty"`
+	IconFile    string       `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
+	Build       *SourceBuild `json:"build,omitempty" yaml:"build,omitempty"`
+	Artifacts   []Artifact   `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+	Entrypoint  *Entrypoint  `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
+	Spec        *Spec        `json:"spec,omitempty" yaml:"spec,omitempty"`
 }
 
 type SourceBuild struct {
 	Workdir string   `json:"workdir,omitempty" yaml:"workdir,omitempty"`
 	Command []string `json:"command" yaml:"command"`
-	Output  string   `json:"output,omitempty" yaml:"output,omitempty"`
 	Inputs  []string `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 }
 

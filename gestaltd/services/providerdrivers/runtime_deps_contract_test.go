@@ -2,12 +2,9 @@ package providerdrivers
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -70,28 +67,39 @@ func setupGoContractProviderDir(t *testing.T, baseDir, kind, name, source string
 	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/"+kind+"/"+name)), 0o644)
 	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, providerDir, "provider.go", []byte(source), 0o644)
+	writeTestFile(t, providerDir, filepath.Join("cmd", "provider", "main.go"), []byte(fmt.Sprintf(`package main
 
-	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "gestalt-"+name))
-	artifactPath := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
-	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	providerpkg %q
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := gestalt.ServeAuthenticationProvider(ctx, providerpkg.New()); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %%v\n", err)
+		os.Exit(1)
 	}
-	if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, kind, runtime.GOOS, runtime.GOARCH); err != nil {
-		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
-	}
-	binData, err := os.ReadFile(artifactPath)
-	if err != nil {
-		t.Fatalf("read provider artifact: %v", err)
-	}
-	sum := sha256.Sum256(binData)
+}
+`, "example.com/providers/"+kind+"/"+name)), 0o644)
+	artifactRel := ".gestalt/build/provider"
+	writeTestFile(t, providerDir, "build.sh", []byte("mkdir -p .gestalt/build\ngo build -o .gestalt/build/provider ./cmd/provider\n"), 0o755)
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
 		Kind:        kind,
 		Source:      "github.com/test/providers/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: name,
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel, SHA256: hex.EncodeToString(sum[:])},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
 		},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
@@ -173,6 +181,9 @@ func writeTestFile(t *testing.T, dir, name string, data []byte, perm os.FileMode
 	t.Helper()
 
 	path := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
 	if err := os.WriteFile(path, data, perm); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}

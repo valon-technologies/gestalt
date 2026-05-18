@@ -57,7 +57,7 @@ import { Callout } from 'nextra/components'
 | `gestaltd provider attach detach --remote URL ATTACH_ID` | Detach a stuck remote provider-dev attachment owned by your authenticated principal. |
 | `gestaltd provider validate --path PATH` | Validate a local source plugin or UI bundle inside the same synthesized Gestalt config used by `gestaltd serve --path`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
-| `gestaltd provider release --version VERSION` | Build and package a provider release. Go, Python, Rust, and TypeScript source plugins default to the host platform. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
+| `gestaltd provider release --version VERSION` | Build and package a provider release. Executable source providers require `build.command` and default to the host platform; UI and declarative providers default to a generic archive. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
 | `gestaltd provider release --output DIR` | Output directory for the release archive. Defaults to `dist/`. |
 
 For config-free local development, inferred UI mount paths use the manifest
@@ -196,9 +196,9 @@ Remote mode tunnels plugin RPC, catalog, post-connect, host-service calls, and
 plugin-owned UI assets for mounted UIs that already exist on the remote server.
 Raw GraphQL surfaces are not tunneled in v1.
 
-For TypeScript source plugins, `gestaltd serve --path` installs dependencies with
-`bun install` when a `package.json` is present and `node_modules` is missing.
-Source UI builds use the same bootstrap for Bun-managed build workdirs before
-`build.command` when dependencies are missing.
+For source-backed providers, `gestaltd serve --path` runs the manifest
+`build.command` when one is declared, verifies the declared output, then serves
+or starts that output. If the build needs dependencies installed first, include
+that bootstrap in the command or in the script it invokes.
 
 See [Configuration](/reference/configuration) for the relationship between `lock`, `sync --locked`, `serve --locked`, and `validate`.

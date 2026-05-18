@@ -971,13 +971,7 @@ func writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent s
 		Kind:        providermanifestv1.KindPlugin,
 		DisplayName: "Alpha",
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{{
-			OS:     runtime.GOOS,
-			Arch:   runtime.GOARCH,
-			Path:   "provider",
-			SHA256: sha256hex(binaryContent),
-		}},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
 	}
 	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -999,9 +993,9 @@ func writeSourceUITree(t *testing.T, dir, source, version string) {
 		Version: version,
 		Build: &providermanifestv1.SourceBuild{
 			Command: []string{"sh", "./build.sh"},
-			Output:  "dist",
 			Inputs:  []string{"build.sh"},
 		},
+		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
 	}
 	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -1342,13 +1336,6 @@ func writeExecutableSourceManifest(t *testing.T, dir, srcDirName, source, versio
 	var entrypoint string
 	for i, artifact := range artifacts {
 		artifactPath := filepath.ToSlash(filepath.Join("artifacts", artifact.goos, artifact.goarch, artifact.binaryName))
-		manifest.Artifacts = append(manifest.Artifacts, providermanifestv1.Artifact{
-			OS:     artifact.goos,
-			Arch:   artifact.goarch,
-			LibC:   artifact.libc,
-			Path:   artifactPath,
-			SHA256: sha256hex(string(artifact.data)),
-		})
 		if i == 0 || (artifact.goos == runtime.GOOS && artifact.goarch == runtime.GOARCH && artifact.libc == "") {
 			entrypoint = artifactPath
 		}
@@ -1394,9 +1381,42 @@ func buildGoSourceSecretsBinary(t *testing.T) string {
 	if err := os.WriteFile(filepath.Join(providerDir, "secrets.go"), []byte(testutil.GeneratedSecretsPackageSource()), 0o644); err != nil {
 		t.Fatalf("write secrets.go: %v", err)
 	}
+	mainDir := filepath.Join(providerDir, "cmd", "provider")
+	if err := os.MkdirAll(mainDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll cmd/provider: %v", err)
+	}
+	mainSource := `package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	providerpkg "example.com/test-go-secrets"
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := gestalt.ServeSecretsProvider(ctx, providerpkg.New()); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(mainDir, "main.go"), []byte(mainSource), 0o644); err != nil {
+		t.Fatalf("write main.go: %v", err)
+	}
 	outputPath := filepath.Join(t.TempDir(), "secrets-provider")
-	if err := providerpkg.BuildGoComponentBinary(providerDir, outputPath, providermanifestv1.KindSecrets, runtime.GOOS, runtime.GOARCH); err != nil {
-		t.Fatalf("BuildGoComponentBinary(secrets): %v", err)
+	cmd := exec.Command("go", "build", "-o", outputPath, "./cmd/provider")
+	cmd.Dir = providerDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("go build secrets provider: %v", err)
 	}
 	return outputPath
 }
@@ -1407,13 +1427,10 @@ func writeBootstrapSecretsManifest(t *testing.T, dir, source, version string) st
 	bootstrapArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "bootstrap-secrets"))
 	manifestPath := filepath.Join(dir, "bootstrap-secrets-manifest.yaml")
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindSecrets,
-		Source:  source,
-		Version: version,
-		Spec:    &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: bootstrapArtifact},
-		},
+		Kind:       providermanifestv1.KindSecrets,
+		Source:     source,
+		Version:    version,
+		Spec:       &providermanifestv1.Spec{},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: bootstrapArtifact},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -5265,13 +5282,10 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	bootstrapArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "bootstrap-secrets"))
 	bootstrapManifestPath := filepath.Join(dir, "bootstrap-secrets-manifest.yaml")
 	bootstrapManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindSecrets,
-		Source:  bootstrapSource,
-		Version: bootstrapVersion,
-		Spec:    &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: bootstrapArtifact},
-		},
+		Kind:       providermanifestv1.KindSecrets,
+		Source:     bootstrapSource,
+		Version:    bootstrapVersion,
+		Spec:       &providermanifestv1.Spec{},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: bootstrapArtifact},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -5550,13 +5564,10 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataPreparesOnce(t *testing
 	bootstrapArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "bootstrap-secrets"))
 	bootstrapManifestPath := filepath.Join(dir, "bootstrap-secrets-manifest.yaml")
 	bootstrapManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindSecrets,
-		Source:  bootstrapSource,
-		Version: bootstrapVersion,
-		Spec:    &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: bootstrapArtifact},
-		},
+		Kind:       providermanifestv1.KindSecrets,
+		Source:     bootstrapSource,
+		Version:    bootstrapVersion,
+		Spec:       &providermanifestv1.Spec{},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: bootstrapArtifact},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {

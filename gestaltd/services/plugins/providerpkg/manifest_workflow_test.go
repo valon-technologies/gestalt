@@ -23,7 +23,7 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 		manifest.IconFile = "assets/icon.svg"
 		manifest.Spec.ConfigSchemaPath = "schemas/config.schema.json"
 
-		mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, manifest))
+		mustWriteManifestData(t, sourceDir, ManifestFile, mustRawManifestJSON(t, manifest))
 		mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("provider-json"), 0o755)
 		mustWriteFile(t, filepath.Join(sourceDir, "assets", "icon.svg"), []byte("<svg/>"), 0o644)
 		mustWriteFile(t, filepath.Join(sourceDir, "schemas", "config.schema.json"), []byte(`{"type":"object"}`), 0o644)
@@ -157,13 +157,20 @@ spec:
 	}
 }
 
-func TestManifestWorkflow_AllowsSourceArtifactsWithoutDigestsUntilPackaging(t *testing.T) {
+func TestManifestWorkflow_SourceExecutableDeclaresEntrypointNotArtifacts(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "source-plugin")
 	artifactPath := testArtifactPath("provider")
-	manifest := mustProviderManifest("github.com/acme/plugins/source-only", "0.0.1-alpha.1", testArtifactOS, testArtifactArch, artifactPath, "")
+	manifest := &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      "github.com/acme/plugins/source-only",
+		Version:     "0.0.1-alpha.1",
+		Spec:        &providermanifestv1.Spec{},
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+		DisplayName: "Source Only",
+	}
 	manifestPath := mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, manifest))
 	mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("source-only"), 0o755)
 
@@ -171,15 +178,14 @@ func TestManifestWorkflow_AllowsSourceArtifactsWithoutDigestsUntilPackaging(t *t
 	if err != nil {
 		t.Fatalf("ReadSourceManifestFile: %v", err)
 	}
-	if manifest.Artifacts[0].SHA256 != "" {
-		t.Fatalf("expected empty source artifact digest, got %q", manifest.Artifacts[0].SHA256)
+	if len(manifest.Artifacts) != 0 {
+		t.Fatalf("source artifacts = %+v, want none", manifest.Artifacts)
 	}
 
-	if _, _, err := ReadManifestFile(manifestPath); err == nil || !strings.Contains(err.Error(), "sha256 is required") {
-		t.Fatalf("ReadManifestFile error = %v, want missing sha256", err)
-	}
-	if err := CreatePackageFromDir(sourceDir, filepath.Join(root, "source-plugin.tar.gz")); err == nil || !strings.Contains(err.Error(), "sha256 is required") {
-		t.Fatalf("CreatePackageFromDir error = %v, want missing sha256", err)
+	rejected := mustProviderManifest("github.com/acme/plugins/source-only-artifacts", "0.0.1-alpha.1", testArtifactOS, testArtifactArch, artifactPath, "")
+	rejectedPath := mustWriteManifestData(t, filepath.Join(root, "rejected-source-plugin"), ManifestFile, mustRawManifestJSON(t, rejected))
+	if _, _, err := ReadSourceManifestFile(rejectedPath); err == nil || !strings.Contains(err.Error(), "artifacts are not allowed in source manifests") {
+		t.Fatalf("ReadSourceManifestFile error = %v, want source artifact rejection", err)
 	}
 }
 
@@ -435,38 +441,27 @@ func TestManifestWorkflow_SourceUIBuildValidation(t *testing.T) {
 		wantErr    string
 	}{
 		{
-			name: "source ui rejects asset root",
+			name: "source ui requires asset root",
 			manifest: `
 kind: ui
 source: github.com/acme/plugins/source-ui
 version: 1.0.0
+build:
+  command: [npm, run, build]
+`,
+			readSource: true,
+			wantErr:    "spec.assetRoot is required for source ui manifests",
+		},
+		{
+			name: "source ui uses asset root as build output",
+			manifest: `
+kind: ui
+source: github.com/acme/plugins/source-ui
+version: 1.0.0
+build:
+  command: [npm, run, build]
 spec:
   assetRoot: dist
-`,
-			readSource: true,
-			wantErr:    "spec.assetRoot is not allowed in source ui manifests; use build.output",
-		},
-		{
-			name: "source ui requires build output",
-			manifest: `
-kind: ui
-source: github.com/acme/plugins/source-ui
-version: 1.0.0
-build:
-  command: [npm, run, build]
-`,
-			readSource: true,
-			wantErr:    "build.output is required for source ui manifests",
-		},
-		{
-			name: "source ui uses build output",
-			manifest: `
-kind: ui
-source: github.com/acme/plugins/source-ui
-version: 1.0.0
-build:
-  command: [npm, run, build]
-  output: dist
 `,
 			readSource: true,
 		},
@@ -488,27 +483,27 @@ source: github.com/acme/plugins/released-ui
 version: 1.0.0
 build:
   command: [npm, run, build]
-  output: dist
 spec:
   assetRoot: dist
 `,
-			wantErr: "build metadata is only allowed in source ui manifests",
+			wantErr: "build metadata is only allowed in source manifests",
 		},
 		{
-			name: "source ui rejects release metadata",
+			name: "source ui rejects deleted release metadata",
 			manifest: `
 kind: ui
 source: github.com/acme/plugins/source-ui
 version: 1.0.0
 build:
   command: [npm, run, build]
-  output: dist
+spec:
+  assetRoot: dist
 release:
   build:
     command: [npm, run, build]
 `,
 			readSource: true,
-			wantErr:    "release metadata is not supported for source ui manifests; use build instead",
+			wantErr:    "field release not found",
 		},
 		{
 			name: "source ui rejects input globs",
@@ -518,9 +513,10 @@ source: github.com/acme/plugins/source-ui
 version: 1.0.0
 build:
   command: [npm, run, build]
-  output: dist
   inputs:
     - src/**
+spec:
+  assetRoot: dist
 `,
 			readSource: true,
 			wantErr:    "build.inputs[0] does not support glob syntax",
@@ -565,6 +561,8 @@ func TestManifestWorkflow_AcceptsPluginRouteAuthReference(t *testing.T) {
 kind: plugin
 source: github.com/acme/plugins/route-auth
 version: 1.0.0
+entrypoint:
+  artifactPath: provider
 spec:
   auth:
     provider: server
@@ -606,6 +604,8 @@ func TestManifestWorkflow_AcceptsNullPluginRouteAuth(t *testing.T) {
 kind: plugin
 source: github.com/acme/plugins/null-route-auth
 version: 1.0.0
+entrypoint:
+  artifactPath: provider
 spec:
   auth:
   connections:
@@ -667,6 +667,8 @@ func TestManifestWorkflow_AcceptsHostedHTTPBindingsAndSecuritySchemes(t *testing
 kind: plugin
 source: github.com/acme/plugins/signed
 version: 1.0.0
+entrypoint:
+  artifactPath: provider
 spec:
   securitySchemes:
     signed:
@@ -950,9 +952,10 @@ func TestManifestWorkflow_EncodesCanonicalProgrammaticDefaultConnection(t *testi
 	t.Parallel()
 
 	programmatic := &providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindPlugin,
-		Source:  "github.com/acme/plugins/programmatic-default-connection",
-		Version: "1.0.0",
+		Kind:       providermanifestv1.KindPlugin,
+		Source:     "github.com/acme/plugins/programmatic-default-connection",
+		Version:    "1.0.0",
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
 		Spec: &providermanifestv1.Spec{
 			Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 				"default": {
