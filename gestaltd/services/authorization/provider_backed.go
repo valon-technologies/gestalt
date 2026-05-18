@@ -587,7 +587,7 @@ func (a *ProviderBackedAuthorizer) readAllRelationships(ctx context.Context, mod
 			return nil, fmt.Errorf("read authorization relationships: %w", err)
 		}
 		for _, rel := range resp.GetRelationships() {
-			if !managedRelationship(rel) && !legacyManagedRelationship(rel) {
+			if !managedRelationship(rel) {
 				continue
 			}
 			out[relationshipMapKey(rel)] = rel
@@ -1011,8 +1011,4 @@ func (a *ProviderBackedAuthorizer) currentState() providerBackedRoleState {
 
 func managedRelationship(rel *core.Relationship) bool {
 	return IsManagedProviderRelationship(rel)
-}
-
-func legacyManagedRelationship(rel *core.Relationship) bool {
-	return rel != nil && strings.TrimSpace(rel.GetResource().GetType()) == "agent_session"
 }
