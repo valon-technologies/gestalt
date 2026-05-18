@@ -4275,6 +4275,10 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	svc := testutil.NewStubServices(t)
 	viewer := seedUser(t, svc, "viewer@example.test")
 	admin := seedUser(t, svc, "admin@example.test")
+	pluginDefs := map[string]*config.ProviderEntry{
+		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
+		"other_plugin":  {AuthorizationPolicy: "other_policy"},
+	}
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
 			"admin_policy": {
@@ -4285,14 +4289,16 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 				},
 			},
 			"sample_policy": {Default: "deny"},
+			"other_policy":  {Default: "deny"},
 		},
-	}, map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-	})
+	}, pluginDefs)
 
 	provider := newMemoryAuthorizationProvider("memory-authorization")
 	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
 	seedProviderDynamicAdminMembership(t, svc, authz, provider, "dynamic-admin@example.test", "admin")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-admin@example.test", "admin")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-viewer@example.test", "viewer")
+	dynamicUser := seedUser(t, svc, "dynamic@example.test")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -4305,6 +4311,10 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 					return &core.UserIdentity{Email: "admin@example.test"}, nil
 				case "dynamic-admin-session":
 					return &core.UserIdentity{Email: "dynamic-admin@example.test"}, nil
+				case "plugin-admin-session":
+					return &core.UserIdentity{Email: "plugin-admin@example.test"}, nil
+				case "plugin-viewer-session":
+					return &core.UserIdentity{Email: "plugin-viewer@example.test"}, nil
 				default:
 					return nil, fmt.Errorf("invalid token")
 				}
@@ -4313,9 +4323,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-		}
+		cfg.PluginDefs = pluginDefs
 		cfg.Admin = server.AdminRouteConfig{
 			AuthorizationPolicy: "admin_policy",
 			AllowedRoles:        []string{"admin"},
@@ -4378,71 +4386,13 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&plugins); err != nil {
 		t.Fatalf("decoding plugins: %v", err)
 	}
-	if len(plugins) != 1 || plugins[0]["name"] != "sample_plugin" {
-		t.Fatalf("plugins = %+v, want sample_plugin", plugins)
+	if len(plugins) != 2 || plugins[0]["name"] != "other_plugin" || plugins[1]["name"] != "sample_plugin" {
+		t.Fatalf("plugins = %+v, want other_plugin and sample_plugin", plugins)
 	}
-}
 
-func TestAdminAPI_PluginAuthorizationAllowsPluginAdmin(t *testing.T) {
-	t.Parallel()
-
-	svc := testutil.NewStubServices(t)
-	seedUser(t, svc, "server-admin@example.test")
-	provider := newMemoryAuthorizationProvider("memory-authorization")
-	pluginDefs := map[string]*config.ProviderEntry{
-		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
-		"other_plugin":  {AuthorizationPolicy: "other_policy"},
-	}
-	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
-		Policies: map[string]config.SubjectPolicyDef{
-			"admin_policy": {
-				Default: "deny",
-				Members: []config.SubjectPolicyMemberDef{
-					staticPolicyUserMember(t, svc, "server-admin@example.test", "admin"),
-				},
-			},
-			"sample_policy": {Default: "deny"},
-			"other_policy":  {Default: "deny"},
-		},
-	}, pluginDefs)
-	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
-	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-admin@example.test", "admin")
-	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-viewer@example.test", "viewer")
-	dynamicUser := seedUser(t, svc, "dynamic@example.test")
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "test",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				switch token {
-				case "server-admin-session":
-					return &core.UserIdentity{Email: "server-admin@example.test"}, nil
-				case "plugin-admin-session":
-					return &core.UserIdentity{Email: "plugin-admin@example.test"}, nil
-				case "plugin-viewer-session":
-					return &core.UserIdentity{Email: "plugin-viewer@example.test"}, nil
-				default:
-					return nil, fmt.Errorf("invalid token")
-				}
-			},
-		}
-		cfg.Services = svc
-		cfg.Authorizer = authz
-		cfg.AuthorizationProvider = provider
-		cfg.PluginDefs = pluginDefs
-		cfg.Admin = server.AdminRouteConfig{
-			AuthorizationPolicy: "admin_policy",
-			AllowedRoles:        []string{"admin"},
-		}
-		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("admin"))
-		})
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
-	resp, err := http.DefaultClient.Do(req)
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("plugin admin GET plugin members: %v", err)
 	}
