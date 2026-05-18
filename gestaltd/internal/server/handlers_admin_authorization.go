@@ -121,7 +121,7 @@ func adminAuthorizationPluginMemberRoutePlugin(r *http.Request) (string, bool) {
 		return "", false
 	}
 	path := adminAuthorizationRoutePath(r)
-	rest := path
+	var rest string
 	switch {
 	case strings.HasPrefix(path, "/authorization/plugins/"):
 		rest = strings.TrimPrefix(path, "/authorization/plugins/")
