@@ -58,12 +58,13 @@ func PrepareExecution(params PrepareParams) (PreparedConfig, error) {
 	var cleanup func()
 
 	if cfg.Command == "" && cfg.ManifestPath != "" {
-		command, args, err := providerpkg.SourceManifestExecutionCommand(cfg.ManifestPath, params.Kind, providerpkg.SourceBuildOptions{})
+		command, args, tempCleanup, err := providerpkg.SourceManifestExecutionCommand(cfg.ManifestPath, params.Kind, providerpkg.SourceBuildOptions{})
 		if err != nil {
 			return PreparedConfig{}, fmt.Errorf("%s: prepare source execution: %w", params.Subject, err)
 		}
 		cfg.Command = command
 		cfg.Args = args
+		cleanup = tempCleanup
 	}
 
 	if cfg.Command == "" {

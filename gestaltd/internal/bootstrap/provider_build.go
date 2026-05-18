@@ -1001,7 +1001,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			}
 			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
 		}
-		command, args, err = providerpkg.SourceManifestExecutionCommand(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
+		command, args, cleanup, err = providerpkg.SourceManifestExecutionCommand(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
 		if err != nil {
 			if runtimeOwned {
 				_ = runtimeProvider.Close()
@@ -1016,9 +1016,15 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		}
 		return nil, err
 	}
+	cleanup = nil
+	launchCleanup := launch.cleanup
+	defer func() {
+		if launchCleanup != nil {
+			launchCleanup()
+		}
+	}()
 	command = launch.command
 	args = launch.args
-	cleanup = launch.cleanup
 	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindPlugin, name, runtimeConfig))
 	if err != nil {
 		if runtimeOwned {
@@ -1050,7 +1056,8 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	if err != nil {
 		return nil, err
 	}
-	cleanup = chainCleanup(cleanup, runtimeCleanup, publicHostServicesCleanup)
+	cleanup = chainCleanup(launchCleanup, runtimeCleanup, publicHostServicesCleanup)
+	launchCleanup = nil
 	startEnv := maps.Clone(env)
 	startEnv = withRuntimeSessionEnv(startEnv, sessionID)
 	startEnv = withHostServiceTLSCAEnv(startEnv, deps)

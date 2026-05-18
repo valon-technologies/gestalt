@@ -185,24 +185,33 @@ func SourceBuildInputs(manifest *providermanifestv1.Manifest) []string {
 	return append([]string(nil), build.Inputs...)
 }
 
-func SourceManifestExecutionCommand(manifestPath, kind string, opts SourceBuildOptions) (string, []string, error) {
+func SourceManifestExecutionCommand(manifestPath, kind string, opts SourceBuildOptions) (string, []string, func(), error) {
 	_, manifest, err := ReadSourceManifestFile(manifestPath)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	if err := EnsureSourceBuildOutput(manifestPath, manifest, opts); err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	if strings.TrimSpace(kind) == "" {
 		kind, err = ManifestKind(manifest)
 		if err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 	}
 	entry := EntrypointForKind(manifest, kind)
-	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
-		return "", nil, fmt.Errorf("manifest does not define a %s entrypoint", kind)
+	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
+		command := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(entry.ArtifactPath))
+		return command, append([]string(nil), entry.Args...), nil, nil
 	}
-	command := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(entry.ArtifactPath))
-	return command, append([]string(nil), entry.Args...), nil
+	rootDir := filepath.Dir(manifestPath)
+	goos, goarch := SourceBuildTarget(opts)
+	switch providermanifestv1.NormalizeKind(kind) {
+	case providermanifestv1.KindPlugin:
+		return SourceProviderExecutionCommand(rootDir, goos, goarch)
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+		return SourceComponentExecutionCommand(rootDir, kind, goos, goarch)
+	default:
+		return "", nil, nil, fmt.Errorf("manifest does not define a %s entrypoint", kind)
+	}
 }

@@ -1887,6 +1887,54 @@ func TestRun_ProviderReleaseCompilesProviderWithoutSourceArtifacts(t *testing.T)
 	}
 }
 
+func TestRun_ProviderReleaseCompilesSDKSourceProviderWithoutBuildCommand(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newSourceProviderReleaseFixtureWithoutCatalog(t, t.TempDir())
+	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      releaseTestSource,
+		Version:     "0.0.1",
+		DisplayName: "Release Test",
+		IconFile:    releaseTestIconPath,
+		Spec: &providermanifestv1.Spec{
+			ConfigSchemaPath: releaseProviderSchemaPath,
+		},
+	})
+	_ = os.Remove(filepath.Join(pluginDir, providerpkg.StaticCatalogFile))
+	_ = os.Remove(filepath.Join(pluginDir, "build.sh"))
+	_ = os.RemoveAll(filepath.Join(pluginDir, "cmd"))
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.4-sdk-source.1"
+	runProviderReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-" + releaseTestPluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+
+	wantBinary := "gestalt-plugin-" + releaseTestPluginName
+	if runtime.GOOS == "windows" {
+		wantBinary += ".exe"
+	}
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != wantBinary {
+		t.Fatalf("artifacts = %+v, want one artifact at %q", manifest.Artifacts, wantBinary)
+	}
+	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != wantBinary {
+		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoint, wantBinary)
+	}
+	data, err := os.ReadFile(filepath.Join(extractDir, providerpkg.StaticCatalogFile))
+	if err != nil {
+		t.Fatalf("read generated catalog: %v", err)
+	}
+	if !strings.Contains(string(data), "generated_op") {
+		t.Fatalf("unexpected generated catalog: %s", data)
+	}
+}
+
 func TestRun_ProviderReleaseRejectsPrebuiltExecutableProvider(t *testing.T) {
 	t.Parallel()
 

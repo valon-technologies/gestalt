@@ -809,14 +809,12 @@ and MCP may be added alongside either or both.
 
 A connection using `mcp_oauth` auth requires the plugin to declare an MCP surface (via `spec.surfaces.mcp` or an equivalent). Manifests that set `auth.type: mcp_oauth` without an MCP surface fail validation.
 
-Executable source providers must declare top-level `build.command` and
-`entrypoint.artifactPath`. Gestalt runs the command before source-manifest
-preparation and requires the command to produce that artifact path. The command
-can call any language runtime or compiler available in the preparation
-environment; Gestalt does not infer a language, read language-specific target
-metadata, or synthesize executable wrappers. Source manifests must not include
-`artifacts`; prepared and released manifests include `artifacts` and omit
-`build`.
+Executable source providers may either use the SDK-native Go, Rust, Python, or
+TypeScript source-package metadata, or declare top-level `build.command` with
+`entrypoint.artifactPath`. When `build.command` is present, Gestalt runs it
+before source-manifest preparation and requires the command to produce that
+artifact path. Source manifests must not include `artifacts`; prepared and
+released manifests include `artifacts` and omit `build`.
 
 ```yaml
 kind: indexeddb

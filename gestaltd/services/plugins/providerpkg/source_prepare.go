@@ -2,10 +2,12 @@ package providerpkg
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -73,18 +75,40 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 }
 
 func generateSourceStaticCatalog(rootDir string, manifest *providermanifestv1.Manifest, catalogPath string) error {
+	var execEnv map[string]string
+	var cleanup func()
 	entry := EntrypointForKind(manifest, providermanifestv1.KindPlugin)
-	if entry == nil || entry.ArtifactPath == "" {
-		return nil
+	command := ""
+	var args []string
+	if entry != nil && entry.ArtifactPath != "" {
+		command = filepath.Join(rootDir, filepath.FromSlash(entry.ArtifactPath))
+		args = append([]string(nil), entry.Args...)
+	} else {
+		var err error
+		command, args, cleanup, err = SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
+		if err != nil {
+			if errors.Is(err, ErrNoSourceProviderPackage) {
+				return nil
+			}
+			return fmt.Errorf("prepare synthesized source provider for static catalog: %w", err)
+		}
+		execEnv, err = SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
+		if err != nil {
+			return fmt.Errorf("prepare synthesized source provider environment for static catalog: %w", err)
+		}
+	}
+	if cleanup != nil {
+		defer cleanup()
 	}
 
-	command := filepath.Join(rootDir, filepath.FromSlash(entry.ArtifactPath))
-	args := append([]string(nil), entry.Args...)
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(
 		os.Environ(),
 		envWriteCatalog+"="+catalogPath,
 	)
+	for key, value := range execEnv {
+		cmd.Env = append(cmd.Env, key+"="+value)
+	}
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output

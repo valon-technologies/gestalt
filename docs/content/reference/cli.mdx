@@ -57,7 +57,7 @@ import { Callout } from 'nextra/components'
 | `gestaltd provider attach detach --remote URL ATTACH_ID` | Detach a stuck remote provider-dev attachment owned by your authenticated principal. |
 | `gestaltd provider validate --path PATH` | Validate a local source plugin or UI bundle inside the same synthesized Gestalt config used by `gestaltd serve --path`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
-| `gestaltd provider release --version VERSION` | Build and package a provider release. Executable source providers require `build.command` and default to the host platform; UI and declarative providers default to a generic archive. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
+| `gestaltd provider release --version VERSION` | Build and package a provider release. Executable source providers use SDK-native source packages or `build.command` and default to the host platform; UI and declarative providers default to a generic archive. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
 | `gestaltd provider release --output DIR` | Output directory for the release archive. Defaults to `dist/`. |
 
 For config-free local development, inferred UI mount paths use the manifest
