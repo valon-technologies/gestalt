@@ -9149,6 +9149,126 @@ func TestListIntegrations(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_ProviderDevListOverlayDoesNotResolveProviderProcess(t *testing.T) {
+	t.Parallel()
+
+	const iconSVG = `<svg viewBox="0 0 1 1"></svg>`
+	svc := testutil.NewStubServices(t)
+	seedUserRecord(t, svc, "user-123", "owner@example.test", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+
+	manager, err := providerdev.NewManager([]providerdev.Target{{
+		Name: "roadmap",
+		Spec: pluginservice.StaticProviderSpec{
+			Name:           "roadmap",
+			DisplayName:    "Remote Roadmap",
+			Description:    "Remote description",
+			ConnectionMode: core.ConnectionModeUser,
+			Catalog: &catalog.Catalog{
+				Name: "roadmap",
+				Operations: []catalog.CatalogOperation{{
+					ID:        "remote-only",
+					Transport: catalog.TransportPlugin,
+				}},
+			},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	owner := &principal.Principal{SubjectID: principal.UserSubjectID("user-123"), UserID: "user-123", Kind: principal.KindUser}
+	if _, err := manager.CreateSession(context.Background(), owner, providerdev.CreateSessionRequest{Providers: []providerdev.AttachProvider{{
+		Name: "roadmap",
+		Spec: pluginservice.StaticProviderSpec{
+			Name:           "roadmap",
+			DisplayName:    "Local Roadmap",
+			Description:    "Local description",
+			IconSVG:        iconSVG,
+			ConnectionMode: core.ConnectionModeUser,
+			AuthTypes:      []string{"oauth2"},
+			CredentialFields: []core.CredentialFieldDef{{
+				Name:  "api_key",
+				Label: "API key",
+			}},
+			Catalog: &catalog.Catalog{
+				Operations: []catalog.CatalogOperation{{
+					ID: "local-only",
+				}},
+			},
+		},
+	}}}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	staticProvider := &coretesting.StubIntegration{
+		N:        "roadmap",
+		DN:       "Static Roadmap",
+		Desc:     "Static description",
+		ConnMode: core.ConnectionModeNone,
+		CatalogVal: &catalog.Catalog{
+			Name: "roadmap",
+			Operations: []catalog.CatalogOperation{{
+				ID:        "static-only",
+				Transport: catalog.TransportPlugin,
+			}},
+		},
+	}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "owner-session" {
+					return nil, principal.ErrInvalidToken
+				}
+				return &core.UserIdentity{Email: "owner@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Providers = testutil.NewProviderRegistry(t, staticProvider)
+		cfg.ProviderDevSessions = manager
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer owner-session")
+	client := ts.Client()
+	client.Timeout = 2 * time.Second
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 200; body = %s", resp.StatusCode, body)
+	}
+
+	var integrations []struct {
+		Name            string   `json:"name"`
+		DisplayName     string   `json:"displayName"`
+		Description     string   `json:"description"`
+		IconSVG         string   `json:"iconSvg"`
+		Status          string   `json:"status"`
+		CredentialState string   `json:"credentialState"`
+		Actions         []string `json:"actions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("integrations = %#v, want one", integrations)
+	}
+	got := integrations[0]
+	if got.Name != "roadmap" || got.DisplayName != "Local Roadmap" || got.Description != "Local description" {
+		t.Fatalf("integration metadata = %#v, want provider-dev display overlay", got)
+	}
+	if got.IconSVG != iconSVG {
+		t.Fatalf("iconSvg = %q, want overlay icon", got.IconSVG)
+	}
+	if got.Status != "ready" || got.CredentialState != "not_required" || len(got.Actions) != 0 {
+		t.Fatalf("status = {%q, %q, %v}, want static provider no-credential status", got.Status, got.CredentialState, got.Actions)
+	}
+}
+
 func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	t.Parallel()
 

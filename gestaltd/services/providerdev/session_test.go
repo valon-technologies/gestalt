@@ -860,6 +860,69 @@ func TestCreateSessionMatchesProviderBySource(t *testing.T) {
 	}
 }
 
+func TestResolveListOverlaysReturnsMetadataWithoutDispatcher(t *testing.T) {
+	t.Parallel()
+
+	const iconSVG = `<svg viewBox="0 0 1 1"></svg>`
+	manager, err := NewManager([]Target{{
+		Name:   "roadmap",
+		Source: "github.com/acme/plugins/roadmap",
+		Spec: pluginservice.StaticProviderSpec{
+			Name:        "roadmap",
+			DisplayName: "Remote Roadmap",
+			Description: "Remote description",
+			IconSVG:     iconSVG,
+			Catalog: &catalog.Catalog{
+				Operations: []catalog.CatalogOperation{{
+					ID: "remote-only",
+				}},
+			},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
+	if _, err := manager.CreateSession(context.Background(), p, CreateSessionRequest{Providers: []AttachProvider{{
+		Name: "roadmap",
+		Spec: pluginservice.StaticProviderSpec{
+			Name:        "roadmap",
+			DisplayName: "Local Roadmap",
+			Description: "Local description",
+			IconSVG:     iconSVG,
+			Catalog: &catalog.Catalog{
+				Operations: []catalog.CatalogOperation{{
+					ID: "local-only",
+				}},
+			},
+		},
+	}}}); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	overlays, err := manager.ResolveListOverlays(context.Background(), p, []string{"roadmap"})
+	if err != nil {
+		t.Fatalf("ResolveListOverlays: %v", err)
+	}
+	overlay, ok := overlays["roadmap"]
+	if !ok {
+		t.Fatalf("ResolveListOverlays missing roadmap overlay: %#v", overlays)
+	}
+	if overlay.DisplayName != "Local Roadmap" || overlay.Description != "Local description" {
+		t.Fatalf("overlay metadata = {%q, %q}, want local metadata", overlay.DisplayName, overlay.Description)
+	}
+	if overlay.IconSVG != iconSVG {
+		t.Fatalf("overlay icon = %q, want %q", overlay.IconSVG, iconSVG)
+	}
+	if overlay.Catalog == nil {
+		t.Fatal("overlay catalog is nil")
+	}
+	if len(overlay.Catalog.Operations) != 1 || overlay.Catalog.Operations[0].ID != "local-only" {
+		t.Fatalf("overlay operations = %#v, want local-only", overlay.Catalog.Operations)
+	}
+}
+
 func TestHTTPTransportCreateSessionExplicitConfigOverridesRemoteConfig(t *testing.T) {
 	t.Parallel()
 

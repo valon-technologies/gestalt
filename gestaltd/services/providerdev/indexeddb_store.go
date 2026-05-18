@@ -799,6 +799,50 @@ func (s *indexedDBSessionStore) latestTarget(ctx context.Context, owner, provide
 	return latest, latestTarget, true, nil
 }
 
+func (s *indexedDBSessionStore) latestTargetsForProviders(ctx context.Context, owner string, providerNames map[string]struct{}, now time.Time) (map[string]Target, error) {
+	if s == nil || len(providerNames) == 0 {
+		return nil, nil
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	records, err := s.db.ObjectStore(indexedDBAttachmentStore).Index("by_owner").GetAll(ctx, nil, owner)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "list provider dev attachments: %v", err)
+	}
+	latest := make(map[string]indexedDBSessionRecord, len(providerNames))
+	targets := make(map[string]Target, len(providerNames))
+	for _, raw := range records {
+		session, err := sessionFromRecord(raw)
+		if err != nil {
+			return nil, err
+		}
+		if session.owner != owner || !attachmentActive(session, now) {
+			continue
+		}
+		for i := range session.targets {
+			target := &session.targets[i]
+			if _, ok := providerNames[target.Name]; !ok {
+				continue
+			}
+			current, ok := latest[target.Name]
+			if ok && !sessionNewerThan(session, current) {
+				continue
+			}
+			latest[target.Name] = session
+			targets[target.Name] = target.target()
+		}
+	}
+	if len(targets) == 0 {
+		return nil, nil
+	}
+	return targets, nil
+}
+
+func sessionNewerThan(a, b indexedDBSessionRecord) bool {
+	return a.createdAt.After(b.createdAt) || (a.createdAt.Equal(b.createdAt) && a.id > b.id)
+}
+
 func (s *indexedDBSessionStore) getActiveAttachment(ctx context.Context, id string, now time.Time) (*indexedDBSessionRecord, error) {
 	raw, err := s.db.ObjectStore(indexedDBAttachmentStore).Get(ctx, strings.TrimSpace(id))
 	if err != nil {

@@ -91,6 +91,13 @@ type AttachProvider struct {
 	UI     bool                             `json:"ui,omitempty"`
 }
 
+type ProviderListOverlay struct {
+	DisplayName string
+	Description string
+	IconSVG     string
+	Catalog     *catalog.Catalog
+}
+
 type CreateSessionResponse struct {
 	AttachID         string                  `json:"attachId,omitempty"`
 	DispatcherSecret string                  `json:"dispatcherSecret,omitempty"`
@@ -926,6 +933,86 @@ func (m *Manager) ResolveProviderOverride(ctx context.Context, p *principal.Prin
 		return prov, true, nil
 	}
 	return nil, false, nil
+}
+
+func (m *Manager) ResolveListOverlays(ctx context.Context, p *principal.Principal, providerNames []string) (map[string]ProviderListOverlay, error) {
+	if m == nil {
+		return nil, nil
+	}
+	owner := principalSubjectID(p)
+	if owner == "" {
+		return nil, nil
+	}
+	names := normalizeProviderNameSet(providerNames)
+	if len(names) == 0 {
+		return nil, nil
+	}
+	now := time.Now()
+	if m.shared != nil {
+		targets, err := m.shared.latestTargetsForProviders(ctx, owner, names, now)
+		if err != nil {
+			return nil, err
+		}
+		out := make(map[string]ProviderListOverlay, len(targets))
+		for name := range targets {
+			target := m.hydrateSharedTarget(targets[name])
+			out[name] = providerListOverlayFromTarget(target)
+		}
+		return out, nil
+	}
+
+	sessions := m.sessionsForOwner(owner)
+	out := make(map[string]ProviderListOverlay, len(names))
+	for i := range sessions {
+		session := sessions[i]
+		if session == nil || session.isIdleExpired(now) {
+			continue
+		}
+		session.mu.Lock()
+		if !session.closed {
+			for name := range names {
+				target := session.targets[name]
+				if target == nil {
+					continue
+				}
+				out[name] = providerListOverlayFromTarget(target.target)
+			}
+		}
+		session.mu.Unlock()
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
+func normalizeProviderNameSet(providerNames []string) map[string]struct{} {
+	if len(providerNames) == 0 {
+		return nil
+	}
+	names := make(map[string]struct{}, len(providerNames))
+	for _, name := range providerNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		names[name] = struct{}{}
+	}
+	return names
+}
+
+func providerListOverlayFromTarget(target Target) ProviderListOverlay {
+	spec := target.Spec
+	var cat *catalog.Catalog
+	if spec.Catalog != nil {
+		cat = spec.Catalog.Clone()
+	}
+	return ProviderListOverlay{
+		DisplayName: strings.TrimSpace(spec.DisplayName),
+		Description: strings.TrimSpace(spec.Description),
+		IconSVG:     strings.TrimSpace(spec.IconSVG),
+		Catalog:     cat,
+	}
 }
 
 func (m *Manager) hydrateSharedTarget(target Target) Target {

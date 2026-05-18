@@ -5,18 +5,19 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
-func (s *Server) integrationHasUsableSurfaceContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider, info integrationInfo) bool {
+func (s *Server) integrationHasUsableSurfaceContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider, info integrationInfo, catalogOverride *catalog.Catalog) bool {
 	if info.MountedPath != "" {
 		return true
 	}
 	if s.integrationHasSettingsSurface(p, info) {
 		return true
 	}
-	return s.integrationHasVisibleHTTPOperationsContext(ctx, p, provider, prov)
+	return s.integrationHasVisibleHTTPOperationsContext(ctx, p, provider, prov, catalogOverride)
 }
 
 func (s *Server) integrationHasSettingsSurface(p *principal.Principal, info integrationInfo) bool {
@@ -29,8 +30,11 @@ func (s *Server) integrationHasSettingsSurface(p *principal.Principal, info inte
 		len(info.Connections) > 0
 }
 
-func (s *Server) integrationHasVisibleHTTPOperationsContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider) bool {
-	cat := prov.Catalog()
+func (s *Server) integrationHasVisibleHTTPOperationsContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider, catalogOverride *catalog.Catalog) bool {
+	cat := catalogOverride
+	if cat == nil {
+		cat = prov.Catalog()
+	}
 	if cat == nil {
 		return false
 	}

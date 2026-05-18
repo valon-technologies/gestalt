@@ -169,7 +169,12 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	names := s.providers.List()
-	out := make([]integrationInfo, 0, len(names))
+	type authorizedProvider struct {
+		name string
+		prov core.Provider
+	}
+	authorized := make([]authorizedProvider, 0, len(names))
+	authorizedNames := make([]string, 0, len(names))
 	for _, name := range names {
 		if !s.allowProviderContext(r.Context(), p, name) {
 			continue
@@ -178,26 +183,44 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		surfaceProv := prov
-		if override, ok, err := s.providerOverrideForContext(r.Context(), p, name); err != nil {
-			slog.ErrorContext(r.Context(), "resolving provider dev override", "provider", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "failed to resolve provider dev override")
-			return
-		} else if ok {
-			surfaceProv = override
+		authorized = append(authorized, authorizedProvider{name: name, prov: prov})
+		authorizedNames = append(authorizedNames, name)
+	}
+	overlays, err := s.providerDevSessions.ResolveListOverlays(r.Context(), p, authorizedNames)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "resolving provider dev list overlays", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to resolve provider dev overrides")
+		return
+	}
+
+	out := make([]integrationInfo, 0, len(authorized))
+	for _, item := range authorized {
+		name := item.name
+		prov := item.prov
+		overlay, hasOverlay := overlays[name]
+		displayName := prov.DisplayName()
+		if hasOverlay && overlay.DisplayName != "" {
+			displayName = overlay.DisplayName
+		}
+		description := prov.Description()
+		if hasOverlay && overlay.Description != "" {
+			description = overlay.Description
 		}
 		info := integrationInfo{
 			Name:            name,
-			DisplayName:     surfaceProv.DisplayName(),
-			Description:     surfaceProv.Description(),
+			DisplayName:     displayName,
+			Description:     description,
 			Connections:     []connectionDefInfo{},
 			Status:          connectionStatusUnknown,
 			CredentialState: credentialStateUnknown,
 			HealthState:     healthStateUnknown,
 			Actions:         []string{},
 		}
-		if cat := surfaceProv.Catalog(); cat != nil {
+		if cat := prov.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
+		}
+		if hasOverlay && strings.TrimSpace(overlay.IconSVG) != "" {
+			info.IconSVG = strings.TrimSpace(overlay.IconSVG)
 		}
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
@@ -206,7 +229,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		authTypes := s.populateIntegrationSettings(&info, prov, instances, p)
 		s.applyIntegrationConnectionStatus(&info, prov, instances, authTypes, p)
 		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
-		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, surfaceProv, info) {
+		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, prov, info, overlay.Catalog) {
 			continue
 		}
 		out = append(out, info)
