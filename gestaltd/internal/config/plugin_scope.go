@@ -242,26 +242,31 @@ func mappingNodeEntries(node *yaml.Node) map[string]*yaml.Node {
 }
 
 func workflowTargetNodeInPluginClosure(targetNode *yaml.Node, keepPlugins map[string]struct{}) bool {
-	pluginName := scalarStringNode(mappingValueNode(mappingValueNode(targetNode, "plugin"), "name"))
-	if pluginName == "" {
-		return false
+	for _, stepNode := range workflowStepNodesFromTargetNode(targetNode) {
+		pluginName := scalarStringNode(mappingValueNode(mappingValueNode(stepNode, "plugin"), "name"))
+		if pluginName == "" {
+			continue
+		}
+		if _, ok := keepPlugins[pluginName]; ok {
+			return true
+		}
 	}
-	_, ok := keepPlugins[pluginName]
-	return ok
+	return false
 }
 
 func workflowRefsFromNode(workflowNode *yaml.Node) workflowPluginRefs {
 	refs := workflowPluginRefs{}
 	targetNode := mappingValueNode(workflowNode, "target")
-	refs.Add(scalarStringNode(mappingValueNode(mappingValueNode(targetNode, "plugin"), "name")))
-	agentNode := mappingValueNode(targetNode, "agent")
-	if toolsNode := mappingValueNode(agentNode, "tools"); toolsNode != nil && toolsNode.Kind == yaml.SequenceNode {
-		for _, tool := range toolsNode.Content {
-			refs.Add(scalarStringNode(mappingValueNode(tool, "plugin")))
+	for _, stepNode := range workflowStepNodesFromTargetNode(targetNode) {
+		refs.Add(scalarStringNode(mappingValueNode(mappingValueNode(stepNode, "plugin"), "name")))
+		agentNode := mappingValueNode(stepNode, "agent")
+		if toolsNode := mappingValueNode(agentNode, "tools"); toolsNode != nil && toolsNode.Kind == yaml.SequenceNode {
+			for _, tool := range toolsNode.Content {
+				refs.Add(scalarStringNode(mappingValueNode(tool, "plugin")))
+			}
 		}
+		addWorkflowDeliveryRefsFromNode(refs, mappingValueNode(stepNode, "outputDelivery"))
 	}
-	addWorkflowDeliveryRefsFromNode(refs, mappingValueNode(agentNode, "outputDelivery"))
-	addWorkflowDeliveryRefsFromNode(refs, mappingValueNode(agentNode, "sessionReadyDelivery"))
 	if invokesNode := mappingValueNode(workflowNode, "invokes"); invokesNode != nil && invokesNode.Kind == yaml.SequenceNode {
 		for _, invoke := range invokesNode.Content {
 			refs.Add(scalarStringNode(mappingValueNode(invoke, "plugin")))
@@ -275,8 +280,22 @@ func workflowRefsFromNode(workflowNode *yaml.Node) workflowPluginRefs {
 	return refs
 }
 
+func workflowStepNodesFromTargetNode(targetNode *yaml.Node) []*yaml.Node {
+	stepsNode := mappingValueNode(targetNode, "steps")
+	if stepsNode == nil || stepsNode.Kind != yaml.SequenceNode {
+		return nil
+	}
+	out := make([]*yaml.Node, 0, len(stepsNode.Content))
+	for _, stepNode := range stepsNode.Content {
+		if stepNode != nil && stepNode.Kind == yaml.MappingNode {
+			out = append(out, stepNode)
+		}
+	}
+	return out
+}
+
 func addWorkflowDeliveryRefsFromNode(refs workflowPluginRefs, deliveryNode *yaml.Node) {
-	refs.Add(scalarStringNode(mappingValueNode(mappingValueNode(deliveryNode, "target"), "name")))
+	refs.Add(scalarStringNode(mappingValueNode(mappingValueNode(deliveryNode, "plugin"), "name")))
 }
 
 func filterWorkflowNodes(workflowsNode *yaml.Node, keep map[string]workflowPluginRefs) {
@@ -471,15 +490,17 @@ func addWorkflowProviderRefsFromNode(doc *yaml.Node, refs *pluginScopeProviderRe
 			addProviderRef(refs.Workflow, name)
 		}
 	}
-	agentNode := mappingValueNode(mappingValueNode(workflowNode, "target"), "agent")
-	if agentNode == nil {
-		return
-	}
-	if provider := scalarStringNode(mappingValueNode(agentNode, "provider")); provider != "" {
-		addProviderRef(refs.Agent, provider)
-	} else {
-		for name := range selectedProviderNamesFromNode(mappingValueNode(mappingValueNode(doc, "providers"), "agent"), "") {
-			addProviderRef(refs.Agent, name)
+	for _, stepNode := range workflowStepNodesFromTargetNode(mappingValueNode(workflowNode, "target")) {
+		agentNode := mappingValueNode(stepNode, "agent")
+		if agentNode == nil {
+			continue
+		}
+		if provider := scalarStringNode(mappingValueNode(agentNode, "provider")); provider != "" {
+			addProviderRef(refs.Agent, provider)
+		} else {
+			for name := range selectedProviderNamesFromNode(mappingValueNode(mappingValueNode(doc, "providers"), "agent"), "") {
+				addProviderRef(refs.Agent, name)
+			}
 		}
 	}
 }
@@ -900,9 +921,11 @@ func addWorkflowProviderRefs(cfg *Config, refs *pluginScopeProviderRefs, workflo
 		}
 		if strings.TrimSpace(step.Agent.Provider) != "" {
 			addProviderRef(refs.Agent, step.Agent.Provider)
-			return nil
+			continue
 		}
-		return addSelectedAgentProviderRef(cfg, refs.Agent)
+		if err := addSelectedAgentProviderRef(cfg, refs.Agent); err != nil {
+			return err
+		}
 	}
 	return nil
 }

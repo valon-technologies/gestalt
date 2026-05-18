@@ -31,15 +31,15 @@ import {
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
-function workflowPluginTarget(pluginName: string, operation: string) {
+function workflowPluginTarget(name: string, operation: string) {
   return {
-    plugin: { pluginName, operation },
+    steps: [{ id: operation, plugin: { name, operation } }],
   };
 }
 
-function workflowAgentTarget(providerName: string, prompt: string) {
+function workflowAgentTarget(provider: string, prompt: string) {
   return {
-    agent: { providerName, prompt },
+    steps: [{ id: "agent", agent: { provider, prompt } }],
   };
 }
 

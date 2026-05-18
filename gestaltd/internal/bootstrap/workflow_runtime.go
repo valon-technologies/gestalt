@@ -313,7 +313,7 @@ func (r *workflowRuntime) invokeWorkflowSteps(ctx context.Context, req coreworkf
 		case step.Plugin != nil:
 			output, err = r.invokeWorkflowPluginStep(stepCtx, req, invoker, p, step.Plugin, inputs, result.Outputs, invocationScope, stepID, "step")
 		case step.Agent != nil:
-			output, turnID, err = r.invokeWorkflowAgentStep(stepCtx, req, agentManager, p, callerPluginName, step.Agent, inputs, sessions, invocationScope, stepID, step.TimeoutSeconds)
+			output, turnID, err = r.invokeWorkflowAgentStep(stepCtx, req, agentManager, p, callerPluginName, step.Agent, inputs, sessions, invocationScope, stepID, step.TimeoutSeconds, step.Metadata)
 		default:
 			err = fmt.Errorf("workflow step must set plugin or agent")
 		}
@@ -408,7 +408,7 @@ func (r *workflowRuntime) invokeWorkflowPluginStep(ctx context.Context, req core
 	return output, nil
 }
 
-func (r *workflowRuntime) invokeWorkflowAgentStep(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, p *principal.Principal, callerPluginName string, agent *coreworkflow.AgentTurn, inputs map[string]any, sessions map[string]workflowAgentSessionState, invocationScope, stepID string, timeoutSeconds int) (any, string, error) {
+func (r *workflowRuntime) invokeWorkflowAgentStep(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, p *principal.Principal, callerPluginName string, agent *coreworkflow.AgentTurn, inputs map[string]any, sessions map[string]workflowAgentSessionState, invocationScope, stepID string, timeoutSeconds int, stepMetadata map[string]any) (any, string, error) {
 	if agentManager == nil {
 		return nil, "", fmt.Errorf("workflow runtime agent manager is not configured")
 	}
@@ -455,6 +455,7 @@ func (r *workflowRuntime) invokeWorkflowAgentStep(ctx context.Context, req corew
 		ToolRefsSet:       true,
 		ResponseSchema:    maps.Clone(agent.ResponseSchema),
 		ResponseSchemaSet: len(agent.ResponseSchema) > 0,
+		Metadata:          maps.Clone(stepMetadata),
 		ModelOptions:      maps.Clone(agent.ModelOptions),
 		TimeoutSeconds:    timeoutSeconds,
 		IdempotencyKey:    workflowStepIdempotencyKey(req, invocationScope, stepID, "agent-turn"),
@@ -560,8 +561,8 @@ func workflowEvaluateStepInputs(values map[string]coreworkflow.Value, req corewo
 		return nil, nil
 	}
 	out := make(map[string]any, len(values))
-	for key, value := range values {
-		resolved, ok, err := workflowEvaluateValue(value, req, outputs, nil, false)
+	for key := range values {
+		resolved, ok, err := workflowEvaluateValue(values[key], req, outputs, nil, false)
 		if err != nil {
 			return nil, fmt.Errorf("inputs.%s: %w", key, err)
 		}
@@ -579,8 +580,8 @@ func workflowEvaluateValue(value coreworkflow.Value, req coreworkflow.InvokeOper
 		return value.Literal, true, nil
 	case value.Object != nil:
 		out := make(map[string]any, len(value.Object))
-		for key, child := range value.Object {
-			resolved, ok, err := workflowEvaluateValue(child, req, outputs, inputs, allowInputs)
+		for key := range value.Object {
+			resolved, ok, err := workflowEvaluateValue(value.Object[key], req, outputs, inputs, allowInputs)
 			if err != nil {
 				return nil, false, fmt.Errorf("%s: %w", key, err)
 			}

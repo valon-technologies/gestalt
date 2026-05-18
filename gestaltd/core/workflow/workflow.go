@@ -108,8 +108,8 @@ func CloneValue(value Value) Value {
 	out := value
 	if value.Object != nil {
 		out.Object = make(map[string]Value, len(value.Object))
-		for key, child := range value.Object {
-			out.Object[key] = CloneValue(child)
+		for key := range value.Object {
+			out.Object[key] = CloneValue(value.Object[key])
 		}
 	}
 	if value.Array != nil {

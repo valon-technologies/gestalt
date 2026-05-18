@@ -13,32 +13,32 @@ use generated::v1::workflow_manager_host_server::{
     WorkflowManagerHost as ProtoWorkflowManagerHost, WorkflowManagerHostServer,
 };
 use generated::v1::{
-    AgentMessagePartType, BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowRun,
-    BoundWorkflowSchedule, ManagedWorkflowDefinition, ManagedWorkflowEventTrigger,
-    ManagedWorkflowRun, ManagedWorkflowRunSignal, ManagedWorkflowSchedule,
-    WorkflowEvent as ProtoWorkflowEvent, WorkflowManagerCreateDefinitionRequest,
-    WorkflowManagerCreateEventTriggerRequest, WorkflowManagerCreateScheduleRequest,
-    WorkflowManagerDeleteDefinitionRequest, WorkflowManagerDeleteEventTriggerRequest,
-    WorkflowManagerDeleteScheduleRequest, WorkflowManagerGetDefinitionRequest,
-    WorkflowManagerGetEventTriggerRequest, WorkflowManagerGetScheduleRequest,
-    WorkflowManagerPauseEventTriggerRequest, WorkflowManagerPauseScheduleRequest,
-    WorkflowManagerPublishEventRequest, WorkflowManagerResumeEventTriggerRequest,
-    WorkflowManagerResumeScheduleRequest, WorkflowManagerSignalOrStartRunRequest,
-    WorkflowManagerSignalRunRequest, WorkflowManagerStartRunRequest,
-    WorkflowManagerUpdateDefinitionRequest, WorkflowManagerUpdateEventTriggerRequest,
-    WorkflowManagerUpdateScheduleRequest, bound_workflow_target,
+    BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowRun, BoundWorkflowSchedule,
+    ManagedWorkflowDefinition, ManagedWorkflowEventTrigger, ManagedWorkflowRun,
+    ManagedWorkflowRunSignal, ManagedWorkflowSchedule, WorkflowEvent as ProtoWorkflowEvent,
+    WorkflowManagerCreateDefinitionRequest, WorkflowManagerCreateEventTriggerRequest,
+    WorkflowManagerCreateScheduleRequest, WorkflowManagerDeleteDefinitionRequest,
+    WorkflowManagerDeleteEventTriggerRequest, WorkflowManagerDeleteScheduleRequest,
+    WorkflowManagerGetDefinitionRequest, WorkflowManagerGetEventTriggerRequest,
+    WorkflowManagerGetScheduleRequest, WorkflowManagerPauseEventTriggerRequest,
+    WorkflowManagerPauseScheduleRequest, WorkflowManagerPublishEventRequest,
+    WorkflowManagerResumeEventTriggerRequest, WorkflowManagerResumeScheduleRequest,
+    WorkflowManagerSignalOrStartRunRequest, WorkflowManagerSignalRunRequest,
+    WorkflowManagerStartRunRequest, WorkflowManagerUpdateDefinitionRequest,
+    WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest, workflow_step,
 };
 use gestalt::{
-    AgentMessage, AgentMessagePart, BoundWorkflowAgentTarget, BoundWorkflowPluginTarget,
-    BoundWorkflowTarget, ENV_WORKFLOW_MANAGER_SOCKET, Request, WorkflowEvent, WorkflowEventMatch,
-    WorkflowManager, WorkflowManagerCreateDefinition, WorkflowManagerCreateEventTrigger,
-    WorkflowManagerCreateSchedule, WorkflowManagerDeleteDefinition,
-    WorkflowManagerDeleteEventTrigger, WorkflowManagerDeleteSchedule, WorkflowManagerGetDefinition,
-    WorkflowManagerGetEventTrigger, WorkflowManagerGetSchedule, WorkflowManagerPauseEventTrigger,
-    WorkflowManagerPauseSchedule, WorkflowManagerPublishEvent, WorkflowManagerResumeEventTrigger,
-    WorkflowManagerResumeSchedule, WorkflowManagerSignalOrStartRun, WorkflowManagerSignalRun,
-    WorkflowManagerStartRun, WorkflowManagerUpdateDefinition, WorkflowManagerUpdateEventTrigger,
-    WorkflowManagerUpdateSchedule, WorkflowSignal,
+    BoundWorkflowTarget, ENV_WORKFLOW_MANAGER_SOCKET, Request, WorkflowAgentMessage, WorkflowEvent,
+    WorkflowEventMatch, WorkflowManager, WorkflowManagerCreateDefinition,
+    WorkflowManagerCreateEventTrigger, WorkflowManagerCreateSchedule,
+    WorkflowManagerDeleteDefinition, WorkflowManagerDeleteEventTrigger,
+    WorkflowManagerDeleteSchedule, WorkflowManagerGetDefinition, WorkflowManagerGetEventTrigger,
+    WorkflowManagerGetSchedule, WorkflowManagerPauseEventTrigger, WorkflowManagerPauseSchedule,
+    WorkflowManagerPublishEvent, WorkflowManagerResumeEventTrigger, WorkflowManagerResumeSchedule,
+    WorkflowManagerSignalOrStartRun, WorkflowManagerSignalRun, WorkflowManagerStartRun,
+    WorkflowManagerUpdateDefinition, WorkflowManagerUpdateEventTrigger,
+    WorkflowManagerUpdateSchedule, WorkflowSignal, WorkflowStep, WorkflowStepAction,
+    WorkflowStepAgentTurn, WorkflowStepPluginCall, WorkflowText,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -66,11 +66,17 @@ struct TestWorkflowManagerServer {
 }
 
 fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
-    BoundWorkflowTarget::Plugin(BoundWorkflowPluginTarget {
-        plugin_name: plugin_name.to_string(),
-        operation: operation.to_string(),
-        ..Default::default()
-    })
+    BoundWorkflowTarget {
+        steps: vec![WorkflowStep {
+            id: operation.to_string(),
+            action: WorkflowStepAction::Plugin(WorkflowStepPluginCall {
+                name: plugin_name.to_string(),
+                operation: operation.to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }],
+    }
 }
 
 #[async_trait]
@@ -1071,20 +1077,24 @@ async fn workflow_manager_signal_or_start_accepts_native_values() {
             provider_name: "basic".to_string(),
             workflow_key: "workflow-key-1".to_string(),
             idempotency_key: "signal-request-key".to_string(),
-            target: Some(BoundWorkflowTarget::Agent(BoundWorkflowAgentTarget {
-                provider_name: "openai".to_string(),
-                model: "gpt-5.1".to_string(),
-                messages: vec![AgentMessage {
-                    role: "user".to_string(),
-                    text: "Respond in thread.".to_string(),
-                    parts: vec![AgentMessagePart {
-                        text: "Respond in thread.".to_string(),
+            target: Some(BoundWorkflowTarget {
+                steps: vec![WorkflowStep {
+                    id: "reply".to_string(),
+                    action: WorkflowStepAction::Agent(WorkflowStepAgentTurn {
+                        provider: "openai".to_string(),
+                        model: "gpt-5.1".to_string(),
+                        messages: vec![WorkflowAgentMessage {
+                            role: "user".to_string(),
+                            text: Some(WorkflowText {
+                                template: "Respond in thread.".to_string(),
+                            }),
+                            ..Default::default()
+                        }],
                         ..Default::default()
-                    }],
+                    }),
                     ..Default::default()
                 }],
-                ..Default::default()
-            })),
+            }),
             signal: Some(WorkflowSignal {
                 name: "slack.event".to_string(),
                 payload: Some(serde_json::json!({ "channel": "C123" })),
@@ -1116,21 +1126,23 @@ async fn workflow_manager_signal_or_start_accepts_native_values() {
     );
 
     let target = request.target.as_ref().expect("target");
-    let agent = match target.kind.as_ref().expect("target kind") {
-        bound_workflow_target::Kind::Agent(agent) => agent,
+    let step = target.steps.first().expect("workflow step");
+    let agent = match step.action.as_ref().expect("step action") {
+        workflow_step::Action::Agent(agent) => agent,
         _ => panic!("expected agent target"),
     };
-    assert_eq!(agent.provider_name, "openai");
+    assert_eq!(agent.provider, "openai");
     assert_eq!(agent.model, "gpt-5.1");
     assert_eq!(agent.messages.len(), 1);
     assert_eq!(agent.messages[0].role, "user");
-    assert_eq!(agent.messages[0].text, "Respond in thread.");
-    assert_eq!(agent.messages[0].parts.len(), 1);
     assert_eq!(
-        agent.messages[0].parts[0].r#type,
-        AgentMessagePartType::Text as i32
+        agent.messages[0]
+            .text
+            .as_ref()
+            .expect("message text")
+            .template,
+        "Respond in thread."
     );
-    assert_eq!(agent.messages[0].parts[0].text, "Respond in thread.");
 
     serve_task.abort();
     let _ = serve_task.await;

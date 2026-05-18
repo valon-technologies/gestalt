@@ -6,16 +6,25 @@ import {
   boundWorkflowTarget,
   boundWorkflowTargetFromTarget,
   workflowSignal,
+  workflowStepWhen,
+  workflowStepWhenToProto,
+  workflowValue,
+  type WorkflowValue,
 } from "../src/index.ts";
 
 test("workflow builders accept native JSON objects and Dates", () => {
   const createdAt = new Date("2026-05-08T12:00:00.000Z");
   const target = boundWorkflowTarget({
-    plugin: {
-      pluginName: "plugin",
-      operation: "run",
-      input: { ok: false, count: 0 },
-    },
+    steps: [
+      {
+        id: "run",
+        plugin: {
+          name: "plugin",
+          operation: "run",
+          input: { literal: { ok: false, count: 0 } },
+        },
+      },
+    ],
   });
   const signal = workflowSignal({
     name: "ready",
@@ -31,10 +40,11 @@ test("workflow builders accept native JSON objects and Dates", () => {
     createdAt,
   });
 
-  if (target.kind?.case !== "plugin") {
-    throw new Error("expected plugin target");
-  }
-  expect(target.kind.value.input).toEqual({ ok: false, count: 0 });
+  expect(target.steps?.[0]?.plugin?.name).toBe("plugin");
+  expect(target.steps?.[0]?.plugin?.input?.kind).toEqual({
+    case: "literal",
+    value: { ok: false, count: 0 },
+  });
   expect(signal.payload).toEqual({ ok: true, count: 1 });
   expect(signal.sequence).toBe(0n);
   expect(run.createdAt?.toISOString()).toBe("2026-05-08T12:00:00.000Z");
@@ -42,127 +52,153 @@ test("workflow builders accept native JSON objects and Dates", () => {
 
 test("workflow copy helpers do not alias nested payloads", () => {
   const target = boundWorkflowTarget({
-    plugin: {
-      pluginName: "plugin",
-      operation: "run",
-      input: { nested: { value: "original" } },
-    },
-  });
-  const copied = boundWorkflowTargetFromTarget(target);
-
-  if (target.kind?.case !== "plugin" || copied.kind?.case !== "plugin") {
-    throw new Error("expected plugin targets");
-  }
-  const input = target.kind.value.input as { nested: { value: string } };
-  input.nested.value = "changed";
-
-  expect((copied.kind.value.input as { nested: unknown }).nested).toEqual({
-    value: "original",
-  });
-});
-
-test("agent workflow tool refs carry runAs subjects", () => {
-  const target = boundWorkflowTarget({
-    agent: {
-      providerName: "agent",
-      toolRefs: [
-        {
-          plugin: "notion",
-          operation: "search",
-          runAs: {
-            id: "service_account:gestalt-support-notion",
-            kind: "service_account",
-            credentialSubjectId: "service_account:notion-credential",
-            displayName: "Gestalt Support Notion",
-            authSource: "notion_service_account",
-          },
-          runAsExternalIdentity: {
-            type: "notion_workspace",
-            id: "valon-support",
+    steps: [
+      {
+        id: "run",
+        plugin: {
+          name: "plugin",
+          operation: "run",
+          input: {
+            object: {
+              nested: { object: { value: { literal: "original" } } },
+            },
           },
         },
-      ],
+      },
+    ],
+  });
+  const copied = boundWorkflowTargetFromTarget(target);
+
+  const nested = target.steps?.[0]?.plugin?.input?.kind;
+  if (nested?.case !== "object") {
+    throw new Error("expected object input");
+  }
+  const inner = nested.value.nested?.kind;
+  if (inner?.case !== "object") {
+    throw new Error("expected nested object input");
+  }
+  inner.value.value = { kind: { case: "literal", value: "changed" } };
+
+  const copiedNested = copied.steps?.[0]?.plugin?.input?.kind;
+  if (copiedNested?.case !== "object") {
+    throw new Error("expected copied object input");
+  }
+  expect(copiedNested.value.nested?.kind).toEqual({
+    case: "object",
+    value: { value: { kind: { case: "literal", value: "original" } } },
+  });
+});
+
+test("workflow values preserve null literals and empty collections", () => {
+  const value = workflowValue({
+    object: {
+      emptyObject: { object: {} },
+      emptyArray: { array: [] },
+      nullLiteral: { literal: null },
+      condition: {
+        stepOutput: {
+          stepId: "diagnosis",
+          path: "agent.structuredOutput.actionableForPr",
+        },
+      },
     },
   });
 
-  if (target.kind?.case !== "agent") {
-    throw new Error("expected agent target");
+  const object = value.kind;
+  if (object?.case !== "object") {
+    throw new Error("expected object value");
   }
-  const refs = target.kind.value.toolRefs ?? [];
-  expect(refs).toHaveLength(1);
-  const ref = refs[0];
-  if (ref === undefined) {
-    throw new Error("expected agent tool ref");
-  }
-  expect(ref.runAs?.id).toBe("service_account:gestalt-support-notion");
-  expect(ref.runAsExternalIdentity?.id).toBe("valon-support");
-
-  const copied = boundWorkflowTargetFromTarget(target);
-  if (copied.kind?.case !== "agent") {
-    throw new Error("expected copied agent target");
-  }
-  const copiedRefs = copied.kind.value.toolRefs ?? [];
-  expect(copiedRefs).toHaveLength(1);
-  const copiedRef = copiedRefs[0];
-  if (copiedRef === undefined) {
-    throw new Error("expected copied agent tool ref");
-  }
-  expect(copiedRef.runAs?.displayName).toBe("Gestalt Support Notion");
-  expect(copiedRef.runAsExternalIdentity?.type).toBe("notion_workspace");
+  expect(object.value.emptyObject?.kind).toEqual({ case: "object", value: {} });
+  expect(object.value.emptyArray?.kind).toEqual({ case: "array", value: [] });
+  expect(object.value.nullLiteral?.kind).toEqual({ case: "literal", value: null });
+  expect(object.value.condition?.kind).toEqual({
+    case: "stepOutput",
+    value: {
+      stepId: "diagnosis",
+      path: "agent.structuredOutput.actionableForPr",
+    },
+  });
 });
 
-test("agent workflow steps round-trip through copy helpers", () => {
+test("workflow step when preserves omitted and explicit null equals", () => {
+  const omitted = workflowStepWhen({ value: { literal: true } });
+  expect(Object.prototype.hasOwnProperty.call(omitted, "equals")).toBe(false);
+  expect(workflowStepWhenToProto(omitted)?.equals).toBeUndefined();
+
+  const explicitNull = workflowStepWhen({
+    value: { literal: true },
+    equals: null,
+  });
+  expect(Object.prototype.hasOwnProperty.call(explicitNull, "equals")).toBe(true);
+  expect(workflowStepWhenToProto(explicitNull)?.equals?.kind.case).toBe("nullValue");
+});
+
+test("agent and plugin workflow steps round-trip through copy helpers", () => {
   const target = boundWorkflowTarget({
-    agent: {
-      providerName: "agent",
-      model: "claude",
-      steps: [
-        {
-          id: "diagnosis",
+    steps: [
+      {
+        id: "diagnosis",
+        inputs: {
+          thread: { signalPayload: "event.thread_ts" },
+        },
+        agent: {
+          provider: "agent",
+          model: "claude",
           prompt: "Diagnose the alert.",
           messages: [{ role: "system", text: "Use concise replies." }],
-          toolRefs: [{ plugin: "datadog", operation: "queryLogs" }],
+          tools: [{ plugin: "datadog", operation: "queryLogs" }],
           responseSchema: { type: "object" },
           modelOptions: { temperature: 0 },
-          timeoutSeconds: 45,
-          metadata: { kind: "diagnosis" },
-          outputDelivery: {
-            target: { pluginName: "slack", operation: "reply" },
-            inputBindings: [
-              { inputField: "text", value: { agentOutput: "text" } },
-            ],
+        },
+        timeoutSeconds: 45,
+        metadata: { kind: "diagnosis" },
+        outputDelivery: {
+          plugin: {
+            name: "slack",
+            operation: "reply",
+            input: {
+              object: {
+                text: { stepOutput: { stepId: "diagnosis", path: "agent.text" } },
+              },
+            },
           },
         },
-        {
-          id: "pr_fix",
+      },
+      {
+        id: "pr_fix",
+        agent: {
+          provider: "agent",
           prompt: "Open a PR.",
-          toolRefs: [{ plugin: "github", operation: "createPullRequest" }],
-          when: {
-            stepId: "diagnosis",
-            outputPath: "structured_output.actionable_for_pr",
-            equals: true,
-          },
+          tools: [{ plugin: "github", operation: "createPullRequest" }],
         },
-      ],
-    },
+        when: {
+          value: {
+            stepOutput: {
+              stepId: "diagnosis",
+              path: "agent.structuredOutput.actionableForPr",
+            },
+          },
+          equals: true,
+        },
+      },
+    ],
   });
 
-  if (target.kind?.case !== "agent") {
-    throw new Error("expected agent target");
-  }
-  const steps = target.kind.value.steps ?? [];
+  const steps = target.steps ?? [];
   expect(steps).toHaveLength(2);
-  expect(steps[0]?.toolRefs?.[0]?.plugin).toBe("datadog");
+  expect(steps[0]?.agent?.tools?.[0]?.plugin).toBe("datadog");
+  expect((steps[1]?.when?.value as WorkflowValue).kind?.case).toBe("stepOutput");
   expect(steps[1]?.when?.equals).toBe(true);
 
   const copied = boundWorkflowTargetFromTarget(target);
-  if (copied.kind?.case !== "agent") {
-    throw new Error("expected copied agent target");
-  }
-  const copiedSteps = copied.kind.value.steps ?? [];
-  expect(copiedSteps[0]?.responseSchema).toEqual({ type: "object" });
-  expect(copiedSteps[0]?.outputDelivery?.target?.pluginName).toBe("slack");
-  expect(copiedSteps[1]?.when?.outputPath).toBe(
-    "structured_output.actionable_for_pr",
-  );
+  const copiedSteps = copied.steps ?? [];
+  expect(copiedSteps[0]?.agent?.responseSchema).toEqual({ type: "object" });
+  expect(copiedSteps[0]?.outputDelivery?.plugin?.name).toBe("slack");
+  expect(copiedSteps[1]?.when?.value?.kind).toEqual({
+    case: "stepOutput",
+    value: {
+      stepId: "diagnosis",
+      path: "agent.structuredOutput.actionableForPr",
+    },
+  });
 });

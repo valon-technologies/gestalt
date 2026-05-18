@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -118,7 +119,9 @@ type workflowValueRequest struct {
 	Literal         any
 	LiteralSet      bool
 	Object          map[string]workflowValueRequest
+	ObjectSet       bool
 	Array           []workflowValueRequest
+	ArraySet        bool
 	Template        *workflowTextRequest
 	RunInput        string
 	SignalPayload   string
@@ -128,6 +131,11 @@ type workflowValueRequest struct {
 }
 
 func (r *workflowValueRequest) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		r.Literal = nil
+		r.LiteralSet = true
+		return nil
+	}
 	var object map[string]json.RawMessage
 	if err := json.Unmarshal(data, &object); err == nil {
 		if len(object) == 1 {
@@ -140,9 +148,17 @@ func (r *workflowValueRequest) UnmarshalJSON(data []byte) error {
 					r.LiteralSet = true
 					return nil
 				case "object":
-					return json.Unmarshal(raw, &r.Object)
+					if err := json.Unmarshal(raw, &r.Object); err != nil {
+						return err
+					}
+					r.ObjectSet = true
+					return nil
 				case "array":
-					return json.Unmarshal(raw, &r.Array)
+					if err := json.Unmarshal(raw, &r.Array); err != nil {
+						return err
+					}
+					r.ArraySet = true
+					return nil
 				case "template":
 					var text workflowTextRequest
 					if err := json.Unmarshal(raw, &text); err != nil {
@@ -177,11 +193,13 @@ func (r *workflowValueRequest) UnmarshalJSON(data []byte) error {
 			values[key] = value
 		}
 		r.Object = values
+		r.ObjectSet = true
 		return nil
 	}
 	var array []workflowValueRequest
 	if err := json.Unmarshal(data, &array); err == nil {
 		r.Array = array
+		r.ArraySet = true
 		return nil
 	}
 	var literal any
@@ -251,8 +269,20 @@ type workflowMessageInfo struct {
 }
 
 type workflowStepWhenInfo struct {
-	Value  any `json:"value,omitempty"`
-	Equals any `json:"equals,omitempty"`
+	Value     any
+	Equals    any
+	EqualsSet bool
+}
+
+func (i workflowStepWhenInfo) MarshalJSON() ([]byte, error) {
+	out := map[string]any{}
+	if i.Value != nil {
+		out["value"] = i.Value
+	}
+	if i.EqualsSet {
+		out["equals"] = i.Equals
+	}
+	return json.Marshal(out)
 }
 
 type workflowScheduleInfo struct {
@@ -455,13 +485,6 @@ func decodeWorkflowJSONBody(r *http.Request, dst any) error {
 	return nil
 }
 
-func workflowPluginTargetFromRequest(target *workflowPluginTargetRequest) workflowPluginTargetRequest {
-	if target == nil {
-		return workflowPluginTargetRequest{}
-	}
-	return *target
-}
-
 func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) error {
 	for i := range target.Steps {
 		step := target.Steps[i]
@@ -546,9 +569,21 @@ func workflowValueMapFromRequest(values map[string]workflowValueRequest) map[str
 	if len(values) == 0 {
 		return nil
 	}
+	return workflowValueObjectMapFromRequest(values)
+}
+
+func workflowValueObjectMapFromRequest(values map[string]workflowValueRequest) map[string]coreworkflow.Value {
 	out := make(map[string]coreworkflow.Value, len(values))
-	for key, value := range values {
-		out[key] = workflowValueFromRequest(value)
+	for key := range values {
+		out[key] = workflowValueFromRequest(values[key])
+	}
+	return out
+}
+
+func workflowValueListFromRequest(values []workflowValueRequest) []coreworkflow.Value {
+	out := make([]coreworkflow.Value, 0, len(values))
+	for i := range values {
+		out = append(out, workflowValueFromRequest(values[i]))
 	}
 	return out
 }
@@ -557,17 +592,16 @@ func workflowValueFromRequest(value workflowValueRequest) coreworkflow.Value {
 	out := coreworkflow.Value{
 		Literal:         value.Literal,
 		LiteralSet:      value.LiteralSet,
-		Object:          workflowValueMapFromRequest(value.Object),
 		RunInput:        strings.TrimSpace(value.RunInput),
 		SignalPayload:   strings.TrimSpace(value.SignalPayload),
 		SignalMetadata:  strings.TrimSpace(value.SignalMetadata),
 		WorkflowContext: strings.TrimSpace(value.WorkflowContext),
 	}
-	if len(value.Array) > 0 {
-		out.Array = make([]coreworkflow.Value, 0, len(value.Array))
-		for i := range value.Array {
-			out.Array = append(out.Array, workflowValueFromRequest(value.Array[i]))
-		}
+	if value.ObjectSet {
+		out.Object = workflowValueObjectMapFromRequest(value.Object)
+	}
+	if value.ArraySet {
+		out.Array = workflowValueListFromRequest(value.Array)
 	}
 	if value.Template != nil {
 		text := workflowTextFromRequest(*value.Template)
@@ -689,8 +723,9 @@ func workflowStepWhenInfoFromCore(when *coreworkflow.StepWhen) *workflowStepWhen
 		return nil
 	}
 	return &workflowStepWhenInfo{
-		Value:  workflowValueInfoFromCore(when.Value),
-		Equals: when.Equals,
+		Value:     workflowValueInfoFromCore(when.Value),
+		Equals:    when.Equals,
+		EqualsSet: when.EqualsSet,
 	}
 }
 
@@ -729,9 +764,13 @@ func workflowValueMapInfoFromCore(values map[string]coreworkflow.Value) map[stri
 	if len(values) == 0 {
 		return nil
 	}
+	return workflowValueObjectInfoFromCore(values)
+}
+
+func workflowValueObjectInfoFromCore(values map[string]coreworkflow.Value) map[string]any {
 	out := make(map[string]any, len(values))
-	for key, value := range values {
-		out[key] = workflowValueInfoFromCore(value)
+	for key := range values {
+		out[key] = workflowValueInfoFromCore(values[key])
 	}
 	return out
 }
@@ -741,7 +780,7 @@ func workflowValueInfoFromCore(value coreworkflow.Value) any {
 	case value.LiteralSet:
 		return map[string]any{"literal": value.Literal}
 	case value.Object != nil:
-		return map[string]any{"object": workflowValueMapInfoFromCore(value.Object)}
+		return map[string]any{"object": workflowValueObjectInfoFromCore(value.Object)}
 	case value.Array != nil:
 		items := make([]any, 0, len(value.Array))
 		for i := range value.Array {

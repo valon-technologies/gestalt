@@ -48,6 +48,7 @@ import {
   parseBuildArgs,
 } from "../src/build.ts";
 import { Cache, cacheSocketEnv } from "../src/cache.ts";
+import { boundWorkflowTargetToProto } from "../src/workflow.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
   ENV_PROVIDER_SOCKET,
@@ -91,12 +92,9 @@ async function waitForSocket(
 }
 
 function workflowPluginTarget(pluginName: string, operation: string) {
-  return {
-    kind: {
-      case: "plugin" as const,
-      value: { pluginName, operation },
-    },
-  };
+  return boundWorkflowTargetToProto({
+    steps: [{ id: operation, plugin: { name: pluginName, operation } }],
+  });
 }
 
 test("build arg parsing validates required arguments", () => {
@@ -924,10 +922,13 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
         target: workflowPluginTarget("roadmap", "sync"),
       }),
     );
-    if (run.target?.kind.case !== "plugin") {
+    const plugin = run.target?.steps[0]?.action.case === "plugin"
+      ? run.target.steps[0].action.value
+      : undefined;
+    if (plugin === undefined) {
       throw new Error("workflow run target is not a plugin target");
     }
-    expect(run.target.kind.value.pluginName).toBe("roadmap");
+    expect(plugin.name).toBe("roadmap");
     expect(run.id).toBe("roadmap:sync:1");
   } finally {
     if (child) {

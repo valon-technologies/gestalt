@@ -3182,6 +3182,40 @@ server:
 				want: `workflows.schedules.nightly.target.steps[1].when.equals is required`,
 			},
 			{
+				name: "agent step when requires value",
+				yaml: `
+workflows:
+  schedules:
+    nightly:
+      provider: temporal
+      cron: "0 2 * * *"
+      target:
+        steps:
+          - id: diagnosis
+            agent:
+              provider: simple
+              prompt: "diagnose"
+          - id: pr_fix
+            agent:
+              provider: simple
+              prompt: "fix"
+            when:
+              equals: null
+providers:
+  agent:
+    simple:
+      source:
+        path: ./providers/agent/simple
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+server:
+  encryptionKey: server-key
+`,
+				want: `workflows.schedules.nightly.target.steps[1].when.value is required`,
+			},
+			{
 				name: "event trigger agent missing provider",
 				yaml: `
 workflows:
@@ -6485,6 +6519,12 @@ func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
 				"temporal": {Source: ProviderSource{Path: "providers/workflow/temporal.yaml"}},
 				"unused":   {Source: ProviderSource{Path: "providers/workflow/unused.yaml"}},
 			},
+			Agent: map[string]*ProviderEntry{
+				"agent_default": {Source: ProviderSource{Path: "providers/agent/default.yaml"}, Default: true},
+				"agent_one":     {Source: ProviderSource{Path: "providers/agent/one.yaml"}},
+				"agent_two":     {Source: ProviderSource{Path: "providers/agent/two.yaml"}},
+				"unused":        {Source: ProviderSource{Path: "providers/agent/unused.yaml"}},
+			},
 			UI: map[string]*UIEntry{
 				"admin_console": {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/admin.yaml"}}},
 				"alpha_ui":      {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/alpha.yaml"}}, OwnerPlugin: "alpha"},
@@ -6501,7 +6541,32 @@ func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
 			Schedules: map[string]WorkflowScheduleConfig{
 				"kept": {
 					Provider: "temporal",
-					Target:   workflowTestPluginTargetConfig("alpha", "", "", nil),
+					Target: &WorkflowTargetConfig{Steps: []WorkflowStepConfig{
+						{
+							ID:     "main",
+							Plugin: &WorkflowStepPluginCallConfig{Name: "alpha"},
+						},
+						{
+							ID: "agent_one",
+							Agent: &WorkflowStepAgentConfig{
+								Provider: "agent_one",
+								Prompt:   WorkflowTextConfig{Template: "first agent step"},
+							},
+						},
+						{
+							ID: "agent_default",
+							Agent: &WorkflowStepAgentConfig{
+								Prompt: WorkflowTextConfig{Template: "default agent step"},
+							},
+						},
+						{
+							ID: "agent_two",
+							Agent: &WorkflowStepAgentConfig{
+								Provider: "agent_two",
+								Prompt:   WorkflowTextConfig{Template: "second agent step"},
+							},
+						},
+					}},
 				},
 				"dropped": {
 					Target: workflowTestPluginTargetConfig("gamma", "", "", nil),
@@ -6541,6 +6606,9 @@ func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
 	}
 	if got, want := sortedProviderEntryKeys(cfg.Providers.Workflow), []string{"temporal"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Providers.Workflow = %v, want %v", got, want)
+	}
+	if got, want := sortedProviderEntryKeys(cfg.Providers.Agent), []string{"agent_default", "agent_one", "agent_two"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Providers.Agent = %v, want %v", got, want)
 	}
 	if got, want := sortedRuntimeProviderEntryKeys(cfg.Runtime.Providers), []string{"runner"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Runtime.Providers = %v, want %v", got, want)
@@ -6613,6 +6681,126 @@ plugins:
 	}
 	if mappingValueNode(providersUI, "noisy") != nil {
 		t.Fatal("providers.ui.noisy should be dropped")
+	}
+}
+
+func TestApplyPluginScopeNodeKeepsWorkflowStepRefs(t *testing.T) {
+	t.Parallel()
+
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(withDefaultConfigAPIVersion(`
+providers:
+  workflow:
+    temporal:
+      source:
+        path: providers/workflow/temporal.yaml
+    unused:
+      source:
+        path: providers/workflow/unused.yaml
+  agent:
+    agent_default:
+      default: true
+      source:
+        path: providers/agent/default.yaml
+    agent_one:
+      source:
+        path: providers/agent/one.yaml
+    agent_two:
+      source:
+        path: providers/agent/two.yaml
+    unused:
+      source:
+        path: providers/agent/unused.yaml
+plugins:
+  alpha:
+    source:
+      path: alpha/manifest.yaml
+  beta:
+    source:
+      path: beta/manifest.yaml
+    invokes:
+      - plugin: delta
+        operation: ping
+  delta:
+    source:
+      path: delta/manifest.yaml
+  noisy:
+    source:
+      path: noisy/manifest.yaml
+workflows:
+  schedules:
+    kept:
+      provider: temporal
+      cron: "0 3 * * *"
+      target:
+        steps:
+          - id: call_alpha
+            plugin:
+              name: alpha
+              operation: sync
+          - id: explicit_agent
+            agent:
+              provider: agent_one
+              prompt: "Inspect"
+              tools:
+                - plugin: beta
+                  operation: search
+          - id: default_agent
+            agent:
+              prompt: "Summarize"
+          - id: second_explicit_agent
+            agent:
+              provider: agent_two
+              prompt: "Fix"
+            outputDelivery:
+              plugin:
+                name: beta
+                operation: reply
+    dropped:
+      cron: "0 4 * * *"
+      target:
+        steps:
+          - id: call_noisy
+            plugin:
+              name: noisy
+              operation: sync
+`)), &root); err != nil {
+		t.Fatalf("yaml.Unmarshal: %v", err)
+	}
+
+	if err := applyPluginScopeNode(&root, []string{"alpha"}); err != nil {
+		t.Fatalf("applyPluginScopeNode: %v", err)
+	}
+
+	doc := documentValueNode(&root)
+	pluginsNode := mappingValueNode(doc, "plugins")
+	for _, name := range []string{"alpha", "beta", "delta"} {
+		if mappingValueNode(pluginsNode, name) == nil {
+			t.Fatalf("plugins.%s should be retained", name)
+		}
+	}
+	if mappingValueNode(pluginsNode, "noisy") != nil {
+		t.Fatal("plugins.noisy should be dropped")
+	}
+	schedulesNode := mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "schedules"), "kept")
+	if schedulesNode == nil {
+		t.Fatal("workflows.schedules.kept should be retained")
+	}
+	if mappingValueNode(mappingValueNode(mappingValueNode(doc, "workflows"), "schedules"), "dropped") != nil {
+		t.Fatal("workflows.schedules.dropped should be dropped")
+	}
+	workflowProviders := mappingValueNode(mappingValueNode(doc, "providers"), "workflow")
+	if mappingValueNode(workflowProviders, "temporal") == nil || mappingValueNode(workflowProviders, "unused") != nil {
+		t.Fatalf("providers.workflow = %#v, want only temporal retained", mappingNodeEntries(workflowProviders))
+	}
+	agentProviders := mappingValueNode(mappingValueNode(doc, "providers"), "agent")
+	for _, name := range []string{"agent_default", "agent_one", "agent_two"} {
+		if mappingValueNode(agentProviders, name) == nil {
+			t.Fatalf("providers.agent.%s should be retained", name)
+		}
+	}
+	if mappingValueNode(agentProviders, "unused") != nil {
+		t.Fatal("providers.agent.unused should be dropped")
 	}
 }
 

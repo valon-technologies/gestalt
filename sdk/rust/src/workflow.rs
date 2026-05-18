@@ -14,8 +14,7 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
 use crate::agent::{
-    AgentMessage, AgentToolRef, agent_tool_ref_from_proto, agent_tool_ref_to_proto,
-    message_from_proto, message_to_proto, new_agent_message, new_agent_tool_ref,
+    AgentToolRef, agent_tool_ref_from_proto, agent_tool_ref_to_proto, new_agent_tool_ref,
 };
 use crate::api::RuntimeMetadata;
 use crate::error::Error;
@@ -85,83 +84,95 @@ impl TryFrom<i32> for WorkflowRunStatus {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct BoundWorkflowPluginTarget {
-    pub plugin_name: String,
+pub struct BoundWorkflowTarget {
+    pub steps: Vec<WorkflowStep>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowStep {
+    pub id: String,
+    pub inputs: BTreeMap<String, WorkflowValue>,
+    pub action: WorkflowStepAction,
+    pub when: Option<WorkflowStepWhen>,
+    pub timeout_seconds: i32,
+    pub output_delivery: Option<WorkflowStepDelivery>,
+    pub metadata: Option<WorkflowJson>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+#[allow(clippy::large_enum_variant)]
+pub enum WorkflowStepAction {
+    #[default]
+    Empty,
+    Plugin(WorkflowStepPluginCall),
+    Agent(WorkflowStepAgentTurn),
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowStepPluginCall {
+    pub name: String,
     pub operation: String,
-    pub input: Option<WorkflowJson>,
+    pub input: Option<WorkflowValue>,
     pub connection: String,
     pub instance: String,
     pub credential_mode: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub enum WorkflowOutputValueSource {
-    #[default]
-    Empty,
-    AgentOutput(String),
-    SignalPayload(String),
-    SignalMetadata(String),
-    Literal(WorkflowJson),
-    AgentSession(String),
+pub struct WorkflowStepDelivery {
+    pub plugin: Option<WorkflowStepPluginCall>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct WorkflowOutputBinding {
-    pub input_field: String,
-    pub value: Option<WorkflowOutputValueSource>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct WorkflowOutputDelivery {
-    pub target: Option<BoundWorkflowPluginTarget>,
-    pub input_bindings: Vec<WorkflowOutputBinding>,
-    pub credential_mode: String,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct BoundWorkflowAgentTarget {
-    pub provider_name: String,
+pub struct WorkflowStepAgentTurn {
+    pub provider: String,
     pub model: String,
-    pub prompt: String,
-    pub messages: Vec<AgentMessage>,
-    pub tool_refs: Vec<AgentToolRef>,
+    pub session_key: String,
+    pub prompt: Option<WorkflowText>,
+    pub messages: Vec<WorkflowAgentMessage>,
+    pub tools: Vec<AgentToolRef>,
     pub response_schema: Option<WorkflowJson>,
-    pub metadata: Option<WorkflowJson>,
-    pub timeout_seconds: i32,
-    pub output_delivery: Option<WorkflowOutputDelivery>,
     pub model_options: Option<WorkflowJson>,
-    pub session_ready_delivery: Option<WorkflowOutputDelivery>,
-    pub steps: Vec<WorkflowAgentStep>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct WorkflowAgentStep {
-    pub id: String,
-    pub prompt: String,
-    pub messages: Vec<AgentMessage>,
-    pub tool_refs: Vec<AgentToolRef>,
-    pub response_schema: Option<WorkflowJson>,
-    pub model_options: Option<WorkflowJson>,
-    pub timeout_seconds: i32,
-    pub output_delivery: Option<WorkflowOutputDelivery>,
-    pub when: Option<WorkflowAgentStepWhen>,
+pub struct WorkflowAgentMessage {
+    pub role: String,
+    pub text: Option<WorkflowText>,
     pub metadata: Option<WorkflowJson>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct WorkflowText {
+    pub template: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct WorkflowAgentStepWhen {
-    pub step_id: String,
-    pub output_path: String,
+pub struct WorkflowStepWhen {
+    pub value: Option<WorkflowValue>,
     pub equals: Option<WorkflowJson>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 #[allow(clippy::large_enum_variant)]
-pub enum BoundWorkflowTarget {
+pub enum WorkflowValue {
     #[default]
     Empty,
-    Plugin(BoundWorkflowPluginTarget),
-    Agent(BoundWorkflowAgentTarget),
+    Literal(WorkflowJson),
+    Object(BTreeMap<String, WorkflowValue>),
+    Array(Vec<WorkflowValue>),
+    Template(WorkflowText),
+    RunInput(String),
+    SignalPayload(String),
+    SignalMetadata(String),
+    WorkflowContext(String),
+    StepOutput(WorkflowStepOutputSource),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct WorkflowStepOutputSource {
+    pub step_id: String,
+    pub path: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -368,37 +379,41 @@ pub struct ManagedWorkflowRunSignal {
     pub workflow_key: String,
 }
 
-impl BoundWorkflowPluginTarget {
+impl WorkflowStepPluginCall {
     /// Sets the target input from any JSON-object-like serializable value.
     pub fn with_input<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
-        self.input = Some(protocol::json_from_serializable(value)?);
+        self.input = Some(WorkflowValue::Literal(protocol::json_from_serializable(
+            value,
+        )?));
         Ok(self)
     }
 }
 
-impl WorkflowOutputValueSource {
+impl WorkflowValue {
     /// Creates a literal value source from any JSON-compatible serializable value.
     pub fn literal<T: Serialize>(value: T) -> ProviderResult<Self> {
         Ok(Self::Literal(protocol::json_from_serializable(value)?))
     }
 }
 
-impl BoundWorkflowAgentTarget {
+impl WorkflowStepAgentTurn {
     /// Sets the response schema from any JSON-object-like serializable value.
     pub fn with_response_schema<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
         self.response_schema = Some(protocol::json_from_serializable(value)?);
         Ok(self)
     }
 
-    /// Sets metadata from any JSON-object-like serializable value.
-    pub fn with_metadata<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
-        self.metadata = Some(protocol::json_from_serializable(value)?);
-        Ok(self)
-    }
-
     /// Sets model options from any JSON-object-like serializable value.
     pub fn with_model_options<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
         self.model_options = Some(protocol::json_from_serializable(value)?);
+        Ok(self)
+    }
+}
+
+impl WorkflowStep {
+    /// Sets step metadata from any JSON-object-like serializable value.
+    pub fn with_metadata<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
+        self.metadata = Some(protocol::json_from_serializable(value)?);
         Ok(self)
     }
 }
@@ -746,562 +761,456 @@ fn workflow_event_match_from_proto(input: pb::WorkflowEventMatch) -> WorkflowEve
     }
 }
 
-/// Creates a workflow output value source.
-pub fn new_workflow_output_value_source(
-    input: WorkflowOutputValueSource,
-) -> WorkflowOutputValueSource {
+/// Creates a workflow value.
+pub fn new_workflow_value(input: WorkflowValue) -> WorkflowValue {
     input
 }
 
-/// Returns input copied from a workflow output value source.
-pub fn workflow_output_value_source_input_from_source(
-    input: &WorkflowOutputValueSource,
-) -> WorkflowOutputValueSource {
-    match input {
-        WorkflowOutputValueSource::Empty => WorkflowOutputValueSource::Empty,
-        WorkflowOutputValueSource::AgentOutput(value) => {
-            WorkflowOutputValueSource::AgentOutput(value.clone())
-        }
-        WorkflowOutputValueSource::SignalPayload(value) => {
-            WorkflowOutputValueSource::SignalPayload(value.clone())
-        }
-        WorkflowOutputValueSource::SignalMetadata(value) => {
-            WorkflowOutputValueSource::SignalMetadata(value.clone())
-        }
-        WorkflowOutputValueSource::Literal(value) => {
-            WorkflowOutputValueSource::Literal(value.clone())
-        }
-        WorkflowOutputValueSource::AgentSession(value) => {
-            WorkflowOutputValueSource::AgentSession(value.clone())
-        }
-    }
+/// Returns input copied from a workflow value.
+pub fn workflow_value_input_from_value(input: &WorkflowValue) -> WorkflowValue {
+    input.clone()
 }
 
-fn workflow_output_value_source_to_proto(
-    input: WorkflowOutputValueSource,
-) -> pb::WorkflowOutputValueSource {
-    use pb::workflow_output_value_source::Kind;
+fn workflow_value_to_proto(input: WorkflowValue) -> pb::WorkflowValue {
+    use pb::workflow_value::Kind;
     let kind = match input {
-        WorkflowOutputValueSource::Empty => None,
-        WorkflowOutputValueSource::AgentOutput(value) => Some(Kind::AgentOutput(value)),
-        WorkflowOutputValueSource::SignalPayload(value) => Some(Kind::SignalPayload(value)),
-        WorkflowOutputValueSource::SignalMetadata(value) => Some(Kind::SignalMetadata(value)),
-        WorkflowOutputValueSource::Literal(value) => {
-            Some(Kind::Literal(protocol::value_from_json(value)))
+        WorkflowValue::Empty => None,
+        WorkflowValue::Literal(value) => Some(Kind::Literal(protocol::value_from_json(value))),
+        WorkflowValue::Object(fields) => Some(Kind::Object(pb::WorkflowObject {
+            fields: fields
+                .into_iter()
+                .map(|(key, value)| (key, workflow_value_to_proto(value)))
+                .collect(),
+        })),
+        WorkflowValue::Array(values) => Some(Kind::Array(pb::WorkflowArray {
+            values: values.into_iter().map(workflow_value_to_proto).collect(),
+        })),
+        WorkflowValue::Template(value) => Some(Kind::Template(workflow_text_to_proto(value))),
+        WorkflowValue::RunInput(path) => Some(Kind::RunInput(pb::WorkflowPathSource { path })),
+        WorkflowValue::SignalPayload(path) => {
+            Some(Kind::SignalPayload(pb::WorkflowPathSource { path }))
         }
-        WorkflowOutputValueSource::AgentSession(value) => Some(Kind::AgentSession(value)),
+        WorkflowValue::SignalMetadata(path) => {
+            Some(Kind::SignalMetadata(pb::WorkflowPathSource { path }))
+        }
+        WorkflowValue::WorkflowContext(path) => {
+            Some(Kind::WorkflowContext(pb::WorkflowPathSource { path }))
+        }
+        WorkflowValue::StepOutput(value) => Some(Kind::StepOutput(
+            workflow_step_output_source_to_proto(value),
+        )),
     };
-    pb::WorkflowOutputValueSource { kind }
+    pb::WorkflowValue { kind }
 }
 
-fn workflow_output_value_source_from_proto(
-    input: pb::WorkflowOutputValueSource,
-) -> WorkflowOutputValueSource {
-    use pb::workflow_output_value_source::Kind;
+fn workflow_value_from_proto(input: pb::WorkflowValue) -> WorkflowValue {
+    use pb::workflow_value::Kind;
     match input.kind {
-        None => WorkflowOutputValueSource::Empty,
-        Some(Kind::AgentOutput(value)) => WorkflowOutputValueSource::AgentOutput(value),
-        Some(Kind::SignalPayload(value)) => WorkflowOutputValueSource::SignalPayload(value),
-        Some(Kind::SignalMetadata(value)) => WorkflowOutputValueSource::SignalMetadata(value),
-        Some(Kind::Literal(value)) => {
-            WorkflowOutputValueSource::Literal(protocol::json_from_value(&value))
+        None => WorkflowValue::Empty,
+        Some(Kind::Literal(value)) => WorkflowValue::Literal(protocol::json_from_value(&value)),
+        Some(Kind::Object(value)) => WorkflowValue::Object(
+            value
+                .fields
+                .into_iter()
+                .map(|(key, value)| (key, workflow_value_from_proto(value)))
+                .collect(),
+        ),
+        Some(Kind::Array(value)) => WorkflowValue::Array(
+            value
+                .values
+                .into_iter()
+                .map(workflow_value_from_proto)
+                .collect(),
+        ),
+        Some(Kind::Template(value)) => WorkflowValue::Template(workflow_text_from_proto(value)),
+        Some(Kind::RunInput(value)) => WorkflowValue::RunInput(value.path),
+        Some(Kind::SignalPayload(value)) => WorkflowValue::SignalPayload(value.path),
+        Some(Kind::SignalMetadata(value)) => WorkflowValue::SignalMetadata(value.path),
+        Some(Kind::WorkflowContext(value)) => WorkflowValue::WorkflowContext(value.path),
+        Some(Kind::StepOutput(value)) => {
+            WorkflowValue::StepOutput(workflow_step_output_source_from_proto(value))
         }
-        Some(Kind::AgentSession(value)) => WorkflowOutputValueSource::AgentSession(value),
     }
 }
 
-/// Creates a workflow output binding.
-pub fn new_workflow_output_binding(input: WorkflowOutputBinding) -> WorkflowOutputBinding {
-    WorkflowOutputBinding {
-        input_field: input.input_field,
-        value: input.value.map(new_workflow_output_value_source),
+/// Creates workflow text.
+pub fn new_workflow_text(input: WorkflowText) -> WorkflowText {
+    input
+}
+
+fn workflow_text_to_proto(input: WorkflowText) -> pb::WorkflowText {
+    pb::WorkflowText {
+        template: input.template,
     }
 }
 
-/// Returns input copied from a workflow output binding.
-pub fn workflow_output_binding_input_from_binding(
-    input: &WorkflowOutputBinding,
-) -> WorkflowOutputBinding {
-    WorkflowOutputBinding {
-        input_field: input.input_field.clone(),
-        value: input
-            .value
-            .as_ref()
-            .map(workflow_output_value_source_input_from_source),
+fn workflow_text_from_proto(input: pb::WorkflowText) -> WorkflowText {
+    WorkflowText {
+        template: input.template,
     }
 }
 
-fn workflow_output_binding_to_proto(input: WorkflowOutputBinding) -> pb::WorkflowOutputBinding {
-    pb::WorkflowOutputBinding {
-        input_field: input.input_field,
-        value: input.value.map(workflow_output_value_source_to_proto),
-    }
-}
-
-fn workflow_output_binding_from_proto(input: pb::WorkflowOutputBinding) -> WorkflowOutputBinding {
-    WorkflowOutputBinding {
-        input_field: input.input_field,
-        value: input.value.map(workflow_output_value_source_from_proto),
-    }
-}
-
-/// Creates a workflow output delivery.
-pub fn new_workflow_output_delivery(
-    input: WorkflowOutputDelivery,
-) -> ProviderResult<WorkflowOutputDelivery> {
-    Ok(WorkflowOutputDelivery {
-        target: input
-            .target
-            .map(new_bound_workflow_plugin_target)
-            .transpose()?,
-        input_bindings: input
-            .input_bindings
-            .into_iter()
-            .map(new_workflow_output_binding)
-            .collect(),
-        credential_mode: input.credential_mode,
-    })
-}
-
-/// Returns input copied from a workflow output delivery.
-pub fn workflow_output_delivery_input_from_delivery(
-    input: &WorkflowOutputDelivery,
-) -> ProviderResult<WorkflowOutputDelivery> {
-    Ok(WorkflowOutputDelivery {
-        target: input
-            .target
-            .as_ref()
-            .map(bound_workflow_plugin_target_input_from_target)
-            .transpose()?,
-        input_bindings: input
-            .input_bindings
-            .iter()
-            .map(workflow_output_binding_input_from_binding)
-            .collect(),
-        credential_mode: input.credential_mode.clone(),
-    })
-}
-
-fn workflow_output_delivery_to_proto(
-    input: WorkflowOutputDelivery,
-) -> ProviderResult<pb::WorkflowOutputDelivery> {
-    Ok(pb::WorkflowOutputDelivery {
-        target: input
-            .target
-            .map(bound_workflow_plugin_target_to_proto)
-            .transpose()?,
-        input_bindings: input
-            .input_bindings
-            .into_iter()
-            .map(workflow_output_binding_to_proto)
-            .collect(),
-        credential_mode: input.credential_mode,
-    })
-}
-
-fn workflow_output_delivery_from_proto(
-    input: pb::WorkflowOutputDelivery,
-) -> ProviderResult<WorkflowOutputDelivery> {
-    Ok(WorkflowOutputDelivery {
-        target: input
-            .target
-            .map(bound_workflow_plugin_target_from_proto)
-            .transpose()?,
-        input_bindings: input
-            .input_bindings
-            .into_iter()
-            .map(workflow_output_binding_from_proto)
-            .collect(),
-        credential_mode: input.credential_mode,
-    })
-}
-
-/// Creates a bound plugin workflow target.
-pub fn new_bound_workflow_plugin_target(
-    input: BoundWorkflowPluginTarget,
-) -> ProviderResult<BoundWorkflowPluginTarget> {
-    Ok(BoundWorkflowPluginTarget {
-        plugin_name: input.plugin_name,
-        operation: input.operation,
-        input: input.input,
-        connection: input.connection,
-        instance: input.instance,
-        credential_mode: input.credential_mode,
-    })
-}
-
-/// Returns input copied from a bound plugin workflow target.
-pub fn bound_workflow_plugin_target_input_from_target(
-    input: &BoundWorkflowPluginTarget,
-) -> ProviderResult<BoundWorkflowPluginTarget> {
-    Ok(BoundWorkflowPluginTarget {
-        plugin_name: input.plugin_name.clone(),
-        operation: input.operation.clone(),
-        input: input.input.clone(),
-        connection: input.connection.clone(),
-        instance: input.instance.clone(),
-        credential_mode: input.credential_mode.clone(),
-    })
-}
-
-fn bound_workflow_plugin_target_to_proto(
-    input: BoundWorkflowPluginTarget,
-) -> ProviderResult<pb::BoundWorkflowPluginTarget> {
-    Ok(pb::BoundWorkflowPluginTarget {
-        plugin_name: input.plugin_name,
-        operation: input.operation,
-        input: input.input.map(protocol::struct_from_json).transpose()?,
-        connection: input.connection,
-        instance: input.instance,
-        credential_mode: input.credential_mode,
-    })
-}
-
-fn bound_workflow_plugin_target_from_proto(
-    input: pb::BoundWorkflowPluginTarget,
-) -> ProviderResult<BoundWorkflowPluginTarget> {
-    Ok(BoundWorkflowPluginTarget {
-        plugin_name: input.plugin_name,
-        operation: input.operation,
-        input: input.input.as_ref().map(protocol::json_from_struct),
-        connection: input.connection,
-        instance: input.instance,
-        credential_mode: input.credential_mode,
-    })
-}
-
-/// Creates a bound agent workflow target.
-pub fn new_bound_workflow_agent_target(
-    input: BoundWorkflowAgentTarget,
-) -> ProviderResult<BoundWorkflowAgentTarget> {
-    Ok(BoundWorkflowAgentTarget {
-        provider_name: input.provider_name,
-        model: input.model,
-        prompt: input.prompt,
-        messages: input
-            .messages
-            .into_iter()
-            .map(new_agent_message)
-            .collect::<ProviderResult<Vec<_>>>()?,
-        tool_refs: input
-            .tool_refs
-            .into_iter()
-            .map(new_agent_tool_ref)
-            .collect(),
-        response_schema: input.response_schema,
-        metadata: input.metadata,
-        timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .map(new_workflow_output_delivery)
-            .transpose()?,
-        model_options: input.model_options,
-        session_ready_delivery: input
-            .session_ready_delivery
-            .map(new_workflow_output_delivery)
-            .transpose()?,
-        steps: input
-            .steps
-            .into_iter()
-            .map(new_workflow_agent_step)
-            .collect::<ProviderResult<Vec<_>>>()?,
-    })
-}
-
-/// Returns input copied from a bound agent workflow target.
-pub fn bound_workflow_agent_target_input_from_target(
-    input: &BoundWorkflowAgentTarget,
-) -> ProviderResult<BoundWorkflowAgentTarget> {
-    Ok(BoundWorkflowAgentTarget {
-        provider_name: input.provider_name.clone(),
-        model: input.model.clone(),
-        prompt: input.prompt.clone(),
-        messages: input.messages.clone(),
-        tool_refs: input.tool_refs.clone(),
-        response_schema: input.response_schema.clone(),
-        metadata: input.metadata.clone(),
-        timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .as_ref()
-            .map(workflow_output_delivery_input_from_delivery)
-            .transpose()?,
-        model_options: input.model_options.clone(),
-        session_ready_delivery: input
-            .session_ready_delivery
-            .as_ref()
-            .map(workflow_output_delivery_input_from_delivery)
-            .transpose()?,
-        steps: input
-            .steps
-            .iter()
-            .map(workflow_agent_step_input_from_step)
-            .collect::<ProviderResult<Vec<_>>>()?,
-    })
-}
-
-/// Creates one bound workflow agent step.
-pub fn new_workflow_agent_step(input: WorkflowAgentStep) -> ProviderResult<WorkflowAgentStep> {
-    Ok(WorkflowAgentStep {
-        id: input.id,
-        prompt: input.prompt,
-        messages: input
-            .messages
-            .into_iter()
-            .map(new_agent_message)
-            .collect::<ProviderResult<Vec<_>>>()?,
-        tool_refs: input
-            .tool_refs
-            .into_iter()
-            .map(new_agent_tool_ref)
-            .collect(),
-        response_schema: input.response_schema,
-        model_options: input.model_options,
-        timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .map(new_workflow_output_delivery)
-            .transpose()?,
-        when: input.when,
-        metadata: input.metadata,
-    })
-}
-
-/// Returns input copied from one bound workflow agent step.
-pub fn workflow_agent_step_input_from_step(
-    input: &WorkflowAgentStep,
-) -> ProviderResult<WorkflowAgentStep> {
-    Ok(WorkflowAgentStep {
-        id: input.id.clone(),
-        prompt: input.prompt.clone(),
-        messages: input.messages.clone(),
-        tool_refs: input.tool_refs.clone(),
-        response_schema: input.response_schema.clone(),
-        model_options: input.model_options.clone(),
-        timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .as_ref()
-            .map(workflow_output_delivery_input_from_delivery)
-            .transpose()?,
-        when: input.when.clone(),
-        metadata: input.metadata.clone(),
-    })
-}
-
-fn bound_workflow_agent_target_to_proto(
-    input: BoundWorkflowAgentTarget,
-) -> ProviderResult<pb::BoundWorkflowAgentTarget> {
-    Ok(pb::BoundWorkflowAgentTarget {
-        provider_name: input.provider_name,
-        model: input.model,
-        prompt: input.prompt,
-        messages: input
-            .messages
-            .into_iter()
-            .map(message_to_proto)
-            .collect::<ProviderResult<Vec<_>>>()?,
-        tool_refs: input
-            .tool_refs
-            .into_iter()
-            .map(agent_tool_ref_to_proto)
-            .collect(),
-        response_schema: input
-            .response_schema
-            .map(protocol::struct_from_json)
-            .transpose()?,
-        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
-        timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .map(workflow_output_delivery_to_proto)
-            .transpose()?,
-        model_options: input
-            .model_options
-            .map(protocol::struct_from_json)
-            .transpose()?,
-        session_ready_delivery: input
-            .session_ready_delivery
-            .map(workflow_output_delivery_to_proto)
-            .transpose()?,
-        steps: input
-            .steps
-            .into_iter()
-            .map(workflow_agent_step_to_proto)
-            .collect::<ProviderResult<Vec<_>>>()?,
-    })
-}
-
-fn bound_workflow_agent_target_from_proto(
-    input: pb::BoundWorkflowAgentTarget,
-) -> ProviderResult<BoundWorkflowAgentTarget> {
-    Ok(BoundWorkflowAgentTarget {
-        provider_name: input.provider_name,
-        model: input.model,
-        prompt: input.prompt,
-        messages: input.messages.into_iter().map(message_from_proto).collect(),
-        tool_refs: input
-            .tool_refs
-            .into_iter()
-            .map(agent_tool_ref_from_proto)
-            .collect(),
-        response_schema: input
-            .response_schema
-            .as_ref()
-            .map(protocol::json_from_struct),
-        metadata: input.metadata.as_ref().map(protocol::json_from_struct),
-        timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .map(workflow_output_delivery_from_proto)
-            .transpose()?,
-        model_options: input.model_options.as_ref().map(protocol::json_from_struct),
-        session_ready_delivery: input
-            .session_ready_delivery
-            .map(workflow_output_delivery_from_proto)
-            .transpose()?,
-        steps: input
-            .steps
-            .into_iter()
-            .map(workflow_agent_step_from_proto)
-            .collect::<ProviderResult<Vec<_>>>()?,
-    })
-}
-
-fn workflow_agent_step_to_proto(input: WorkflowAgentStep) -> ProviderResult<pb::WorkflowAgentStep> {
-    Ok(pb::WorkflowAgentStep {
-        id: input.id,
-        prompt: input.prompt,
-        messages: input
-            .messages
-            .into_iter()
-            .map(message_to_proto)
-            .collect::<ProviderResult<Vec<_>>>()?,
-        tool_refs: input
-            .tool_refs
-            .into_iter()
-            .map(agent_tool_ref_to_proto)
-            .collect(),
-        response_schema: input
-            .response_schema
-            .map(protocol::struct_from_json)
-            .transpose()?,
-        model_options: input
-            .model_options
-            .map(protocol::struct_from_json)
-            .transpose()?,
-        timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .map(workflow_output_delivery_to_proto)
-            .transpose()?,
-        when: input.when.map(workflow_agent_step_when_to_proto),
-        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
-    })
-}
-
-fn workflow_agent_step_from_proto(
-    input: pb::WorkflowAgentStep,
-) -> ProviderResult<WorkflowAgentStep> {
-    Ok(WorkflowAgentStep {
-        id: input.id,
-        prompt: input.prompt,
-        messages: input.messages.into_iter().map(message_from_proto).collect(),
-        tool_refs: input
-            .tool_refs
-            .into_iter()
-            .map(agent_tool_ref_from_proto)
-            .collect(),
-        response_schema: input
-            .response_schema
-            .as_ref()
-            .map(protocol::json_from_struct),
-        model_options: input.model_options.as_ref().map(protocol::json_from_struct),
-        timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .map(workflow_output_delivery_from_proto)
-            .transpose()?,
-        when: input.when.map(workflow_agent_step_when_from_proto),
-        metadata: input.metadata.as_ref().map(protocol::json_from_struct),
-    })
-}
-
-fn workflow_agent_step_when_to_proto(input: WorkflowAgentStepWhen) -> pb::WorkflowAgentStepWhen {
-    pb::WorkflowAgentStepWhen {
+fn workflow_step_output_source_to_proto(
+    input: WorkflowStepOutputSource,
+) -> pb::WorkflowStepOutputSource {
+    pb::WorkflowStepOutputSource {
         step_id: input.step_id,
-        output_path: input.output_path,
+        path: input.path,
+    }
+}
+
+fn workflow_step_output_source_from_proto(
+    input: pb::WorkflowStepOutputSource,
+) -> WorkflowStepOutputSource {
+    WorkflowStepOutputSource {
+        step_id: input.step_id,
+        path: input.path,
+    }
+}
+
+/// Creates a workflow step plugin call.
+pub fn new_workflow_step_plugin_call(
+    input: WorkflowStepPluginCall,
+) -> ProviderResult<WorkflowStepPluginCall> {
+    Ok(WorkflowStepPluginCall {
+        name: input.name,
+        operation: input.operation,
+        input: input.input.map(new_workflow_value),
+        connection: input.connection,
+        instance: input.instance,
+        credential_mode: input.credential_mode,
+    })
+}
+
+/// Returns input copied from a workflow step plugin call.
+pub fn workflow_step_plugin_call_input_from_call(
+    input: &WorkflowStepPluginCall,
+) -> ProviderResult<WorkflowStepPluginCall> {
+    Ok(input.clone())
+}
+
+fn workflow_step_plugin_call_to_proto(
+    input: WorkflowStepPluginCall,
+) -> ProviderResult<pb::WorkflowStepPluginCall> {
+    Ok(pb::WorkflowStepPluginCall {
+        name: input.name,
+        operation: input.operation,
+        input: input.input.map(workflow_value_to_proto),
+        connection: input.connection,
+        instance: input.instance,
+        credential_mode: input.credential_mode,
+    })
+}
+
+fn workflow_step_plugin_call_from_proto(
+    input: pb::WorkflowStepPluginCall,
+) -> ProviderResult<WorkflowStepPluginCall> {
+    Ok(WorkflowStepPluginCall {
+        name: input.name,
+        operation: input.operation,
+        input: input.input.map(workflow_value_from_proto),
+        connection: input.connection,
+        instance: input.instance,
+        credential_mode: input.credential_mode,
+    })
+}
+
+/// Creates a workflow step delivery.
+pub fn new_workflow_step_delivery(
+    input: WorkflowStepDelivery,
+) -> ProviderResult<WorkflowStepDelivery> {
+    Ok(WorkflowStepDelivery {
+        plugin: input
+            .plugin
+            .map(new_workflow_step_plugin_call)
+            .transpose()?,
+    })
+}
+
+/// Returns input copied from a workflow step delivery.
+pub fn workflow_step_delivery_input_from_delivery(
+    input: &WorkflowStepDelivery,
+) -> ProviderResult<WorkflowStepDelivery> {
+    Ok(input.clone())
+}
+
+fn workflow_step_delivery_to_proto(
+    input: WorkflowStepDelivery,
+) -> ProviderResult<pb::WorkflowStepDelivery> {
+    Ok(pb::WorkflowStepDelivery {
+        plugin: input
+            .plugin
+            .map(workflow_step_plugin_call_to_proto)
+            .transpose()?,
+    })
+}
+
+fn workflow_step_delivery_from_proto(
+    input: pb::WorkflowStepDelivery,
+) -> ProviderResult<WorkflowStepDelivery> {
+    Ok(WorkflowStepDelivery {
+        plugin: input
+            .plugin
+            .map(workflow_step_plugin_call_from_proto)
+            .transpose()?,
+    })
+}
+
+/// Creates a workflow agent message.
+pub fn new_workflow_agent_message(input: WorkflowAgentMessage) -> WorkflowAgentMessage {
+    input
+}
+
+fn workflow_agent_message_to_proto(
+    input: WorkflowAgentMessage,
+) -> ProviderResult<pb::WorkflowAgentMessage> {
+    Ok(pb::WorkflowAgentMessage {
+        role: input.role,
+        text: input.text.map(workflow_text_to_proto),
+        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
+    })
+}
+
+fn workflow_agent_message_from_proto(input: pb::WorkflowAgentMessage) -> WorkflowAgentMessage {
+    WorkflowAgentMessage {
+        role: input.role,
+        text: input.text.map(workflow_text_from_proto),
+        metadata: input.metadata.as_ref().map(protocol::json_from_struct),
+    }
+}
+
+/// Creates a workflow step agent turn.
+pub fn new_workflow_step_agent_turn(
+    input: WorkflowStepAgentTurn,
+) -> ProviderResult<WorkflowStepAgentTurn> {
+    Ok(WorkflowStepAgentTurn {
+        provider: input.provider,
+        model: input.model,
+        session_key: input.session_key,
+        prompt: input.prompt,
+        messages: input
+            .messages
+            .into_iter()
+            .map(new_workflow_agent_message)
+            .collect(),
+        tools: input.tools.into_iter().map(new_agent_tool_ref).collect(),
+        response_schema: input.response_schema,
+        model_options: input.model_options,
+    })
+}
+
+/// Returns input copied from a workflow step agent turn.
+pub fn workflow_step_agent_turn_input_from_turn(
+    input: &WorkflowStepAgentTurn,
+) -> ProviderResult<WorkflowStepAgentTurn> {
+    Ok(input.clone())
+}
+
+fn workflow_step_agent_turn_to_proto(
+    input: WorkflowStepAgentTurn,
+) -> ProviderResult<pb::WorkflowStepAgentTurn> {
+    Ok(pb::WorkflowStepAgentTurn {
+        provider: input.provider,
+        model: input.model,
+        session_key: input.session_key,
+        prompt: input.prompt.map(workflow_text_to_proto),
+        messages: input
+            .messages
+            .into_iter()
+            .map(workflow_agent_message_to_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
+        tools: input
+            .tools
+            .into_iter()
+            .map(agent_tool_ref_to_proto)
+            .collect(),
+        response_schema: input
+            .response_schema
+            .map(protocol::struct_from_json)
+            .transpose()?,
+        model_options: input
+            .model_options
+            .map(protocol::struct_from_json)
+            .transpose()?,
+    })
+}
+
+fn workflow_step_agent_turn_from_proto(input: pb::WorkflowStepAgentTurn) -> WorkflowStepAgentTurn {
+    WorkflowStepAgentTurn {
+        provider: input.provider,
+        model: input.model,
+        session_key: input.session_key,
+        prompt: input.prompt.map(workflow_text_from_proto),
+        messages: input
+            .messages
+            .into_iter()
+            .map(workflow_agent_message_from_proto)
+            .collect(),
+        tools: input
+            .tools
+            .into_iter()
+            .map(agent_tool_ref_from_proto)
+            .collect(),
+        response_schema: input
+            .response_schema
+            .as_ref()
+            .map(protocol::json_from_struct),
+        model_options: input.model_options.as_ref().map(protocol::json_from_struct),
+    }
+}
+
+/// Creates a workflow step condition.
+pub fn new_workflow_step_when(input: WorkflowStepWhen) -> WorkflowStepWhen {
+    input
+}
+
+fn workflow_step_when_to_proto(input: WorkflowStepWhen) -> pb::WorkflowStepWhen {
+    pb::WorkflowStepWhen {
+        value: input.value.map(workflow_value_to_proto),
         equals: input.equals.map(protocol::value_from_json),
     }
 }
 
-fn workflow_agent_step_when_from_proto(input: pb::WorkflowAgentStepWhen) -> WorkflowAgentStepWhen {
-    WorkflowAgentStepWhen {
-        step_id: input.step_id,
-        output_path: input.output_path,
+fn workflow_step_when_from_proto(input: pb::WorkflowStepWhen) -> WorkflowStepWhen {
+    WorkflowStepWhen {
+        value: input.value.map(workflow_value_from_proto),
         equals: input.equals.as_ref().map(protocol::json_from_value),
     }
+}
+
+/// Creates a workflow step.
+pub fn new_workflow_step(input: WorkflowStep) -> ProviderResult<WorkflowStep> {
+    Ok(WorkflowStep {
+        id: input.id,
+        inputs: input
+            .inputs
+            .into_iter()
+            .map(|(key, value)| (key, new_workflow_value(value)))
+            .collect(),
+        action: match input.action {
+            WorkflowStepAction::Empty => WorkflowStepAction::Empty,
+            WorkflowStepAction::Plugin(value) => {
+                WorkflowStepAction::Plugin(new_workflow_step_plugin_call(value)?)
+            }
+            WorkflowStepAction::Agent(value) => {
+                WorkflowStepAction::Agent(new_workflow_step_agent_turn(value)?)
+            }
+        },
+        when: input.when.map(new_workflow_step_when),
+        timeout_seconds: input.timeout_seconds,
+        output_delivery: input
+            .output_delivery
+            .map(new_workflow_step_delivery)
+            .transpose()?,
+        metadata: input.metadata,
+    })
+}
+
+/// Returns input copied from a workflow step.
+pub fn workflow_step_input_from_step(input: &WorkflowStep) -> ProviderResult<WorkflowStep> {
+    Ok(input.clone())
+}
+
+fn workflow_step_to_proto(input: WorkflowStep) -> ProviderResult<pb::WorkflowStep> {
+    use pb::workflow_step::Action;
+    let action = match input.action {
+        WorkflowStepAction::Empty => None,
+        WorkflowStepAction::Plugin(value) => {
+            Some(Action::Plugin(workflow_step_plugin_call_to_proto(value)?))
+        }
+        WorkflowStepAction::Agent(value) => {
+            Some(Action::Agent(workflow_step_agent_turn_to_proto(value)?))
+        }
+    };
+    Ok(pb::WorkflowStep {
+        id: input.id,
+        inputs: input
+            .inputs
+            .into_iter()
+            .map(|(key, value)| (key, workflow_value_to_proto(value)))
+            .collect(),
+        action,
+        when: input.when.map(workflow_step_when_to_proto),
+        timeout_seconds: input.timeout_seconds,
+        output_delivery: input
+            .output_delivery
+            .map(workflow_step_delivery_to_proto)
+            .transpose()?,
+        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
+    })
+}
+
+fn workflow_step_from_proto(input: pb::WorkflowStep) -> ProviderResult<WorkflowStep> {
+    use pb::workflow_step::Action;
+    let action = match input.action {
+        None => WorkflowStepAction::Empty,
+        Some(Action::Plugin(value)) => {
+            WorkflowStepAction::Plugin(workflow_step_plugin_call_from_proto(value)?)
+        }
+        Some(Action::Agent(value)) => {
+            WorkflowStepAction::Agent(workflow_step_agent_turn_from_proto(value))
+        }
+    };
+    Ok(WorkflowStep {
+        id: input.id,
+        inputs: input
+            .inputs
+            .into_iter()
+            .map(|(key, value)| (key, workflow_value_from_proto(value)))
+            .collect(),
+        action,
+        when: input.when.map(workflow_step_when_from_proto),
+        timeout_seconds: input.timeout_seconds,
+        output_delivery: input
+            .output_delivery
+            .map(workflow_step_delivery_from_proto)
+            .transpose()?,
+        metadata: input.metadata.as_ref().map(protocol::json_from_struct),
+    })
 }
 
 /// Creates a bound workflow target.
 pub fn new_bound_workflow_target(
     input: BoundWorkflowTarget,
 ) -> ProviderResult<BoundWorkflowTarget> {
-    match input {
-        BoundWorkflowTarget::Empty => Ok(BoundWorkflowTarget::Empty),
-        BoundWorkflowTarget::Plugin(input) => Ok(BoundWorkflowTarget::Plugin(
-            new_bound_workflow_plugin_target(input)?,
-        )),
-        BoundWorkflowTarget::Agent(input) => Ok(BoundWorkflowTarget::Agent(
-            new_bound_workflow_agent_target(input)?,
-        )),
-    }
+    Ok(BoundWorkflowTarget {
+        steps: input
+            .steps
+            .into_iter()
+            .map(new_workflow_step)
+            .collect::<ProviderResult<Vec<_>>>()?,
+    })
 }
 
 /// Returns input copied from a bound workflow target.
 pub fn bound_workflow_target_input_from_target(
     input: &BoundWorkflowTarget,
 ) -> ProviderResult<BoundWorkflowTarget> {
-    match input {
-        BoundWorkflowTarget::Empty => Ok(BoundWorkflowTarget::Empty),
-        BoundWorkflowTarget::Plugin(value) => Ok(BoundWorkflowTarget::Plugin(
-            bound_workflow_plugin_target_input_from_target(value)?,
-        )),
-        BoundWorkflowTarget::Agent(value) => Ok(BoundWorkflowTarget::Agent(
-            bound_workflow_agent_target_input_from_target(value)?,
-        )),
-    }
+    Ok(input.clone())
 }
 
 pub(crate) fn bound_workflow_target_to_proto(
     input: BoundWorkflowTarget,
 ) -> ProviderResult<pb::BoundWorkflowTarget> {
-    use pb::bound_workflow_target::Kind;
-    let kind = match input {
-        BoundWorkflowTarget::Empty => None,
-        BoundWorkflowTarget::Plugin(input) => {
-            Some(Kind::Plugin(bound_workflow_plugin_target_to_proto(input)?))
-        }
-        BoundWorkflowTarget::Agent(input) => {
-            Some(Kind::Agent(bound_workflow_agent_target_to_proto(input)?))
-        }
-    };
-    Ok(pb::BoundWorkflowTarget { kind })
+    Ok(pb::BoundWorkflowTarget {
+        steps: input
+            .steps
+            .into_iter()
+            .map(workflow_step_to_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
+    })
 }
 
 fn bound_workflow_target_from_proto(
     input: pb::BoundWorkflowTarget,
 ) -> ProviderResult<BoundWorkflowTarget> {
-    use pb::bound_workflow_target::Kind;
-    match input.kind {
-        None => Ok(BoundWorkflowTarget::Empty),
-        Some(Kind::Plugin(value)) => Ok(BoundWorkflowTarget::Plugin(
-            bound_workflow_plugin_target_from_proto(value)?,
-        )),
-        Some(Kind::Agent(value)) => Ok(BoundWorkflowTarget::Agent(
-            bound_workflow_agent_target_from_proto(value)?,
-        )),
-    }
+    Ok(BoundWorkflowTarget {
+        steps: input
+            .steps
+            .into_iter()
+            .map(workflow_step_from_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
+    })
 }
 
 /// Returns a deep copy of a bound workflow target.

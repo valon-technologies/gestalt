@@ -2076,6 +2076,9 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 			if err := normalizeWorkflowValueConfig(stepPath+".when.value", &step.When.Value); err != nil {
 				return err
 			}
+			if !workflowValueConfigIsSet(step.When.Value) {
+				return fmt.Errorf("config validation: %s.when.value is required", stepPath)
+			}
 			if step.When.Value.StepOutput != nil {
 				step.When.Value.StepOutput.StepID = strings.TrimSpace(step.When.Value.StepOutput.StepID)
 				step.When.Value.StepOutput.Path = strings.TrimSpace(step.When.Value.StepOutput.Path)
@@ -2225,8 +2228,8 @@ func normalizeWorkflowValueConfig(path string, value *WorkflowValueConfig) error
 	}
 	if value.Object != nil {
 		set++
-		for key, nested := range value.Object {
-			nested := nested
+		for key := range value.Object {
+			nested := value.Object[key]
 			if err := normalizeWorkflowValueConfig(path+"."+key, &nested); err != nil {
 				return err
 			}
@@ -2272,6 +2275,31 @@ func normalizeWorkflowValueConfig(path string, value *WorkflowValueConfig) error
 		return fmt.Errorf("config validation: %s must set exactly one value kind", path)
 	}
 	return nil
+}
+
+func workflowValueConfigIsSet(value WorkflowValueConfig) bool {
+	switch {
+	case value.LiteralSet:
+		return true
+	case value.Object != nil:
+		return true
+	case value.Array != nil:
+		return true
+	case value.Template != nil:
+		return true
+	case strings.TrimSpace(value.RunInput) != "":
+		return true
+	case strings.TrimSpace(value.SignalPayload) != "":
+		return true
+	case strings.TrimSpace(value.SignalMetadata) != "":
+		return true
+	case strings.TrimSpace(value.WorkflowContext) != "":
+		return true
+	case value.StepOutput != nil:
+		return true
+	default:
+		return false
+	}
 }
 
 func validatePluginCacheBindings(cfg *Config, name string, entry *ProviderEntry) error {

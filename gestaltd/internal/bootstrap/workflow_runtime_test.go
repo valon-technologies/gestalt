@@ -681,6 +681,41 @@ func TestWorkflowStepIdempotencyKeyIncludesSignalIdentity(t *testing.T) {
 	}
 }
 
+func TestWorkflowExecutionRefPermissionsForTargetIncludesAgentProvider(t *testing.T) {
+	t.Parallel()
+
+	perms := workflowExecutionRefPermissionsForTarget(coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID: "agent",
+		Agent: &coreworkflow.AgentTurn{
+			ProviderName: "managed",
+			ToolRefs: []coreagent.ToolRef{{
+				Plugin:    "roadmap",
+				Operation: "sync",
+			}},
+		},
+		OutputDelivery: &coreworkflow.StepDelivery{Plugin: &coreworkflow.PluginCall{
+			Name:      "notification",
+			Operation: "reply",
+		}},
+	}}})
+
+	if !slices.ContainsFunc(perms, func(perm core.AccessPermission) bool {
+		return perm.Plugin == "managed" && len(perm.Operations) == 0
+	}) {
+		t.Fatalf("permissions = %#v, want managed agent provider permission", perms)
+	}
+	if !slices.ContainsFunc(perms, func(perm core.AccessPermission) bool {
+		return perm.Plugin == "roadmap" && slices.Equal(perm.Operations, []string{"sync"})
+	}) {
+		t.Fatalf("permissions = %#v, want roadmap.sync", perms)
+	}
+	if !slices.ContainsFunc(perms, func(perm core.AccessPermission) bool {
+		return perm.Plugin == "notification" && slices.Equal(perm.Operations, []string{"reply"})
+	}) {
+		t.Fatalf("permissions = %#v, want notification.reply", perms)
+	}
+}
+
 func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) {
 	t.Parallel()
 
@@ -1082,6 +1117,7 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 			{
 				ID:             "diagnosis",
 				TimeoutSeconds: 30,
+				Metadata:       map[string]any{"phase": "diagnosis"},
 				Agent: &coreworkflow.AgentTurn{
 					ProviderName:   "managed",
 					Model:          "deep",
@@ -1198,6 +1234,9 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 	}
 	if firstTurn.TimeoutSeconds != 30 || secondTurn.TimeoutSeconds != 120 {
 		t.Fatalf("turn timeouts = %d/%d, want 30/120", firstTurn.TimeoutSeconds, secondTurn.TimeoutSeconds)
+	}
+	if firstTurn.Metadata["phase"] != "diagnosis" {
+		t.Fatalf("diagnosis turn metadata = %#v", firstTurn.Metadata)
 	}
 	if !firstTurn.ToolRefsSet || !secondTurn.ToolRefsSet {
 		t.Fatalf("tool refs set = %v/%v, want both true", firstTurn.ToolRefsSet, secondTurn.ToolRefsSet)

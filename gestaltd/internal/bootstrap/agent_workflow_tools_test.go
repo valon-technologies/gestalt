@@ -565,11 +565,11 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 				Steps []struct {
 					ID    string `json:"id"`
 					Agent struct {
-						Prompt   map[string]any `json:"prompt"`
-						ToolRefs []struct {
+						Prompt map[string]any `json:"prompt"`
+						Tools  []struct {
 							Plugin    string `json:"plugin"`
 							Operation string `json:"operation"`
-						} `json:"toolRefs"`
+						} `json:"tools"`
 					} `json:"agent"`
 				} `json:"steps"`
 			} `json:"target"`
@@ -581,8 +581,8 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 	if len(body.Run.Target.Steps) != 1 || body.Run.Target.Steps[0].ID != "diagnosis" || body.Run.Target.Steps[0].Agent.Prompt == nil {
 		t.Fatalf("run target steps = %#v", body.Run.Target.Steps)
 	}
-	if len(body.Run.Target.Steps[0].Agent.ToolRefs) != 1 || body.Run.Target.Steps[0].Agent.ToolRefs[0].Plugin != "datadog" {
-		t.Fatalf("step tool refs = %#v", body.Run.Target.Steps[0].Agent.ToolRefs)
+	if len(body.Run.Target.Steps[0].Agent.Tools) != 1 || body.Run.Target.Steps[0].Agent.Tools[0].Plugin != "datadog" {
+		t.Fatalf("step tools = %#v", body.Run.Target.Steps[0].Agent.Tools)
 	}
 	if len(workflowProvider.startedRuns) != 1 {
 		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))

@@ -15,7 +15,6 @@ from gestalt import (
     ENV_WORKFLOW_HOST_SOCKET,
     ENV_WORKFLOW_MANAGER_SOCKET,
     ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
-    BoundWorkflowPluginTarget,
     BoundWorkflowTarget,
     Request,
     WorkflowEvent,
@@ -24,6 +23,8 @@ from gestalt import (
     WorkflowManagerCreateDefinition,
     WorkflowManagerCreateSchedule,
     WorkflowManagerPublishEvent,
+    WorkflowStep,
+    WorkflowStepPluginCall,
 )
 from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
 from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
@@ -39,12 +40,17 @@ _manager_relay_tokens: list[str] = []
 
 
 class _PluginTargetDict(TypedDict):
-    plugin_name: str
+    name: str
     operation: str
 
 
-class _BoundTargetDict(TypedDict):
+class _WorkflowStepDict(TypedDict):
+    id: str
     plugin: _PluginTargetDict
+
+
+class _BoundTargetDict(TypedDict):
+    steps: list[_WorkflowStepDict]
 
 
 @dataclasses.dataclass(slots=True)
@@ -56,7 +62,7 @@ class _InvokeOperationRequestInput:
 class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
     def InvokeOperation(self, request: Any, context: grpc.ServicerContext) -> Any:
         target = request.target
-        plugin = target.plugin if target is not None else None
+        plugin = target.steps[0].plugin if target is not None and target.steps else None
         operation = plugin.operation if plugin is not None else ""
         return workflow_pb2.InvokeWorkflowOperationResponse(
             status=202,
@@ -182,7 +188,12 @@ class WorkflowTransportTests(unittest.TestCase):
 
     def test_workflow_host_roundtrip(self) -> None:
         target: _BoundTargetDict = {
-            "plugin": {"plugin_name": "demo", "operation": "sync"}
+            "steps": [
+                {
+                    "id": "sync",
+                    "plugin": {"name": "demo", "operation": "sync"},
+                }
+            ]
         }
         with WorkflowHost() as host:
             response = host.invoke_operation(
@@ -239,10 +250,15 @@ class WorkflowTransportTests(unittest.TestCase):
                 WorkflowManagerCreateDefinition(
                     provider_name="managed",
                     target=BoundWorkflowTarget(
-                        plugin=BoundWorkflowPluginTarget(
-                            plugin_name="demo",
-                            operation="sync",
-                        ),
+                        steps=[
+                            WorkflowStep(
+                                id="sync",
+                                plugin=WorkflowStepPluginCall(
+                                    name="demo",
+                                    operation="sync",
+                                ),
+                            )
+                        ],
                     ),
                 )
             )

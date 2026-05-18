@@ -1803,6 +1803,9 @@ func validateWorkflowStepWhen(index int, when *coreworkflow.StepWhen, previousSt
 	if when == nil {
 		return nil
 	}
+	if !workflowValueIsSet(when.Value) {
+		return fmt.Errorf("workflow target.steps[%d].when.value is required", index)
+	}
 	if err := validateWorkflowStepWhenValue(index, when.Value, previousSteps); err != nil {
 		return err
 	}
@@ -1813,6 +1816,31 @@ func validateWorkflowStepWhen(index int, when *coreworkflow.StepWhen, previousSt
 		return fmt.Errorf("workflow target.steps[%d].when.equals must be a scalar JSON value", index)
 	}
 	return nil
+}
+
+func workflowValueIsSet(value coreworkflow.Value) bool {
+	switch {
+	case value.LiteralSet:
+		return true
+	case value.Object != nil:
+		return true
+	case value.Array != nil:
+		return true
+	case value.Template != nil:
+		return true
+	case strings.TrimSpace(value.RunInput) != "":
+		return true
+	case strings.TrimSpace(value.SignalPayload) != "":
+		return true
+	case strings.TrimSpace(value.SignalMetadata) != "":
+		return true
+	case strings.TrimSpace(value.WorkflowContext) != "":
+		return true
+	case value.StepOutput != nil:
+		return true
+	default:
+		return false
+	}
 }
 
 func validateWorkflowStepWhenValue(index int, value coreworkflow.Value, previousSteps map[string]struct{}) error {
@@ -1829,13 +1857,13 @@ func validateWorkflowStepWhenValue(index int, value coreworkflow.Value, previous
 			return fmt.Errorf("workflow target.steps[%d].when.value.step_output.path is required", index)
 		}
 	}
-	for _, child := range value.Object {
-		if err := validateWorkflowStepWhenValue(index, child, previousSteps); err != nil {
+	for key := range value.Object {
+		if err := validateWorkflowStepWhenValue(index, value.Object[key], previousSteps); err != nil {
 			return err
 		}
 	}
-	for _, child := range value.Array {
-		if err := validateWorkflowStepWhenValue(index, child, previousSteps); err != nil {
+	for i := range value.Array {
+		if err := validateWorkflowStepWhenValue(index, value.Array[i], previousSteps); err != nil {
 			return err
 		}
 	}

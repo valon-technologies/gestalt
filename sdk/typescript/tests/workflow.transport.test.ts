@@ -51,10 +51,8 @@ test("WorkflowProvider service converts transport messages to native callbacks",
   const provider = defineWorkflowProvider({
     displayName: "Workflow transport fixture",
     async startRun(request) {
-      const detail =
-        request.target?.kind?.case === "plugin"
-          ? request.target.kind.value.operation ?? ""
-          : "";
+      const firstStep = request.target?.steps?.[0];
+      const detail = firstStep?.plugin?.operation ?? "";
       calls.push({ method: "start-run", detail });
       return {
         id: request.idempotencyKey,
@@ -194,10 +192,13 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     const run = await client.startRun(create(StartWorkflowProviderRunRequestSchema, {
       idempotencyKey: "run-native-ts",
       target: {
-        kind: {
-          case: "plugin",
-          value: { pluginName: "demo", operation: "sync" },
-        },
+        steps: [{
+          id: "sync",
+          action: {
+            case: "plugin",
+            value: { name: "demo", operation: "sync" },
+          },
+        }],
       },
     }));
     expect(run.id).toBe("run-native-ts");

@@ -191,6 +191,37 @@ func TestWorkflowTargetFromProtoPreservesEmptyStepPlugin(t *testing.T) {
 	}
 }
 
+func TestWorkflowValueProtoRoundTripPreservesEmptyCollections(t *testing.T) {
+	t.Parallel()
+
+	value := coreworkflow.Value{Object: map[string]coreworkflow.Value{
+		"empty_object": {Object: map[string]coreworkflow.Value{}},
+		"empty_array":  {Array: []coreworkflow.Value{}},
+	}}
+
+	pb, err := workflowValueToProto(value)
+	if err != nil {
+		t.Fatalf("workflowValueToProto: %v", err)
+	}
+	if pb.GetObject() == nil {
+		t.Fatalf("proto value = %#v, want object", pb)
+	}
+	if pb.GetObject().GetFields()["empty_object"].GetObject() == nil {
+		t.Fatalf("empty object proto = %#v, want object kind", pb.GetObject().GetFields()["empty_object"])
+	}
+	if pb.GetObject().GetFields()["empty_array"].GetArray() == nil {
+		t.Fatalf("empty array proto = %#v, want array kind", pb.GetObject().GetFields()["empty_array"])
+	}
+
+	roundTrip := workflowValueFromProto(pb)
+	if got := roundTrip.Object["empty_object"].Object; got == nil || len(got) != 0 {
+		t.Fatalf("round trip empty object = %#v, want empty object", got)
+	}
+	if got := roundTrip.Object["empty_array"].Array; got == nil || len(got) != 0 {
+		t.Fatalf("round trip empty array = %#v, want empty array", got)
+	}
+}
+
 func TestWorkflowExecutionReferenceProtoRoundTripsRunAsSubject(t *testing.T) {
 	t.Parallel()
 

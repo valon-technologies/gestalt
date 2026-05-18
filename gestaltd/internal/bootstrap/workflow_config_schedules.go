@@ -369,12 +369,12 @@ func workflowConfigStepDelivery(delivery *config.WorkflowStepDeliveryConfig) *co
 }
 
 func workflowConfigValueMap(values map[string]config.WorkflowValueConfig) map[string]coreworkflow.Value {
-	if len(values) == 0 {
+	if values == nil {
 		return nil
 	}
 	out := make(map[string]coreworkflow.Value, len(values))
-	for key, value := range values {
-		out[key] = workflowConfigValue(value)
+	for key := range values {
+		out[key] = workflowConfigValue(values[key])
 	}
 	return out
 }
@@ -407,8 +407,8 @@ func workflowConfigValueArray(values []config.WorkflowValueConfig) []coreworkflo
 		return nil
 	}
 	out := make([]coreworkflow.Value, 0, len(values))
-	for _, value := range values {
-		out = append(out, workflowConfigValue(value))
+	for i := range values {
+		out = append(out, workflowConfigValue(values[i]))
 	}
 	return out
 }
@@ -563,6 +563,10 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 			}
 		}
 		if step.Agent != nil {
+			providerName := strings.TrimSpace(step.Agent.ProviderName)
+			if providerName != "" {
+				base = append(base, core.AccessPermission{Plugin: providerName})
+			}
 			for j := range step.Agent.ToolRefs {
 				tool := step.Agent.ToolRefs[j]
 				pluginName := strings.TrimSpace(tool.Plugin)
@@ -602,6 +606,10 @@ func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []c
 				}
 			}
 			if len(operations) == 0 {
+				if _, ok := pluginIndexes[plugin]; !ok {
+					pluginIndexes[plugin] = len(out)
+					out = append(out, core.AccessPermission{Plugin: plugin})
+				}
 				continue
 			}
 			idx, ok := pluginIndexes[plugin]
@@ -610,6 +618,8 @@ func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []c
 				pluginIndexes[plugin] = idx
 				seenOperations[plugin] = map[string]struct{}{}
 				out = append(out, core.AccessPermission{Plugin: plugin})
+			} else if seenOperations[plugin] == nil {
+				seenOperations[plugin] = map[string]struct{}{}
 			}
 			for _, operation := range operations {
 				if _, exists := seenOperations[plugin][operation]; exists {
@@ -764,7 +774,8 @@ func workflowConfigValueObjectMap(value coreworkflow.Value) map[string]any {
 		return nil
 	}
 	out := make(map[string]any, len(value.Object))
-	for key, nested := range value.Object {
+	for key := range value.Object {
+		nested := value.Object[key]
 		if nested.LiteralSet {
 			out[key] = nested.Literal
 		}

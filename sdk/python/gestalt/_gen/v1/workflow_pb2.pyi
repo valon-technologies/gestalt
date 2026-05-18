@@ -31,121 +31,157 @@ WORKFLOW_RUN_STATUS_CANCELED: WorkflowRunStatus
 
 class BoundWorkflowTarget(_message.Message):
     __slots__ = ()
+    STEPS_FIELD_NUMBER: _ClassVar[int]
+    steps: _containers.RepeatedCompositeFieldContainer[WorkflowStep]
+    def __init__(self, steps: _Optional[_Iterable[_Union[WorkflowStep, _Mapping]]] = ...) -> None: ...
+
+class WorkflowStep(_message.Message):
+    __slots__ = ()
+    class InputsEntry(_message.Message):
+        __slots__ = ()
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: WorkflowValue
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[_Union[WorkflowValue, _Mapping]] = ...) -> None: ...
+    ID_FIELD_NUMBER: _ClassVar[int]
+    INPUTS_FIELD_NUMBER: _ClassVar[int]
     PLUGIN_FIELD_NUMBER: _ClassVar[int]
     AGENT_FIELD_NUMBER: _ClassVar[int]
-    plugin: BoundWorkflowPluginTarget
-    agent: BoundWorkflowAgentTarget
-    def __init__(self, plugin: _Optional[_Union[BoundWorkflowPluginTarget, _Mapping]] = ..., agent: _Optional[_Union[BoundWorkflowAgentTarget, _Mapping]] = ...) -> None: ...
+    WHEN_FIELD_NUMBER: _ClassVar[int]
+    TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_DELIVERY_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
+    id: str
+    inputs: _containers.MessageMap[str, WorkflowValue]
+    plugin: WorkflowStepPluginCall
+    agent: WorkflowStepAgentTurn
+    when: WorkflowStepWhen
+    timeout_seconds: int
+    output_delivery: WorkflowStepDelivery
+    metadata: _struct_pb2.Struct
+    def __init__(self, id: _Optional[str] = ..., inputs: _Optional[_Mapping[str, WorkflowValue]] = ..., plugin: _Optional[_Union[WorkflowStepPluginCall, _Mapping]] = ..., agent: _Optional[_Union[WorkflowStepAgentTurn, _Mapping]] = ..., when: _Optional[_Union[WorkflowStepWhen, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowStepDelivery, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
-class BoundWorkflowPluginTarget(_message.Message):
+class WorkflowStepPluginCall(_message.Message):
     __slots__ = ()
-    PLUGIN_NAME_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
     OPERATION_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
     CONNECTION_FIELD_NUMBER: _ClassVar[int]
     INSTANCE_FIELD_NUMBER: _ClassVar[int]
     CREDENTIAL_MODE_FIELD_NUMBER: _ClassVar[int]
-    plugin_name: str
+    name: str
     operation: str
-    input: _struct_pb2.Struct
+    input: WorkflowValue
     connection: str
     instance: str
     credential_mode: str
-    def __init__(self, plugin_name: _Optional[str] = ..., operation: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., credential_mode: _Optional[str] = ...) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., operation: _Optional[str] = ..., input: _Optional[_Union[WorkflowValue, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., credential_mode: _Optional[str] = ...) -> None: ...
 
-class BoundWorkflowAgentTarget(_message.Message):
+class WorkflowStepDelivery(_message.Message):
     __slots__ = ()
-    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
+    PLUGIN_FIELD_NUMBER: _ClassVar[int]
+    plugin: WorkflowStepPluginCall
+    def __init__(self, plugin: _Optional[_Union[WorkflowStepPluginCall, _Mapping]] = ...) -> None: ...
+
+class WorkflowStepAgentTurn(_message.Message):
+    __slots__ = ()
+    PROVIDER_FIELD_NUMBER: _ClassVar[int]
     MODEL_FIELD_NUMBER: _ClassVar[int]
+    SESSION_KEY_FIELD_NUMBER: _ClassVar[int]
     PROMPT_FIELD_NUMBER: _ClassVar[int]
     MESSAGES_FIELD_NUMBER: _ClassVar[int]
-    TOOL_REFS_FIELD_NUMBER: _ClassVar[int]
+    TOOLS_FIELD_NUMBER: _ClassVar[int]
     RESPONSE_SCHEMA_FIELD_NUMBER: _ClassVar[int]
-    METADATA_FIELD_NUMBER: _ClassVar[int]
-    TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
-    OUTPUT_DELIVERY_FIELD_NUMBER: _ClassVar[int]
     MODEL_OPTIONS_FIELD_NUMBER: _ClassVar[int]
-    SESSION_READY_DELIVERY_FIELD_NUMBER: _ClassVar[int]
-    STEPS_FIELD_NUMBER: _ClassVar[int]
-    provider_name: str
+    provider: str
     model: str
-    prompt: str
-    messages: _containers.RepeatedCompositeFieldContainer[_agent_pb2.AgentMessage]
-    tool_refs: _containers.RepeatedCompositeFieldContainer[_plugin_pb2.AgentToolRef]
+    session_key: str
+    prompt: WorkflowText
+    messages: _containers.RepeatedCompositeFieldContainer[WorkflowAgentMessage]
+    tools: _containers.RepeatedCompositeFieldContainer[_plugin_pb2.AgentToolRef]
     response_schema: _struct_pb2.Struct
-    metadata: _struct_pb2.Struct
-    timeout_seconds: int
-    output_delivery: WorkflowOutputDelivery
     model_options: _struct_pb2.Struct
-    session_ready_delivery: WorkflowOutputDelivery
-    steps: _containers.RepeatedCompositeFieldContainer[WorkflowAgentStep]
-    def __init__(self, provider_name: _Optional[str] = ..., model: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., session_ready_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., steps: _Optional[_Iterable[_Union[WorkflowAgentStep, _Mapping]]] = ...) -> None: ...
+    def __init__(self, provider: _Optional[str] = ..., model: _Optional[str] = ..., session_key: _Optional[str] = ..., prompt: _Optional[_Union[WorkflowText, _Mapping]] = ..., messages: _Optional[_Iterable[_Union[WorkflowAgentMessage, _Mapping]]] = ..., tools: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
-class WorkflowAgentStep(_message.Message):
+class WorkflowAgentMessage(_message.Message):
     __slots__ = ()
-    ID_FIELD_NUMBER: _ClassVar[int]
-    PROMPT_FIELD_NUMBER: _ClassVar[int]
-    MESSAGES_FIELD_NUMBER: _ClassVar[int]
-    TOOL_REFS_FIELD_NUMBER: _ClassVar[int]
-    RESPONSE_SCHEMA_FIELD_NUMBER: _ClassVar[int]
-    MODEL_OPTIONS_FIELD_NUMBER: _ClassVar[int]
-    TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
-    OUTPUT_DELIVERY_FIELD_NUMBER: _ClassVar[int]
-    WHEN_FIELD_NUMBER: _ClassVar[int]
+    ROLE_FIELD_NUMBER: _ClassVar[int]
+    TEXT_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    prompt: str
-    messages: _containers.RepeatedCompositeFieldContainer[_agent_pb2.AgentMessage]
-    tool_refs: _containers.RepeatedCompositeFieldContainer[_plugin_pb2.AgentToolRef]
-    response_schema: _struct_pb2.Struct
-    model_options: _struct_pb2.Struct
-    timeout_seconds: int
-    output_delivery: WorkflowOutputDelivery
-    when: WorkflowAgentStepWhen
+    role: str
+    text: WorkflowText
     metadata: _struct_pb2.Struct
-    def __init__(self, id: _Optional[str] = ..., prompt: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[_agent_pb2.AgentMessage, _Mapping]]] = ..., tool_refs: _Optional[_Iterable[_Union[_plugin_pb2.AgentToolRef, _Mapping]]] = ..., response_schema: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., model_options: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowOutputDelivery, _Mapping]] = ..., when: _Optional[_Union[WorkflowAgentStepWhen, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    def __init__(self, role: _Optional[str] = ..., text: _Optional[_Union[WorkflowText, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
-class WorkflowAgentStepWhen(_message.Message):
+class WorkflowText(_message.Message):
     __slots__ = ()
-    STEP_ID_FIELD_NUMBER: _ClassVar[int]
-    OUTPUT_PATH_FIELD_NUMBER: _ClassVar[int]
-    EQUALS_FIELD_NUMBER: _ClassVar[int]
-    step_id: str
-    output_path: str
-    equals: _struct_pb2.Value
-    def __init__(self, step_id: _Optional[str] = ..., output_path: _Optional[str] = ..., equals: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ...) -> None: ...
+    TEMPLATE_FIELD_NUMBER: _ClassVar[int]
+    template: str
+    def __init__(self, template: _Optional[str] = ...) -> None: ...
 
-class WorkflowOutputDelivery(_message.Message):
+class WorkflowStepWhen(_message.Message):
     __slots__ = ()
-    TARGET_FIELD_NUMBER: _ClassVar[int]
-    INPUT_BINDINGS_FIELD_NUMBER: _ClassVar[int]
-    CREDENTIAL_MODE_FIELD_NUMBER: _ClassVar[int]
-    target: BoundWorkflowPluginTarget
-    input_bindings: _containers.RepeatedCompositeFieldContainer[WorkflowOutputBinding]
-    credential_mode: str
-    def __init__(self, target: _Optional[_Union[BoundWorkflowPluginTarget, _Mapping]] = ..., input_bindings: _Optional[_Iterable[_Union[WorkflowOutputBinding, _Mapping]]] = ..., credential_mode: _Optional[str] = ...) -> None: ...
-
-class WorkflowOutputBinding(_message.Message):
-    __slots__ = ()
-    INPUT_FIELD_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
-    input_field: str
-    value: WorkflowOutputValueSource
-    def __init__(self, input_field: _Optional[str] = ..., value: _Optional[_Union[WorkflowOutputValueSource, _Mapping]] = ...) -> None: ...
+    EQUALS_FIELD_NUMBER: _ClassVar[int]
+    value: WorkflowValue
+    equals: _struct_pb2.Value
+    def __init__(self, value: _Optional[_Union[WorkflowValue, _Mapping]] = ..., equals: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ...) -> None: ...
 
-class WorkflowOutputValueSource(_message.Message):
+class WorkflowValue(_message.Message):
     __slots__ = ()
-    AGENT_OUTPUT_FIELD_NUMBER: _ClassVar[int]
+    LITERAL_FIELD_NUMBER: _ClassVar[int]
+    OBJECT_FIELD_NUMBER: _ClassVar[int]
+    ARRAY_FIELD_NUMBER: _ClassVar[int]
+    TEMPLATE_FIELD_NUMBER: _ClassVar[int]
+    RUN_INPUT_FIELD_NUMBER: _ClassVar[int]
     SIGNAL_PAYLOAD_FIELD_NUMBER: _ClassVar[int]
     SIGNAL_METADATA_FIELD_NUMBER: _ClassVar[int]
-    LITERAL_FIELD_NUMBER: _ClassVar[int]
-    AGENT_SESSION_FIELD_NUMBER: _ClassVar[int]
-    agent_output: str
-    signal_payload: str
-    signal_metadata: str
+    WORKFLOW_CONTEXT_FIELD_NUMBER: _ClassVar[int]
+    STEP_OUTPUT_FIELD_NUMBER: _ClassVar[int]
     literal: _struct_pb2.Value
-    agent_session: str
-    def __init__(self, agent_output: _Optional[str] = ..., signal_payload: _Optional[str] = ..., signal_metadata: _Optional[str] = ..., literal: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ..., agent_session: _Optional[str] = ...) -> None: ...
+    object: WorkflowObject
+    array: WorkflowArray
+    template: WorkflowText
+    run_input: WorkflowPathSource
+    signal_payload: WorkflowPathSource
+    signal_metadata: WorkflowPathSource
+    workflow_context: WorkflowPathSource
+    step_output: WorkflowStepOutputSource
+    def __init__(self, literal: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ..., object: _Optional[_Union[WorkflowObject, _Mapping]] = ..., array: _Optional[_Union[WorkflowArray, _Mapping]] = ..., template: _Optional[_Union[WorkflowText, _Mapping]] = ..., run_input: _Optional[_Union[WorkflowPathSource, _Mapping]] = ..., signal_payload: _Optional[_Union[WorkflowPathSource, _Mapping]] = ..., signal_metadata: _Optional[_Union[WorkflowPathSource, _Mapping]] = ..., workflow_context: _Optional[_Union[WorkflowPathSource, _Mapping]] = ..., step_output: _Optional[_Union[WorkflowStepOutputSource, _Mapping]] = ...) -> None: ...
+
+class WorkflowObject(_message.Message):
+    __slots__ = ()
+    class FieldsEntry(_message.Message):
+        __slots__ = ()
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: WorkflowValue
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[_Union[WorkflowValue, _Mapping]] = ...) -> None: ...
+    FIELDS_FIELD_NUMBER: _ClassVar[int]
+    fields: _containers.MessageMap[str, WorkflowValue]
+    def __init__(self, fields: _Optional[_Mapping[str, WorkflowValue]] = ...) -> None: ...
+
+class WorkflowArray(_message.Message):
+    __slots__ = ()
+    VALUES_FIELD_NUMBER: _ClassVar[int]
+    values: _containers.RepeatedCompositeFieldContainer[WorkflowValue]
+    def __init__(self, values: _Optional[_Iterable[_Union[WorkflowValue, _Mapping]]] = ...) -> None: ...
+
+class WorkflowPathSource(_message.Message):
+    __slots__ = ()
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    path: str
+    def __init__(self, path: _Optional[str] = ...) -> None: ...
+
+class WorkflowStepOutputSource(_message.Message):
+    __slots__ = ()
+    STEP_ID_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    step_id: str
+    path: str
+    def __init__(self, step_id: _Optional[str] = ..., path: _Optional[str] = ...) -> None: ...
 
 class WorkflowActor(_message.Message):
     __slots__ = ()

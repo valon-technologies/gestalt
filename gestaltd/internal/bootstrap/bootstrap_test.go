@@ -6523,7 +6523,20 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 		if err != nil {
 			t.Fatalf("Get execution ref %q: %v", executionRef, err)
 		}
-		if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
+		if len(ref.Permissions) != 2 {
+			t.Fatalf("permissions = %#v", ref.Permissions)
+		}
+		seenAgentProvider := false
+		seenPluginOperation := false
+		for _, permission := range ref.Permissions {
+			if permission.Plugin == "managed" && len(permission.Operations) == 0 {
+				seenAgentProvider = true
+			}
+			if permission.Plugin == "roadmap" && len(permission.Operations) == 1 && permission.Operations[0] == "sync" {
+				seenPluginOperation = true
+			}
+		}
+		if !seenAgentProvider || !seenPluginOperation {
 			t.Fatalf("permissions = %#v", ref.Permissions)
 		}
 	}

@@ -1920,7 +1920,7 @@ func workflowSystemToolAgentTurnInfo(agent coreworkflow.AgentTurn) map[string]an
 		"model":        agent.Model,
 		"sessionKey":   agent.SessionKey,
 		"prompt":       workflowSystemToolTextInfo(agent.Prompt),
-		"toolRefs":     workflowSystemToolRefsInfo(agent.ToolRefs),
+		"tools":        workflowSystemToolRefsInfo(agent.ToolRefs),
 		"modelOptions": workflowSystemToolMapDeepClone(agent.ModelOptions),
 	}
 	if len(agent.Messages) > 0 {
@@ -1959,8 +1959,8 @@ func workflowSystemToolValueMapInfo(values map[string]coreworkflow.Value) map[st
 		return nil
 	}
 	out := make(map[string]any, len(values))
-	for key, value := range values {
-		out[key] = workflowSystemToolValueInfo(value)
+	for key := range values {
+		out[key] = workflowSystemToolValueInfo(values[key])
 	}
 	return out
 }

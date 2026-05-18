@@ -800,8 +800,8 @@ func cloneStartupWorkflowValues(values map[string]coreworkflow.Value) map[string
 		return nil
 	}
 	out := make(map[string]coreworkflow.Value, len(values))
-	for key, value := range values {
-		out[key] = cloneStartupWorkflowValue(value)
+	for key := range values {
+		out[key] = cloneStartupWorkflowValue(values[key])
 	}
 	return out
 }
