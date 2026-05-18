@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -49,6 +50,7 @@ type adminAuthorizationWriteSubject struct {
 }
 
 const adminAuthorizationCanWriteHeader = "X-Gestalt-Can-Write"
+const adminAuthorizationPluginAdminRole = "admin"
 
 func (s *Server) mountAdminAuthorizationRoutes(r chi.Router) {
 	r.Get("/authorization/provider", s.getAdminAuthorizationProvider)
@@ -87,21 +89,67 @@ func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		access, allowed := s.authorizer.ResolveAdminAccess(r.Context(), p, s.adminRoute.AuthorizationPolicy)
-		if !allowed || !mountedUIRoleAllowed(access.Role, s.adminRoute.AllowedRoles) {
-			writeError(w, http.StatusForbidden, "admin access denied")
+		if access, allowed := s.authorizer.ResolveAdminAccess(r.Context(), p, s.adminRoute.AuthorizationPolicy); allowed && mountedUIRoleAllowed(access.Role, s.adminRoute.AllowedRoles) {
+			s.serveAdminAPIWithAccess(next, w, r, p, access)
 			return
 		}
 
-		ctx := r.Context()
-		if p != nil {
-			ctx = principal.WithPrincipal(ctx, p)
+		if plugin, ok := adminAuthorizationPluginMemberRoutePlugin(r); ok {
+			access, allowed := s.authorizer.ResolveAccess(r.Context(), p, plugin)
+			if allowed && adminAuthorizationPluginRoleCanMutate(access.Role) {
+				s.serveAdminAPIWithAccess(next, w, r, p, access)
+				return
+			}
 		}
-		if access.Policy != "" || access.Role != "" {
-			ctx = invocation.WithAccessContext(ctx, access)
-		}
-		next.ServeHTTP(w, r.WithContext(ctx))
+
+		writeError(w, http.StatusForbidden, "admin access denied")
 	})
+}
+
+func (s *Server) serveAdminAPIWithAccess(next http.Handler, w http.ResponseWriter, r *http.Request, p *principal.Principal, access invocation.AccessContext) {
+	ctx := r.Context()
+	if p != nil {
+		ctx = principal.WithPrincipal(ctx, p)
+	}
+	if access.Policy != "" || access.Role != "" {
+		ctx = invocation.WithAccessContext(ctx, access)
+	}
+	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func adminAuthorizationPluginMemberRoutePlugin(r *http.Request) (string, bool) {
+	if r == nil || r.URL == nil {
+		return "", false
+	}
+	const prefix = "/admin/api/v1/authorization/plugins/"
+	path := r.URL.EscapedPath()
+	if !strings.HasPrefix(path, prefix) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	pluginSegment, suffix, ok := strings.Cut(rest, "/")
+	if !ok || pluginSegment == "" {
+		return "", false
+	}
+	switch {
+	case suffix == "members":
+	case strings.HasPrefix(suffix, "members/"):
+		subjectSegment := strings.TrimPrefix(suffix, "members/")
+		if subjectSegment == "" || strings.Contains(subjectSegment, "/") {
+			return "", false
+		}
+	default:
+		return "", false
+	}
+	plugin, err := url.PathUnescape(pluginSegment)
+	if err != nil || strings.TrimSpace(plugin) == "" {
+		return "", false
+	}
+	return plugin, true
+}
+
+func adminAuthorizationPluginRoleCanMutate(role string) bool {
+	return strings.TrimSpace(role) == adminAuthorizationPluginAdminRole
 }
 
 func (s *Server) listAdminAuthorizationPlugins(w http.ResponseWriter, r *http.Request) {

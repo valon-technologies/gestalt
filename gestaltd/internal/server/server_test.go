@@ -4383,6 +4383,124 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	}
 }
 
+func TestAdminAPI_PluginAuthorizationAllowsPluginAdmin(t *testing.T) {
+	t.Parallel()
+
+	svc := testutil.NewStubServices(t)
+	seedUser(t, svc, "server-admin@example.test")
+	provider := newMemoryAuthorizationProvider("memory-authorization")
+	pluginDefs := map[string]*config.ProviderEntry{
+		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
+		"other_plugin":  {AuthorizationPolicy: "other_policy"},
+	}
+	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.SubjectPolicyDef{
+			"admin_policy": {
+				Default: "deny",
+				Members: []config.SubjectPolicyMemberDef{
+					staticPolicyUserMember(t, svc, "server-admin@example.test", "admin"),
+				},
+			},
+			"sample_policy": {Default: "deny"},
+			"other_policy":  {Default: "deny"},
+		},
+	}, pluginDefs)
+	authz := mustProviderBackedAuthorizer(t, baseAuthz, provider)
+	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-admin@example.test", "admin")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-viewer@example.test", "viewer")
+	dynamicUser := seedUser(t, svc, "dynamic@example.test")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "server-admin-session":
+					return &core.UserIdentity{Email: "server-admin@example.test"}, nil
+				case "plugin-admin-session":
+					return &core.UserIdentity{Email: "plugin-admin@example.test"}, nil
+				case "plugin-viewer-session":
+					return &core.UserIdentity{Email: "plugin-viewer@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("invalid token")
+				}
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.AuthorizationProvider = provider
+		cfg.PluginDefs = pluginDefs
+		cfg.Admin = server.AdminRouteConfig{
+			AuthorizationPolicy: "admin_policy",
+			AllowedRoles:        []string{"admin"},
+		}
+		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("admin"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("plugin admin GET plugin members: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("plugin admin get plugin members status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("plugin admin PUT plugin member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("plugin admin put plugin member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members/"+url.PathEscape(principal.UserSubjectID(dynamicUser.ID)), nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "plugin-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("plugin admin DELETE plugin member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("plugin admin delete plugin member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	for _, tc := range []struct {
+		name    string
+		session string
+		path    string
+	}{
+		{name: "plugin admin cannot manage other plugin", session: "plugin-admin-session", path: "/admin/api/v1/authorization/plugins/other_plugin/members"},
+		{name: "plugin viewer cannot manage plugin", session: "plugin-viewer-session", path: "/admin/api/v1/authorization/plugins/sample_plugin/members"},
+		{name: "plugin admin cannot manage gestaltd admins", session: "plugin-admin-session", path: "/admin/api/v1/authorization/admins/members"},
+	} {
+		req, _ = http.NewRequest(http.MethodGet, ts.URL+tc.path, nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: tc.session})
+		resp, err = http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusForbidden {
+			respBody, _ := io.ReadAll(resp.Body)
+			t.Fatalf("%s status = %d, want 403: %s", tc.name, resp.StatusCode, respBody)
+		}
+	}
+}
+
 func TestAdminAPI_RoutesMountedWithoutAdminUI(t *testing.T) {
 	t.Parallel()
 
