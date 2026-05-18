@@ -39,7 +39,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "sync",
 			args:      []string{"sync", "--help"},
-			wantParts: []string{"gestaltd sync --locked", "Materialize prepared artifacts", "--artifacts-dir", "--check"},
+			wantParts: []string{"gestaltd sync --locked", "Materialize prepared artifacts", "--artifacts-dir", "--parallelism", "--check"},
 		},
 		{
 			name:      "provider",
@@ -87,6 +87,47 @@ func TestE2ECLIHelp(t *testing.T) {
 				if strings.Contains(string(out), notWant) {
 					t.Fatalf("expected output to omit %q, got: %s", notWant, out)
 				}
+			}
+		})
+	}
+}
+
+func TestRunSyncParallelismValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		args      []string
+		wantError string
+	}{
+		{
+			name:      "zero",
+			args:      []string{"--locked", "--parallelism", "0", "--config", filepath.Join(t.TempDir(), "missing.yaml")},
+			wantError: "invalid --parallelism 0: must be at least 1",
+		},
+		{
+			name:      "negative",
+			args:      []string{"--locked", "--parallelism", "-1", "--config", filepath.Join(t.TempDir(), "missing.yaml")},
+			wantError: "invalid --parallelism -1: must be at least 1",
+		},
+		{
+			name:      "one accepted",
+			args:      []string{"--parallelism", "1"},
+			wantError: "gestaltd sync currently requires --locked",
+		},
+		{
+			name:      "two accepted",
+			args:      []string{"--parallelism", "2"},
+			wantError: "gestaltd sync currently requires --locked",
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := runSync(tc.args)
+			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("runSync(%v) error = %v, want %q", tc.args, err, tc.wantError)
 			}
 		})
 	}
