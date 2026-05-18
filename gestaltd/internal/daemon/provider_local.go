@@ -836,7 +836,7 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 			return nil, fmt.Errorf("plugins.%s resolved manifest path is required for source provider execution", target.Name)
 		}
 		var err error
-		command, args, err = providerpkg.SourceManifestExecutionCommand(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
+		command, args, cleanup, err = providerpkg.SourceManifestExecutionCommand(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("plugins.%s: prepare source provider execution: %w", target.Name, err)
 		}

@@ -72,8 +72,9 @@ type releasePlatform struct {
 }
 
 type releaseBuildTarget struct {
-	Executable bool
-	Build      bool
+	Kind          string
+	DeclaredBuild bool
+	Prebuilt      bool
 }
 
 type releaseArchive struct {
@@ -158,12 +159,12 @@ func runProviderRelease(args []string) (err error) {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	buildTarget, err := resolveReleaseBuildTarget(releaseManifest)
+	buildTarget, err := resolveReleaseBuildTarget(sourceDir, releaseManifest)
 	if err != nil {
 		return err
 	}
 
-	buildPlatforms, err := resolveReleaseBuildPlatforms(releaseManifest, buildTarget, *platforms, platformFlagExplicit)
+	buildPlatforms, err := resolveReleaseBuildPlatforms(sourceDir, releaseManifest, buildTarget, *platforms, platformFlagExplicit)
 	if err != nil {
 		return err
 	}
@@ -261,30 +262,52 @@ func (s *sourceStaticCatalogSnapshot) Restore() error {
 	return nil
 }
 
-func resolveReleaseBuildTarget(manifest *providermanifestv1.Manifest) (*releaseBuildTarget, error) {
+func resolveReleaseBuildTarget(root string, manifest *providermanifestv1.Manifest) (*releaseBuildTarget, error) {
 	kind, err := providerpkg.ManifestKind(manifest)
 	if err != nil {
 		return nil, err
 	}
 	if kind == providermanifestv1.KindUI {
-		return &releaseBuildTarget{}, nil
-	}
-	entry := providerpkg.EntrypointForKind(manifest, kind)
-	return &releaseBuildTarget{
-		Executable: entry != nil && strings.TrimSpace(entry.ArtifactPath) != "",
-		Build:      providerpkg.EffectiveSourceBuild(manifest) != nil,
-	}, nil
-}
-
-func resolveReleaseBuildPlatforms(manifest *providermanifestv1.Manifest, target *releaseBuildTarget, value string, explicit bool) ([]releasePlatform, error) {
-	if target == nil || !target.Executable {
 		return nil, nil
 	}
-	if !target.Build {
+	if providerpkg.EffectiveSourceBuild(manifest) != nil {
+		entry := providerpkg.EntrypointForKind(manifest, kind)
+		if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
+			return nil, nil
+		}
+		return &releaseBuildTarget{Kind: kind, DeclaredBuild: true}, nil
+	}
+	hasSource, err := providerpkg.HasSourceReleaseTarget(root, kind)
+	if err != nil {
+		return nil, fmt.Errorf("detect source %s package: %w", kind, err)
+	}
+	if !hasSource {
+		entry := providerpkg.EntrypointForKind(manifest, kind)
+		if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
+			return &releaseBuildTarget{Kind: kind, Prebuilt: true}, nil
+		}
+		if providerpkg.ReleaseRequiresBuild(manifest) {
+			return nil, providerpkg.MissingSourceReleaseTargetError(kind)
+		}
+		return nil, nil
+	}
+	return &releaseBuildTarget{Kind: kind}, nil
+}
+
+func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Manifest, target *releaseBuildTarget, value string, explicit bool) ([]releasePlatform, error) {
+	if target == nil {
+		return nil, nil
+	}
+	if target.Prebuilt {
 		if explicit {
 			return nil, fmt.Errorf("--platform requires build.command for executable source providers")
 		}
 		return nil, fmt.Errorf("provider release requires build.command for executable source providers")
+	}
+
+	buildRequired := target.DeclaredBuild || providerpkg.ReleaseRequiresBuild(manifest)
+	if !buildRequired && !explicit {
+		return nil, nil
 	}
 
 	if explicit {
@@ -299,6 +322,13 @@ func resolveReleaseBuildPlatforms(manifest *providermanifestv1.Manifest, target 
 	platforms, err := parseReleasePlatforms(value)
 	if err != nil {
 		return nil, err
+	}
+	if !target.DeclaredBuild {
+		for _, platform := range platforms {
+			if err := providerpkg.ValidateSourceReleaseTarget(root, target.Kind, platform.GOOS, platform.GOARCH); err != nil {
+				return nil, fmt.Errorf("validate %s source release target for %s: %w", target.Kind, providerpkg.PlatformString(platform.GOOS, platform.GOARCH), err)
+			}
+		}
 	}
 	return platforms, nil
 }
@@ -590,7 +620,7 @@ func printProviderReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd provider release --version VERSION [--output DIR] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Build provider release archives.")
-	writeUsageLine(w, "Executable source providers require build.command and default to the host platform.")
+	writeUsageLine(w, "Executable source providers use SDK-native source packages or build.command and default to the host platform.")
 	writeUsageLine(w, "UI and declarative providers default to a generic archive.")
 	writeUsageLine(w, "Pass --platform with a comma-separated os/arch list or --platform all")
 	writeUsageLine(w, "to build multiple per-platform tar.gz archives plus a checksums file.")
