@@ -97,11 +97,13 @@ export interface AgentManagerCreateTurn {
   model?: string | undefined;
   messages?: readonly AgentMessage[] | undefined;
   toolRefs?: readonly AgentToolRef[] | undefined;
+  toolRefsSet?: boolean | undefined;
   toolSource?: AgentToolSourceMode | undefined;
   responseSchema?: JsonObjectInput | undefined;
   metadata?: JsonObjectInput | undefined;
   idempotencyKey?: string | undefined;
   modelOptions?: JsonObjectInput | undefined;
+  timeoutSeconds?: number | undefined;
 }
 
 /** Shape accepted when fetching an agent turn through the host manager. */
@@ -237,12 +239,14 @@ export class AgentManager {
         model: request.model ?? "",
         messages: request.messages?.map(agentMessageToProto) ?? [],
         toolRefs: request.toolRefs?.map(agentToolRefToProto) ?? [],
+        toolRefsSet: request.toolRefsSet ?? (request.toolRefs !== undefined),
         toolSource: request.toolSource ?? AgentToolSourceMode.UNSPECIFIED,
         responseSchema: optionalStruct(request.responseSchema),
         metadata: optionalStruct(request.metadata),
         idempotencyKey: request.idempotencyKey ?? "",
         invocationToken: this.invocationToken,
         modelOptions: optionalStruct(request.modelOptions),
+        timeoutSeconds: request.timeoutSeconds ?? 0,
       }),
     );
   }

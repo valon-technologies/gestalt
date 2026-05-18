@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -1886,7 +1887,11 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	}
 	target.Model = strings.TrimSpace(target.Model)
 	target.Prompt = strings.TrimSpace(target.Prompt)
-	if strings.TrimSpace(target.Prompt) == "" && len(target.Messages) == 0 {
+	if len(target.Steps) > 0 {
+		if target.Prompt != "" || len(target.Messages) > 0 || len(target.ToolRefs) > 0 || len(target.ResponseSchema) > 0 || len(target.ModelOptions) > 0 || target.OutputDelivery != nil {
+			return coreworkflow.Target{}, fmt.Errorf("workflow agent target must not set prompt, messages, tool_refs, response_schema, model_options, or output_delivery when steps are set")
+		}
+	} else if strings.TrimSpace(target.Prompt) == "" && len(target.Messages) == 0 {
 		return coreworkflow.Target{}, fmt.Errorf("workflow agent target prompt or messages is required")
 	}
 	if target.TimeoutSeconds < 0 {
@@ -1908,7 +1913,71 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	if err := m.normalizeWorkflowAgentDelivery(target.SessionReadyDelivery, callerPluginName, "session_ready_delivery"); err != nil {
 		return coreworkflow.Target{}, err
 	}
+	steps, err := m.normalizeWorkflowAgentSteps(target.Steps, callerPluginName)
+	if err != nil {
+		return coreworkflow.Target{}, err
+	}
+	target.Steps = steps
 	return coreworkflow.Target{Agent: &target}, nil
+}
+
+func (m *Manager) normalizeWorkflowAgentSteps(steps []coreworkflow.AgentStep, callerPluginName string) ([]coreworkflow.AgentStep, error) {
+	if len(steps) == 0 {
+		return nil, nil
+	}
+	out := make([]coreworkflow.AgentStep, 0, len(steps))
+	seen := map[string]struct{}{}
+	for i := range steps {
+		step := steps[i]
+		step.ID = strings.TrimSpace(step.ID)
+		if step.ID == "" {
+			return nil, fmt.Errorf("workflow agent steps[%d].id is required", i)
+		}
+		if _, exists := seen[step.ID]; exists {
+			return nil, fmt.Errorf("workflow agent steps[%d].id duplicates %q", i, step.ID)
+		}
+		step.Prompt = strings.TrimSpace(step.Prompt)
+		if step.Prompt == "" && len(step.Messages) == 0 {
+			return nil, fmt.Errorf("workflow agent steps[%d] prompt or messages is required", i)
+		}
+		if step.TimeoutSeconds < 0 {
+			return nil, fmt.Errorf("workflow agent steps[%d].timeout_seconds must not be negative", i)
+		}
+		step.Messages = append([]coreagent.Message(nil), step.Messages...)
+		step.ToolRefs = append([]coreagent.ToolRef(nil), step.ToolRefs...)
+		step.ResponseSchema = maps.Clone(step.ResponseSchema)
+		step.ModelOptions = maps.Clone(step.ModelOptions)
+		step.Metadata = maps.Clone(step.Metadata)
+		step.OutputDelivery = coreworkflow.CloneOutputDelivery(step.OutputDelivery)
+		if err := validateWorkflowAgentToolRefs(step.ToolRefs); err != nil {
+			return nil, err
+		}
+		if err := m.normalizeWorkflowAgentDelivery(step.OutputDelivery, callerPluginName, fmt.Sprintf("steps[%d].output_delivery", i)); err != nil {
+			return nil, err
+		}
+		if step.When != nil {
+			step.When.StepID = strings.TrimSpace(step.When.StepID)
+			step.When.OutputPath = strings.TrimSpace(step.When.OutputPath)
+			if step.When.StepID == "" {
+				return nil, fmt.Errorf("workflow agent steps[%d].when.step_id is required", i)
+			}
+			if _, ok := seen[step.When.StepID]; !ok {
+				return nil, fmt.Errorf("workflow agent steps[%d].when.step_id %q must reference an earlier step", i, step.When.StepID)
+			}
+			if step.When.OutputPath == "" {
+				return nil, fmt.Errorf("workflow agent steps[%d].when.output_path is required", i)
+			}
+			if !step.When.EqualsSet {
+				return nil, fmt.Errorf("workflow agent steps[%d].when.equals is required", i)
+			}
+			if !jsonvalue.IsScalar(step.When.Equals) {
+				return nil, fmt.Errorf("workflow agent steps[%d].when.equals must be a scalar JSON value", i)
+			}
+		}
+		seen[step.ID] = struct{}{}
+		out = append(out, step)
+	}
+	return out, nil
 }
 
 func (m *Manager) requireOwnedSchedule(ctx context.Context, scheduleID string, p *principal.Principal) (*ManagedSchedule, error) {
@@ -2216,6 +2285,23 @@ func (m *Manager) executionRefPermissions(p *principal.Principal, target corewor
 		if pluginName, operation, ok := workflowOutputDeliveryOperation(target.Agent.SessionReadyDelivery); ok && m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
 			addWorkflowPermission(permissions, pluginName, operation)
 		}
+		for i := range target.Agent.Steps {
+			step := target.Agent.Steps[i]
+			for j := range step.ToolRefs {
+				tool := step.ToolRefs[j]
+				pluginName := strings.TrimSpace(tool.Plugin)
+				operation := strings.TrimSpace(tool.Operation)
+				if pluginName == "" || pluginName == "*" || operation == "" {
+					continue
+				}
+				if m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+					addWorkflowPermission(permissions, pluginName, operation)
+				}
+			}
+			if pluginName, operation, ok := workflowOutputDeliveryOperation(step.OutputDelivery); ok && m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+				addWorkflowPermission(permissions, pluginName, operation)
+			}
+		}
 	}
 	out := principal.PermissionsToAccessPermissions(permissions)
 	if len(out) == 0 {
@@ -2478,6 +2564,59 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 			}
 			if !principal.AllowsOperationPermission(p, pluginName, operation) {
 				return targetAuthorizationDenied(targetAuthorizationComponentSessionReadyDelivery, targetAuthorizationReasonPrincipalOperationPermissionDenied, pluginName, operation, -1)
+			}
+		}
+		for stepIndex := range target.Agent.Steps {
+			step := target.Agent.Steps[stepIndex]
+			hasSystemTools := workflowAgentToolRefsContainSystem(step.ToolRefs)
+			for i := range step.ToolRefs {
+				tool := step.ToolRefs[i]
+				if systemName := strings.TrimSpace(tool.System); systemName != "" {
+					if systemName != coreagent.SystemToolWorkflow || strings.TrimSpace(tool.Operation) == "" {
+						return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonInvalidSystemToolRef, "", "", i)
+					}
+					if strings.TrimSpace(tool.Plugin) != "" || strings.TrimSpace(tool.Connection) != "" || strings.TrimSpace(tool.Instance) != "" || tool.CredentialMode != "" {
+						return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonInvalidSystemToolRef, "", "", i)
+					}
+					continue
+				}
+				pluginName := strings.TrimSpace(tool.Plugin)
+				operation := strings.TrimSpace(tool.Operation)
+				if pluginName == "" {
+					return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonMissingToolProvider, "", operation, i)
+				}
+				if hasSystemTools && (pluginName == "*" || operation == "") {
+					return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonNonExactToolRefWithSystemTools, pluginName, operation, i)
+				}
+				if operation == "" {
+					if !m.allowProvider(ctx, p, pluginName) {
+						return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonAuthorizerProviderDenied, pluginName, "", i)
+					}
+					if !principal.AllowsProviderPermission(p, pluginName) {
+						return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonPrincipalProviderPermissionDenied, pluginName, "", i)
+					}
+					continue
+				}
+				if !m.allowProvider(ctx, p, pluginName) {
+					return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonAuthorizerProviderDenied, pluginName, operation, i)
+				}
+				if !m.allowOperation(ctx, p, pluginName, operation) {
+					return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonAuthorizerOperationDenied, pluginName, operation, i)
+				}
+				if !principal.AllowsOperationPermission(p, pluginName, operation) {
+					return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonPrincipalOperationPermissionDenied, pluginName, operation, i)
+				}
+			}
+			if pluginName, operation, ok := workflowOutputDeliveryOperation(step.OutputDelivery); ok {
+				if !m.allowProvider(ctx, p, pluginName) {
+					return targetAuthorizationDenied(targetAuthorizationComponentOutputDelivery, targetAuthorizationReasonAuthorizerProviderDenied, pluginName, operation, -1)
+				}
+				if !m.allowOperation(ctx, p, pluginName, operation) {
+					return targetAuthorizationDenied(targetAuthorizationComponentOutputDelivery, targetAuthorizationReasonAuthorizerOperationDenied, pluginName, operation, -1)
+				}
+				if !principal.AllowsOperationPermission(p, pluginName, operation) {
+					return targetAuthorizationDenied(targetAuthorizationComponentOutputDelivery, targetAuthorizationReasonPrincipalOperationPermissionDenied, pluginName, operation, -1)
+				}
 			}
 		}
 		return targetAuthorizationAllowed()

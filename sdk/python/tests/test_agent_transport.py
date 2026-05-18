@@ -471,6 +471,9 @@ class _AgentManagerServicer(agent_pb2_grpc.AgentManagerHostServicer):
                 "reason": "",
                 "tool_source": request.tool_source,
                 "has_response_schema": request.HasField("response_schema"),
+                "tool_refs_set": request.tool_refs_set,
+                "tool_refs_len": len(request.tool_refs),
+                "timeout_seconds": request.timeout_seconds,
             }
         )
         return agent_pb2.AgentTurn(
@@ -1290,6 +1293,9 @@ class AgentTransportTests(unittest.TestCase):
                     "reason": "",
                     "tool_source": agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE,
                     "has_response_schema": True,
+                    "tool_refs_set": False,
+                    "tool_refs_len": 0,
+                    "timeout_seconds": 0,
                 },
                 {
                     "method": "get_turn",
@@ -1398,6 +1404,15 @@ class AgentTransportTests(unittest.TestCase):
                     response_schema={"type": "object"},
                     metadata={"request": "native"},
                     model_options={"temperature": 0},
+                    timeout_seconds=23,
+                )
+            )
+            empty_tools_turn = manager.create_turn(
+                AgentManagerCreateTurn(
+                    session_id="session-managed-1",
+                    model="gpt-5.1",
+                    tool_refs=[],
+                    timeout_seconds=7,
                 )
             )
             resolved = manager.resolve_interaction(
@@ -1409,6 +1424,7 @@ class AgentTransportTests(unittest.TestCase):
             )
 
         self.assertEqual(created_turn.id, "turn-managed-1")
+        self.assertEqual(empty_tools_turn.id, "turn-managed-1")
         self.assertEqual(created_turn.messages[0].role, "user")
         self.assertEqual(created_turn.messages[0].metadata["source"], "native")
         self.assertEqual(
@@ -1416,13 +1432,22 @@ class AgentTransportTests(unittest.TestCase):
             agent_pb2.AGENT_MESSAGE_PART_TYPE_TEXT,
         )
         self.assertEqual(resolved.id, "interaction-1")
-        self.assertEqual(_manager_relay_tokens, ["relay-token-py", "relay-token-py"])
+        self.assertEqual(
+            _manager_relay_tokens,
+            ["relay-token-py", "relay-token-py", "relay-token-py"],
+        )
         self.assertEqual(
             [item["method"] for item in _manager_requests],
-            ["create_turn", "resolve_interaction"],
+            ["create_turn", "create_turn", "resolve_interaction"],
         )
         self.assertEqual(_manager_requests[0]["tool_source"], agent_pb2.AGENT_TOOL_SOURCE_MODE_NONE)
         self.assertTrue(_manager_requests[0]["has_response_schema"])
+        self.assertTrue(_manager_requests[0]["tool_refs_set"])
+        self.assertEqual(_manager_requests[0]["tool_refs_len"], 1)
+        self.assertEqual(_manager_requests[0]["timeout_seconds"], 23)
+        self.assertTrue(_manager_requests[1]["tool_refs_set"])
+        self.assertEqual(_manager_requests[1]["tool_refs_len"], 0)
+        self.assertEqual(_manager_requests[1]["timeout_seconds"], 7)
 
 
 if __name__ == "__main__":

@@ -539,12 +539,17 @@ func (s *indexedDBServer) executeUpgradeOperation(ctx context.Context, upgrade c
 		terminal = true
 	case *proto.UpgradeOperation_AbortUpgrade:
 		err = fmt.Errorf("%w: %s", coreindexeddb.ErrAbort, body.AbortUpgrade.GetReason())
+		terminal = true
 	default:
 		err = status.Error(codes.InvalidArgument, "unknown upgrade operation")
+		terminal = true
 	}
 	if err != nil {
 		resp.Error = rpcStatusFromError(err)
-		return resp, true, err
+		if terminal {
+			return resp, true, err
+		}
+		return resp, false, nil
 	}
 	return resp, terminal, nil
 }

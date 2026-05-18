@@ -716,19 +716,31 @@ async fn agent_manager_create_turn_accepts_native_values() {
             response_schema: Some(serde_json::json!({ "type": "object" })),
             metadata: Some(serde_json::json!({ "request": "native" })),
             model_options: Some(serde_json::json!({ "temperature": 0 })),
+            timeout_seconds: 23,
             ..Default::default()
         })
         .await
         .expect("create turn");
+    let empty_tools_turn = manager
+        .create_turn(AgentManagerCreateTurn {
+            session_id: "session-managed-1".to_string(),
+            model: "gpt-5.1".to_string(),
+            tool_refs_set: true,
+            timeout_seconds: 7,
+            ..Default::default()
+        })
+        .await
+        .expect("create turn with explicit empty tools");
 
     assert_eq!(created_turn.id, "turn-managed-1");
+    assert_eq!(empty_tools_turn.id, "turn-managed-1");
 
     let requests = server
         .create_turn_requests
         .lock()
         .expect("lock create turn requests")
         .clone();
-    assert_eq!(requests.len(), 1);
+    assert_eq!(requests.len(), 2);
     let request = &requests[0];
     assert_eq!(request.invocation_token, "token-123");
     assert_eq!(request.session_id, "session-managed-1");
@@ -751,6 +763,8 @@ async fn agent_manager_create_turn_accepts_native_values() {
     );
     assert_eq!(request.messages[0].parts[0].text, "Summarize this");
     assert_eq!(request.tool_refs.len(), 1);
+    assert!(request.tool_refs_set);
+    assert_eq!(request.timeout_seconds, 23);
     assert_eq!(request.tool_refs[0].plugin, "github");
     assert_eq!(request.tool_refs[0].operation, "issues.get");
     assert_eq!(request.tool_refs[0].connection, "default");
@@ -778,6 +792,10 @@ async fn agent_manager_create_turn_accepts_native_values() {
         support_protocol::json_from_struct(request.model_options.as_ref().unwrap()),
         serde_json::json!({ "temperature": 0.0 })
     );
+    let empty_tools_request = &requests[1];
+    assert!(empty_tools_request.tool_refs_set);
+    assert!(empty_tools_request.tool_refs.is_empty());
+    assert_eq!(empty_tools_request.timeout_seconds, 7);
 
     serve_task.abort();
     let _ = serve_task.await;

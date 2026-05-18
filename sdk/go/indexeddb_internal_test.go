@@ -72,6 +72,89 @@ func TestIndexedDBClientCanceledStatusMapping(t *testing.T) {
 	}
 }
 
+func TestIndexedDBProviderUpgradeOperationErrorsAreRecoverable(t *testing.T) {
+	t.Parallel()
+
+	upgrade := &recordingUpgradeContext{stores: map[string]struct{}{"items": {}}}
+	resp, terminal, opErr := executeIndexedDBUpgradeOperation(context.Background(), upgrade, &proto.UpgradeOperation{
+		RequestId: 1,
+		Op: &proto.UpgradeOperation_CreateObjectStore{CreateObjectStore: &proto.UpgradeCreateObjectStoreRequest{
+			Name: "items",
+		}},
+	})
+	if opErr != nil {
+		t.Fatalf("execute duplicate CreateObjectStore opErr = %v, want nil", opErr)
+	}
+	if terminal {
+		t.Fatal("duplicate CreateObjectStore terminal = true, want false")
+	}
+	if resp.GetError() == nil {
+		t.Fatal("duplicate CreateObjectStore response error is nil")
+	}
+
+	resp, terminal, opErr = executeIndexedDBUpgradeOperation(context.Background(), upgrade, &proto.UpgradeOperation{
+		RequestId: 2,
+		Op:        &proto.UpgradeOperation_FinishUpgrade{FinishUpgrade: &proto.FinishUpgradeRequest{}},
+	})
+	if opErr != nil {
+		t.Fatalf("finish opErr = %v, want nil", opErr)
+	}
+	if !terminal {
+		t.Fatal("finish terminal = false, want true")
+	}
+	if resp.GetError() != nil {
+		t.Fatalf("finish response error = %v, want nil", resp.GetError())
+	}
+}
+
+type recordingUpgradeContext struct {
+	stores map[string]struct{}
+}
+
+func (u *recordingUpgradeContext) OldVersion() uint64 { return 1 }
+
+func (u *recordingUpgradeContext) NewVersion() uint64 { return 2 }
+
+func (u *recordingUpgradeContext) Database() UpgradeDatabase { return recordingUpgradeDatabase{u} }
+
+func (u *recordingUpgradeContext) ObjectStoreNames(context.Context) ([]string, error) {
+	names := make([]string, 0, len(u.stores))
+	for name := range u.stores {
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+func (u *recordingUpgradeContext) CreateObjectStore(_ context.Context, name string, _ ObjectStoreSchema) error {
+	if _, exists := u.stores[name]; exists {
+		return ErrAlreadyExists
+	}
+	u.stores[name] = struct{}{}
+	return nil
+}
+
+func (u *recordingUpgradeContext) DeleteObjectStore(_ context.Context, name string) error {
+	if _, exists := u.stores[name]; !exists {
+		return ErrNotFound
+	}
+	delete(u.stores, name)
+	return nil
+}
+
+func (u *recordingUpgradeContext) CreateIndex(context.Context, string, IndexSchema) error {
+	return nil
+}
+
+func (u *recordingUpgradeContext) DeleteIndex(context.Context, string, string) error {
+	return nil
+}
+
+type recordingUpgradeDatabase struct {
+	*recordingUpgradeContext
+}
+
+func (recordingUpgradeDatabase) Name() string { return "app" }
+
 func newIndexedDBTestConn(t *testing.T, register func(*grpc.Server)) *grpc.ClientConn {
 	t.Helper()
 

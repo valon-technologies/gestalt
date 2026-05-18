@@ -248,6 +248,63 @@ func TestIndexedDBServerSharesConnectionRegistryAcrossServerInstances(t *testing
 	}
 }
 
+func TestIndexedDBServerUpgradeOperationErrorsAreRecoverable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	version := uint64(1)
+	if _, err := db.Open(ctx, "app", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			return upgrade.CreateObjectStore(ctx, "items", indexeddb.ObjectStoreSchema{})
+		},
+	}); err != nil {
+		t.Fatalf("initial Open: %v", err)
+	}
+
+	srv := NewServer(db, "roadmap", ServerOptions{AllowedStores: []string{"items"}}).(*indexedDBServer)
+	version = 2
+	_, err := db.Open(ctx, "app", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			resp, terminal, opErr := srv.executeUpgradeOperation(ctx, upgrade, &proto.UpgradeOperation{
+				RequestId: 1,
+				Op: &proto.UpgradeOperation_CreateObjectStore{CreateObjectStore: &proto.UpgradeCreateObjectStoreRequest{
+					Name: "not-allowed",
+				}},
+			})
+			if opErr != nil {
+				t.Fatalf("execute invalid CreateObjectStore opErr = %v, want nil", opErr)
+			}
+			if terminal {
+				t.Fatal("invalid CreateObjectStore terminal = true, want false")
+			}
+			if resp.GetError() == nil {
+				t.Fatal("invalid CreateObjectStore response error is nil")
+			}
+
+			resp, terminal, opErr = srv.executeUpgradeOperation(ctx, upgrade, &proto.UpgradeOperation{
+				RequestId: 2,
+				Op:        &proto.UpgradeOperation_FinishUpgrade{FinishUpgrade: &proto.FinishUpgradeRequest{}},
+			})
+			if opErr != nil {
+				t.Fatalf("finish opErr = %v, want nil", opErr)
+			}
+			if !terminal {
+				t.Fatal("finish terminal = false, want true")
+			}
+			if resp.GetError() != nil {
+				t.Fatalf("finish response error = %v, want nil", resp.GetError())
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("upgrade Open after recoverable op error: %v", err)
+	}
+}
+
 func TestIndexedDBServerPutRejectsUniqueIndexConflict(t *testing.T) {
 	t.Parallel()
 

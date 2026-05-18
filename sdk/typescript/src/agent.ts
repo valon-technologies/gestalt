@@ -362,6 +362,7 @@ export interface CreateAgentProviderTurnRequest {
   subject?: AgentSubjectContext | undefined;
   modelOptions?: JsonObjectInput | undefined;
   runGrant: string;
+  timeoutSeconds: number;
 }
 
 export interface GetAgentProviderTurnRequest {
@@ -841,6 +842,7 @@ function createAgentProviderTurnRequestFromProto(
     subject: agentSubjectFromProto(request.subject),
     modelOptions: optionalObjectFromStruct(request.modelOptions),
     runGrant: request.runGrant,
+    timeoutSeconds: request.timeoutSeconds,
   };
 }
 

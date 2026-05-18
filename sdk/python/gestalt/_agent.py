@@ -128,11 +128,13 @@ class AgentManagerCreateTurn:
     model: str = ""
     messages: Sequence[Any] | None = None
     tool_refs: Sequence[Any] | None = None
+    tool_refs_set: bool = False
     tool_source: int = AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
     response_schema: Any | None = None
     metadata: Any | None = None
     idempotency_key: str = ""
     model_options: Any | None = None
+    timeout_seconds: int = 0
 
 
 @dataclass(slots=True)
@@ -422,6 +424,7 @@ class CreateAgentProviderTurnRequest:
     subject: AgentSubjectContext | None = None
     model_options: JsonObject | None = None
     run_grant: str = ""
+    timeout_seconds: int = 0
 
 
 @dataclass(slots=True)
@@ -695,6 +698,7 @@ def create_agent_provider_turn_request_from_proto(
         if has_field(request, "model_options")
         else None,
         run_grant=request.run_grant,
+        timeout_seconds=request.timeout_seconds,
     )
 
 
@@ -1981,8 +1985,10 @@ def _agent_manager_create_turn_request(value: Any | None = None, **kwargs: Any) 
         tool_refs=[
             _agent_tool_ref_value(item) for item in (data.get("tool_refs") or [])
         ],
+        tool_refs_set=data.get("tool_refs_set", False) or data.get("tool_refs") is not None,
         tool_source=data.get("tool_source", AGENT_TOOL_SOURCE_MODE_UNSPECIFIED),
         idempotency_key=data.get("idempotency_key", ""),
+        timeout_seconds=data.get("timeout_seconds", 0),
     )
     if data.get("response_schema") is not None:
         request.response_schema.CopyFrom(struct_from_dict(data["response_schema"]))

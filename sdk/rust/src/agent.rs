@@ -673,6 +673,7 @@ pub struct CreateAgentProviderTurnRequest {
     pub subject: Option<AgentSubjectContext>,
     pub model_options: Option<AgentJson>,
     pub run_grant: String,
+    pub timeout_seconds: i32,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1589,6 +1590,7 @@ fn create_turn_request_from_proto(
         subject: agent_subject_from_proto(value.subject),
         model_options: json_from_struct(value.model_options),
         run_grant: value.run_grant,
+        timeout_seconds: value.timeout_seconds,
     }
 }
 

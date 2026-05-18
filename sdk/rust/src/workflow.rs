@@ -131,6 +131,28 @@ pub struct BoundWorkflowAgentTarget {
     pub output_delivery: Option<WorkflowOutputDelivery>,
     pub model_options: Option<WorkflowJson>,
     pub session_ready_delivery: Option<WorkflowOutputDelivery>,
+    pub steps: Vec<WorkflowAgentStep>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowAgentStep {
+    pub id: String,
+    pub prompt: String,
+    pub messages: Vec<AgentMessage>,
+    pub tool_refs: Vec<AgentToolRef>,
+    pub response_schema: Option<WorkflowJson>,
+    pub model_options: Option<WorkflowJson>,
+    pub timeout_seconds: i32,
+    pub output_delivery: Option<WorkflowOutputDelivery>,
+    pub when: Option<WorkflowAgentStepWhen>,
+    pub metadata: Option<WorkflowJson>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkflowAgentStepWhen {
+    pub step_id: String,
+    pub output_path: String,
+    pub equals: Option<WorkflowJson>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -978,6 +1000,11 @@ pub fn new_bound_workflow_agent_target(
             .session_ready_delivery
             .map(new_workflow_output_delivery)
             .transpose()?,
+        steps: input
+            .steps
+            .into_iter()
+            .map(new_workflow_agent_step)
+            .collect::<ProviderResult<Vec<_>>>()?,
     })
 }
 
@@ -1005,6 +1032,60 @@ pub fn bound_workflow_agent_target_input_from_target(
             .as_ref()
             .map(workflow_output_delivery_input_from_delivery)
             .transpose()?,
+        steps: input
+            .steps
+            .iter()
+            .map(workflow_agent_step_input_from_step)
+            .collect::<ProviderResult<Vec<_>>>()?,
+    })
+}
+
+/// Creates one bound workflow agent step.
+pub fn new_workflow_agent_step(input: WorkflowAgentStep) -> ProviderResult<WorkflowAgentStep> {
+    Ok(WorkflowAgentStep {
+        id: input.id,
+        prompt: input.prompt,
+        messages: input
+            .messages
+            .into_iter()
+            .map(new_agent_message)
+            .collect::<ProviderResult<Vec<_>>>()?,
+        tool_refs: input
+            .tool_refs
+            .into_iter()
+            .map(new_agent_tool_ref)
+            .collect(),
+        response_schema: input.response_schema,
+        model_options: input.model_options,
+        timeout_seconds: input.timeout_seconds,
+        output_delivery: input
+            .output_delivery
+            .map(new_workflow_output_delivery)
+            .transpose()?,
+        when: input.when,
+        metadata: input.metadata,
+    })
+}
+
+/// Returns input copied from one bound workflow agent step.
+pub fn workflow_agent_step_input_from_step(
+    input: &WorkflowAgentStep,
+) -> ProviderResult<WorkflowAgentStep> {
+    Ok(WorkflowAgentStep {
+        id: input.id.clone(),
+        prompt: input.prompt.clone(),
+        messages: input.messages.clone(),
+        tool_refs: input.tool_refs.clone(),
+        response_schema: input.response_schema.clone(),
+        model_options: input.model_options.clone(),
+        timeout_seconds: input.timeout_seconds,
+        output_delivery: input
+            .output_delivery
+            .as_ref()
+            .map(workflow_output_delivery_input_from_delivery)
+            .transpose()?,
+        when: input.when.clone(),
+        metadata: input.metadata.clone(),
     })
 }
 
@@ -1043,6 +1124,11 @@ fn bound_workflow_agent_target_to_proto(
             .session_ready_delivery
             .map(workflow_output_delivery_to_proto)
             .transpose()?,
+        steps: input
+            .steps
+            .into_iter()
+            .map(workflow_agent_step_to_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
     })
 }
 
@@ -1074,7 +1160,87 @@ fn bound_workflow_agent_target_from_proto(
             .session_ready_delivery
             .map(workflow_output_delivery_from_proto)
             .transpose()?,
+        steps: input
+            .steps
+            .into_iter()
+            .map(workflow_agent_step_from_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
     })
+}
+
+fn workflow_agent_step_to_proto(input: WorkflowAgentStep) -> ProviderResult<pb::WorkflowAgentStep> {
+    Ok(pb::WorkflowAgentStep {
+        id: input.id,
+        prompt: input.prompt,
+        messages: input
+            .messages
+            .into_iter()
+            .map(message_to_proto)
+            .collect::<ProviderResult<Vec<_>>>()?,
+        tool_refs: input
+            .tool_refs
+            .into_iter()
+            .map(agent_tool_ref_to_proto)
+            .collect(),
+        response_schema: input
+            .response_schema
+            .map(protocol::struct_from_json)
+            .transpose()?,
+        model_options: input
+            .model_options
+            .map(protocol::struct_from_json)
+            .transpose()?,
+        timeout_seconds: input.timeout_seconds,
+        output_delivery: input
+            .output_delivery
+            .map(workflow_output_delivery_to_proto)
+            .transpose()?,
+        when: input.when.map(workflow_agent_step_when_to_proto),
+        metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
+    })
+}
+
+fn workflow_agent_step_from_proto(
+    input: pb::WorkflowAgentStep,
+) -> ProviderResult<WorkflowAgentStep> {
+    Ok(WorkflowAgentStep {
+        id: input.id,
+        prompt: input.prompt,
+        messages: input.messages.into_iter().map(message_from_proto).collect(),
+        tool_refs: input
+            .tool_refs
+            .into_iter()
+            .map(agent_tool_ref_from_proto)
+            .collect(),
+        response_schema: input
+            .response_schema
+            .as_ref()
+            .map(protocol::json_from_struct),
+        model_options: input.model_options.as_ref().map(protocol::json_from_struct),
+        timeout_seconds: input.timeout_seconds,
+        output_delivery: input
+            .output_delivery
+            .map(workflow_output_delivery_from_proto)
+            .transpose()?,
+        when: input.when.map(workflow_agent_step_when_from_proto),
+        metadata: input.metadata.as_ref().map(protocol::json_from_struct),
+    })
+}
+
+fn workflow_agent_step_when_to_proto(input: WorkflowAgentStepWhen) -> pb::WorkflowAgentStepWhen {
+    pb::WorkflowAgentStepWhen {
+        step_id: input.step_id,
+        output_path: input.output_path,
+        equals: input.equals.map(protocol::value_from_json),
+    }
+}
+
+fn workflow_agent_step_when_from_proto(input: pb::WorkflowAgentStepWhen) -> WorkflowAgentStepWhen {
+    WorkflowAgentStepWhen {
+        step_id: input.step_id,
+        output_path: input.output_path,
+        equals: input.equals.as_ref().map(protocol::json_from_value),
+    }
 }
 
 /// Creates a bound workflow target.
