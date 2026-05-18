@@ -118,3 +118,78 @@ func TestStubTransactionAbortsOnOperationError(t *testing.T) {
 		t.Fatalf("user-3 after aborted transaction error = %v, want indexeddb.ErrNotFound", err)
 	}
 }
+
+func TestStubOpenRollsBackFailedUpgrade(t *testing.T) {
+	t.Parallel()
+
+	db := &StubIndexedDB{}
+	ctx := context.Background()
+	version := uint64(1)
+	upgradeErr := errors.New("upgrade failed")
+
+	_, err := db.Open(ctx, "app", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			if err := upgrade.CreateObjectStore(ctx, "users", indexeddb.ObjectStoreSchema{}); err != nil {
+				return err
+			}
+			return upgradeErr
+		},
+	})
+	if !errors.Is(err, upgradeErr) {
+		t.Fatalf("Open error = %v, want upgrade error", err)
+	}
+	if db.Name() != "" {
+		t.Fatalf("Name after failed initial upgrade = %q, want empty", db.Name())
+	}
+	if db.Version() != 0 {
+		t.Fatalf("Version after failed initial upgrade = %d, want 0", db.Version())
+	}
+	if db.HasObjectStore("users") {
+		t.Fatal("failed initial upgrade left created users store")
+	}
+
+	_, err = db.Open(ctx, "app", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			return upgrade.CreateObjectStore(ctx, "users", indexeddb.ObjectStoreSchema{
+				Indexes: []indexeddb.IndexSchema{{Name: "by_email", KeyPath: []string{"email"}}},
+			})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Open successful v1: %v", err)
+	}
+	version = 2
+	_, err = db.Open(ctx, "app", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			if err := upgrade.DeleteIndex(ctx, "users", "by_email"); err != nil {
+				return err
+			}
+			if err := upgrade.CreateObjectStore(ctx, "sessions", indexeddb.ObjectStoreSchema{}); err != nil {
+				return err
+			}
+			return upgradeErr
+		},
+	})
+	if !errors.Is(err, upgradeErr) {
+		t.Fatalf("Open v2 error = %v, want upgrade error", err)
+	}
+	if db.Version() != 1 {
+		t.Fatalf("Version after failed v2 upgrade = %d, want 1", db.Version())
+	}
+	if db.HasObjectStore("sessions") {
+		t.Fatal("failed v2 upgrade left created sessions store")
+	}
+	if err := db.ObjectStore("users").Put(ctx, indexeddb.Record{"id": "user-1", "email": "kept@example.com"}); err != nil {
+		t.Fatalf("Put after failed v2 upgrade: %v", err)
+	}
+	record, err := db.ObjectStore("users").Index("by_email").Get(ctx, "kept@example.com")
+	if err != nil {
+		t.Fatalf("users.by_email after failed v2 upgrade: %v", err)
+	}
+	if record["id"] != "user-1" {
+		t.Fatalf("record id after failed v2 upgrade = %v, want user-1", record["id"])
+	}
+}

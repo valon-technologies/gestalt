@@ -33,11 +33,19 @@ func (s *StubIndexedDB) Open(ctx context.Context, name string, opts indexeddb.Op
 		s.mu.Unlock()
 		return nil, indexeddb.ErrInvalidTransaction
 	}
-	s.name = name
+	upgradeDB := &StubIndexedDB{
+		name:    name,
+		version: oldVersion,
+		stores:  cloneStoresForDB(s.stores, nil),
+		Err:     s.Err,
+	}
+	for _, store := range upgradeDB.stores {
+		store.db = upgradeDB
+	}
 	s.mu.Unlock()
 
 	if newVersion > oldVersion && opts.Upgrade != nil {
-		if err := opts.Upgrade(ctx, stubUpgradeContext{db: s, oldVersion: oldVersion, newVersion: newVersion}); err != nil {
+		if err := opts.Upgrade(ctx, stubUpgradeContext{db: upgradeDB, oldVersion: oldVersion, newVersion: newVersion}); err != nil {
 			return nil, err
 		}
 	}
@@ -45,6 +53,7 @@ func (s *StubIndexedDB) Open(ctx context.Context, name string, opts indexeddb.Op
 	s.mu.Lock()
 	s.name = name
 	s.version = newVersion
+	s.stores = cloneStoresForDB(upgradeDB.stores, s)
 	s.mu.Unlock()
 	return s, nil
 }
@@ -326,7 +335,28 @@ func (o *stubObjectStore) clone(db *StubIndexedDB) *stubObjectStore {
 	return &stubObjectStore{
 		db:      db,
 		records: records,
-		schema:  o.schema,
+		schema:  cloneObjectStoreSchema(o.schema),
+	}
+}
+
+func cloneStoresForDB(stores map[string]*stubObjectStore, db *StubIndexedDB) map[string]*stubObjectStore {
+	if len(stores) == 0 {
+		return nil
+	}
+	out := make(map[string]*stubObjectStore, len(stores))
+	for name, store := range stores {
+		if store == nil {
+			continue
+		}
+		out[name] = store.clone(db)
+	}
+	return out
+}
+
+func cloneObjectStoreSchema(schema indexeddb.ObjectStoreSchema) indexeddb.ObjectStoreSchema {
+	return indexeddb.ObjectStoreSchema{
+		Indexes: append([]indexeddb.IndexSchema(nil), schema.Indexes...),
+		Columns: append([]indexeddb.ColumnDef(nil), schema.Columns...),
 	}
 }
 

@@ -203,7 +203,14 @@ func (d *databaseBackedIndexedDB) Transaction(ctx context.Context, stores []stri
 	if db == nil {
 		return nil, indexeddb.ErrNotFound
 	}
-	return db.Transaction(ctx, stores, mode, opts)
+	tx, err := db.Transaction(ctx, stores, mode, opts)
+	if err != nil {
+		return nil, err
+	}
+	if d.metricDBName == "" {
+		return tx, nil
+	}
+	return metricutil.InstrumentTransaction(tx, d.metricDBName), nil
 }
 
 func (d *databaseBackedIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
