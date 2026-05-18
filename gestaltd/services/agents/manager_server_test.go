@@ -189,6 +189,51 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 	}
 }
 
+func TestManagerServerCreateTurnPreservesExplicitEmptyToolRefs(t *testing.T) {
+	t.Parallel()
+
+	tokens, err := NewInvocationTokenManager([]byte("agent-manager-server-turn-tool-refs-secret"))
+	if err != nil {
+		t.Fatalf("NewInvocationTokenManager: %v", err)
+	}
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID: "user-1",
+		Kind:      principal.KindUser,
+	})
+	token, err := tokens.MintRootToken(ctx, "caller-plugin", nil)
+	if err != nil {
+		t.Fatalf("MintRootToken: %v", err)
+	}
+	server := NewManagerServer("caller-plugin", &recordingManagerService{
+		createTurn: func(_ context.Context, _ *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
+			if !req.ToolRefsSet {
+				t.Fatal("ToolRefsSet = false, want true for explicit empty tool refs")
+			}
+			if len(req.ToolRefs) != 0 {
+				t.Fatalf("ToolRefs len = %d, want 0", len(req.ToolRefs))
+			}
+			if req.TimeoutSeconds != 17 {
+				t.Fatalf("TimeoutSeconds = %d, want 17", req.TimeoutSeconds)
+			}
+			return &coreagent.Turn{
+				ID:        "turn-1",
+				SessionID: req.SessionID,
+				Status:    coreagent.ExecutionStatusRunning,
+			}, nil
+		},
+	}, tokens)
+
+	_, err = server.CreateTurn(context.Background(), &proto.AgentManagerCreateTurnRequest{
+		SessionId:       "session-1",
+		InvocationToken: token,
+		ToolRefsSet:     true,
+		TimeoutSeconds:  17,
+	})
+	if err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+}
+
 func TestManagerServerMapsStructuredOutputUnsupportedToFailedPrecondition(t *testing.T) {
 	t.Parallel()
 

@@ -21,7 +21,11 @@ type Services struct {
 	DB                  indexeddb.IndexedDB
 }
 
-const systemDatabaseName = "gestalt"
+// SystemDatabaseName is the logical IndexedDB database that stores gestaltd
+// core object stores.
+const SystemDatabaseName = "gestalt"
+
+const systemDatabaseName = SystemDatabaseName
 
 var systemObjectStores = []struct {
 	name   string

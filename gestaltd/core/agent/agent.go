@@ -327,6 +327,7 @@ type CreateTurnRequest struct {
 	ResponseSchemaSet bool
 	Metadata          map[string]any
 	ModelOptions      map[string]any
+	TimeoutSeconds    int
 	CreatedBy         Actor
 	ExecutionRef      string
 	Subject           SubjectContext
@@ -552,6 +553,7 @@ type ManagerCreateTurnRequest struct {
 	ResponseSchemaSet bool
 	Metadata          map[string]any
 	ModelOptions      map[string]any
+	TimeoutSeconds    int
 }
 
 type ManagerListSessionsRequest struct {

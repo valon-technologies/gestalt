@@ -721,6 +721,7 @@ func createAgentProviderTurnRequestFromProto(req *proto.CreateAgentProviderTurnR
 		Subject:           agentSubjectContextFromProto(req.GetSubject()),
 		ModelOptions:      mapFromStruct(req.GetModelOptions()),
 		RunGrant:          req.GetRunGrant(),
+		TimeoutSeconds:    req.GetTimeoutSeconds(),
 	}
 }
 

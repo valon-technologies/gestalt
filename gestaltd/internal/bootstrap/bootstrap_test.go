@@ -4534,6 +4534,35 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 		}); err == nil {
 			t.Fatal("CreateObjectStore(plugin_credentials) succeeded, want allowlist failure")
 		}
+
+		stream, err := client.OpenDatabase(context.Background())
+		if err != nil {
+			t.Fatalf("OpenDatabase: %v", err)
+		}
+		if err := stream.Send(&proto.OpenDatabaseClientMessage{
+			Msg: &proto.OpenDatabaseClientMessage_Open{Open: &proto.OpenDatabaseRequest{Name: "system"}},
+		}); err != nil {
+			t.Fatalf("OpenDatabase send: %v", err)
+		}
+		msg, err := stream.Recv()
+		if err != nil {
+			t.Fatalf("OpenDatabase recv: %v", err)
+		}
+		if got := status.FromProto(msg.GetError()).Code(); got != codes.NotFound {
+			t.Fatalf("OpenDatabase outside allowed database code = %v, want %v", got, codes.NotFound)
+		}
+
+		deleteStream, err := client.DeleteDatabase(context.Background(), &proto.DeleteDatabaseRequest{Name: "system"})
+		if err != nil {
+			t.Fatalf("DeleteDatabase: %v", err)
+		}
+		deleteMsg, err := deleteStream.Recv()
+		if err != nil {
+			t.Fatalf("DeleteDatabase recv: %v", err)
+		}
+		if got := status.FromProto(deleteMsg.GetError()).Code(); got != codes.NotFound {
+			t.Fatalf("DeleteDatabase outside allowed database code = %v, want %v", got, codes.NotFound)
+		}
 	})
 }
 
