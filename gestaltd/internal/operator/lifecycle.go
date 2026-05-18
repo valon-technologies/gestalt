@@ -2698,10 +2698,6 @@ func preparedInstallMatchesLockForMode(kind, name string, provider *config.Provi
 	return install != nil && preparedManifestMatchesLock(entry, install.manifest)
 }
 
-func backfillPreparedLockMetadataIfNeeded(kind, name string, provider *config.ProviderEntry, entry LockEntry, install *preparedInstall, mode artifactMode) error {
-	return nil
-}
-
 // resolveArchiveForPlatform looks up a LockArchive for the given platform
 // string using a fallback chain: exact match → generic.
 func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, string, bool) {
@@ -4336,11 +4332,6 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 				if !preparedManifestMatchesLock(*lockEntry, stagedInstall.manifest) {
 					return "", lockMetadataStaleError(paths, "lock entry for %s is stale", subject)
 				}
-				if provider.HasLocalSource() {
-					if err := writePreparedLockMetadata(paths, stagedInstall, providermanifestv1.KindUI, logicalName, provider); err != nil {
-						return "", err
-					}
-				}
 				if err := commitStaged(); err != nil {
 					return "", err
 				}
@@ -4353,9 +4344,6 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths lifecyclePaths, lockEntry *L
 			if err != nil {
 				return "", fmt.Errorf("read prepared manifest for %s: %w", subject, err)
 			}
-		}
-		if err := backfillPreparedLockMetadataIfNeeded(providermanifestv1.KindUI, logicalName, provider, *lockEntry, install, mode); err != nil {
-			return "", err
 		}
 		if install.assetRootPath == "" {
 			return "", fmt.Errorf("prepared asset root for %s not found in %s", subject, destDir)
@@ -4485,11 +4473,6 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			if !preparedManifestMatchesLock(entry, stagedInstall.manifest) {
 				return lockMetadataStaleError(paths, "lock entry for provider %q is stale", name)
 			}
-			if plugin.HasLocalSource() {
-				if err := writePreparedLockMetadata(paths, stagedInstall, providermanifestv1.KindPlugin, name, plugin); err != nil {
-					return err
-				}
-			}
 			if err := commitStaged(); err != nil {
 				return err
 			}
@@ -4502,9 +4485,6 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 		if err != nil {
 			return fmt.Errorf("read prepared manifest for provider %q: %w", name, err)
 		}
-	}
-	if err := backfillPreparedLockMetadataIfNeeded(providermanifestv1.KindPlugin, name, plugin, entry, install, mode); err != nil {
-		return err
 	}
 	if err := bindResolvedProviderManifest(name, plugin, install.manifestPath, install.manifest, configMap); err != nil {
 		return err
@@ -4596,11 +4576,6 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 			if !preparedManifestMatchesLock(*entry, stagedInstall.manifest) {
 				return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
 			}
-			if plugin.HasLocalSource() {
-				if err := writePreparedLockMetadata(paths, stagedInstall, kind, name, plugin); err != nil {
-					return err
-				}
-			}
 			if err := commitStaged(); err != nil {
 				return err
 			}
@@ -4613,9 +4588,6 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 		if err != nil {
 			return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
 		}
-	}
-	if err := backfillPreparedLockMetadataIfNeeded(kind, name, plugin, *entry, install, mode); err != nil {
-		return err
 	}
 	if install.executablePath == "" {
 		return preparedArtifactStaleError(paths, "prepared executable for %s %q not found in %s", kind, name, destDir)
