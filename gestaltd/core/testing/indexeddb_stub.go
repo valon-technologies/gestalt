@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"sync"
 
@@ -11,10 +12,110 @@ import (
 )
 
 type StubIndexedDB struct {
-	mu     sync.RWMutex
-	txMu   sync.RWMutex
-	stores map[string]*stubObjectStore
-	Err    error
+	mu      sync.RWMutex
+	txMu    sync.RWMutex
+	name    string
+	version uint64
+	stores  map[string]*stubObjectStore
+	Err     error
+}
+
+func (s *StubIndexedDB) Open(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
+	s.mu.Lock()
+	oldVersion := s.version
+	newVersion := oldVersion
+	if opts.Version != nil {
+		newVersion = *opts.Version
+	} else if newVersion == 0 {
+		newVersion = 1
+	}
+	if oldVersion != 0 && newVersion < oldVersion {
+		s.mu.Unlock()
+		return nil, indexeddb.ErrInvalidTransaction
+	}
+	s.name = name
+	s.mu.Unlock()
+
+	if newVersion > oldVersion && opts.Upgrade != nil {
+		if err := opts.Upgrade(ctx, stubUpgradeContext{db: s, oldVersion: oldVersion, newVersion: newVersion}); err != nil {
+			return nil, err
+		}
+	}
+
+	s.mu.Lock()
+	s.name = name
+	s.version = newVersion
+	s.mu.Unlock()
+	return s, nil
+}
+
+func (s *StubIndexedDB) OpenCurrent(_ context.Context, name string, _ indexeddb.OpenOptions) (indexeddb.Database, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.version == 0 || s.name != name {
+		return nil, indexeddb.ErrNotFound
+	}
+	return s, nil
+}
+
+func (s *StubIndexedDB) DeleteDatabase(_ context.Context, name string, _ indexeddb.DeleteOptions) (indexeddb.DeleteDatabaseResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.name != name {
+		return indexeddb.DeleteDatabaseResult{Name: name}, nil
+	}
+	oldVersion := s.version
+	s.name = ""
+	s.version = 0
+	s.stores = make(map[string]*stubObjectStore)
+	return indexeddb.DeleteDatabaseResult{Name: name, OldVersion: oldVersion}, nil
+}
+
+func (s *StubIndexedDB) Databases(context.Context) ([]indexeddb.DatabaseInfo, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.version == 0 {
+		return nil, nil
+	}
+	return []indexeddb.DatabaseInfo{{Name: s.name, Version: s.version}}, nil
+}
+
+func (s *StubIndexedDB) CompareKeys(first any, second any) (int, error) {
+	if reflect.DeepEqual(first, second) {
+		return 0, nil
+	}
+	left := fmt.Sprint(first)
+	right := fmt.Sprint(second)
+	if left < right {
+		return -1, nil
+	}
+	if left > right {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+func (s *StubIndexedDB) Name() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.name
+}
+
+func (s *StubIndexedDB) Version() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.version
+}
+
+func (s *StubIndexedDB) ObjectStoreNames(context.Context) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	names := make([]string, 0, len(s.stores))
+	for name := range s.stores {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
 }
 
 func (s *StubIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
@@ -102,6 +203,96 @@ func (s *StubIndexedDB) HasObjectStore(name string) bool {
 	}
 	_, ok := s.stores[name]
 	return ok
+}
+
+type stubUpgradeContext struct {
+	db         *StubIndexedDB
+	oldVersion uint64
+	newVersion uint64
+}
+
+func (u stubUpgradeContext) OldVersion() uint64 { return u.oldVersion }
+
+func (u stubUpgradeContext) NewVersion() uint64 { return u.newVersion }
+
+func (u stubUpgradeContext) Database() indexeddb.UpgradeDatabase {
+	return stubUpgradeDatabase{db: u.db}
+}
+
+func (u stubUpgradeContext) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	return u.db.ObjectStoreNames(ctx)
+}
+
+func (u stubUpgradeContext) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+	return u.db.CreateObjectStore(ctx, name, schema)
+}
+
+func (u stubUpgradeContext) DeleteObjectStore(ctx context.Context, name string) error {
+	return u.db.DeleteObjectStore(ctx, name)
+}
+
+func (u stubUpgradeContext) CreateIndex(_ context.Context, store string, index indexeddb.IndexSchema) error {
+	u.db.mu.Lock()
+	defer u.db.mu.Unlock()
+	if u.db.stores == nil {
+		u.db.stores = make(map[string]*stubObjectStore)
+	}
+	st := u.db.stores[store]
+	if st == nil {
+		st = &stubObjectStore{db: u.db, records: make(map[string]indexeddb.Record)}
+		u.db.stores[store] = st
+	}
+	for i, existing := range st.schema.Indexes {
+		if existing.Name == index.Name {
+			st.schema.Indexes[i] = index
+			return nil
+		}
+	}
+	st.schema.Indexes = append(st.schema.Indexes, index)
+	return nil
+}
+
+func (u stubUpgradeContext) DeleteIndex(_ context.Context, store string, name string) error {
+	u.db.mu.Lock()
+	defer u.db.mu.Unlock()
+	st := u.db.stores[store]
+	if st == nil {
+		return nil
+	}
+	indexes := st.schema.Indexes[:0]
+	for _, existing := range st.schema.Indexes {
+		if existing.Name != name {
+			indexes = append(indexes, existing)
+		}
+	}
+	st.schema.Indexes = indexes
+	return nil
+}
+
+type stubUpgradeDatabase struct {
+	db *StubIndexedDB
+}
+
+func (d stubUpgradeDatabase) Name() string { return d.db.Name() }
+
+func (d stubUpgradeDatabase) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	return d.db.ObjectStoreNames(ctx)
+}
+
+func (d stubUpgradeDatabase) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+	return d.db.CreateObjectStore(ctx, name, schema)
+}
+
+func (d stubUpgradeDatabase) DeleteObjectStore(ctx context.Context, name string) error {
+	return d.db.DeleteObjectStore(ctx, name)
+}
+
+func (d stubUpgradeDatabase) CreateIndex(ctx context.Context, store string, index indexeddb.IndexSchema) error {
+	return stubUpgradeContext{db: d.db}.CreateIndex(ctx, store, index)
+}
+
+func (d stubUpgradeDatabase) DeleteIndex(ctx context.Context, store string, name string) error {
+	return stubUpgradeContext{db: d.db}.DeleteIndex(ctx, store, name)
 }
 
 type stubObjectStore struct {

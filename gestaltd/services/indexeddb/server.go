@@ -25,8 +25,19 @@ type indexedDBServer struct {
 	plugin           string
 	allowed          map[string]struct{}
 	allowedDatabases map[string]struct{}
-	mu               sync.Mutex
-	connections      map[string]*databaseConnection
+	registry         *ConnectionRegistry
+}
+
+// ConnectionRegistry shares live OpenDatabase connection handles across
+// IndexedDB server instances registered for the same host service.
+type ConnectionRegistry struct {
+	mu          sync.Mutex
+	connections map[string]*databaseConnection
+}
+
+// NewConnectionRegistry creates an empty connection registry.
+func NewConnectionRegistry() *ConnectionRegistry {
+	return &ConnectionRegistry{connections: make(map[string]*databaseConnection)}
 }
 
 type databaseConnection struct {
@@ -74,8 +85,9 @@ func (c *databaseConnection) close() {
 }
 
 type ServerOptions struct {
-	AllowedStores    []string
-	AllowedDatabases []string
+	AllowedStores      []string
+	AllowedDatabases   []string
+	ConnectionRegistry *ConnectionRegistry
 }
 
 func NewServer(ds coreindexeddb.IndexedDB, pluginName string, opts ServerOptions) proto.IndexedDBServer {
@@ -97,6 +109,10 @@ func NewServer(ds coreindexeddb.IndexedDB, pluginName string, opts ServerOptions
 	if candidate, ok := metricutil.UnwrapIndexedDB(ds).(coreindexeddb.Factory); ok {
 		factory = candidate
 	}
+	registry := opts.ConnectionRegistry
+	if registry == nil {
+		registry = NewConnectionRegistry()
+	}
 	return &indexedDBServer{
 		ds:               ds,
 		factory:          factory,
@@ -104,7 +120,7 @@ func NewServer(ds coreindexeddb.IndexedDB, pluginName string, opts ServerOptions
 		plugin:           pluginName,
 		allowed:          allowed,
 		allowedDatabases: allowedDatabases,
-		connections:      make(map[string]*databaseConnection),
+		registry:         registry,
 	}
 }
 
@@ -152,13 +168,13 @@ func (s *indexedDBServer) registerDatabase(db coreindexeddb.Database) ([]byte, e
 			return nil, err
 		}
 		key := string(id)
-		s.mu.Lock()
-		if _, exists := s.connections[key]; !exists {
-			s.connections[key] = newDatabaseConnection(db)
-			s.mu.Unlock()
+		s.registry.mu.Lock()
+		if _, exists := s.registry.connections[key]; !exists {
+			s.registry.connections[key] = newDatabaseConnection(db)
+			s.registry.mu.Unlock()
 			return id, nil
 		}
-		s.mu.Unlock()
+		s.registry.mu.Unlock()
 	}
 	return nil, status.Error(codes.Internal, "could not allocate database connection id")
 }
@@ -167,9 +183,9 @@ func (s *indexedDBServer) databaseForConnection(connectionID []byte) (coreindexe
 	if len(connectionID) == 0 {
 		return nil, func() {}, nil
 	}
-	s.mu.Lock()
-	conn := s.connections[string(connectionID)]
-	s.mu.Unlock()
+	s.registry.mu.Lock()
+	conn := s.registry.connections[string(connectionID)]
+	s.registry.mu.Unlock()
 	if conn == nil {
 		return nil, nil, coreindexeddb.ErrNotFound
 	}
@@ -181,10 +197,10 @@ func (s *indexedDBServer) closeConnection(connectionID []byte) {
 		return
 	}
 	key := string(connectionID)
-	s.mu.Lock()
-	conn := s.connections[key]
-	delete(s.connections, key)
-	s.mu.Unlock()
+	s.registry.mu.Lock()
+	conn := s.registry.connections[key]
+	delete(s.registry.connections, key)
+	s.registry.mu.Unlock()
 	if conn != nil {
 		conn.close()
 	}

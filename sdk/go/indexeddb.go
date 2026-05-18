@@ -492,7 +492,9 @@ func (db *IndexedDBClient) DeleteDatabase(ctx context.Context, name string, opts
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	stream, err := db.client.DeleteDatabase(ctx, &proto.DeleteDatabaseRequest{Name: name})
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream, err := db.client.DeleteDatabase(streamCtx, &proto.DeleteDatabaseRequest{Name: name})
 	if err != nil {
 		return DeleteDatabaseResult{}, grpcErr(err)
 	}
@@ -508,10 +510,12 @@ func (db *IndexedDBClient) DeleteDatabase(ctx context.Context, name string, opts
 				var callbackErr error
 				action, callbackErr = opts.OnBlocked(ctx, blockedInfoFromProto(body.Blocked))
 				if callbackErr != nil {
+					cancel()
 					return DeleteDatabaseResult{}, fmt.Errorf("%w: %v", ErrAbort, callbackErr)
 				}
 			}
 			if action == BlockedFail {
+				cancel()
 				return DeleteDatabaseResult{}, ErrBlocked
 			}
 		case *proto.DeleteDatabaseServerMessage_Deleted:

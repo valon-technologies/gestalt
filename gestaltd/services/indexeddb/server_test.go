@@ -195,6 +195,59 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 	}
 }
 
+func TestIndexedDBServerSharesConnectionRegistryAcrossServerInstances(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	registry := NewConnectionRegistry()
+	openConn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterIndexedDBServer(server, NewServer(db, "roadmap", ServerOptions{
+			ConnectionRegistry: registry,
+		}))
+	})
+	opsConn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterIndexedDBServer(server, NewServer(db, "roadmap", ServerOptions{
+			ConnectionRegistry: registry,
+		}))
+	})
+	opener := &remoteIndexedDB{client: proto.NewIndexedDBClient(openConn)}
+	opsClient := proto.NewIndexedDBClient(opsConn)
+
+	version := uint64(1)
+	opened, err := opener.Open(ctx, "default", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			return upgrade.CreateObjectStore(ctx, "events", indexeddb.ObjectStoreSchema{})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = opened.Close() }()
+	remoteDB, ok := opened.(*remoteDatabase)
+	if !ok {
+		t.Fatalf("opened database type = %T, want *remoteDatabase", opened)
+	}
+
+	record, err := indexeddbcodec.RecordToProto(map[string]any{"id": "evt-1", "value": "ok"})
+	if err != nil {
+		t.Fatalf("RecordToProto: %v", err)
+	}
+	if _, err := opsClient.Put(ctx, &proto.RecordRequest{
+		ConnectionId: remoteDB.connectionID,
+		Store:        "events",
+		Record:       record,
+	}); err != nil {
+		t.Fatalf("Put through second server: %v", err)
+	}
+	if got, err := db.ObjectStore("events").Get(ctx, "evt-1"); err != nil {
+		t.Fatalf("backing Get: %v", err)
+	} else if got["value"] != "ok" {
+		t.Fatalf("backing value = %v, want ok", got["value"])
+	}
+}
+
 func TestIndexedDBServerPutRejectsUniqueIndexConflict(t *testing.T) {
 	t.Parallel()
 

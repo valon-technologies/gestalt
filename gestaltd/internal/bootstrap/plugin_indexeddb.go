@@ -78,6 +78,208 @@ func (d *indexedDBStoreAllowlist) Close() error {
 	return d.inner.Close()
 }
 
+func (d *indexedDBStoreAllowlist) Open(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
+	factory, ok := d.inner.(indexeddb.Factory)
+	if !ok {
+		return nil, indexeddb.ErrInvalidTransaction
+	}
+	opts.Upgrade = d.wrapUpgrade(opts.Upgrade)
+	db, err := factory.Open(ctx, name, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &indexedDBDatabaseAllowlist{allowlist: d, inner: db}, nil
+}
+
+func (d *indexedDBStoreAllowlist) OpenCurrent(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
+	factory, ok := d.inner.(indexeddb.Factory)
+	if !ok {
+		return nil, indexeddb.ErrInvalidTransaction
+	}
+	db, err := factory.OpenCurrent(ctx, name, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &indexedDBDatabaseAllowlist{allowlist: d, inner: db}, nil
+}
+
+func (d *indexedDBStoreAllowlist) DeleteDatabase(ctx context.Context, name string, opts indexeddb.DeleteOptions) (indexeddb.DeleteDatabaseResult, error) {
+	factory, ok := d.inner.(indexeddb.Factory)
+	if !ok {
+		return indexeddb.DeleteDatabaseResult{}, indexeddb.ErrInvalidTransaction
+	}
+	return factory.DeleteDatabase(ctx, name, opts)
+}
+
+func (d *indexedDBStoreAllowlist) Databases(ctx context.Context) ([]indexeddb.DatabaseInfo, error) {
+	factory, ok := d.inner.(indexeddb.Factory)
+	if !ok {
+		return nil, indexeddb.ErrInvalidTransaction
+	}
+	return factory.Databases(ctx)
+}
+
+func (d *indexedDBStoreAllowlist) CompareKeys(first any, second any) (int, error) {
+	factory, ok := d.inner.(indexeddb.Factory)
+	if !ok {
+		return 0, indexeddb.ErrInvalidTransaction
+	}
+	return factory.CompareKeys(first, second)
+}
+
+func (d *indexedDBStoreAllowlist) wrapUpgrade(upgrade func(context.Context, indexeddb.UpgradeContext) error) func(context.Context, indexeddb.UpgradeContext) error {
+	if upgrade == nil {
+		return nil
+	}
+	return func(ctx context.Context, inner indexeddb.UpgradeContext) error {
+		return upgrade(ctx, indexedDBUpgradeContextAllowlist{allowlist: d, inner: inner})
+	}
+}
+
+func (d *indexedDBStoreAllowlist) filterStoreNames(names []string) []string {
+	if len(d.allowed) == 0 {
+		return names
+	}
+	filtered := names[:0]
+	for _, name := range names {
+		if _, ok := d.allowed[name]; ok {
+			filtered = append(filtered, name)
+		}
+	}
+	return filtered
+}
+
+type indexedDBDatabaseAllowlist struct {
+	allowlist *indexedDBStoreAllowlist
+	inner     indexeddb.Database
+}
+
+func (d *indexedDBDatabaseAllowlist) Name() string { return d.inner.Name() }
+
+func (d *indexedDBDatabaseAllowlist) Version() uint64 { return d.inner.Version() }
+
+func (d *indexedDBDatabaseAllowlist) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	names, err := d.inner.ObjectStoreNames(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return d.allowlist.filterStoreNames(names), nil
+}
+
+func (d *indexedDBDatabaseAllowlist) ObjectStore(name string) indexeddb.ObjectStore {
+	if err := d.allowlist.checkStore(name); err != nil {
+		return missingObjectStore{}
+	}
+	return d.inner.ObjectStore(name)
+}
+
+func (d *indexedDBDatabaseAllowlist) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	for _, store := range stores {
+		if err := d.allowlist.checkStore(store); err != nil {
+			return nil, err
+		}
+	}
+	tx, err := d.inner.Transaction(ctx, stores, mode, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &indexedDBStoreAllowlistTransaction{allowlist: d.allowlist, inner: tx}, nil
+}
+
+func (d *indexedDBDatabaseAllowlist) Close() error { return d.inner.Close() }
+
+type indexedDBUpgradeContextAllowlist struct {
+	allowlist *indexedDBStoreAllowlist
+	inner     indexeddb.UpgradeContext
+}
+
+func (u indexedDBUpgradeContextAllowlist) OldVersion() uint64 { return u.inner.OldVersion() }
+
+func (u indexedDBUpgradeContextAllowlist) NewVersion() uint64 { return u.inner.NewVersion() }
+
+func (u indexedDBUpgradeContextAllowlist) Database() indexeddb.UpgradeDatabase {
+	return indexedDBUpgradeDatabaseAllowlist{allowlist: u.allowlist, inner: u.inner.Database()}
+}
+
+func (u indexedDBUpgradeContextAllowlist) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	names, err := u.inner.ObjectStoreNames(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return u.allowlist.filterStoreNames(names), nil
+}
+
+func (u indexedDBUpgradeContextAllowlist) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+	if err := u.allowlist.checkStore(name); err != nil {
+		return err
+	}
+	return u.inner.CreateObjectStore(ctx, name, schema)
+}
+
+func (u indexedDBUpgradeContextAllowlist) DeleteObjectStore(ctx context.Context, name string) error {
+	if err := u.allowlist.checkStore(name); err != nil {
+		return err
+	}
+	return u.inner.DeleteObjectStore(ctx, name)
+}
+
+func (u indexedDBUpgradeContextAllowlist) CreateIndex(ctx context.Context, store string, index indexeddb.IndexSchema) error {
+	if err := u.allowlist.checkStore(store); err != nil {
+		return err
+	}
+	return u.inner.CreateIndex(ctx, store, index)
+}
+
+func (u indexedDBUpgradeContextAllowlist) DeleteIndex(ctx context.Context, store string, name string) error {
+	if err := u.allowlist.checkStore(store); err != nil {
+		return err
+	}
+	return u.inner.DeleteIndex(ctx, store, name)
+}
+
+type indexedDBUpgradeDatabaseAllowlist struct {
+	allowlist *indexedDBStoreAllowlist
+	inner     indexeddb.UpgradeDatabase
+}
+
+func (d indexedDBUpgradeDatabaseAllowlist) Name() string { return d.inner.Name() }
+
+func (d indexedDBUpgradeDatabaseAllowlist) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	names, err := d.inner.ObjectStoreNames(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return d.allowlist.filterStoreNames(names), nil
+}
+
+func (d indexedDBUpgradeDatabaseAllowlist) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+	if err := d.allowlist.checkStore(name); err != nil {
+		return err
+	}
+	return d.inner.CreateObjectStore(ctx, name, schema)
+}
+
+func (d indexedDBUpgradeDatabaseAllowlist) DeleteObjectStore(ctx context.Context, name string) error {
+	if err := d.allowlist.checkStore(name); err != nil {
+		return err
+	}
+	return d.inner.DeleteObjectStore(ctx, name)
+}
+
+func (d indexedDBUpgradeDatabaseAllowlist) CreateIndex(ctx context.Context, store string, index indexeddb.IndexSchema) error {
+	if err := d.allowlist.checkStore(store); err != nil {
+		return err
+	}
+	return d.inner.CreateIndex(ctx, store, index)
+}
+
+func (d indexedDBUpgradeDatabaseAllowlist) DeleteIndex(ctx context.Context, store string, name string) error {
+	if err := d.allowlist.checkStore(store); err != nil {
+		return err
+	}
+	return d.inner.DeleteIndex(ctx, store, name)
+}
+
 type indexedDBStoreAllowlistTransaction struct {
 	allowlist *indexedDBStoreAllowlist
 	inner     indexeddb.Transaction

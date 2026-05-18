@@ -240,7 +240,9 @@ func (r *remoteIndexedDB) DeleteDatabase(ctx context.Context, name string, opts 
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	stream, err := r.client.DeleteDatabase(ctx, &proto.DeleteDatabaseRequest{Name: name})
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream, err := r.client.DeleteDatabase(streamCtx, &proto.DeleteDatabaseRequest{Name: name})
 	if err != nil {
 		return coreindexeddb.DeleteDatabaseResult{}, grpcToDatastoreErr(err)
 	}
@@ -256,10 +258,12 @@ func (r *remoteIndexedDB) DeleteDatabase(ctx context.Context, name string, opts 
 				var callbackErr error
 				action, callbackErr = opts.OnBlocked(ctx, blockedInfoFromProto(body.Blocked))
 				if callbackErr != nil {
+					cancel()
 					return coreindexeddb.DeleteDatabaseResult{}, fmt.Errorf("%w: %v", coreindexeddb.ErrAbort, callbackErr)
 				}
 			}
 			if action == coreindexeddb.BlockedFail {
+				cancel()
 				return coreindexeddb.DeleteDatabaseResult{}, coreindexeddb.ErrBlocked
 			}
 		case *proto.DeleteDatabaseServerMessage_Deleted:

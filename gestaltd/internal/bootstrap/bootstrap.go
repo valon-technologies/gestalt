@@ -1647,12 +1647,14 @@ func buildExternalCredentialsHostServices(name string, deps Deps) ([]runtimehost
 }
 
 func externalCredentialsIndexedDBHostService(envVar, providerName string, ds indexeddb.IndexedDB) runtimehost.HostService {
+	registry := indexeddbservice.NewConnectionRegistry()
 	return runtimehost.HostService{
 		Name:   "indexeddb",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, providerName, indexeddbservice.ServerOptions{
-				AllowedStores: []string{"external_credentials"},
+				AllowedStores:      []string{"external_credentials"},
+				ConnectionRegistry: registry,
 			}))
 		},
 	}
@@ -1833,11 +1835,14 @@ func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]i
 }
 
 func indexedDBHostService(envVar, name string, ds indexeddb.IndexedDB) runtimehost.HostService {
+	registry := indexeddbservice.NewConnectionRegistry()
 	return runtimehost.HostService{
 		Name:   "indexeddb",
 		EnvVar: envVar,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{}))
+			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{
+				ConnectionRegistry: registry,
+			}))
 		},
 	}
 }
