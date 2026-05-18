@@ -193,3 +193,32 @@ func TestStubOpenRollsBackFailedUpgrade(t *testing.T) {
 		t.Fatalf("record id after failed v2 upgrade = %v, want user-1", record["id"])
 	}
 }
+
+func TestStubOpenSameVersionPreservesStoreHandles(t *testing.T) {
+	t.Parallel()
+
+	db := &StubIndexedDB{}
+	ctx := context.Background()
+	version := uint64(1)
+	_, err := db.Open(ctx, "app", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			return upgrade.CreateObjectStore(ctx, "users", indexeddb.ObjectStoreSchema{})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Open v1: %v", err)
+	}
+	store := db.ObjectStore("users")
+
+	_, err = db.Open(ctx, "app", indexeddb.OpenOptions{})
+	if err != nil {
+		t.Fatalf("same-version Open: %v", err)
+	}
+	if err := store.Put(ctx, indexeddb.Record{"id": "user-1"}); err != nil {
+		t.Fatalf("Put via pre-open store handle: %v", err)
+	}
+	if _, err := db.ObjectStore("users").Get(ctx, "user-1"); err != nil {
+		t.Fatalf("Get after same-version Open and old-handle Put: %v", err)
+	}
+}

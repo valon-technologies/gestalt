@@ -44,6 +44,33 @@ func TestDatabaseBackedIndexedDBClearsClosedHandleWhenUpgradeRecoveryFails(t *te
 	}
 }
 
+func TestDatabaseBackedIndexedDBCloseIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	root := &closeCountingIndexedDB{}
+	db := &failingUpgradeDatabase{version: 1}
+	adapter := &databaseBackedIndexedDB{
+		root: root,
+		db:   db,
+	}
+
+	if err := adapter.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	if err := adapter.Close(); err != nil {
+		t.Fatalf("second Close: %v", err)
+	}
+	if root.closeCount != 1 {
+		t.Fatalf("root Close count = %d, want 1", root.closeCount)
+	}
+	if db.closeCount != 1 {
+		t.Fatalf("database Close count = %d, want 1", db.closeCount)
+	}
+	if err := adapter.Ping(context.Background()); !errors.Is(err, indexeddb.ErrNotFound) {
+		t.Fatalf("Ping after Close error = %v, want ErrNotFound", err)
+	}
+}
+
 type failingUpgradeFactory struct {
 	openErr        error
 	openCurrentErr error
@@ -70,8 +97,9 @@ func (f *failingUpgradeFactory) CompareKeys(any, any) (int, error) { return 0, n
 func (f *failingUpgradeFactory) Close() error { return nil }
 
 type failingUpgradeDatabase struct {
-	version uint64
-	closed  bool
+	version    uint64
+	closed     bool
+	closeCount int
 }
 
 func (d *failingUpgradeDatabase) Name() string { return "gestalt" }
@@ -90,5 +118,31 @@ func (d *failingUpgradeDatabase) Transaction(context.Context, []string, indexedd
 
 func (d *failingUpgradeDatabase) Close() error {
 	d.closed = true
+	d.closeCount++
+	return nil
+}
+
+type closeCountingIndexedDB struct {
+	closeCount int
+}
+
+func (d *closeCountingIndexedDB) ObjectStore(string) indexeddb.ObjectStore { return nil }
+
+func (d *closeCountingIndexedDB) Transaction(context.Context, []string, indexeddb.TransactionMode, indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	return nil, indexeddb.ErrNotFound
+}
+
+func (d *closeCountingIndexedDB) CreateObjectStore(context.Context, string, indexeddb.ObjectStoreSchema) error {
+	return nil
+}
+
+func (d *closeCountingIndexedDB) DeleteObjectStore(context.Context, string) error {
+	return nil
+}
+
+func (d *closeCountingIndexedDB) Ping(context.Context) error { return nil }
+
+func (d *closeCountingIndexedDB) Close() error {
+	d.closeCount++
 	return nil
 }

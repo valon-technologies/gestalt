@@ -229,20 +229,28 @@ func (d *databaseBackedIndexedDB) DeleteObjectStore(ctx context.Context, name st
 }
 
 func (d *databaseBackedIndexedDB) Ping(ctx context.Context) error {
-	return d.root.Ping(ctx)
+	d.mu.Lock()
+	root := d.root
+	d.mu.Unlock()
+	if root == nil {
+		return indexeddb.ErrNotFound
+	}
+	return root.Ping(ctx)
 }
 
 func (d *databaseBackedIndexedDB) Close() error {
 	d.mu.Lock()
 	db := d.db
+	root := d.root
 	d.db = nil
+	d.root = nil
 	d.mu.Unlock()
 	var errs []error
 	if db != nil {
 		errs = append(errs, db.Close())
 	}
-	if d.root != nil {
-		errs = append(errs, d.root.Close())
+	if root != nil {
+		errs = append(errs, root.Close())
 	}
 	return errors.Join(errs...)
 }

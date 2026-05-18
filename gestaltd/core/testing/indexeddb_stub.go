@@ -33,6 +33,12 @@ func (s *StubIndexedDB) Open(ctx context.Context, name string, opts indexeddb.Op
 		s.mu.Unlock()
 		return nil, indexeddb.ErrInvalidTransaction
 	}
+	if newVersion <= oldVersion || opts.Upgrade == nil {
+		s.name = name
+		s.version = newVersion
+		s.mu.Unlock()
+		return s, nil
+	}
 	upgradeDB := &StubIndexedDB{
 		name:    name,
 		version: oldVersion,
@@ -44,10 +50,8 @@ func (s *StubIndexedDB) Open(ctx context.Context, name string, opts indexeddb.Op
 	}
 	s.mu.Unlock()
 
-	if newVersion > oldVersion && opts.Upgrade != nil {
-		if err := opts.Upgrade(ctx, stubUpgradeContext{db: upgradeDB, oldVersion: oldVersion, newVersion: newVersion}); err != nil {
-			return nil, err
-		}
+	if err := opts.Upgrade(ctx, stubUpgradeContext{db: upgradeDB, oldVersion: oldVersion, newVersion: newVersion}); err != nil {
+		return nil, err
 	}
 
 	s.mu.Lock()
