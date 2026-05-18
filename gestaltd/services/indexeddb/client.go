@@ -1279,7 +1279,8 @@ func grpcToDatastoreErr(err error) error {
 }
 
 func isIndexedDBAbortMessage(message string) bool {
-	return strings.Contains(message, coreindexeddb.ErrAbort.Error())
+	message = strings.ToLower(strings.TrimSpace(message))
+	return message == "operation aborted" || strings.Contains(message, ": operation aborted")
 }
 
 // --- Remote Cursor ---

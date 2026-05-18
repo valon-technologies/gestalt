@@ -1894,5 +1894,6 @@ func grpcErr(err error) error {
 }
 
 func isIndexedDBAbortMessage(message string) bool {
-	return strings.Contains(message, ErrAbort.Error())
+	message = strings.ToLower(strings.TrimSpace(message))
+	return message == "operation aborted" || strings.Contains(message, ": operation aborted")
 }

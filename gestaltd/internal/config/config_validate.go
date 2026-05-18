@@ -17,6 +17,7 @@ import (
 	cronv3 "github.com/robfig/cron/v3"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
+	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
@@ -2094,49 +2095,16 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 		agent.Messages[i].Role = strings.TrimSpace(agent.Messages[i].Role)
 		agent.Messages[i].Text = strings.TrimSpace(agent.Messages[i].Text)
 	}
-	if agent.Prompt == "" && len(agent.Messages) == 0 {
+	hasSteps := len(agent.Steps) > 0
+	if hasSteps {
+		if agent.Prompt != "" || len(agent.Messages) > 0 || len(agent.Tools) > 0 || len(agent.ResponseSchema) > 0 || len(agent.ModelOptions) > 0 || agent.OutputDelivery != nil {
+			return fmt.Errorf("config validation: %s must not set prompt, messages, tools, responseSchema, modelOptions, or outputDelivery when steps are set", path)
+		}
+	} else if agent.Prompt == "" && len(agent.Messages) == 0 {
 		return fmt.Errorf("config validation: %s.prompt or messages is required", path)
 	}
-	hasSystemTool := false
-	for i := range agent.Tools {
-		if strings.TrimSpace(agent.Tools[i].System) != "" {
-			hasSystemTool = true
-			break
-		}
-	}
-	for i := range agent.Tools {
-		tool := &agent.Tools[i]
-		tool.System = strings.TrimSpace(tool.System)
-		tool.Plugin = strings.TrimSpace(tool.Plugin)
-		if tool.System == "" && tool.Plugin == "" {
-			return fmt.Errorf("config validation: %s.tools[%d].plugin or system is required", path, i)
-		}
-		if tool.System != "" && tool.Plugin != "" {
-			return fmt.Errorf("config validation: %s.tools[%d] must set exactly one of plugin or system", path, i)
-		}
-		tool.Operation = strings.TrimSpace(tool.Operation)
-		tool.Connection = strings.TrimSpace(tool.Connection)
-		tool.Instance = strings.TrimSpace(tool.Instance)
-		tool.Title = strings.TrimSpace(tool.Title)
-		tool.Description = strings.TrimSpace(tool.Description)
-		if tool.System != "" {
-			if tool.System != "workflow" {
-				return fmt.Errorf("config validation: %s.tools[%d].system references unknown system %q", path, i, tool.System)
-			}
-			if tool.Operation == "" {
-				return fmt.Errorf("config validation: %s.tools[%d].operation is required for system tool refs", path, i)
-			}
-			if tool.Connection != "" || tool.Instance != "" {
-				return fmt.Errorf("config validation: %s.tools[%d] system refs cannot include connection or instance", path, i)
-			}
-			continue
-		}
-		if _, ok := cfg.Plugins[tool.Plugin]; !ok {
-			return fmt.Errorf("config validation: %s.tools[%d].plugin references unknown plugin %q", path, i, tool.Plugin)
-		}
-		if hasSystemTool && tool.Operation == "" {
-			return fmt.Errorf("config validation: %s.tools[%d].operation is required when workflow system tools are delegated", path, i)
-		}
+	if err := validateWorkflowAgentToolsConfig(cfg, path+".tools", agent.Tools); err != nil {
+		return err
 	}
 	agent.Timeout = strings.TrimSpace(agent.Timeout)
 	if agent.Timeout != "" {
@@ -2149,6 +2117,110 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 	}
 	if err := normalizeWorkflowOutputDeliveryConfig(path+".sessionReadyDelivery", agent.SessionReadyDelivery, true); err != nil {
 		return err
+	}
+	if err := validateWorkflowAgentStepConfigs(cfg, path, agent.Steps); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateWorkflowAgentStepConfigs(cfg *Config, path string, steps []WorkflowAgentStepConfig) error {
+	seen := map[string]struct{}{}
+	for i := range steps {
+		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
+		step := &steps[i]
+		step.ID = strings.TrimSpace(step.ID)
+		if step.ID == "" {
+			return fmt.Errorf("config validation: %s.id is required", stepPath)
+		}
+		if _, exists := seen[step.ID]; exists {
+			return fmt.Errorf("config validation: %s.id duplicates %q", stepPath, step.ID)
+		}
+		step.Prompt = strings.TrimSpace(step.Prompt)
+		for j := range step.Messages {
+			step.Messages[j].Role = strings.TrimSpace(step.Messages[j].Role)
+			step.Messages[j].Text = strings.TrimSpace(step.Messages[j].Text)
+		}
+		if step.Prompt == "" && len(step.Messages) == 0 {
+			return fmt.Errorf("config validation: %s.prompt or messages is required", stepPath)
+		}
+		if err := validateWorkflowAgentToolsConfig(cfg, stepPath+".tools", step.Tools); err != nil {
+			return err
+		}
+		step.Timeout = strings.TrimSpace(step.Timeout)
+		if step.Timeout != "" {
+			if _, err := time.ParseDuration(step.Timeout); err != nil {
+				return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", stepPath, step.Timeout, err)
+			}
+		}
+		if err := normalizeWorkflowOutputDeliveryConfig(stepPath+".outputDelivery", step.OutputDelivery, false); err != nil {
+			return err
+		}
+		if step.When != nil {
+			step.When.StepID = strings.TrimSpace(step.When.StepID)
+			step.When.OutputPath = strings.TrimSpace(step.When.OutputPath)
+			if step.When.StepID == "" {
+				return fmt.Errorf("config validation: %s.when.stepId is required", stepPath)
+			}
+			if _, ok := seen[step.When.StepID]; !ok {
+				return fmt.Errorf("config validation: %s.when.stepId %q must reference an earlier step", stepPath, step.When.StepID)
+			}
+			if step.When.OutputPath == "" {
+				return fmt.Errorf("config validation: %s.when.outputPath is required", stepPath)
+			}
+			if !step.When.equalsSet {
+				return fmt.Errorf("config validation: %s.when.equals is required", stepPath)
+			}
+			if !jsonvalue.IsScalar(step.When.Equals) {
+				return fmt.Errorf("config validation: %s.when.equals must be a scalar JSON value", stepPath)
+			}
+		}
+		seen[step.ID] = struct{}{}
+	}
+	return nil
+}
+
+func validateWorkflowAgentToolsConfig(cfg *Config, path string, tools []WorkflowAgentToolRef) error {
+	hasSystemTool := false
+	for i := range tools {
+		if strings.TrimSpace(tools[i].System) != "" {
+			hasSystemTool = true
+			break
+		}
+	}
+	for i := range tools {
+		tool := &tools[i]
+		tool.System = strings.TrimSpace(tool.System)
+		tool.Plugin = strings.TrimSpace(tool.Plugin)
+		if tool.System == "" && tool.Plugin == "" {
+			return fmt.Errorf("config validation: %s[%d].plugin or system is required", path, i)
+		}
+		if tool.System != "" && tool.Plugin != "" {
+			return fmt.Errorf("config validation: %s[%d] must set exactly one of plugin or system", path, i)
+		}
+		tool.Operation = strings.TrimSpace(tool.Operation)
+		tool.Connection = strings.TrimSpace(tool.Connection)
+		tool.Instance = strings.TrimSpace(tool.Instance)
+		tool.Title = strings.TrimSpace(tool.Title)
+		tool.Description = strings.TrimSpace(tool.Description)
+		if tool.System != "" {
+			if tool.System != "workflow" {
+				return fmt.Errorf("config validation: %s[%d].system references unknown system %q", path, i, tool.System)
+			}
+			if tool.Operation == "" {
+				return fmt.Errorf("config validation: %s[%d].operation is required for system tool refs", path, i)
+			}
+			if tool.Connection != "" || tool.Instance != "" {
+				return fmt.Errorf("config validation: %s[%d] system refs cannot include connection or instance", path, i)
+			}
+			continue
+		}
+		if _, ok := cfg.Plugins[tool.Plugin]; !ok {
+			return fmt.Errorf("config validation: %s[%d].plugin references unknown plugin %q", path, i, tool.Plugin)
+		}
+		if hasSystemTool && tool.Operation == "" {
+			return fmt.Errorf("config validation: %s[%d].operation is required when workflow system tools are delegated", path, i)
+		}
 	}
 	return nil
 }

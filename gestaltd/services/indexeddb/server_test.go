@@ -3,6 +3,7 @@ package indexeddb
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -12,6 +13,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestIndexedDBServerUsesStoreNamesAsProvided(t *testing.T) {
@@ -192,6 +195,38 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 			_ = cursor.Close()
 		}
 		t.Fatalf("remote OpenCursor error = %v, want indexeddb.ErrNotFound", err)
+	}
+}
+
+func TestIndexedDBServerRejectsDeleteDatabaseWhenStoreScoped(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	version := uint64(1)
+	if opened, err := db.Open(ctx, "gestalt", indexeddb.OpenOptions{Version: &version}); err != nil {
+		t.Fatalf("Open seed database: %v", err)
+	} else {
+		defer func() { _ = opened.Close() }()
+	}
+	srv := NewServer(db, "external_credentials", ServerOptions{
+		AllowedStores:    []string{"external_credentials"},
+		AllowedDatabases: []string{"gestalt"},
+	})
+	conn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterIndexedDBServer(server, srv)
+	})
+	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+
+	if _, err := remote.DeleteDatabase(ctx, "gestalt", indexeddb.DeleteOptions{}); status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), "store-scoped") {
+		t.Fatalf("DeleteDatabase error = %v, want FailedPrecondition store-scoped denial", err)
+	}
+	infos, err := db.Databases(ctx)
+	if err != nil {
+		t.Fatalf("Databases after denied delete: %v", err)
+	}
+	if len(infos) != 1 || infos[0].Name != "gestalt" || infos[0].Version != 1 {
+		t.Fatalf("databases after denied delete = %#v, want gestalt v1 still present", infos)
 	}
 }
 

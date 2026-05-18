@@ -403,6 +403,12 @@ func (s *indexedDBServer) DeleteDatabase(req *proto.DeleteDatabaseRequest, strea
 		})
 		return nil
 	}
+	if len(s.allowed) > 0 {
+		_ = stream.Send(&proto.DeleteDatabaseServerMessage{
+			Msg: &proto.DeleteDatabaseServerMessage_Error{Error: rpcStatusFromError(status.Error(codes.FailedPrecondition, "indexeddb database deletion is not available on store-scoped bindings"))},
+		})
+		return nil
+	}
 	result, err := s.factory.DeleteDatabase(stream.Context(), req.GetName(), coreindexeddb.DeleteOptions{
 		OnBlocked: func(ctx context.Context, info coreindexeddb.BlockedInfo) (coreindexeddb.BlockedAction, error) {
 			if err := stream.Send(&proto.DeleteDatabaseServerMessage{

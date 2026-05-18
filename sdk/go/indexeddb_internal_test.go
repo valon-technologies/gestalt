@@ -63,6 +63,11 @@ func TestIndexedDBClientCanceledStatusMapping(t *testing.T) {
 		t.Fatalf("abort application status error = %v, should not match context.Canceled", err)
 	}
 
+	err = rpcStatusErr(&rpcstatus.Status{Code: int32(codes.Canceled), Message: "datastore: operation aborted: remote callback"})
+	if !errors.Is(err, ErrAbort) {
+		t.Fatalf("cross-layer abort application status error = %v, want ErrAbort", err)
+	}
+
 	err = rpcStatusErr(&rpcstatus.Status{Code: int32(codes.Canceled), Message: context.Canceled.Error()})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled application status error = %v, want context.Canceled", err)
