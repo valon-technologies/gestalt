@@ -120,12 +120,16 @@ func adminAuthorizationPluginMemberRoutePlugin(r *http.Request) (string, bool) {
 	if r == nil || r.URL == nil {
 		return "", false
 	}
-	const prefix = "/admin/api/v1/authorization/plugins/"
-	path := r.URL.EscapedPath()
-	if !strings.HasPrefix(path, prefix) {
+	path := adminAuthorizationRoutePath(r)
+	rest := path
+	switch {
+	case strings.HasPrefix(path, "/authorization/plugins/"):
+		rest = strings.TrimPrefix(path, "/authorization/plugins/")
+	case strings.HasPrefix(path, "/admin/api/v1/authorization/plugins/"):
+		rest = strings.TrimPrefix(path, "/admin/api/v1/authorization/plugins/")
+	default:
 		return "", false
 	}
-	rest := strings.TrimPrefix(path, prefix)
 	pluginSegment, suffix, ok := strings.Cut(rest, "/")
 	if !ok || pluginSegment == "" {
 		return "", false
@@ -145,6 +149,19 @@ func adminAuthorizationPluginMemberRoutePlugin(r *http.Request) (string, bool) {
 		return "", false
 	}
 	return plugin, true
+}
+
+func adminAuthorizationRoutePath(r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return ""
+	}
+	if rctx := chi.RouteContext(r.Context()); rctx != nil && rctx.RoutePath != "" {
+		return rctx.RoutePath
+	}
+	if r.URL.RawPath != "" {
+		return r.URL.RawPath
+	}
+	return r.URL.Path
 }
 
 func adminAuthorizationPluginRoleCanMutate(role string) bool {

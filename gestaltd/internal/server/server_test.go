@@ -4280,6 +4280,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		"other_plugin":  {AuthorizationPolicy: "other_policy"},
 		"a/b":           {AuthorizationPolicy: "slash_policy"},
 		"a%2Fb":         {AuthorizationPolicy: "escaped_policy"},
+		"a%252Fb":       {AuthorizationPolicy: "double_escaped_policy"},
 	}
 	baseAuthz := mustAuthorizer(t, config.AuthorizationConfig{
 		Policies: map[string]config.SubjectPolicyDef{
@@ -4296,6 +4297,9 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 			"escaped_policy": {
 				Default: "deny",
 			},
+			"double_escaped_policy": {
+				Default: "deny",
+			},
 		},
 	}, pluginDefs)
 
@@ -4305,6 +4309,8 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-admin@example.test", "admin")
 	seedProviderPluginAuthorization(t, svc, authz, provider, "sample_plugin", "plugin-viewer@example.test", "viewer")
 	seedProviderPluginAuthorization(t, svc, authz, provider, "a/b", "slash-plugin-admin@example.test", "admin")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "a%2Fb", "escaped-plugin-admin@example.test", "admin")
+	seedProviderPluginAuthorization(t, svc, authz, provider, "a%252Fb", "double-escaped-plugin-admin@example.test", "admin")
 	dynamicUser := seedUser(t, svc, "dynamic@example.test")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -4324,6 +4330,10 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 					return &core.UserIdentity{Email: "plugin-viewer@example.test"}, nil
 				case "slash-plugin-admin-session":
 					return &core.UserIdentity{Email: "slash-plugin-admin@example.test"}, nil
+				case "escaped-plugin-admin-session":
+					return &core.UserIdentity{Email: "escaped-plugin-admin@example.test"}, nil
+				case "double-escaped-plugin-admin-session":
+					return &core.UserIdentity{Email: "double-escaped-plugin-admin@example.test"}, nil
 				default:
 					return nil, fmt.Errorf("invalid token")
 				}
@@ -4395,8 +4405,8 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&plugins); err != nil {
 		t.Fatalf("decoding plugins: %v", err)
 	}
-	if len(plugins) != 4 || plugins[0]["name"] != "a%2Fb" || plugins[1]["name"] != "a/b" || plugins[2]["name"] != "other_plugin" || plugins[3]["name"] != "sample_plugin" {
-		t.Fatalf("plugins = %+v, want escaped, slash, other_plugin, and sample_plugin", plugins)
+	if len(plugins) != 5 || plugins[0]["name"] != "a%252Fb" || plugins[1]["name"] != "a%2Fb" || plugins[2]["name"] != "a/b" || plugins[3]["name"] != "other_plugin" || plugins[4]["name"] != "sample_plugin" {
+		t.Fatalf("plugins = %+v, want double escaped, escaped, slash, other_plugin, and sample_plugin", plugins)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
@@ -4437,6 +4447,18 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 		t.Fatalf("plugin admin delete plugin member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
 
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/a%252Fb/members", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "escaped-plugin-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("escaped plugin admin GET plugin members: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("escaped plugin admin get plugin members status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
 	for _, tc := range []struct {
 		name    string
 		session string
@@ -4444,7 +4466,8 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	}{
 		{name: "plugin admin cannot manage other plugin", session: "plugin-admin-session", path: "/admin/api/v1/authorization/plugins/other_plugin/members"},
 		{name: "plugin viewer cannot manage plugin", session: "plugin-viewer-session", path: "/admin/api/v1/authorization/plugins/sample_plugin/members"},
-		{name: "escaped plugin key is authorized literally", session: "slash-plugin-admin-session", path: "/admin/api/v1/authorization/plugins/a%2Fb/members"},
+		{name: "escaped slash path does not authorize slash plugin", session: "slash-plugin-admin-session", path: "/admin/api/v1/authorization/plugins/a%2Fb/members"},
+		{name: "double escaped plugin admin cannot manage escaped plugin", session: "double-escaped-plugin-admin-session", path: "/admin/api/v1/authorization/plugins/a%252Fb/members"},
 		{name: "plugin admin cannot manage gestaltd admins", session: "plugin-admin-session", path: "/admin/api/v1/authorization/admins/members"},
 	} {
 		req, _ = http.NewRequest(http.MethodGet, ts.URL+tc.path, nil)
