@@ -1211,7 +1211,8 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 			}
 
 			if sourceBacked(provider) {
-				if provider.HasLocalSource() {
+				switch {
+				case provider.HasLocalSource():
 					if lock == nil {
 						entry, err := l.writeComponentArtifact(ctx, cfg, paths, providermanifestv1.KindSecrets, name, secretsDestDir(paths, name), provider, provider.Config)
 						if err != nil {
@@ -1222,7 +1223,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 					if err := l.applyLocalComponentEntry(paths, providermanifestv1.KindSecrets, name, provider, configMap, secretsDestDir(paths, name), mode); err != nil {
 						return nil, err
 					}
-				} else if lock != nil {
+				case lock != nil:
 					lockEntry, ok := lock.Secrets[name]
 					if !ok {
 						return nil, lockMetadataStaleError(paths, "lock entry for %s %q is missing or stale", providermanifestv1.KindSecrets, name)
@@ -1230,7 +1231,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 					if err := l.applyLockedComponentEntry(paths, &lockEntry, providermanifestv1.KindSecrets, name, provider, configMap, secretsDestDir(paths, name), mode); err != nil {
 						return nil, err
 					}
-				} else {
+				default:
 					entry, err := l.writeComponentArtifact(ctx, cfg, paths, providermanifestv1.KindSecrets, name, secretsDestDir(paths, name), provider, provider.Config)
 					if err != nil {
 						return nil, err

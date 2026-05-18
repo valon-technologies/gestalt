@@ -816,7 +816,36 @@ func TestE2EValidatePlatformUsesLockedStaticMetadataWithoutArchiveDownload(t *te
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := writeValidValidateConfig(t, dir)
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
+	pluginDir := setupPrebuiltPluginDir(t, dir)
+	if err := writeLocalProviderReleaseMetadata(pluginDir); err != nil {
+		t.Fatalf("write plugin provider-release metadata: %v", err)
+	}
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+server:
+  baseUrl: %s
+  encryptionKey: valid-config-e2e-key
+  providers:
+    indexeddb: inmem
+    externalCredentials: default
+providers:
+  externalCredentials:
+    default:
+      source:
+        path: %s
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+plugins:
+  example:
+    source: %s
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, filepath.Join(pluginDir, "provider-release.yaml"))
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
 	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err != nil {
