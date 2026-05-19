@@ -228,6 +228,34 @@ func (p *nativeIndexedDBProvider) GetAllKeys(_ context.Context, req gestalt.Inde
 	return keys, nil
 }
 
+func (p *nativeIndexedDBProvider) Query(_ context.Context, req gestalt.IndexedDBObjectStoreQueryRequest) (*gestalt.IndexedDBQueryResponse, error) {
+	entries, err := p.objectEntries(req.Store, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp := &gestalt.IndexedDBQueryResponse{}
+	for _, entry := range entries {
+		matches := true
+		for _, filter := range req.Filters {
+			if fmt.Sprint(entry.Record[filter.Column]) != fmt.Sprint(filter.Value) {
+				matches = false
+				break
+			}
+		}
+		if !matches {
+			continue
+		}
+		resp.Keys = append(resp.Keys, entry.PrimaryKey)
+		if !req.KeysOnly {
+			resp.Records = append(resp.Records, cloneRecord(entry.Record))
+		}
+		if req.PageSize > 0 && len(resp.Keys) >= req.PageSize {
+			break
+		}
+	}
+	return resp, nil
+}
+
 func (p *nativeIndexedDBProvider) Count(ctx context.Context, req gestalt.IndexedDBObjectStoreRangeRequest) (int64, error) {
 	records, err := p.GetAll(ctx, req)
 	return int64(len(records)), err

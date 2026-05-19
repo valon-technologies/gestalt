@@ -3,7 +3,9 @@ package workflowmanager
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -46,6 +48,8 @@ const workflowRunExecutionRefBasePrefix = "workflow_run:"
 const workflowDefinitionExecutionRefBasePrefix = "workflow_definition:"
 const workflowNoProviderPermissionsPlugin = "__gestalt.workflow.no_provider_permissions__"
 const defaultWorkflowEventSpecVersion = "1.0"
+const workflowRunListDefaultPageSize = 100
+const workflowRunListMaxPageSize = 200
 
 type signalTargetPrincipalSource uint8
 
@@ -83,13 +87,18 @@ type Service interface {
 	DeleteEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) error
 	PauseEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error)
 	ResumeEventTrigger(ctx context.Context, p *principal.Principal, triggerID string) (*ManagedEventTrigger, error)
-	ListRuns(ctx context.Context, p *principal.Principal) ([]*ManagedRun, error)
+	ListRuns(ctx context.Context, p *principal.Principal, req coreworkflow.ListRunsRequest) (*ListRunsResponse, error)
 	StartRun(ctx context.Context, p *principal.Principal, req RunStart) (*ManagedRun, error)
 	GetRun(ctx context.Context, p *principal.Principal, runID string) (*ManagedRun, error)
 	CancelRun(ctx context.Context, p *principal.Principal, runID, reason string) (*ManagedRun, error)
 	SignalRun(ctx context.Context, p *principal.Principal, req RunSignal) (*ManagedRunSignal, error)
 	SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (*ManagedRunSignal, error)
 	PublishEvent(ctx context.Context, p *principal.Principal, req EventPublish) (coreworkflow.Event, error)
+}
+
+type ListRunsResponse struct {
+	Runs          []*ManagedRun
+	NextPageToken string
 }
 
 type Config struct {
@@ -531,56 +540,207 @@ func managedDefinitionMatchesUpsert(existing *ManagedDefinition, providerName st
 	return coreworkflow.TargetsEqual(existing.Definition.Target, target)
 }
 
-func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal) ([]*ManagedRun, error) {
-	refs, err := m.listOwnedExecutionRefs(ctx, p, false)
+func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req coreworkflow.ListRunsRequest) (*ListRunsResponse, error) {
+	pageSize, err := effectiveWorkflowRunListPageSize(req.PageSize)
 	if err != nil {
 		return nil, err
 	}
-	refsByProvider := executionRefsByProvider(refs)
-	out := make([]*ManagedRun, 0, len(refs))
-	for providerName, providerRefs := range refsByProvider {
+	if m == nil || m.workflow == nil {
+		return nil, ErrExecutionRefsNotConfigured
+	}
+	subjectID := strings.TrimSpace(principalSubjectID(principal.Canonicalized(p)))
+	if subjectID == "" {
+		return nil, ErrWorkflowSubjectRequired
+	}
+	providerNames := m.workflow.ProviderNames()
+	cursor, err := decodeWorkflowRunListPageToken(req.PageToken, len(providerNames))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*ManagedRun, 0, pageSize)
+	for providerIndex := cursor.ProviderIndex; providerIndex < len(providerNames) && len(out) < pageSize; providerIndex++ {
+		providerName := providerNames[providerIndex]
 		provider, err := m.resolveProviderByName(providerName)
 		if err != nil {
 			return nil, err
 		}
-		runs, err := provider.ListRuns(ctx, coreworkflow.ListRunsRequest{})
+		store, err := workflowExecutionReferenceStore(providerName, provider)
 		if err != nil {
 			return nil, err
 		}
-		refIndex := executionRefsByID(providerRefs)
-		for _, run := range runs {
-			if run == nil {
-				continue
-			}
-			ref := refIndex[strings.TrimSpace(run.ExecutionRef)]
-			if ref == nil || !m.allowTarget(ctx, p, ref.Target) || !runMatchesExecutionRef(providerName, run, ref) {
-				continue
-			}
-			out = append(out, &ManagedRun{
-				ProviderName: providerName,
-				Run:          run,
-				ExecutionRef: ref,
-				provider:     provider,
+		providerPageToken := ""
+		providerOffset := 0
+		if providerIndex == cursor.ProviderIndex {
+			providerPageToken = cursor.ProviderToken
+			providerOffset = cursor.ProviderOffset
+		}
+		seenProviderTokens := map[string]struct{}{providerPageToken: {}}
+		for len(out) < pageSize {
+			resp, err := provider.ListRuns(ctx, coreworkflow.ListRunsRequest{
+				PageSize:     pageSize - len(out),
+				PageToken:    providerPageToken,
+				TargetPlugin: strings.TrimSpace(req.TargetPlugin),
+				Status:       req.Status,
 			})
+			if err != nil {
+				return nil, err
+			}
+			if resp == nil {
+				break
+			}
+
+			processedOffset := providerOffset
+			for rawIndex, run := range resp.Runs {
+				if rawIndex < providerOffset {
+					continue
+				}
+				if len(out) >= pageSize {
+					break
+				}
+				processedOffset = rawIndex + 1
+				if run == nil {
+					continue
+				}
+				ref, err := m.executionRefForRun(ctx, store, providerName, run)
+				if err != nil {
+					return nil, err
+				}
+				if ref == nil ||
+					!executionRefOwnedBy(ref, p) ||
+					!m.allowTarget(ctx, p, ref.Target) ||
+					!runMatchesExecutionRef(providerName, run, ref) ||
+					!runMatchesListFilters(run, req) {
+					continue
+				}
+				out = append(out, &ManagedRun{
+					ProviderName: providerName,
+					Run:          run,
+					ExecutionRef: ref,
+					provider:     provider,
+				})
+			}
+
+			if len(out) >= pageSize && processedOffset < len(resp.Runs) {
+				return &ListRunsResponse{
+					Runs: out,
+					NextPageToken: encodeWorkflowRunListPageToken(workflowRunListPageToken{
+						ProviderIndex:  providerIndex,
+						ProviderToken:  providerPageToken,
+						ProviderOffset: processedOffset,
+					}),
+				}, nil
+			}
+			nextProviderToken := strings.TrimSpace(resp.NextPageToken)
+			if nextProviderToken == "" {
+				break
+			}
+			if len(out) > 0 {
+				return &ListRunsResponse{
+					Runs:          out,
+					NextPageToken: encodeWorkflowRunListPageToken(workflowRunListPageToken{ProviderIndex: providerIndex, ProviderToken: nextProviderToken}),
+				}, nil
+			}
+			if _, ok := seenProviderTokens[nextProviderToken]; ok {
+				break
+			}
+			seenProviderTokens[nextProviderToken] = struct{}{}
+			providerPageToken = nextProviderToken
+			providerOffset = 0
+		}
+		if len(out) >= pageSize && providerIndex+1 < len(providerNames) {
+			return &ListRunsResponse{
+				Runs:          out,
+				NextPageToken: encodeWorkflowRunListPageToken(workflowRunListPageToken{ProviderIndex: providerIndex + 1}),
+			}, nil
 		}
 	}
-	sort.Slice(out, func(i, j int) bool {
-		left := out[i]
-		right := out[j]
-		if left.Run != nil && right.Run != nil && left.Run.CreatedAt != nil && right.Run.CreatedAt != nil && !left.Run.CreatedAt.Equal(*right.Run.CreatedAt) {
-			return left.Run.CreatedAt.After(*right.Run.CreatedAt)
+	return &ListRunsResponse{Runs: out}, nil
+}
+
+func (m *Manager) executionRefForRun(ctx context.Context, store coreworkflow.ExecutionReferenceStore, providerName string, run *coreworkflow.Run) (*coreworkflow.ExecutionReference, error) {
+	executionRefID := ""
+	if run != nil {
+		executionRefID = strings.TrimSpace(run.ExecutionRef)
+	}
+	if executionRefID == "" {
+		return nil, nil
+	}
+	ref, err := store.GetExecutionReference(ctx, executionRefID)
+	if errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return workflowExecutionRefForProvider(ref, providerName), nil
+}
+
+func effectiveWorkflowRunListPageSize(pageSize int) (int, error) {
+	if pageSize < 0 {
+		return 0, fmt.Errorf("%w: page_size must be non-negative", invocation.ErrInvalidInvocation)
+	}
+	if pageSize == 0 {
+		return workflowRunListDefaultPageSize, nil
+	}
+	if pageSize > workflowRunListMaxPageSize {
+		return workflowRunListMaxPageSize, nil
+	}
+	return pageSize, nil
+}
+
+type workflowRunListPageToken struct {
+	ProviderIndex  int    `json:"providerIndex"`
+	ProviderToken  string `json:"providerToken,omitempty"`
+	ProviderOffset int    `json:"providerOffset,omitempty"`
+}
+
+func decodeWorkflowRunListPageToken(raw string, providerCount int) (workflowRunListPageToken, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return workflowRunListPageToken{}, nil
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return workflowRunListPageToken{}, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+	}
+	var token workflowRunListPageToken
+	if err := json.Unmarshal(decoded, &token); err != nil {
+		return workflowRunListPageToken{}, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+	}
+	if token.ProviderIndex < 0 || token.ProviderIndex > providerCount {
+		return workflowRunListPageToken{}, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+	}
+	if token.ProviderIndex == providerCount && strings.TrimSpace(token.ProviderToken) != "" {
+		return workflowRunListPageToken{}, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+	}
+	if token.ProviderOffset < 0 || (token.ProviderIndex == providerCount && token.ProviderOffset != 0) {
+		return workflowRunListPageToken{}, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
+	}
+	token.ProviderToken = strings.TrimSpace(token.ProviderToken)
+	return token, nil
+}
+
+func encodeWorkflowRunListPageToken(token workflowRunListPageToken) string {
+	encoded, err := json.Marshal(token)
+	if err != nil {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(encoded)
+}
+
+func runMatchesListFilters(run *coreworkflow.Run, req coreworkflow.ListRunsRequest) bool {
+	if run == nil {
+		return false
+	}
+	if plugin := strings.TrimSpace(req.TargetPlugin); plugin != "" {
+		if run.Target.Plugin == nil || strings.TrimSpace(run.Target.Plugin.PluginName) != plugin {
+			return false
 		}
-		leftID := ""
-		rightID := ""
-		if left.Run != nil {
-			leftID = left.Run.ID
-		}
-		if right.Run != nil {
-			rightID = right.Run.ID
-		}
-		return leftID < rightID
-	})
-	return out, nil
+	}
+	if req.Status != "" && run.Status != req.Status {
+		return false
+	}
+	return true
 }
 
 func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunStart) (out *ManagedRun, err error) {

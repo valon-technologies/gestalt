@@ -35,7 +35,7 @@ import (
 )
 
 type startupTestWorkflowProvider struct {
-	listRuns func(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error)
+	listRuns func(context.Context, coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error)
 }
 
 type startableStartupTestWorkflowProvider struct {
@@ -58,11 +58,11 @@ func (p startupTestWorkflowProvider) GetRun(context.Context, coreworkflow.GetRun
 	return &coreworkflow.Run{}, nil
 }
 
-func (p startupTestWorkflowProvider) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
+func (p startupTestWorkflowProvider) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
 	if p.listRuns != nil {
 		return p.listRuns(ctx, req)
 	}
-	return nil, nil
+	return &coreworkflow.ListRunsResponse{}, nil
 }
 
 func (p startupTestWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {

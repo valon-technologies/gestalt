@@ -157,9 +157,7 @@ _AUTHENTICATION_AUTHORED_EXPORTS = (
     "CompleteLoginRequest",
 )
 
-_AUTHORIZATION_HELPER_EXPORTS = (
-    "AUTHORIZATION_SUBJECT_TYPE_SUBJECT",
-)
+_AUTHORIZATION_HELPER_EXPORTS = ("AUTHORIZATION_SUBJECT_TYPE_SUBJECT",)
 
 _PLUGIN_RUNTIME_AUTHORED_EXPORTS = (
     "GetPluginRuntimeSessionRequest",
@@ -394,6 +392,9 @@ _LAZY_EXPORTS = {
         "IndexedDBCursorSnapshotEntry",
     ),
     "IndexedDBOpenCursorRequest": ("._indexeddb", "IndexedDBOpenCursorRequest"),
+    "IndexedDBQueryFilter": ("._indexeddb", "IndexedDBQueryFilter"),
+    "IndexedDBQueryOrder": ("._indexeddb", "IndexedDBQueryOrder"),
+    "IndexedDBQueryResponse": ("._indexeddb", "IndexedDBQueryResponse"),
     "IndexedDB": ("._indexeddb", "IndexedDB"),
     "IndexSchema": ("._indexeddb", "IndexSchema"),
     "KeyRange": ("._indexeddb", "KeyRange"),
@@ -556,6 +557,9 @@ __all__ = [
     "IndexedDBCursorSnapshot",
     "IndexedDBCursorSnapshotEntry",
     "IndexedDBOpenCursorRequest",
+    "IndexedDBQueryFilter",
+    "IndexedDBQueryOrder",
+    "IndexedDBQueryResponse",
     "IndexedDB",
     "IndexSchema",
     "KeyRange",

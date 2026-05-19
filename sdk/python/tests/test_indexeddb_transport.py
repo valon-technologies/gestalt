@@ -15,6 +15,8 @@ from gestalt import (
     CURSOR_NEXT,
     AlreadyExistsError,
     IndexedDB,
+    IndexedDBQueryFilter,
+    IndexedDBQueryOrder,
     IndexSchema,
     KeyRange,
     NotFoundError,
@@ -244,6 +246,42 @@ class TestNestedJSON(unittest.TestCase):
         self.assertEqual(got["meta"]["role"], "admin")
         self.assertIsInstance(got["tags"], list)
         self.assertEqual(got["tags"][0], "rust")
+        c.close()
+
+
+class TestQuery(unittest.TestCase):
+    def test_query_pages_records_and_keys(self) -> None:
+        c = _client()
+        _seed_store(c, "query_pages")
+        s = c.object_store("query_pages")
+
+        first = s.query(
+            filters=[IndexedDBQueryFilter("status", "active")],
+            order_by=[IndexedDBQueryOrder("id")],
+            page_size=2,
+        )
+        self.assertEqual([record["id"] for record in first.records], ["a", "b"])
+        self.assertEqual(first.keys, ["a", "b"])
+        self.assertEqual(first.next_page_token, "2")
+
+        second = s.query(
+            filters=[IndexedDBQueryFilter("status", "active")],
+            order_by=[IndexedDBQueryOrder("id")],
+            page_size=2,
+            page_token=first.next_page_token,
+        )
+        self.assertEqual([record["id"] for record in second.records], ["d"])
+        self.assertEqual(second.keys, ["d"])
+        self.assertEqual(second.next_page_token, "")
+
+        keys_only = s.query(
+            filters=[IndexedDBQueryFilter("status", "active")],
+            order_by=[IndexedDBQueryOrder("id")],
+            keys_only=True,
+        )
+        self.assertEqual(keys_only.records, [])
+        self.assertEqual(keys_only.keys, ["a", "b", "d"])
+
         c.close()
 
 

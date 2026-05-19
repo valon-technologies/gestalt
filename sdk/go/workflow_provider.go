@@ -17,11 +17,17 @@ type GetWorkflowProviderRunRequest struct {
 }
 
 // ListWorkflowProviderRunsRequest requests workflow runs visible to the caller.
-type ListWorkflowProviderRunsRequest struct{}
+type ListWorkflowProviderRunsRequest struct {
+	PageSize     int
+	PageToken    string
+	TargetPlugin string
+	Status       WorkflowRunStatus
+}
 
 // ListWorkflowProviderRunsResponse contains workflow runs.
 type ListWorkflowProviderRunsResponse struct {
-	Runs []BoundWorkflowRun
+	Runs          []BoundWorkflowRun
+	NextPageToken string
 }
 
 // GetRuns returns workflow runs from the response.
@@ -30,6 +36,14 @@ func (r *ListWorkflowProviderRunsResponse) GetRuns() []BoundWorkflowRun {
 		return nil
 	}
 	return r.Runs
+}
+
+// GetNextPageToken returns the token for the next page, if any.
+func (r *ListWorkflowProviderRunsResponse) GetNextPageToken() string {
+	if r == nil {
+		return ""
+	}
+	return r.NextPageToken
 }
 
 // CancelWorkflowProviderRunRequest requests cancellation of one workflow run.

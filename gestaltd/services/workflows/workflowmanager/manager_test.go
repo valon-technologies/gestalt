@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -526,6 +527,154 @@ func TestDefinitionRunsUseDefinitionProvider(t *testing.T) {
 	})
 	if !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("StartRun with mismatched provider error = %v, want invalid invocation", err)
+	}
+}
+
+func TestListRunsResumesTokenlessProviderOverrun(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: testWorkflowControl{provider: provider},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"issues.triage"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+	target := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+		PluginName: "github",
+		Operation:  "issues.triage",
+	}}
+	for _, id := range []string{"1", "2", "3"} {
+		refID := "ref-" + id
+		provider.refs[refID] = &coreworkflow.ExecutionReference{
+			ID:           refID,
+			ProviderName: "local",
+			Target:       target,
+			SubjectID:    principal.UserSubjectID("ada"),
+			SubjectKind:  string(principal.KindUser),
+		}
+		provider.runs["run-"+id] = &coreworkflow.Run{
+			ID:           "run-" + id,
+			Status:       coreworkflow.RunStatusRunning,
+			Target:       target,
+			ExecutionRef: refID,
+		}
+	}
+
+	first, err := manager.ListRuns(context.Background(), caller, coreworkflow.ListRunsRequest{PageSize: 2})
+	if err != nil {
+		t.Fatalf("ListRuns(first): %v", err)
+	}
+	if got := workflowManagerRunIDs(first.Runs); !reflect.DeepEqual(got, []string{"run-1", "run-2"}) || first.NextPageToken == "" {
+		t.Fatalf("first page ids=%v next=%q, want first two runs and token", got, first.NextPageToken)
+	}
+
+	second, err := manager.ListRuns(context.Background(), caller, coreworkflow.ListRunsRequest{PageSize: 2, PageToken: first.NextPageToken})
+	if err != nil {
+		t.Fatalf("ListRuns(second): %v", err)
+	}
+	if got := workflowManagerRunIDs(second.Runs); !reflect.DeepEqual(got, []string{"run-3"}) || second.NextPageToken != "" {
+		t.Fatalf("second page ids=%v next=%q, want final run", got, second.NextPageToken)
+	}
+}
+
+func TestListRunsSkipsFilteredProviderPages(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	target := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
+		PluginName: "github",
+		Operation:  "issues.triage",
+	}}
+	provider.refs["ref-hidden"] = &coreworkflow.ExecutionReference{
+		ID:           "ref-hidden",
+		ProviderName: "local",
+		Target:       target,
+		SubjectID:    principal.UserSubjectID("grace"),
+		SubjectKind:  string(principal.KindUser),
+	}
+	provider.refs["ref-visible"] = &coreworkflow.ExecutionReference{
+		ID:           "ref-visible",
+		ProviderName: "local",
+		Target:       target,
+		SubjectID:    principal.UserSubjectID("ada"),
+		SubjectKind:  string(principal.KindUser),
+	}
+	provider.listRunsHook = func(req coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
+		switch strings.TrimSpace(req.PageToken) {
+		case "":
+			return &coreworkflow.ListRunsResponse{
+				Runs: []*coreworkflow.Run{{
+					ID:           "run-hidden",
+					Status:       coreworkflow.RunStatusRunning,
+					Target:       target,
+					ExecutionRef: "ref-hidden",
+				}},
+				NextPageToken: "page-2",
+			}, nil
+		case "page-2":
+			return &coreworkflow.ListRunsResponse{
+				Runs: []*coreworkflow.Run{{
+					ID:           "run-visible",
+					Status:       coreworkflow.RunStatusRunning,
+					Target:       target,
+					ExecutionRef: "ref-visible",
+				}},
+			}, nil
+		default:
+			t.Fatalf("unexpected provider page token %q", req.PageToken)
+			return nil, nil
+		}
+	}
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "issues.triage", Method: "POST"},
+				},
+			},
+		}),
+		Workflow: testWorkflowControl{provider: provider},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{{
+		Plugin:     "github",
+		Operations: []string{"issues.triage"},
+	}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+
+	resp, err := manager.ListRuns(context.Background(), caller, coreworkflow.ListRunsRequest{PageSize: 1})
+	if err != nil {
+		t.Fatalf("ListRuns: %v", err)
+	}
+	if got := workflowManagerRunIDs(resp.Runs); !reflect.DeepEqual(got, []string{"run-visible"}) || resp.NextPageToken != "" {
+		t.Fatalf("runs=%v next=%q, want visible run without an empty-page token", got, resp.NextPageToken)
 	}
 }
 
@@ -1595,6 +1744,7 @@ type testWorkflowProvider struct {
 	schedules                       map[string]*coreworkflow.Schedule
 	eventTriggers                   map[string]*coreworkflow.EventTrigger
 	startRunHook                    func(coreworkflow.StartRunRequest) (*coreworkflow.Run, error)
+	listRunsHook                    func(coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error)
 	upsertedSchedules               []coreworkflow.UpsertScheduleRequest
 	upsertedEventTriggers           []coreworkflow.UpsertEventTriggerRequest
 	signalOrStartErr                error
@@ -1664,6 +1814,33 @@ func (p *testWorkflowProvider) GetRun(_ context.Context, req coreworkflow.GetRun
 	}
 	copied := *run
 	return &copied, nil
+}
+
+func (p *testWorkflowProvider) ListRuns(_ context.Context, req coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
+	if p.listRunsHook != nil {
+		return p.listRunsHook(req)
+	}
+	ids := make([]string, 0, len(p.runs))
+	for id := range p.runs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]*coreworkflow.Run, 0, len(ids))
+	for _, id := range ids {
+		run := p.runs[id]
+		if run == nil {
+			continue
+		}
+		if req.TargetPlugin != "" && (run.Target.Plugin == nil || strings.TrimSpace(run.Target.Plugin.PluginName) != strings.TrimSpace(req.TargetPlugin)) {
+			continue
+		}
+		if req.Status != "" && run.Status != req.Status {
+			continue
+		}
+		copied := *run
+		out = append(out, &copied)
+	}
+	return &coreworkflow.ListRunsResponse{Runs: out}, nil
 }
 
 func (p *testWorkflowProvider) SignalRun(_ context.Context, req coreworkflow.SignalRunRequest) (*coreworkflow.SignalRunResponse, error) {
@@ -1769,4 +1946,15 @@ func (p *testWorkflowProvider) ListExecutionReferences(_ context.Context, subjec
 		out = append(out, &copied)
 	}
 	return out, nil
+}
+
+func workflowManagerRunIDs(runs []*ManagedRun) []string {
+	out := make([]string, 0, len(runs))
+	for _, run := range runs {
+		if run == nil || run.Run == nil {
+			continue
+		}
+		out = append(out, run.Run.ID)
+	}
+	return out
 }
