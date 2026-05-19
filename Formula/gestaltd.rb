@@ -9,24 +9,24 @@ class Gestaltd < Formula
   on_macos do
     on_arm do
       url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.2/gestaltd-macos-arm64.tar.gz"
-      sha256 "1c251b9e193c07c5e4190d1d7b3b8a91d4bd70a81f320bb6296312e934658dfd"
+      sha256 "2e003b67a38ac5d62bcc86f0053a1ab51fcf05229ca8314819859896d48f1f39"
     end
 
     on_intel do
       url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.2/gestaltd-macos-x86_64.tar.gz"
-      sha256 "ff6a1094e60627a49731059cb503d69197ce6c4c663c30fb6ad0745e3208ccda"
+      sha256 "08d9ea12d06298816c0ce261c66d12be42de03dc6cb4cd4ea15499188a532c8c"
     end
   end
 
   on_linux do
     on_arm do
       url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.2/gestaltd-linux-arm64.tar.gz"
-      sha256 "356a988624654b0475f3eeb852a91e79b1e02d99d242fabc4ef850dcc2e8ae73"
+      sha256 "51323f6b5a1d79a4d92641050f230ef1169defcf6340bdbe0fdb7175d5a88ee8"
     end
 
     on_intel do
       url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.2-alpha.2/gestaltd-linux-x86_64.tar.gz"
-      sha256 "8900dbaadf3b03b391376e4997e9ddee5fe4a043622633b251ba4657d3cc7687"
+      sha256 "67c8e5fb96510f6b1d6ffc02594d29f084f7e7dfaf9ea66b164588033e3b0efb"
     end
   end
 
