@@ -2,9 +2,7 @@ use std::io::IsTerminal;
 
 use colored::Colorize;
 use comfy_table::{
-    Cell, ContentArrangement, Table,
-    modifiers::UTF8_ROUND_CORNERS,
-    presets::{UTF8_BORDERS_ONLY, UTF8_FULL_CONDENSED},
+    Cell, ContentArrangement, Table, modifiers::UTF8_ROUND_CORNERS, presets::UTF8_BORDERS_ONLY,
 };
 use serde::Serialize;
 
@@ -71,11 +69,9 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
     );
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TableStyle {
     BordersOnly,
-    FullCondensed,
 }
 
 fn render_table_with_style(headers: &[&str], rows: &[Vec<String>], style: TableStyle) -> String {
@@ -101,7 +97,6 @@ fn render_table_with_style_and_width(
     table
         .load_preset(match style {
             TableStyle::BordersOnly => UTF8_BORDERS_ONLY,
-            TableStyle::FullCondensed => UTF8_FULL_CONDENSED,
         })
         .apply_modifier(UTF8_ROUND_CORNERS)
         .set_content_arrangement(ContentArrangement::Dynamic)
@@ -156,60 +151,5 @@ pub fn print_error(msg: &str) {
         eprintln!("{}: {}", "error".red().bold(), msg);
     } else {
         eprintln!("error: {}", msg);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{TableStyle, render_table_with_style_and_width};
-
-    #[test]
-    fn table_style_presets_render_with_utf8_chrome() {
-        let headers = ["Name", "Description", "Connected"];
-        let rows = vec![vec![
-            "bigquery".to_string(),
-            "Google BigQuery data warehouse".to_string(),
-            "yes".to_string(),
-        ]];
-
-        let borders_only =
-            render_table_with_style_and_width(&headers, &rows, TableStyle::BordersOnly, 72);
-        let full_condensed =
-            render_table_with_style_and_width(&headers, &rows, TableStyle::FullCondensed, 72);
-
-        let left_lines: Vec<&str> = borders_only.lines().collect();
-        let right_lines: Vec<&str> = full_condensed.lines().collect();
-        let left_width = left_lines
-            .iter()
-            .map(|line| line.chars().count())
-            .max()
-            .unwrap_or(0);
-
-        println!();
-        println!(
-            "{:<left_width$}    Full condensed",
-            "Borders only",
-            left_width = left_width
-        );
-
-        for idx in 0..left_lines.len().max(right_lines.len()) {
-            let left = left_lines.get(idx).copied().unwrap_or("");
-            let right = right_lines.get(idx).copied().unwrap_or("");
-            println!(
-                "{:<left_width$}    {}",
-                left,
-                right,
-                left_width = left_width
-            );
-        }
-        println!();
-
-        assert!(borders_only.contains('╭'));
-        assert!(borders_only.contains('╰'));
-        assert!(full_condensed.contains('╭'));
-        assert!(full_condensed.contains('╰'));
-        assert!(full_condensed.contains('┆'));
-        assert!(!borders_only.contains('+'));
-        assert!(!full_condensed.contains('+'));
     }
 }
