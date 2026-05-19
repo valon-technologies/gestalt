@@ -958,7 +958,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		_ = store.Close()
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, svcErr)
 	}
-	hostIndexedDBs := map[string]indexeddb.IndexedDB{selectedIndexedDBName: store}
+	hostIndexedDBs := map[string]indexeddb.IndexedDB{selectedIndexedDBName: svc.DB}
 	var extraIndexedDBs []indexeddb.IndexedDB
 	for name, entry := range cfg.Providers.IndexedDB {
 		if name == selectedIndexedDBName || entry == nil {

@@ -183,6 +183,55 @@ type databaseBackedIndexedDB struct {
 	metricDBName string
 }
 
+func (d *databaseBackedIndexedDB) currentFactory() (indexeddb.Factory, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.root == nil || d.factory == nil {
+		return nil, indexeddb.ErrNotFound
+	}
+	return d.factory, nil
+}
+
+func (d *databaseBackedIndexedDB) Open(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
+	factory, err := d.currentFactory()
+	if err != nil {
+		return nil, err
+	}
+	return factory.Open(ctx, name, opts)
+}
+
+func (d *databaseBackedIndexedDB) OpenCurrent(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
+	factory, err := d.currentFactory()
+	if err != nil {
+		return nil, err
+	}
+	return factory.OpenCurrent(ctx, name, opts)
+}
+
+func (d *databaseBackedIndexedDB) DeleteDatabase(ctx context.Context, name string, opts indexeddb.DeleteOptions) (indexeddb.DeleteDatabaseResult, error) {
+	factory, err := d.currentFactory()
+	if err != nil {
+		return indexeddb.DeleteDatabaseResult{Name: name}, err
+	}
+	return factory.DeleteDatabase(ctx, name, opts)
+}
+
+func (d *databaseBackedIndexedDB) Databases(ctx context.Context) ([]indexeddb.DatabaseInfo, error) {
+	factory, err := d.currentFactory()
+	if err != nil {
+		return nil, err
+	}
+	return factory.Databases(ctx)
+}
+
+func (d *databaseBackedIndexedDB) CompareKeys(first any, second any) (int, error) {
+	factory, err := d.currentFactory()
+	if err != nil {
+		return 0, err
+	}
+	return factory.CompareKeys(first, second)
+}
+
 func (d *databaseBackedIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 	store := databaseBackedObjectStore{db: d, name: name}
 	if d.metricDBName == "" {
