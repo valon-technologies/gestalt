@@ -476,7 +476,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
-	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory for sync/serve")
+	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory for sync/serve; relative paths use the current working directory")
 	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json next to the primary config")
 }
 
@@ -496,6 +496,7 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "When locked, run `gestaltd lock` before deploy and `gestaltd sync --locked` during build.")
 	writeUsageLine(w, "When repeated, --config files merge left-to-right. Maps deep-merge,")
 	writeUsageLine(w, "later scalars win, lists replace, and null deletes inherited keys.")
+	writeUsageLine(w, "Relative --artifacts-dir paths use the current working directory.")
 }
 
 func printLockUsage(w io.Writer) {
@@ -524,7 +525,7 @@ func printSyncUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
-	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory")
+	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory; relative paths use the current working directory")
 	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json next to the primary config")
 	writeUsageLine(w, "  --locked          Require an existing lockfile")
 	writeUsageLine(w, "  --parallelism     Maximum concurrent local source UI preparations")
@@ -540,8 +541,7 @@ func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Static validation uses locked provider metadata and temporary scratch state.")
 	writeUsageLine(w, "Use --runtime to opt into deep validation that starts configured providers.")
 	writeUsageLine(w, "Repeated --config flags merge left-to-right.")
-	writeUsageLine(w, "The --lockfile path follows normal CLI path resolution; --artifacts-dir keeps")
-	writeUsageLine(w, "the same config-relative resolution used by sync and serve.")
+	writeUsageLine(w, "The --lockfile path follows normal CLI path resolution.")
 }
 
 func writeUsageLine(w io.Writer, line string) {

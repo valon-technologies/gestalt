@@ -1823,17 +1823,40 @@ func resolveLockPath(baseDir, provider string) string {
 }
 
 func resolveArtifactsDir(configPath string, cfg *config.Config, override string) string {
-	dir := override
-	if dir == "" && cfg != nil {
-		dir = cfg.Server.ArtifactsDir
+	if override != "" {
+		return resolveCLIArtifactsDir(override)
 	}
-	if dir == "" {
-		return filepath.Dir(configPath)
+	if cfg != nil {
+		if cfg.Server.ArtifactsDir != "" {
+			return resolveConfigArtifactsDir(configPath, cfg.Server.ArtifactsDir)
+		}
 	}
+	return absoluteConfigDir(configPath)
+}
+
+func resolveCLIArtifactsDir(dir string) string {
 	if filepath.IsAbs(dir) {
-		return dir
+		return filepath.Clean(dir)
 	}
-	return filepath.Join(filepath.Dir(configPath), dir)
+	if abs, err := filepath.Abs(dir); err == nil {
+		return filepath.Clean(abs)
+	}
+	return filepath.Clean(dir)
+}
+
+func resolveConfigArtifactsDir(configPath, dir string) string {
+	if filepath.IsAbs(dir) {
+		return filepath.Clean(dir)
+	}
+	return filepath.Join(absoluteConfigDir(configPath), dir)
+}
+
+func absoluteConfigDir(configPath string) string {
+	dir := filepath.Dir(configPath)
+	if abs, err := filepath.Abs(dir); err == nil {
+		return filepath.Clean(abs)
+	}
+	return filepath.Clean(dir)
 }
 
 func resolveLockfilePath(configPath, override string) string {
