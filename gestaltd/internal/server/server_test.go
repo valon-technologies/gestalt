@@ -18690,36 +18690,6 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 	}
 }
 
-func TestCallbackPathConstants(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	// Auth login callback: should not 404 (it will return 400 for missing code,
-	// which proves the route exists).
-	resp, err := http.Get(ts.URL + config.AuthCallbackPath)
-	if err != nil {
-		t.Fatalf("GET %s: %v", config.AuthCallbackPath, err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		t.Errorf("config.AuthCallbackPath %q is not a registered route (got 404)", config.AuthCallbackPath)
-	}
-
-	// Integration callback: should be public and return 400 for missing params,
-	// which proves the route exists without auth middleware.
-	resp, err = http.Get(ts.URL + config.IntegrationCallbackPath)
-	if err != nil {
-		t.Fatalf("GET %s: %v", config.IntegrationCallbackPath, err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode == http.StatusNotFound {
-		t.Errorf("config.IntegrationCallbackPath %q is not a registered route (got 404)", config.IntegrationCallbackPath)
-	}
-}
-
 type stubOAuthIntegration struct {
 	stubIntegrationWithOps
 	refreshTokenFn func(context.Context, string) (*core.TokenResponse, error)

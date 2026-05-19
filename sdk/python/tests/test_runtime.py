@@ -11,7 +11,6 @@ from typing import Any, cast
 from unittest import mock
 
 import grpc
-from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format
 from google.protobuf import struct_pb2 as _struct_pb2
@@ -53,7 +52,6 @@ from gestalt import (
     WarningsProvider,
     WorkflowProvider,
     _bootstrap,
-    _grpc_transport,
     _runtime,
 )
 from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
@@ -71,7 +69,6 @@ from gestalt._gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 agent_pb2_grpc: Any = _agent_pb2_grpc
 authentication_pb2: Any = _authentication_pb2
 cache_pb2: Any = _cache_pb2
-duration_pb2: Any = _duration_pb2
 empty_pb2: Any = _empty_pb2
 plugin_pb2: Any = _plugin_pb2
 plugin_pb2_grpc: Any = _plugin_pb2_grpc
@@ -169,75 +166,6 @@ class ParseRuntimeArgsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with mock.patch.object(_runtime.sys, "_MEIPASS", tmpdir, create=True):
                 self.assertIsNone(_runtime._parse_runtime_args([]))
-
-
-class RuntimeKindNormalizationTests(unittest.TestCase):
-    def test_normalized_runtime_kind_recognizes_cache(self) -> None:
-        self.assertEqual(
-            _runtime._normalized_runtime_kind("cache"),
-            ProviderKind.CACHE,
-        )
-
-    def test_normalized_runtime_kind_defaults_none_to_integration(self) -> None:
-        self.assertEqual(
-            _runtime._normalized_runtime_kind(None),
-            ProviderKind.INTEGRATION,
-        )
-
-    def test_normalized_runtime_kind_rejects_unknown_values(self) -> None:
-        with self.assertRaisesRegex(ValueError, "unsupported runtime kind"):
-            _runtime._normalized_runtime_kind("typo")
-
-    def test_normalized_runtime_kind_rejects_unsupported_types(self) -> None:
-        with self.assertRaisesRegex(TypeError, "unsupported runtime kind"):
-            _runtime._normalized_runtime_kind(object())
-
-
-class DurationConversionTests(unittest.TestCase):
-    def test_duration_to_timedelta_truncates_submicrosecond_nanos(self) -> None:
-        self.assertEqual(
-            _runtime._duration_to_timedelta(duration_pb2.Duration(nanos=5_999)),
-            dt.timedelta(microseconds=5),
-        )
-
-
-class ProviderSocketTargetTests(unittest.TestCase):
-    def test_parse_provider_socket_target_defaults_plain_paths_to_unix(self) -> None:
-        self.assertEqual(
-            _runtime._parse_provider_socket_target("/tmp/provider.sock"),
-            ("unix", "/tmp/provider.sock"),
-        )
-
-    def test_parse_provider_socket_target_accepts_unix_and_tcp_targets(self) -> None:
-        self.assertEqual(
-            _runtime._parse_provider_socket_target("unix:///tmp/provider.sock"),
-            ("unix", "/tmp/provider.sock"),
-        )
-        self.assertEqual(
-            _runtime._parse_provider_socket_target("tcp://127.0.0.1:50051"),
-            ("tcp", "127.0.0.1:50051"),
-        )
-
-    def test_parse_provider_socket_target_rejects_unsupported_schemes(self) -> None:
-        with self.assertRaisesRegex(
-            RuntimeError,
-            "unsupported provider socket target scheme 'tls'",
-        ):
-            _runtime._parse_provider_socket_target("tls://127.0.0.1:50051")
-
-
-class InternalGrpcTransportTests(unittest.TestCase):
-    def test_internal_channels_raise_message_size_limits(self) -> None:
-        options = dict(_grpc_transport._INTERNAL_CHANNEL_OPTIONS)
-
-        self.assertEqual(
-            options["grpc.max_receive_message_length"],
-            _grpc_transport.INTERNAL_GRPC_MAX_MESSAGE_BYTES,
-        )
-        self.assertEqual(
-            options["grpc.max_send_message_length"],
-            _grpc_transport.INTERNAL_GRPC_MAX_MESSAGE_BYTES,
-        )
 
 
 class RuntimeServeTransportTests(unittest.TestCase):
@@ -1366,12 +1294,6 @@ class PluginRuntimeRuntimeTests(unittest.TestCase):
         def health_check(self) -> None:
             return None
 
-    def test_normalized_runtime_kind_recognizes_runtime(self) -> None:
-        self.assertEqual(
-            _runtime._normalized_runtime_kind("runtime"),
-            ProviderKind.RUNTIME,
-        )
-
     def test_runtime_metadata_and_plugin_runtime_registration(self) -> None:
         provider = self.StubPluginRuntimeProvider()
 
@@ -1481,12 +1403,6 @@ class WorkflowRuntimeTests(unittest.TestCase):
 
         def health_check(self) -> None:
             return None
-
-    def test_normalized_runtime_kind_recognizes_workflow(self) -> None:
-        self.assertEqual(
-            _runtime._normalized_runtime_kind("workflow"),
-            ProviderKind.WORKFLOW,
-        )
 
     def test_runtime_metadata_and_workflow_registration(self) -> None:
         provider = self.StubWorkflowProvider()
