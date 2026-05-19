@@ -41,6 +41,11 @@ func InstrumentObjectStore(store indexeddb.ObjectStore, labels IndexedDBMetricLa
 	return &instrumentedObjectStore{inner: store, labels: labels}
 }
 
+// InstrumentTransaction wraps a Transaction to record metrics for transaction-scoped operations.
+func InstrumentTransaction(tx indexeddb.Transaction, dbName string) indexeddb.Transaction {
+	return &instrumentedTransaction{inner: tx, db: dbName}
+}
+
 func (d *instrumentedIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 	return InstrumentObjectStore(d.inner.ObjectStore(name), IndexedDBMetricLabels{
 		DB:          d.db,
@@ -49,7 +54,11 @@ func (d *instrumentedIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 }
 
 func (d *instrumentedIndexedDB) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
-	return d.inner.Transaction(ctx, stores, mode, opts)
+	tx, err := d.inner.Transaction(ctx, stores, mode, opts)
+	if err != nil {
+		return nil, err
+	}
+	return InstrumentTransaction(tx, d.db), nil
 }
 
 func (d *instrumentedIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
@@ -229,4 +238,162 @@ func (i *instrumentedIndex) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyR
 	c, err := i.inner.OpenKeyCursor(ctx, r, dir, values...)
 	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.OpenKeyCursor", err)
 	return c, err
+}
+
+type instrumentedTransaction struct {
+	inner indexeddb.Transaction
+	db    string
+}
+
+func (tx *instrumentedTransaction) ObjectStore(name string) indexeddb.TransactionObjectStore {
+	return &instrumentedTransactionObjectStore{
+		inner: tx.inner.ObjectStore(name),
+		labels: IndexedDBMetricLabels{
+			DB:          tx.db,
+			ObjectStore: name,
+		},
+	}
+}
+
+func (tx *instrumentedTransaction) Commit(ctx context.Context) error {
+	return tx.inner.Commit(ctx)
+}
+
+func (tx *instrumentedTransaction) Abort(ctx context.Context) error {
+	return tx.inner.Abort(ctx)
+}
+
+type instrumentedTransactionObjectStore struct {
+	inner  indexeddb.TransactionObjectStore
+	labels IndexedDBMetricLabels
+}
+
+func (s *instrumentedTransactionObjectStore) Get(ctx context.Context, id string) (indexeddb.Record, error) {
+	startedAt := time.Now()
+	rec, err := s.inner.Get(ctx, id)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Get", err)
+	return rec, err
+}
+
+func (s *instrumentedTransactionObjectStore) GetKey(ctx context.Context, id string) (string, error) {
+	startedAt := time.Now()
+	key, err := s.inner.GetKey(ctx, id)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "GetKey", err)
+	return key, err
+}
+
+func (s *instrumentedTransactionObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
+	startedAt := time.Now()
+	err := s.inner.Add(ctx, record)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Add", err)
+	return err
+}
+
+func (s *instrumentedTransactionObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
+	startedAt := time.Now()
+	err := s.inner.Put(ctx, record)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Put", err)
+	return err
+}
+
+func (s *instrumentedTransactionObjectStore) Delete(ctx context.Context, id string) error {
+	startedAt := time.Now()
+	err := s.inner.Delete(ctx, id)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Delete", err)
+	return err
+}
+
+func (s *instrumentedTransactionObjectStore) Clear(ctx context.Context) error {
+	startedAt := time.Now()
+	err := s.inner.Clear(ctx)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Clear", err)
+	return err
+}
+
+func (s *instrumentedTransactionObjectStore) GetAll(ctx context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+	startedAt := time.Now()
+	recs, err := s.inner.GetAll(ctx, r)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "GetAll", err)
+	return recs, err
+}
+
+func (s *instrumentedTransactionObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange) ([]string, error) {
+	startedAt := time.Now()
+	keys, err := s.inner.GetAllKeys(ctx, r)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "GetAllKeys", err)
+	return keys, err
+}
+
+func (s *instrumentedTransactionObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
+	startedAt := time.Now()
+	n, err := s.inner.Count(ctx, r)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Count", err)
+	return n, err
+}
+
+func (s *instrumentedTransactionObjectStore) DeleteRange(ctx context.Context, r indexeddb.KeyRange) (int64, error) {
+	startedAt := time.Now()
+	n, err := s.inner.DeleteRange(ctx, r)
+	RecordIndexedDBOperation(ctx, startedAt, s.labels, "DeleteRange", err)
+	return n, err
+}
+
+func (s *instrumentedTransactionObjectStore) Index(name string) indexeddb.TransactionIndex {
+	labels := s.labels
+	labels.IndexName = name
+	return &instrumentedTransactionIndex{inner: s.inner.Index(name), labels: labels}
+}
+
+type instrumentedTransactionIndex struct {
+	inner  indexeddb.TransactionIndex
+	labels IndexedDBMetricLabels
+}
+
+func (i *instrumentedTransactionIndex) Get(ctx context.Context, values ...any) (indexeddb.Record, error) {
+	startedAt := time.Now()
+	rec, err := i.inner.Get(ctx, values...)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.Get", err)
+	return rec, err
+}
+
+func (i *instrumentedTransactionIndex) GetKey(ctx context.Context, values ...any) (string, error) {
+	startedAt := time.Now()
+	key, err := i.inner.GetKey(ctx, values...)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.GetKey", err)
+	return key, err
+}
+
+func (i *instrumentedTransactionIndex) GetAll(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
+	startedAt := time.Now()
+	recs, err := i.inner.GetAll(ctx, r, values...)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.GetAll", err)
+	return recs, err
+}
+
+func (i *instrumentedTransactionIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
+	startedAt := time.Now()
+	keys, err := i.inner.GetAllKeys(ctx, r, values...)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.GetAllKeys", err)
+	return keys, err
+}
+
+func (i *instrumentedTransactionIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+	startedAt := time.Now()
+	n, err := i.inner.Count(ctx, r, values...)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.Count", err)
+	return n, err
+}
+
+func (i *instrumentedTransactionIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+	startedAt := time.Now()
+	n, err := i.inner.Delete(ctx, values...)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.Delete", err)
+	return n, err
+}
+
+func (i *instrumentedTransactionIndex) DeleteRange(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+	startedAt := time.Now()
+	n, err := i.inner.DeleteRange(ctx, r, values...)
+	RecordIndexedDBOperation(ctx, startedAt, i.labels, "Index.DeleteRange", err)
+	return n, err
 }

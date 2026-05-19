@@ -32,6 +32,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
@@ -1613,6 +1614,113 @@ func (t *trackedIndexedDB) Close() error {
 		t.closed.Add(1)
 	}
 	return nil
+}
+
+type splitFactoryIndexedDB struct {
+	legacy    *coretesting.StubIndexedDB
+	mu        sync.Mutex
+	databases map[string]*coretesting.StubIndexedDB
+}
+
+func newSplitFactoryIndexedDB() *splitFactoryIndexedDB {
+	return &splitFactoryIndexedDB{
+		legacy:    &coretesting.StubIndexedDB{},
+		databases: make(map[string]*coretesting.StubIndexedDB),
+	}
+}
+
+func (s *splitFactoryIndexedDB) database(name string) *coretesting.StubIndexedDB {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	db := s.databases[name]
+	if db == nil {
+		db = &coretesting.StubIndexedDB{}
+		s.databases[name] = db
+	}
+	return db
+}
+
+func (s *splitFactoryIndexedDB) Open(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
+	return s.database(name).Open(ctx, name, opts)
+}
+
+func (s *splitFactoryIndexedDB) OpenCurrent(ctx context.Context, name string, opts indexeddb.OpenOptions) (indexeddb.Database, error) {
+	s.mu.Lock()
+	db := s.databases[name]
+	s.mu.Unlock()
+	if db == nil {
+		return nil, indexeddb.ErrNotFound
+	}
+	return db.OpenCurrent(ctx, name, opts)
+}
+
+func (s *splitFactoryIndexedDB) DeleteDatabase(ctx context.Context, name string, opts indexeddb.DeleteOptions) (indexeddb.DeleteDatabaseResult, error) {
+	s.mu.Lock()
+	db := s.databases[name]
+	s.mu.Unlock()
+	if db == nil {
+		return indexeddb.DeleteDatabaseResult{Name: name}, nil
+	}
+	return db.DeleteDatabase(ctx, name, opts)
+}
+
+func (s *splitFactoryIndexedDB) Databases(ctx context.Context) ([]indexeddb.DatabaseInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	infos := make([]indexeddb.DatabaseInfo, 0, len(s.databases))
+	for name, db := range s.databases {
+		current, err := db.OpenCurrent(ctx, name, indexeddb.OpenOptions{})
+		if errors.Is(err, indexeddb.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, indexeddb.DatabaseInfo{Name: current.Name(), Version: current.Version()})
+	}
+	slices.SortFunc(infos, func(a, b indexeddb.DatabaseInfo) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	return infos, nil
+}
+
+func (s *splitFactoryIndexedDB) CompareKeys(first any, second any) (int, error) {
+	return s.legacy.CompareKeys(first, second)
+}
+
+func (s *splitFactoryIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+	return s.legacy.ObjectStore(name)
+}
+
+func (s *splitFactoryIndexedDB) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
+	return s.legacy.Transaction(ctx, stores, mode, opts)
+}
+
+func (s *splitFactoryIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+	return s.legacy.CreateObjectStore(ctx, name, schema)
+}
+
+func (s *splitFactoryIndexedDB) DeleteObjectStore(ctx context.Context, name string) error {
+	return s.legacy.DeleteObjectStore(ctx, name)
+}
+
+func (s *splitFactoryIndexedDB) Ping(ctx context.Context) error {
+	return s.legacy.Ping(ctx)
+}
+
+func (s *splitFactoryIndexedDB) Close() error {
+	s.mu.Lock()
+	databases := make([]*coretesting.StubIndexedDB, 0, len(s.databases))
+	for _, db := range s.databases {
+		databases = append(databases, db)
+	}
+	s.mu.Unlock()
+
+	errs := []error{s.legacy.Close()}
+	for _, db := range databases {
+		errs = append(errs, db.Close())
+	}
+	return errors.Join(errs...)
 }
 
 func validConfig() *config.Config {
@@ -4397,6 +4505,62 @@ func TestBootstrapPassesIndexedDBHostSocketsToAuthorizationProviders(t *testing.
 	}
 }
 
+func TestBootstrapSelectedIndexedDBHostUsesSystemDatabase(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+		"indexeddb": {
+			Source: config.ProviderSource{Path: "stub"},
+			Config: mustYAMLNode(t, map[string]any{"indexeddb": "test"}),
+		},
+	}
+	cfg.Server.Providers.Authorization = "indexeddb"
+
+	systemDB := newSplitFactoryIndexedDB()
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
+		return systemDB, nil
+	}
+	var hostServices []runtimehost.HostService
+	factories.Authorization = func(_ yaml.Node, services []runtimehost.HostService, _ bootstrap.Deps) (core.AuthorizationProvider, error) {
+		hostServices = append([]runtimehost.HostService(nil), services...)
+		return &stubAuthorizationProvider{name: "test-authorization"}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	user, err := result.Services.Users.FindOrCreateUser(context.Background(), "ada@example.test")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	if len(hostServices) == 0 || hostServices[0].EnvVar != indexeddbservice.DefaultSocketEnv {
+		t.Fatalf("missing default indexeddb host service: %#v", hostServices)
+	}
+
+	withIndexedDBHostClient(t, hostServices[0], func(client proto.IndexedDBClient) {
+		resp, err := client.Get(context.Background(), &proto.ObjectStoreRequest{
+			Store: coredata.StoreUsers,
+			Id:    user.ID,
+		})
+		if err != nil {
+			t.Fatalf("Get(%s, %s): %v", coredata.StoreUsers, user.ID, err)
+		}
+		got, err := indexeddbcodec.RecordFromProto(resp.GetRecord())
+		if err != nil {
+			t.Fatalf("RecordFromProto: %v", err)
+		}
+		if got["email"] != "ada@example.test" {
+			t.Fatalf("email = %#v, want %q", got["email"], "ada@example.test")
+		}
+	})
+}
+
 func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 	t.Parallel()
 
@@ -4533,6 +4697,35 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 			Schema: &proto.ObjectStoreSchema{},
 		}); err == nil {
 			t.Fatal("CreateObjectStore(plugin_credentials) succeeded, want allowlist failure")
+		}
+
+		stream, err := client.OpenDatabase(context.Background())
+		if err != nil {
+			t.Fatalf("OpenDatabase: %v", err)
+		}
+		if err := stream.Send(&proto.OpenDatabaseClientMessage{
+			Msg: &proto.OpenDatabaseClientMessage_Open{Open: &proto.OpenDatabaseRequest{Name: "system"}},
+		}); err != nil {
+			t.Fatalf("OpenDatabase send: %v", err)
+		}
+		msg, err := stream.Recv()
+		if err != nil {
+			t.Fatalf("OpenDatabase recv: %v", err)
+		}
+		if got := status.FromProto(msg.GetError()).Code(); got != codes.NotFound {
+			t.Fatalf("OpenDatabase outside allowed database code = %v, want %v", got, codes.NotFound)
+		}
+
+		deleteStream, err := client.DeleteDatabase(context.Background(), &proto.DeleteDatabaseRequest{Name: "system"})
+		if err != nil {
+			t.Fatalf("DeleteDatabase: %v", err)
+		}
+		deleteMsg, err := deleteStream.Recv()
+		if err != nil {
+			t.Fatalf("DeleteDatabase recv: %v", err)
+		}
+		if got := status.FromProto(deleteMsg.GetError()).Code(); got != codes.NotFound {
+			t.Fatalf("DeleteDatabase outside allowed database code = %v, want %v", got, codes.NotFound)
 		}
 	})
 }

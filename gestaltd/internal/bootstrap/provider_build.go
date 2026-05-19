@@ -2179,12 +2179,14 @@ func buildPluginIndexedDBHostServices(pluginName string, effective config.Effect
 		return nil, nil, err
 	}
 
+	registry := indexeddbservice.NewConnectionRegistry()
 	hostServices := []runtimehost.HostService{{
 		Name:   "indexeddb",
 		EnvVar: indexeddbservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, pluginName, indexeddbservice.ServerOptions{
-				AllowedStores: effective.ObjectStores,
+				AllowedStores:      effective.ObjectStores,
+				ConnectionRegistry: registry,
 			}))
 		},
 	}}
@@ -2299,12 +2301,14 @@ func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveH
 		return nil, nil, err
 	}
 
+	registry := indexeddbservice.NewConnectionRegistry()
 	hostServices := []runtimehost.HostService{{
 		Name:   "indexeddb",
 		EnvVar: indexeddbservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{
-				AllowedStores: effective.ObjectStores,
+				AllowedStores:      effective.ObjectStores,
+				ConnectionRegistry: registry,
 			}))
 		},
 	}}
@@ -2323,12 +2327,14 @@ func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHost
 		return nil, nil, err
 	}
 
+	registry := indexeddbservice.NewConnectionRegistry()
 	hostServices := []runtimehost.HostService{{
 		Name:   "indexeddb",
 		EnvVar: indexeddbservice.DefaultSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{
-				AllowedStores: effective.ObjectStores,
+				AllowedStores:      effective.ObjectStores,
+				ConnectionRegistry: registry,
 			}))
 		},
 	}}
