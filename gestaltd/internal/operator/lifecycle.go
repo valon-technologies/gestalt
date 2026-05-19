@@ -3496,7 +3496,7 @@ func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile,
 		return nil
 	}
 
-	if err := l.resolveConfiguredPlugins(paths, lock, cfg, mode); err != nil {
+	if err := l.resolveConfiguredPluginsWithOptions(paths, lock, cfg, mode, opts); err != nil {
 		return err
 	}
 	if err := synthesizePluginOwnedUIEntries(cfg); err != nil {
@@ -3675,20 +3675,31 @@ func localUISourcePathDomains(paths lifecyclePaths, name string, entry *config.U
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", normalized.manifestPath, err)
 	}
-	build := providerpkg.EffectiveSourceBuild(manifest)
-	if build != nil {
-		workdir := normalized.sourceDir
-		if build.Workdir != "" && build.Workdir != "." {
-			workdir = filepath.Join(normalized.sourceDir, filepath.FromSlash(build.Workdir))
-		}
-		domainPaths = append(domainPaths, workdir)
-		outputRel, _, err := providerpkg.SourceBuildOutput(manifest)
-		if err != nil {
-			return nil, err
-		}
-		domainPaths = append(domainPaths, filepath.Join(normalized.sourceDir, filepath.FromSlash(outputRel)))
+	buildDomains, err := sourceBuildPathDomains(normalized.sourceDir, manifest)
+	if err != nil {
+		return nil, err
 	}
+	domainPaths = append(domainPaths, buildDomains...)
 	return normalizePathDomains(domainPaths...)
+}
+
+func sourceBuildPathDomains(sourceDir string, manifest *providermanifestv1.Manifest) ([]string, error) {
+	build := providerpkg.EffectiveSourceBuild(manifest)
+	if build == nil {
+		return nil, nil
+	}
+	workdir := sourceDir
+	if build.Workdir != "" && build.Workdir != "." {
+		workdir = filepath.Join(sourceDir, filepath.FromSlash(build.Workdir))
+	}
+	outputRel, _, err := providerpkg.SourceBuildOutput(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		workdir,
+		filepath.Join(sourceDir, filepath.FromSlash(outputRel)),
+	}, nil
 }
 
 func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths, cfg *config.Config, locked bool, bootstrapLock *Lockfile, mode artifactMode) (bool, error) {
@@ -4516,8 +4527,23 @@ func installPackageForStaticValidation(packagePath, destDir string) (*preparedIn
 	return &preparedInstall{manifestPath: manifestPath, manifest: manifest}, nil
 }
 
+type preparedPluginWork struct {
+	name          string
+	entry         *config.ProviderEntry
+	configMap     map[string]any
+	localParallel bool
+	install       *preparedInstall
+}
+
 func (l *Lifecycle) resolveConfiguredPlugins(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode) error {
-	for name, entry := range cfg.Plugins {
+	return l.resolveConfiguredPluginsWithOptions(paths, lock, cfg, mode, SyncOptions{Parallelism: 1})
+}
+
+func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode, opts SyncOptions) error {
+	var localWork []*preparedPluginWork
+	var ordered []*preparedPluginWork
+	for _, name := range slices.Sorted(maps.Keys(cfg.Plugins)) {
+		entry := cfg.Plugins[name]
 		if entry == nil {
 			continue
 		}
@@ -4525,21 +4551,124 @@ func (l *Lifecycle) resolveConfiguredPlugins(paths lifecyclePaths, lock *Lockfil
 		if err != nil {
 			return fmt.Errorf("decode provider config for provider %q: %w", name, err)
 		}
-		switch {
-		case sourceBacked(entry):
-			if err := l.applyLockedProviderEntry(paths, lock, name, entry, configMap, mode); err != nil {
-				return err
-			}
-		default:
+		work := &preparedPluginWork{
+			name:          name,
+			entry:         entry,
+			configMap:     configMap,
+			localParallel: localPluginParallelPrepareCandidate(paths, entry, mode),
+		}
+		ordered = append(ordered, work)
+		if work.localParallel {
+			localWork = append(localWork, work)
+		}
+	}
+	for _, work := range ordered {
+		if work.localParallel || !sourceBacked(work.entry) {
 			continue
 		}
-		if manifest := entry.ResolvedManifest; manifest != nil {
-			entry.DisplayName = cmp.Or(entry.DisplayName, manifest.DisplayName)
-			entry.Description = cmp.Or(entry.Description, manifest.Description)
+		if err := l.applyLockedProviderEntry(paths, lock, work.name, work.entry, work.configMap, mode); err != nil {
+			return err
 		}
-		entry.IconFile = cmp.Or(entry.IconFile, entry.ResolvedIconFile)
+	}
+	if err := l.prepareLocalPluginProviders(paths, localWork, opts); err != nil {
+		return err
+	}
+	for _, work := range ordered {
+		if work.install != nil {
+			if err := bindPreparedProviderInstall(paths, work.name, work.entry, work.configMap, work.install); err != nil {
+				return err
+			}
+		}
+		if manifest := work.entry.ResolvedManifest; manifest != nil {
+			work.entry.DisplayName = cmp.Or(work.entry.DisplayName, manifest.DisplayName)
+			work.entry.Description = cmp.Or(work.entry.Description, manifest.Description)
+		}
+		work.entry.IconFile = cmp.Or(work.entry.IconFile, work.entry.ResolvedIconFile)
 	}
 	return nil
+}
+
+func localPluginParallelPrepareCandidate(paths lifecyclePaths, entry *config.ProviderEntry, mode artifactMode) bool {
+	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() {
+		return false
+	}
+	if pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
+		return false
+	}
+	return true
+}
+
+func (l *Lifecycle) prepareLocalPluginProviders(paths lifecyclePaths, work []*preparedPluginWork, opts SyncOptions) error {
+	if len(work) == 0 {
+		return nil
+	}
+	opts = normalizeSyncOptions(opts)
+	tasks := make([]pathDomainTask, 0, len(work))
+	for _, work := range work {
+		work := work
+		domains, err := localPluginSourcePathDomains(paths, work.name, work.entry)
+		if err != nil {
+			return err
+		}
+		tasks = append(tasks, pathDomainTask{
+			name:    work.name,
+			domains: domains,
+			run: func() error {
+				install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindPlugin, work.name, work.entry, work.configMap, providerDestDir(paths, work.name), "provider "+strconv.Quote(work.name), artifactModeMaterialize)
+				if err != nil {
+					return err
+				}
+				work.install = install
+				return nil
+			},
+		})
+	}
+	slices.SortFunc(tasks, func(a, b pathDomainTask) int {
+		return cmp.Compare(a.name, b.name)
+	})
+	return runPathDomainTasks(tasks, opts.Parallelism)
+}
+
+func localPluginSourcePathDomains(paths lifecyclePaths, name string, entry *config.ProviderEntry) ([]string, error) {
+	if entry == nil {
+		return nil, nil
+	}
+	normalized, err := normalizeLocalSource(entry.SourcePath())
+	if err != nil {
+		return nil, fmt.Errorf("manifest for plugin %q not found at %s: %w", name, entry.SourcePath(), err)
+	}
+	domainPaths := []string{
+		normalized.sourceDir,
+		normalized.manifestPath,
+		providerDestDir(paths, name),
+	}
+	_, manifest, err := providerpkg.ReadSourceManifestFile(normalized.manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", normalized.manifestPath, err)
+	}
+	buildDomains, err := sourceBuildPathDomains(normalized.sourceDir, manifest)
+	if err != nil {
+		return nil, err
+	}
+	domainPaths = append(domainPaths, buildDomains...)
+	if manifest != nil && manifest.Kind == providermanifestv1.KindPlugin && manifest.Spec != nil && manifest.Spec.UI != nil && strings.TrimSpace(manifest.Spec.UI.Path) != "" {
+		uiManifestPath := filepath.Join(normalized.sourceDir, filepath.FromSlash(manifest.Spec.UI.Path))
+		uiNormalized, err := normalizeLocalSource(uiManifestPath)
+		if err != nil {
+			return nil, fmt.Errorf("manifest for provider %q owned ui not found at %s: %w", name, uiManifestPath, err)
+		}
+		domainPaths = append(domainPaths, uiNormalized.sourceDir, uiNormalized.manifestPath)
+		_, uiManifest, err := providerpkg.ReadSourceManifestFile(uiNormalized.manifestPath)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", uiNormalized.manifestPath, err)
+		}
+		uiBuildDomains, err := sourceBuildPathDomains(uiNormalized.sourceDir, uiManifest)
+		if err != nil {
+			return nil, err
+		}
+		domainPaths = append(domainPaths, uiBuildDomains...)
+	}
+	return normalizePathDomains(domainPaths...)
 }
 
 func synthesizePluginOwnedUIEntries(cfg *config.Config) error {
