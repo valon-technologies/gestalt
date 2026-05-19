@@ -1727,14 +1727,14 @@ func (m *stubWorkflowManager) ResumeEventTrigger(_ context.Context, p *principal
 	return cloneManagedEventTrigger(value), nil
 }
 
-func (m *stubWorkflowManager) ListRuns(context.Context, *principal.Principal, coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
+func (m *stubWorkflowManager) ListRuns(context.Context, *principal.Principal) ([]*workflowmanager.ManagedRun, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]*workflowmanager.ManagedRun, 0, len(m.runs))
 	for _, item := range m.runs {
 		out = append(out, cloneManagedRun(item))
 	}
-	return &workflowmanager.ListRunsResponse{Runs: out}, nil
+	return out, nil
 }
 
 func (m *stubWorkflowManager) StartRun(_ context.Context, p *principal.Principal, req workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {

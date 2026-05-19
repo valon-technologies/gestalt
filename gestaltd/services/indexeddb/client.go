@@ -240,28 +240,6 @@ func (o *remoteObjectStore) GetAllKeys(ctx context.Context, r *coreindexeddb.Key
 	return resp.GetKeys(), nil
 }
 
-func (o *remoteObjectStore) Query(ctx context.Context, req coreindexeddb.QueryRequest) (*coreindexeddb.QueryResponse, error) {
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	pbReq, err := objectStoreQueryRequestToProto(o.store, req)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := o.client.Query(ctx, pbReq)
-	if err != nil {
-		return nil, grpcToDatastoreErr(err)
-	}
-	records, err := recordsFromProto(resp.GetRecords())
-	if err != nil {
-		return nil, fmt.Errorf("unmarshal records: %w", err)
-	}
-	return &coreindexeddb.QueryResponse{
-		Records:       records,
-		Keys:          resp.GetKeys(),
-		NextPageToken: resp.GetNextPageToken(),
-	}, nil
-}
-
 func (o *remoteObjectStore) Count(ctx context.Context, r *coreindexeddb.KeyRange) (int64, error) {
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
@@ -1204,54 +1182,6 @@ func recordFromProto(record *proto.Record) (coreindexeddb.Record, error) {
 
 func recordsFromProto(records []*proto.Record) ([]coreindexeddb.Record, error) {
 	return indexeddbcodec.RecordsFromProto(records)
-}
-
-func objectStoreQueryRequestToProto(store string, req coreindexeddb.QueryRequest) (*proto.ObjectStoreQueryRequest, error) {
-	filters := make([]*proto.QueryFilter, 0, len(req.Filters))
-	for _, filter := range req.Filters {
-		value, err := typedValueFromAny(filter.Value)
-		if err != nil {
-			return nil, fmt.Errorf("filter %q: %w", filter.Column, err)
-		}
-		filters = append(filters, &proto.QueryFilter{Column: filter.Column, Value: value})
-	}
-	orderBy := make([]*proto.QueryOrder, 0, len(req.OrderBy))
-	for _, order := range req.OrderBy {
-		orderBy = append(orderBy, &proto.QueryOrder{Column: order.Column, Descending: order.Descending})
-	}
-	return &proto.ObjectStoreQueryRequest{
-		Store:     store,
-		Filters:   filters,
-		OrderBy:   orderBy,
-		PageSize:  int32(req.PageSize),
-		PageToken: req.PageToken,
-		KeysOnly:  req.KeysOnly,
-	}, nil
-}
-
-func objectStoreQueryRequestFromProto(req *proto.ObjectStoreQueryRequest) (coreindexeddb.QueryRequest, error) {
-	if req == nil {
-		return coreindexeddb.QueryRequest{}, nil
-	}
-	filters := make([]coreindexeddb.QueryFilter, 0, len(req.GetFilters()))
-	for _, filter := range req.GetFilters() {
-		value, err := anyFromTypedValue(filter.GetValue())
-		if err != nil {
-			return coreindexeddb.QueryRequest{}, fmt.Errorf("filter %q: %w", filter.GetColumn(), err)
-		}
-		filters = append(filters, coreindexeddb.QueryFilter{Column: filter.GetColumn(), Value: value})
-	}
-	orderBy := make([]coreindexeddb.QueryOrder, 0, len(req.GetOrderBy()))
-	for _, order := range req.GetOrderBy() {
-		orderBy = append(orderBy, coreindexeddb.QueryOrder{Column: order.GetColumn(), Descending: order.GetDescending()})
-	}
-	return coreindexeddb.QueryRequest{
-		Filters:   filters,
-		OrderBy:   orderBy,
-		PageSize:  int(req.GetPageSize()),
-		PageToken: req.GetPageToken(),
-		KeysOnly:  req.GetKeysOnly(),
-	}, nil
 }
 
 func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {

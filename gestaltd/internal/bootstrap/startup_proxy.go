@@ -432,7 +432,7 @@ func (p *startupWorkflowProviderProxy) GetRun(ctx context.Context, req coreworkf
 	return provider.GetRun(ctx, req)
 }
 
-func (p *startupWorkflowProviderProxy) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
+func (p *startupWorkflowProviderProxy) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
 	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err

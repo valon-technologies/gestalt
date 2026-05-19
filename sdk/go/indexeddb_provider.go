@@ -19,7 +19,6 @@ type IndexedDBProvider interface {
 	Clear(ctx context.Context, store string) error
 	GetAll(ctx context.Context, req IndexedDBObjectStoreRangeRequest) ([]Record, error)
 	GetAllKeys(ctx context.Context, req IndexedDBObjectStoreRangeRequest) ([]string, error)
-	Query(ctx context.Context, req IndexedDBObjectStoreQueryRequest) (*IndexedDBQueryResponse, error)
 	Count(ctx context.Context, req IndexedDBObjectStoreRangeRequest) (int64, error)
 	DeleteRange(ctx context.Context, req IndexedDBObjectStoreRangeRequest) (int64, error)
 
@@ -47,31 +46,6 @@ type IndexedDBRecordRequest struct {
 type IndexedDBObjectStoreRangeRequest struct {
 	Store string
 	Range *KeyRange
-}
-
-type IndexedDBQueryFilter struct {
-	Column string
-	Value  any
-}
-
-type IndexedDBQueryOrder struct {
-	Column     string
-	Descending bool
-}
-
-type IndexedDBObjectStoreQueryRequest struct {
-	Store     string
-	Filters   []IndexedDBQueryFilter
-	OrderBy   []IndexedDBQueryOrder
-	PageSize  int
-	PageToken string
-	KeysOnly  bool
-}
-
-type IndexedDBQueryResponse struct {
-	Records       []Record
-	Keys          []string
-	NextPageToken string
 }
 
 type IndexedDBIndexQueryRequest struct {

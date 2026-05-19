@@ -530,7 +530,6 @@ export {
   type ListWorkflowExecutionReferencesRequest,
   type ListWorkflowProviderEventTriggersRequest,
   type ListWorkflowProviderRunsRequest,
-  type ListWorkflowProviderRunsResponse,
   type ListWorkflowProviderSchedulesRequest,
   type ManagedWorkflowDefinition,
   type ManagedWorkflowEventTrigger,

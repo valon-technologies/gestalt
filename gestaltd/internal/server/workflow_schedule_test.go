@@ -95,7 +95,6 @@ type memoryWorkflowProvider struct {
 	pauseTriggerReqs     []coreworkflow.PauseEventTriggerRequest
 	resumeReqs           []coreworkflow.ResumeScheduleRequest
 	resumeTriggerReqs    []coreworkflow.ResumeEventTriggerRequest
-	listRunReqs          []coreworkflow.ListRunsRequest
 	cancelReqs           []coreworkflow.CancelRunRequest
 	nextUpsertErr        error
 	nextUpsertTriggerErr error
@@ -105,7 +104,6 @@ type memoryWorkflowProvider struct {
 	listTriggersErr      error
 	getRunErr            error
 	listRunsErr          error
-	listRunsNextPage     string
 	cancelRunErr         error
 	publishEventErr      error
 }
@@ -142,8 +140,7 @@ func (p *memoryWorkflowProvider) GetRun(_ context.Context, req coreworkflow.GetR
 	return cloneWorkflowRun(run), nil
 }
 
-func (p *memoryWorkflowProvider) ListRuns(_ context.Context, req coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
-	p.listRunReqs = append(p.listRunReqs, req)
+func (p *memoryWorkflowProvider) ListRuns(_ context.Context, _ coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
 	if p.listRunsErr != nil {
 		return nil, p.listRunsErr
 	}
@@ -153,7 +150,7 @@ func (p *memoryWorkflowProvider) ListRuns(_ context.Context, req coreworkflow.Li
 			out = append(out, cloneWorkflowRun(run))
 		}
 	}
-	return &coreworkflow.ListRunsResponse{Runs: out, NextPageToken: p.listRunsNextPage}, nil
+	return out, nil
 }
 
 func (p *memoryWorkflowProvider) CancelRun(_ context.Context, req coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {

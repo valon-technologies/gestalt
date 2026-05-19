@@ -30,7 +30,6 @@ const (
 	IndexedDB_Clear_FullMethodName             = "/gestalt.provider.v1.IndexedDB/Clear"
 	IndexedDB_GetAll_FullMethodName            = "/gestalt.provider.v1.IndexedDB/GetAll"
 	IndexedDB_GetAllKeys_FullMethodName        = "/gestalt.provider.v1.IndexedDB/GetAllKeys"
-	IndexedDB_Query_FullMethodName             = "/gestalt.provider.v1.IndexedDB/Query"
 	IndexedDB_Count_FullMethodName             = "/gestalt.provider.v1.IndexedDB/Count"
 	IndexedDB_DeleteRange_FullMethodName       = "/gestalt.provider.v1.IndexedDB/DeleteRange"
 	IndexedDB_IndexGet_FullMethodName          = "/gestalt.provider.v1.IndexedDB/IndexGet"
@@ -62,7 +61,6 @@ type IndexedDBClient interface {
 	Clear(ctx context.Context, in *ObjectStoreNameRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetAll(ctx context.Context, in *ObjectStoreRangeRequest, opts ...grpc.CallOption) (*RecordsResponse, error)
 	GetAllKeys(ctx context.Context, in *ObjectStoreRangeRequest, opts ...grpc.CallOption) (*KeysResponse, error)
-	Query(ctx context.Context, in *ObjectStoreQueryRequest, opts ...grpc.CallOption) (*RecordsPageResponse, error)
 	Count(ctx context.Context, in *ObjectStoreRangeRequest, opts ...grpc.CallOption) (*CountResponse, error)
 	DeleteRange(ctx context.Context, in *ObjectStoreRangeRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
 	// Index queries
@@ -181,16 +179,6 @@ func (c *indexedDBClient) GetAllKeys(ctx context.Context, in *ObjectStoreRangeRe
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(KeysResponse)
 	err := c.cc.Invoke(ctx, IndexedDB_GetAllKeys_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *indexedDBClient) Query(ctx context.Context, in *ObjectStoreQueryRequest, opts ...grpc.CallOption) (*RecordsPageResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(RecordsPageResponse)
-	err := c.cc.Invoke(ctx, IndexedDB_Query_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +310,6 @@ type IndexedDBServer interface {
 	Clear(context.Context, *ObjectStoreNameRequest) (*emptypb.Empty, error)
 	GetAll(context.Context, *ObjectStoreRangeRequest) (*RecordsResponse, error)
 	GetAllKeys(context.Context, *ObjectStoreRangeRequest) (*KeysResponse, error)
-	Query(context.Context, *ObjectStoreQueryRequest) (*RecordsPageResponse, error)
 	Count(context.Context, *ObjectStoreRangeRequest) (*CountResponse, error)
 	DeleteRange(context.Context, *ObjectStoreRangeRequest) (*DeleteResponse, error)
 	// Index queries
@@ -376,9 +363,6 @@ func (UnimplementedIndexedDBServer) GetAll(context.Context, *ObjectStoreRangeReq
 }
 func (UnimplementedIndexedDBServer) GetAllKeys(context.Context, *ObjectStoreRangeRequest) (*KeysResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetAllKeys not implemented")
-}
-func (UnimplementedIndexedDBServer) Query(context.Context, *ObjectStoreQueryRequest) (*RecordsPageResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Query not implemented")
 }
 func (UnimplementedIndexedDBServer) Count(context.Context, *ObjectStoreRangeRequest) (*CountResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Count not implemented")
@@ -611,24 +595,6 @@ func _IndexedDB_GetAllKeys_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _IndexedDB_Query_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ObjectStoreQueryRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(IndexedDBServer).Query(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: IndexedDB_Query_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(IndexedDBServer).Query(ctx, req.(*ObjectStoreQueryRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _IndexedDB_Count_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ObjectStoreRangeRequest)
 	if err := dec(in); err != nil {
@@ -833,10 +799,6 @@ var IndexedDB_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAllKeys",
 			Handler:    _IndexedDB_GetAllKeys_Handler,
-		},
-		{
-			MethodName: "Query",
-			Handler:    _IndexedDB_Query_Handler,
 		},
 		{
 			MethodName: "Count",

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"sync"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -303,70 +302,6 @@ func (o *stubObjectStore) GetAllKeys(_ context.Context, r *indexeddb.KeyRange) (
 	c := o.newCursor(indexeddb.CursorNext, true)
 	c.applyKeyRange(r)
 	return append([]string(nil), c.keys...), nil
-}
-
-func (o *stubObjectStore) Query(_ context.Context, req indexeddb.QueryRequest) (*indexeddb.QueryResponse, error) {
-	if o.db.Err != nil {
-		return nil, o.db.Err
-	}
-	done := o.readSchedule()
-	defer done()
-	c := o.newCursor(indexeddb.CursorNext, req.KeysOnly)
-	items := make([]string, 0, len(c.keys))
-	for _, key := range c.keys {
-		record := c.snapshot[key]
-		matches := true
-		for _, filter := range req.Filters {
-			if compareIndexKeys(record[filter.Column], filter.Value) != 0 {
-				matches = false
-				break
-			}
-		}
-		if matches {
-			items = append(items, key)
-		}
-	}
-	sort.SliceStable(items, func(i, j int) bool {
-		left := c.snapshot[items[i]]
-		right := c.snapshot[items[j]]
-		for _, order := range req.OrderBy {
-			cmp := compareIndexKeys(left[order.Column], right[order.Column])
-			if cmp == 0 {
-				continue
-			}
-			if order.Descending {
-				return cmp > 0
-			}
-			return cmp < 0
-		}
-		return items[i] < items[j]
-	})
-	offset := 0
-	if token := req.PageToken; token != "" {
-		if parsed, err := strconv.Atoi(token); err == nil && parsed > 0 {
-			offset = parsed
-		}
-	}
-	if offset > len(items) {
-		offset = len(items)
-	}
-	limit := req.PageSize
-	if limit <= 0 || limit > len(items)-offset {
-		limit = len(items) - offset
-	}
-	end := offset + limit
-	next := ""
-	if end < len(items) {
-		next = strconv.Itoa(end)
-	}
-	resp := &indexeddb.QueryResponse{Keys: append([]string(nil), items[offset:end]...), NextPageToken: next}
-	if !req.KeysOnly {
-		resp.Records = make([]indexeddb.Record, 0, limit)
-		for _, key := range items[offset:end] {
-			resp.Records = append(resp.Records, c.snapshot[key])
-		}
-	}
-	return resp, nil
 }
 
 func (o *stubObjectStore) Count(_ context.Context, r *indexeddb.KeyRange) (int64, error) {

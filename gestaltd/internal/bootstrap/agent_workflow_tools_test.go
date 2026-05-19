@@ -7,8 +7,6 @@ import (
 	"maps"
 	"net/http"
 	"reflect"
-	"sort"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -1489,100 +1487,6 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesSchedule(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *testing.T) {
-	t.Parallel()
-
-	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
-	listTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolRunsList)
-	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
-		Permissions: []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}},
-		ToolRefs: []coreagent.ToolRef{
-			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsList},
-			{Plugin: "roadmap", Operation: "sync"},
-		},
-		Tools: []coreagent.Tool{listTool},
-	})
-	roadmapTarget := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "roadmap", Operation: "sync"}}
-	notificationTarget := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"}}
-	workflowProvider.runs = map[string]*coreworkflow.Run{
-		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, ExecutionRef: "ref-a"},
-		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, ExecutionRef: "ref-b"},
-		"run-c": {ID: "run-c", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, ExecutionRef: "ref-c"},
-		"run-d": {ID: "run-d", Status: coreworkflow.RunStatusFailed, Target: roadmapTarget, ExecutionRef: "ref-d"},
-	}
-	for runID, run := range workflowProvider.runs {
-		_, err := workflowProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-			ID:           run.ExecutionRef,
-			ProviderName: "temporal",
-			Target:       run.Target,
-			SubjectID:    principal.UserSubjectID("ada"),
-			SubjectKind:  string(principal.KindUser),
-		})
-		if err != nil {
-			t.Fatalf("PutExecutionReference(%s): %v", runID, err)
-		}
-	}
-
-	firstResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
-		ProviderName: "managed",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		ToolCallID:   "runs-list-first",
-		ToolID:       listTool.ID,
-		RunGrant:     runGrant,
-		Arguments: map[string]any{
-			"pageSize": 1,
-			"plugin":   "roadmap",
-			"status":   string(coreworkflow.RunStatusSucceeded),
-		},
-	})
-	if err != nil {
-		t.Fatalf("ExecuteTool first list: %v", err)
-	}
-	var firstBody struct {
-		Runs []struct {
-			ID string `json:"id"`
-		} `json:"runs"`
-		NextPageToken string `json:"nextPageToken"`
-	}
-	if err := json.Unmarshal([]byte(firstResp.Body), &firstBody); err != nil {
-		t.Fatalf("decode first response body: %v", err)
-	}
-	if len(firstBody.Runs) != 1 || firstBody.Runs[0].ID != "run-a" || firstBody.NextPageToken == "" {
-		t.Fatalf("first page = %#v next=%q, want run-a and next token", firstBody.Runs, firstBody.NextPageToken)
-	}
-
-	secondResp, err := runtime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
-		ProviderName: "managed",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		ToolCallID:   "runs-list-second",
-		ToolID:       listTool.ID,
-		RunGrant:     runGrant,
-		Arguments: map[string]any{
-			"pageSize":  1,
-			"pageToken": firstBody.NextPageToken,
-			"plugin":    "roadmap",
-			"status":    string(coreworkflow.RunStatusSucceeded),
-		},
-	})
-	if err != nil {
-		t.Fatalf("ExecuteTool second list: %v", err)
-	}
-	var secondBody struct {
-		Runs []struct {
-			ID string `json:"id"`
-		} `json:"runs"`
-		NextPageToken string `json:"nextPageToken"`
-	}
-	if err := json.Unmarshal([]byte(secondResp.Body), &secondBody); err != nil {
-		t.Fatalf("decode second response body: %v", err)
-	}
-	if len(secondBody.Runs) != 1 || secondBody.Runs[0].ID != "run-c" || secondBody.NextPageToken != "" {
-		t.Fatalf("second page = %#v next=%q, want final run-c page", secondBody.Runs, secondBody.NextPageToken)
-	}
-}
-
 func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *testing.T) {
 	t.Parallel()
 
@@ -1996,45 +1900,13 @@ func (p *workflowSystemToolRecordingProvider) GetRun(_ context.Context, req core
 	}
 	return nil, core.ErrNotFound
 }
-func (p *workflowSystemToolRecordingProvider) ListRuns(_ context.Context, req coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
+func (p *workflowSystemToolRecordingProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
 	out := make([]*coreworkflow.Run, 0, len(p.runs))
-	ids := make([]string, 0, len(p.runs))
-	for id := range p.runs {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		run := p.runs[id]
-		if req.TargetPlugin != "" && (run.Target.Plugin == nil || run.Target.Plugin.PluginName != req.TargetPlugin) {
-			continue
-		}
-		if req.Status != "" && run.Status != req.Status {
-			continue
-		}
+	for _, run := range p.runs {
 		value := *run
 		out = append(out, &value)
 	}
-	start := 0
-	if req.PageToken != "" {
-		parsed, err := strconv.Atoi(req.PageToken)
-		if err != nil || parsed < 0 || parsed > len(out) {
-			return nil, errors.New("invalid page token")
-		}
-		start = parsed
-	}
-	pageSize := req.PageSize
-	if pageSize <= 0 || pageSize > len(out) {
-		pageSize = len(out)
-	}
-	end := start + pageSize
-	if end > len(out) {
-		end = len(out)
-	}
-	nextPageToken := ""
-	if end < len(out) {
-		nextPageToken = strconv.Itoa(end)
-	}
-	return &coreworkflow.ListRunsResponse{Runs: out[start:end], NextPageToken: nextPageToken}, nil
+	return out, nil
 }
 func (p *workflowSystemToolRecordingProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil

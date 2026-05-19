@@ -121,31 +121,6 @@ class IndexedDBOpenCursorRequest:
 
 
 @dataclass
-class IndexedDBQueryFilter:
-    """Equality filter for object-store query helpers."""
-
-    column: str
-    value: Any
-
-
-@dataclass
-class IndexedDBQueryOrder:
-    """Sort order for object-store query helpers."""
-
-    column: str
-    descending: bool = False
-
-
-@dataclass
-class IndexedDBQueryResponse:
-    """Bounded object-store query result page."""
-
-    records: list[dict[str, Any]] = field(default_factory=list)
-    keys: list[str] = field(default_factory=list)
-    next_page_token: str = ""
-
-
-@dataclass
 class IndexedDBCursorSnapshotEntry:
     """One provider-side cursor row.
 
@@ -533,34 +508,6 @@ class ObjectStore:
             ),
         )
         return list(resp.keys)
-
-    def query(
-        self,
-        filters: list[IndexedDBQueryFilter] | None = None,
-        order_by: list[IndexedDBQueryOrder] | None = None,
-        *,
-        page_size: int = 0,
-        page_token: str = "",
-        keys_only: bool = False,
-    ) -> IndexedDBQueryResponse:
-        """Return a bounded page of records matching query filters."""
-
-        resp = _grpc_call(
-            self._stub.Query,
-            pb.ObjectStoreQueryRequest(
-                store=self._store,
-                filters=[_query_filter_to_proto(f) for f in (filters or [])],
-                order_by=[_query_order_to_proto(o) for o in (order_by or [])],
-                page_size=int(page_size),
-                page_token=page_token,
-                keys_only=keys_only,
-            ),
-        )
-        return IndexedDBQueryResponse(
-            records=[_record_to_dict(r) for r in resp.records],
-            keys=list(resp.keys),
-            next_page_token=resp.next_page_token,
-        )
 
     def count(self, key_range: KeyRange | None = None) -> int:
         """Return the number of matching records."""
@@ -1404,14 +1351,6 @@ def _dict_to_record(d: dict[str, Any]) -> Any:
 
 def _record_to_dict(record: Any) -> dict[str, Any]:
     return {key: _typed_value_to_python(value) for key, value in record.fields.items()}
-
-
-def _query_filter_to_proto(filter: IndexedDBQueryFilter) -> Any:
-    return pb.QueryFilter(column=filter.column, value=_to_typed_value(filter.value))
-
-
-def _query_order_to_proto(order: IndexedDBQueryOrder) -> Any:
-    return pb.QueryOrder(column=order.column, descending=order.descending)
 
 
 def _to_typed_value(v: Any) -> Any:

@@ -129,13 +129,6 @@ func (s *instrumentedObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.K
 	return keys, err
 }
 
-func (s *instrumentedObjectStore) Query(ctx context.Context, req indexeddb.QueryRequest) (*indexeddb.QueryResponse, error) {
-	startedAt := time.Now()
-	resp, err := s.inner.Query(ctx, req)
-	RecordIndexedDBOperation(ctx, startedAt, s.labels, "Query", err)
-	return resp, err
-}
-
 func (s *instrumentedObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
 	startedAt := time.Now()
 	n, err := s.inner.Count(ctx, r)
