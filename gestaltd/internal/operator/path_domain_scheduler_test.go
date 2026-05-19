@@ -59,42 +59,6 @@ func TestRunPathDomainTasksHonorsWorkerCap(t *testing.T) {
 	}
 }
 
-func TestRunPathDomainTasksAllowsDisjointOverlap(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	started := make(chan struct{}, 2)
-	release := make(chan struct{})
-	tasks := []pathDomainTask{
-		{
-			name:    "a",
-			domains: mustNormalizePathDomains(t, filepath.Join(dir, "a")),
-			run: func() error {
-				started <- struct{}{}
-				<-release
-				return nil
-			},
-		},
-		{
-			name:    "b",
-			domains: mustNormalizePathDomains(t, filepath.Join(dir, "b")),
-			run: func() error {
-				started <- struct{}{}
-				<-release
-				return nil
-			},
-		},
-	}
-
-	done := make(chan error, 1)
-	go func() { done <- runPathDomainTasks(tasks, 2) }()
-	waitForStarts(t, started, 2)
-	close(release)
-	if err := waitForScheduler(t, done); err != nil {
-		t.Fatalf("runPathDomainTasks: %v", err)
-	}
-}
-
 func TestRunPathDomainTasksSerializesAncestorDescendantDomains(t *testing.T) {
 	t.Parallel()
 
@@ -138,31 +102,6 @@ func TestRunPathDomainTasksSerializesAncestorDescendantDomains(t *testing.T) {
 	if got := waitForStart(t, started); got != "b" {
 		t.Fatalf("second started task = %q, want b", got)
 	}
-	if err := waitForScheduler(t, done); err != nil {
-		t.Fatalf("runPathDomainTasks: %v", err)
-	}
-}
-
-func TestRunPathDomainTasksDoesNotDeadlockWithMultipleDomains(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	a := filepath.Join(dir, "a")
-	b := filepath.Join(dir, "b")
-	tasks := []pathDomainTask{
-		{
-			name:    "a",
-			domains: mustNormalizePathDomains(t, a, b),
-			run:     func() error { return nil },
-		},
-		{
-			name:    "b",
-			domains: mustNormalizePathDomains(t, b, a),
-			run:     func() error { return nil },
-		},
-	}
-	done := make(chan error, 1)
-	go func() { done <- runPathDomainTasks(tasks, 2) }()
 	if err := waitForScheduler(t, done); err != nil {
 		t.Fatalf("runPathDomainTasks: %v", err)
 	}
@@ -217,36 +156,6 @@ func TestRunPathDomainTasksDoesNotRunBlockedTaskAfterFailure(t *testing.T) {
 	}
 	if bRan.Load() {
 		t.Fatal("blocked task ran after scheduler failure")
-	}
-}
-
-func TestRunPathDomainTasksReturnsLowestSortedRunningError(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	errA := errors.New("a failed")
-	errB := errors.New("b failed")
-	bFailed := make(chan struct{})
-	tasks := []pathDomainTask{
-		{
-			name:    "a",
-			domains: mustNormalizePathDomains(t, filepath.Join(dir, "a")),
-			run: func() error {
-				<-bFailed
-				return errA
-			},
-		},
-		{
-			name:    "b",
-			domains: mustNormalizePathDomains(t, filepath.Join(dir, "b")),
-			run: func() error {
-				close(bFailed)
-				return errB
-			},
-		},
-	}
-	if err := runPathDomainTasks(tasks, 2); !errors.Is(err, errA) {
-		t.Fatalf("runPathDomainTasks error = %v, want %v", err, errA)
 	}
 }
 

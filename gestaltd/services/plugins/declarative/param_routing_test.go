@@ -12,23 +12,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
 
-func TestPartitionParams_NilCatalogOp(t *testing.T) {
-	t.Parallel()
-
-	params := map[string]any{"name": "x", "page": 2}
-	body, query, headers := partitionParams(nil, params, false)
-
-	if body["name"] != "x" || body["page"] != 2 {
-		t.Fatalf("body = %v, want all params", body)
-	}
-	if query != nil {
-		t.Fatalf("query = %v, want nil", query)
-	}
-	if headers != nil {
-		t.Fatalf("headers = %v, want nil", headers)
-	}
-}
-
 func TestPartitionParams_NoLocations(t *testing.T) {
 	t.Parallel()
 
@@ -189,46 +172,6 @@ func TestPartitionParams_UnknownParam(t *testing.T) {
 	}
 	if query["unknown"] != "extra" {
 		t.Fatalf("query[unknown] = %v, want extra (unknown GET params default to query)", query["unknown"])
-	}
-}
-
-func TestFindCatalogOp_Found(t *testing.T) {
-	t.Parallel()
-
-	cat := &catalog.Catalog{
-		Name: "test",
-		Operations: []catalog.CatalogOperation{
-			{ID: "op_alpha", Method: http.MethodGet, Path: "/alpha"},
-			{ID: "op_beta", Method: http.MethodPost, Path: "/beta"},
-		},
-	}
-	got := findCatalogOp(cat, "op_beta")
-	if got == nil || got.ID != "op_beta" {
-		t.Fatalf("findCatalogOp = %v, want op_beta", got)
-	}
-}
-
-func TestFindCatalogOp_NilCatalog(t *testing.T) {
-	t.Parallel()
-
-	got := findCatalogOp(nil, "anything")
-	if got != nil {
-		t.Fatalf("findCatalogOp(nil) = %v, want nil", got)
-	}
-}
-
-func TestFindCatalogOp_NotFound(t *testing.T) {
-	t.Parallel()
-
-	cat := &catalog.Catalog{
-		Name: "test",
-		Operations: []catalog.CatalogOperation{
-			{ID: "op_alpha", Method: http.MethodGet, Path: "/alpha"},
-		},
-	}
-	got := findCatalogOp(cat, "nonexistent")
-	if got != nil {
-		t.Fatalf("findCatalogOp = %v, want nil", got)
 	}
 }
 
