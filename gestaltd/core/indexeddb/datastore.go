@@ -26,30 +26,6 @@ const (
 
 type Record = map[string]any
 
-type QueryFilter struct {
-	Column string
-	Value  any
-}
-
-type QueryOrder struct {
-	Column     string
-	Descending bool
-}
-
-type QueryRequest struct {
-	Filters   []QueryFilter
-	OrderBy   []QueryOrder
-	PageSize  int
-	PageToken string
-	KeysOnly  bool
-}
-
-type QueryResponse struct {
-	Records       []Record
-	Keys          []string
-	NextPageToken string
-}
-
 // TransactionMode controls whether a transaction may mutate scoped stores.
 type TransactionMode string
 
@@ -131,7 +107,6 @@ type ObjectStore interface {
 	Clear(ctx context.Context) error
 	GetAll(ctx context.Context, r *KeyRange) ([]Record, error)
 	GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error)
-	Query(ctx context.Context, req QueryRequest) (*QueryResponse, error)
 	Count(ctx context.Context, r *KeyRange) (int64, error)
 	DeleteRange(ctx context.Context, r KeyRange) (int64, error)
 

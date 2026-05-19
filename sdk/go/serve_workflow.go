@@ -40,12 +40,7 @@ func (s workflowProviderServer) GetRun(ctx context.Context, req *proto.GetWorkfl
 }
 
 func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
-	resp, err := s.provider.ListRuns(ctx, &ListWorkflowProviderRunsRequest{
-		PageSize:     int(req.GetPageSize()),
-		PageToken:    req.GetPageToken(),
-		TargetPlugin: req.GetTargetPlugin(),
-		Status:       WorkflowRunStatus(req.GetStatus()),
-	})
+	resp, err := s.provider.ListRuns(ctx, &ListWorkflowProviderRunsRequest{})
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
 	}
@@ -53,10 +48,7 @@ func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWor
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
 	}
-	return &proto.ListWorkflowProviderRunsResponse{
-		Runs:          runs,
-		NextPageToken: resp.GetNextPageToken(),
-	}, nil
+	return &proto.ListWorkflowProviderRunsResponse{Runs: runs}, nil
 }
 
 func (s workflowProviderServer) CancelRun(ctx context.Context, req *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {

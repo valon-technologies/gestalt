@@ -32,11 +32,6 @@ type workflowRunResponse struct {
 	} `json:"trigger"`
 }
 
-type workflowRunListResponse struct {
-	Runs          []workflowRunResponse `json:"runs"`
-	NextPageToken string                `json:"nextPageToken,omitempty"`
-}
-
 func workflowPluginTarget(pluginName, operation string) coreworkflow.Target {
 	return workflowPluginTargetWithRouting(pluginName, operation, "", "")
 }
@@ -154,24 +149,18 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 	if listResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", listResp.StatusCode)
 	}
-	var listedResp workflowRunListResponse
-	if err := json.NewDecoder(listResp.Body).Decode(&listedResp); err != nil {
+	var listed []workflowRunResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
-	listed := listedResp.Runs
 	if len(listed) != 2 {
 		t.Fatalf("listed runs = %#v, want 2 items", listed)
 	}
-	byID := map[string]workflowRunResponse{}
-	for _, run := range listed {
-		byID[run.ID] = run
+	if listed[0].ID != "run-new" || listed[1].ID != "run-old" {
+		t.Fatalf("listed run order = %#v", listed)
 	}
-	if _, ok := byID["run-new"]; !ok {
-		t.Fatalf("listed runs = %#v, missing run-new", listed)
-	}
-	old := byID["run-old"]
-	if old.Trigger.Kind != "schedule" || old.Trigger.ScheduleID != "sched-old" {
-		t.Fatalf("historical trigger = %#v", old.Trigger)
+	if listed[1].Trigger.Kind != "schedule" || listed[1].Trigger.ScheduleID != "sched-old" {
+		t.Fatalf("historical trigger = %#v", listed[1].Trigger)
 	}
 
 	getReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/runs/run-old", nil)
@@ -190,101 +179,6 @@ func TestGlobalWorkflowRunInspectionIncludesHistoricalRevokedRefs(t *testing.T) 
 	}
 	if got.ID != "run-old" || got.Status != string(coreworkflow.RunStatusSucceeded) {
 		t.Fatalf("run = %#v", got)
-	}
-}
-
-func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
-	t.Parallel()
-
-	services := testutil.NewStubServices(t)
-	user := seedUser(t, services, "ada@example.test")
-	provider := newMemoryWorkflowProvider()
-	provider.listRunsNextPage = "next-run-page"
-
-	now := time.Now().UTC().Truncate(time.Second)
-	provider.runs["run-page"] = &coreworkflow.Run{
-		ID:           "run-page",
-		Status:       coreworkflow.RunStatusRunning,
-		Target:       workflowPluginTarget("roadmap", "sync"),
-		ExecutionRef: "workflow_run:page:ref",
-		CreatedAt:    &now,
-	}
-	if _, err := provider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "workflow_run:page:ref",
-		ProviderName: "basic",
-		Target:       provider.runs["run-page"].Target,
-		SubjectID:    principal.UserSubjectID(user.ID),
-	}); err != nil {
-		t.Fatalf("Put execution ref: %v", err)
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = &coretesting.StubAuthProvider{
-			N: "stub",
-			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "ada-session" {
-					return nil, core.ErrNotFound
-				}
-				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
-			},
-		}
-		cfg.Services = services
-		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
-			N:        "roadmap",
-			ConnMode: core.ConnectionModeNone,
-			CatalogVal: &catalog.Catalog{
-				Name:       "roadmap",
-				Operations: []catalog.CatalogOperation{{ID: "sync", Method: http.MethodPost}},
-			},
-		})
-		cfg.Workflow = &stubWorkflowControl{
-			defaultProviderName: "basic",
-			provider:            provider,
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/runs/?pageSize=17&plugin=roadmap&status=running", nil)
-	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	listResp, err := http.DefaultClient.Do(listReq)
-	if err != nil {
-		t.Fatalf("list request: %v", err)
-	}
-	defer func() { _ = listResp.Body.Close() }()
-	if listResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", listResp.StatusCode)
-	}
-	var listed workflowRunListResponse
-	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
-		t.Fatalf("decode list response: %v", err)
-	}
-	if listed.NextPageToken == "" || len(listed.Runs) != 1 || listed.Runs[0].ID != "run-page" {
-		t.Fatalf("list response = %#v", listed)
-	}
-	if len(provider.listRunReqs) != 1 {
-		t.Fatalf("provider list requests = %#v, want 1", provider.listRunReqs)
-	}
-	got := provider.listRunReqs[0]
-	if got.PageSize != 17 || got.PageToken != "" || got.TargetPlugin != "roadmap" || got.Status != coreworkflow.RunStatusRunning {
-		t.Fatalf("provider list request = %#v", got)
-	}
-
-	nextReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/runs/?pageSize=17&pageToken="+listed.NextPageToken+"&plugin=roadmap&status=running", nil)
-	nextReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
-	nextResp, err := http.DefaultClient.Do(nextReq)
-	if err != nil {
-		t.Fatalf("next list request: %v", err)
-	}
-	defer func() { _ = nextResp.Body.Close() }()
-	if nextResp.StatusCode != http.StatusOK {
-		t.Fatalf("expected next 200, got %d", nextResp.StatusCode)
-	}
-	if len(provider.listRunReqs) != 2 {
-		t.Fatalf("provider list requests = %#v, want 2", provider.listRunReqs)
-	}
-	got = provider.listRunReqs[1]
-	if got.PageSize != 17 || got.PageToken != "next-run-page" || got.TargetPlugin != "roadmap" || got.Status != coreworkflow.RunStatusRunning {
-		t.Fatalf("next provider list request = %#v", got)
 	}
 }
 
@@ -382,11 +276,10 @@ func TestGlobalWorkflowRunInspectionAPITokenScopeFiltersOperations(t *testing.T)
 	if listResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", listResp.StatusCode)
 	}
-	var listedResp workflowRunListResponse
-	if err := json.NewDecoder(listResp.Body).Decode(&listedResp); err != nil {
+	var listed []workflowRunResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
 		t.Fatalf("decode list response: %v", err)
 	}
-	listed := listedResp.Runs
 	if len(listed) != 1 || listed[0].ID != "run-sync" {
 		t.Fatalf("listed runs = %#v", listed)
 	}

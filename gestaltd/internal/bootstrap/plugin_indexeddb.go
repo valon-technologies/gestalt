@@ -132,10 +132,6 @@ func (missingObjectStore) GetAllKeys(context.Context, *indexeddb.KeyRange) ([]st
 	return nil, indexeddb.ErrNotFound
 }
 
-func (missingObjectStore) Query(context.Context, indexeddb.QueryRequest) (*indexeddb.QueryResponse, error) {
-	return nil, indexeddb.ErrNotFound
-}
-
 func (missingObjectStore) Count(context.Context, *indexeddb.KeyRange) (int64, error) {
 	return 0, indexeddb.ErrNotFound
 }

@@ -73,13 +73,6 @@ message RecordsResponse {
   repeated Record records = 1;
 }
 
-// RecordsPageResponse wraps one bounded query page.
-message RecordsPageResponse {
-  repeated Record records = 1;
-  repeated string keys = 2;
-  string next_page_token = 3;
-}
-
 // KeysResponse wraps repeated primary keys.
 message KeysResponse {
   repeated string keys = 1;
@@ -100,25 +93,6 @@ message ObjectStoreNameRequest {
 message ObjectStoreRangeRequest {
   string store = 1;
   optional KeyRange range = 2;
-}
-
-message QueryFilter {
-  string column = 1;
-  TypedValue value = 2;
-}
-
-message QueryOrder {
-  string column = 1;
-  bool descending = 2;
-}
-
-message ObjectStoreQueryRequest {
-  string store = 1;
-  repeated QueryFilter filters = 2;
-  repeated QueryOrder order_by = 3;
-  int32 page_size = 4;
-  string page_token = 5;
-  bool keys_only = 6;
 }
 
 // CreateObjectStoreRequest creates a new object store.
@@ -351,7 +325,6 @@ service IndexedDB {
   rpc Clear(ObjectStoreNameRequest) returns (google.protobuf.Empty);
   rpc GetAll(ObjectStoreRangeRequest) returns (RecordsResponse);
   rpc GetAllKeys(ObjectStoreRangeRequest) returns (KeysResponse);
-  rpc Query(ObjectStoreQueryRequest) returns (RecordsPageResponse);
   rpc Count(ObjectStoreRangeRequest) returns (CountResponse);
   rpc DeleteRange(ObjectStoreRangeRequest) returns (DeleteResponse);
 

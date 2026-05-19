@@ -219,17 +219,7 @@ type GetRunRequest struct {
 	RunID string
 }
 
-type ListRunsRequest struct {
-	PageSize     int
-	PageToken    string
-	TargetPlugin string
-	Status       RunStatus
-}
-
-type ListRunsResponse struct {
-	Runs          []*Run
-	NextPageToken string
-}
+type ListRunsRequest struct{}
 
 type CancelRunRequest struct {
 	RunID  string
@@ -349,7 +339,7 @@ type InvokeOperationResponse struct {
 type Provider interface {
 	StartRun(ctx context.Context, req StartRunRequest) (*Run, error)
 	GetRun(ctx context.Context, req GetRunRequest) (*Run, error)
-	ListRuns(ctx context.Context, req ListRunsRequest) (*ListRunsResponse, error)
+	ListRuns(ctx context.Context, req ListRunsRequest) ([]*Run, error)
 	CancelRun(ctx context.Context, req CancelRunRequest) (*Run, error)
 	SignalRun(ctx context.Context, req SignalRunRequest) (*SignalRunResponse, error)
 	SignalOrStartRun(ctx context.Context, req SignalOrStartRunRequest) (*SignalRunResponse, error)

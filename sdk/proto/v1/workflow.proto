@@ -238,16 +238,10 @@ message GetWorkflowProviderRunRequest {
   string run_id = 2;
 }
 
-message ListWorkflowProviderRunsRequest {
-  int32 page_size = 1;
-  string page_token = 2;
-  string target_plugin = 3;
-  WorkflowRunStatus status = 4;
-}
+message ListWorkflowProviderRunsRequest {}
 
 message ListWorkflowProviderRunsResponse {
   repeated BoundWorkflowRun runs = 1;
-  string next_page_token = 2;
 }
 
 message CancelWorkflowProviderRunRequest {

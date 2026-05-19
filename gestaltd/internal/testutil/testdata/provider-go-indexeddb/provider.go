@@ -3,8 +3,6 @@ package provider
 import (
 	"context"
 	"reflect"
-	"sort"
-	"strconv"
 	"sync"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
@@ -146,58 +144,6 @@ func (p *Provider) GetAllKeys(_ context.Context, req gestalt.IndexedDBObjectStor
 		keys = append(keys, k)
 	}
 	return keys, nil
-}
-
-func (p *Provider) Query(_ context.Context, req gestalt.IndexedDBObjectStoreQueryRequest) (*gestalt.IndexedDBQueryResponse, error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	s, ok := p.stores[req.Store]
-	if !ok {
-		return &gestalt.IndexedDBQueryResponse{}, nil
-	}
-	keys := make([]string, 0, len(s.records))
-	for key, rec := range s.records {
-		matches := true
-		for _, filter := range req.Filters {
-			if !reflect.DeepEqual(rec[filter.Column], filter.Value) {
-				matches = false
-				break
-			}
-		}
-		if matches {
-			keys = append(keys, key)
-		}
-	}
-	sort.Strings(keys)
-	offset := 0
-	if req.PageToken != "" {
-		parsed, err := strconv.Atoi(req.PageToken)
-		if err != nil {
-			return nil, gestalt.InvalidArgument("invalid page token")
-		}
-		offset = parsed
-	}
-	if offset > len(keys) {
-		offset = len(keys)
-	}
-	limit := req.PageSize
-	if limit <= 0 || limit > len(keys)-offset {
-		limit = len(keys) - offset
-	}
-	end := offset + limit
-	resp := &gestalt.IndexedDBQueryResponse{
-		Keys: keys[offset:end],
-	}
-	if end < len(keys) {
-		resp.NextPageToken = strconv.Itoa(end)
-	}
-	if !req.KeysOnly {
-		resp.Records = make([]gestalt.Record, 0, limit)
-		for _, key := range keys[offset:end] {
-			resp.Records = append(resp.Records, cloneRecord(s.records[key]))
-		}
-	}
-	return resp, nil
 }
 
 func (p *Provider) Count(_ context.Context, req gestalt.IndexedDBObjectStoreRangeRequest) (int64, error) {

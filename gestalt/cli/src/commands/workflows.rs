@@ -183,61 +183,14 @@ pub fn list_runs(
     client: &ApiClient,
     plugin: Option<&str>,
     status: Option<&str>,
-    page_size: Option<u32>,
-    page_token: Option<&str>,
-    all: bool,
     format: Format,
 ) -> Result<()> {
-    if all {
-        let mut runs = Vec::new();
-        let mut next = page_token.map(str::to_string);
-        loop {
-            let path = runs_path(plugin, status, page_size, next.as_deref())?;
-            let resp = client.get(&path).context("failed to list workflow runs")?;
-            runs.extend(workflow_run_items(&resp));
-            let Some(token) = next_page_token(&resp).map(str::to_string) else {
-                break;
-            };
-            if next.as_deref() == Some(token.as_str()) {
-                return Err(anyhow!("workflow runs response repeated nextPageToken"));
-            }
-            next = Some(token);
-        }
-        print_runs(&json!({ "runs": runs }), format);
-        return Ok(());
-    }
-    let path = runs_path(plugin, status, page_size, page_token)?;
-    let resp = client.get(&path).context("failed to list workflow runs")?;
-    print_runs(&resp, format);
+    let resp = client
+        .get(RUNS_PATH)
+        .context("failed to list workflow runs")?;
+    let filtered = filter_runs(resp, plugin, status);
+    print_runs(&filtered, format);
     Ok(())
-}
-
-fn runs_path(
-    plugin: Option<&str>,
-    status: Option<&str>,
-    page_size: Option<u32>,
-    page_token: Option<&str>,
-) -> Result<String> {
-    let mut params = Vec::new();
-    push_query_param(&mut params, "plugin", plugin);
-    push_query_param(&mut params, "status", status);
-    if let Some(page_size) = page_size {
-        params.push(("pageSize".to_string(), page_size.to_string()));
-    }
-    push_query_param(&mut params, "pageToken", page_token);
-    if params.is_empty() {
-        return Ok(RUNS_PATH.to_string());
-    }
-    Ok(format!(
-        "{RUNS_PATH}?{}",
-        serde_urlencoded::to_string(params).context("failed to encode query")?
-    ))
-}
-
-fn push_query_param(params: &mut Vec<(String, String)>, name: &str, value: Option<&str>) {
-    if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
-        params.push((name.to_string(), value.to_string()));
-    }
 }
 
 pub fn get_run(client: &ApiClient, id: &str, format: Format) -> Result<()> {
@@ -295,6 +248,25 @@ fn filter_by_plugin(value: Value, plugin: Option<&str>) -> Value {
         items
             .into_iter()
             .filter(|item| target_plugin(item) == Some(plugin))
+            .collect(),
+    )
+}
+
+fn filter_runs(value: Value, plugin: Option<&str>, status: Option<&str>) -> Value {
+    let Value::Array(items) = value else {
+        return value;
+    };
+    Value::Array(
+        items
+            .into_iter()
+            .filter(|item| {
+                plugin
+                    .map(|plugin| target_plugin(item) == Some(plugin))
+                    .unwrap_or(true)
+                    && status
+                        .map(|status| item["status"].as_str() == Some(status))
+                        .unwrap_or(true)
+            })
             .collect(),
     )
 }
@@ -735,31 +707,11 @@ fn print_runs(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let items = workflow_run_items(value);
+            let items = value.as_array().cloned().unwrap_or_default();
             let rows: Vec<Vec<String>> = items.iter().map(run_row).collect();
             output::print_table(&run_headers(), &rows);
-            if let Some(token) = next_page_token(value) {
-                eprintln!("Next page token: {token}");
-            }
         }
     }
-}
-
-fn workflow_run_items(value: &Value) -> Vec<Value> {
-    value
-        .get("runs")
-        .and_then(Value::as_array)
-        .or_else(|| value.as_array())
-        .cloned()
-        .unwrap_or_default()
-}
-
-fn next_page_token(value: &Value) -> Option<&str> {
-    value
-        .get("nextPageToken")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|token| !token.is_empty())
 }
 
 fn print_published_event(value: &Value, format: Format) {

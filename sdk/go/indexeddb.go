@@ -465,28 +465,6 @@ func (o *ObjectStoreClient) GetAllKeys(ctx context.Context, r *KeyRange) ([]stri
 	return resp.GetKeys(), nil
 }
 
-// Query returns a bounded, ordered page from the object store.
-func (o *ObjectStoreClient) Query(ctx context.Context, req IndexedDBObjectStoreQueryRequest) (*IndexedDBQueryResponse, error) {
-	req.Store = o.store
-	pbReq, err := objectStoreQueryRequestToProto(req)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := o.client.Query(ctx, pbReq)
-	if err != nil {
-		return nil, grpcErr(err)
-	}
-	records, err := recordsFromProto(resp.GetRecords())
-	if err != nil {
-		return nil, fmt.Errorf("unmarshal records: %w", err)
-	}
-	return &IndexedDBQueryResponse{
-		Records:       records,
-		Keys:          resp.GetKeys(),
-		NextPageToken: resp.GetNextPageToken(),
-	}, nil
-}
-
 // Count returns the number of records that match r.
 func (o *ObjectStoreClient) Count(ctx context.Context, r *KeyRange) (int64, error) {
 	kr, err := krToProto(r)

@@ -938,7 +938,10 @@ def bound_workflow_agent_target(value: Any | None = None, **kwargs: Any) -> Any:
         session_ready_delivery=workflow_output_delivery(session_ready_delivery)
         if session_ready_delivery is not None
         else None,
-        steps=[workflow_agent_step(step) for step in (data.get("steps") or [])],
+        steps=[
+            workflow_agent_step(step)
+            for step in (data.get("steps") or [])
+        ],
     )
 
 
@@ -1807,7 +1810,9 @@ def workflow_manager_run_signal_from_proto(value: Any) -> WorkflowManagerRunSign
 def workflow_manager_definition_from_proto(value: Any) -> WorkflowManagerDefinition:
     return WorkflowManagerDefinition(
         provider_name=value.provider_name,
-        definition=workflow_manager_bound_definition_from_definition(value.definition)
+        definition=workflow_manager_bound_definition_from_definition(
+            value.definition
+        )
         if has_field(value, "definition")
         else None,
     )
@@ -1922,18 +1927,12 @@ class GetWorkflowProviderRunRequest:
 class ListWorkflowProviderRunsRequest:
     """List-runs request passed to workflow providers."""
 
-    page_size: int = 0
-    page_token: str = ""
-    target_plugin: str = ""
-    status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
-
 
 @_dataclasses.dataclass(slots=True)
 class ListWorkflowProviderRunsResponse:
     """Runs returned by workflow providers."""
 
     runs: Sequence[Any] | None = None
-    next_page_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
@@ -2139,14 +2138,9 @@ def get_workflow_provider_run_request_from_proto(
 
 
 def list_workflow_provider_runs_request_from_proto(
-    value: Any,
+    _value: Any,
 ) -> ListWorkflowProviderRunsRequest:
-    return ListWorkflowProviderRunsRequest(
-        page_size=int(value.page_size),
-        page_token=value.page_token,
-        target_plugin=value.target_plugin,
-        status=value.status,
-    )
+    return ListWorkflowProviderRunsRequest()
 
 
 def list_workflow_provider_runs_response_to_proto(value: Any) -> Any:
@@ -2158,8 +2152,7 @@ def list_workflow_provider_runs_response_to_proto(value: Any) -> Any:
         "ListWorkflowProviderRunsResponse",
     )
     return pb.ListWorkflowProviderRunsResponse(
-        runs=[bound_workflow_run(item) for item in (response.runs or [])],
-        next_page_token=response.next_page_token,
+        runs=[bound_workflow_run(item) for item in (response.runs or [])]
     )
 
 
@@ -2253,7 +2246,9 @@ def list_workflow_provider_schedules_response_to_proto(value: Any) -> Any:
         "ListWorkflowProviderSchedulesResponse",
     )
     return pb.ListWorkflowProviderSchedulesResponse(
-        schedules=[bound_workflow_schedule(item) for item in (response.schedules or [])]
+        schedules=[
+            bound_workflow_schedule(item) for item in (response.schedules or [])
+        ]
     )
 
 
@@ -2371,7 +2366,8 @@ def list_workflow_execution_references_response_to_proto(value: Any) -> Any:
     )
     return pb.ListWorkflowExecutionReferencesResponse(
         references=[
-            workflow_execution_reference(item) for item in (response.references or [])
+            workflow_execution_reference(item)
+            for item in (response.references or [])
         ]
     )
 

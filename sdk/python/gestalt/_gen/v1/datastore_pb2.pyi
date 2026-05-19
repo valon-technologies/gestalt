@@ -137,16 +137,6 @@ class RecordsResponse(_message.Message):
     records: _containers.RepeatedCompositeFieldContainer[Record]
     def __init__(self, records: _Optional[_Iterable[_Union[Record, _Mapping]]] = ...) -> None: ...
 
-class RecordsPageResponse(_message.Message):
-    __slots__ = ()
-    RECORDS_FIELD_NUMBER: _ClassVar[int]
-    KEYS_FIELD_NUMBER: _ClassVar[int]
-    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    records: _containers.RepeatedCompositeFieldContainer[Record]
-    keys: _containers.RepeatedScalarFieldContainer[str]
-    next_page_token: str
-    def __init__(self, records: _Optional[_Iterable[_Union[Record, _Mapping]]] = ..., keys: _Optional[_Iterable[str]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
-
 class KeysResponse(_message.Message):
     __slots__ = ()
     KEYS_FIELD_NUMBER: _ClassVar[int]
@@ -174,38 +164,6 @@ class ObjectStoreRangeRequest(_message.Message):
     store: str
     range: KeyRange
     def __init__(self, store: _Optional[str] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ...) -> None: ...
-
-class QueryFilter(_message.Message):
-    __slots__ = ()
-    COLUMN_FIELD_NUMBER: _ClassVar[int]
-    VALUE_FIELD_NUMBER: _ClassVar[int]
-    column: str
-    value: TypedValue
-    def __init__(self, column: _Optional[str] = ..., value: _Optional[_Union[TypedValue, _Mapping]] = ...) -> None: ...
-
-class QueryOrder(_message.Message):
-    __slots__ = ()
-    COLUMN_FIELD_NUMBER: _ClassVar[int]
-    DESCENDING_FIELD_NUMBER: _ClassVar[int]
-    column: str
-    descending: bool
-    def __init__(self, column: _Optional[str] = ..., descending: _Optional[bool] = ...) -> None: ...
-
-class ObjectStoreQueryRequest(_message.Message):
-    __slots__ = ()
-    STORE_FIELD_NUMBER: _ClassVar[int]
-    FILTERS_FIELD_NUMBER: _ClassVar[int]
-    ORDER_BY_FIELD_NUMBER: _ClassVar[int]
-    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
-    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    KEYS_ONLY_FIELD_NUMBER: _ClassVar[int]
-    store: str
-    filters: _containers.RepeatedCompositeFieldContainer[QueryFilter]
-    order_by: _containers.RepeatedCompositeFieldContainer[QueryOrder]
-    page_size: int
-    page_token: str
-    keys_only: bool
-    def __init__(self, store: _Optional[str] = ..., filters: _Optional[_Iterable[_Union[QueryFilter, _Mapping]]] = ..., order_by: _Optional[_Iterable[_Union[QueryOrder, _Mapping]]] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., keys_only: _Optional[bool] = ...) -> None: ...
 
 class CreateObjectStoreRequest(_message.Message):
     __slots__ = ()

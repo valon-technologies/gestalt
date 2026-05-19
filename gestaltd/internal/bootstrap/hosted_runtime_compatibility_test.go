@@ -93,8 +93,8 @@ func (p *noopWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRe
 func (p *noopWorkflowProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
 	return nil, nil
 }
-func (p *noopWorkflowProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
-	return &coreworkflow.ListRunsResponse{}, nil
+func (p *noopWorkflowProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
+	return nil, nil
 }
 func (p *noopWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
 	return nil, nil

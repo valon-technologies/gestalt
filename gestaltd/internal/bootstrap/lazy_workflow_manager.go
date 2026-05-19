@@ -169,12 +169,12 @@ func (l *lazyWorkflowManager) ResumeEventTrigger(ctx context.Context, p *princip
 	return target.ResumeEventTrigger(ctx, p, triggerID)
 }
 
-func (l *lazyWorkflowManager) ListRuns(ctx context.Context, p *principal.Principal, req coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
+func (l *lazyWorkflowManager) ListRuns(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedRun, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.ListRuns(ctx, p, req)
+	return target.ListRuns(ctx, p)
 }
 
 func (l *lazyWorkflowManager) StartRun(ctx context.Context, p *principal.Principal, req workflowmanager.RunStart) (*workflowmanager.ManagedRun, error) {

@@ -193,10 +193,6 @@ func (o *countingObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRa
 	return o.inner.GetAllKeys(ctx, r)
 }
 
-func (o *countingObjectStore) Query(ctx context.Context, req indexeddb.QueryRequest) (*indexeddb.QueryResponse, error) {
-	return o.inner.Query(ctx, req)
-}
-
 func (o *countingObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
 	return o.inner.Count(ctx, r)
 }

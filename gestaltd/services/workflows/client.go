@@ -139,21 +139,16 @@ func (r *remoteWorkflow) GetRun(ctx context.Context, req coreworkflow.GetRunRequ
 	return workflowRunFromProto(resp)
 }
 
-func (r *remoteWorkflow) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) (out *coreworkflow.ListRunsResponse, err error) {
+func (r *remoteWorkflow) ListRuns(ctx context.Context, req coreworkflow.ListRunsRequest) (runs []*coreworkflow.Run, err error) {
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationListRuns, workflowDims{})
 	defer func() { end(err) }()
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{
-		PageSize:     int32(req.PageSize),
-		PageToken:    strings.TrimSpace(req.PageToken),
-		TargetPlugin: strings.TrimSpace(req.TargetPlugin),
-		Status:       workflowRunStatusToProto(req.Status),
-	})
+	resp, err := r.client.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{})
 	if err != nil {
 		return nil, err
 	}
-	runs := make([]*coreworkflow.Run, 0, len(resp.GetRuns()))
+	runs = make([]*coreworkflow.Run, 0, len(resp.GetRuns()))
 	for _, run := range resp.GetRuns() {
 		value, err := workflowRunFromProto(run)
 		if err != nil {
@@ -161,10 +156,7 @@ func (r *remoteWorkflow) ListRuns(ctx context.Context, req coreworkflow.ListRuns
 		}
 		runs = append(runs, value)
 	}
-	return &coreworkflow.ListRunsResponse{
-		Runs:          runs,
-		NextPageToken: strings.TrimSpace(resp.GetNextPageToken()),
-	}, nil
+	return runs, nil
 }
 
 func (r *remoteWorkflow) CancelRun(ctx context.Context, req coreworkflow.CancelRunRequest) (run *coreworkflow.Run, err error) {

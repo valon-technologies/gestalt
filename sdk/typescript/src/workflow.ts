@@ -366,17 +366,7 @@ export interface GetWorkflowProviderRunRequest {
   runId: string;
 }
 
-export interface ListWorkflowProviderRunsRequest {
-  pageSize?: number | undefined;
-  pageToken?: string | undefined;
-  targetPlugin?: string | undefined;
-  status?: WorkflowRunStatus | undefined;
-}
-
-export interface ListWorkflowProviderRunsResponse {
-  runs: readonly BoundWorkflowRun[];
-  nextPageToken?: string | undefined;
-}
+export interface ListWorkflowProviderRunsRequest {}
 
 export interface CancelWorkflowProviderRunRequest {
   runId: string;
@@ -1204,7 +1194,7 @@ export interface WorkflowProviderOptions extends ProviderBaseOptions {
   ) => MaybePromise<BoundWorkflowRun>;
   listRuns: (
     request: ListWorkflowProviderRunsRequest,
-  ) => MaybePromise<readonly BoundWorkflowRun[] | ListWorkflowProviderRunsResponse>;
+  ) => MaybePromise<readonly BoundWorkflowRun[]>;
   cancelRun: (
     request: CancelWorkflowProviderRunRequest,
   ) => MaybePromise<BoundWorkflowRun>;
@@ -1328,9 +1318,7 @@ export class WorkflowProvider extends ProviderBase {
     return await this.getRunHandler(request);
   }
 
-  async listRuns(
-    request: ListWorkflowProviderRunsRequest,
-  ): Promise<readonly BoundWorkflowRun[] | ListWorkflowProviderRunsResponse> {
+  async listRuns(request: ListWorkflowProviderRunsRequest): Promise<readonly BoundWorkflowRun[]> {
     return await this.listRunsHandler(request);
   }
 
@@ -1537,13 +1525,12 @@ export function createWorkflowProviderService(
       );
     },
     async listRuns(request) {
-      const response = await invokeWorkflowProvider("list runs", () =>
-        provider.listRuns(listWorkflowProviderRunsRequestFromProto(request)),
-      );
-      const result = listRunsResult(response);
       return create(ListWorkflowProviderRunsResponseSchema, {
-        runs: result.runs.map(boundWorkflowRunToProto),
-        nextPageToken: result.nextPageToken ?? "",
+        runs: (
+          await invokeWorkflowProvider("list runs", () =>
+            provider.listRuns(listWorkflowProviderRunsRequestFromProto(request)),
+          )
+        ).map(boundWorkflowRunToProto),
       });
     },
     async cancelRun(request) {
@@ -2464,14 +2451,9 @@ function getWorkflowProviderRunRequestFromProto(
 }
 
 function listWorkflowProviderRunsRequestFromProto(
-  input: ProtoListWorkflowProviderRunsRequest,
+  _input: ProtoListWorkflowProviderRunsRequest,
 ): ListWorkflowProviderRunsRequest {
-  return {
-    pageSize: input.pageSize,
-    pageToken: input.pageToken,
-    targetPlugin: input.targetPlugin,
-    status: input.status as WorkflowRunStatus,
-  };
+  return {};
 }
 
 function cancelWorkflowProviderRunRequestFromProto(
@@ -2754,12 +2736,6 @@ function workflowHostRelayTokenInterceptor(token: string): Interceptor {
     req.header.set(WORKFLOW_HOST_RELAY_TOKEN_HEADER, token);
     return next(req);
   };
-}
-
-function listRunsResult(
-  value: readonly BoundWorkflowRun[] | ListWorkflowProviderRunsResponse,
-): ListWorkflowProviderRunsResponse {
-  return "runs" in value ? value : { runs: value };
 }
 
 async function invokeWorkflowProvider<T>(
