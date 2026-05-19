@@ -1980,8 +1980,7 @@ def _agent_manager_create_turn_request(value: Any | None = None, **kwargs: Any) 
         tool_refs=[
             _agent_tool_ref_value(item) for item in (data.get("tool_refs") or [])
         ],
-        tool_refs_set=data.get("tool_refs_set", False)
-        or bool(data.get("tool_refs") or []),
+        tool_refs_set=data.get("tool_refs_set", False) or data.get("tool_refs") is not None,
         tool_source=data.get("tool_source", AGENT_TOOL_SOURCE_MODE_UNSPECIFIED),
         idempotency_key=data.get("idempotency_key", ""),
         timeout_seconds=data.get("timeout_seconds", 0),

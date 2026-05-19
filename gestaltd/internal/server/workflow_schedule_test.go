@@ -585,6 +585,28 @@ type workflowAgentTargetResponse struct {
 	} `json:"toolRefs"`
 	OutputDelivery       *workflowOutputDeliveryResponse `json:"outputDelivery"`
 	SessionReadyDelivery *workflowOutputDeliveryResponse `json:"sessionReadyDelivery"`
+	Steps                []workflowAgentStepResponse     `json:"steps"`
+}
+
+type workflowAgentStepResponse struct {
+	ID             string                          `json:"id"`
+	Prompt         string                          `json:"prompt"`
+	TimeoutSeconds int                             `json:"timeoutSeconds"`
+	ToolRefs       []workflowAgentToolRefResponse  `json:"toolRefs"`
+	OutputDelivery *workflowOutputDeliveryResponse `json:"outputDelivery"`
+	When           *workflowAgentStepWhenResponse  `json:"when"`
+}
+
+type workflowAgentToolRefResponse struct {
+	System    string `json:"system"`
+	Plugin    string `json:"plugin"`
+	Operation string `json:"operation"`
+}
+
+type workflowAgentStepWhenResponse struct {
+	StepID     string `json:"stepId"`
+	OutputPath string `json:"outputPath"`
+	Equals     any    `json:"equals"`
 }
 
 type workflowOutputDeliveryResponse struct {
@@ -949,6 +971,109 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	}
 	if listed[0].Target.Agent.SessionReadyDelivery == nil || listed[0].Target.Agent.SessionReadyDelivery.InputBindings[0].Value.AgentSession != "id" {
 		t.Fatalf("listed agent session ready delivery = %#v", listed[0].Target.Agent.SessionReadyDelivery)
+	}
+}
+
+func TestWorkflowScheduleAgentTargetPreservesSteps(t *testing.T) {
+	t.Parallel()
+
+	services := testutil.NewStubServices(t)
+	user := seedUser(t, services, "ada-agent-steps@example.test")
+	provider := newMemoryWorkflowProvider()
+	agentProvider := newMemoryAgentProvider()
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "ada-session" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: user.Email, DisplayName: "Ada"}, nil
+			},
+		}
+		cfg.Services = services
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "roadmap",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name:       "roadmap",
+				Operations: []catalog.CatalogOperation{{ID: "sync", Method: http.MethodPost}},
+			},
+		})
+		cfg.Agent = &stubAgentControl{defaultProviderName: "managed", provider: agentProvider}
+		cfg.AgentManager = agentmanager.New(agentmanager.Config{
+			Providers: cfg.Providers,
+			Agent:     cfg.Agent,
+			Invoker:   cfg.Invoker,
+			RunGrants: newServerTestAgentRunGrants(t),
+		})
+		cfg.Workflow = &stubWorkflowControl{
+			defaultProviderName: "basic",
+			provider:            provider,
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createBody := bytes.NewBufferString(`{"cron":"*/5 * * * *","timezone":"UTC","target":{"agent":{"provider":"managed","model":"deep","steps":[{"id":"diagnosis","prompt":"Diagnose","timeoutSeconds":30,"toolRefs":[{"plugin":"roadmap","operation":"sync"}],"outputDelivery":{"target":{"name":"roadmap","operation":"sync"},"inputBindings":[{"inputField":"text","value":{"agentOutput":"text"}}]}},{"id":"pr_fix","messages":[{"role":"user","text":"Fix it"}],"when":{"stepId":"diagnosis","outputPath":"structured_output.actionable_for_pr","equals":true}}]}}}`)
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/workflow/schedules/", createBody)
+	createReq.Header.Set("Content-Type", "application/json")
+	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	createResp, err := http.DefaultClient.Do(createReq)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = createResp.Body.Close() }()
+	if createResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(createResp.Body)
+		t.Fatalf("expected 201, got %d: %s", createResp.StatusCode, body)
+	}
+	var created workflowScheduleResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.Target.Agent == nil || len(created.Target.Agent.Steps) != 2 {
+		t.Fatalf("created agent steps = %#v", created.Target.Agent)
+	}
+	if created.Target.Agent.Steps[0].ID != "diagnosis" || created.Target.Agent.Steps[0].ToolRefs[0].Plugin != "roadmap" || created.Target.Agent.Steps[0].TimeoutSeconds != 30 {
+		t.Fatalf("created first step = %#v", created.Target.Agent.Steps[0])
+	}
+	if created.Target.Agent.Steps[1].When == nil || created.Target.Agent.Steps[1].When.StepID != "diagnosis" || created.Target.Agent.Steps[1].When.Equals != true {
+		t.Fatalf("created second step when = %#v", created.Target.Agent.Steps[1].When)
+	}
+	if len(provider.upsertReqs) != 1 {
+		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
+	}
+	storedTarget := provider.upsertReqs[0].Target
+	if storedTarget.Agent == nil || len(storedTarget.Agent.Steps) != 2 {
+		t.Fatalf("stored agent steps = %#v", storedTarget.Agent)
+	}
+	if storedTarget.Agent.Steps[0].OutputDelivery == nil || storedTarget.Agent.Steps[0].OutputDelivery.Target.PluginName != "roadmap" {
+		t.Fatalf("stored first step output delivery = %#v", storedTarget.Agent.Steps[0].OutputDelivery)
+	}
+	if storedTarget.Agent.Steps[1].When == nil || !storedTarget.Agent.Steps[1].When.EqualsSet {
+		t.Fatalf("stored second step when = %#v", storedTarget.Agent.Steps[1].When)
+	}
+
+	listReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/workflow/schedules/", nil)
+	listReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("expected 200, got %d: %s", listResp.StatusCode, body)
+	}
+	var listed []workflowScheduleResponse
+	if err := json.NewDecoder(listResp.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(listed) != 1 || listed[0].Target.Agent == nil || len(listed[0].Target.Agent.Steps) != 2 {
+		t.Fatalf("listed schedules = %#v", listed)
+	}
+	if listed[0].Target.Agent.Steps[1].When == nil || listed[0].Target.Agent.Steps[1].When.OutputPath != "structured_output.actionable_for_pr" {
+		t.Fatalf("listed second step when = %#v", listed[0].Target.Agent.Steps[1].When)
 	}
 }
 

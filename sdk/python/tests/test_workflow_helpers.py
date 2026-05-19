@@ -150,6 +150,25 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertIsInstance(copied.tool_refs[0], gestalt.AgentToolRef)
         self.assertEqual(copied.tool_refs[0].plugin, "github")
 
+    def test_agent_step_when_preserves_explicit_null_equals(self) -> None:
+        when = gestalt.workflow_agent_step_when(
+            step_id="extract",
+            output_path="$.value",
+            equals=None,
+        )
+
+        self.assertTrue(when.HasField("equals"))
+        self.assertEqual(when.equals.WhichOneof("kind"), "null_value")
+
+        copied = gestalt.workflow_agent_step_when_input_from_when(when)
+        round_tripped = gestalt.workflow_agent_step_when(copied)
+
+        self.assertTrue(round_tripped.HasField("equals"))
+        self.assertEqual(round_tripped.equals.WhichOneof("kind"), "null_value")
+
+        absent = gestalt.workflow_agent_step_when(step_id="extract")
+        self.assertFalse(absent.HasField("equals"))
+
     def test_agent_target_steps_round_trip(self) -> None:
         self.assertIsNotNone(gestalt.workflow_agent_step)
         self.assertIsNotNone(gestalt.workflow_agent_step_when)

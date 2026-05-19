@@ -564,7 +564,10 @@ func workflowEnsureConfigExecutionRef(
 func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explicit ...[]core.AccessPermission) []core.AccessPermission {
 	var base []core.AccessPermission
 	if target.Agent != nil {
-		base = make([]core.AccessPermission, 0, len(target.Agent.ToolRefs)+2)
+		base = make([]core.AccessPermission, 0, len(target.Agent.ToolRefs)+3)
+		if providerName := strings.TrimSpace(target.Agent.ProviderName); providerName != "" {
+			base = append(base, core.AccessPermission{Plugin: providerName})
+		}
 		for i := range target.Agent.ToolRefs {
 			tool := target.Agent.ToolRefs[i]
 			pluginName := strings.TrimSpace(tool.Plugin)
@@ -643,6 +646,7 @@ func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []c
 	out := make([]core.AccessPermission, 0)
 	pluginIndexes := map[string]int{}
 	seenOperations := map[string]map[string]struct{}{}
+	allOperations := map[string]bool{}
 	for _, group := range groups {
 		for _, value := range group {
 			plugin := strings.TrimSpace(value.Plugin)
@@ -657,6 +661,18 @@ func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []c
 				}
 			}
 			if len(operations) == 0 {
+				if len(value.Actions) > 0 {
+					continue
+				}
+				idx, ok := pluginIndexes[plugin]
+				if !ok {
+					idx = len(out)
+					pluginIndexes[plugin] = idx
+					seenOperations[plugin] = map[string]struct{}{}
+					out = append(out, core.AccessPermission{Plugin: plugin})
+				}
+				out[idx].Operations = nil
+				allOperations[plugin] = true
 				continue
 			}
 			idx, ok := pluginIndexes[plugin]
@@ -665,6 +681,9 @@ func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []c
 				pluginIndexes[plugin] = idx
 				seenOperations[plugin] = map[string]struct{}{}
 				out = append(out, core.AccessPermission{Plugin: plugin})
+			}
+			if allOperations[plugin] {
+				continue
 			}
 			for _, operation := range operations {
 				if _, exists := seenOperations[plugin][operation]; exists {

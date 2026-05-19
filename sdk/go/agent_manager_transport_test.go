@@ -136,6 +136,9 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	if len(harness.turnRequests[0].GetToolRefs()) != 0 {
 		t.Fatalf("turn tool refs len = %d, want 0", len(harness.turnRequests[0].GetToolRefs()))
 	}
+	if harness.turnRequests[0].GetToolRefsSet() {
+		t.Fatal("turn tool_refs_set = true, want false for unset tool refs")
+	}
 	if harness.turnRequests[0].GetToolSource() != proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED {
 		t.Fatalf("turn tool source = %s, want unspecified", harness.turnRequests[0].GetToolSource())
 	}
@@ -186,6 +189,7 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 		ResponseSchema: map[string]any{"type": "object"},
 		Metadata:       map[string]any{"request": "native"},
 		ModelOptions:   map[string]any{"temperature": 0},
+		TimeoutSeconds: 23,
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -212,7 +216,63 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 	if got.GetToolRefs()[0].GetPlugin() != "github" || got.GetToolRefs()[0].GetConnection() != "default" {
 		t.Fatalf("tool refs = %#v", got.GetToolRefs())
 	}
+	if !got.GetToolRefsSet() {
+		t.Fatal("tool_refs_set = false, want true for non-empty tool refs")
+	}
+	if got.GetTimeoutSeconds() != 23 {
+		t.Fatalf("timeout_seconds = %d, want 23", got.GetTimeoutSeconds())
+	}
 	if schema := got.GetResponseSchema().AsMap(); schema["type"] != "object" {
 		t.Fatalf("response schema = %#v", schema)
+	}
+}
+
+func TestTransport_AgentManagerCreateTurnExplicitEmptyToolRefs(t *testing.T) {
+	address := reserveTCPAddress()
+	lis, err := net.Listen("tcp", address)
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	t.Cleanup(func() { _ = lis.Close() })
+
+	harness := &agentManagerTransportHarness{}
+	srv := grpc.NewServer()
+	proto.RegisterAgentManagerHostServer(srv, harness)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(srv.Stop)
+
+	t.Setenv(gestalt.EnvAgentManagerSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvAgentManagerSocketToken, "relay-token-go")
+
+	client, err := gestalt.AgentManager("parent-token")
+	if err != nil {
+		t.Fatalf("AgentManager: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if _, err := client.CreateTurn(context.Background(), gestalt.AgentManagerCreateTurn{
+		SessionID:      "session-1",
+		ToolRefsSet:    true,
+		TimeoutSeconds: 7,
+	}); err != nil {
+		t.Fatalf("CreateTurn: %v", err)
+	}
+
+	harness.mu.Lock()
+	defer harness.mu.Unlock()
+	if len(harness.turnRequests) != 1 {
+		t.Fatalf("turn requests len = %d, want 1", len(harness.turnRequests))
+	}
+	got := harness.turnRequests[0]
+	if !got.GetToolRefsSet() {
+		t.Fatal("tool_refs_set = false, want true")
+	}
+	if len(got.GetToolRefs()) != 0 {
+		t.Fatalf("tool refs len = %d, want 0", len(got.GetToolRefs()))
+	}
+	if got.GetTimeoutSeconds() != 7 {
+		t.Fatalf("timeout_seconds = %d, want 7", got.GetTimeoutSeconds())
 	}
 }

@@ -239,7 +239,7 @@ export class AgentManager {
         model: request.model ?? "",
         messages: request.messages?.map(agentMessageToProto) ?? [],
         toolRefs: request.toolRefs?.map(agentToolRefToProto) ?? [],
-        toolRefsSet: request.toolRefsSet ?? (request.toolRefs !== undefined && request.toolRefs.length > 0),
+        toolRefsSet: request.toolRefsSet ?? (request.toolRefs !== undefined),
         toolSource: request.toolSource ?? AgentToolSourceMode.UNSPECIFIED,
         responseSchema: optionalStruct(request.responseSchema),
         metadata: optionalStruct(request.metadata),

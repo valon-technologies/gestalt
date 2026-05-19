@@ -6489,9 +6489,73 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 		if err != nil {
 			t.Fatalf("Get execution ref %q: %v", executionRef, err)
 		}
-		if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
-			t.Fatalf("permissions = %#v", ref.Permissions)
+		wantPermissions := []core.AccessPermission{
+			{Plugin: "managed"},
+			{Plugin: "roadmap", Operations: []string{"sync"}},
 		}
+		if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
+			t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
+		}
+	}
+}
+
+func TestBootstrapConfigManagedAgentStepPermissionsIncludeAgentProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Providers.Agent = map[string]*config.ProviderEntry{
+		"managed": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Workflows.Schedules = map[string]config.WorkflowScheduleConfig{
+		"agent_schedule": {
+			Provider: "temporal",
+			Cron:     "*/10 * * * *",
+			Timezone: "UTC",
+			Target: &config.WorkflowTargetConfig{Agent: &config.WorkflowAgentConfig{
+				Provider: "managed",
+				Steps: []config.WorkflowAgentStepConfig{{
+					ID:     "sync",
+					Prompt: "Sync the roadmap",
+					Tools: []config.WorkflowAgentToolRef{
+						{Plugin: "roadmap", Operation: "sync"},
+					},
+				}},
+			}},
+		},
+	}
+
+	factories := validFactories()
+	factories.Agent = func(context.Context, string, yaml.Node, []runtimehost.HostService, bootstrap.Deps) (coreagent.Provider, error) {
+		return newRecordingAgentProvider(), nil
+	}
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("recorded schedules = %#v", recorders)
+	}
+	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedSchedules[0].ExecutionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	wantPermissions := []core.AccessPermission{
+		{Plugin: "managed"},
+		{Plugin: "roadmap", Operations: []string{"sync"}},
+	}
+	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
+		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
 	}
 }
 

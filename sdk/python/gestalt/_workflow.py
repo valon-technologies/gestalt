@@ -938,10 +938,7 @@ def bound_workflow_agent_target(value: Any | None = None, **kwargs: Any) -> Any:
         session_ready_delivery=workflow_output_delivery(session_ready_delivery)
         if session_ready_delivery is not None
         else None,
-        steps=[
-            workflow_agent_step(step)
-            for step in (data.get("steps") or [])
-        ],
+        steps=[workflow_agent_step(step) for step in (data.get("steps") or [])],
     )
 
 
@@ -978,7 +975,7 @@ def bound_workflow_agent_target_input_from_target(
         )
         if has_field(value, "session_ready_delivery")
         else None,
-        steps=[workflow_agent_step_input_from_step(step) for step in value.steps],
+        steps=[workflow_agent_step_input_from_step(step) for step in (value.steps or [])],
     )
 
 
@@ -1043,10 +1040,11 @@ def workflow_agent_step_when(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.WorkflowAgentStepWhen):
         return _copy(value)
     data = _data(value, kwargs)
+    equals = _value(data["equals"]) if "equals" in data else None
     return pb.WorkflowAgentStepWhen(
         step_id=data.get("step_id", ""),
         output_path=data.get("output_path", ""),
-        equals=_optional_value(data.get("equals")),
+        equals=equals,
     )
 
 

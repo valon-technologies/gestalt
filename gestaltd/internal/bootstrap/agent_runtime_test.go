@@ -1405,7 +1405,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 			ExpiresAt: &expiresAt,
 		}
 		if index == 1 {
-			recommendedDrainAt := startedAt.Add(3 * time.Second)
+			recommendedDrainAt := startedAt.Add(8 * time.Second)
 			lifecycle.RecommendedDrainAt = &recommendedDrainAt
 		}
 		return lifecycle
@@ -1468,7 +1468,7 @@ func TestAgentRuntimeConfigKeepsHostedAgentServingWhenProactiveReplacementStartF
 		t.Fatalf("ready backends = %d, want 1", len(backends))
 	}
 	first := backends[0]
-	waitForAgentRuntimeCondition(t, 2*time.Second, func() bool {
+	waitForAgentRuntimeCondition(t, 6*time.Second, func() bool {
 		pool.mu.Lock()
 		defer pool.mu.Unlock()
 		return len(runtimeProvider.startSessionRequests()) >= 2 && !first.replacing

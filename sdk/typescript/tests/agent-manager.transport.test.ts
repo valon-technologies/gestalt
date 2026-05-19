@@ -44,6 +44,9 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
     turnId?: string;
     interactionId?: string;
     reason?: string;
+    toolRefsSet?: boolean;
+    timeoutSeconds?: number;
+    toolRefsLength?: number;
   }> = [];
 
   const handler = connectNodeAdapter({
@@ -122,6 +125,9 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
             method: "createTurn",
             invocationToken: input.invocationToken,
             sessionId: input.sessionId,
+            toolRefsSet: input.toolRefsSet,
+            timeoutSeconds: input.timeoutSeconds,
+            toolRefsLength: input.toolRefs.length,
           });
           return create(AgentTurnSchema, {
             id: "turn-1",
@@ -302,6 +308,13 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
       ],
       idempotencyKey: "turn-req-1",
     });
+    const noToolTurn = await fromRequest.createTurn({
+      sessionId: "session-1",
+      model: "gpt-test",
+      toolRefs: [],
+      timeoutSeconds: 7,
+      idempotencyKey: "turn-req-2",
+    });
     const fetchedTurn = await fromRequest.getTurn({ turnId: "turn-1" });
     const listedTurns = await fromRequest.listTurns({ sessionId: "session-1" });
     const events = await fromRequest.listTurnEvents({
@@ -328,6 +341,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
     expect(updatedSession.state).toBe(AgentSessionState.ARCHIVED);
     expect(turn.id).toBe("turn-1");
     expect(turn.status).toBe(AgentExecutionStatus.WAITING_FOR_INPUT);
+    expect(noToolTurn.id).toBe("turn-1");
     expect(fetchedTurn.statusMessage).toBe("waiting for input");
     expect(listedTurns.map((entry) => entry.id)).toEqual(["turn-1"]);
     expect(events.map((entry) => entry.type)).toEqual(["turn.started"]);
@@ -361,6 +375,17 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
         method: "createTurn",
         invocationToken: "invocation-token-456",
         sessionId: "session-1",
+        toolRefsSet: true,
+        timeoutSeconds: 0,
+        toolRefsLength: 1,
+      },
+      {
+        method: "createTurn",
+        invocationToken: "invocation-token-456",
+        sessionId: "session-1",
+        toolRefsSet: true,
+        timeoutSeconds: 7,
+        toolRefsLength: 0,
       },
       {
         method: "getTurn",
