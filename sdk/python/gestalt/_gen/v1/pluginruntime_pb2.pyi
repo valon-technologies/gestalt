@@ -167,6 +167,7 @@ class StartHostedPluginRequest(_message.Message):
     ALLOWED_HOSTS_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_ACTION_FIELD_NUMBER: _ClassVar[int]
     HOST_BINARY_FIELD_NUMBER: _ClassVar[int]
+    WORKDIR_FIELD_NUMBER: _ClassVar[int]
     session_id: str
     plugin_name: str
     command: str
@@ -175,7 +176,8 @@ class StartHostedPluginRequest(_message.Message):
     allowed_hosts: _containers.RepeatedScalarFieldContainer[str]
     default_action: str
     host_binary: str
-    def __init__(self, session_id: _Optional[str] = ..., plugin_name: _Optional[str] = ..., command: _Optional[str] = ..., args: _Optional[_Iterable[str]] = ..., env: _Optional[_Mapping[str, str]] = ..., allowed_hosts: _Optional[_Iterable[str]] = ..., default_action: _Optional[str] = ..., host_binary: _Optional[str] = ...) -> None: ...
+    workdir: str
+    def __init__(self, session_id: _Optional[str] = ..., plugin_name: _Optional[str] = ..., command: _Optional[str] = ..., args: _Optional[_Iterable[str]] = ..., env: _Optional[_Mapping[str, str]] = ..., allowed_hosts: _Optional[_Iterable[str]] = ..., default_action: _Optional[str] = ..., host_binary: _Optional[str] = ..., workdir: _Optional[str] = ...) -> None: ...
 
 class HostedPlugin(_message.Message):
     __slots__ = ()

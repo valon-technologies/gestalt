@@ -115,6 +115,39 @@ plugins:
 	}
 }
 
+func TestSourceBuildPathDomains_PrepareOnlyBuildUsesWorkdirOnly(t *testing.T) {
+	t.Parallel()
+
+	sourceDir := filepath.Join(t.TempDir(), "provider")
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindPlugin,
+		Source:  "github.com/acme/plugins/provider",
+		Version: "0.0.1-alpha.1",
+		Build: &providermanifestv1.SourceBuild{
+			Command:     []string{"uv", "sync"},
+			PrepareOnly: true,
+		},
+		Spec: &providermanifestv1.Spec{},
+	}
+
+	domains, err := sourceBuildPathDomains(sourceDir, manifest)
+	if err != nil {
+		t.Fatalf("sourceBuildPathDomains: %v", err)
+	}
+	if want := []string{sourceDir}; !slices.Equal(domains, want) {
+		t.Fatalf("domains = %#v, want %#v", domains, want)
+	}
+
+	manifest.Build.Workdir = "src"
+	domains, err = sourceBuildPathDomains(sourceDir, manifest)
+	if err != nil {
+		t.Fatalf("sourceBuildPathDomains with workdir: %v", err)
+	}
+	if want := []string{filepath.Join(sourceDir, "src")}; !slices.Equal(domains, want) {
+		t.Fatalf("domains = %#v, want %#v", domains, want)
+	}
+}
+
 func TestLifecycleGitSourceUIBuildLockSyncContract(t *testing.T) {
 	t.Parallel()
 

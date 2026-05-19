@@ -46,6 +46,9 @@
     "build": {
       "$ref": "#/$defs/sourceBuild"
     },
+    "run": {
+      "$ref": "#/$defs/sourceRun"
+    },
     "artifacts": {
       "type": "array",
       "items": {
@@ -61,17 +64,8 @@
   },
   "$defs": {
     "sourceBuild": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "command"
-      ],
-      "properties": {
-        "workdir": {
-          "type": "string",
-          "minLength": 1
-        },
-        "command": {
+      "oneOf": [
+        {
           "type": "array",
           "minItems": 1,
           "items": {
@@ -79,8 +73,50 @@
             "minLength": 1
           }
         },
-        "inputs": {
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "command"
+          ],
+          "properties": {
+            "workdir": {
+              "type": "string",
+              "minLength": 1
+            },
+            "command": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "output": {
+              "type": "string",
+              "minLength": 1
+            },
+            "inputs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sourceRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commandPrefix"
+      ],
+      "properties": {
+        "commandPrefix": {
           "type": "array",
+          "minItems": 1,
           "items": {
             "type": "string",
             "minLength": 1

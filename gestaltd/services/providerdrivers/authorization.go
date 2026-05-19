@@ -31,6 +31,7 @@ func AuthorizationFactory(node yaml.Node, hostServices []runtimehost.HostService
 	return authorizationservice.NewExecutable(context.Background(), authorizationservice.ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
+		Workdir:      cfg.Workdir,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
 		Egress:       cfg.EgressPolicy(""),

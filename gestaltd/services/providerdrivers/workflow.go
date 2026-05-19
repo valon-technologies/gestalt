@@ -31,6 +31,7 @@ func WorkflowFactory(ctx context.Context, name string, node yaml.Node, hostServi
 	return workflowservice.NewExecutable(ctx, workflowservice.ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
+		Workdir:      cfg.Workdir,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
 		Egress:       cfg.EgressPolicy(deps.EgressDefaultAction),

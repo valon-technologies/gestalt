@@ -31,6 +31,7 @@ func AgentFactory(ctx context.Context, name string, node yaml.Node, hostServices
 	return agentservice.NewExecutable(ctx, agentservice.ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
+		Workdir:      cfg.Workdir,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
 		Egress:       cfg.EgressPolicy(deps.EgressDefaultAction),

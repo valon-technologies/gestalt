@@ -30,6 +30,7 @@ func CacheFactory(node yaml.Node) (corecache.Cache, error) {
 	return cacheservice.NewExecutable(context.Background(), cacheservice.ExecConfig{
 		Command:    cfg.Command,
 		Args:       cfg.Args,
+		Workdir:    cfg.Workdir,
 		Env:        cfg.Env,
 		Config:     cfg.Config,
 		Egress:     cfg.EgressPolicy(""),

@@ -35,6 +35,7 @@ const (
 type ProcessConfig struct {
 	Command      string
 	Args         []string
+	Workdir      string
 	Env          map[string]string
 	Egress       egress.Policy
 	HostBinary   string
@@ -195,8 +196,12 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 		proc.sandboxTmp = sandboxTmp
 		env["TMPDIR"] = sandboxTmp
 
+		readOnlyPaths := append(sandbox.DefaultReadOnlyPaths(), filepath.Dir(cfg.Command))
+		if cfg.Workdir != "" {
+			readOnlyPaths = append(readOnlyPaths, cfg.Workdir)
+		}
 		policy := &sandbox.Policy{
-			ReadOnlyPaths:  append(sandbox.DefaultReadOnlyPaths(), filepath.Dir(cfg.Command)),
+			ReadOnlyPaths:  readOnlyPaths,
 			ReadWritePaths: []string{dir, sandboxTmp},
 			AllowedHosts:   egressPolicy.AllowedHosts,
 			HostBinary:     cfg.HostBinary,
@@ -217,6 +222,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 
 		cmd, cleanup, err := startCommandWithRetry(ctx, func() (*exec.Cmd, func(), error) {
 			cmd := exec.Command(cfg.Command, cfg.Args...)
+			cmd.Dir = cfg.Workdir
 			cmd.Env = buildPluginEnv(env, sandboxActive)
 			cmd.Stdout = stdout
 			cmd.Stderr = stderr
@@ -237,6 +243,7 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 	} else {
 		cmd, _, err := startCommandWithRetry(ctx, func() (*exec.Cmd, func(), error) {
 			cmd := exec.Command(cfg.Command, cfg.Args...)
+			cmd.Dir = cfg.Workdir
 			cmd.Env = append(safeBaseEnv(), envSlice(env)...)
 			cmd.Stdout = stdout
 			cmd.Stderr = stderr

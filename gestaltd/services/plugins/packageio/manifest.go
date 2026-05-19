@@ -159,12 +159,20 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 			return err
 		}
 	}
+	if manifest.Run != nil {
+		if !sourceMode {
+			return fmt.Errorf("run metadata is only allowed in source manifests")
+		}
+		if err := validateSourceRun(manifest.Run); err != nil {
+			return err
+		}
+	}
 
 	if sourceMode && len(manifest.Artifacts) > 0 {
 		return fmt.Errorf("artifacts are not allowed in source manifests; prepared and released manifests generate them")
 	}
 
-	allowsSourceEntrypointOmission := sourceMode && manifest.Entrypoint == nil && manifest.Build == nil
+	allowsSourceEntrypointOmission := sourceMode && manifest.Entrypoint == nil && (manifest.Build == nil || manifest.Build.PrepareOnly)
 
 	needsArtifacts := len(manifest.Artifacts) > 0
 	switch kind {
@@ -204,6 +212,9 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 			return err
 		}
 	}
+	if manifest.Build != nil && manifest.Build.Output != "" && kind != providermanifestv1.KindUI {
+		return fmt.Errorf("build.output is only supported for source ui manifests")
+	}
 
 	switch kind {
 	case providermanifestv1.KindPlugin:
@@ -226,7 +237,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 			if err := validateEntrypoint(kind, manifest.Entrypoint, artifactPaths, sourceMode); err != nil {
 				return err
 			}
-		case manifest.Build != nil:
+		case manifest.Build != nil && !manifest.Build.PrepareOnly:
 			return fmt.Errorf("entrypoint is required when build is set")
 		case manifest.IsDeclarativeOnlyProvider():
 		case spec != nil && spec.IsSpecLoaded():
@@ -251,12 +262,28 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if spec != nil {
 			assetRoot = spec.AssetRoot
 		}
+		buildOutput := ""
+		if manifest.Build != nil {
+			buildOutput = manifest.Build.Output
+			if buildOutput != "" {
+				if err := validateRelativeSourcePath(buildOutput, "build.output"); err != nil {
+					return err
+				}
+				if assetRoot != "" && assetRoot != buildOutput {
+					return fmt.Errorf("build.output must match spec.assetRoot when both are set")
+				}
+				assetRoot = buildOutput
+			}
+		}
 		if sourceMode {
 			if manifest.Build == nil {
 				return fmt.Errorf("build is required for source ui manifests")
 			}
+			if manifest.Build.PrepareOnly {
+				return fmt.Errorf("source ui manifests require build output metadata")
+			}
 			if assetRoot == "" {
-				return fmt.Errorf("spec.assetRoot is required for source ui manifests")
+				return fmt.Errorf("build.output or spec.assetRoot is required for source ui manifests")
 			}
 		} else if assetRoot == "" {
 			return fmt.Errorf("spec.assetRoot is required for ui manifests")
@@ -438,8 +465,22 @@ func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
 	if build == nil {
 		return nil
 	}
+	if build.PrepareOnly && build.Workdir != "" {
+		return fmt.Errorf("build.workdir is only supported with object-form build metadata")
+	}
+	if build.PrepareOnly && len(build.Inputs) > 0 {
+		return fmt.Errorf("build.inputs is only supported with object-form build metadata")
+	}
+	if build.PrepareOnly && build.Output != "" {
+		return fmt.Errorf("build.output is only supported with object-form build metadata")
+	}
 	if build.Workdir != "" {
 		if err := validateRelativeSourcePath(build.Workdir, "build.workdir"); err != nil {
+			return err
+		}
+	}
+	if build.Output != "" {
+		if err := validateRelativeSourcePath(build.Output, "build.output"); err != nil {
 			return err
 		}
 	}
@@ -463,9 +504,27 @@ func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
 	return nil
 }
 
+func validateSourceRun(run *providermanifestv1.SourceRun) error {
+	if run == nil {
+		return nil
+	}
+	if len(run.CommandPrefix) == 0 {
+		return fmt.Errorf("run.commandPrefix is required")
+	}
+	for i, arg := range run.CommandPrefix {
+		if strings.TrimSpace(arg) == "" {
+			return fmt.Errorf("run.commandPrefix[%d] is required", i)
+		}
+	}
+	return nil
+}
+
 func SourceUIBuildOutput(manifest *providermanifestv1.Manifest) string {
 	if manifest == nil {
 		return ""
+	}
+	if manifest.Build != nil && strings.TrimSpace(manifest.Build.Output) != "" {
+		return manifest.Build.Output
 	}
 	if manifest.Spec != nil {
 		return manifest.Spec.AssetRoot

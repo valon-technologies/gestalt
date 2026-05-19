@@ -789,6 +789,7 @@ type StartHostedPluginRequest struct {
 	AllowedHosts  []string               `protobuf:"bytes,7,rep,name=allowed_hosts,json=allowedHosts,proto3" json:"allowed_hosts,omitempty"`
 	DefaultAction string                 `protobuf:"bytes,8,opt,name=default_action,json=defaultAction,proto3" json:"default_action,omitempty"`
 	HostBinary    string                 `protobuf:"bytes,9,opt,name=host_binary,json=hostBinary,proto3" json:"host_binary,omitempty"`
+	Workdir       string                 `protobuf:"bytes,11,opt,name=workdir,proto3" json:"workdir,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -875,6 +876,13 @@ func (x *StartHostedPluginRequest) GetDefaultAction() string {
 func (x *StartHostedPluginRequest) GetHostBinary() string {
 	if x != nil {
 		return x.HostBinary
+	}
+	return ""
+}
+
+func (x *StartHostedPluginRequest) GetWorkdir() string {
+	if x != nil {
+		return x.Workdir
 	}
 	return ""
 }
@@ -1168,7 +1176,7 @@ const file_v1_pluginruntime_proto_rawDesc = "" +
 	"#RemovePluginRuntimeWorkspaceRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12(\n" +
-	"\x10agent_session_id\x18\x02 \x01(\tR\x0eagentSessionId\"\x83\x03\n" +
+	"\x10agent_session_id\x18\x02 \x01(\tR\x0eagentSessionId\"\x9d\x03\n" +
 	"\x18StartHostedPluginRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1f\n" +
@@ -1180,7 +1188,8 @@ const file_v1_pluginruntime_proto_rawDesc = "" +
 	"\rallowed_hosts\x18\a \x03(\tR\fallowedHosts\x12%\n" +
 	"\x0edefault_action\x18\b \x01(\tR\rdefaultAction\x12\x1f\n" +
 	"\vhost_binary\x18\t \x01(\tR\n" +
-	"hostBinary\x1a6\n" +
+	"hostBinary\x12\x18\n" +
+	"\aworkdir\x18\v \x01(\tR\aworkdir\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x06\x10\aJ\x04\b\n" +

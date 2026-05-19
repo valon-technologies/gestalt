@@ -17,6 +17,7 @@ import (
 type ExecConfig struct {
 	Command    string
 	Args       []string
+	Workdir    string
 	Env        map[string]string
 	Config     map[string]any
 	Egress     egress.Policy
@@ -35,6 +36,7 @@ func NewExecutable(ctx context.Context, cfg ExecConfig) (corecache.Cache, error)
 	proc, err := runtimehost.StartPluginProcess(ctx, runtimehost.ProcessConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
+		Workdir:      cfg.Workdir,
 		Env:          cfg.Env,
 		Egress:       cfg.Egress,
 		HostBinary:   cfg.HostBinary,

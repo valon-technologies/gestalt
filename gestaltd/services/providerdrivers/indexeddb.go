@@ -30,6 +30,7 @@ func IndexedDBFactory(node yaml.Node) (indexeddb.IndexedDB, error) {
 	return indexeddbservice.NewExecutable(context.Background(), indexeddbservice.ExecConfig{
 		Command:    cfg.Command,
 		Args:       cfg.Args,
+		Workdir:    cfg.Workdir,
 		Env:        cfg.Env,
 		Config:     cfg.Config,
 		Egress:     cfg.EgressPolicy(""),

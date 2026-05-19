@@ -239,6 +239,7 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 		PluginName: name,
 		Command:    launch.launch.command,
 		Args:       launch.launch.args,
+		Workdir:    launch.cfg.Workdir,
 		Env:        startEnv,
 		Egress: pluginruntime.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,

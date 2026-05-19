@@ -30,6 +30,7 @@ func S3Factory(node yaml.Node) (s3store.Client, error) {
 	return s3service.NewExecutable(context.Background(), s3service.ExecConfig{
 		Command:    cfg.Command,
 		Args:       cfg.Args,
+		Workdir:    cfg.Workdir,
 		Env:        cfg.Env,
 		Config:     cfg.Config,
 		Egress:     cfg.EgressPolicy(""),

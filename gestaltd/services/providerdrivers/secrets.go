@@ -30,6 +30,7 @@ func SecretsProviderFactory(node yaml.Node) (core.SecretManager, error) {
 	return secretsservice.NewExecutable(context.Background(), secretsservice.ExecConfig{
 		Command:    cfg.Command,
 		Args:       cfg.Args,
+		Workdir:    cfg.Workdir,
 		Env:        cfg.Env,
 		Config:     cfg.Config,
 		Egress:     cfg.EgressPolicy(""),

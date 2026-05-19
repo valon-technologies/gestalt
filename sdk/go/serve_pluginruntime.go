@@ -174,6 +174,7 @@ func startHostedPluginRequestFromProto(req *proto.StartHostedPluginRequest) Star
 		AllowedHosts:  append([]string(nil), req.GetAllowedHosts()...),
 		DefaultAction: req.GetDefaultAction(),
 		HostBinary:    req.GetHostBinary(),
+		Workdir:       req.GetWorkdir(),
 	}
 }
 

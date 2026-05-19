@@ -144,6 +144,7 @@ class StartHostedPluginRequest:
     allowed_hosts: Iterable[str] = field(default_factory=list)
     default_action: str = ""
     host_binary: str = ""
+    workdir: str = ""
 
 
 @dataclass(slots=True)
@@ -346,6 +347,7 @@ def start_hosted_plugin_request_from_proto(value: Any) -> StartHostedPluginReque
         allowed_hosts=list(value.allowed_hosts),
         default_action=value.default_action,
         host_binary=value.host_binary,
+        workdir=value.workdir,
     )
 
 

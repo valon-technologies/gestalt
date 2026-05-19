@@ -31,6 +31,7 @@ func ExternalCredentialsFactory(ctx context.Context, name string, node yaml.Node
 	return externalcredentialsservice.NewExecutable(ctx, externalcredentialsservice.ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
+		Workdir:      cfg.Workdir,
 		Env:          cfg.Env,
 		Config:       cfg.Config,
 		Egress:       cfg.EgressPolicy(""),

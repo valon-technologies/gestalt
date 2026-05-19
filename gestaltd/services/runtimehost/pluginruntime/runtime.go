@@ -112,6 +112,7 @@ type StartPluginRequest struct {
 	PluginName string
 	Command    string
 	Args       []string
+	Workdir    string
 	Env        map[string]string
 	Egress     RuntimeEgressPolicy
 	HostBinary string

@@ -963,6 +963,7 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 func buildPluginProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, spec pluginservice.StaticProviderSpec, deps Deps) (core.Provider, error) {
 	command := entry.Command
 	args := entry.Args
+	workdir := ""
 	env := clonePluginEnv(entry.Env)
 	var cleanup func()
 	defer func() {
@@ -1001,13 +1002,17 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			}
 			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
 		}
-		command, args, cleanup, err = providerpkg.SourceManifestExecutionCommand(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
+		execution, err := providerpkg.SourceManifestExecution(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
 		if err != nil {
 			if runtimeOwned {
 				_ = runtimeProvider.Close()
 			}
 			return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
 		}
+		command = execution.Command
+		args = execution.Args
+		workdir = execution.Workdir
+		cleanup = execution.Cleanup
 	}
 	launch, err := prepareHostedProcessLaunch(providermanifestv1.KindPlugin, name, entry, command, args, cleanup, runtimeConfig)
 	if err != nil {
@@ -1095,6 +1100,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		PluginName: name,
 		Command:    command,
 		Args:       args,
+		Workdir:    workdir,
 		Env:        startEnv,
 		Egress: pluginruntime.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
@@ -1381,6 +1387,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		PluginName: name,
 		Command:    launch.launch.command,
 		Args:       launch.launch.args,
+		Workdir:    cfg.Workdir,
 		Env:        startEnv,
 		Egress: pluginruntime.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,

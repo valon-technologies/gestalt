@@ -12,10 +12,12 @@ import (
 )
 
 type ResolvedSourceBuild struct {
-	Label   string
-	Workdir string
-	Command []string
-	Inputs  []string
+	Label       string
+	Workdir     string
+	Command     []string
+	Output      string
+	Inputs      []string
+	PrepareOnly bool
 }
 
 type SourceBuildOptions struct {
@@ -24,19 +26,33 @@ type SourceBuildOptions struct {
 	LibC   string
 }
 
+type SourceExecution struct {
+	Command string
+	Args    []string
+	Workdir string
+	Cleanup func()
+}
+
 func EffectiveSourceBuild(manifest *providermanifestv1.Manifest) *ResolvedSourceBuild {
 	if manifest == nil {
 		return nil
 	}
 	if manifest.Build != nil {
 		return &ResolvedSourceBuild{
-			Label:   "build",
-			Workdir: manifest.Build.Workdir,
-			Command: append([]string(nil), manifest.Build.Command...),
-			Inputs:  append([]string(nil), manifest.Build.Inputs...),
+			Label:       "build",
+			Workdir:     manifest.Build.Workdir,
+			Command:     append([]string(nil), manifest.Build.Command...),
+			Output:      manifest.Build.Output,
+			Inputs:      append([]string(nil), manifest.Build.Inputs...),
+			PrepareOnly: manifest.Build.PrepareOnly,
 		}
 	}
 	return nil
+}
+
+func SourceBuildProducesOutput(manifest *providermanifestv1.Manifest) bool {
+	build := EffectiveSourceBuild(manifest)
+	return build != nil && !build.PrepareOnly
 }
 
 func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
@@ -62,13 +78,17 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 		return fmt.Errorf("%s.workdir %q is not a directory", build.Label, build.Workdir)
 	}
 
-	outputRel, outputKind, err := SourceBuildOutput(manifest)
-	if err != nil {
-		return err
-	}
-	outputPath := filepath.Join(rootDir, filepath.FromSlash(outputRel))
-	if err := os.RemoveAll(outputPath); err != nil {
-		return fmt.Errorf("remove %s output %q: %w", build.Label, outputRel, err)
+	var outputRel, outputKind, outputPath string
+	if !build.PrepareOnly {
+		var err error
+		outputRel, outputKind, err = SourceBuildOutput(manifest)
+		if err != nil {
+			return err
+		}
+		outputPath = filepath.Join(rootDir, filepath.FromSlash(outputRel))
+		if err := os.RemoveAll(outputPath); err != nil {
+			return fmt.Errorf("remove %s output %q: %w", build.Label, outputRel, err)
+		}
 	}
 
 	cmd := exec.Command(build.Command[0], build.Command[1:]...)
@@ -79,19 +99,26 @@ func RunSourceBuild(manifestPath string, manifest *providermanifestv1.Manifest, 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("run %s.command: %w", build.Label, err)
 	}
+	if build.PrepareOnly {
+		return nil
+	}
 	return verifySourceBuildOutput(outputPath, outputRel, outputKind, opts)
 }
 
 func SourceBuildOutput(manifest *providermanifestv1.Manifest) (rel string, kind string, err error) {
+	if build := EffectiveSourceBuild(manifest); build != nil && build.PrepareOnly {
+		return "", "", nil
+	}
 	manifestKind, err := ManifestKind(manifest)
 	if err != nil {
 		return "", "", err
 	}
 	if manifestKind == providermanifestv1.KindUI {
-		if manifest == nil || manifest.Spec == nil || strings.TrimSpace(manifest.Spec.AssetRoot) == "" {
-			return "", "", fmt.Errorf("spec.assetRoot is required when build is set")
+		output := SourceUIBuildOutput(manifest)
+		if strings.TrimSpace(output) == "" {
+			return "", "", fmt.Errorf("build.output or spec.assetRoot is required when build is set")
 		}
-		return manifest.Spec.AssetRoot, providermanifestv1.KindUI, nil
+		return output, providermanifestv1.KindUI, nil
 	}
 	entry := EntrypointForKind(manifest, manifestKind)
 	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
@@ -166,6 +193,9 @@ func EnsureSourceBuildOutput(manifestPath string, manifest *providermanifestv1.M
 	if err := RunSourceBuild(manifestPath, manifest, opts); err != nil {
 		return err
 	}
+	if !SourceBuildProducesOutput(manifest) {
+		return nil
+	}
 	outputRel, outputKind, err := SourceBuildOutput(manifest)
 	if err != nil {
 		if EffectiveSourceBuild(manifest) == nil {
@@ -186,32 +216,68 @@ func SourceBuildInputs(manifest *providermanifestv1.Manifest) []string {
 }
 
 func SourceManifestExecutionCommand(manifestPath, kind string, opts SourceBuildOptions) (string, []string, func(), error) {
-	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	exec, err := SourceManifestExecution(manifestPath, kind, opts)
 	if err != nil {
 		return "", nil, nil, err
 	}
-	if err := EnsureSourceBuildOutput(manifestPath, manifest, opts); err != nil {
-		return "", nil, nil, err
+	return exec.Command, exec.Args, exec.Cleanup, nil
+}
+
+func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions) (SourceExecution, error) {
+	absoluteManifestPath, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return SourceExecution{}, fmt.Errorf("resolve manifest path: %w", err)
 	}
+	manifestPath = absoluteManifestPath
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return SourceExecution{}, err
+	}
+	if err := EnsureSourceBuildOutput(manifestPath, manifest, opts); err != nil {
+		return SourceExecution{}, err
+	}
+	return sourceManifestExecution(manifestPath, manifest, kind, opts)
+}
+
+func sourceManifestExecution(manifestPath string, manifest *providermanifestv1.Manifest, kind string, opts SourceBuildOptions) (SourceExecution, error) {
 	if strings.TrimSpace(kind) == "" {
+		var err error
 		kind, err = ManifestKind(manifest)
 		if err != nil {
-			return "", nil, nil, err
+			return SourceExecution{}, err
 		}
 	}
+	rootDir := filepath.Dir(manifestPath)
+	exec := SourceExecution{Workdir: rootDir}
 	entry := EntrypointForKind(manifest, kind)
 	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
-		command := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(entry.ArtifactPath))
-		return command, append([]string(nil), entry.Args...), nil, nil
+		exec.Command = filepath.Join(rootDir, filepath.FromSlash(entry.ArtifactPath))
+		exec.Args = append([]string(nil), entry.Args...)
+	} else {
+		goos, goarch := SourceBuildTarget(opts)
+		var err error
+		switch providermanifestv1.NormalizeKind(kind) {
+		case providermanifestv1.KindPlugin:
+			exec.Command, exec.Args, exec.Cleanup, err = SourceProviderExecutionCommand(rootDir, goos, goarch)
+		case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+			exec.Command, exec.Args, exec.Cleanup, err = SourceComponentExecutionCommand(rootDir, kind, goos, goarch)
+		default:
+			return SourceExecution{}, fmt.Errorf("manifest does not define a %s entrypoint", kind)
+		}
+		if err != nil {
+			return SourceExecution{}, err
+		}
 	}
-	rootDir := filepath.Dir(manifestPath)
-	goos, goarch := SourceBuildTarget(opts)
-	switch providermanifestv1.NormalizeKind(kind) {
-	case providermanifestv1.KindPlugin:
-		return SourceProviderExecutionCommand(rootDir, goos, goarch)
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return SourceComponentExecutionCommand(rootDir, kind, goos, goarch)
-	default:
-		return "", nil, nil, fmt.Errorf("manifest does not define a %s entrypoint", kind)
+	return applySourceRunCommandPrefix(exec, manifest), nil
+}
+
+func applySourceRunCommandPrefix(exec SourceExecution, manifest *providermanifestv1.Manifest) SourceExecution {
+	if manifest == nil || manifest.Run == nil || len(manifest.Run.CommandPrefix) == 0 || exec.Command == "" {
+		return exec
 	}
+	prefix := append([]string(nil), manifest.Run.CommandPrefix...)
+	original := append([]string{exec.Command}, exec.Args...)
+	exec.Command = prefix[0]
+	exec.Args = append(prefix[1:], original...)
+	return exec
 }
