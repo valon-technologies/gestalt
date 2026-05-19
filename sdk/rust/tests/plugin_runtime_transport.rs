@@ -37,13 +37,13 @@ use tower::service_fn;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct SeenRequest {
-	method: String,
-	session_id: String,
-	plugin_name: String,
-	agent_session_id: String,
-	command: String,
-	cwd: String,
-	workdir: String,
+    method: String,
+    session_id: String,
+    plugin_name: String,
+    agent_session_id: String,
+    command: String,
+    cwd: String,
+    workdir: String,
 }
 
 #[derive(Default)]

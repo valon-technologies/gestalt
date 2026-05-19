@@ -82,7 +82,7 @@ chmod +x .gestalt/build/provider
 	}
 }
 
-func TestSourceManifestExecution_PrepareOnlyBuildAndRunPrefix(t *testing.T) {
+func TestSourceManifestExecution_PrepareOnlyBuildAndRunPrefix(t *testing.T) { //nolint:paralleltest // Uses t.Setenv through installFakeUV.
 	if runtime.GOOS == windowsOS {
 		t.Skip("fake uv fixture uses POSIX shell")
 	}
@@ -127,7 +127,7 @@ spec: {}
 	}
 }
 
-func TestPrepareSourceManifest_PrepareOnlyBuildRunsBeforeStaticCatalogWithRunPrefix(t *testing.T) {
+func TestPrepareSourceManifest_PrepareOnlyBuildRunsBeforeStaticCatalogWithRunPrefix(t *testing.T) { //nolint:paralleltest // Uses t.Setenv through installFakeUV.
 	if runtime.GOOS == windowsOS {
 		t.Skip("fake uv fixture uses POSIX shell")
 	}

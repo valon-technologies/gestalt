@@ -278,6 +278,6 @@ func applySourceRunCommandPrefix(exec SourceExecution, manifest *providermanifes
 	prefix := append([]string(nil), manifest.Run.CommandPrefix...)
 	original := append([]string{exec.Command}, exec.Args...)
 	exec.Command = prefix[0]
-	exec.Args = append(prefix[1:], original...)
+	exec.Args = append(append([]string(nil), prefix[1:]...), original...)
 	return exec
 }
