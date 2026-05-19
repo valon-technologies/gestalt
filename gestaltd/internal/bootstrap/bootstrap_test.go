@@ -526,8 +526,8 @@ func (s *stubWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRe
 func (s *stubWorkflowProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil
 }
-func (s *stubWorkflowProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
-	return nil, nil
+func (s *stubWorkflowProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
+	return &coreworkflow.ListRunsResponse{}, nil
 }
 func (s *stubWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil
@@ -1356,8 +1356,8 @@ func (p *recordingWorkflowProvider) StartRun(context.Context, coreworkflow.Start
 func (p *recordingWorkflowProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil
 }
-func (p *recordingWorkflowProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
-	return nil, nil
+func (p *recordingWorkflowProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
+	return &coreworkflow.ListRunsResponse{}, nil
 }
 func (p *recordingWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil

@@ -136,7 +136,7 @@ var workflowSystemToolDescriptors = map[string]workflowSystemToolDescriptor{
 		Operation:        workflowSystemToolRunsList,
 		Name:             "workflow_runs_list",
 		Description:      "List workflow runs owned by the current caller.",
-		ParametersSchema: workflowSystemToolObjectSchema(nil, nil),
+		ParametersSchema: workflowSystemToolListRunsSchema(),
 	},
 	workflowSystemToolRunsGet: {
 		Operation:        workflowSystemToolRunsGet,
@@ -268,18 +268,30 @@ func (t *workflowSystemTools) ExecuteSystemTool(ctx context.Context, req agentSy
 	case workflowSystemToolRunsStart:
 		return t.executeStartRun(ctx, req)
 	case workflowSystemToolRunsList:
-		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.runs.list"); err != nil {
+		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.runs.list", "pageSize", "pageToken", "plugin", "status"); err != nil {
 			return nil, err
 		}
-		runs, err := t.manager.ListRuns(ctx, workflowSystemToolManagementPrincipal(req))
+		listReq, err := workflowSystemToolListRunsRequest(req.Arguments)
 		if err != nil {
 			return nil, err
 		}
+		resp, err := t.manager.ListRuns(ctx, workflowSystemToolManagementPrincipal(req), listReq)
+		if err != nil {
+			return nil, err
+		}
+		if resp == nil {
+			resp = &workflowmanager.ListRunsResponse{}
+		}
+		runs := resp.Runs
 		items := make([]map[string]any, 0, len(runs))
 		for _, run := range runs {
 			items = append(items, workflowSystemRunInfo(run))
 		}
-		return workflowSystemToolJSONResponse(http.StatusOK, map[string]any{"runs": items})
+		out := map[string]any{"runs": items}
+		if token := strings.TrimSpace(resp.NextPageToken); token != "" {
+			out["nextPageToken"] = token
+		}
+		return workflowSystemToolJSONResponse(http.StatusOK, out)
 	case workflowSystemToolRunsGet:
 		if err := workflowSystemToolRejectUnknownKeys(req.Arguments, "workflow.runs.get", "runId"); err != nil {
 			return nil, err
@@ -892,6 +904,25 @@ func workflowSystemToolUpdateScheduleSchema() map[string]any {
 		"paused":       map[string]any{"type": "boolean", "description": "Paused state. If omitted, the existing paused state is preserved."},
 		"target":       workflowSystemToolTargetSchema(),
 		"definitionId": workflowSystemToolStringSchema("Workflow definition ID to schedule. If omitted with no target, the existing resolved target is preserved."),
+	})
+}
+
+func workflowSystemToolListRunsSchema() map[string]any {
+	return workflowSystemToolObjectSchema(nil, map[string]any{
+		"pageSize":  map[string]any{"type": "integer", "minimum": 0, "description": "Maximum runs to return."},
+		"pageToken": workflowSystemToolStringSchema("Pagination token from a previous workflow_runs_list response."),
+		"plugin":    workflowSystemToolStringSchema("Target plugin name to filter by."),
+		"status": map[string]any{
+			"type":        "string",
+			"description": "Workflow run status to filter by.",
+			"enum": []any{
+				string(coreworkflow.RunStatusPending),
+				string(coreworkflow.RunStatusRunning),
+				string(coreworkflow.RunStatusSucceeded),
+				string(coreworkflow.RunStatusFailed),
+				string(coreworkflow.RunStatusCanceled),
+			},
+		},
 	})
 }
 
@@ -1977,6 +2008,37 @@ func workflowSystemToolStringArg(args map[string]any, key string) string {
 		}
 	}
 	return ""
+}
+
+func workflowSystemToolListRunsRequest(args map[string]any) (coreworkflow.ListRunsRequest, error) {
+	req := coreworkflow.ListRunsRequest{
+		PageToken:    workflowSystemToolStringArg(args, "pageToken"),
+		TargetPlugin: workflowSystemToolStringArg(args, "plugin"),
+	}
+	if value, ok := args["pageSize"]; ok && value != nil {
+		switch v := value.(type) {
+		case int:
+			req.PageSize = v
+		case int64:
+			req.PageSize = int(v)
+		case float64:
+			req.PageSize = int(v)
+			if float64(req.PageSize) != v {
+				return coreworkflow.ListRunsRequest{}, fmt.Errorf("%w: workflow.runs.list.pageSize must be an integer", invocation.ErrInvalidInvocation)
+			}
+		default:
+			return coreworkflow.ListRunsRequest{}, fmt.Errorf("%w: workflow.runs.list.pageSize must be an integer", invocation.ErrInvalidInvocation)
+		}
+	}
+	if status := workflowSystemToolStringArg(args, "status"); status != "" {
+		req.Status = coreworkflow.RunStatus(status)
+		switch req.Status {
+		case coreworkflow.RunStatusPending, coreworkflow.RunStatusRunning, coreworkflow.RunStatusSucceeded, coreworkflow.RunStatusFailed, coreworkflow.RunStatusCanceled:
+		default:
+			return coreworkflow.ListRunsRequest{}, fmt.Errorf("%w: workflow.runs.list.status is not supported", invocation.ErrInvalidInvocation)
+		}
+	}
+	return req, nil
 }
 
 func workflowSystemToolBoolArg(args map[string]any, key string) bool {

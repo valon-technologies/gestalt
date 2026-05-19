@@ -831,6 +831,12 @@ pub enum WorkflowRunCommands {
         /// Filter runs by status
         #[arg(long)]
         status: Option<String>,
+        /// Number of runs to request
+        #[arg(long)]
+        page_size: Option<u32>,
+        /// Token returned by a previous list response
+        #[arg(long)]
+        page_token: Option<String>,
     },
     /// Show a single workflow run
     Get {

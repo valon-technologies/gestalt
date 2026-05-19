@@ -3566,12 +3566,21 @@ pub struct GetWorkflowProviderRunRequest {
     #[prost(string, tag = "2")]
     pub run_id: ::prost::alloc::string::String,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListWorkflowProviderRunsRequest {}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListWorkflowProviderRunsRequest {
+    #[prost(int32, tag = "1")]
+    pub page_size: i32,
+    #[prost(string, tag = "2")]
+    pub page_token: ::prost::alloc::string::String,
+    #[prost(enumeration = "WorkflowRunStatus", tag = "3")]
+    pub status: i32,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderRunsResponse {
     #[prost(message, repeated, tag = "1")]
     pub runs: ::prost::alloc::vec::Vec<BoundWorkflowRun>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CancelWorkflowProviderRunRequest {

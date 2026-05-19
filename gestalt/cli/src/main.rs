@@ -109,10 +109,17 @@ fn run() -> anyhow::Result<()> {
                     }
                 },
                 WorkflowCommands::Runs { command } => match command {
-                    WorkflowRunCommands::List { plugin, status } => commands::workflows::list_runs(
+                    WorkflowRunCommands::List {
+                        plugin,
+                        status,
+                        page_size,
+                        page_token,
+                    } => commands::workflows::list_runs(
                         &client,
                         plugin.as_deref(),
                         status.as_deref(),
+                        page_size,
+                        page_token.as_deref(),
                         format,
                     ),
                     WorkflowRunCommands::Get { id } => {
