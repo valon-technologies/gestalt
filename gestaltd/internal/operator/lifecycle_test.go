@@ -1051,7 +1051,7 @@ server:
 	}
 }
 
-func TestPrepareAtPath_RejectsSessionCatalogOnlyInvokesTarget(t *testing.T) {
+func TestPrepareAtPath_AllowsSessionCatalogOnlyInvokesTarget(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1066,6 +1066,11 @@ func TestPrepareAtPath_RejectsSessionCatalogOnlyInvokesTarget(t *testing.T) {
       invokes:
         - plugin: target
           operation: private_search
+          runAs:
+            subject:
+              id: service_account:agent
+              kind: service_account
+            applyByDefault: false
     target:
       source:
         path: %q
@@ -1076,9 +1081,8 @@ server:
 		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := NewLifecycle().PrepareAtPath(cfgPath)
-	if err == nil || !strings.Contains(err.Error(), `session-catalog-only operation "private_search" on plugin "target"`) {
-		t.Fatalf("PrepareAtPath error = %v, want session catalog invokes error", err)
+	if _, err := NewLifecycle().PrepareAtPath(cfgPath); err != nil {
+		t.Fatalf("PrepareAtPath: %v", err)
 	}
 }
 
