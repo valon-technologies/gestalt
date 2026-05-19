@@ -59,6 +59,18 @@ gestaltd lock --config deploy/config.yaml
 gestaltd sync --locked --config deploy/config.yaml --artifacts-dir deploy
 ```
 
+If the deployment builds local source providers during `sync`, you can opt into
+the generic Gestalt build cache during the build stage:
+
+```dockerfile
+RUN --mount=type=cache,target=/root/.cache/gestalt-build,sharing=locked \
+    GESTALT_BUILD_CACHE_DIR=/root/.cache/gestalt-build \
+    gestaltd sync --locked --config deploy/config.yaml --artifacts-dir deploy
+```
+
+The cache stores build accelerators only. It is safe to delete, and unsetting
+`GESTALT_BUILD_CACHE_DIR` returns `sync` to the default clean build behavior.
+
 ```
 deploy/
   config.yaml
