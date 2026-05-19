@@ -12,6 +12,7 @@ type YAMLConfig struct {
 	Name         string            `yaml:"name"`
 	Command      string            `yaml:"command"`
 	Args         []string          `yaml:"args"`
+	Workdir      string            `yaml:"workdir"`
 	Env          map[string]string `yaml:"env"`
 	Egress       *YAMLEgressConfig `yaml:"egress,omitempty"`
 	HostBinary   string            `yaml:"hostBinary"`
@@ -58,13 +59,14 @@ func PrepareExecution(params PrepareParams) (PreparedConfig, error) {
 	var cleanup func()
 
 	if cfg.Command == "" && cfg.ManifestPath != "" {
-		command, args, tempCleanup, err := providerpkg.SourceManifestExecutionCommand(cfg.ManifestPath, params.Kind, providerpkg.SourceBuildOptions{})
+		execution, err := providerpkg.SourceManifestExecution(cfg.ManifestPath, params.Kind, providerpkg.SourceBuildOptions{})
 		if err != nil {
 			return PreparedConfig{}, fmt.Errorf("%s: prepare source execution: %w", params.Subject, err)
 		}
-		cfg.Command = command
-		cfg.Args = args
-		cleanup = tempCleanup
+		cfg.Command = execution.Command
+		cfg.Args = execution.Args
+		cfg.Workdir = execution.Workdir
+		cleanup = execution.Cleanup
 	}
 
 	if cfg.Command == "" {

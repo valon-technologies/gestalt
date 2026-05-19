@@ -317,6 +317,7 @@ func (p *LocalProvider) StartPlugin(ctx context.Context, req StartPluginRequest)
 	process, err := runtimehost.StartPluginProcess(ctx, runtimehost.ProcessConfig{
 		Command: req.Command,
 		Args:    req.Args,
+		Workdir: req.Workdir,
 		Env:     env,
 		Egress: egress.Policy{
 			AllowedHosts:  append([]string(nil), req.Egress.AllowedHosts...),

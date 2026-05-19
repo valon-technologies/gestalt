@@ -1675,6 +1675,7 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
 });
 
 test("plugin runtime provider serves runtime metadata plus sessions", async () => {
+  let startPluginWorkdir: string | undefined;
   const provider = definePluginRuntimeProvider({
     name: "runtime-provider",
     displayName: "Fixture Runtime",
@@ -1712,6 +1713,7 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
     },
     removeWorkspace() {},
     startPlugin(request) {
+      startPluginWorkdir = request.workdir;
       return {
         id: "hosted-plugin-1",
         sessionId: request.sessionId,
@@ -1786,6 +1788,7 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
     create(StartHostedPluginRequestSchema, {
       sessionId: "plugin-session",
       pluginName: "plugin",
+      workdir: "/runtime/providers/plugin",
     }),
   );
   expect(hosted).toMatchObject({
@@ -1794,6 +1797,7 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
     pluginName: "plugin",
     dialTarget: "unix:///tmp/plugin.sock",
   });
+  expect(startPluginWorkdir).toBe("/runtime/providers/plugin");
 
   const stopped = await (service.stopSession as any)(
     create(StopPluginRuntimeSessionRequestSchema, {

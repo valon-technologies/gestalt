@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -25,6 +26,8 @@ SH
 chmod +x .gestalt/build/provider
 `
 	mustWriteFile(t, filepath.Join(root, "build.sh"), []byte(buildScript), 0o755)
+	prefixScriptPath := filepath.Join(root, "prefix.sh")
+	mustWriteFile(t, prefixScriptPath, []byte("#!/bin/sh\nexec \"$@\"\n"), 0o755)
 	manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindPlugin,
 		Source:      "github.com/test/plugins/provider",
@@ -35,6 +38,7 @@ chmod +x .gestalt/build/provider
 			Command: []string{"sh", "./build.sh"},
 			Inputs:  []string{"build.sh"},
 		},
+		Run:        &providermanifestv1.SourceRun{CommandPrefix: []string{prefixScriptPath}},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}))
 
@@ -56,6 +60,9 @@ chmod +x .gestalt/build/provider
 		}
 		t.Fatalf("staged manifest entrypoint = %#v, want artifact path %q", entrypoint, artifactPath)
 	}
+	if staged.Manifest.Build != nil || staged.Manifest.Run != nil {
+		t.Fatalf("staged manifest retained source execution metadata: build=%#v run=%#v", staged.Manifest.Build, staged.Manifest.Run)
+	}
 
 	stagedBinaryPath := filepath.Join(stagingDir, filepath.FromSlash(artifactPath))
 	data, err := os.ReadFile(stagedBinaryPath)
@@ -72,6 +79,109 @@ chmod +x .gestalt/build/provider
 	}
 	if len(catalogData) == 0 {
 		t.Fatal("staged catalog.yaml is empty")
+	}
+}
+
+func TestSourcePrepareOnlyBuildAndRunPrefix(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == windowsOS {
+		t.Skip("fake uv fixture uses POSIX shell")
+	}
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T, root, fakeUVPath, logPath string)
+	}{
+		{
+			name: "source execution wraps entrypoint",
+			run: func(t *testing.T, root, fakeUVPath, logPath string) {
+				mustWriteFile(t, filepath.Join(root, "provider.sh"), []byte("#!/bin/sh\nexit 0\n"), 0o755)
+				manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+					Kind:    providermanifestv1.KindPlugin,
+					Source:  "github.com/test/plugins/uv-provider",
+					Version: "0.0.1-alpha.1",
+					Build: &providermanifestv1.SourceBuild{
+						Command:     []string{fakeUVPath, "sync", "--frozen", "--no-install-project"},
+						PrepareOnly: true,
+					},
+					Run:        &providermanifestv1.SourceRun{CommandPrefix: []string{fakeUVPath, "run", "--frozen"}},
+					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider.sh", Args: []string{"--serve"}},
+					Spec:       &providermanifestv1.Spec{},
+				}))
+
+				execution, err := SourceManifestExecution(manifestPath, providermanifestv1.KindPlugin, SourceBuildOptions{})
+				if err != nil {
+					t.Fatalf("SourceManifestExecution: %v", err)
+				}
+				if execution.Command != fakeUVPath {
+					t.Fatalf("execution.Command = %q, want %q", execution.Command, fakeUVPath)
+				}
+				wantArgs := []string{"run", "--frozen", filepath.Join(root, "provider.sh"), "--serve"}
+				if !slices.Equal(execution.Args, wantArgs) {
+					t.Fatalf("execution.Args = %#v, want %#v", execution.Args, wantArgs)
+				}
+				if execution.Workdir != root {
+					t.Fatalf("execution.Workdir = %q, want %q", execution.Workdir, root)
+				}
+				assertLogContains(t, logPath, root+"|sync --frozen --no-install-project")
+			},
+		},
+		{
+			name: "prepare runs before static catalog generation",
+			run: func(t *testing.T, root, fakeUVPath, logPath string) {
+				mustWriteFile(t, filepath.Join(root, "provider.sh"), []byte(`#!/bin/sh
+set -eu
+if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+  printf 'name: provider\noperations:\n  - id: uv_catalog\n    method: POST\n' > "$GESTALT_PLUGIN_WRITE_CATALOG"
+fi
+`), 0o755)
+				manifestPath := mustWriteManifestData(t, root, "manifest.yaml", mustManifestYAML(t, &providermanifestv1.Manifest{
+					Kind:    providermanifestv1.KindPlugin,
+					Source:  "github.com/test/plugins/uv-provider",
+					Version: "0.0.1-alpha.1",
+					Build: &providermanifestv1.SourceBuild{
+						Command:     []string{fakeUVPath, "sync", "--frozen", "--no-install-project"},
+						PrepareOnly: true,
+					},
+					Run:        &providermanifestv1.SourceRun{CommandPrefix: []string{fakeUVPath, "run", "--frozen"}},
+					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "provider.sh"},
+					Spec:       &providermanifestv1.Spec{},
+				}))
+
+				if _, _, err := PrepareSourceManifest(manifestPath); err != nil {
+					t.Fatalf("PrepareSourceManifest: %v", err)
+				}
+
+				catalogData, err := os.ReadFile(filepath.Join(root, StaticCatalogFile))
+				if err != nil {
+					t.Fatalf("ReadFile(%s): %v", filepath.Join(root, StaticCatalogFile), err)
+				}
+				if !strings.Contains(string(catalogData), "uv_catalog") {
+					t.Fatalf("catalog = %q, want generated catalog", catalogData)
+				}
+
+				logText := readLog(t, logPath)
+				syncLine := root + "|sync --frozen --no-install-project"
+				runLine := root + "|run --frozen " + filepath.Join(root, "provider.sh")
+				syncIdx := strings.Index(logText, syncLine)
+				runIdx := strings.Index(logText, runLine)
+				if syncIdx < 0 || runIdx < 0 || syncIdx > runIdx {
+					t.Fatalf("uv log = %q, want sync before catalog run", logText)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			fakeUVPath, logPath := writeFakeUV(t, root)
+			tc.run(t, root, fakeUVPath, logPath)
+		})
 	}
 }
 
@@ -147,6 +257,52 @@ chmod +x .gestalt/build/provider
 	if !strings.Contains(string(stagedBinary), "target artifact") {
 		t.Fatalf("staged binary did not come from target build: %s", stagedBinary)
 	}
+}
+
+func writeFakeUV(t *testing.T, root string) (string, string) {
+	t.Helper()
+
+	logPath := filepath.Join(root, "uv.log")
+	uvPath := filepath.Join(root, "uv")
+	mustWriteFile(t, uvPath, []byte(`#!/bin/sh
+set -eu
+printf '%s|%s\n' "$PWD" "$*" >> `+shellQuote(logPath)+`
+if [ "$#" -gt 0 ] && [ "$1" = "sync" ]; then
+  exit 0
+fi
+if [ "$#" -gt 0 ] && [ "$1" = "run" ]; then
+  shift
+  while [ "$#" -gt 0 ] && [ "$1" = "--frozen" ]; do
+    shift
+  done
+  exec "$@"
+fi
+echo "unexpected uv invocation: $*" >&2
+exit 64
+`), 0o755)
+	return uvPath, logPath
+}
+
+func assertLogContains(t *testing.T, logPath, want string) {
+	t.Helper()
+
+	if got := readLog(t, logPath); !strings.Contains(got, want) {
+		t.Fatalf("uv log = %q, want to contain %q", got, want)
+	}
+}
+
+func readLog(t *testing.T, logPath string) string {
+	t.Helper()
+
+	logData, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", logPath, err)
+	}
+	return string(logData)
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func TestStagePreparedInstallDir_WithEntrypointCopiesGeneratedCatalog(t *testing.T) {

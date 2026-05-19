@@ -21,6 +21,7 @@ import (
 type ExecConfig struct {
 	Command          string
 	Args             []string
+	Workdir          string
 	Env              map[string]string
 	StaticSpec       StaticProviderSpec
 	Config           map[string]any
@@ -71,6 +72,7 @@ func (c ExecConfig) processConfig() runtimehost.ProcessConfig {
 	return runtimehost.ProcessConfig{
 		Command:      c.Command,
 		Args:         c.Args,
+		Workdir:      c.Workdir,
 		Env:          c.Env,
 		Egress:       cloneEgressPolicy(c.Egress),
 		HostBinary:   c.HostBinary,

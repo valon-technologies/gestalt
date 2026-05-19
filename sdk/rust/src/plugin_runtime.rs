@@ -120,6 +120,7 @@ pub struct StartHostedPluginRequest {
     pub allowed_hosts: Vec<String>,
     pub default_action: String,
     pub host_binary: String,
+    pub workdir: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -229,6 +230,7 @@ fn start_plugin_request_from_proto(
         allowed_hosts: value.allowed_hosts,
         default_action: value.default_action,
         host_binary: value.host_binary,
+        workdir: value.workdir,
     }
 }
 

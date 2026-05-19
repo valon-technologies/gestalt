@@ -43,6 +43,7 @@ struct SeenRequest {
     agent_session_id: String,
     command: String,
     cwd: String,
+    workdir: String,
 }
 
 #[derive(Default)]
@@ -178,6 +179,7 @@ impl PluginRuntimeProvider for TestPluginRuntimeProvider {
             session_id: request.session_id.clone(),
             plugin_name: request.plugin_name.clone(),
             command: request.command,
+            workdir: request.workdir,
             ..Default::default()
         });
         Ok(HostedPlugin {
@@ -320,6 +322,7 @@ async fn plugin_runtime_provider_transport_uses_native_trait_types() {
             allowed_hosts: vec!["api.github.com".to_string()],
             default_action: "deny".to_string(),
             host_binary: "/usr/bin/gestalt-plugin-host".to_string(),
+            workdir: "/runtime/providers/github".to_string(),
         })
         .await
         .expect("start plugin")
@@ -372,6 +375,7 @@ async fn plugin_runtime_provider_transport_uses_native_trait_types() {
                 session_id: "session-1".to_string(),
                 plugin_name: "github".to_string(),
                 command: "/bin/plugin".to_string(),
+                workdir: "/runtime/providers/github".to_string(),
                 ..Default::default()
             },
             SeenRequest {

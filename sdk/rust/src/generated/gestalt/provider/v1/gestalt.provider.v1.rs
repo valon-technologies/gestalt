@@ -2685,6 +2685,8 @@ pub struct StartHostedPluginRequest {
     pub default_action: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
     pub host_binary: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub workdir: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HostedPlugin {

@@ -3716,10 +3716,11 @@ func sourceBuildPathDomains(sourceDir string, manifest *providermanifestv1.Manif
 	if err != nil {
 		return nil, err
 	}
-	return []string{
-		workdir,
-		filepath.Join(sourceDir, filepath.FromSlash(outputRel)),
-	}, nil
+	domains := []string{workdir}
+	if outputRel != "" {
+		domains = append(domains, filepath.Join(sourceDir, filepath.FromSlash(outputRel)))
+	}
+	return domains, nil
 }
 
 func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths, cfg *config.Config, locked bool, bootstrapLock *Lockfile, mode artifactMode) (bool, error) {

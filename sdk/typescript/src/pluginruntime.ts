@@ -125,6 +125,7 @@ export interface StartHostedPluginRequest {
   allowedHosts?: readonly string[] | undefined;
   defaultAction?: string | undefined;
   hostBinary?: string | undefined;
+  workdir?: string | undefined;
 }
 
 export interface HostedPlugin {
@@ -409,6 +410,7 @@ function startHostedPluginRequestFromProto(
     allowedHosts: [...request.allowedHosts],
     defaultAction: request.defaultAction,
     hostBinary: request.hostBinary,
+    workdir: request.workdir,
   };
 }
 

@@ -259,6 +259,7 @@ func (p *executableProvider) StartPlugin(ctx context.Context, req StartPluginReq
 		AllowedHosts:  append([]string(nil), req.Egress.AllowedHosts...),
 		DefaultAction: string(req.Egress.DefaultAction),
 		HostBinary:    req.HostBinary,
+		Workdir:       req.Workdir,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start hosted plugin: %w", p.enrichStartPluginError(req.SessionID, err))

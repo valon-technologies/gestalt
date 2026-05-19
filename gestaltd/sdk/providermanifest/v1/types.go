@@ -69,15 +69,116 @@ type Manifest struct {
 	Description string       `json:"description,omitempty" yaml:"description,omitempty"`
 	IconFile    string       `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
 	Build       *SourceBuild `json:"build,omitempty" yaml:"build,omitempty"`
+	Run         *SourceRun   `json:"run,omitempty" yaml:"run,omitempty"`
 	Artifacts   []Artifact   `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
 	Entrypoint  *Entrypoint  `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
 	Spec        *Spec        `json:"spec,omitempty" yaml:"spec,omitempty"`
 }
 
 type SourceBuild struct {
+	Workdir     string   `json:"workdir,omitempty" yaml:"workdir,omitempty"`
+	Command     []string `json:"command" yaml:"command"`
+	Inputs      []string `json:"inputs,omitempty" yaml:"inputs,omitempty"`
+	PrepareOnly bool     `json:"-" yaml:"-"`
+}
+
+type SourceRun struct {
+	CommandPrefix []string `json:"commandPrefix,omitempty" yaml:"commandPrefix,omitempty"`
+}
+
+type sourceBuildWire struct {
 	Workdir string   `json:"workdir,omitempty" yaml:"workdir,omitempty"`
 	Command []string `json:"command" yaml:"command"`
 	Inputs  []string `json:"inputs,omitempty" yaml:"inputs,omitempty"`
+}
+
+func (b *SourceBuild) UnmarshalJSON(data []byte) error {
+	if b == nil {
+		return nil
+	}
+	trimmed := bytes.TrimSpace(data)
+	if bytes.Equal(trimmed, []byte("null")) {
+		*b = SourceBuild{}
+		return nil
+	}
+	if len(trimmed) > 0 && trimmed[0] == '[' {
+		var command []string
+		if err := json.Unmarshal(trimmed, &command); err != nil {
+			return err
+		}
+		*b = SourceBuild{Command: command, PrepareOnly: true}
+		return nil
+	}
+	if err := validateJSONWireObjectFields(trimmed, sourceBuildWireFields); err != nil {
+		return err
+	}
+	var raw sourceBuildWire
+	if err := decodeJSONKnownFields(trimmed, &raw); err != nil {
+		return err
+	}
+	*b = SourceBuild{
+		Workdir: raw.Workdir,
+		Command: raw.Command,
+		Inputs:  raw.Inputs,
+	}
+	return nil
+}
+
+func (b SourceBuild) MarshalJSON() ([]byte, error) {
+	if b.PrepareOnly {
+		return json.Marshal(b.Command)
+	}
+	return json.Marshal(sourceBuildWire{
+		Workdir: b.Workdir,
+		Command: b.Command,
+		Inputs:  b.Inputs,
+	})
+}
+
+func (b *SourceBuild) UnmarshalYAML(value *yaml.Node) error {
+	if b == nil {
+		return nil
+	}
+	if value == nil {
+		*b = SourceBuild{}
+		return nil
+	}
+	switch value.Kind {
+	case yaml.SequenceNode:
+		var command []string
+		if err := value.Decode(&command); err != nil {
+			return err
+		}
+		*b = SourceBuild{Command: command, PrepareOnly: true}
+		return nil
+	case yaml.MappingNode:
+		if err := validateYAMLWireObjectFields(value, sourceBuildWireFields, "build"); err != nil {
+			return err
+		}
+		var raw sourceBuildWire
+		if err := decodeYAMLKnownFields(value, &raw); err != nil {
+			return err
+		}
+		*b = SourceBuild{
+			Workdir: raw.Workdir,
+			Command: raw.Command,
+			Inputs:  raw.Inputs,
+		}
+		return nil
+	default:
+		return fmt.Errorf("build must be a sequence or mapping")
+	}
+}
+
+func (b SourceBuild) MarshalYAML() (any, error) {
+	if b.PrepareOnly {
+		return append([]string(nil), b.Command...), nil
+	}
+	return sourceBuildWire{
+		Workdir: b.Workdir,
+		Command: b.Command,
+		Inputs:  b.Inputs,
+	}, nil
 }
 
 // Spec is a union type validated per kind. For auth/datastore/secrets only
@@ -994,6 +1095,12 @@ func validateYAMLWireObjectFields(node *yaml.Node, allowed map[string]struct{}, 
 		}
 	}
 	return nil
+}
+
+var sourceBuildWireFields = map[string]struct{}{
+	"workdir": {},
+	"command": {},
+	"inputs":  {},
 }
 
 var specWireFields = map[string]struct{}{

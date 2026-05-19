@@ -75,7 +75,7 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s: %w", manifestPath, err)
 	}
-	if !hostBuiltForCatalog || !sourceBuildTargetsHost(targetOpts) {
+	if SourceBuildProducesOutput(manifest) && (!hostBuiltForCatalog || !sourceBuildTargetsHost(targetOpts)) {
 		if err := EnsureSourceBuildOutput(manifestPath, manifest, targetOpts); err != nil {
 			return nil, err
 		}
@@ -93,7 +93,7 @@ func ensureHostBuildForSourceStaticCatalog(manifestPath string, manifest *provid
 	if err != nil {
 		return false, err
 	}
-	if EffectiveSourceBuild(manifest) == nil || !mayGenerate {
+	if !SourceBuildProducesOutput(manifest) || !mayGenerate {
 		return false, nil
 	}
 	if err := EnsureSourceBuildOutput(manifestPath, manifest, SourceBuildOptions{}); err != nil {
@@ -181,7 +181,7 @@ func stagePreparedInstallDir(manifestPath, stagingDir string, srcManifest *provi
 
 	var stagedManifest *providermanifestv1.Manifest
 	buildKind := ""
-	if EffectiveSourceBuild(srcManifest) == nil {
+	if !SourceBuildProducesOutput(srcManifest) {
 		var err error
 		buildKind, err = resolvePreparedInstallBuildKind(sourceDir, srcManifest, "")
 		if err != nil {
@@ -351,13 +351,21 @@ func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest
 	if err != nil {
 		return nil, fmt.Errorf("clone manifest: %w", err)
 	}
+	uiAssetRoot := SourceUIBuildOutput(manifest)
 	manifest.Version = version
 	manifest.Build = nil
+	manifest.Run = nil
 	manifest.Artifacts = nil
 
 	kind, err := ManifestKind(manifest)
 	if err != nil {
 		return nil, err
+	}
+	if kind == providermanifestv1.KindUI && uiAssetRoot != "" {
+		if manifest.Spec == nil {
+			manifest.Spec = &providermanifestv1.Spec{}
+		}
+		manifest.Spec.AssetRoot = uiAssetRoot
 	}
 	entry := EntrypointForKind(manifest, kind)
 	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
@@ -381,6 +389,7 @@ func buildPreparedInstallManifest(srcManifest *providermanifestv1.Manifest, vers
 	}
 	manifest.Version = version
 	manifest.Build = nil
+	manifest.Run = nil
 	manifest.Artifacts = []providermanifestv1.Artifact{
 		{OS: goos, Arch: goarch, Path: binaryName, SHA256: digest},
 	}

@@ -86,6 +86,7 @@ type StartHostedPluginRequest struct {
 	AllowedHosts  []string
 	DefaultAction string
 	HostBinary    string
+	Workdir       string
 }
 
 type HostedPlugin struct {

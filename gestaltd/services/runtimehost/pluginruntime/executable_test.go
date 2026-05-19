@@ -126,6 +126,45 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 	}
 }
 
+func TestExecutableProviderForwardsStartPluginWorkdir(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	runtimeBin := buildRuntimeLogProviderBinary(t)
+	runtimeProvider, err := NewExecutableProvider(ctx, ExecutableConfig{
+		Name:    "modal",
+		Command: runtimeBin,
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableProvider: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = runtimeProvider.Close()
+	})
+
+	session, err := runtimeProvider.StartSession(ctx, StartSessionRequest{
+		PluginName: "agent",
+	})
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	hosted, err := runtimeProvider.StartPlugin(ctx, StartPluginRequest{
+		SessionID:  session.ID,
+		PluginName: "agent",
+		Command:    "/bin/plugin",
+		Workdir:    "/tmp/provider-root",
+	})
+	if err != nil {
+		t.Fatalf("StartPlugin: %v", err)
+	}
+	if hosted.DialTarget != "workdir:///tmp/provider-root" {
+		t.Fatalf("DialTarget = %q, want forwarded workdir", hosted.DialTarget)
+	}
+}
+
 func buildRuntimeLogProviderBinary(t *testing.T) string {
 	t.Helper()
 
@@ -250,6 +289,14 @@ func (p *runtimeProvider) StopSession(_ context.Context, sessionID string) error
 }
 
 func (p *runtimeProvider) StartPlugin(ctx context.Context, req gestalt.StartHostedPluginRequest) (gestalt.HostedPlugin, error) {
+	if req.Workdir != "" {
+		return gestalt.HostedPlugin{
+			ID:         "hosted-" + req.PluginName,
+			SessionID:  req.SessionID,
+			PluginName: req.PluginName,
+			DialTarget: "workdir://" + req.Workdir,
+		}, nil
+	}
 	host, err := gestalt.RuntimeLogHost()
 	if err == nil {
 		defer func() { _ = host.Close() }()

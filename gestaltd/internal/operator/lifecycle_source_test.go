@@ -115,6 +115,87 @@ plugins:
 	}
 }
 
+func TestSourceBuildPathDomains(t *testing.T) {
+	t.Parallel()
+
+	sourceDir := filepath.Join(t.TempDir(), "provider")
+
+	tests := []struct {
+		name     string
+		manifest *providermanifestv1.Manifest
+		want     []string
+	}{
+		{
+			name: "no build",
+			manifest: &providermanifestv1.Manifest{
+				Kind:    providermanifestv1.KindPlugin,
+				Source:  "github.com/acme/plugins/provider",
+				Version: "0.0.1-alpha.1",
+				Spec:    &providermanifestv1.Spec{},
+			},
+		},
+		{
+			name: "output producing build tracks workdir and output",
+			manifest: &providermanifestv1.Manifest{
+				Kind:       providermanifestv1.KindPlugin,
+				Source:     "github.com/acme/plugins/provider",
+				Version:    "0.0.1-alpha.1",
+				Build:      &providermanifestv1.SourceBuild{Command: []string{"go", "build"}},
+				Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "bin/provider"},
+				Spec:       &providermanifestv1.Spec{},
+			},
+			want: []string{
+				sourceDir,
+				filepath.Join(sourceDir, "bin", "provider"),
+			},
+		},
+		{
+			name: "prepare-only build tracks default workdir",
+			manifest: &providermanifestv1.Manifest{
+				Kind:    providermanifestv1.KindPlugin,
+				Source:  "github.com/acme/plugins/provider",
+				Version: "0.0.1-alpha.1",
+				Build: &providermanifestv1.SourceBuild{
+					Command:     []string{"uv", "sync"},
+					PrepareOnly: true,
+				},
+				Spec: &providermanifestv1.Spec{},
+			},
+			want: []string{sourceDir},
+		},
+		{
+			name: "prepare-only build tracks configured workdir",
+			manifest: &providermanifestv1.Manifest{
+				Kind:    providermanifestv1.KindPlugin,
+				Source:  "github.com/acme/plugins/provider",
+				Version: "0.0.1-alpha.1",
+				Build: &providermanifestv1.SourceBuild{
+					Command:     []string{"uv", "sync"},
+					PrepareOnly: true,
+					Workdir:     "src",
+				},
+				Spec: &providermanifestv1.Spec{},
+			},
+			want: []string{filepath.Join(sourceDir, "src")},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			domains, err := sourceBuildPathDomains(sourceDir, tc.manifest)
+			if err != nil {
+				t.Fatalf("sourceBuildPathDomains: %v", err)
+			}
+			if !slices.Equal(domains, tc.want) {
+				t.Fatalf("domains = %#v, want %#v", domains, tc.want)
+			}
+		})
+	}
+}
+
 func TestLifecycleGitSourceUIBuildLockSyncContract(t *testing.T) {
 	t.Parallel()
 

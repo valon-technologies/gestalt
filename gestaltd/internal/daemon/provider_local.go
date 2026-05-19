@@ -829,6 +829,7 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 	entry := target.Entry
 	command := entry.Command
 	args := slices.Clone(entry.Args)
+	workdir := ""
 	env := cloneStringMap(entry.Env)
 	var cleanup func()
 	if command == "" {
@@ -836,10 +837,14 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 			return nil, fmt.Errorf("plugins.%s resolved manifest path is required for source provider execution", target.Name)
 		}
 		var err error
-		command, args, cleanup, err = providerpkg.SourceManifestExecutionCommand(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
+		execution, err := providerpkg.SourceManifestExecution(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("plugins.%s: prepare source provider execution: %w", target.Name, err)
 		}
+		command = execution.Command
+		args = execution.Args
+		workdir = execution.Workdir
+		cleanup = execution.Cleanup
 	}
 	env = mergeStringMaps(env, remote.Env)
 
@@ -849,6 +854,7 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 	process, err := runtimehost.StartPluginProcess(ctx, runtimehost.ProcessConfig{
 		Command:      command,
 		Args:         args,
+		Workdir:      workdir,
 		Env:          env,
 		HostBinary:   entry.HostBinary,
 		Cleanup:      cleanup,

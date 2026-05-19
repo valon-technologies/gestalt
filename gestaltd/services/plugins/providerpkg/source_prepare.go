@@ -34,6 +34,11 @@ func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Man
 	if err != nil {
 		return nil, nil, err
 	}
+	if build := EffectiveSourceBuild(manifest); build != nil && build.PrepareOnly {
+		if err := RunSourceBuild(manifestPath, manifest, SourceBuildOptions{}); err != nil {
+			return nil, nil, err
+		}
+	}
 	if err := EnsureSourceStaticCatalog(manifestPath, manifest); err != nil {
 		return nil, nil, err
 	}
@@ -62,7 +67,7 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 	} else if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("stat static catalog %q: %w", StaticCatalogFile, err)
 	}
-	if err := generateSourceStaticCatalog(rootDir, manifest, absoluteCatalogPath); err != nil {
+	if err := generateSourceStaticCatalog(manifestPath, rootDir, manifest, absoluteCatalogPath); err != nil {
 		return err
 	}
 	if _, err := os.Stat(absoluteCatalogPath); err != nil {
@@ -74,34 +79,27 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 	return nil
 }
 
-func generateSourceStaticCatalog(rootDir string, manifest *providermanifestv1.Manifest, catalogPath string) error {
+func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *providermanifestv1.Manifest, catalogPath string) error {
 	var execEnv map[string]string
-	var cleanup func()
-	entry := EntrypointForKind(manifest, providermanifestv1.KindPlugin)
-	command := ""
-	var args []string
-	if entry != nil && entry.ArtifactPath != "" {
-		command = filepath.Join(rootDir, filepath.FromSlash(entry.ArtifactPath))
-		args = append([]string(nil), entry.Args...)
-	} else {
-		var err error
-		command, args, cleanup, err = SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
-		if err != nil {
-			if errors.Is(err, ErrNoSourceProviderPackage) {
-				return nil
-			}
-			return fmt.Errorf("prepare synthesized source provider for static catalog: %w", err)
+	execution, err := sourceManifestExecution(manifestPath, manifest, providermanifestv1.KindPlugin, SourceBuildOptions{})
+	if err != nil {
+		if errors.Is(err, ErrNoSourceProviderPackage) {
+			return nil
 		}
+		return fmt.Errorf("prepare synthesized source provider for static catalog: %w", err)
+	}
+	if EntrypointForKind(manifest, providermanifestv1.KindPlugin) == nil {
 		execEnv, err = SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			return fmt.Errorf("prepare synthesized source provider environment for static catalog: %w", err)
 		}
 	}
-	if cleanup != nil {
-		defer cleanup()
+	if execution.Cleanup != nil {
+		defer execution.Cleanup()
 	}
 
-	cmd := exec.Command(command, args...)
+	cmd := exec.Command(execution.Command, execution.Args...)
+	cmd.Dir = execution.Workdir
 	cmd.Env = append(
 		os.Environ(),
 		envWriteCatalog+"="+catalogPath,

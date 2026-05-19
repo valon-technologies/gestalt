@@ -93,6 +93,7 @@ message StartHostedPluginRequest {
   repeated string allowed_hosts = 7;
   string default_action = 8;
   string host_binary = 9;
+  string workdir = 11;
 }
 
 message HostedPlugin {

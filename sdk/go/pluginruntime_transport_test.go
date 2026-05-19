@@ -17,6 +17,7 @@ import (
 type pluginRuntimeTransportProvider struct {
 	prepareReq gestalt.PreparePluginRuntimeWorkspaceRequest
 	removeReq  gestalt.RemovePluginRuntimeWorkspaceRequest
+	pluginReq  gestalt.StartHostedPluginRequest
 }
 
 func (*pluginRuntimeTransportProvider) GetMetadata() gestalt.ProviderMetadata {
@@ -54,8 +55,9 @@ func (*pluginRuntimeTransportProvider) StopSession(context.Context, string) erro
 	return nil
 }
 
-func (*pluginRuntimeTransportProvider) StartPlugin(context.Context, gestalt.StartHostedPluginRequest) (gestalt.HostedPlugin, error) {
-	return gestalt.HostedPlugin{ID: "plugin-1", SessionID: "runtime-session-1"}, nil
+func (p *pluginRuntimeTransportProvider) StartPlugin(_ context.Context, req gestalt.StartHostedPluginRequest) (gestalt.HostedPlugin, error) {
+	p.pluginReq = req
+	return gestalt.HostedPlugin{ID: "plugin-1", SessionID: req.SessionID, PluginName: req.PluginName}, nil
 }
 
 func (p *pluginRuntimeTransportProvider) PrepareWorkspace(_ context.Context, req gestalt.PreparePluginRuntimeWorkspaceRequest) (gestalt.PreparePluginRuntimeWorkspaceResponse, error) {
@@ -164,6 +166,22 @@ func TestPluginRuntimeProviderWorkspaceTransport(t *testing.T) {
 	}
 	if provider.removeReq.SessionID != "runtime-session-1" || provider.removeReq.AgentSessionID != "agent-session-1" {
 		t.Fatalf("remove request = %#v", provider.removeReq)
+	}
+
+	hosted, err := client.StartPlugin(context.Background(), &proto.StartHostedPluginRequest{
+		SessionId:  "runtime-session-1",
+		PluginName: "github",
+		Command:    "/bin/plugin",
+		Workdir:    "/tmp/runtime-session-1/providers/github",
+	})
+	if err != nil {
+		t.Fatalf("StartPlugin: %v", err)
+	}
+	if hosted.GetSessionId() != "runtime-session-1" || hosted.GetPluginName() != "github" {
+		t.Fatalf("hosted plugin = %#v", hosted)
+	}
+	if provider.pluginReq.Workdir != "/tmp/runtime-session-1/providers/github" {
+		t.Fatalf("start plugin workdir = %q", provider.pluginReq.Workdir)
 	}
 
 	cancel()

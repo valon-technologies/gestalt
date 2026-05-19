@@ -39,6 +39,7 @@ func AuthenticationFactory(node yaml.Node, deps AuthenticationDeps) (core.Authen
 	return authenticationservice.NewExecutable(context.Background(), authenticationservice.ExecConfig{
 		Command:     cfg.Command,
 		Args:        cfg.Args,
+		Workdir:     cfg.Workdir,
 		Env:         cfg.Env,
 		Config:      cfg.Config,
 		Egress:      cfg.EgressPolicy(""),
