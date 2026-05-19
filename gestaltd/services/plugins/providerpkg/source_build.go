@@ -15,7 +15,6 @@ type ResolvedSourceBuild struct {
 	Label       string
 	Workdir     string
 	Command     []string
-	Output      string
 	Inputs      []string
 	PrepareOnly bool
 }
@@ -42,7 +41,6 @@ func EffectiveSourceBuild(manifest *providermanifestv1.Manifest) *ResolvedSource
 			Label:       "build",
 			Workdir:     manifest.Build.Workdir,
 			Command:     append([]string(nil), manifest.Build.Command...),
-			Output:      manifest.Build.Output,
 			Inputs:      append([]string(nil), manifest.Build.Inputs...),
 			PrepareOnly: manifest.Build.PrepareOnly,
 		}
@@ -116,7 +114,7 @@ func SourceBuildOutput(manifest *providermanifestv1.Manifest) (rel string, kind 
 	if manifestKind == providermanifestv1.KindUI {
 		output := SourceUIBuildOutput(manifest)
 		if strings.TrimSpace(output) == "" {
-			return "", "", fmt.Errorf("build.output or spec.assetRoot is required when build is set")
+			return "", "", fmt.Errorf("spec.assetRoot is required when build is set")
 		}
 		return output, providermanifestv1.KindUI, nil
 	}
@@ -213,14 +211,6 @@ func SourceBuildInputs(manifest *providermanifestv1.Manifest) []string {
 		return nil
 	}
 	return append([]string(nil), build.Inputs...)
-}
-
-func SourceManifestExecutionCommand(manifestPath, kind string, opts SourceBuildOptions) (string, []string, func(), error) {
-	exec, err := SourceManifestExecution(manifestPath, kind, opts)
-	if err != nil {
-		return "", nil, nil, err
-	}
-	return exec.Command, exec.Args, exec.Cleanup, nil
 }
 
 func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions) (SourceExecution, error) {

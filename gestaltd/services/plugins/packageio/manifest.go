@@ -212,10 +212,6 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 			return err
 		}
 	}
-	if manifest.Build != nil && manifest.Build.Output != "" && kind != providermanifestv1.KindUI {
-		return fmt.Errorf("build.output is only supported for source ui manifests")
-	}
-
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		if spec == nil {
@@ -262,28 +258,15 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if spec != nil {
 			assetRoot = spec.AssetRoot
 		}
-		buildOutput := ""
-		if manifest.Build != nil {
-			buildOutput = manifest.Build.Output
-			if buildOutput != "" {
-				if err := validateRelativeSourcePath(buildOutput, "build.output"); err != nil {
-					return err
-				}
-				if assetRoot != "" && assetRoot != buildOutput {
-					return fmt.Errorf("build.output must match spec.assetRoot when both are set")
-				}
-				assetRoot = buildOutput
-			}
-		}
 		if sourceMode {
 			if manifest.Build == nil {
 				return fmt.Errorf("build is required for source ui manifests")
 			}
 			if manifest.Build.PrepareOnly {
-				return fmt.Errorf("source ui manifests require build output metadata")
+				return fmt.Errorf("source ui manifests require object-form build metadata")
 			}
 			if assetRoot == "" {
-				return fmt.Errorf("build.output or spec.assetRoot is required for source ui manifests")
+				return fmt.Errorf("spec.assetRoot is required for source ui manifests")
 			}
 		} else if assetRoot == "" {
 			return fmt.Errorf("spec.assetRoot is required for ui manifests")
@@ -471,16 +454,8 @@ func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
 	if build.PrepareOnly && len(build.Inputs) > 0 {
 		return fmt.Errorf("build.inputs is only supported with object-form build metadata")
 	}
-	if build.PrepareOnly && build.Output != "" {
-		return fmt.Errorf("build.output is only supported with object-form build metadata")
-	}
 	if build.Workdir != "" {
 		if err := validateRelativeSourcePath(build.Workdir, "build.workdir"); err != nil {
-			return err
-		}
-	}
-	if build.Output != "" {
-		if err := validateRelativeSourcePath(build.Output, "build.output"); err != nil {
 			return err
 		}
 	}
@@ -522,9 +497,6 @@ func validateSourceRun(run *providermanifestv1.SourceRun) error {
 func SourceUIBuildOutput(manifest *providermanifestv1.Manifest) string {
 	if manifest == nil {
 		return ""
-	}
-	if manifest.Build != nil && strings.TrimSpace(manifest.Build.Output) != "" {
-		return manifest.Build.Output
 	}
 	if manifest.Spec != nil {
 		return manifest.Spec.AssetRoot

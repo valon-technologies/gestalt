@@ -559,7 +559,7 @@ func TestManifestWorkflow_SourceUIBuildValidation(t *testing.T) {
 		wantErr    string
 	}{
 		{
-			name: "source ui requires build output",
+			name: "source ui requires asset root",
 			manifest: `
 kind: ui
 source: github.com/acme/plugins/source-ui
@@ -568,10 +568,10 @@ build:
   command: [npm, run, build]
 `,
 			readSource: true,
-			wantErr:    "build.output or spec.assetRoot is required for source ui manifests",
+			wantErr:    "spec.assetRoot is required for source ui manifests",
 		},
 		{
-			name: "source ui uses asset root as build output",
+			name: "source ui uses asset root",
 			manifest: `
 kind: ui
 source: github.com/acme/plugins/source-ui
@@ -584,7 +584,7 @@ spec:
 			readSource: true,
 		},
 		{
-			name: "source ui uses build output",
+			name: "source ui rejects build output field",
 			manifest: `
 kind: ui
 source: github.com/acme/plugins/source-ui
@@ -598,6 +598,7 @@ spec:
       allowedRoles: [viewer]
 `,
 			readSource: true,
+			wantErr:    "build.output is not supported",
 		},
 		{
 			name: "source ui rejects prepare-only build",
@@ -610,7 +611,7 @@ spec:
   assetRoot: dist
 `,
 			readSource: true,
-			wantErr:    "source ui manifests require build output metadata",
+			wantErr:    "source ui manifests require object-form build metadata",
 		},
 		{
 			name: "released ui uses asset root",

@@ -78,7 +78,6 @@ type Manifest struct {
 type SourceBuild struct {
 	Workdir     string   `json:"workdir,omitempty" yaml:"workdir,omitempty"`
 	Command     []string `json:"command" yaml:"command"`
-	Output      string   `json:"output,omitempty" yaml:"output,omitempty"`
 	Inputs      []string `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 	PrepareOnly bool     `json:"-" yaml:"-"`
 }
@@ -90,7 +89,6 @@ type SourceRun struct {
 type sourceBuildWire struct {
 	Workdir string   `json:"workdir,omitempty" yaml:"workdir,omitempty"`
 	Command []string `json:"command" yaml:"command"`
-	Output  string   `json:"output,omitempty" yaml:"output,omitempty"`
 	Inputs  []string `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 }
 
@@ -121,7 +119,6 @@ func (b *SourceBuild) UnmarshalJSON(data []byte) error {
 	*b = SourceBuild{
 		Workdir: raw.Workdir,
 		Command: raw.Command,
-		Output:  raw.Output,
 		Inputs:  raw.Inputs,
 	}
 	return nil
@@ -134,7 +131,6 @@ func (b SourceBuild) MarshalJSON() ([]byte, error) {
 	return json.Marshal(sourceBuildWire{
 		Workdir: b.Workdir,
 		Command: b.Command,
-		Output:  b.Output,
 		Inputs:  b.Inputs,
 	})
 }
@@ -166,7 +162,6 @@ func (b *SourceBuild) UnmarshalYAML(value *yaml.Node) error {
 		*b = SourceBuild{
 			Workdir: raw.Workdir,
 			Command: raw.Command,
-			Output:  raw.Output,
 			Inputs:  raw.Inputs,
 		}
 		return nil
@@ -182,7 +177,6 @@ func (b SourceBuild) MarshalYAML() (any, error) {
 	return sourceBuildWire{
 		Workdir: b.Workdir,
 		Command: b.Command,
-		Output:  b.Output,
 		Inputs:  b.Inputs,
 	}, nil
 }
@@ -1106,7 +1100,6 @@ func validateYAMLWireObjectFields(node *yaml.Node, allowed map[string]struct{}, 
 var sourceBuildWireFields = map[string]struct{}{
 	"workdir": {},
 	"command": {},
-	"output":  {},
 	"inputs":  {},
 }
 
