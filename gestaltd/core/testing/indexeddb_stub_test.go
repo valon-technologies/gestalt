@@ -217,6 +217,26 @@ func TestStubUpgradeCreateIndexRequiresExistingObjectStore(t *testing.T) {
 	}
 }
 
+func TestStubUpgradeDeleteIndexRequiresExistingObjectStore(t *testing.T) {
+	t.Parallel()
+
+	db := &StubIndexedDB{}
+	ctx := context.Background()
+	version := uint64(1)
+	_, err := db.Open(ctx, "app", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			return upgrade.DeleteIndex(ctx, "missing", "by_email")
+		},
+	})
+	if !errors.Is(err, indexeddb.ErrNotFound) {
+		t.Fatalf("Open error = %v, want indexeddb.ErrNotFound", err)
+	}
+	if db.HasObjectStore("missing") {
+		t.Fatal("DeleteIndex created missing object store")
+	}
+}
+
 func TestStubOpenSameVersionPreservesStoreHandles(t *testing.T) {
 	t.Parallel()
 

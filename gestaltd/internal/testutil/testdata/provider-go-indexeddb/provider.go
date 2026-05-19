@@ -40,18 +40,21 @@ func (p *Provider) OpenDatabase(ctx context.Context, name string, opts gestalt.O
 		p.mu.Unlock()
 		return nil, gestalt.FailedPrecondition("requested version is lower than current version")
 	}
-	if p.version == 0 {
-		p.name = name
-	}
-	p.mu.Unlock()
 
 	if newVersion > oldVersion && opts.Upgrade != nil {
-		if err := opts.Upgrade(ctx, providerUpgradeContext{provider: p, oldVersion: oldVersion, newVersion: newVersion}); err != nil {
+		upgradeProvider := &Provider{
+			name:    name,
+			version: oldVersion,
+			stores:  cloneStores(p.stores),
+		}
+		p.mu.Unlock()
+		if err := opts.Upgrade(ctx, providerUpgradeContext{provider: upgradeProvider, oldVersion: oldVersion, newVersion: newVersion}); err != nil {
 			return nil, err
 		}
+		p.mu.Lock()
+		p.stores = cloneStores(upgradeProvider.stores)
 	}
 
-	p.mu.Lock()
 	p.name = name
 	p.version = newVersion
 	p.mu.Unlock()
@@ -374,7 +377,10 @@ func (u providerUpgradeContext) DeleteObjectStore(ctx context.Context, name stri
 func (u providerUpgradeContext) CreateIndex(ctx context.Context, store string, index gestalt.IndexSchema) error {
 	u.provider.mu.Lock()
 	defer u.provider.mu.Unlock()
-	s := u.provider.getStoreLocked(store)
+	s, err := u.provider.existingStoreLocked(store)
+	if err != nil {
+		return err
+	}
 	for i, existing := range s.schema.Indexes {
 		if existing.Name == index.Name {
 			s.schema.Indexes[i] = index
@@ -388,7 +394,10 @@ func (u providerUpgradeContext) CreateIndex(ctx context.Context, store string, i
 func (u providerUpgradeContext) DeleteIndex(_ context.Context, store string, name string) error {
 	u.provider.mu.Lock()
 	defer u.provider.mu.Unlock()
-	s := u.provider.getStoreLocked(store)
+	s, err := u.provider.existingStoreLocked(store)
+	if err != nil {
+		return err
+	}
 	indexes := s.schema.Indexes[:0]
 	for _, existing := range s.schema.Indexes {
 		if existing.Name != name {
@@ -432,6 +441,14 @@ func (p *Provider) getStoreLocked(name string) *objectStore {
 	s := &objectStore{records: make(map[string]gestalt.Record)}
 	p.stores[name] = s
 	return s
+}
+
+func (p *Provider) existingStoreLocked(name string) (*objectStore, error) {
+	s, ok := p.stores[name]
+	if !ok {
+		return nil, gestalt.NotFound("object store not found")
+	}
+	return s, nil
 }
 
 func fieldString(rec gestalt.Record, key string) string {
@@ -485,4 +502,36 @@ func cloneRecord(record gestalt.Record) gestalt.Record {
 		cloned[k] = v
 	}
 	return cloned
+}
+
+func cloneStores(stores map[string]*objectStore) map[string]*objectStore {
+	if len(stores) == 0 {
+		return make(map[string]*objectStore)
+	}
+	cloned := make(map[string]*objectStore, len(stores))
+	for name, store := range stores {
+		if store == nil {
+			continue
+		}
+		cloned[name] = store.clone()
+	}
+	return cloned
+}
+
+func (s *objectStore) clone() *objectStore {
+	records := make(map[string]gestalt.Record, len(s.records))
+	for id, record := range s.records {
+		records[id] = cloneRecord(record)
+	}
+	return &objectStore{
+		records: records,
+		schema:  cloneObjectStoreSchema(s.schema),
+	}
+}
+
+func cloneObjectStoreSchema(schema gestalt.ObjectStoreSchema) gestalt.ObjectStoreSchema {
+	return gestalt.ObjectStoreSchema{
+		Indexes: append([]gestalt.IndexSchema(nil), schema.Indexes...),
+		Columns: append([]gestalt.ColumnDef(nil), schema.Columns...),
+	}
 }

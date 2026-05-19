@@ -266,7 +266,7 @@ func (u stubUpgradeContext) DeleteIndex(_ context.Context, store string, name st
 	defer u.db.mu.Unlock()
 	st := u.db.stores[store]
 	if st == nil {
-		return nil
+		return indexeddb.ErrNotFound
 	}
 	indexes := st.schema.Indexes[:0]
 	for _, existing := range st.schema.Indexes {
