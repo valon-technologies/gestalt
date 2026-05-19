@@ -366,7 +366,16 @@ export interface GetWorkflowProviderRunRequest {
   runId: string;
 }
 
-export interface ListWorkflowProviderRunsRequest {}
+export interface ListWorkflowProviderRunsRequest {
+  pageSize?: number | undefined;
+  pageToken?: string | undefined;
+  status?: WorkflowRunStatus | undefined;
+}
+
+export interface ListWorkflowProviderRunsResponse {
+  runs: readonly BoundWorkflowRun[];
+  nextPageToken?: string | undefined;
+}
 
 export interface CancelWorkflowProviderRunRequest {
   runId: string;
@@ -1194,7 +1203,7 @@ export interface WorkflowProviderOptions extends ProviderBaseOptions {
   ) => MaybePromise<BoundWorkflowRun>;
   listRuns: (
     request: ListWorkflowProviderRunsRequest,
-  ) => MaybePromise<readonly BoundWorkflowRun[]>;
+  ) => MaybePromise<readonly BoundWorkflowRun[] | ListWorkflowProviderRunsResponse>;
   cancelRun: (
     request: CancelWorkflowProviderRunRequest,
   ) => MaybePromise<BoundWorkflowRun>;
@@ -1318,7 +1327,9 @@ export class WorkflowProvider extends ProviderBase {
     return await this.getRunHandler(request);
   }
 
-  async listRuns(request: ListWorkflowProviderRunsRequest): Promise<readonly BoundWorkflowRun[]> {
+  async listRuns(
+    request: ListWorkflowProviderRunsRequest,
+  ): Promise<readonly BoundWorkflowRun[] | ListWorkflowProviderRunsResponse> {
     return await this.listRunsHandler(request);
   }
 
@@ -1525,12 +1536,13 @@ export function createWorkflowProviderService(
       );
     },
     async listRuns(request) {
+      const response = await invokeWorkflowProvider("list runs", () =>
+        provider.listRuns(listWorkflowProviderRunsRequestFromProto(request)),
+      );
+      const result = listRunsResult(response);
       return create(ListWorkflowProviderRunsResponseSchema, {
-        runs: (
-          await invokeWorkflowProvider("list runs", () =>
-            provider.listRuns(listWorkflowProviderRunsRequestFromProto(request)),
-          )
-        ).map(boundWorkflowRunToProto),
+        runs: result.runs.map(boundWorkflowRunToProto),
+        nextPageToken: result.nextPageToken ?? "",
       });
     },
     async cancelRun(request) {
@@ -2451,9 +2463,13 @@ function getWorkflowProviderRunRequestFromProto(
 }
 
 function listWorkflowProviderRunsRequestFromProto(
-  _input: ProtoListWorkflowProviderRunsRequest,
+  input: ProtoListWorkflowProviderRunsRequest,
 ): ListWorkflowProviderRunsRequest {
-  return {};
+  return {
+    pageSize: input.pageSize,
+    pageToken: input.pageToken,
+    status: input.status as WorkflowRunStatus,
+  };
 }
 
 function cancelWorkflowProviderRunRequestFromProto(
@@ -2736,6 +2752,12 @@ function workflowHostRelayTokenInterceptor(token: string): Interceptor {
     req.header.set(WORKFLOW_HOST_RELAY_TOKEN_HEADER, token);
     return next(req);
   };
+}
+
+function listRunsResult(
+  value: readonly BoundWorkflowRun[] | ListWorkflowProviderRunsResponse,
+): ListWorkflowProviderRunsResponse {
+  return "runs" in value ? value : { runs: value };
 }
 
 async function invokeWorkflowProvider<T>(

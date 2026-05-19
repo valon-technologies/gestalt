@@ -640,7 +640,9 @@ fn test_cli_resumes_event_trigger() {
 fn test_cli_lists_runs() {
     let mut server = Server::new();
     let _mock = authed_json_mock!(server, Method::GET, "/api/v1/workflow/runs", StatusCode::OK)
-        .with_body(format!("[{RUN_JSON}]"))
+        .with_body(format!(
+            r#"{{"runs":[{RUN_JSON}],"nextPageToken":"next-1"}}"#
+        ))
         .create();
 
     let home = tempfile::tempdir().unwrap();
@@ -655,19 +657,35 @@ fn test_cli_lists_runs() {
 
 #[test]
 fn test_cli_list_runs_filters() {
-    let body = r#"[
-        {"id":"run-a","status":"running","target":{"plugin":{"name":"alpha","operation":"x"}},"trigger":{"kind":"manual"}},
-        {"id":"run-b","status":"failed","target":{"plugin":{"name":"beta","operation":"y"}},"trigger":{"kind":"event","triggerId":"evt-1"}}
-    ]"#;
+    let body = r#"{
+        "runs":[{"id":"run-b","status":"failed","target":{"plugin":{"name":"beta","operation":"y"}},"trigger":{"kind":"event","triggerId":"evt-1"}}],
+        "nextPageToken":"next-filtered"
+    }"#;
     let mut server = Server::new();
     let _mock = authed_json_mock!(server, Method::GET, "/api/v1/workflow/runs", StatusCode::OK)
+        .match_query(Matcher::AllOf(vec![
+            Matcher::UrlEncoded("plugin".into(), "beta".into()),
+            Matcher::UrlEncoded("status".into(), "failed".into()),
+            Matcher::UrlEncoded("pageSize".into(), "25".into()),
+            Matcher::UrlEncoded("pageToken".into(), "cursor-1".into()),
+        ]))
         .with_body(body)
         .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
         .args([
-            "workflow", "runs", "list", "--plugin", "beta", "--status", "failed",
+            "workflow",
+            "runs",
+            "list",
+            "--plugin",
+            "beta",
+            "--status",
+            "failed",
+            "--page-size",
+            "25",
+            "--page-token",
+            "cursor-1",
         ])
         .assert()
         .success()

@@ -406,13 +406,21 @@ class GetWorkflowProviderRunRequest(_message.Message):
 
 class ListWorkflowProviderRunsRequest(_message.Message):
     __slots__ = ()
-    def __init__(self) -> None: ...
+    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
+    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    page_size: int
+    page_token: str
+    status: WorkflowRunStatus
+    def __init__(self, page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ...) -> None: ...
 
 class ListWorkflowProviderRunsResponse(_message.Message):
     __slots__ = ()
     RUNS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     runs: _containers.RepeatedCompositeFieldContainer[BoundWorkflowRun]
-    def __init__(self, runs: _Optional[_Iterable[_Union[BoundWorkflowRun, _Mapping]]] = ...) -> None: ...
+    next_page_token: str
+    def __init__(self, runs: _Optional[_Iterable[_Union[BoundWorkflowRun, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
 
 class CancelWorkflowProviderRunRequest(_message.Message):
     __slots__ = ()

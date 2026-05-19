@@ -318,6 +318,7 @@ pub struct SignalWorkflowRunResponse {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ListWorkflowProviderRunsResponse {
     pub runs: Vec<BoundWorkflowRun>,
+    pub next_page_token: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -451,7 +452,11 @@ pub struct GetWorkflowProviderRunRequest {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ListWorkflowProviderRunsRequest {}
+pub struct ListWorkflowProviderRunsRequest {
+    pub page_size: i32,
+    pub page_token: String,
+    pub status: WorkflowRunStatus,
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CancelWorkflowProviderRunRequest {
@@ -2153,6 +2158,17 @@ fn list_runs_response_to_proto(
             .into_iter()
             .map(bound_workflow_run_to_proto)
             .collect::<ProviderResult<Vec<_>>>()?,
+        next_page_token: response.next_page_token,
+    })
+}
+
+fn list_workflow_provider_runs_request_from_proto(
+    request: pb::ListWorkflowProviderRunsRequest,
+) -> ProviderResult<ListWorkflowProviderRunsRequest> {
+    Ok(ListWorkflowProviderRunsRequest {
+        page_size: request.page_size,
+        page_token: request.page_token,
+        status: WorkflowRunStatus::try_from(request.status)?,
     })
 }
 
@@ -2768,10 +2784,10 @@ where
     ) -> std::result::Result<GrpcResponse<pb::ListWorkflowProviderRunsResponse>, Status> {
         let response = self
             .provider
-            .list_runs({
-                let _request = request.into_inner();
-                ListWorkflowProviderRunsRequest {}
-            })
+            .list_runs(
+                list_workflow_provider_runs_request_from_proto(request.into_inner())
+                    .map_err(|error| rpc_status("workflow list runs", error))?,
+            )
             .await
             .map_err(|error| rpc_status("workflow list runs", error))?;
         Ok(GrpcResponse::new(
