@@ -1040,10 +1040,11 @@ def workflow_agent_step_when(value: Any | None = None, **kwargs: Any) -> Any:
     if isinstance(value, pb.WorkflowAgentStepWhen):
         return _copy(value)
     data = _data(value, kwargs)
+    equals = _value(data["equals"]) if "equals" in data else None
     return pb.WorkflowAgentStepWhen(
         step_id=data.get("step_id", ""),
         output_path=data.get("output_path", ""),
-        equals=_optional_value(data.get("equals")),
+        equals=equals,
     )
 
 

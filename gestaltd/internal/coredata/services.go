@@ -175,7 +175,7 @@ func createObjectStores(
 }
 
 type databaseBackedIndexedDB struct {
-	mu           sync.Mutex
+	mu           sync.RWMutex
 	root         indexeddb.IndexedDB
 	factory      indexeddb.Factory
 	dbName       string
@@ -184,13 +184,7 @@ type databaseBackedIndexedDB struct {
 }
 
 func (d *databaseBackedIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
-	d.mu.Lock()
-	db := d.db
-	d.mu.Unlock()
-	if db == nil {
-		return errObjectStore{err: indexeddb.ErrNotFound}
-	}
-	store := db.ObjectStore(name)
+	store := databaseBackedObjectStore{db: d, name: name}
 	if d.metricDBName == "" {
 		return store
 	}
@@ -201,20 +195,22 @@ func (d *databaseBackedIndexedDB) ObjectStore(name string) indexeddb.ObjectStore
 }
 
 func (d *databaseBackedIndexedDB) Transaction(ctx context.Context, stores []string, mode indexeddb.TransactionMode, opts indexeddb.TransactionOptions) (indexeddb.Transaction, error) {
-	d.mu.Lock()
+	d.mu.RLock()
 	db := d.db
-	d.mu.Unlock()
 	if db == nil {
+		d.mu.RUnlock()
 		return nil, indexeddb.ErrNotFound
 	}
 	tx, err := db.Transaction(ctx, stores, mode, opts)
 	if err != nil {
+		d.mu.RUnlock()
 		return nil, err
 	}
+	wrapped := &databaseBackedTransaction{inner: tx, release: d.mu.RUnlock}
 	if d.metricDBName == "" {
-		return tx, nil
+		return wrapped, nil
 	}
-	return metricutil.InstrumentTransaction(tx, d.metricDBName), nil
+	return metricutil.InstrumentTransaction(wrapped, d.metricDBName), nil
 }
 
 func (d *databaseBackedIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
@@ -233,12 +229,13 @@ func (d *databaseBackedIndexedDB) DeleteObjectStore(ctx context.Context, name st
 }
 
 func (d *databaseBackedIndexedDB) Ping(ctx context.Context) error {
-	d.mu.Lock()
+	d.mu.RLock()
 	root := d.root
-	d.mu.Unlock()
 	if root == nil {
+		d.mu.RUnlock()
 		return indexeddb.ErrNotFound
 	}
+	defer d.mu.RUnlock()
 	return root.Ping(ctx)
 }
 
@@ -281,6 +278,334 @@ func (d *databaseBackedIndexedDB) upgrade(ctx context.Context, fn func(context.C
 	}
 	d.db = db
 	return nil
+}
+
+type databaseBackedObjectStore struct {
+	db   *databaseBackedIndexedDB
+	name string
+}
+
+func (s databaseBackedObjectStore) current() (indexeddb.ObjectStore, func(), error) {
+	s.db.mu.RLock()
+	db := s.db.db
+	if db == nil {
+		s.db.mu.RUnlock()
+		return nil, nil, indexeddb.ErrNotFound
+	}
+	store := db.ObjectStore(s.name)
+	if store == nil {
+		s.db.mu.RUnlock()
+		return nil, nil, indexeddb.ErrNotFound
+	}
+	return store, s.db.mu.RUnlock, nil
+}
+
+func (s databaseBackedObjectStore) Get(ctx context.Context, id string) (indexeddb.Record, error) {
+	store, release, err := s.current()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	return store.Get(ctx, id)
+}
+
+func (s databaseBackedObjectStore) GetKey(ctx context.Context, id string) (string, error) {
+	store, release, err := s.current()
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	return store.GetKey(ctx, id)
+}
+
+func (s databaseBackedObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
+	store, release, err := s.current()
+	if err != nil {
+		return err
+	}
+	defer release()
+	return store.Add(ctx, record)
+}
+
+func (s databaseBackedObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
+	store, release, err := s.current()
+	if err != nil {
+		return err
+	}
+	defer release()
+	return store.Put(ctx, record)
+}
+
+func (s databaseBackedObjectStore) Delete(ctx context.Context, id string) error {
+	store, release, err := s.current()
+	if err != nil {
+		return err
+	}
+	defer release()
+	return store.Delete(ctx, id)
+}
+
+func (s databaseBackedObjectStore) Clear(ctx context.Context) error {
+	store, release, err := s.current()
+	if err != nil {
+		return err
+	}
+	defer release()
+	return store.Clear(ctx)
+}
+
+func (s databaseBackedObjectStore) GetAll(ctx context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+	store, release, err := s.current()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	return store.GetAll(ctx, r)
+}
+
+func (s databaseBackedObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange) ([]string, error) {
+	store, release, err := s.current()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	return store.GetAllKeys(ctx, r)
+}
+
+func (s databaseBackedObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
+	store, release, err := s.current()
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	return store.Count(ctx, r)
+}
+
+func (s databaseBackedObjectStore) DeleteRange(ctx context.Context, r indexeddb.KeyRange) (int64, error) {
+	store, release, err := s.current()
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	return store.DeleteRange(ctx, r)
+}
+
+func (s databaseBackedObjectStore) Index(name string) indexeddb.Index {
+	return databaseBackedIndex{db: s.db, storeName: s.name, name: name}
+}
+
+func (s databaseBackedObjectStore) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	store, release, err := s.current()
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := store.OpenCursor(ctx, r, dir)
+	if err != nil || cursor == nil {
+		release()
+		return cursor, err
+	}
+	return &databaseBackedCursor{inner: cursor, release: release}, nil
+}
+
+func (s databaseBackedObjectStore) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	store, release, err := s.current()
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := store.OpenKeyCursor(ctx, r, dir)
+	if err != nil || cursor == nil {
+		release()
+		return cursor, err
+	}
+	return &databaseBackedCursor{inner: cursor, release: release}, nil
+}
+
+type databaseBackedIndex struct {
+	db        *databaseBackedIndexedDB
+	storeName string
+	name      string
+}
+
+func (i databaseBackedIndex) current() (indexeddb.Index, func(), error) {
+	i.db.mu.RLock()
+	db := i.db.db
+	if db == nil {
+		i.db.mu.RUnlock()
+		return nil, nil, indexeddb.ErrNotFound
+	}
+	store := db.ObjectStore(i.storeName)
+	if store == nil {
+		i.db.mu.RUnlock()
+		return nil, nil, indexeddb.ErrNotFound
+	}
+	index := store.Index(i.name)
+	if index == nil {
+		i.db.mu.RUnlock()
+		return nil, nil, indexeddb.ErrNotFound
+	}
+	return index, i.db.mu.RUnlock, nil
+}
+
+func (i databaseBackedIndex) Get(ctx context.Context, values ...any) (indexeddb.Record, error) {
+	index, release, err := i.current()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	return index.Get(ctx, values...)
+}
+
+func (i databaseBackedIndex) GetKey(ctx context.Context, values ...any) (string, error) {
+	index, release, err := i.current()
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	return index.GetKey(ctx, values...)
+}
+
+func (i databaseBackedIndex) GetAll(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
+	index, release, err := i.current()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	return index.GetAll(ctx, r, values...)
+}
+
+func (i databaseBackedIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
+	index, release, err := i.current()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	return index.GetAllKeys(ctx, r, values...)
+}
+
+func (i databaseBackedIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+	index, release, err := i.current()
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	return index.Count(ctx, r, values...)
+}
+
+func (i databaseBackedIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+	index, release, err := i.current()
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	return index.Delete(ctx, values...)
+}
+
+func (i databaseBackedIndex) DeleteRange(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+	index, release, err := i.current()
+	if err != nil {
+		return 0, err
+	}
+	defer release()
+	return index.DeleteRange(ctx, r, values...)
+}
+
+func (i databaseBackedIndex) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
+	index, release, err := i.current()
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := index.OpenCursor(ctx, r, dir, values...)
+	if err != nil || cursor == nil {
+		release()
+		return cursor, err
+	}
+	return &databaseBackedCursor{inner: cursor, release: release}, nil
+}
+
+func (i databaseBackedIndex) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
+	index, release, err := i.current()
+	if err != nil {
+		return nil, err
+	}
+	cursor, err := index.OpenKeyCursor(ctx, r, dir, values...)
+	if err != nil || cursor == nil {
+		release()
+		return cursor, err
+	}
+	return &databaseBackedCursor{inner: cursor, release: release}, nil
+}
+
+type databaseBackedTransaction struct {
+	inner   indexeddb.Transaction
+	release func()
+	once    sync.Once
+}
+
+func (tx *databaseBackedTransaction) ObjectStore(name string) indexeddb.TransactionObjectStore {
+	return tx.inner.ObjectStore(name)
+}
+
+func (tx *databaseBackedTransaction) Commit(ctx context.Context) error {
+	err := tx.inner.Commit(ctx)
+	tx.once.Do(tx.release)
+	return err
+}
+
+func (tx *databaseBackedTransaction) Abort(ctx context.Context) error {
+	err := tx.inner.Abort(ctx)
+	tx.once.Do(tx.release)
+	return err
+}
+
+type databaseBackedCursor struct {
+	inner    indexeddb.Cursor
+	release  func()
+	once     sync.Once
+	closeErr error
+}
+
+func (c *databaseBackedCursor) Continue() bool {
+	return c.inner.Continue()
+}
+
+func (c *databaseBackedCursor) ContinueToKey(key any) bool {
+	return c.inner.ContinueToKey(key)
+}
+
+func (c *databaseBackedCursor) Advance(count int) bool {
+	return c.inner.Advance(count)
+}
+
+func (c *databaseBackedCursor) Key() any {
+	return c.inner.Key()
+}
+
+func (c *databaseBackedCursor) PrimaryKey() string {
+	return c.inner.PrimaryKey()
+}
+
+func (c *databaseBackedCursor) Value() (indexeddb.Record, error) {
+	return c.inner.Value()
+}
+
+func (c *databaseBackedCursor) Delete() error {
+	return c.inner.Delete()
+}
+
+func (c *databaseBackedCursor) Update(value indexeddb.Record) error {
+	return c.inner.Update(value)
+}
+
+func (c *databaseBackedCursor) Err() error {
+	return c.inner.Err()
+}
+
+func (c *databaseBackedCursor) Close() error {
+	c.once.Do(func() {
+		c.closeErr = c.inner.Close()
+		c.release()
+	})
+	return c.closeErr
 }
 
 type errObjectStore struct {

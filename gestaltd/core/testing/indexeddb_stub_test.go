@@ -194,6 +194,29 @@ func TestStubOpenRollsBackFailedUpgrade(t *testing.T) {
 	}
 }
 
+func TestStubUpgradeCreateIndexRequiresExistingObjectStore(t *testing.T) {
+	t.Parallel()
+
+	db := &StubIndexedDB{}
+	ctx := context.Background()
+	version := uint64(1)
+	_, err := db.Open(ctx, "app", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			return upgrade.CreateIndex(ctx, "missing", indexeddb.IndexSchema{
+				Name:    "by_email",
+				KeyPath: []string{"email"},
+			})
+		},
+	})
+	if !errors.Is(err, indexeddb.ErrNotFound) {
+		t.Fatalf("Open error = %v, want indexeddb.ErrNotFound", err)
+	}
+	if db.HasObjectStore("missing") {
+		t.Fatal("CreateIndex created missing object store")
+	}
+}
+
 func TestStubOpenSameVersionPreservesStoreHandles(t *testing.T) {
 	t.Parallel()
 

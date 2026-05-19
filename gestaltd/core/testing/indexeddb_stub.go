@@ -247,13 +247,9 @@ func (u stubUpgradeContext) DeleteObjectStore(ctx context.Context, name string) 
 func (u stubUpgradeContext) CreateIndex(_ context.Context, store string, index indexeddb.IndexSchema) error {
 	u.db.mu.Lock()
 	defer u.db.mu.Unlock()
-	if u.db.stores == nil {
-		u.db.stores = make(map[string]*stubObjectStore)
-	}
 	st := u.db.stores[store]
 	if st == nil {
-		st = &stubObjectStore{db: u.db, records: make(map[string]indexeddb.Record)}
-		u.db.stores[store] = st
+		return indexeddb.ErrNotFound
 	}
 	for i, existing := range st.schema.Indexes {
 		if existing.Name == index.Name {
