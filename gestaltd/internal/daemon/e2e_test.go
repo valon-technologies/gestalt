@@ -3164,6 +3164,28 @@ func TestE2ELockSyncLocalProviders(t *testing.T) {
 		t.Fatalf("gestaltd lock --check failed: %v\noutput: %s", err, out)
 	}
 
+	cmdDir := filepath.Join(dir, "command-cwd")
+	if err := os.MkdirAll(cmdDir, 0o755); err != nil {
+		t.Fatalf("create command cwd: %v", err)
+	}
+	relCfgPath, err := filepath.Rel(cmdDir, cfgPath)
+	if err != nil {
+		t.Fatalf("relative config path: %v", err)
+	}
+	relativeArtifactsDir := "relative-prepared"
+	cmd := exec.Command(gestaltdBin, "sync", "--locked", "--config", relCfgPath, "--artifacts-dir", relativeArtifactsDir)
+	cmd.Dir = cmdDir
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd sync with relative artifacts dir failed: %v\noutput: %s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(cmdDir, relativeArtifactsDir, ".gestaltd", "providers", "example")); err != nil {
+		t.Fatalf("relative artifacts dir should be rooted at command cwd, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, relativeArtifactsDir, ".gestaltd", "providers", "example")); !os.IsNotExist(err) {
+		t.Fatalf("relative artifacts dir should not be rooted at config dir, stat err=%v", err)
+	}
+
 	staleCfgPath := filepath.Join(dir, "config-stale.yaml")
 	cfgBytes, err := os.ReadFile(cfgPath)
 	if err != nil {

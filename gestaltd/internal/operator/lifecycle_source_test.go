@@ -1046,6 +1046,25 @@ plugins:
 	if _, err := os.Stat(filepath.Join(explicitArtifactsDir, LockfileName)); !os.IsNotExist(err) {
 		t.Fatalf("explicit artifacts root lockfile should not be written, stat err=%v", err)
 	}
+	relativeArtifactsRoot := filepath.Join(dir, "relative-artifacts")
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	relativeArtifactsDir, err := filepath.Rel(cwd, relativeArtifactsRoot)
+	if err != nil {
+		t.Fatalf("relative artifacts dir: %v", err)
+	}
+	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{
+		ArtifactsDir: relativeArtifactsDir,
+		PluginScope:  []string{"alpha"},
+	}, false); err != nil {
+		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths with relative artifacts dir: %v", err)
+	}
+	relativeScopedLockPath := filepath.Join(relativeArtifactsRoot, ".gestaltd", "scopes", "plugins", "alpha", LockfileName)
+	if _, err := os.Stat(relativeScopedLockPath); err != nil {
+		t.Fatalf("relative artifacts scoped lockfile missing: %v", err)
+	}
 }
 
 func TestLoadForExecutionPluginScopeKeepsReferencedSecretsProvider(t *testing.T) {

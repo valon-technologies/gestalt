@@ -6140,7 +6140,7 @@ server:
 	}
 }
 
-func TestLoadPaths_ResolvesRelativeScalarSourcePathsPerFile(t *testing.T) {
+func TestLoadPaths_ResolvesRelativePathsPerFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -6150,6 +6150,8 @@ func TestLoadPaths_ResolvesRelativeScalarSourcePathsPerFile(t *testing.T) {
 	}
 	if err := os.WriteFile(basePath, []byte(`
 apiVersion: gestaltd.config/v5
+server:
+  artifactsDir: ../base-artifacts
 providers:
 plugins:
     sample:
@@ -6164,6 +6166,8 @@ plugins:
 	}
 	if err := os.WriteFile(overridePath, []byte(`
 apiVersion: gestaltd.config/v5
+server:
+  artifactsDir: ./override-artifacts
 providers:
 plugins:
     sample:
@@ -6180,6 +6184,9 @@ plugins:
 	wantPath := filepath.Join(filepath.Dir(overridePath), "override-plugin", "manifest.yaml")
 	if got := cfg.Plugins["sample"].SourcePath(); got != wantPath {
 		t.Fatalf("SourcePath = %q, want %q", got, wantPath)
+	}
+	if got, want := cfg.Server.ArtifactsDir, filepath.Join(filepath.Dir(overridePath), "override-artifacts"); got != want {
+		t.Fatalf("Server.ArtifactsDir = %q, want %q", got, want)
 	}
 }
 
