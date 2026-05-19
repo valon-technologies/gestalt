@@ -30,6 +30,12 @@ class TransactionDurabilityHint(int, metaclass=_enum_type_wrapper.EnumTypeWrappe
     TRANSACTION_DURABILITY_DEFAULT: _ClassVar[TransactionDurabilityHint]
     TRANSACTION_DURABILITY_STRICT: _ClassVar[TransactionDurabilityHint]
     TRANSACTION_DURABILITY_RELAXED: _ClassVar[TransactionDurabilityHint]
+
+class VersionChangeReason(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    VERSION_CHANGE_REASON_UNSPECIFIED: _ClassVar[VersionChangeReason]
+    VERSION_CHANGE_REASON_UPGRADE: _ClassVar[VersionChangeReason]
+    VERSION_CHANGE_REASON_DELETE: _ClassVar[VersionChangeReason]
 CURSOR_NEXT: CursorDirection
 CURSOR_NEXT_UNIQUE: CursorDirection
 CURSOR_PREV: CursorDirection
@@ -39,6 +45,9 @@ TRANSACTION_READWRITE: TransactionMode
 TRANSACTION_DURABILITY_DEFAULT: TransactionDurabilityHint
 TRANSACTION_DURABILITY_STRICT: TransactionDurabilityHint
 TRANSACTION_DURABILITY_RELAXED: TransactionDurabilityHint
+VERSION_CHANGE_REASON_UNSPECIFIED: VersionChangeReason
+VERSION_CHANGE_REASON_UPGRADE: VersionChangeReason
+VERSION_CHANGE_REASON_DELETE: VersionChangeReason
 
 class TypedValue(_message.Message):
     __slots__ = ()
@@ -121,9 +130,11 @@ class RecordRequest(_message.Message):
     __slots__ = ()
     STORE_FIELD_NUMBER: _ClassVar[int]
     RECORD_FIELD_NUMBER: _ClassVar[int]
+    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
     store: str
     record: Record
-    def __init__(self, store: _Optional[str] = ..., record: _Optional[_Union[Record, _Mapping]] = ...) -> None: ...
+    connection_id: bytes
+    def __init__(self, store: _Optional[str] = ..., record: _Optional[_Union[Record, _Mapping]] = ..., connection_id: _Optional[bytes] = ...) -> None: ...
 
 class RecordResponse(_message.Message):
     __slots__ = ()
@@ -147,23 +158,29 @@ class ObjectStoreRequest(_message.Message):
     __slots__ = ()
     STORE_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
+    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
     store: str
     id: str
-    def __init__(self, store: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
+    connection_id: bytes
+    def __init__(self, store: _Optional[str] = ..., id: _Optional[str] = ..., connection_id: _Optional[bytes] = ...) -> None: ...
 
 class ObjectStoreNameRequest(_message.Message):
     __slots__ = ()
     STORE_FIELD_NUMBER: _ClassVar[int]
+    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
     store: str
-    def __init__(self, store: _Optional[str] = ...) -> None: ...
+    connection_id: bytes
+    def __init__(self, store: _Optional[str] = ..., connection_id: _Optional[bytes] = ...) -> None: ...
 
 class ObjectStoreRangeRequest(_message.Message):
     __slots__ = ()
     STORE_FIELD_NUMBER: _ClassVar[int]
     RANGE_FIELD_NUMBER: _ClassVar[int]
+    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
     store: str
     range: KeyRange
-    def __init__(self, store: _Optional[str] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ...) -> None: ...
+    connection_id: bytes
+    def __init__(self, store: _Optional[str] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ..., connection_id: _Optional[bytes] = ...) -> None: ...
 
 class CreateObjectStoreRequest(_message.Message):
     __slots__ = ()
@@ -185,11 +202,13 @@ class IndexQueryRequest(_message.Message):
     INDEX_FIELD_NUMBER: _ClassVar[int]
     VALUES_FIELD_NUMBER: _ClassVar[int]
     RANGE_FIELD_NUMBER: _ClassVar[int]
+    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
     store: str
     index: str
     values: _containers.RepeatedCompositeFieldContainer[TypedValue]
     range: KeyRange
-    def __init__(self, store: _Optional[str] = ..., index: _Optional[str] = ..., values: _Optional[_Iterable[_Union[TypedValue, _Mapping]]] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ...) -> None: ...
+    connection_id: bytes
+    def __init__(self, store: _Optional[str] = ..., index: _Optional[str] = ..., values: _Optional[_Iterable[_Union[TypedValue, _Mapping]]] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ..., connection_id: _Optional[bytes] = ...) -> None: ...
 
 class CountResponse(_message.Message):
     __slots__ = ()
@@ -205,13 +224,15 @@ class OpenCursorRequest(_message.Message):
     KEYS_ONLY_FIELD_NUMBER: _ClassVar[int]
     INDEX_FIELD_NUMBER: _ClassVar[int]
     VALUES_FIELD_NUMBER: _ClassVar[int]
+    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
     store: str
     range: KeyRange
     direction: CursorDirection
     keys_only: bool
     index: str
     values: _containers.RepeatedCompositeFieldContainer[TypedValue]
-    def __init__(self, store: _Optional[str] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ..., direction: _Optional[_Union[CursorDirection, str]] = ..., keys_only: _Optional[bool] = ..., index: _Optional[str] = ..., values: _Optional[_Iterable[_Union[TypedValue, _Mapping]]] = ...) -> None: ...
+    connection_id: bytes
+    def __init__(self, store: _Optional[str] = ..., range: _Optional[_Union[KeyRange, _Mapping]] = ..., direction: _Optional[_Union[CursorDirection, str]] = ..., keys_only: _Optional[bool] = ..., index: _Optional[str] = ..., values: _Optional[_Iterable[_Union[TypedValue, _Mapping]]] = ..., connection_id: _Optional[bytes] = ...) -> None: ...
 
 class KeyValue(_message.Message):
     __slots__ = ()
@@ -287,15 +308,249 @@ class KeyResponse(_message.Message):
     key: str
     def __init__(self, key: _Optional[str] = ...) -> None: ...
 
+class VersionChangeInfo(_message.Message):
+    __slots__ = ()
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    OLD_VERSION_FIELD_NUMBER: _ClassVar[int]
+    NEW_VERSION_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    old_version: int
+    new_version: int
+    reason: VersionChangeReason
+    def __init__(self, name: _Optional[str] = ..., old_version: _Optional[int] = ..., new_version: _Optional[int] = ..., reason: _Optional[_Union[VersionChangeReason, str]] = ...) -> None: ...
+
+class BlockedInfo(_message.Message):
+    __slots__ = ()
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    OLD_VERSION_FIELD_NUMBER: _ClassVar[int]
+    NEW_VERSION_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    OPEN_CONNECTIONS_FIELD_NUMBER: _ClassVar[int]
+    ACTIVE_OPERATIONS_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    old_version: int
+    new_version: int
+    reason: VersionChangeReason
+    open_connections: int
+    active_operations: int
+    def __init__(self, name: _Optional[str] = ..., old_version: _Optional[int] = ..., new_version: _Optional[int] = ..., reason: _Optional[_Union[VersionChangeReason, str]] = ..., open_connections: _Optional[int] = ..., active_operations: _Optional[int] = ...) -> None: ...
+
+class OpenDatabaseRequest(_message.Message):
+    __slots__ = ()
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    REQUIRE_EXISTING_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    version: int
+    require_existing: bool
+    def __init__(self, name: _Optional[str] = ..., version: _Optional[int] = ..., require_existing: _Optional[bool] = ...) -> None: ...
+
+class UpgradeStarted(_message.Message):
+    __slots__ = ()
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    OLD_VERSION_FIELD_NUMBER: _ClassVar[int]
+    NEW_VERSION_FIELD_NUMBER: _ClassVar[int]
+    OBJECT_STORE_NAMES_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    old_version: int
+    new_version: int
+    object_store_names: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, name: _Optional[str] = ..., old_version: _Optional[int] = ..., new_version: _Optional[int] = ..., object_store_names: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class OpenDatabaseSuccess(_message.Message):
+    __slots__ = ()
+    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    OBJECT_STORE_NAMES_FIELD_NUMBER: _ClassVar[int]
+    connection_id: bytes
+    name: str
+    version: int
+    object_store_names: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, connection_id: _Optional[bytes] = ..., name: _Optional[str] = ..., version: _Optional[int] = ..., object_store_names: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class CloseDatabaseRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class CloseDatabaseResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class DeleteDatabaseRequest(_message.Message):
+    __slots__ = ()
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class DeleteDatabaseResponse(_message.Message):
+    __slots__ = ()
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    OLD_VERSION_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    old_version: int
+    def __init__(self, name: _Optional[str] = ..., old_version: _Optional[int] = ...) -> None: ...
+
+class DatabasesRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class DatabaseInfo(_message.Message):
+    __slots__ = ()
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    VERSION_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    version: int
+    def __init__(self, name: _Optional[str] = ..., version: _Optional[int] = ...) -> None: ...
+
+class DatabasesResponse(_message.Message):
+    __slots__ = ()
+    DATABASES_FIELD_NUMBER: _ClassVar[int]
+    databases: _containers.RepeatedCompositeFieldContainer[DatabaseInfo]
+    def __init__(self, databases: _Optional[_Iterable[_Union[DatabaseInfo, _Mapping]]] = ...) -> None: ...
+
+class CompareKeysRequest(_message.Message):
+    __slots__ = ()
+    FIRST_FIELD_NUMBER: _ClassVar[int]
+    SECOND_FIELD_NUMBER: _ClassVar[int]
+    first: KeyValue
+    second: KeyValue
+    def __init__(self, first: _Optional[_Union[KeyValue, _Mapping]] = ..., second: _Optional[_Union[KeyValue, _Mapping]] = ...) -> None: ...
+
+class CompareKeysResponse(_message.Message):
+    __slots__ = ()
+    CMP_FIELD_NUMBER: _ClassVar[int]
+    cmp: int
+    def __init__(self, cmp: _Optional[int] = ...) -> None: ...
+
+class UpgradeCreateObjectStoreRequest(_message.Message):
+    __slots__ = ()
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    SCHEMA_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    schema: ObjectStoreSchema
+    def __init__(self, name: _Optional[str] = ..., schema: _Optional[_Union[ObjectStoreSchema, _Mapping]] = ...) -> None: ...
+
+class UpgradeDeleteObjectStoreRequest(_message.Message):
+    __slots__ = ()
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class UpgradeCreateIndexRequest(_message.Message):
+    __slots__ = ()
+    STORE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    KEY_PATH_FIELD_NUMBER: _ClassVar[int]
+    UNIQUE_FIELD_NUMBER: _ClassVar[int]
+    store: str
+    name: str
+    key_path: _containers.RepeatedScalarFieldContainer[str]
+    unique: bool
+    def __init__(self, store: _Optional[str] = ..., name: _Optional[str] = ..., key_path: _Optional[_Iterable[str]] = ..., unique: _Optional[bool] = ...) -> None: ...
+
+class UpgradeDeleteIndexRequest(_message.Message):
+    __slots__ = ()
+    STORE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    store: str
+    name: str
+    def __init__(self, store: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+
+class UpgradeObjectStoreNamesRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class FinishUpgradeRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class AbortUpgradeRequest(_message.Message):
+    __slots__ = ()
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    reason: str
+    def __init__(self, reason: _Optional[str] = ...) -> None: ...
+
+class UpgradeOperation(_message.Message):
+    __slots__ = ()
+    REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
+    CREATE_OBJECT_STORE_FIELD_NUMBER: _ClassVar[int]
+    DELETE_OBJECT_STORE_FIELD_NUMBER: _ClassVar[int]
+    CREATE_INDEX_FIELD_NUMBER: _ClassVar[int]
+    DELETE_INDEX_FIELD_NUMBER: _ClassVar[int]
+    OBJECT_STORE_NAMES_FIELD_NUMBER: _ClassVar[int]
+    FINISH_UPGRADE_FIELD_NUMBER: _ClassVar[int]
+    ABORT_UPGRADE_FIELD_NUMBER: _ClassVar[int]
+    request_id: int
+    create_object_store: UpgradeCreateObjectStoreRequest
+    delete_object_store: UpgradeDeleteObjectStoreRequest
+    create_index: UpgradeCreateIndexRequest
+    delete_index: UpgradeDeleteIndexRequest
+    object_store_names: UpgradeObjectStoreNamesRequest
+    finish_upgrade: FinishUpgradeRequest
+    abort_upgrade: AbortUpgradeRequest
+    def __init__(self, request_id: _Optional[int] = ..., create_object_store: _Optional[_Union[UpgradeCreateObjectStoreRequest, _Mapping]] = ..., delete_object_store: _Optional[_Union[UpgradeDeleteObjectStoreRequest, _Mapping]] = ..., create_index: _Optional[_Union[UpgradeCreateIndexRequest, _Mapping]] = ..., delete_index: _Optional[_Union[UpgradeDeleteIndexRequest, _Mapping]] = ..., object_store_names: _Optional[_Union[UpgradeObjectStoreNamesRequest, _Mapping]] = ..., finish_upgrade: _Optional[_Union[FinishUpgradeRequest, _Mapping]] = ..., abort_upgrade: _Optional[_Union[AbortUpgradeRequest, _Mapping]] = ...) -> None: ...
+
+class UpgradeOperationResponse(_message.Message):
+    __slots__ = ()
+    REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    OBJECT_STORE_NAMES_FIELD_NUMBER: _ClassVar[int]
+    request_id: int
+    error: _status_pb2.Status
+    object_store_names: _containers.RepeatedScalarFieldContainer[str]
+    def __init__(self, request_id: _Optional[int] = ..., error: _Optional[_Union[_status_pb2.Status, _Mapping]] = ..., object_store_names: _Optional[_Iterable[str]] = ...) -> None: ...
+
+class OpenDatabaseClientMessage(_message.Message):
+    __slots__ = ()
+    OPEN_FIELD_NUMBER: _ClassVar[int]
+    UPGRADE_OPERATION_FIELD_NUMBER: _ClassVar[int]
+    CLOSE_FIELD_NUMBER: _ClassVar[int]
+    open: OpenDatabaseRequest
+    upgrade_operation: UpgradeOperation
+    close: CloseDatabaseRequest
+    def __init__(self, open: _Optional[_Union[OpenDatabaseRequest, _Mapping]] = ..., upgrade_operation: _Optional[_Union[UpgradeOperation, _Mapping]] = ..., close: _Optional[_Union[CloseDatabaseRequest, _Mapping]] = ...) -> None: ...
+
+class OpenDatabaseServerMessage(_message.Message):
+    __slots__ = ()
+    UPGRADE_STARTED_FIELD_NUMBER: _ClassVar[int]
+    UPGRADE_OPERATION_RESPONSE_FIELD_NUMBER: _ClassVar[int]
+    OPENED_FIELD_NUMBER: _ClassVar[int]
+    VERSIONCHANGE_FIELD_NUMBER: _ClassVar[int]
+    BLOCKED_FIELD_NUMBER: _ClassVar[int]
+    CLOSED_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    upgrade_started: UpgradeStarted
+    upgrade_operation_response: UpgradeOperationResponse
+    opened: OpenDatabaseSuccess
+    versionchange: VersionChangeInfo
+    blocked: BlockedInfo
+    closed: CloseDatabaseResponse
+    error: _status_pb2.Status
+    def __init__(self, upgrade_started: _Optional[_Union[UpgradeStarted, _Mapping]] = ..., upgrade_operation_response: _Optional[_Union[UpgradeOperationResponse, _Mapping]] = ..., opened: _Optional[_Union[OpenDatabaseSuccess, _Mapping]] = ..., versionchange: _Optional[_Union[VersionChangeInfo, _Mapping]] = ..., blocked: _Optional[_Union[BlockedInfo, _Mapping]] = ..., closed: _Optional[_Union[CloseDatabaseResponse, _Mapping]] = ..., error: _Optional[_Union[_status_pb2.Status, _Mapping]] = ...) -> None: ...
+
+class DeleteDatabaseServerMessage(_message.Message):
+    __slots__ = ()
+    BLOCKED_FIELD_NUMBER: _ClassVar[int]
+    DELETED_FIELD_NUMBER: _ClassVar[int]
+    ERROR_FIELD_NUMBER: _ClassVar[int]
+    blocked: BlockedInfo
+    deleted: DeleteDatabaseResponse
+    error: _status_pb2.Status
+    def __init__(self, blocked: _Optional[_Union[BlockedInfo, _Mapping]] = ..., deleted: _Optional[_Union[DeleteDatabaseResponse, _Mapping]] = ..., error: _Optional[_Union[_status_pb2.Status, _Mapping]] = ...) -> None: ...
+
 class BeginTransactionRequest(_message.Message):
     __slots__ = ()
     STORES_FIELD_NUMBER: _ClassVar[int]
     MODE_FIELD_NUMBER: _ClassVar[int]
     DURABILITY_HINT_FIELD_NUMBER: _ClassVar[int]
+    CONNECTION_ID_FIELD_NUMBER: _ClassVar[int]
     stores: _containers.RepeatedScalarFieldContainer[str]
     mode: TransactionMode
     durability_hint: TransactionDurabilityHint
-    def __init__(self, stores: _Optional[_Iterable[str]] = ..., mode: _Optional[_Union[TransactionMode, str]] = ..., durability_hint: _Optional[_Union[TransactionDurabilityHint, str]] = ...) -> None: ...
+    connection_id: bytes
+    def __init__(self, stores: _Optional[_Iterable[str]] = ..., mode: _Optional[_Union[TransactionMode, str]] = ..., durability_hint: _Optional[_Union[TransactionDurabilityHint, str]] = ..., connection_id: _Optional[bytes] = ...) -> None: ...
 
 class TransactionBeginResponse(_message.Message):
     __slots__ = ()

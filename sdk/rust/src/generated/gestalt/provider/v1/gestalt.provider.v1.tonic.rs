@@ -5858,7 +5858,88 @@ pub mod indexed_db_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
-        /** Lifecycle
+        /** Factory lifecycle
+        */
+        pub async fn open_database(
+            &mut self,
+            request: impl tonic::IntoStreamingRequest<Message = super::OpenDatabaseClientMessage>,
+        ) -> std::result::Result<
+            tonic::Response<tonic::codec::Streaming<super::OpenDatabaseServerMessage>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/OpenDatabase");
+            let mut req = request.into_streaming_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "OpenDatabase",
+            ));
+            self.inner.streaming(req, path, codec).await
+        }
+        ///
+        pub async fn delete_database(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DeleteDatabaseRequest>,
+        ) -> std::result::Result<
+            tonic::Response<tonic::codec::Streaming<super::DeleteDatabaseServerMessage>>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/gestalt.provider.v1.IndexedDB/DeleteDatabase",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "DeleteDatabase",
+            ));
+            self.inner.server_streaming(req, path, codec).await
+        }
+        ///
+        pub async fn databases(
+            &mut self,
+            request: impl tonic::IntoRequest<super::DatabasesRequest>,
+        ) -> std::result::Result<tonic::Response<super::DatabasesResponse>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/Databases");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "Databases",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        ///
+        pub async fn compare_keys(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CompareKeysRequest>,
+        ) -> std::result::Result<tonic::Response<super::CompareKeysResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic_prost::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/gestalt.provider.v1.IndexedDB/CompareKeys");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "gestalt.provider.v1.IndexedDB",
+                "CompareKeys",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        /** Legacy object-store lifecycle
         */
         pub async fn create_object_store(
             &mut self,
@@ -6226,7 +6307,38 @@ pub mod indexed_db_server {
     /// Generated trait containing gRPC methods that should be implemented for use with IndexedDbServer.
     #[async_trait]
     pub trait IndexedDb: std::marker::Send + std::marker::Sync + 'static {
-        /** Lifecycle
+        /// Server streaming response type for the OpenDatabase method.
+        type OpenDatabaseStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::OpenDatabaseServerMessage, tonic::Status>,
+            > + std::marker::Send
+            + 'static;
+        /** Factory lifecycle
+        */
+        async fn open_database(
+            &self,
+            request: tonic::Request<tonic::Streaming<super::OpenDatabaseClientMessage>>,
+        ) -> std::result::Result<tonic::Response<Self::OpenDatabaseStream>, tonic::Status>;
+        /// Server streaming response type for the DeleteDatabase method.
+        type DeleteDatabaseStream: tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::DeleteDatabaseServerMessage, tonic::Status>,
+            > + std::marker::Send
+            + 'static;
+        ///
+        async fn delete_database(
+            &self,
+            request: tonic::Request<super::DeleteDatabaseRequest>,
+        ) -> std::result::Result<tonic::Response<Self::DeleteDatabaseStream>, tonic::Status>;
+        ///
+        async fn databases(
+            &self,
+            request: tonic::Request<super::DatabasesRequest>,
+        ) -> std::result::Result<tonic::Response<super::DatabasesResponse>, tonic::Status>;
+        ///
+        async fn compare_keys(
+            &self,
+            request: tonic::Request<super::CompareKeysRequest>,
+        ) -> std::result::Result<tonic::Response<super::CompareKeysResponse>, tonic::Status>;
+        /** Legacy object-store lifecycle
         */
         async fn create_object_store(
             &self,
@@ -6419,6 +6531,173 @@ pub mod indexed_db_server {
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             match req.uri().path() {
+                "/gestalt.provider.v1.IndexedDB/OpenDatabase" => {
+                    #[allow(non_camel_case_types)]
+                    struct OpenDatabaseSvc<T: IndexedDb>(pub Arc<T>);
+                    impl<T: IndexedDb>
+                        tonic::server::StreamingService<super::OpenDatabaseClientMessage>
+                        for OpenDatabaseSvc<T>
+                    {
+                        type Response = super::OpenDatabaseServerMessage;
+                        type ResponseStream = T::OpenDatabaseStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                tonic::Streaming<super::OpenDatabaseClientMessage>,
+                            >,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as IndexedDb>::open_database(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = OpenDatabaseSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.IndexedDB/DeleteDatabase" => {
+                    #[allow(non_camel_case_types)]
+                    struct DeleteDatabaseSvc<T: IndexedDb>(pub Arc<T>);
+                    impl<T: IndexedDb>
+                        tonic::server::ServerStreamingService<super::DeleteDatabaseRequest>
+                        for DeleteDatabaseSvc<T>
+                    {
+                        type Response = super::DeleteDatabaseServerMessage;
+                        type ResponseStream = T::DeleteDatabaseStream;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DeleteDatabaseRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as IndexedDb>::delete_database(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = DeleteDatabaseSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.server_streaming(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.IndexedDB/Databases" => {
+                    #[allow(non_camel_case_types)]
+                    struct DatabasesSvc<T: IndexedDb>(pub Arc<T>);
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::DatabasesRequest> for DatabasesSvc<T> {
+                        type Response = super::DatabasesResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::DatabasesRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut =
+                                async move { <T as IndexedDb>::databases(&inner, request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = DatabasesSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/gestalt.provider.v1.IndexedDB/CompareKeys" => {
+                    #[allow(non_camel_case_types)]
+                    struct CompareKeysSvc<T: IndexedDb>(pub Arc<T>);
+                    impl<T: IndexedDb> tonic::server::UnaryService<super::CompareKeysRequest> for CompareKeysSvc<T> {
+                        type Response = super::CompareKeysResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::CompareKeysRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as IndexedDb>::compare_keys(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = CompareKeysSvc(inner);
+                        let codec = tonic_prost::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
                 "/gestalt.provider.v1.IndexedDB/CreateObjectStore" => {
                     #[allow(non_camel_case_types)]
                     struct CreateObjectStoreSvc<T: IndexedDb>(pub Arc<T>);

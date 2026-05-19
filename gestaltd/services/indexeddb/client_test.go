@@ -2,13 +2,18 @@ package indexeddb
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
+	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -59,4 +64,84 @@ func TestRemoteIndexedDBSchemaChangesUseProviderRPCTimeout(t *testing.T) {
 	if err := db.DeleteObjectStore(context.Background(), "api_tokens"); err != nil {
 		t.Fatalf("DeleteObjectStore: %v", err)
 	}
+}
+
+func TestRemoteIndexedDBLifecycleNilStatusErrorFramesReturnError(t *testing.T) {
+	t.Parallel()
+
+	conn := newBufconnConn(t, func(s *grpc.Server) {
+		proto.RegisterIndexedDBServer(s, malformedLifecycleErrorIndexedDBServer{})
+	})
+	db := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+
+	opened, err := db.Open(context.Background(), "app", indexeddb.OpenOptions{})
+	if err == nil {
+		if opened != nil {
+			_ = opened.Close()
+		}
+		t.Fatal("Open nil status error frame returned nil error")
+	}
+	if !strings.Contains(err.Error(), "missing non-OK status") {
+		t.Fatalf("Open nil status error = %v, want missing non-OK status", err)
+	}
+
+	result, err := db.DeleteDatabase(context.Background(), "app", indexeddb.DeleteOptions{})
+	if err == nil {
+		t.Fatalf("DeleteDatabase nil status error frame returned nil error and result %#v", result)
+	}
+	if !strings.Contains(err.Error(), "missing non-OK status") {
+		t.Fatalf("DeleteDatabase nil status error = %v, want missing non-OK status", err)
+	}
+}
+
+func TestRemoteIndexedDBCanceledStatusMapping(t *testing.T) {
+	t.Parallel()
+
+	err := grpcToDatastoreErr(status.Error(codes.Canceled, context.Canceled.Error()))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("transport canceled error = %v, want context.Canceled", err)
+	}
+	if errors.Is(err, indexeddb.ErrAbort) {
+		t.Fatalf("transport canceled error = %v, should not match ErrAbort", err)
+	}
+
+	err = rpcStatusToDatastoreErr(&rpcstatus.Status{Code: int32(codes.Canceled), Message: indexeddb.ErrAbort.Error() + ": user callback"})
+	if !errors.Is(err, indexeddb.ErrAbort) {
+		t.Fatalf("abort application status error = %v, want ErrAbort", err)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Fatalf("abort application status error = %v, should not match context.Canceled", err)
+	}
+
+	err = rpcStatusToDatastoreErr(&rpcstatus.Status{Code: int32(codes.Canceled), Message: "indexeddb: operation aborted: remote callback"})
+	if !errors.Is(err, indexeddb.ErrAbort) {
+		t.Fatalf("cross-layer abort application status error = %v, want ErrAbort", err)
+	}
+
+	err = rpcStatusToDatastoreErr(&rpcstatus.Status{Code: int32(codes.Canceled), Message: context.Canceled.Error()})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled application status error = %v, want context.Canceled", err)
+	}
+	if errors.Is(err, indexeddb.ErrAbort) {
+		t.Fatalf("canceled application status error = %v, should not match ErrAbort", err)
+	}
+}
+
+type malformedLifecycleErrorIndexedDBServer struct {
+	proto.UnimplementedIndexedDBServer
+}
+
+func (malformedLifecycleErrorIndexedDBServer) OpenDatabase(stream proto.IndexedDB_OpenDatabaseServer) error {
+	if _, err := stream.Recv(); err != nil {
+		return err
+	}
+	return stream.Send(&proto.OpenDatabaseServerMessage{
+		Msg: &proto.OpenDatabaseServerMessage_Error{},
+	})
+}
+
+func (malformedLifecycleErrorIndexedDBServer) DeleteDatabase(_ *proto.DeleteDatabaseRequest, stream proto.IndexedDB_DeleteDatabaseServer) error {
+	return stream.Send(&proto.DeleteDatabaseServerMessage{
+		Msg: &proto.DeleteDatabaseServerMessage_Error{},
+	})
 }

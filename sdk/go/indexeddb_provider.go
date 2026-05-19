@@ -2,15 +2,30 @@ package gestalt
 
 import "context"
 
-// IndexedDBProvider is implemented by providers that serve an IndexedDB-style
-// datastore. The SDK owns the gRPC/protobuf transport adapter; provider code
-// implements this typed interface instead of importing generated protobuf
-// bindings.
+// IndexedDBProvider is implemented by providers that expose IndexedDB-style
+// factory lifecycle semantics: named databases, versioned open, upgrade
+// callbacks, deletion, and scoped database connections.
 type IndexedDBProvider interface {
 	Provider
-	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
-	DeleteObjectStore(ctx context.Context, name string) error
+	OpenDatabase(ctx context.Context, name string, opts OpenOptions) (IDBDatabase, error)
+	OpenCurrentDatabase(ctx context.Context, name string, opts OpenOptions) (IDBDatabase, error)
+	DeleteDatabase(ctx context.Context, name string, opts DeleteOptions) (DeleteDatabaseResult, error)
+	Databases(ctx context.Context) ([]IDBDatabaseInfo, error)
+	CompareKeys(ctx context.Context, first any, second any) (int, error)
+}
 
+// IDBDatabase is an opened database connection returned by an
+// [IndexedDBProvider]. Store, index, cursor, and transaction operations
+// are scoped to this connection by the SDK transport adapter.
+type IDBDatabase interface {
+	Name() string
+	Version() uint64
+	ObjectStoreNames(ctx context.Context) ([]string, error)
+	IndexedDBOperations
+	Close() error
+}
+
+type IndexedDBOperations interface {
 	Get(ctx context.Context, req IndexedDBObjectStoreRequest) (Record, error)
 	GetKey(ctx context.Context, req IndexedDBObjectStoreRequest) (string, error)
 	Add(ctx context.Context, req IndexedDBRecordRequest) error
@@ -29,8 +44,8 @@ type IndexedDBProvider interface {
 	IndexCount(ctx context.Context, req IndexedDBIndexQueryRequest) (int64, error)
 	IndexDelete(ctx context.Context, req IndexedDBIndexQueryRequest) (int64, error)
 
-	OpenCursor(ctx context.Context, req IndexedDBOpenCursorRequest) (IndexedDBCursor, error)
-	BeginTransaction(ctx context.Context, req IndexedDBBeginTransactionRequest) (IndexedDBTransaction, error)
+	OpenCursor(ctx context.Context, req IndexedDBOpenCursorRequest) (IDBCursor, error)
+	BeginTransaction(ctx context.Context, req IndexedDBBeginTransactionRequest) (IDBTransaction, error)
 }
 
 type IndexedDBObjectStoreRequest struct {
@@ -64,20 +79,21 @@ type IndexedDBOpenCursorRequest struct {
 	Values    []any
 }
 
-type IndexedDBCursorEntry struct {
+// IDBCursorEntry is one provider-side cursor position.
+type IDBCursorEntry struct {
 	Key        any
 	PrimaryKey string
 	Record     Record
 }
 
-// IndexedDBCursor is the runtime object returned from OpenCursor. Returning a
+// IDBCursor is the runtime object returned from OpenCursor. Returning a
 // nil entry from movement methods indicates cursor exhaustion.
-type IndexedDBCursor interface {
-	Next(ctx context.Context) (*IndexedDBCursorEntry, error)
-	ContinueToKey(ctx context.Context, key any) (*IndexedDBCursorEntry, error)
-	Advance(ctx context.Context, count int) (*IndexedDBCursorEntry, error)
+type IDBCursor interface {
+	Next(ctx context.Context) (*IDBCursorEntry, error)
+	ContinueToKey(ctx context.Context, key any) (*IDBCursorEntry, error)
+	Advance(ctx context.Context, count int) (*IDBCursorEntry, error)
 	Delete(ctx context.Context) error
-	Update(ctx context.Context, record Record) (*IndexedDBCursorEntry, error)
+	Update(ctx context.Context, record Record) (*IDBCursorEntry, error)
 	Close() error
 }
 
@@ -87,7 +103,8 @@ type IndexedDBBeginTransactionRequest struct {
 	DurabilityHint TransactionDurabilityHint
 }
 
-type IndexedDBTransaction interface {
+// IDBTransaction is a provider-side transaction scoped to object stores.
+type IDBTransaction interface {
 	Commit(ctx context.Context) error
 	Abort(ctx context.Context) error
 	Get(ctx context.Context, req IndexedDBObjectStoreRequest) (Record, error)

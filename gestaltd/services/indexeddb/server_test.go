@@ -3,6 +3,7 @@ package indexeddb
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -12,6 +13,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestIndexedDBServerUsesStoreNamesAsProvided(t *testing.T) {
@@ -192,6 +195,148 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 			_ = cursor.Close()
 		}
 		t.Fatalf("remote OpenCursor error = %v, want indexeddb.ErrNotFound", err)
+	}
+}
+
+func TestIndexedDBServerRejectsDeleteDatabaseWhenStoreScoped(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	version := uint64(1)
+	if opened, err := db.Open(ctx, "gestalt", indexeddb.OpenOptions{Version: &version}); err != nil {
+		t.Fatalf("Open seed database: %v", err)
+	} else {
+		defer func() { _ = opened.Close() }()
+	}
+	srv := NewServer(db, "external_credentials", ServerOptions{
+		AllowedStores:    []string{"external_credentials"},
+		AllowedDatabases: []string{"gestalt"},
+	})
+	conn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterIndexedDBServer(server, srv)
+	})
+	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+
+	if _, err := remote.DeleteDatabase(ctx, "gestalt", indexeddb.DeleteOptions{}); status.Code(err) != codes.FailedPrecondition || !strings.Contains(err.Error(), "store-scoped") {
+		t.Fatalf("DeleteDatabase error = %v, want FailedPrecondition store-scoped denial", err)
+	}
+	infos, err := db.Databases(ctx)
+	if err != nil {
+		t.Fatalf("Databases after denied delete: %v", err)
+	}
+	if len(infos) != 1 || infos[0].Name != "gestalt" || infos[0].Version != 1 {
+		t.Fatalf("databases after denied delete = %#v, want gestalt v1 still present", infos)
+	}
+}
+
+func TestIndexedDBServerSharesConnectionRegistryAcrossServerInstances(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	registry := NewConnectionRegistry()
+	openConn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterIndexedDBServer(server, NewServer(db, "roadmap", ServerOptions{
+			ConnectionRegistry: registry,
+		}))
+	})
+	opsConn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterIndexedDBServer(server, NewServer(db, "roadmap", ServerOptions{
+			ConnectionRegistry: registry,
+		}))
+	})
+	opener := &remoteIndexedDB{client: proto.NewIndexedDBClient(openConn)}
+	opsClient := proto.NewIndexedDBClient(opsConn)
+
+	version := uint64(1)
+	opened, err := opener.Open(ctx, "default", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			return upgrade.CreateObjectStore(ctx, "events", indexeddb.ObjectStoreSchema{})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = opened.Close() }()
+	remoteDB, ok := opened.(*remoteDatabase)
+	if !ok {
+		t.Fatalf("opened database type = %T, want *remoteDatabase", opened)
+	}
+
+	record, err := indexeddbcodec.RecordToProto(map[string]any{"id": "evt-1", "value": "ok"})
+	if err != nil {
+		t.Fatalf("RecordToProto: %v", err)
+	}
+	if _, err := opsClient.Put(ctx, &proto.RecordRequest{
+		ConnectionId: remoteDB.connectionID,
+		Store:        "events",
+		Record:       record,
+	}); err != nil {
+		t.Fatalf("Put through second server: %v", err)
+	}
+	if got, err := db.ObjectStore("events").Get(ctx, "evt-1"); err != nil {
+		t.Fatalf("backing Get: %v", err)
+	} else if got["value"] != "ok" {
+		t.Fatalf("backing value = %v, want ok", got["value"])
+	}
+}
+
+func TestIndexedDBServerUpgradeOperationErrorsAreRecoverable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := &coretesting.StubIndexedDB{}
+	version := uint64(1)
+	if _, err := db.Open(ctx, "app", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			return upgrade.CreateObjectStore(ctx, "items", indexeddb.ObjectStoreSchema{})
+		},
+	}); err != nil {
+		t.Fatalf("initial Open: %v", err)
+	}
+
+	srv := NewServer(db, "roadmap", ServerOptions{AllowedStores: []string{"items"}}).(*indexedDBServer)
+	version = 2
+	_, err := db.Open(ctx, "app", indexeddb.OpenOptions{
+		Version: &version,
+		Upgrade: func(ctx context.Context, upgrade indexeddb.UpgradeContext) error {
+			resp, terminal, opErr := srv.executeUpgradeOperation(ctx, upgrade, &proto.UpgradeOperation{
+				RequestId: 1,
+				Op: &proto.UpgradeOperation_CreateObjectStore{CreateObjectStore: &proto.UpgradeCreateObjectStoreRequest{
+					Name: "not-allowed",
+				}},
+			})
+			if opErr != nil {
+				t.Fatalf("execute invalid CreateObjectStore opErr = %v, want nil", opErr)
+			}
+			if terminal {
+				t.Fatal("invalid CreateObjectStore terminal = true, want false")
+			}
+			if resp.GetError() == nil {
+				t.Fatal("invalid CreateObjectStore response error is nil")
+			}
+
+			resp, terminal, opErr = srv.executeUpgradeOperation(ctx, upgrade, &proto.UpgradeOperation{
+				RequestId: 2,
+				Op:        &proto.UpgradeOperation_FinishUpgrade{FinishUpgrade: &proto.FinishUpgradeRequest{}},
+			})
+			if opErr != nil {
+				t.Fatalf("finish opErr = %v, want nil", opErr)
+			}
+			if !terminal {
+				t.Fatal("finish terminal = false, want true")
+			}
+			if resp.GetError() != nil {
+				t.Fatalf("finish response error = %v, want nil", resp.GetError())
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("upgrade Open after recoverable op error: %v", err)
 	}
 }
 

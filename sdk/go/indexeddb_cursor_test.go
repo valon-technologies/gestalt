@@ -11,7 +11,7 @@ import (
 )
 
 func TestCursor_ContinueToKeyRejectsUnsupportedKey(t *testing.T) {
-	cursor := &Cursor{}
+	cursor := &IDBCursorClient{}
 
 	if cursor.ContinueToKey(make(chan int)) {
 		t.Fatal("ContinueToKey returned true")
@@ -30,7 +30,7 @@ func TestCursor_CloseClearsCurrentEntry(t *testing.T) {
 		t.Fatalf("anyToKeyValue: %v", err)
 	}
 
-	cursor := &Cursor{
+	cursor := &IDBCursorClient{
 		entry: &proto.CursorEntry{
 			Key:        []*proto.KeyValue{kv},
 			PrimaryKey: "a",
@@ -52,7 +52,7 @@ func TestCursor_CloseClearsCurrentEntry(t *testing.T) {
 }
 
 func TestCursor_ValueRejectsNilRecord(t *testing.T) {
-	cursor := &Cursor{
+	cursor := &IDBCursorClient{
 		entry: &proto.CursorEntry{
 			PrimaryKey: "a",
 		},

@@ -678,13 +678,33 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		}
 		defer func() { _ = db.Close() }()
 
-		if err := db.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil && !errors.Is(err, gestalt.ErrAlreadyExists) {
+		version := uint64(1)
+		if infos, err := db.Databases(ctx); err == nil {
+			for _, info := range infos {
+				if info.Name == "default" {
+					version = info.Version + 1
+					break
+				}
+			}
+		}
+		conn, err := db.Open(ctx, "default", gestalt.OpenOptions{
+			Version: &version,
+			Upgrade: func(ctx context.Context, upgrade gestalt.UpgradeContext) error {
+				if err := upgrade.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil && !errors.Is(err, gestalt.ErrAlreadyExists) {
+					return err
+				}
+				return nil
+			},
+		})
+		if err != nil {
 			return nil, err
 		}
-		if err := db.ObjectStore(store).Put(ctx, map[string]any{"id": id, "value": value}); err != nil {
+		defer func() { _ = conn.Close() }()
+
+		if err := conn.ObjectStore(store).Put(ctx, map[string]any{"id": id, "value": value}); err != nil {
 			return nil, err
 		}
-		record, err := db.ObjectStore(store).Get(ctx, id)
+		record, err := conn.ObjectStore(store).Get(ctx, id)
 		if err != nil {
 			return nil, err
 		}

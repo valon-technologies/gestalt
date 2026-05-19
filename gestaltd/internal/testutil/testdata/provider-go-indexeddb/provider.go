@@ -3,14 +3,17 @@ package provider
 import (
 	"context"
 	"reflect"
+	"sort"
 	"sync"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 )
 
 type Provider struct {
-	mu     sync.RWMutex
-	stores map[string]*objectStore
+	mu      sync.RWMutex
+	name    string
+	version uint64
+	stores  map[string]*objectStore
 }
 
 type objectStore struct {
@@ -23,6 +26,105 @@ func New() *Provider {
 }
 
 func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
+
+func (p *Provider) OpenDatabase(ctx context.Context, name string, opts gestalt.OpenOptions) (gestalt.IDBDatabase, error) {
+	p.mu.Lock()
+	oldVersion := p.version
+	newVersion := oldVersion
+	if opts.Version != nil {
+		newVersion = *opts.Version
+	} else if newVersion == 0 {
+		newVersion = 1
+	}
+	if oldVersion != 0 && newVersion < oldVersion {
+		p.mu.Unlock()
+		return nil, gestalt.FailedPrecondition("requested version is lower than current version")
+	}
+	if p.version == 0 {
+		p.name = name
+	}
+	p.mu.Unlock()
+
+	if newVersion > oldVersion && opts.Upgrade != nil {
+		if err := opts.Upgrade(ctx, providerUpgradeContext{provider: p, oldVersion: oldVersion, newVersion: newVersion}); err != nil {
+			return nil, err
+		}
+	}
+
+	p.mu.Lock()
+	p.name = name
+	p.version = newVersion
+	p.mu.Unlock()
+	return p, nil
+}
+
+func (p *Provider) OpenCurrentDatabase(_ context.Context, name string, _ gestalt.OpenOptions) (gestalt.IDBDatabase, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.version == 0 || p.name != name {
+		return nil, gestalt.NotFound("database not found")
+	}
+	return p, nil
+}
+
+func (p *Provider) DeleteDatabase(_ context.Context, name string, _ gestalt.DeleteOptions) (gestalt.DeleteDatabaseResult, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.name != name {
+		return gestalt.DeleteDatabaseResult{Name: name}, nil
+	}
+	oldVersion := p.version
+	p.name = ""
+	p.version = 0
+	p.stores = make(map[string]*objectStore)
+	return gestalt.DeleteDatabaseResult{Name: name, OldVersion: oldVersion}, nil
+}
+
+func (p *Provider) Databases(context.Context) ([]gestalt.IDBDatabaseInfo, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.version == 0 {
+		return nil, nil
+	}
+	return []gestalt.IDBDatabaseInfo{{Name: p.name, Version: p.version}}, nil
+}
+
+func (p *Provider) CompareKeys(_ context.Context, first any, second any) (int, error) {
+	if reflect.DeepEqual(first, second) {
+		return 0, nil
+	}
+	left := fieldString(gestalt.Record{"value": first}, "value")
+	right := fieldString(gestalt.Record{"value": second}, "value")
+	if left < right {
+		return -1, nil
+	}
+	return 1, nil
+}
+
+func (p *Provider) Name() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.name
+}
+
+func (p *Provider) Version() uint64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.version
+}
+
+func (p *Provider) ObjectStoreNames(context.Context) ([]string, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	names := make([]string, 0, len(p.stores))
+	for name := range p.stores {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func (p *Provider) Close() error { return nil }
 
 func (p *Provider) CreateObjectStore(_ context.Context, name string, schema gestalt.ObjectStoreSchema) error {
 	p.mu.Lock()
@@ -235,12 +337,92 @@ func (p *Provider) IndexDelete(_ context.Context, req gestalt.IndexedDBIndexQuer
 	return int64(len(toDelete)), nil
 }
 
-func (p *Provider) OpenCursor(context.Context, gestalt.IndexedDBOpenCursorRequest) (gestalt.IndexedDBCursor, error) {
+func (p *Provider) OpenCursor(context.Context, gestalt.IndexedDBOpenCursorRequest) (gestalt.IDBCursor, error) {
 	return nil, gestalt.Unimplemented("open cursor is not implemented")
 }
 
-func (p *Provider) BeginTransaction(context.Context, gestalt.IndexedDBBeginTransactionRequest) (gestalt.IndexedDBTransaction, error) {
+func (p *Provider) BeginTransaction(context.Context, gestalt.IndexedDBBeginTransactionRequest) (gestalt.IDBTransaction, error) {
 	return nil, gestalt.Unimplemented("transactions are not implemented")
+}
+
+type providerUpgradeContext struct {
+	provider   *Provider
+	oldVersion uint64
+	newVersion uint64
+}
+
+func (u providerUpgradeContext) OldVersion() uint64 { return u.oldVersion }
+
+func (u providerUpgradeContext) NewVersion() uint64 { return u.newVersion }
+
+func (u providerUpgradeContext) Database() gestalt.UpgradeDatabase {
+	return providerUpgradeDatabase{provider: u.provider}
+}
+
+func (u providerUpgradeContext) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	return u.provider.ObjectStoreNames(ctx)
+}
+
+func (u providerUpgradeContext) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreSchema) error {
+	return u.provider.CreateObjectStore(ctx, name, schema)
+}
+
+func (u providerUpgradeContext) DeleteObjectStore(ctx context.Context, name string) error {
+	return u.provider.DeleteObjectStore(ctx, name)
+}
+
+func (u providerUpgradeContext) CreateIndex(ctx context.Context, store string, index gestalt.IndexSchema) error {
+	u.provider.mu.Lock()
+	defer u.provider.mu.Unlock()
+	s := u.provider.getStoreLocked(store)
+	for i, existing := range s.schema.Indexes {
+		if existing.Name == index.Name {
+			s.schema.Indexes[i] = index
+			return nil
+		}
+	}
+	s.schema.Indexes = append(s.schema.Indexes, index)
+	return nil
+}
+
+func (u providerUpgradeContext) DeleteIndex(_ context.Context, store string, name string) error {
+	u.provider.mu.Lock()
+	defer u.provider.mu.Unlock()
+	s := u.provider.getStoreLocked(store)
+	indexes := s.schema.Indexes[:0]
+	for _, existing := range s.schema.Indexes {
+		if existing.Name != name {
+			indexes = append(indexes, existing)
+		}
+	}
+	s.schema.Indexes = indexes
+	return nil
+}
+
+type providerUpgradeDatabase struct {
+	provider *Provider
+}
+
+func (db providerUpgradeDatabase) Name() string { return db.provider.Name() }
+
+func (db providerUpgradeDatabase) ObjectStoreNames(ctx context.Context) ([]string, error) {
+	return db.provider.ObjectStoreNames(ctx)
+}
+
+func (db providerUpgradeDatabase) CreateObjectStore(ctx context.Context, name string, schema gestalt.ObjectStoreSchema) error {
+	return db.provider.CreateObjectStore(ctx, name, schema)
+}
+
+func (db providerUpgradeDatabase) DeleteObjectStore(ctx context.Context, name string) error {
+	return db.provider.DeleteObjectStore(ctx, name)
+}
+
+func (db providerUpgradeDatabase) CreateIndex(ctx context.Context, store string, index gestalt.IndexSchema) error {
+	return providerUpgradeContext{provider: db.provider}.CreateIndex(ctx, store, index)
+}
+
+func (db providerUpgradeDatabase) DeleteIndex(ctx context.Context, store string, name string) error {
+	return providerUpgradeContext{provider: db.provider}.DeleteIndex(ctx, store, name)
 }
 
 func (p *Provider) getStoreLocked(name string) *objectStore {

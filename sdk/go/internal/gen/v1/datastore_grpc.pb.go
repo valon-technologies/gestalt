@@ -20,6 +20,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	IndexedDB_OpenDatabase_FullMethodName      = "/gestalt.provider.v1.IndexedDB/OpenDatabase"
+	IndexedDB_DeleteDatabase_FullMethodName    = "/gestalt.provider.v1.IndexedDB/DeleteDatabase"
+	IndexedDB_Databases_FullMethodName         = "/gestalt.provider.v1.IndexedDB/Databases"
+	IndexedDB_CompareKeys_FullMethodName       = "/gestalt.provider.v1.IndexedDB/CompareKeys"
 	IndexedDB_CreateObjectStore_FullMethodName = "/gestalt.provider.v1.IndexedDB/CreateObjectStore"
 	IndexedDB_DeleteObjectStore_FullMethodName = "/gestalt.provider.v1.IndexedDB/DeleteObjectStore"
 	IndexedDB_Get_FullMethodName               = "/gestalt.provider.v1.IndexedDB/Get"
@@ -48,7 +52,12 @@ const (
 //
 // IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 type IndexedDBClient interface {
-	// Lifecycle
+	// Factory lifecycle
+	OpenDatabase(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[OpenDatabaseClientMessage, OpenDatabaseServerMessage], error)
+	DeleteDatabase(ctx context.Context, in *DeleteDatabaseRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DeleteDatabaseServerMessage], error)
+	Databases(ctx context.Context, in *DatabasesRequest, opts ...grpc.CallOption) (*DatabasesResponse, error)
+	CompareKeys(ctx context.Context, in *CompareKeysRequest, opts ...grpc.CallOption) (*CompareKeysResponse, error)
+	// Legacy object-store lifecycle
 	CreateObjectStore(ctx context.Context, in *CreateObjectStoreRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteObjectStore(ctx context.Context, in *DeleteObjectStoreRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Primary key CRUD
@@ -83,6 +92,58 @@ type indexedDBClient struct {
 
 func NewIndexedDBClient(cc grpc.ClientConnInterface) IndexedDBClient {
 	return &indexedDBClient{cc}
+}
+
+func (c *indexedDBClient) OpenDatabase(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[OpenDatabaseClientMessage, OpenDatabaseServerMessage], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &IndexedDB_ServiceDesc.Streams[0], IndexedDB_OpenDatabase_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[OpenDatabaseClientMessage, OpenDatabaseServerMessage]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IndexedDB_OpenDatabaseClient = grpc.BidiStreamingClient[OpenDatabaseClientMessage, OpenDatabaseServerMessage]
+
+func (c *indexedDBClient) DeleteDatabase(ctx context.Context, in *DeleteDatabaseRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DeleteDatabaseServerMessage], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &IndexedDB_ServiceDesc.Streams[1], IndexedDB_DeleteDatabase_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[DeleteDatabaseRequest, DeleteDatabaseServerMessage]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IndexedDB_DeleteDatabaseClient = grpc.ServerStreamingClient[DeleteDatabaseServerMessage]
+
+func (c *indexedDBClient) Databases(ctx context.Context, in *DatabasesRequest, opts ...grpc.CallOption) (*DatabasesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DatabasesResponse)
+	err := c.cc.Invoke(ctx, IndexedDB_Databases_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *indexedDBClient) CompareKeys(ctx context.Context, in *CompareKeysRequest, opts ...grpc.CallOption) (*CompareKeysResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CompareKeysResponse)
+	err := c.cc.Invoke(ctx, IndexedDB_CompareKeys_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *indexedDBClient) CreateObjectStore(ctx context.Context, in *CreateObjectStoreRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
@@ -267,7 +328,7 @@ func (c *indexedDBClient) IndexDelete(ctx context.Context, in *IndexQueryRequest
 
 func (c *indexedDBClient) OpenCursor(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[CursorClientMessage, CursorResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &IndexedDB_ServiceDesc.Streams[0], IndexedDB_OpenCursor_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &IndexedDB_ServiceDesc.Streams[2], IndexedDB_OpenCursor_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +341,7 @@ type IndexedDB_OpenCursorClient = grpc.BidiStreamingClient[CursorClientMessage, 
 
 func (c *indexedDBClient) Transaction(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TransactionClientMessage, TransactionServerMessage], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &IndexedDB_ServiceDesc.Streams[1], IndexedDB_Transaction_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &IndexedDB_ServiceDesc.Streams[3], IndexedDB_Transaction_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +358,12 @@ type IndexedDB_TransactionClient = grpc.BidiStreamingClient[TransactionClientMes
 //
 // IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 type IndexedDBServer interface {
-	// Lifecycle
+	// Factory lifecycle
+	OpenDatabase(grpc.BidiStreamingServer[OpenDatabaseClientMessage, OpenDatabaseServerMessage]) error
+	DeleteDatabase(*DeleteDatabaseRequest, grpc.ServerStreamingServer[DeleteDatabaseServerMessage]) error
+	Databases(context.Context, *DatabasesRequest) (*DatabasesResponse, error)
+	CompareKeys(context.Context, *CompareKeysRequest) (*CompareKeysResponse, error)
+	// Legacy object-store lifecycle
 	CreateObjectStore(context.Context, *CreateObjectStoreRequest) (*emptypb.Empty, error)
 	DeleteObjectStore(context.Context, *DeleteObjectStoreRequest) (*emptypb.Empty, error)
 	// Primary key CRUD
@@ -334,6 +400,18 @@ type IndexedDBServer interface {
 // pointer dereference when methods are called.
 type UnimplementedIndexedDBServer struct{}
 
+func (UnimplementedIndexedDBServer) OpenDatabase(grpc.BidiStreamingServer[OpenDatabaseClientMessage, OpenDatabaseServerMessage]) error {
+	return status.Error(codes.Unimplemented, "method OpenDatabase not implemented")
+}
+func (UnimplementedIndexedDBServer) DeleteDatabase(*DeleteDatabaseRequest, grpc.ServerStreamingServer[DeleteDatabaseServerMessage]) error {
+	return status.Error(codes.Unimplemented, "method DeleteDatabase not implemented")
+}
+func (UnimplementedIndexedDBServer) Databases(context.Context, *DatabasesRequest) (*DatabasesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Databases not implemented")
+}
+func (UnimplementedIndexedDBServer) CompareKeys(context.Context, *CompareKeysRequest) (*CompareKeysResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CompareKeys not implemented")
+}
 func (UnimplementedIndexedDBServer) CreateObjectStore(context.Context, *CreateObjectStoreRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateObjectStore not implemented")
 }
@@ -413,6 +491,60 @@ func RegisterIndexedDBServer(s grpc.ServiceRegistrar, srv IndexedDBServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&IndexedDB_ServiceDesc, srv)
+}
+
+func _IndexedDB_OpenDatabase_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(IndexedDBServer).OpenDatabase(&grpc.GenericServerStream[OpenDatabaseClientMessage, OpenDatabaseServerMessage]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IndexedDB_OpenDatabaseServer = grpc.BidiStreamingServer[OpenDatabaseClientMessage, OpenDatabaseServerMessage]
+
+func _IndexedDB_DeleteDatabase_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DeleteDatabaseRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(IndexedDBServer).DeleteDatabase(m, &grpc.GenericServerStream[DeleteDatabaseRequest, DeleteDatabaseServerMessage]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IndexedDB_DeleteDatabaseServer = grpc.ServerStreamingServer[DeleteDatabaseServerMessage]
+
+func _IndexedDB_Databases_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DatabasesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndexedDBServer).Databases(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndexedDB_Databases_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndexedDBServer).Databases(ctx, req.(*DatabasesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IndexedDB_CompareKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CompareKeysRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IndexedDBServer).CompareKeys(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IndexedDB_CompareKeys_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IndexedDBServer).CompareKeys(ctx, req.(*CompareKeysRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _IndexedDB_CreateObjectStore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -761,6 +893,14 @@ var IndexedDB_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*IndexedDBServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "Databases",
+			Handler:    _IndexedDB_Databases_Handler,
+		},
+		{
+			MethodName: "CompareKeys",
+			Handler:    _IndexedDB_CompareKeys_Handler,
+		},
+		{
 			MethodName: "CreateObjectStore",
 			Handler:    _IndexedDB_CreateObjectStore_Handler,
 		},
@@ -834,6 +974,17 @@ var IndexedDB_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "OpenDatabase",
+			Handler:       _IndexedDB_OpenDatabase_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "DeleteDatabase",
+			Handler:       _IndexedDB_DeleteDatabase_Handler,
+			ServerStreams: true,
+		},
 		{
 			StreamName:    "OpenCursor",
 			Handler:       _IndexedDB_OpenCursor_Handler,

@@ -2115,6 +2115,10 @@ pub struct RecordRequest {
     pub store: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub record: ::core::option::Option<Record>,
+    /// connection_id scopes this operation to a database connection returned by
+    /// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+    #[prost(bytes = "vec", tag = "100")]
+    pub connection_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// RecordResponse wraps one row payload.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2141,12 +2145,20 @@ pub struct ObjectStoreRequest {
     pub store: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub id: ::prost::alloc::string::String,
+    /// connection_id scopes this operation to a database connection returned by
+    /// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+    #[prost(bytes = "vec", tag = "100")]
+    pub connection_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// ObjectStoreNameRequest addresses an object store without a specific row key.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ObjectStoreNameRequest {
     #[prost(string, tag = "1")]
     pub store: ::prost::alloc::string::String,
+    /// connection_id scopes this operation to a database connection returned by
+    /// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+    #[prost(bytes = "vec", tag = "100")]
+    pub connection_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// ObjectStoreRangeRequest addresses an object store plus an optional key range.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2155,6 +2167,10 @@ pub struct ObjectStoreRangeRequest {
     pub store: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub range: ::core::option::Option<KeyRange>,
+    /// connection_id scopes this operation to a database connection returned by
+    /// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+    #[prost(bytes = "vec", tag = "100")]
+    pub connection_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// CreateObjectStoreRequest creates a new object store.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2182,6 +2198,10 @@ pub struct IndexQueryRequest {
     pub values: ::prost::alloc::vec::Vec<TypedValue>,
     #[prost(message, optional, tag = "4")]
     pub range: ::core::option::Option<KeyRange>,
+    /// connection_id scopes this operation to a database connection returned by
+    /// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+    #[prost(bytes = "vec", tag = "100")]
+    pub connection_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// CountResponse reports how many rows matched a query.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2207,6 +2227,10 @@ pub struct OpenCursorRequest {
     /// values selects a compound index key prefix when index is set.
     #[prost(message, repeated, tag = "6")]
     pub values: ::prost::alloc::vec::Vec<TypedValue>,
+    /// connection_id scopes this cursor to a database connection returned by
+    /// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+    #[prost(bytes = "vec", tag = "100")]
+    pub connection_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// KeyValue represents a single IndexedDB key, which can be a scalar
 /// (string, number, date, binary) or a nested array of keys per the W3C spec.
@@ -2317,6 +2341,267 @@ pub struct KeyResponse {
     #[prost(string, tag = "1")]
     pub key: ::prost::alloc::string::String,
 }
+/// VersionChangeInfo notifies an existing connection that an open or delete
+/// request needs that connection to close before it can proceed.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct VersionChangeInfo {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub old_version: u64,
+    #[prost(uint64, optional, tag = "3")]
+    pub new_version: ::core::option::Option<u64>,
+    #[prost(enumeration = "VersionChangeReason", tag = "4")]
+    pub reason: i32,
+}
+/// BlockedInfo reports that open/delete is waiting for incumbent connections or
+/// operations to drain.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct BlockedInfo {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub old_version: u64,
+    #[prost(uint64, optional, tag = "3")]
+    pub new_version: ::core::option::Option<u64>,
+    #[prost(enumeration = "VersionChangeReason", tag = "4")]
+    pub reason: i32,
+    #[prost(int32, tag = "5")]
+    pub open_connections: i32,
+    #[prost(int32, tag = "6")]
+    pub active_operations: i32,
+}
+/// OpenDatabaseRequest starts a database open flow. version absent opens the
+/// current version, creating version 1 when missing. require_existing is used by
+/// OpenCurrent and fails instead of creating a missing database.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct OpenDatabaseRequest {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint64, optional, tag = "2")]
+    pub version: ::core::option::Option<u64>,
+    #[prost(bool, tag = "3")]
+    pub require_existing: bool,
+}
+/// UpgradeStarted starts the exclusive upgrade phase for an open request.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeStarted {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub old_version: u64,
+    #[prost(uint64, tag = "3")]
+    pub new_version: u64,
+    #[prost(string, repeated, tag = "4")]
+    pub object_store_names: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// OpenDatabaseSuccess returns the live connection token and database metadata.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct OpenDatabaseSuccess {
+    #[prost(bytes = "vec", tag = "1")]
+    pub connection_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "3")]
+    pub version: u64,
+    #[prost(string, repeated, tag = "4")]
+    pub object_store_names: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CloseDatabaseRequest {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CloseDatabaseResponse {}
+/// DeleteDatabaseRequest starts a database delete flow.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeleteDatabaseRequest {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+}
+/// DeleteDatabaseResponse reports the deleted database version. Missing
+/// databases succeed with old_version 0.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeleteDatabaseResponse {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub old_version: u64,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DatabasesRequest {}
+/// DatabaseInfo mirrors IDBFactory.databases() and intentionally exposes only
+/// name and version.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DatabaseInfo {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DatabasesResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub databases: ::prost::alloc::vec::Vec<DatabaseInfo>,
+}
+/// CompareKeysRequest compares two IndexedDB keys encoded with KeyValue.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CompareKeysRequest {
+    #[prost(message, optional, tag = "1")]
+    pub first: ::core::option::Option<KeyValue>,
+    #[prost(message, optional, tag = "2")]
+    pub second: ::core::option::Option<KeyValue>,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CompareKeysResponse {
+    #[prost(int32, tag = "1")]
+    pub cmp: i32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradeCreateObjectStoreRequest {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub schema: ::core::option::Option<ObjectStoreSchema>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeDeleteObjectStoreRequest {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeCreateIndexRequest {
+    #[prost(string, tag = "1")]
+    pub store: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, repeated, tag = "3")]
+    pub key_path: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(bool, tag = "4")]
+    pub unique: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeDeleteIndexRequest {
+    #[prost(string, tag = "1")]
+    pub store: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct UpgradeObjectStoreNamesRequest {}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct FinishUpgradeRequest {}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct AbortUpgradeRequest {
+    #[prost(string, tag = "1")]
+    pub reason: ::prost::alloc::string::String,
+}
+/// UpgradeOperation is one ordered schema operation in an open upgrade phase.
+/// Clients send one operation and wait for its matching response before sending
+/// the next operation.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradeOperation {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(oneof = "upgrade_operation::Op", tags = "10, 11, 12, 13, 14, 15, 16")]
+    pub op: ::core::option::Option<upgrade_operation::Op>,
+}
+/// Nested message and enum types in `UpgradeOperation`.
+pub mod upgrade_operation {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Op {
+        #[prost(message, tag = "10")]
+        CreateObjectStore(super::UpgradeCreateObjectStoreRequest),
+        #[prost(message, tag = "11")]
+        DeleteObjectStore(super::UpgradeDeleteObjectStoreRequest),
+        #[prost(message, tag = "12")]
+        CreateIndex(super::UpgradeCreateIndexRequest),
+        #[prost(message, tag = "13")]
+        DeleteIndex(super::UpgradeDeleteIndexRequest),
+        #[prost(message, tag = "14")]
+        ObjectStoreNames(super::UpgradeObjectStoreNamesRequest),
+        #[prost(message, tag = "15")]
+        FinishUpgrade(super::FinishUpgradeRequest),
+        #[prost(message, tag = "16")]
+        AbortUpgrade(super::AbortUpgradeRequest),
+    }
+}
+/// UpgradeOperationResponse is terminal for the open flow when error is non-OK.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UpgradeOperationResponse {
+    #[prost(uint64, tag = "1")]
+    pub request_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub error: ::core::option::Option<super::super::super::google::rpc::Status>,
+    #[prost(string, repeated, tag = "3")]
+    pub object_store_names: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+/// OpenDatabaseClientMessage is one frame in the open/connection lifetime
+/// stream. The first frame must be OpenDatabaseRequest.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OpenDatabaseClientMessage {
+    #[prost(oneof = "open_database_client_message::Msg", tags = "1, 2, 3")]
+    pub msg: ::core::option::Option<open_database_client_message::Msg>,
+}
+/// Nested message and enum types in `OpenDatabaseClientMessage`.
+pub mod open_database_client_message {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Open(super::OpenDatabaseRequest),
+        #[prost(message, tag = "2")]
+        UpgradeOperation(super::UpgradeOperation),
+        #[prost(message, tag = "3")]
+        Close(super::CloseDatabaseRequest),
+    }
+}
+/// OpenDatabaseServerMessage carries open progress, connection events, and
+/// terminal application errors.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct OpenDatabaseServerMessage {
+    #[prost(
+        oneof = "open_database_server_message::Msg",
+        tags = "1, 2, 3, 4, 5, 6, 7"
+    )]
+    pub msg: ::core::option::Option<open_database_server_message::Msg>,
+}
+/// Nested message and enum types in `OpenDatabaseServerMessage`.
+pub mod open_database_server_message {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        UpgradeStarted(super::UpgradeStarted),
+        #[prost(message, tag = "2")]
+        UpgradeOperationResponse(super::UpgradeOperationResponse),
+        #[prost(message, tag = "3")]
+        Opened(super::OpenDatabaseSuccess),
+        #[prost(message, tag = "4")]
+        Versionchange(super::VersionChangeInfo),
+        #[prost(message, tag = "5")]
+        Blocked(super::BlockedInfo),
+        #[prost(message, tag = "6")]
+        Closed(super::CloseDatabaseResponse),
+        #[prost(message, tag = "7")]
+        Error(super::super::super::super::google::rpc::Status),
+    }
+}
+/// DeleteDatabaseServerMessage streams blocked progress and the final delete
+/// result. A terminal error frame is followed by an OK transport close.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeleteDatabaseServerMessage {
+    #[prost(oneof = "delete_database_server_message::Msg", tags = "1, 2, 3")]
+    pub msg: ::core::option::Option<delete_database_server_message::Msg>,
+}
+/// Nested message and enum types in `DeleteDatabaseServerMessage`.
+pub mod delete_database_server_message {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Blocked(super::BlockedInfo),
+        #[prost(message, tag = "2")]
+        Deleted(super::DeleteDatabaseResponse),
+        #[prost(message, tag = "3")]
+        Error(super::super::super::super::google::rpc::Status),
+    }
+}
 /// BeginTransactionRequest starts an IndexedDB transaction stream.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BeginTransactionRequest {
@@ -2326,6 +2611,10 @@ pub struct BeginTransactionRequest {
     pub mode: i32,
     #[prost(enumeration = "TransactionDurabilityHint", tag = "3")]
     pub durability_hint: i32,
+    /// connection_id scopes this transaction to a database connection returned by
+    /// OpenDatabase. Empty preserves the legacy unscoped provider behavior.
+    #[prost(bytes = "vec", tag = "100")]
+    pub connection_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TransactionBeginResponse {}
@@ -2561,6 +2850,37 @@ impl TransactionDurabilityHint {
             "TRANSACTION_DURABILITY_DEFAULT" => Some(Self::TransactionDurabilityDefault),
             "TRANSACTION_DURABILITY_STRICT" => Some(Self::TransactionDurabilityStrict),
             "TRANSACTION_DURABILITY_RELAXED" => Some(Self::TransactionDurabilityRelaxed),
+            _ => None,
+        }
+    }
+}
+/// VersionChangeReason identifies why a live database connection received a
+/// versionchange notification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VersionChangeReason {
+    Unspecified = 0,
+    Upgrade = 1,
+    Delete = 2,
+}
+impl VersionChangeReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VERSION_CHANGE_REASON_UNSPECIFIED",
+            Self::Upgrade => "VERSION_CHANGE_REASON_UPGRADE",
+            Self::Delete => "VERSION_CHANGE_REASON_DELETE",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VERSION_CHANGE_REASON_UNSPECIFIED" => Some(Self::Unspecified),
+            "VERSION_CHANGE_REASON_UPGRADE" => Some(Self::Upgrade),
+            "VERSION_CHANGE_REASON_DELETE" => Some(Self::Delete),
             _ => None,
         }
     }
