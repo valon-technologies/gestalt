@@ -54,13 +54,12 @@ Common source-package checks:
 
   </Tabs.Tab>
   <Tabs.Tab>
-    Verify the virtualenv is intact and the configured module is importable:
+    Verify the build command can produce the declared executable artifact:
 
     ```sh
-    uv run python -c "import provider"
+    ./scripts/build-provider.sh
+    test -x .gestalt/build/provider
     ```
-
-    Also confirm the `[tool.gestalt].provider` entry in `pyproject.toml` points at the module Gestalt should load.
 
   </Tabs.Tab>
   <Tabs.Tab>
@@ -74,13 +73,12 @@ Common source-package checks:
 
   </Tabs.Tab>
   <Tabs.Tab>
-    Verify the module resolves from the provider root:
+    Verify the build command can produce the declared executable artifact:
 
     ```sh
-    bun run -e "import('./provider.ts')"
+    npm run build
+    test -x .gestalt/build/provider
     ```
-
-    Confirm `package.json` has a `gestalt.provider` entry pointing at the correct `./file.ts#export` target. The target path must start with `./` and the export name must match a named export in the module.
 
   </Tabs.Tab>
 </Tabs>

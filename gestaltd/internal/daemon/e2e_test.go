@@ -2,8 +2,6 @@ package daemon
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -816,7 +814,36 @@ func TestE2EValidatePlatformUsesLockedStaticMetadataWithoutArchiveDownload(t *te
 	t.Parallel()
 
 	dir := t.TempDir()
-	cfgPath := writeValidValidateConfig(t, dir)
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
+	pluginDir := setupPrebuiltPluginDir(t, dir)
+	if err := writeLocalProviderReleaseMetadata(pluginDir); err != nil {
+		t.Fatalf("write plugin provider-release metadata: %v", err)
+	}
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+server:
+  baseUrl: %s
+  encryptionKey: valid-config-e2e-key
+  providers:
+    indexeddb: inmem
+    externalCredentials: default
+providers:
+  externalCredentials:
+    default:
+      source:
+        path: %s
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+plugins:
+  example:
+    source: %s
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, filepath.Join(pluginDir, "provider-release.yaml"))
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
 	out, err := exec.Command(gestaltdBin, "lock", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
 	if err != nil {
@@ -872,7 +899,11 @@ func TestE2EValidateStaticRejectsStaleCatalogExposureMetadata(t *testing.T) {
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	externalCredentialsManifest := componentProviderManifestPath(t, setupExternalCredentialsProviderDir(t, dir))
 	callerManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "caller")))
-	targetManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, filepath.Join(dir, "target")))
+	targetDir := setupPrebuiltPluginDir(t, filepath.Join(dir, "target"))
+	if err := writeLocalProviderReleaseMetadata(targetDir); err != nil {
+		t.Fatalf("write target provider-release metadata: %v", err)
+	}
+	targetReleaseMetadata := filepath.Join(targetDir, "provider-release.yaml")
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
 	cfgPath := filepath.Join(dir, "config.yaml")
 	writeConfig := func(targetOperation string) {
@@ -901,11 +932,10 @@ plugins:
       - plugin: target
         operation: echo
   target:
-    source:
-      path: %s
+    source: %s
     allowedOperations:
       %s: {}
-`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, callerManifest, targetManifest, targetOperation)
+`, e2eLoopbackBaseURL(8080), externalCredentialsManifest, indexedDBManifest, callerManifest, targetReleaseMetadata, targetOperation)
 		if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 			t.Fatalf("write config: %v", err)
 		}
@@ -1394,6 +1424,8 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 
 	pluginDir := filepath.Join(baseDir, "plugin-src")
 	testutil.CopyExampleProviderPlugin(t, pluginDir)
+	artifactRel := ".gestalt/build/provider"
+	writeGoPluginBuildFixture(t, pluginDir, "github.com/valon-technologies/gestalt/testdata/provider-go", "example", artifactRel)
 	manifest := &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindPlugin,
 		Source:      "github.com/test/plugins/provider",
@@ -1401,6 +1433,11 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 		DisplayName: "Example Provider",
 		Description: "A minimal example provider built with the public SDK",
 		Spec:        &providermanifestv1.Spec{},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}
 	writeManifestFile(t, pluginDir, manifest)
 	return pluginDir
@@ -1439,22 +1476,17 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/auth/"+name)), 0o644)
 	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, providerDir, "auth.go", []byte(authProviderSource(name)), 0o644)
-	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth-provider"))
-	artifactPath := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
-	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
-	}
-	if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, providermanifestv1.KindAuthentication, runtime.GOOS, runtime.GOARCH); err != nil {
-		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
-	}
+	artifactRel := ".gestalt/build/auth-provider"
+	writeGoComponentBuildFixture(t, providerDir, "example.com/providers/auth/"+name, providermanifestv1.KindAuthentication, artifactRel)
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindAuthentication,
 		Source:      "github.com/test/providers/auth/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Auth " + name,
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "auth.go", "cmd", "build.sh"},
 		},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
@@ -1471,22 +1503,17 @@ func setupAuthorizationProviderDir(t *testing.T, baseDir, name string) string {
 	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/authorization/"+name)), 0o644)
 	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, providerDir, "authorization.go", []byte(httpSubjectAuthorizationProviderSource(name)), 0o644)
-	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "authorization-provider"))
-	artifactPath := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
-	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
-	}
-	if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, providermanifestv1.KindAuthorization, runtime.GOOS, runtime.GOARCH); err != nil {
-		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
-	}
+	artifactRel := ".gestalt/build/authorization-provider"
+	writeGoComponentBuildFixture(t, providerDir, "example.com/providers/authorization/"+name, providermanifestv1.KindAuthorization, artifactRel)
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindAuthorization,
 		Source:      "github.com/test/providers/authorization/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Authorization " + name,
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "authorization.go", "cmd", "build.sh"},
 		},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
@@ -1503,22 +1530,17 @@ func setupCacheProviderDir(t *testing.T, baseDir, name string) string {
 	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/cache/"+name)), 0o644)
 	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, providerDir, "cache.go", []byte(testutil.GeneratedCachePackageSource()), 0o644)
-	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "cache-provider"))
-	artifactPath := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
-	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
-	}
-	if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, providermanifestv1.KindCache, runtime.GOOS, runtime.GOARCH); err != nil {
-		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
-	}
+	artifactRel := ".gestalt/build/cache-provider"
+	writeGoComponentBuildFixture(t, providerDir, "example.com/providers/cache/"+name, providermanifestv1.KindCache, artifactRel)
 	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindCache,
 		Source:      "github.com/test/providers/cache/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Cache " + name,
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "cache.go", "cmd", "build.sh"},
 		},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
@@ -1544,9 +1566,8 @@ func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string
 		writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/workflow/"+name)), 0o644)
 		writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 		writeTestFile(t, providerDir, "workflow.go", []byte(testutil.GeneratedWorkflowPackageSource()), 0o644)
-		if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, binDest, providermanifestv1.KindWorkflow, runtime.GOOS, runtime.GOARCH); err != nil {
-			t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
-		}
+		artifactRel = ".gestalt/build/workflow-provider"
+		writeGoComponentBuildFixture(t, providerDir, "example.com/providers/workflow/"+name, providermanifestv1.KindWorkflow, artifactRel)
 	case providermanifestv1.KindAgent:
 		if err := testutil.BuildSDKTestMainBinary(testutil.MustSDKTestProviderPath("agent"), binDest); err != nil {
 			t.Fatalf("build agent provider fixture: %v", err)
@@ -1560,23 +1581,112 @@ func setupExecutableProviderDir(t *testing.T, baseDir, kind, name string) string
 			t.Fatalf("write provider binary: %v", err)
 		}
 	}
-	binData, err := os.ReadFile(binDest)
-	if err != nil {
-		t.Fatalf("read provider artifact: %v", err)
-	}
-	sum := sha256.Sum256(binData)
-	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
+	manifest := &providermanifestv1.Manifest{
 		Kind:        kind,
 		Source:      "github.com/test/providers/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: name,
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel, SHA256: hex.EncodeToString(sum[:])},
-		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
-	})
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+	}
+	if kind == providermanifestv1.KindWorkflow {
+		manifest.Build = &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "workflow.go", "cmd", "build.sh"},
+		}
+	}
+	writeManifestFile(t, providerDir, manifest)
 	return providerDir
+}
+
+func writeGoComponentBuildFixture(t *testing.T, providerDir, importPath, kind, artifactRel string) {
+	t.Helper()
+
+	serveCall := goComponentServeCallForTest(t, kind)
+	mainSource := fmt.Sprintf(`package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	providerpkg %q
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := %s; err != nil {
+		fmt.Fprintf(os.Stderr, "error: %%v\n", err)
+		os.Exit(1)
+	}
+}
+`, importPath, serveCall)
+	writeTestFile(t, providerDir, filepath.Join("cmd", "provider", "main.go"), []byte(mainSource), 0o644)
+	buildScript := fmt.Sprintf("mkdir -p %q\ngo build -o %q ./cmd/provider\n", filepath.ToSlash(filepath.Dir(artifactRel)), artifactRel)
+	writeTestFile(t, providerDir, "build.sh", []byte(buildScript), 0o755)
+}
+
+func writeGoPluginBuildFixture(t *testing.T, providerDir, importPath, pluginName, artifactRel string) {
+	t.Helper()
+
+	mainSource := fmt.Sprintf(`package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	providerpkg %q
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router.WithName(%q)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %%v\n", err)
+		os.Exit(1)
+	}
+}
+`, importPath, pluginName)
+	writeTestFile(t, providerDir, filepath.Join("cmd", "provider", "main.go"), []byte(mainSource), 0o644)
+	buildScript := fmt.Sprintf("mkdir -p %q\ngo build -o %q ./cmd/provider\n", filepath.ToSlash(filepath.Dir(artifactRel)), artifactRel)
+	writeTestFile(t, providerDir, "build.sh", []byte(buildScript), 0o755)
+}
+
+func goComponentServeCallForTest(t *testing.T, kind string) string {
+	t.Helper()
+	switch providermanifestv1.NormalizeKind(kind) {
+	case providermanifestv1.KindAuthentication:
+		return "gestalt.ServeAuthenticationProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindAuthorization:
+		return "gestalt.ServeAuthorizationProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindCache:
+		return "gestalt.ServeCacheProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindWorkflow:
+		return "gestalt.ServeWorkflowProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindExternalCredentials:
+		return "gestalt.ServeExternalCredentialProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindSecrets:
+		return "gestalt.ServeSecretsProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindIndexedDB:
+		return "gestalt.ServeIndexedDBProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindS3:
+		return "gestalt.ServeS3Provider(ctx, providerpkg.New())"
+	case providermanifestv1.KindAgent:
+		return "gestalt.ServeAgentProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindRuntime:
+		return "gestalt.ServePluginRuntimeProvider(ctx, providerpkg.New())"
+	default:
+		t.Fatalf("unsupported Go component fixture kind %q", kind)
+		return ""
+	}
 }
 
 func authProviderSource(name string) string {
@@ -1774,10 +1884,7 @@ func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Relational IndexedDB",
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
-		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
 	return providerDir
 }
@@ -1806,10 +1913,7 @@ func setupExternalCredentialsProviderDir(t *testing.T, baseDir string) string {
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Default External Credentials",
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
-		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
 	return providerDir
 }
@@ -1846,12 +1950,10 @@ func setupPrebuiltPluginDir(t *testing.T, baseDir string) string {
 	}
 
 	artifactRel := filepath.Base(binDest)
-	sum := sha256.Sum256(binData)
 	srcManifest.Source = "github.com/test/plugins/provider"
 	srcManifest.Version = "0.0.1-alpha.1"
-	srcManifest.Artifacts = []providermanifestv1.Artifact{
-		{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel, SHA256: hex.EncodeToString(sum[:])},
-	}
+	srcManifest.Build = nil
+	srcManifest.Artifacts = nil
 	srcManifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artifactRel}
 	writeManifestFile(t, providerDir, srcManifest)
 	return providerDir
@@ -1916,17 +2018,19 @@ func setupMountedUIDirAt(t *testing.T, uiDir string, routes []providermanifestv1
 `), 0o644)
 	writeTestFile(t, uiDir, filepath.Join("dist", "assets", "app.js"), []byte(`window.__ROADMAP_REVIEW_UI__ = "ready";
 `), 0o644)
+	writeTestFile(t, uiDir, "build.sh", []byte("mkdir -p dist/assets\nprintf '<html>Roadmap Review UI</html>\\n' > dist/index.html\nprintf 'window.__ROADMAP_REVIEW_UI__ = \"ready\";\\n' > dist/assets/app.js\n"), 0o755)
 	writeManifestFile(t, uiDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindUI,
 		Source:      "github.com/test/ui/roadmap-review",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Roadmap Review UI",
 		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"go", "version"},
-			Output:  "dist",
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh"},
 		},
 		Spec: &providermanifestv1.Spec{
-			Routes: routes,
+			AssetRoot: "dist",
+			Routes:    routes,
 		},
 	})
 
@@ -1960,10 +2064,7 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Relational IndexedDB",
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: filepath.Base(indexedDBBinDest)},
-		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(indexedDBBinDest)},
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(indexedDBBinDest)},
 	})
 
 	externalCredentialsDir := filepath.Join(providersDir, "externalcredentials", "default")
@@ -1984,10 +2085,7 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Default External Credentials",
 		Spec:        &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: filepath.Base(externalCredentialsBinDest)},
-		},
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(externalCredentialsBinDest)},
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(externalCredentialsBinDest)},
 	})
 
 	rootUIDir := filepath.Join(providersDir, "ui", "default")
@@ -2006,15 +2104,17 @@ func setupDefaultLocalProvidersDir(t *testing.T, baseDir string) string {
   </body>
 </html>
 `), 0o644)
+	writeTestFile(t, rootUIDir, "build.sh", []byte("mkdir -p dist\nprintf '<html>Default Gestalt UI</html>\\n' > dist/index.html\n"), 0o755)
 	writeManifestFile(t, rootUIDir, &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindUI,
 		Source:      "github.com/test/ui/default",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Default Gestalt UI",
 		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"go", "version"},
-			Output:  "dist",
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh"},
 		},
+		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
 	})
 
 	return providersDir
@@ -3080,28 +3180,24 @@ func TestE2ELockSyncLocalProviders(t *testing.T) {
 	if err == nil {
 		t.Fatalf("gestaltd sync --check with stale lock unexpectedly succeeded\noutput: %s", out)
 	}
-	if !strings.Contains(string(out), "gestaltd lock") {
-		t.Fatalf("stale lock output should point at lock, got: %s", out)
+	if !strings.Contains(string(out), "prepared artifact for provider") ||
+		!strings.Contains(string(out), "renamed") ||
+		!strings.Contains(string(out), "gestaltd sync --locked") {
+		t.Fatalf("stale local source output should point at sync, got: %s", out)
 	}
-	if strings.Contains(string(out), "--artifacts-dir") {
-		t.Fatalf("lock remediation should not include --artifacts-dir, got: %s", out)
+	if !strings.Contains(string(out), "--artifacts-dir") {
+		t.Fatalf("sync remediation should include --artifacts-dir, got: %s", out)
 	}
 	if strings.Contains(string(out), "--lockfile") {
-		t.Fatalf("lock remediation should not include default --lockfile, got: %s", out)
+		t.Fatalf("sync remediation should not include default --lockfile, got: %s", out)
 	}
 	staleArtifactsDir := filepath.Join(dir, "prepared-stale")
 	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--config", staleCfgPath, "--artifacts-dir", staleArtifactsDir).CombinedOutput()
-	if err == nil {
-		t.Fatalf("gestaltd sync with stale lock unexpectedly succeeded\noutput: %s", out)
+	if err != nil {
+		t.Fatalf("gestaltd sync with renamed local provider should materialize from source: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "lockfile is out of date") || !strings.Contains(string(out), "gestaltd lock") {
-		t.Fatalf("stale lock materialize output should point at lock, got: %s", out)
-	}
-	if strings.Contains(string(out), "lock entry for provider") {
-		t.Fatalf("stale lock materialize should fail before per-provider materialization, got: %s", out)
-	}
-	if _, err := os.Stat(staleArtifactsDir); !os.IsNotExist(err) {
-		t.Fatalf("stale sync should not create artifacts dir, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(staleArtifactsDir, ".gestaltd", "providers", "renamed")); err != nil {
+		t.Fatalf("renamed local provider should be prepared from source, stat err=%v", err)
 	}
 
 	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", staleCfgPath, "--lockfile", lockPath, "--artifacts-dir", filepath.Join(dir, "prepared")).CombinedOutput()
@@ -3109,10 +3205,10 @@ func TestE2ELockSyncLocalProviders(t *testing.T) {
 		t.Fatalf("gestaltd sync --check with stale lock unexpectedly succeeded\noutput: %s", out)
 	}
 	if !strings.Contains(string(out), "--lockfile "+lockPath) {
-		t.Fatalf("lock remediation should preserve explicit --lockfile, got: %s", out)
+		t.Fatalf("sync remediation should preserve explicit --lockfile, got: %s", out)
 	}
-	if strings.Contains(string(out), "--artifacts-dir") {
-		t.Fatalf("lock remediation should not include --artifacts-dir, got: %s", out)
+	if !strings.Contains(string(out), "--artifacts-dir") {
+		t.Fatalf("sync remediation should include --artifacts-dir, got: %s", out)
 	}
 
 	out, err = exec.Command(gestaltdBin, "sync", "--locked", "--check", "--config", cfgPath).CombinedOutput()

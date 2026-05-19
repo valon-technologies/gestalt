@@ -15,10 +15,10 @@ import {
   type AgentTurnDisplay as ProtoAgentTurnDisplay,
 } from "./internal/gen/v1/agent_pb.ts";
 import {
-  AgentSubjectContextSchema,
+  SubjectContextSchema,
   AgentToolRefSchema,
   ExternalIdentityContextSchema,
-  type AgentSubjectContext as ProtoAgentSubjectContext,
+  type SubjectContext as ProtoSubjectContext,
   type AgentToolRef as ProtoAgentToolRef,
   type ExternalIdentityContext as ProtoExternalIdentityContext,
 } from "./internal/gen/v1/plugin_pb.ts";
@@ -36,11 +36,10 @@ import type {
   AgentMessage,
   AgentMessagePart,
   AgentMessagePartType,
-  AgentSubjectContext,
   AgentToolRef,
   AgentTurnDisplay,
 } from "./agent.ts";
-import type { ExternalIdentity } from "./api.ts";
+import type { ExternalIdentity, Subject, SubjectInput } from "./api.ts";
 
 export function agentTurnDisplayFromProto(
   display?: ProtoAgentTurnDisplay | undefined,
@@ -213,32 +212,34 @@ export function agentToolRefToProto(ref: AgentToolRef): ProtoAgentToolRef {
 }
 
 function agentRunAsSubjectFromProto(
-  subject?: ProtoAgentSubjectContext | undefined,
-): AgentSubjectContext | undefined {
+  subject?: ProtoSubjectContext | undefined,
+): Subject | undefined {
   if (subject === undefined) {
     return undefined;
   }
   return {
-    subjectId: subject.subjectId,
-    subjectKind: subject.subjectKind,
+    id: subject.id,
+    kind: subject.kind,
     credentialSubjectId: subject.credentialSubjectId,
     displayName: subject.displayName,
     authSource: subject.authSource,
+    email: subject.email,
   };
 }
 
 function agentRunAsSubjectToProto(
-  subject?: AgentSubjectContext | undefined,
-): ProtoAgentSubjectContext | undefined {
+  subject?: SubjectInput | undefined,
+): ProtoSubjectContext | undefined {
   if (subject === undefined) {
     return undefined;
   }
-  return create(AgentSubjectContextSchema, {
-    subjectId: subject.subjectId ?? "",
-    subjectKind: subject.subjectKind ?? "",
+  return create(SubjectContextSchema, {
+    id: subject.id ?? "",
+    kind: subject.kind ?? "",
     credentialSubjectId: subject.credentialSubjectId ?? "",
     displayName: subject.displayName ?? "",
     authSource: subject.authSource ?? "",
+    email: subject.email ?? "",
   });
 }
 

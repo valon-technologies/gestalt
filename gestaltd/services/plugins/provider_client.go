@@ -407,7 +407,7 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 		out.Host = &proto.HostContext{PublicBaseUrl: publicBaseURL}
 	}
 	if audit := invocation.RunAsAuditFromContext(ctx); audit.AgentSubject != nil {
-		out.AgentSubject = runAsSubjectContextProto(audit.AgentSubject)
+		out.AgentSubject = agentwire.RunAsSubjectToProto(audit.AgentSubject)
 	}
 	if identity := invocation.AgentExternalIdentityContextFromContext(ctx); identity.Type != "" && identity.ID != "" {
 		out.AgentExternalIdentity = &proto.ExternalIdentityContext{
@@ -516,17 +516,4 @@ func subjectEmail(p *principal.Principal) string {
 		return ""
 	}
 	return strings.TrimSpace(p.Identity.Email)
-}
-
-func runAsSubjectContextProto(subject *core.RunAsSubject) *proto.SubjectContext {
-	subject = core.NormalizeRunAsSubject(subject)
-	if subject == nil {
-		return nil
-	}
-	return &proto.SubjectContext{
-		Id:          subject.SubjectID,
-		Kind:        subject.SubjectKind,
-		DisplayName: subject.DisplayName,
-		AuthSource:  subject.AuthSource,
-	}
 }

@@ -618,6 +618,7 @@ export function createProviderService(
             subject: {
               id: subject.id,
               kind: subject.kind,
+              credentialSubjectId: subject.credentialSubjectId ?? "",
               displayName: subject.displayName,
               authSource: subject.authSource,
               email: subject.email ?? "",
@@ -861,6 +862,7 @@ function providerRequest(
     subject: {
       id: subject?.id ?? "",
       kind: subject?.kind ?? "",
+      credentialSubjectId: subject?.credentialSubjectId ?? "",
       displayName: subject?.displayName ?? "",
       authSource: subject?.authSource ?? "",
       email: subject?.email ?? "",
@@ -868,6 +870,7 @@ function providerRequest(
     agentSubject: {
       id: agentSubject?.id ?? "",
       kind: agentSubject?.kind ?? "",
+      credentialSubjectId: agentSubject?.credentialSubjectId ?? "",
       displayName: agentSubject?.displayName ?? "",
       authSource: agentSubject?.authSource ?? "",
       email: agentSubject?.email ?? "",

@@ -10,10 +10,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use generated::v1::integration_provider_client::IntegrationProviderClient;
 use generated::v1::{
-    AccessContext, AgentSubjectContext, AgentToolRef, CredentialContext, ExecuteRequest,
-    ExternalIdentityContext, GetSessionCatalogRequest, HostContext, HttpSubjectRequest,
-    PostConnectCredential, PostConnectRequest, RequestContext, ResolveHttpSubjectRequest,
-    StartProviderRequest, StringList, SubjectContext,
+    AccessContext, AgentToolRef, CredentialContext, ExecuteRequest, ExternalIdentityContext,
+    GetSessionCatalogRequest, HostContext, HttpSubjectRequest, PostConnectCredential,
+    PostConnectRequest, RequestContext, ResolveHttpSubjectRequest, StartProviderRequest,
+    StringList, SubjectContext,
 };
 use gestalt::{Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok};
 use hyper_util::rt::tokio::TokioIo;
@@ -109,6 +109,7 @@ impl Provider for TestProvider {
                 Ok(Some(gestalt::Subject {
                     id: format!("slack:{team_id}:{user_id}"),
                     kind: "user".to_string(),
+                    credential_subject_id: String::new(),
                     display_name: format!(
                         "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
                         request.method.as_str(),
@@ -356,7 +357,7 @@ async fn serves_provider_requests_over_unix_socket() {
                         .tool_refs
                         .first()
                         .and_then(|ref_| ref_.run_as.as_ref())
-                        .map(|run_as| run_as.subject_id.as_str())
+                        .map(|run_as| run_as.id.as_str())
                         .unwrap_or_default()
                         .to_string(),
                     tool_ref_external_id: request
@@ -499,12 +500,13 @@ async fn serves_provider_requests_over_unix_socket() {
                 tool_refs: vec![AgentToolRef {
                     plugin: "github".to_string(),
                     operation: "bot.getPullRequest".to_string(),
-                    run_as: Some(AgentSubjectContext {
-                        subject_id: "service_account:github-review".to_string(),
-                        subject_kind: "service_account".to_string(),
+                    run_as: Some(SubjectContext {
+                        id: "service_account:github-review".to_string(),
+                        kind: "service_account".to_string(),
                         credential_subject_id: "service_account:github-review".to_string(),
                         display_name: "GitHub Review".to_string(),
                         auth_source: "managed_subject".to_string(),
+                        email: String::new(),
                     }),
                     run_as_external_identity: Some(ExternalIdentityContext {
                         r#type: "github_identity".to_string(),

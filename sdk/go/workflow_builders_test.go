@@ -131,9 +131,9 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	input := AgentToolRef{
 		Plugin:    "notion",
 		Operation: "search",
-		RunAs: &AgentSubjectContext{
-			SubjectID:           "service_account:gestalt-support-notion",
-			SubjectKind:         "service_account",
+		RunAs: &Subject{
+			ID:                  "service_account:gestalt-support-notion",
+			Kind:                "service_account",
 			CredentialSubjectID: "service_account:notion-credential",
 			DisplayName:         "Gestalt Support Notion",
 			AuthSource:          "notion_service_account",
@@ -145,9 +145,9 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	}
 
 	copied := NewAgentToolRef(input)
-	input.RunAs.SubjectID = "changed"
+	input.RunAs.ID = "changed"
 	input.RunAsExternalIdentity.ID = "changed"
-	if copied.RunAs == nil || copied.RunAs.SubjectID != "service_account:gestalt-support-notion" {
+	if copied.RunAs == nil || copied.RunAs.ID != "service_account:gestalt-support-notion" {
 		t.Fatalf("copied runAs = %#v, want independent copy", copied.RunAs)
 	}
 	if copied.RunAsExternalIdentity == nil || copied.RunAsExternalIdentity.ID != "valon-support" {
@@ -155,7 +155,7 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	}
 
 	encoded := agentToolRefToProto(*copied)
-	if got := encoded.GetRunAs().GetSubjectId(); got != "service_account:gestalt-support-notion" {
+	if got := encoded.GetRunAs().GetId(); got != "service_account:gestalt-support-notion" {
 		t.Fatalf("encoded runAs subject = %q", got)
 	}
 	if got := encoded.GetRunAsExternalIdentity().GetId(); got != "valon-support" {
@@ -209,6 +209,40 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 					},
 				},
 			},
+			Steps: []WorkflowAgentStep{
+				{
+					ID:             "diagnosis",
+					Prompt:         "Diagnose",
+					Messages:       []AgentMessage{{Role: "system", Parts: []AgentMessagePart{{Type: AgentMessagePartTypeText, Text: "brief"}}}},
+					ToolRefs:       []AgentToolRef{{Plugin: "datadog", Operation: "queryLogs"}},
+					ResponseSchema: map[string]any{"type": "object"},
+					ModelOptions:   map[string]any{"temperature": 0},
+					TimeoutSeconds: 45,
+					Metadata:       map[string]any{"kind": "diagnosis"},
+					OutputDelivery: &WorkflowOutputDelivery{
+						Target: &BoundWorkflowPluginTarget{
+							PluginName: "slack",
+							Operation:  "chat.postMessage",
+						},
+						InputBindings: []WorkflowOutputBinding{
+							{
+								InputField: "text",
+								Value:      &WorkflowOutputValueSource{AgentOutput: "text"},
+							},
+						},
+					},
+				},
+				{
+					ID:       "pr_fix",
+					Prompt:   "Open a PR",
+					ToolRefs: []AgentToolRef{{Plugin: "github", Operation: "createPullRequest"}},
+					When: &WorkflowAgentStepWhen{
+						StepID:     "diagnosis",
+						OutputPath: "structured_output.actionable_for_pr",
+						Equals:     true,
+					},
+				},
+			},
 		},
 	})
 	if err != nil {
@@ -226,6 +260,22 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 	}
 	if got := agent.GetSessionReadyDelivery().GetInputBindings()[0].GetValue().GetAgentSession(); got != "id" {
 		t.Fatalf("session ready binding = %#v, want id", got)
+	}
+	if got := agent.GetSteps()[0].GetToolRefs()[0].GetPlugin(); got != "datadog" {
+		t.Fatalf("step tool ref plugin = %q, want datadog", got)
+	}
+	if got := agent.GetSteps()[1].GetWhen().GetEquals().GetBoolValue(); got != true {
+		t.Fatalf("step when equals = %v, want true", got)
+	}
+	roundTrip := boundWorkflowAgentTargetFromProto(agent)
+	if len(roundTrip.Steps) != 2 {
+		t.Fatalf("round trip steps = %#v, want two", roundTrip.Steps)
+	}
+	if roundTrip.Steps[0].ID != "diagnosis" || roundTrip.Steps[0].TimeoutSeconds != 45 {
+		t.Fatalf("round trip diagnosis step = %#v", roundTrip.Steps[0])
+	}
+	if roundTrip.Steps[1].When == nil || roundTrip.Steps[1].When.Equals != true {
+		t.Fatalf("round trip pr_fix when = %#v", roundTrip.Steps[1].When)
 	}
 }
 

@@ -120,11 +120,12 @@ type PostConnectCapable interface {
 
 // Subject identifies the caller that initiated an operation.
 type Subject struct {
-	ID          string
-	Kind        string
-	DisplayName string
-	AuthSource  string
-	Email       string
+	ID                  string
+	Kind                string
+	CredentialSubjectID string
+	DisplayName         string
+	AuthSource          string
+	Email               string
 }
 
 // ExternalIdentity identifies the caller in a provider-owned identity namespace.

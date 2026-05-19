@@ -85,6 +85,108 @@ func withNoAuthDefaultConnection(spec *providermanifestv1.Spec) *providermanifes
 	return spec
 }
 
+func writeTestFile(t *testing.T, dir, rel string, data []byte, mode os.FileMode) {
+	t.Helper()
+
+	path := filepath.Join(dir, rel)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, data, mode); err != nil {
+		t.Fatalf("WriteFile(%s): %v", path, err)
+	}
+}
+
+func writeOperatorGoComponentBuildFixture(t *testing.T, providerDir, importPath, kind, artifactRel string) {
+	t.Helper()
+
+	serveCall := operatorGoComponentServeCallForTest(t, kind)
+	mainSource := fmt.Sprintf(`package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	providerpkg %q
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := %s; err != nil {
+		fmt.Fprintf(os.Stderr, "error: %%v\n", err)
+		os.Exit(1)
+	}
+}
+`, importPath, serveCall)
+	writeTestFile(t, providerDir, filepath.Join("cmd", "provider", "main.go"), []byte(mainSource), 0o644)
+	buildScript := fmt.Sprintf("mkdir -p %q\ngo build -o %q ./cmd/provider\n", filepath.ToSlash(filepath.Dir(artifactRel)), artifactRel)
+	writeTestFile(t, providerDir, "build.sh", []byte(buildScript), 0o755)
+}
+
+func writeOperatorGoPluginBuildFixture(t *testing.T, providerDir, importPath, pluginName, artifactRel string) {
+	t.Helper()
+
+	mainSource := fmt.Sprintf(`package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	providerpkg %q
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router.WithName(%q)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %%v\n", err)
+		os.Exit(1)
+	}
+}
+`, importPath, pluginName)
+	writeTestFile(t, providerDir, filepath.Join("cmd", "provider", "main.go"), []byte(mainSource), 0o644)
+	buildScript := fmt.Sprintf("mkdir -p %q\ngo build -o %q ./cmd/provider\n", filepath.ToSlash(filepath.Dir(artifactRel)), artifactRel)
+	writeTestFile(t, providerDir, "build.sh", []byte(buildScript), 0o755)
+}
+
+func operatorGoComponentServeCallForTest(t *testing.T, kind string) string {
+	t.Helper()
+	switch providermanifestv1.NormalizeKind(kind) {
+	case providermanifestv1.KindAuthentication:
+		return "gestalt.ServeAuthenticationProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindAuthorization:
+		return "gestalt.ServeAuthorizationProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindCache:
+		return "gestalt.ServeCacheProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindWorkflow:
+		return "gestalt.ServeWorkflowProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindExternalCredentials:
+		return "gestalt.ServeExternalCredentialProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindSecrets:
+		return "gestalt.ServeSecretsProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindIndexedDB:
+		return "gestalt.ServeIndexedDBProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindS3:
+		return "gestalt.ServeS3Provider(ctx, providerpkg.New())"
+	case providermanifestv1.KindAgent:
+		return "gestalt.ServeAgentProvider(ctx, providerpkg.New())"
+	case providermanifestv1.KindRuntime:
+		return "gestalt.ServePluginRuntimeProvider(ctx, providerpkg.New())"
+	default:
+		t.Fatalf("unsupported Go component fixture kind %q", kind)
+		return ""
+	}
+}
+
 func writeStubIndexedDBManifest(t *testing.T, dir string) string {
 	t.Helper()
 	providerDir := filepath.Join(dir, "indexeddb-stub")
@@ -98,15 +200,10 @@ func writeStubIndexedDBManifest(t *testing.T, dir string) string {
 		t.Fatalf("write indexeddb artifact: %v", err)
 	}
 	data, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Source:  "github.com/test/providers/indexeddb-stub",
-		Version: "0.0.1-alpha.1",
-		Kind:    providermanifestv1.KindIndexedDB,
-		Spec:    &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{{
-			OS:   runtime.GOOS,
-			Arch: runtime.GOARCH,
-			Path: artifactRel,
-		}},
+		Source:     "github.com/test/providers/indexeddb-stub",
+		Version:    "0.0.1-alpha.1",
+		Kind:       providermanifestv1.KindIndexedDB,
+		Spec:       &providermanifestv1.Spec{},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -231,11 +328,17 @@ func writeLocalUIManifest(t *testing.T, dir, name, source, version string, spec 
 		}
 	}
 	manifestPath := filepath.Join(root, "manifest.yaml")
-	build := &providermanifestv1.SourceBuild{Command: []string{"go", "version"}, Output: "dist"}
-	if spec != nil && spec.AssetRoot != "" {
-		build.Output = spec.AssetRoot
-		spec.AssetRoot = ""
+	if spec == nil {
+		spec = &providermanifestv1.Spec{}
 	}
+	if spec.AssetRoot == "" {
+		spec.AssetRoot = "dist"
+	}
+	buildScript := fmt.Sprintf("mkdir -p %s\nprintf '<html>%s</html>\\n' > %s/index.html\n", spec.AssetRoot, name, spec.AssetRoot)
+	if err := os.WriteFile(filepath.Join(root, "build.sh"), []byte(buildScript), 0o755); err != nil {
+		t.Fatalf("WriteFile build.sh: %v", err)
+	}
+	build := &providermanifestv1.SourceBuild{Command: []string{"sh", "./build.sh"}, Inputs: []string{"build.sh"}}
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindUI,
 		Source:      source,
@@ -269,7 +372,6 @@ func writeLocalExecutablePlugin(t *testing.T, dir, name string, operations ...st
 	if err := os.WriteFile(artifactFullPath, artifactContent, 0o755); err != nil {
 		t.Fatalf("WriteFile(%s): %v", artifactFullPath, err)
 	}
-	artifactSum := sha256.Sum256(artifactContent)
 	manifestPath := filepath.Join(root, "manifest.yaml")
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindPlugin,
@@ -277,13 +379,7 @@ func writeLocalExecutablePlugin(t *testing.T, dir, name string, operations ...st
 		Version:     "0.0.1-alpha.1",
 		DisplayName: testDisplayName(name),
 		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
-		Artifacts: []providermanifestv1.Artifact{{
-			OS:     runtime.GOOS,
-			Arch:   runtime.GOARCH,
-			Path:   artifactPath,
-			SHA256: hex.EncodeToString(artifactSum[:]),
-		}},
-		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
+		Spec:        withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat(%s): %v", name, err)
@@ -416,8 +512,6 @@ paths:
 	if err := os.WriteFile(artifactFullPath, artifactContent, 0o755); err != nil {
 		t.Fatalf("WriteFile(%s): %v", artifactFullPath, err)
 	}
-	artifactSum := sha256.Sum256(artifactContent)
-
 	manifestPath := filepath.Join(root, "manifest.yaml")
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindPlugin,
@@ -425,12 +519,6 @@ paths:
 		Version:     "0.0.1-alpha.1",
 		DisplayName: testDisplayName(name),
 		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
-		Artifacts: []providermanifestv1.Artifact{{
-			OS:     runtime.GOOS,
-			Arch:   runtime.GOARCH,
-			Path:   artifactPath,
-			SHA256: hex.EncodeToString(artifactSum[:]),
-		}},
 		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
 			Surfaces: &providermanifestv1.ProviderSurfaces{
 				OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
@@ -497,11 +585,6 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		DisplayName: "Local Provider",
 		Description: "Local executable provider",
 		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
-		Artifacts: []providermanifestv1.Artifact{{
-			OS:   runtime.GOOS,
-			Arch: runtime.GOARCH,
-			Path: artifactRel,
-		}},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -1435,7 +1518,6 @@ plugins:
 			if tc.sourceBuild {
 				build = &providermanifestv1.SourceBuild{
 					Command: []string{"sh", "./build.sh"},
-					Output:  "dist",
 					Inputs:  []string{"build.sh"},
 				}
 				if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
@@ -1449,14 +1531,17 @@ plugins:
 					t.Fatalf("WriteFile index.html: %v", err)
 				}
 				build = &providermanifestv1.SourceBuild{
-					Command: []string{"go", "version"},
-					Output:  "dist",
+					Command: []string{"sh", "./build.sh"},
+				}
+				if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
+					t.Fatalf("WriteFile build.sh: %v", err)
 				}
 			}
+			if spec == nil {
+				spec = &providermanifestv1.Spec{}
+			}
+			spec.AssetRoot = "dist"
 			if tc.wantPolicy != "" {
-				if spec == nil {
-					spec = &providermanifestv1.Spec{}
-				}
 				spec.Routes = []providermanifestv1.UIRoute{
 					{Path: "/", AllowedRoles: []string{"viewer"}},
 				}
@@ -1498,12 +1583,7 @@ plugins:
 					DisplayName: "Roadmap Plugin",
 					Kind:        providermanifestv1.KindPlugin,
 					Spec:        pluginSpec,
-					Artifacts: []providermanifestv1.Artifact{{
-						OS:   runtime.GOOS,
-						Arch: runtime.GOARCH,
-						Path: pluginArtifactRel,
-					}},
-					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: pluginArtifactRel},
+					Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: pluginArtifactRel},
 				}, providerpkg.ManifestFormatYAML)
 				if err != nil {
 					t.Fatalf("EncodePluginManifest: %v", err)
@@ -1589,7 +1669,7 @@ plugins:
 	}
 }
 
-func TestLoadForExecutionAtPath_RejectsLockedExplicitLocalUIWithoutPreparedUILockEntry(t *testing.T) {
+func TestLoadForExecutionAtPath_AllowsLockedExplicitLocalUIWithoutPreparedUILockEntry(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1600,15 +1680,19 @@ func TestLoadForExecutionAtPath_RejectsLockedExplicitLocalUIWithoutPreparedUILoc
 	if err := os.WriteFile(filepath.Join(uiDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>roadmap</html>\\n' > dist/index.html\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile build.sh: %v", err)
+	}
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindUI,
 		Source:      "github.com/testowner/web/roadmap",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Roadmap UI",
 		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"go", "version"},
-			Output:  "dist",
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh"},
 		},
+		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
@@ -1644,8 +1728,12 @@ server:
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 
-	if _, _, err := lc.LoadForExecutionAtPath(cfgPath, true); err == nil || !strings.Contains(err.Error(), `lock entry for ui "roadmap" is missing or stale`) {
-		t.Fatalf("LoadForExecutionAtPath locked error = %v, want missing lock entry", err)
+	cfgLoaded, _, err := lc.LoadForExecutionAtPath(cfgPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath locked: %v", err)
+	}
+	if cfgLoaded.Providers.UI["roadmap"].ResolvedManifest == nil {
+		t.Fatal(`Providers.UI["roadmap"].ResolvedManifest = nil`)
 	}
 }
 
@@ -2456,13 +2544,10 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	authArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth-plugin"))
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindAuthentication,
-		Source:  "github.com/testowner/plugins/local-auth",
-		Version: "0.0.1-alpha.1",
-		Spec:    &providermanifestv1.Spec{},
-		Artifacts: []providermanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: authArtifact},
-		},
+		Kind:       providermanifestv1.KindAuthentication,
+		Source:     "github.com/testowner/plugins/local-auth",
+		Version:    "0.0.1-alpha.1",
+		Spec:       &providermanifestv1.Spec{},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: authArtifact, Args: []string{"serve-auth"}},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -2557,11 +2642,18 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	writeTestSourceFile("auth.go", []byte(testutil.GeneratedAuthPackageSource()), 0o644)
+	authArtifactRel := ".gestalt/build/auth-provider"
+	writeOperatorGoComponentBuildFixture(t, dir, "example.com/local-components", providermanifestv1.KindAuthentication, authArtifactRel)
 	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Kind:    providermanifestv1.KindAuthentication,
 		Source:  "github.com/testowner/plugins/local-source-auth",
 		Version: "0.0.1-alpha.1",
 		Spec:    &providermanifestv1.Spec{},
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "auth.go", "cmd", "build.sh"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: authArtifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat auth: %v", err)
@@ -2640,11 +2732,18 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	writeTestFile("go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/local-generated-provider")), 0o644)
 	writeTestFile("go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile("provider.go", []byte(testutil.GeneratedProviderPackageSource()), 0o644)
+	artifactRel := ".gestalt/build/provider"
+	writeOperatorGoPluginBuildFixture(t, dir, "example.com/local-generated-provider", "example", artifactRel)
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-generated-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Provider",
 		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifestFormat: %v", err)
@@ -2701,12 +2800,19 @@ func TestLoadForExecutionAtPath_LockedLocalSourcePluginUsesPreparedArtifactWitho
 	writeTestFile("go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/local-locked-provider")), 0o644)
 	writeTestFile("go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile("provider.go", []byte(testutil.GeneratedProviderPackageSource()), 0o644)
+	artifactRel := ".gestalt/build/provider"
+	writeOperatorGoPluginBuildFixture(t, dir, "example.com/local-locked-provider", "example", artifactRel)
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-locked-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Locked Local Provider",
 		Kind:        providermanifestv1.KindPlugin,
 		Spec:        withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
+		Build: &providermanifestv1.SourceBuild{
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"go.mod", "go.sum", "provider.go", "cmd", "build.sh"},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifestFormat: %v", err)
@@ -2789,9 +2895,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "local-python-provider"
-
-[tool.gestalt]
-provider = "provider"
 	`, "\n")), 0o644)
 	writeTestFile("provider.py", []byte(`from typing import Optional
 
@@ -2888,17 +2991,46 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	createLocalPythonSDKVenv(t, python3Path, filepath.Join(dir, ".venv"), localPythonSDKPath(t))
 	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	writeTestFile(artifactRel, []byte("python-provider"), 0o755)
+	writeTestFile(providerpkg.StaticCatalogFile, []byte(`name: local-python-provider
+displayName: Local Python Provider
+operations:
+  - id: echo
+    method: POST
+    params:
+      - name: prefix
+        type: string
+        default: ''
+      - name: names
+        type: array
+        default: null
+      - name: metadata
+        type: object
+      - name: filters
+        type: object
+      - name: limit
+        type: integer
+  - id: times_two
+    method: POST
+  - id: explode
+    method: POST
+  - id: maybe_filters
+    method: POST
+    params:
+      - name: owner
+        type: string
+        default: ''
+  - id: list_items
+    method: GET
+    readOnly: true
+  - id: status_zero
+    method: POST
+`), 0o644)
 
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-python-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Python Provider",
 		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
-		Artifacts: []providermanifestv1.Artifact{{
-			OS:   runtime.GOOS,
-			Arch: runtime.GOARCH,
-			Path: artifactRel,
-		}},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -3270,11 +3402,6 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
 		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
-		Artifacts: []providermanifestv1.Artifact{{
-			OS:   runtime.GOOS,
-			Arch: runtime.GOARCH,
-			Path: artifactRel,
-		}},
 		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
@@ -3469,7 +3596,16 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(assetRoot, "index.html"), []byte("<html></html>"), 0o644); err != nil {
 				t.Fatalf("WriteFile(asset): %v", err)
 			}
-			manifest += "build:\n  command: [go, version]\n  output: assets\n"
+			manifest += "build:\n  command: [go, version]\nspec:\n  assetRoot: assets\n"
+		} else {
+			artifactPath := filepath.Join(filepath.Dir(manifestPath), ".gestalt", "build", "provider")
+			if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+				t.Fatalf("MkdirAll(%q): %v", filepath.Dir(artifactPath), err)
+			}
+			if err := os.WriteFile(artifactPath, []byte("fingerprint-provider"), 0o755); err != nil {
+				t.Fatalf("WriteFile(artifact): %v", err)
+			}
+			manifest += "entrypoint:\n  artifactPath: .gestalt/build/provider\n"
 		}
 		if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", manifestPath, err)
@@ -3562,7 +3698,7 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		secondConfigDir := filepath.Join(root, "two", "deploy")
 		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "plugins/sample/manifest.yaml", providermanifestv1.KindAuthorization)
 		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "plugins/sample/manifest.yaml", providermanifestv1.KindAuthorization)
-		if err := os.WriteFile(secondManifestPath, []byte("source: github.com/test-org/two/component\nversion: 0.0.2\nkind: authorization\n"), 0o644); err != nil {
+		if err := os.WriteFile(secondManifestPath, []byte("source: github.com/test-org/two/component\nversion: 0.0.2\nkind: authorization\nentrypoint:\n  artifactPath: .gestalt/build/provider\n"), 0o644); err != nil {
 			t.Fatalf("WriteFile(%q): %v", secondManifestPath, err)
 		}
 
@@ -3583,6 +3719,56 @@ func TestProviderFingerprint_Stable(t *testing.T) {
 		}
 		if first == second {
 			t.Fatalf("local source fingerprint should change when manifest content changes: %q", first)
+		}
+	})
+
+	t.Run("built source support files change the fingerprint", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		manifestPath := filepath.Join(root, "manifest.yaml")
+		if err := os.MkdirAll(filepath.Join(root, "schemas"), 0o755); err != nil {
+			t.Fatalf("MkdirAll(schemas): %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "build.sh"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatalf("WriteFile(build.sh): %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "schemas", "config.schema.yaml"), []byte("type: object\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(config.schema.yaml): %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "catalog.yaml"), []byte("name: sample\noperations:\n  - id: echo\n    method: POST\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(catalog.yaml): %v", err)
+		}
+		manifest := []byte(`source: github.com/test-org/fingerprint-test/component
+version: 0.0.1
+kind: plugin
+build:
+  command: [sh, ./build.sh]
+  inputs: [build.sh]
+entrypoint:
+  artifactPath: .gestalt/build/provider
+spec:
+  configSchemaPath: schemas/config.schema.yaml
+`)
+		if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+			t.Fatalf("WriteFile(manifest.yaml): %v", err)
+		}
+		provider := &config.ProviderEntry{Source: config.ProviderSource{Path: manifestPath}}
+
+		first := mustFingerprint(t, "example", provider, root)
+		if err := os.WriteFile(filepath.Join(root, "schemas", "config.schema.yaml"), []byte("type: object\nadditionalProperties: false\n"), 0o644); err != nil {
+			t.Fatalf("mutate config schema: %v", err)
+		}
+		second := mustFingerprint(t, "example", provider, root)
+		if first == second {
+			t.Fatalf("local built-source fingerprint should change when config schema changes: %q", first)
+		}
+		if err := os.WriteFile(filepath.Join(root, "catalog.yaml"), []byte("name: sample\noperations:\n  - id: status\n    method: GET\n"), 0o644); err != nil {
+			t.Fatalf("mutate catalog: %v", err)
+		}
+		third := mustFingerprint(t, "example", provider, root)
+		if second == third {
+			t.Fatalf("local built-source fingerprint should change when static catalog changes: %q", second)
 		}
 	})
 }

@@ -1,11 +1,7 @@
 package componentprovider
 
 import (
-	"errors"
 	"fmt"
-	"maps"
-	"path/filepath"
-	"runtime"
 
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
@@ -62,22 +58,9 @@ func PrepareExecution(params PrepareParams) (PreparedConfig, error) {
 	var cleanup func()
 
 	if cfg.Command == "" && cfg.ManifestPath != "" {
-		command, args, tempCleanup, err := providerpkg.SourceComponentExecutionCommand(filepath.Dir(cfg.ManifestPath), params.Kind, runtime.GOOS, runtime.GOARCH)
-		if errors.Is(err, providerpkg.ErrNoSourceComponentPackage) {
-			return PreparedConfig{}, fmt.Errorf("%s: %s", params.Subject, params.SourceMissingMessage)
-		}
+		command, args, tempCleanup, err := providerpkg.SourceManifestExecutionCommand(cfg.ManifestPath, params.Kind, providerpkg.SourceBuildOptions{})
 		if err != nil {
-			return PreparedConfig{}, fmt.Errorf("%s: prepare synthesized source execution: %w", params.Subject, err)
-		}
-		execEnv, err := providerpkg.SourceComponentExecutionEnv(filepath.Dir(cfg.ManifestPath), params.Kind, runtime.GOOS, runtime.GOARCH)
-		if err != nil {
-			return PreparedConfig{}, fmt.Errorf("%s: prepare synthesized source environment: %w", params.Subject, err)
-		}
-		if len(execEnv) > 0 {
-			if cfg.Env == nil {
-				cfg.Env = make(map[string]string, len(execEnv))
-			}
-			maps.Copy(cfg.Env, execEnv)
+			return PreparedConfig{}, fmt.Errorf("%s: prepare source execution: %w", params.Subject, err)
 		}
 		cfg.Command = command
 		cfg.Args = args

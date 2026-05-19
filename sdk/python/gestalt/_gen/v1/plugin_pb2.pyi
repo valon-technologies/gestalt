@@ -250,12 +250,14 @@ class SubjectContext(_message.Message):
     DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
     AUTH_SOURCE_FIELD_NUMBER: _ClassVar[int]
     EMAIL_FIELD_NUMBER: _ClassVar[int]
+    CREDENTIAL_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     id: str
     kind: str
     display_name: str
     auth_source: str
     email: str
-    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ..., email: _Optional[str] = ...) -> None: ...
+    credential_subject_id: str
+    def __init__(self, id: _Optional[str] = ..., kind: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ..., email: _Optional[str] = ..., credential_subject_id: _Optional[str] = ...) -> None: ...
 
 class ExternalIdentityContext(_message.Message):
     __slots__ = ()
@@ -264,20 +266,6 @@ class ExternalIdentityContext(_message.Message):
     type: str
     id: str
     def __init__(self, type: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
-
-class AgentSubjectContext(_message.Message):
-    __slots__ = ()
-    SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    SUBJECT_KIND_FIELD_NUMBER: _ClassVar[int]
-    CREDENTIAL_SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
-    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
-    AUTH_SOURCE_FIELD_NUMBER: _ClassVar[int]
-    subject_id: str
-    subject_kind: str
-    credential_subject_id: str
-    display_name: str
-    auth_source: str
-    def __init__(self, subject_id: _Optional[str] = ..., subject_kind: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ...) -> None: ...
 
 class AgentToolRef(_message.Message):
     __slots__ = ()
@@ -297,9 +285,9 @@ class AgentToolRef(_message.Message):
     title: str
     description: str
     system: str
-    run_as: AgentSubjectContext
+    run_as: SubjectContext
     run_as_external_identity: ExternalIdentityContext
-    def __init__(self, plugin: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., system: _Optional[str] = ..., run_as: _Optional[_Union[AgentSubjectContext, _Mapping]] = ..., run_as_external_identity: _Optional[_Union[ExternalIdentityContext, _Mapping]] = ...) -> None: ...
+    def __init__(self, plugin: _Optional[str] = ..., operation: _Optional[str] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., title: _Optional[str] = ..., description: _Optional[str] = ..., system: _Optional[str] = ..., run_as: _Optional[_Union[SubjectContext, _Mapping]] = ..., run_as_external_identity: _Optional[_Union[ExternalIdentityContext, _Mapping]] = ...) -> None: ...
 
 class StringList(_message.Message):
     __slots__ = ()

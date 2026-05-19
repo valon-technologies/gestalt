@@ -288,8 +288,11 @@ streaming output to interaction prompts when a provider requests input.
 ## Authorization
 
 `gestalt authorization` covers service account subjects and the dynamic
-authorization admin surface. Admin subcommands may require `--url` pointing at
-the management base URL when public and management listeners are split.
+authorization admin surface. Built-in Gestalt admins can manage all dynamic
+grants. Plugin admins can manage members for the specific plugins they
+administer, so they can grant users or service accounts access without being
+global Gestalt admins. Admin subcommands may require `--url` pointing at the
+management base URL when public and management listeners are split.
 
 ```sh
 gestalt authorization subjects list
@@ -336,6 +339,9 @@ gestalt authorization plugins members list github
 gestalt authorization plugins members set github \
   --subject-id service_account:release-bot \
   --role viewer
+gestalt authorization plugins members set github \
+  --email operator@example.com \
+  --role admin
 gestalt authorization plugins members remove github service_account:release-bot
 
 gestalt authorization admins members list

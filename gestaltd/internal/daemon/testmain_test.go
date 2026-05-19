@@ -53,15 +53,15 @@ func TestMain(m *testing.M) {
 	}()
 	go func() {
 		defer wg.Done()
-		errs[1] = providerpkg.BuildGoProviderBinary(testutil.MustExampleProviderPluginPath(), pluginBin, "provider-go", runtime.GOOS, runtime.GOARCH)
+		errs[1] = buildGoFixtureBinary(testutil.MustExampleProviderPluginPath(), pluginBin, "github.com/valon-technologies/gestalt/testdata/provider-go", `gestalt.ServeProvider(ctx, providerpkg.New(), providerpkg.Router.WithName("provider-go"))`)
 	}()
 	go func() {
 		defer wg.Done()
-		errs[2] = providerpkg.BuildGoComponentBinary(indexedDBSrcDir, indexedDBBin, "indexeddb", runtime.GOOS, runtime.GOARCH)
+		errs[2] = buildGoFixtureBinary(indexedDBSrcDir, indexedDBBin, "github.com/valon-technologies/gestalt/testdata/provider-go-indexeddb", "gestalt.ServeIndexedDBProvider(ctx, providerpkg.New())")
 	}()
 	go func() {
 		defer wg.Done()
-		errs[3] = providerpkg.BuildGoComponentBinary(externalCredentialsSrcDir, externalCredentialsBin, string(providermanifestv1.KindExternalCredentials), runtime.GOOS, runtime.GOARCH)
+		errs[3] = buildGoFixtureBinary(externalCredentialsSrcDir, externalCredentialsBin, "github.com/valon-technologies/gestalt/testdata/provider-go-externalcredentials", "gestalt.ServeExternalCredentialProvider(ctx, providerpkg.New())")
 	}()
 	wg.Wait()
 
@@ -129,6 +129,81 @@ func buildGestaltCLI() string {
 
 func buildTarget(dir, target, output string) error {
 	return runGo(dir, "build", "-o", output, target)
+}
+
+func buildGoFixtureBinary(srcDir, output, importPath, serveCall string) error {
+	buildDir, err := os.MkdirTemp(filepath.Dir(output), "go-provider-fixture-*")
+	if err != nil {
+		return err
+	}
+	if err := copyTestFixtureTree(srcDir, buildDir); err != nil {
+		return err
+	}
+	goModPath := filepath.Join(buildDir, "go.mod")
+	goMod, err := os.ReadFile(goModPath)
+	if err != nil {
+		return err
+	}
+	root := filepath.Clean(filepath.Join(testutil.MustExampleProviderPluginPath(), "..", "..", "..", "..", ".."))
+	replaced := strings.Replace(string(goMod), "replace github.com/valon-technologies/gestalt/sdk/go => ../../../../../sdk/go", "replace github.com/valon-technologies/gestalt/sdk/go => "+filepath.Join(root, "sdk", "go"), 1)
+	if err := os.WriteFile(goModPath, []byte(replaced), 0o644); err != nil {
+		return err
+	}
+	mainDir := filepath.Join(buildDir, "cmd", "provider")
+	if err := os.MkdirAll(mainDir, 0o755); err != nil {
+		return err
+	}
+	mainSource := fmt.Sprintf(`package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	providerpkg %q
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := %s; err != nil {
+		fmt.Fprintf(os.Stderr, "error: %%v\n", err)
+		os.Exit(1)
+	}
+}
+`, importPath, serveCall)
+	if err := os.WriteFile(filepath.Join(mainDir, "main.go"), []byte(mainSource), 0o644); err != nil {
+		return err
+	}
+	return buildTarget(buildDir, "./cmd/provider", output)
+}
+
+func copyTestFixtureTree(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode())
+	})
 }
 
 func runGo(dir string, args ...string) error {
@@ -221,15 +296,19 @@ func writeDefaultProvidersDir(baseDir string) (string, error) {
 `), 0o644); err != nil {
 		return "", err
 	}
+	if err := os.WriteFile(filepath.Join(uiDir, "build.sh"), []byte("mkdir -p dist\nprintf '<html>Default Gestalt UI</html>\\n' > dist/index.html\n"), 0o755); err != nil {
+		return "", err
+	}
 	if err := writeManifest(filepath.Join(uiDir, "manifest.yaml"), &providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindUI,
 		Source:      "github.com/test/ui/default",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Default Gestalt UI",
 		Build: &providermanifestv1.SourceBuild{
-			Command: []string{"go", "version"},
-			Output:  "dist",
+			Command: []string{"sh", "./build.sh"},
+			Inputs:  []string{"build.sh"},
 		},
+		Spec: &providermanifestv1.Spec{AssetRoot: "dist"},
 	}); err != nil {
 		return "", err
 	}
@@ -258,7 +337,11 @@ func writeComponentProviderDir(dir, binaryPath string, manifest *providermanifes
 		SHA256: fmt.Sprintf("%x", sum[:]),
 	}}
 	manifestCopy.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: filepath.Base(dest)}
-	return writeManifest(filepath.Join(dir, "manifest.yaml"), &manifestCopy)
+	manifestData, err := providerpkg.EncodeManifestFormat(&manifestCopy, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "manifest.yaml"), manifestData, 0o644)
 }
 
 func writeManifest(path string, manifest *providermanifestv1.Manifest) error {
@@ -273,7 +356,35 @@ func writeLocalProviderReleaseMetadata(dir string) error {
 	manifestPath := filepath.Join(dir, "manifest.yaml")
 	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
-		return err
+		_, manifest, err = providerpkg.ReadManifestFile(manifestPath)
+		if err != nil {
+			return err
+		}
+	} else {
+		manifestCopy := *manifest
+		manifestCopy.Build = nil
+		manifestCopy.Artifacts = nil
+		entrypoint := providerpkg.EntrypointForKind(&manifestCopy, manifestCopy.Kind)
+		if entrypoint != nil && entrypoint.ArtifactPath != "" {
+			digest, err := providerpkg.FileSHA256(filepath.Join(dir, filepath.FromSlash(entrypoint.ArtifactPath)))
+			if err != nil {
+				return err
+			}
+			manifestCopy.Artifacts = []providermanifestv1.Artifact{{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   entrypoint.ArtifactPath,
+				SHA256: digest,
+			}}
+		}
+		manifestData, err := providerpkg.EncodeManifestFormat(&manifestCopy, providerpkg.ManifestFormatYAML)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+			return err
+		}
+		manifest = &manifestCopy
 	}
 
 	archivePath := filepath.Join(filepath.Dir(dir), filepath.Base(dir)+"-provider.tar.gz")

@@ -13,7 +13,7 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
-use crate::api::{ExternalIdentity, RuntimeMetadata};
+use crate::api::{ExternalIdentity, RuntimeMetadata, Subject};
 use crate::error::Result as ProviderResult;
 use crate::generated::v1::{
     self as pb, agent_host_client::AgentHostClient as ProtoAgentHostClient,
@@ -417,15 +417,6 @@ pub struct AgentActor {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct AgentSubjectContext {
-    pub subject_id: String,
-    pub subject_kind: String,
-    pub credential_subject_id: String,
-    pub display_name: String,
-    pub auth_source: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AgentPreparedWorkspace {
     pub root: String,
     pub cwd: String,
@@ -448,7 +439,7 @@ pub struct AgentToolRef {
     pub title: String,
     pub description: String,
     pub system: String,
-    pub run_as: Option<AgentSubjectContext>,
+    pub run_as: Option<Subject>,
     pub run_as_external_identity: Option<ExternalIdentity>,
 }
 
@@ -566,7 +557,7 @@ pub struct CreateAgentProviderSessionRequest {
     pub client_ref: String,
     pub metadata: Option<AgentJson>,
     pub created_by: Option<AgentActor>,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
     pub session_start: Option<AgentSessionStartConfig>,
     pub prepared_workspace: Option<AgentPreparedWorkspace>,
 }
@@ -596,12 +587,12 @@ pub struct AgentSessionStartHookOutput {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GetAgentProviderSessionRequest {
     pub session_id: String,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListAgentProviderSessionsRequest {
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
     pub session_ids: Vec<String>,
     pub state: AgentSessionState,
     pub limit: i32,
@@ -619,7 +610,7 @@ pub struct UpdateAgentProviderSessionRequest {
     pub client_ref: String,
     pub state: AgentSessionState,
     pub metadata: Option<AgentJson>,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -670,7 +661,7 @@ pub struct CreateAgentProviderTurnRequest {
     pub execution_ref: String,
     pub tool_refs: Vec<AgentToolRef>,
     pub tool_source: AgentToolSourceMode,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
     pub model_options: Option<AgentJson>,
     pub run_grant: String,
     pub timeout_seconds: i32,
@@ -679,13 +670,13 @@ pub struct CreateAgentProviderTurnRequest {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GetAgentProviderTurnRequest {
     pub turn_id: String,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListAgentProviderTurnsRequest {
     pub session_id: String,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
     pub turn_ids: Vec<String>,
     pub status: AgentExecutionStatus,
     pub limit: i32,
@@ -701,7 +692,7 @@ pub struct ListAgentProviderTurnsResponse {
 pub struct CancelAgentProviderTurnRequest {
     pub turn_id: String,
     pub reason: String,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -722,7 +713,7 @@ pub struct ListAgentProviderTurnEventsRequest {
     pub turn_id: String,
     pub after_seq: i64,
     pub limit: i32,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -733,13 +724,13 @@ pub struct ListAgentProviderTurnEventsResponse {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct GetAgentProviderInteractionRequest {
     pub interaction_id: String,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ListAgentProviderInteractionsRequest {
     pub turn_id: String,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -751,7 +742,7 @@ pub struct ListAgentProviderInteractionsResponse {
 pub struct ResolveAgentProviderInteractionRequest {
     pub interaction_id: String,
     pub resolution: Option<AgentJson>,
-    pub subject: Option<AgentSubjectContext>,
+    pub subject: Option<Subject>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -1172,13 +1163,14 @@ fn agent_actor_to_proto(value: Option<AgentActor>) -> Option<pb::AgentActor> {
     })
 }
 
-fn agent_subject_from_proto(value: Option<pb::AgentSubjectContext>) -> Option<AgentSubjectContext> {
-    value.map(|value| AgentSubjectContext {
-        subject_id: value.subject_id,
-        subject_kind: value.subject_kind,
+fn agent_subject_from_proto(value: Option<pb::SubjectContext>) -> Option<Subject> {
+    value.map(|value| Subject {
+        id: value.id,
+        kind: value.kind,
         credential_subject_id: value.credential_subject_id,
         display_name: value.display_name,
         auth_source: value.auth_source,
+        email: value.email,
     })
 }
 
@@ -1210,27 +1202,25 @@ pub(crate) fn agent_tool_ref_to_proto(value: AgentToolRef) -> pb::AgentToolRef {
     }
 }
 
-fn agent_run_as_context_from_proto(
-    value: Option<pb::AgentSubjectContext>,
-) -> Option<AgentSubjectContext> {
-    value.map(|value| AgentSubjectContext {
-        subject_id: value.subject_id,
-        subject_kind: value.subject_kind,
+fn agent_run_as_context_from_proto(value: Option<pb::SubjectContext>) -> Option<Subject> {
+    value.map(|value| Subject {
+        id: value.id,
+        kind: value.kind,
         credential_subject_id: value.credential_subject_id,
         display_name: value.display_name,
         auth_source: value.auth_source,
+        email: value.email,
     })
 }
 
-fn agent_run_as_context_to_proto(
-    value: Option<AgentSubjectContext>,
-) -> Option<pb::AgentSubjectContext> {
-    value.map(|value| pb::AgentSubjectContext {
-        subject_id: value.subject_id,
-        subject_kind: value.subject_kind,
+fn agent_run_as_context_to_proto(value: Option<Subject>) -> Option<pb::SubjectContext> {
+    value.map(|value| pb::SubjectContext {
+        id: value.id,
+        kind: value.kind,
         credential_subject_id: value.credential_subject_id,
         display_name: value.display_name,
         auth_source: value.auth_source,
+        email: value.email,
     })
 }
 

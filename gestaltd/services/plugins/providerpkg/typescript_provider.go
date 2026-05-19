@@ -189,6 +189,8 @@ func typeScriptComponentKind(kind string) (string, error) {
 		return "agent", nil
 	case providermanifestv1.KindSecrets:
 		return "secrets", nil
+	case providermanifestv1.KindRuntime:
+		return "runtime", nil
 	default:
 		return "", fmt.Errorf("unsupported source component kind %q", kind)
 	}
@@ -385,6 +387,8 @@ func normalizeTypeScriptProviderKind(value string) string {
 		return "agent"
 	case "secrets":
 		return "secrets"
+	case "runtime":
+		return "runtime"
 	case "telemetry":
 		return "telemetry"
 	default:

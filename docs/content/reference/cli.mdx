@@ -23,7 +23,7 @@ import { Callout } from 'nextra/components'
 | `gestaltd serve --lockfile PATH` | Override the lockfile location. `PATH` resolves like a normal CLI path. |
 | `gestaltd lock --config PATH` | Resolve published provider sources and write canonical lock metadata. Repeat `--config` to layer overrides. |
 | `gestaltd lock --check --config PATH` | Verify that the checked-in lockfile matches the current config without rewriting it. |
-| `gestaltd sync --locked --config PATH` | Materialize prepared provider artifacts from an existing lockfile. |
+| `gestaltd sync --locked --config PATH` | Materialize prepared provider artifacts from an existing lockfile. Local source UI preparation uses bounded parallelism by default. |
 | `gestaltd sync --locked --check --config PATH` | Verify that prepared artifacts exist and match the lockfile without rewriting them. |
 | `gestaltd validate --config PATH` | Validate config without serving. Repeat `--config` to layer overrides. |
 | `gestaltd validate --lockfile PATH` | Accept the same explicit lockfile path used by `lock`, `sync`, and `serve` without mutating it. |
@@ -57,7 +57,7 @@ import { Callout } from 'nextra/components'
 | `gestaltd provider attach detach --remote URL ATTACH_ID` | Detach a stuck remote provider-dev attachment owned by your authenticated principal. |
 | `gestaltd provider validate --path PATH` | Validate a local source plugin or UI bundle inside the same synthesized Gestalt config used by `gestaltd serve --path`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
-| `gestaltd provider release --version VERSION` | Build and package a provider release. Go, Python, Rust, and TypeScript source plugins default to the host platform. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
+| `gestaltd provider release --version VERSION` | Build and package a provider release. Executable source providers use SDK-native source packages or `build.command` and default to the host platform; UI and declarative providers default to a generic archive. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
 | `gestaltd provider release --output DIR` | Output directory for the release archive. Defaults to `dist/`. |
 
 For config-free local development, inferred UI mount paths use the manifest
@@ -75,12 +75,18 @@ view. `provider add`, `provider remove`, and `provider upgrade NAME --version`
 update the lockfile by default. `provider add` and `provider remove` accept
 `--no-lock` when you need to edit config only.
 
+`gestaltd sync --locked --parallelism N` caps concurrent preparation for local
+`source.path` UI bundles. The default is up to four workers, capped by
+`GOMAXPROCS`; `--parallelism 1` forces sequential preparation. Other provider
+types and `sync --locked --check` remain sequential.
+
 ## Examples
 
 ```sh
 gestaltd
 gestaltd lock --config ./config.yaml
 gestaltd sync --locked --config ./config.yaml
+gestaltd sync --locked --config ./config.yaml --parallelism 2
 gestaltd serve --locked --config ./config.yaml
 gestaltd validate --config ./config.yaml
 gestaltd lock --config ./config.yaml --lockfile ./local/gestalt.lock.json
@@ -196,9 +202,9 @@ Remote mode tunnels plugin RPC, catalog, post-connect, host-service calls, and
 plugin-owned UI assets for mounted UIs that already exist on the remote server.
 Raw GraphQL surfaces are not tunneled in v1.
 
-For TypeScript source plugins, `gestaltd serve --path` installs dependencies with
-`bun install` when a `package.json` is present and `node_modules` is missing.
-Source UI builds use the same bootstrap for Bun-managed build workdirs before
-`build.command` when dependencies are missing.
+For source-backed providers, `gestaltd serve --path` runs the manifest
+`build.command` when one is declared, verifies the declared output, then serves
+or starts that output. If the build needs dependencies installed first, include
+that bootstrap in the command or in the script it invokes.
 
 See [Configuration](/reference/configuration) for the relationship between `lock`, `sync --locked`, `serve --locked`, and `validate`.

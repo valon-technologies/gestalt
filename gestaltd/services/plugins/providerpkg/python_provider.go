@@ -296,6 +296,7 @@ const (
 	pythonRuntimeKindWorkflow       = "workflow"
 	pythonRuntimeKindAgent          = "agent"
 	pythonRuntimeKindSecrets        = "secrets"
+	pythonRuntimeKindRuntime        = "runtime"
 )
 
 func pythonRuntimeKind(kind string) (string, error) {
@@ -319,6 +320,8 @@ func pythonRuntimeKind(kind string) (string, error) {
 		return pythonRuntimeKindAgent, nil
 	case providermanifestv1.KindSecrets:
 		return pythonRuntimeKindSecrets, nil
+	case providermanifestv1.KindRuntime:
+		return pythonRuntimeKindRuntime, nil
 	default:
 		return "", fmt.Errorf("unsupported Python runtime kind %q", kind)
 	}

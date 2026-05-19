@@ -58,7 +58,6 @@ func runProvider(args []string) error {
 const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm64"
 const allPlatformsValue = "all"
 const defaultReleaseOutputDir = "dist/"
-const releaseBinaryPrefix = "gestalt-plugin-"
 const providerReleaseMetadataFile = "provider-release.yaml"
 const providerReleaseSchemaName = "gestaltd-provider-release"
 const providerReleaseSchemaVersion = 1
@@ -66,8 +65,6 @@ const providerReleaseRuntimeKindExecutable = "executable"
 const providerReleaseRuntimeKindDeclarative = "declarative"
 const providerReleaseRuntimeKindUI = "ui"
 const providerReleaseGenericTarget = "generic"
-const windowsOS = "windows"
-const windowsExecutableSuffix = ".exe"
 
 type releasePlatform struct {
 	GOOS   string
@@ -75,7 +72,9 @@ type releasePlatform struct {
 }
 
 type releaseBuildTarget struct {
-	Kind string
+	Kind          string
+	DeclaredBuild bool
+	Prebuilt      bool
 }
 
 type releaseArchive struct {
@@ -147,17 +146,7 @@ func runProviderRelease(args []string) (err error) {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", manifestPath, err)
 	}
-	if err := providerpkg.RunSourceReleaseBuild(manifestPath, releaseManifest); err != nil {
-		return err
-	}
-	_, releaseManifest, err = providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		return fmt.Errorf("read %s after release build: %w", manifestPath, err)
-	}
 	if err := validateReleaseOutputDir(releaseManifest, sourceDir, *outputDir); err != nil {
-		return err
-	}
-	if err := providerpkg.EnsureSourceStaticCatalog(manifestPath, releaseManifest); err != nil {
 		return err
 	}
 	src, err := source.Parse(releaseManifest.Source)
@@ -183,7 +172,7 @@ func runProviderRelease(args []string) (err error) {
 	var releaseArchives []releaseArchive
 	if len(buildPlatforms) > 0 {
 		for _, platform := range buildPlatforms {
-			archivePath, err := buildPlatformArchive(manifestPath, pluginName, *version, buildTarget.Kind, platform, *outputDir)
+			archivePath, err := buildPlatformArchive(manifestPath, pluginName, *version, platform, *outputDir)
 			if err != nil {
 				return fmt.Errorf("build %s: %w", providerpkg.PlatformString(platform.GOOS, platform.GOARCH), err)
 			}
@@ -281,11 +270,22 @@ func resolveReleaseBuildTarget(root string, manifest *providermanifestv1.Manifes
 	if kind == providermanifestv1.KindUI {
 		return nil, nil
 	}
+	if providerpkg.EffectiveSourceBuild(manifest) != nil {
+		entry := providerpkg.EntrypointForKind(manifest, kind)
+		if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
+			return nil, nil
+		}
+		return &releaseBuildTarget{Kind: kind, DeclaredBuild: true}, nil
+	}
 	hasSource, err := providerpkg.HasSourceReleaseTarget(root, kind)
 	if err != nil {
 		return nil, fmt.Errorf("detect source %s package: %w", kind, err)
 	}
 	if !hasSource {
+		entry := providerpkg.EntrypointForKind(manifest, kind)
+		if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
+			return &releaseBuildTarget{Kind: kind, Prebuilt: true}, nil
+		}
 		if providerpkg.ReleaseRequiresBuild(manifest) {
 			return nil, providerpkg.MissingSourceReleaseTargetError(kind)
 		}
@@ -298,11 +298,18 @@ func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Mani
 	if target == nil {
 		return nil, nil
 	}
+	if target.Prebuilt {
+		if explicit {
+			return nil, fmt.Errorf("--platform requires build.command for executable source providers")
+		}
+		return nil, fmt.Errorf("provider release requires build.command for executable source providers")
+	}
 
-	buildRequired := providerpkg.ReleaseRequiresBuild(manifest)
+	buildRequired := target.DeclaredBuild || providerpkg.ReleaseRequiresBuild(manifest)
 	if !buildRequired && !explicit {
 		return nil, nil
 	}
+
 	if explicit {
 		var err error
 		value, err = expandReleasePlatformValue(value)
@@ -316,27 +323,14 @@ func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Mani
 	if err != nil {
 		return nil, err
 	}
-
-	builds := make([]releasePlatform, 0, len(platforms))
-	var missingSource bool
-	for _, platform := range platforms {
-		if err := providerpkg.ValidateSourceReleaseTarget(root, target.Kind, platform.GOOS, platform.GOARCH); err != nil {
-			if providerpkg.IsMissingSourceReleaseTarget(err, target.Kind) {
-				missingSource = true
-				continue
+	if !target.DeclaredBuild {
+		for _, platform := range platforms {
+			if err := providerpkg.ValidateSourceReleaseTarget(root, target.Kind, platform.GOOS, platform.GOARCH); err != nil {
+				return nil, fmt.Errorf("validate %s source release target for %s: %w", target.Kind, providerpkg.PlatformString(platform.GOOS, platform.GOARCH), err)
 			}
-			return nil, fmt.Errorf("detect source %s package for %s/%s: %w", target.Kind, platform.GOOS, platform.GOARCH, err)
 		}
-		builds = append(builds, platform)
 	}
-
-	if len(builds) == 0 {
-		return nil, providerpkg.MissingSourceReleaseTargetError(target.Kind)
-	}
-	if missingSource {
-		return nil, providerpkg.MissingSourceReleaseTargetError(target.Kind)
-	}
-	return builds, nil
+	return platforms, nil
 }
 
 func expandReleasePlatformValue(value string) (string, error) {
@@ -351,12 +345,11 @@ func expandReleasePlatformValue(value string) (string, error) {
 	}
 }
 
-func buildPlatformArchive(manifestPath, pluginName, version, buildKind string, platform releasePlatform, outputDir string) (string, error) {
+func buildPlatformArchive(manifestPath, pluginName, version string, platform releasePlatform, outputDir string) (string, error) {
 	archiveName := platformArchiveName(pluginName, version, platform)
 	return createReleaseArchive(outputDir, archiveName, func(stagingDir string) (*providerpkg.StagedPreparedInstall, error) {
-		return providerpkg.StagePreparedInstallDir(manifestPath, stagingDir, providerpkg.StagePreparedInstallOptions{
+		return providerpkg.StageSourcePreparedInstallDir(manifestPath, stagingDir, providerpkg.StageSourcePreparedInstallOptions{
 			VersionOverride: version,
-			BuildKind:       buildKind,
 			PluginName:      pluginName,
 			GOOS:            platform.GOOS,
 			GOARCH:          platform.GOARCH,
@@ -411,7 +404,7 @@ func currentReleasePlatform() string {
 func buildSourceArchive(manifestPath, pluginName, version, outputDir string) (string, error) {
 	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s.tar.gz", pluginName, version)
 	return createReleaseArchive(outputDir, archiveName, func(stagingDir string) (*providerpkg.StagedPreparedInstall, error) {
-		return providerpkg.StagePreparedInstallDir(manifestPath, stagingDir, providerpkg.StagePreparedInstallOptions{
+		return providerpkg.StageSourcePreparedInstallDir(manifestPath, stagingDir, providerpkg.StageSourcePreparedInstallOptions{
 			VersionOverride: version,
 		})
 	})
@@ -430,14 +423,6 @@ func validateStagedReleaseCatalog(staged *providerpkg.StagedPreparedInstall) err
 
 func platformArchiveName(pluginName, version string, plat releasePlatform) string {
 	return fmt.Sprintf("gestalt-plugin-%s_v%s_%s.tar.gz", pluginName, version, providerpkg.PlatformArchiveSuffix(plat.GOOS, plat.GOARCH))
-}
-
-func releaseBinaryName(pluginName, goos string) string {
-	binaryName := releaseBinaryPrefix + pluginName
-	if goos == windowsOS {
-		return binaryName + windowsExecutableSuffix
-	}
-	return binaryName
 }
 
 func writeChecksums(dir string, archives []releaseArchive) error {
@@ -634,7 +619,9 @@ func printProviderReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd provider release --version VERSION [--output DIR] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "Build a provider release archive for the host platform by default.")
+	writeUsageLine(w, "Build provider release archives.")
+	writeUsageLine(w, "Executable source providers use SDK-native source packages or build.command and default to the host platform.")
+	writeUsageLine(w, "UI and declarative providers default to a generic archive.")
 	writeUsageLine(w, "Pass --platform with a comma-separated os/arch list or --platform all")
 	writeUsageLine(w, "to build multiple per-platform tar.gz archives plus a checksums file.")
 	writeUsageLine(w, "Run from the provider source directory.")
@@ -643,5 +630,5 @@ func printProviderReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --version    Semantic version string (required)")
 	writeUsageLine(w, "  --output     Output directory (default: dist/)")
-	writeUsageLine(w, "  --platform   Comma-separated platforms (os/arch) or all (default: host platform only)")
+	writeUsageLine(w, "  --platform   Comma-separated platforms (os/arch) or all")
 }

@@ -43,9 +43,6 @@
     "iconFile": {
       "type": "string"
     },
-    "release": {
-      "$ref": "#/$defs/release"
-    },
     "build": {
       "$ref": "#/$defs/sourceBuild"
     },
@@ -63,16 +60,7 @@
     }
   },
   "$defs": {
-    "release": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "build": {
-          "$ref": "#/$defs/releaseBuild"
-        }
-      }
-    },
-    "releaseBuild": {
+    "sourceBuild": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -90,32 +78,6 @@
             "type": "string",
             "minLength": 1
           }
-        }
-      }
-    },
-    "sourceBuild": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "command",
-        "output"
-      ],
-      "properties": {
-        "workdir": {
-          "type": "string",
-          "minLength": 1
-        },
-        "command": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "output": {
-          "type": "string",
-          "minLength": 1
         },
         "inputs": {
           "type": "array",

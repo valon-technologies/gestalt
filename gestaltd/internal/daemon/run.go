@@ -302,20 +302,28 @@ func runSync(args []string) error {
 	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
 	locked := fs.Bool("locked", false, "require an existing lockfile; do not resolve new metadata")
 	check := fs.Bool("check", false, "fail if artifacts would need to be materialized")
+	parallelism := fs.Int("parallelism", defaultSyncParallelism(), "maximum concurrent local UI source preparations")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
+	if *parallelism < 1 {
+		return fmt.Errorf("invalid --parallelism %d: must be at least 1", *parallelism)
+	}
 	if !*locked {
 		return fmt.Errorf("gestaltd sync currently requires --locked")
 	}
 
-	return syncConfigWithStatePaths(configPaths, operator.StatePaths{
+	return syncConfigWithStatePathsOptions(configPaths, operator.StatePaths{
 		ArtifactsDir: *artifactsDir,
 		LockfilePath: *lockfilePath,
-	}, *check)
+	}, *check, operator.SyncOptions{Parallelism: *parallelism})
+}
+
+func defaultSyncParallelism() int {
+	return operator.DefaultSyncParallelism()
 }
 
 func runValidate(args []string) error {
@@ -449,7 +457,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--platform PLATFORMS] [--check]")
-	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--check]")
+	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--check]")
 	writeUsageLine(w, "  gestaltd serve [--plugin NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd serve --remote URL (--path PATH | --config PATH...) [--name NAME]")
@@ -507,10 +515,11 @@ func printLockUsage(w io.Writer) {
 
 func printSyncUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--check]")
+	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--check]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Materialize prepared artifacts from the existing lockfile.")
 	writeUsageLine(w, "Does not resolve new metadata or rewrite the lockfile.")
+	writeUsageLine(w, "--parallelism caps concurrent local source UI preparation; --check remains read-only.")
 	writeUsageLine(w, "When repeated, --config files merge left-to-right.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
@@ -518,6 +527,7 @@ func printSyncUsage(w io.Writer) {
 	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory")
 	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json next to the primary config")
 	writeUsageLine(w, "  --locked          Require an existing lockfile")
+	writeUsageLine(w, "  --parallelism     Maximum concurrent local source UI preparations")
 	writeUsageLine(w, "  --check           Fail if artifacts would need to be materialized")
 }
 

@@ -203,7 +203,7 @@ For the conceptual model and setup flow, see
 | `PUT` | `/admin/api/v1/authorization/admins/members` | Upsert one dynamic built-in admin membership row by canonical `subjectId` or by user-only `email` alias and role. Rejects subjects who already have static built-in admin authorization. |
 | `DELETE` | `/admin/api/v1/authorization/admins/members/{subjectID}` | Remove one dynamic built-in admin membership row. Static rows are read-only and cannot be deleted through the API. |
 
-`/admin/api/v1/...` mirrors the built-in `/admin` protection model: when `server.admin.authorizationPolicy` is unset, the routes are open wherever `/admin` is open; when it is set, they require the same browser session and role checks as `/admin`, but return JSON `401`/`403` instead of browser redirects.
+`/admin/api/v1/...` mirrors the built-in `/admin` protection model for global admin and debug routes: when `server.admin.authorizationPolicy` is unset, the routes are open wherever `/admin` is open; when it is set, they require the same browser session and role checks as `/admin`, but return JSON `401`/`403` instead of browser redirects. Plugin member routes also accept callers with role `admin` on the specific target plugin, so plugin admins can manage dynamic grants for their own plugin without being built-in Gestalt admins.
 
 Mutable membership APIs still list and delete by canonical `subjectId`. User-backed rows use `user:<user_id>` and non-human rows can use `service_account:<id>` or another canonical non-system subject ID. Dynamic membership writes accept either a canonical `subjectId` or an `email` alias. When `email` is used, Gestalt resolves it to the canonical user subject and creates the user record if needed before persisting the provider-backed grant.
 

@@ -835,23 +835,11 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 		if entry.ResolvedManifestPath == "" {
 			return nil, fmt.Errorf("plugins.%s resolved manifest path is required for source provider execution", target.Name)
 		}
-		rootDir := filepath.Dir(entry.ResolvedManifestPath)
 		var err error
-		command, args, cleanup, err = providerpkg.SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
-		if errors.Is(err, providerpkg.ErrNoSourceProviderPackage) {
-			return nil, fmt.Errorf("plugins.%s: prepare source provider execution: no Go, Python, Rust, or TypeScript provider source found", target.Name)
-		}
+		command, args, cleanup, err = providerpkg.SourceManifestExecutionCommand(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("plugins.%s: prepare source provider execution: %w", target.Name, err)
 		}
-		execEnv, err := providerpkg.SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
-		if err != nil {
-			if cleanup != nil {
-				cleanup()
-			}
-			return nil, fmt.Errorf("plugins.%s: prepare source provider environment: %w", target.Name, err)
-		}
-		env = mergeStringMaps(env, execEnv)
 	}
 	env = mergeStringMaps(env, remote.Env)
 
@@ -965,16 +953,16 @@ func sourceUIHandler(manifestPath string) (http.Handler, error) {
 	if kind != providermanifestv1.KindUI {
 		return nil, fmt.Errorf("ui manifest %q must have kind %q (got %q)", manifestPath, providermanifestv1.KindUI, kind)
 	}
-	if err := providerpkg.RunSourceReleaseBuild(manifestPath, manifest); err != nil {
+	if err := providerpkg.RunSourceBuild(manifestPath, manifest, providerpkg.SourceBuildOptions{}); err != nil {
 		return nil, err
 	}
 	_, manifest, err = providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf("read ui manifest after release build: %w", err)
+		return nil, fmt.Errorf("read ui manifest after source build: %w", err)
 	}
 	assetRootValue := providerpkg.SourceUIBuildOutput(manifest)
 	if strings.TrimSpace(assetRootValue) == "" {
-		return nil, fmt.Errorf("ui manifest %q missing build.output", manifestPath)
+		return nil, fmt.Errorf("ui manifest %q missing spec.assetRoot", manifestPath)
 	}
 	assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(assetRootValue))
 	if _, err := os.Stat(assetRoot); err != nil {

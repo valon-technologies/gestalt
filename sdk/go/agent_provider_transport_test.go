@@ -290,9 +290,9 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 			DisplayName: "Test User",
 			AuthSource:  "test",
 		},
-		Subject: &proto.AgentSubjectContext{
-			SubjectId:           "borrower-1",
-			SubjectKind:         "borrower",
+		Subject: &proto.SubjectContext{
+			Id:                  "borrower-1",
+			Kind:                "borrower",
 			CredentialSubjectId: "user-1",
 			DisplayName:         "Borrower One",
 			AuthSource:          "test",
@@ -391,7 +391,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 			Operation: "chat.postMessage",
 		}},
 		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
-		Subject:    &proto.AgentSubjectContext{SubjectId: "borrower-1", SubjectKind: "borrower"},
+		Subject:    &proto.SubjectContext{Id: "borrower-1", Kind: "borrower"},
 		ModelOptions: mustStruct(t, map[string]any{
 			"temperature": 0.2,
 		}),

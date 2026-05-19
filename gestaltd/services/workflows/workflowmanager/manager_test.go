@@ -716,6 +716,50 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	}
 }
 
+func TestSignalOrStartRunRejectsStepWhenMissingEquals(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{Plugin: "simple"}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: callerPermissions,
+		Scopes:           principal.PermissionPlugins(callerPermissions),
+	})
+
+	_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName: "local",
+		WorkflowKey:  "agent:steps:missing-equals",
+		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+			ProviderName: "simple",
+			Steps: []coreworkflow.AgentStep{
+				{ID: "diagnosis", Prompt: "Diagnose the alert."},
+				{
+					ID:     "pr_fix",
+					Prompt: "Open a PR.",
+					When: &coreworkflow.AgentStepWhen{
+						StepID:     "diagnosis",
+						OutputPath: "structured_output.actionable_for_pr",
+					},
+				},
+			},
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "workflow agent steps[1].when.equals is required") {
+		t.Fatalf("SignalOrStartRun error = %v, want missing when.equals validation", err)
+	}
+	if provider.signalOrStartCalls != 0 {
+		t.Fatalf("SignalOrStartRun provider calls = %d, want 0", provider.signalOrStartCalls)
+	}
+}
+
 func TestSignalOrStartRunRejectsOutputDeliveryTargetCredentialMode(t *testing.T) {
 	t.Parallel()
 

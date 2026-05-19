@@ -262,17 +262,21 @@ The authentication surface has two required methods: `BeginLogin` and `CompleteL
     });
     ```
 
-    Point `package.json` at the authentication provider with `gestalt.provider`:
+    The authentication provider manifest points Gestalt at the executable
+    artifact produced by its build command:
 
-    ```json
-    {
-      "gestalt": {
-        "provider": {
-          "kind": "authentication",
-          "target": "./authentication.ts#provider"
-        }
-      }
-    }
+    ```yaml
+    build:
+      command:
+        - npm
+        - run
+        - build
+      inputs:
+        - package.json
+        - package-lock.json
+        - authentication.ts
+    entrypoint:
+      artifactPath: .gestalt/build/authentication
     ```
 
   </Tabs.Tab>

@@ -463,7 +463,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "tool_ref_operation": request.tool_refs[0].operation
                 if request.tool_refs
                 else "",
-                "tool_ref_run_as": request.tool_refs[0].run_as.subject_id
+                "tool_ref_run_as": request.tool_refs[0].run_as.id
                 if request.tool_refs and request.tool_refs[0].run_as
                 else "",
                 "tool_ref_external_id": request.tool_refs[0].run_as_external_identity.id
@@ -598,9 +598,9 @@ class MainEntrypointTests(unittest.TestCase):
                         plugin_pb2.AgentToolRef(
                             plugin="github",
                             operation="bot.getPullRequest",
-                            run_as=plugin_pb2.AgentSubjectContext(
-                                subject_id="service_account:github-review",
-                                subject_kind="service_account",
+                            run_as=plugin_pb2.SubjectContext(
+                                id="service_account:github-review",
+                                kind="service_account",
                                 credential_subject_id="service_account:github-review",
                                 display_name="GitHub Review",
                                 auth_source="managed_subject",

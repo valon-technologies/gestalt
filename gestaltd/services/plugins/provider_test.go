@@ -611,7 +611,7 @@ func TestRequestContextProto_PreservesToolRefsContext(t *testing.T) {
 	if got := refs[0].GetOperation(); got != "bot.getPullRequest" {
 		t.Fatalf("tool ref operation = %q, want bot.getPullRequest", got)
 	}
-	if got := refs[0].GetRunAs().GetSubjectId(); got != "service_account:github-review" {
+	if got := refs[0].GetRunAs().GetId(); got != "service_account:github-review" {
 		t.Fatalf("tool ref runAs subject = %q, want service_account:github-review", got)
 	}
 	if got := refs[0].GetRunAsExternalIdentity().GetId(); got != "user:12345678" {
@@ -627,9 +627,9 @@ func TestApplyRequestContext_PreservesToolRefsContext(t *testing.T) {
 		ToolRefs: []*proto.AgentToolRef{{
 			Plugin:    "github",
 			Operation: "bot.getPullRequest",
-			RunAs: &proto.AgentSubjectContext{
-				SubjectId:           "service_account:github-review",
-				SubjectKind:         "service_account",
+			RunAs: &proto.SubjectContext{
+				Id:                  "service_account:github-review",
+				Kind:                "service_account",
 				CredentialSubjectId: "service_account:github-review",
 				DisplayName:         "GitHub Review",
 				AuthSource:          "managed_subject",
