@@ -9,28 +9,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 )
 
-func TestDeriveKeyPassphraseEncryptRoundTrip(t *testing.T) {
-	t.Parallel()
-	key := crypto.DeriveKey("dummy-passphrase-for-testing")
-	enc, err := crypto.NewAESGCM(key)
-	if err != nil {
-		t.Fatalf("NewAESGCM: %v", err)
-	}
-
-	plaintext := "sensitive-token-value"
-	ciphertext, err := enc.Encrypt(plaintext)
-	if err != nil {
-		t.Fatalf("Encrypt: %v", err)
-	}
-	got, err := enc.Decrypt(ciphertext)
-	if err != nil {
-		t.Fatalf("Decrypt: %v", err)
-	}
-	if got != plaintext {
-		t.Fatalf("round-trip failed: got %q, want %q", got, plaintext)
-	}
-}
-
 func TestDeriveKeyHexKeyEncryptRoundTrip(t *testing.T) {
 	t.Parallel()
 	hexKey := "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"

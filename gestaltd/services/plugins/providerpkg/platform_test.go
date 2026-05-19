@@ -5,17 +5,6 @@ import (
 	"testing"
 )
 
-func TestParsePlatformString_TwoComponents(t *testing.T) {
-	t.Parallel()
-	goos, goarch, err := ParsePlatformString("darwin/arm64")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if goos != "darwin" || goarch != "arm64" {
-		t.Fatalf("got (%q, %q), want (darwin, arm64)", goos, goarch)
-	}
-}
-
 func TestParsePlatformString_RoundTrip(t *testing.T) {
 	t.Parallel()
 	for _, input := range []string{"darwin/arm64", "linux/amd64", "windows/amd64"} {

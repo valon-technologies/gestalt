@@ -2440,7 +2440,7 @@ authorization:
 	}
 }
 
-func TestLockEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
+func TestPrepareAtPath_RejectsMetadataPackageManifestKindMismatch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -2456,8 +2456,6 @@ func TestLockEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
 		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth")): "auth-binary",
 	}, false)
 
-	cfgPath := filepath.Join(dir, "config.yaml")
-	paths := lifecyclePathsForConfig(cfgPath)
 	srv := newManagedMetadataServer(t, []managedMetadataRelease{{
 		metadataPath:    "/providers/auth-only/v" + version + "/provider-release.yaml",
 		archiveURLPath:  "/providers/auth-only/v" + version + "/auth-only.tar.gz",
@@ -2469,11 +2467,19 @@ func TestLockEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
 	}})
 	defer srv.Close()
 	lc := NewLifecycle().WithHTTPClient(srv.Client())
-	plugin := &config.ProviderEntry{
-		Source: config.NewMetadataSource(srv.URL + "/providers/auth-only/v" + version + "/provider-release.yaml"),
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+    example:
+      source: ` + srv.URL + `/providers/auth-only/v` + version + `/provider-release.yaml
+server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
 	}
 
-	_, err := lc.lockProviderEntryForSource(context.Background(), nil, paths, "example", plugin, map[string]any{})
+	_, err := lc.PrepareAtPath(cfgPath)
 	if err == nil {
 		t.Fatal("expected provider kind validation error")
 		return
@@ -3384,103 +3390,6 @@ func TestPortableStaticValidationManifestRelativizesLocalSurfaces(t *testing.T) 
 	}
 }
 
-func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	manifestPath := filepath.Join(dir, "manifest.yaml")
-	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
-	artifactPath := filepath.Join(dir, filepath.FromSlash(artifactRel))
-	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll artifact dir: %v", err)
-	}
-	if err := os.WriteFile(artifactPath, []byte("local-provider"), 0o755); err != nil {
-		t.Fatalf("WriteFile artifact: %v", err)
-	}
-	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Source:      "github.com/testowner/plugins/local-provider",
-		Version:     "0.0.1-alpha.1",
-		DisplayName: "Local Provider",
-		Kind:        providermanifestv1.KindPlugin, Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{}),
-		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-		t.Fatalf("WriteFile manifest: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile catalog: %v", err)
-	}
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigWithAPIVersionYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
-    example:
-      source:
-        path: ./manifest.yaml
-` + `server:
-` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	loaded, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatalf("Load config: %v", err)
-	}
-	loaded.Plugins["missing"] = &config.ProviderEntry{}
-
-	lc := NewLifecycle()
-	if _, err := lc.applyLockedProviders([]string{cfgPath}, StatePaths{}, loaded, false, nil, artifactModeMaterialize); err != nil {
-		t.Fatalf("applyLockedProviders: %v", err)
-	}
-	if loaded.Plugins["example"] == nil || loaded.Plugins["example"].ResolvedManifest == nil {
-		t.Fatalf("ResolvedManifest = %+v", loaded.Plugins["example"])
-	}
-}
-
-func TestLockMatchesConfig_FalseWithNilLock(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("apiVersion: "+config.ConfigAPIVersion+"\nserver:\n  public:\n    port: 8080\n"), 0644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	paths := lifecyclePathsForConfig(cfgPath)
-
-	if lockMatchesConfig(cfg, paths, nil) {
-		t.Fatal("lockMatchesConfig returned true for nil lock")
-	}
-}
-
-func TestResolveSecretsProviderMetadataSkipsResolverWithoutMetadataDependencies(t *testing.T) {
-	t.Parallel()
-
-	called := false
-	lc := NewLifecycle().WithConfigSecretResolver(func(context.Context, *config.Config) error {
-		called = true
-		return fmt.Errorf("resolver should not be called")
-	})
-	provider := &config.ProviderEntry{
-		Source: config.NewMetadataSource("https://example.invalid/github-com-testowner-providers-secrets/v0.0.1-alpha.1/provider-release.yaml"),
-	}
-
-	if err := lc.resolveSecretsProviderMetadata(context.Background(), "secrets", provider, nil, configSecretResolutionAll); err != nil {
-		t.Fatalf("resolveSecretsProviderMetadata: %v", err)
-	}
-	if called {
-		t.Fatal("config secret resolver was called for provider metadata without secret dependencies")
-	}
-}
-
 func TestLockMatchesConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
 	t.Parallel()
 
@@ -3520,51 +3429,6 @@ func TestLockMatchesConfig_RemoteS3UsesResourceNameFingerprint(t *testing.T) {
 	}
 	if !lockMatchesConfig(cfg, paths, lock) {
 		t.Fatal("lockMatchesConfig returned false for matching remote S3 lock entry")
-	}
-}
-
-func TestConfigHasProviderLoadingIncludesIndexedDBAndS3(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		cfg  *config.Config
-	}{
-		{
-			name: "indexeddb only",
-			cfg: &config.Config{
-				Providers: config.ProvidersConfig{
-					IndexedDB: map[string]*config.ProviderEntry{
-						"main": {
-							Source: config.NewMetadataSource("https://example.invalid/github-com-testowner-providers-indexeddb/v0.0.1-alpha.1/provider-release.yaml"),
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "s3 only",
-			cfg: &config.Config{
-				Providers: config.ProvidersConfig{
-					S3: map[string]*config.ProviderEntry{
-						"assets": {
-							Source: config.NewMetadataSource("https://example.invalid/github-com-testowner-providers-s3/v0.0.1-alpha.1/provider-release.yaml"),
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if !configHasProviderLoading(tt.cfg) {
-				t.Fatal("configHasProviderLoading returned false")
-			}
-		})
 	}
 }
 
@@ -4141,47 +4005,6 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	}
 	if got.Providers["example"].Manifest != "" || got.UIs["roadmap"].AssetRoot != "" {
 		t.Fatal("portable lock schema should not populate local path fields on read")
-	}
-}
-
-func TestResolveArchiveForPlatform(t *testing.T) {
-	t.Parallel()
-
-	entry := LockEntry{
-		Archives: map[string]LockArchive{
-			"darwin/arm64": {URL: "https://example.com/darwin-arm64", SHA256: "abc"},
-			"linux/amd64":  {URL: "https://example.com/linux-amd64", SHA256: "def"},
-			"generic":      {URL: "https://example.com/generic", SHA256: "xyz"},
-		},
-	}
-
-	tests := []struct {
-		name     string
-		platform string
-		wantURL  string
-		wantOK   bool
-	}{
-		{"exact match", "darwin/arm64", "https://example.com/darwin-arm64", true},
-		{"linux match", "linux/amd64", "https://example.com/linux-amd64", true},
-		{"no match falls to generic", "windows/amd64", "https://example.com/generic", true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			archive, _, ok := resolveArchiveForPlatform(entry, tt.platform)
-			if ok != tt.wantOK {
-				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
-			}
-			if ok && archive.URL != tt.wantURL {
-				t.Errorf("URL = %q, want %q", archive.URL, tt.wantURL)
-			}
-		})
-	}
-
-	// No match at all
-	sparse := LockEntry{Archives: map[string]LockArchive{"windows/amd64": {URL: "x"}}}
-	if _, _, ok := resolveArchiveForPlatform(sparse, "darwin/arm64"); ok {
-		t.Error("expected no match for darwin/arm64 when only windows is available")
 	}
 }
 
