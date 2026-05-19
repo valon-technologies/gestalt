@@ -202,14 +202,47 @@ func TestLifecycleSyncLockedPreparesIndependentLocalUIsInParallel(t *testing.T) 
 		t.Skip("source UI build fixture uses POSIX shell")
 	}
 
-	dir := t.TempDir()
-	syncDir := filepath.Join(dir, "sync")
-	if err := os.MkdirAll(syncDir, 0o755); err != nil {
-		t.Fatalf("mkdir sync dir: %v", err)
-	}
-	alphaDir := filepath.Join(dir, "ui", "alpha")
-	betaDir := filepath.Join(dir, "ui", "beta")
-	writeBlockingSourceUITree(t, alphaDir, "github.com/acme/ui/alpha", "1.2.3", fmt.Sprintf(`#!/bin/sh
+	for _, tc := range []struct {
+		name      string
+		bound     bool
+		configure func(t *testing.T, dir string, plugins, uis map[string]string) (string, *Lockfile)
+	}{
+		{
+			name: "standalone",
+			configure: func(t *testing.T, dir string, _ map[string]string, uis map[string]string) (string, *Lockfile) {
+				t.Helper()
+				configPath := writeLocalUITestConfig(t, dir, uis)
+				lock, err := ReadLockfile(filepath.Join(dir, LockfileName))
+				if err != nil {
+					t.Fatalf("read lockfile: %v", err)
+				}
+				return configPath, lock
+			},
+		},
+		{
+			name:  "plugin-bound",
+			bound: true,
+			configure: func(t *testing.T, dir string, plugins, uis map[string]string) (string, *Lockfile) {
+				t.Helper()
+				return writePluginBoundLocalUITestConfig(t, dir, plugins, uis)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			syncDir := filepath.Join(dir, "sync")
+			if err := os.MkdirAll(syncDir, 0o755); err != nil {
+				t.Fatalf("mkdir sync dir: %v", err)
+			}
+			alphaPlugin := filepath.Join(dir, "plugins", "alpha")
+			betaPlugin := filepath.Join(dir, "plugins", "beta")
+			alphaDir := filepath.Join(dir, "ui", "alpha")
+			betaDir := filepath.Join(dir, "ui", "beta")
+			writeSourceProviderTree(t, alphaPlugin, "github.com/acme/plugins/alpha", "1.2.3", "alpha-binary")
+			writeSourceProviderTree(t, betaPlugin, "github.com/acme/plugins/beta", "1.2.3", "beta-binary")
+			writeBlockingSourceUITree(t, alphaDir, "github.com/acme/ui/alpha", "1.2.3", fmt.Sprintf(`#!/bin/sh
 set -eu
 touch %s/alpha.started
 i=0
@@ -224,7 +257,7 @@ done
 mkdir -p dist
 printf '<html>alpha</html>\n' > dist/index.html
 `, syncDir, syncDir))
-	writeBlockingSourceUITree(t, betaDir, "github.com/acme/ui/beta", "1.2.3", fmt.Sprintf(`#!/bin/sh
+			writeBlockingSourceUITree(t, betaDir, "github.com/acme/ui/beta", "1.2.3", fmt.Sprintf(`#!/bin/sh
 set -eu
 touch %s/beta.started
 i=0
@@ -240,17 +273,56 @@ mkdir -p dist
 printf '<html>beta</html>\n' > dist/index.html
 `, syncDir, syncDir))
 
-	configPath := writeLocalUITestConfig(t, dir, map[string]string{
-		"alpha": filepath.Join(alphaDir, "manifest.yaml"),
-		"beta":  filepath.Join(betaDir, "manifest.yaml"),
-	})
-	if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2}); err != nil {
-		t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
-	}
-	for _, name := range []string{"alpha", "beta"} {
-		if _, err := os.Stat(filepath.Join(dir, "artifacts", ".gestaltd", "ui", name, "dist", "index.html")); err != nil {
-			t.Fatalf("prepared ui %s not found: %v", name, err)
-		}
+			configPath, lock := tc.configure(t, dir, map[string]string{
+				"alpha": filepath.Join(alphaPlugin, "manifest.yaml"),
+				"beta":  filepath.Join(betaPlugin, "manifest.yaml"),
+			}, map[string]string{
+				"alpha": filepath.Join(alphaDir, "manifest.yaml"),
+				"beta":  filepath.Join(betaDir, "manifest.yaml"),
+			})
+			for _, name := range []string{"alpha", "beta"} {
+				if _, ok := lock.UIs[name]; ok {
+					t.Fatalf("local ui %q should not be serialized in committed lockfile: %#v", name, lock.UIs)
+				}
+			}
+			loaded, err := config.Load(configPath)
+			if err != nil {
+				t.Fatalf("Load config: %v", err)
+			}
+			for _, name := range []string{"alpha", "beta"} {
+				entry := loaded.Providers.UI[name]
+				if entry == nil {
+					t.Fatalf("loaded ui %q = nil", name)
+				}
+				if got := entry.OwnerPlugin; tc.bound {
+					if got != name {
+						t.Fatalf("ui %q OwnerPlugin = %q, want %q", name, got, name)
+					}
+				} else if got != "" {
+					t.Fatalf("ui %q OwnerPlugin = %q, want empty", name, got)
+				}
+			}
+			lockPath := filepath.Join(dir, LockfileName)
+			before, err := os.ReadFile(lockPath)
+			if err != nil {
+				t.Fatalf("read lockfile before sync: %v", err)
+			}
+			if err := NewLifecycle().SyncAtPathsWithStatePathsOptions([]string{configPath}, StatePaths{}, SyncOptions{Parallelism: 2}); err != nil {
+				t.Fatalf("SyncAtPathsWithStatePathsOptions: %v", err)
+			}
+			after, err := os.ReadFile(lockPath)
+			if err != nil {
+				t.Fatalf("read lockfile after sync: %v", err)
+			}
+			if !bytes.Equal(before, after) {
+				t.Fatal("sync --locked rewrote committed lockfile")
+			}
+			for _, name := range []string{"alpha", "beta"} {
+				if _, err := os.Stat(filepath.Join(dir, "artifacts", ".gestaltd", "ui", name, "dist", "index.html")); err != nil {
+					t.Fatalf("prepared ui %s not found: %v", name, err)
+				}
+			}
+		})
 	}
 }
 
@@ -263,8 +335,12 @@ func TestLifecycleSyncLockedParallelismOnePreparesLocalUIsSequentially(t *testin
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "build.log")
+	alphaPlugin := filepath.Join(dir, "plugins", "alpha")
+	betaPlugin := filepath.Join(dir, "plugins", "beta")
 	alphaDir := filepath.Join(dir, "ui", "alpha")
 	betaDir := filepath.Join(dir, "ui", "beta")
+	writeSourceProviderTree(t, alphaPlugin, "github.com/acme/plugins/alpha", "1.2.3", "alpha-binary")
+	writeSourceProviderTree(t, betaPlugin, "github.com/acme/plugins/beta", "1.2.3", "beta-binary")
 	writeBlockingSourceUITree(t, alphaDir, "github.com/acme/ui/alpha", "1.2.3", fmt.Sprintf(`#!/bin/sh
 set -eu
 printf 'alpha start\n' >> %s
@@ -280,7 +356,10 @@ printf '<html>beta</html>\n' > dist/index.html
 printf 'beta end\n' >> %s
 `, logPath, logPath))
 
-	configPath := writeLocalUITestConfig(t, dir, map[string]string{
+	configPath, _ := writePluginBoundLocalUITestConfig(t, dir, map[string]string{
+		"alpha": filepath.Join(alphaPlugin, "manifest.yaml"),
+		"beta":  filepath.Join(betaPlugin, "manifest.yaml"),
+	}, map[string]string{
 		"alpha": filepath.Join(alphaDir, "manifest.yaml"),
 		"beta":  filepath.Join(betaDir, "manifest.yaml"),
 	})
@@ -536,8 +615,8 @@ func TestLocalUIParallelPrepareCandidateScope(t *testing.T) {
 		ProviderEntry: localEntry.ProviderEntry,
 		OwnerPlugin:   "plugin",
 	}
-	if localUIParallelPrepareCandidate(paths, ownedEntry, artifactModeMaterialize) {
-		t.Fatal("plugin-owned ui should not be eligible")
+	if !localUIParallelPrepareCandidate(paths, ownedEntry, artifactModeMaterialize) {
+		t.Fatal("plugin-bound local source ui should be eligible")
 	}
 	preparedEntry := &config.UIEntry{
 		ProviderEntry: config.ProviderEntry{
@@ -546,6 +625,13 @@ func TestLocalUIParallelPrepareCandidateScope(t *testing.T) {
 	}
 	if localUIParallelPrepareCandidate(paths, preparedEntry, artifactModeMaterialize) {
 		t.Fatal("prepared path-backed ui should not be eligible")
+	}
+	preparedOwnedEntry := &config.UIEntry{
+		ProviderEntry: preparedEntry.ProviderEntry,
+		OwnerPlugin:   "plugin",
+	}
+	if localUIParallelPrepareCandidate(paths, preparedOwnedEntry, artifactModeMaterialize) {
+		t.Fatal("prepared plugin-owned ui should not be eligible")
 	}
 	gitEntry := &config.UIEntry{
 		ProviderEntry: config.ProviderEntry{
@@ -1633,6 +1719,43 @@ func writeOwnedUIPluginTestConfig(t *testing.T, dir string, plugins map[string]s
 		t.Fatalf("write lockfile: %v", err)
 	}
 	return configPath
+}
+
+func writePluginBoundLocalUITestConfig(t *testing.T, dir string, plugins, uiManifests map[string]string) (string, *Lockfile) {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("apiVersion: gestaltd.config/v5\n")
+	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
+	b.WriteString("  ui:\n")
+	for _, name := range slices.Sorted(maps.Keys(uiManifests)) {
+		b.WriteString("    " + name + ":\n")
+		b.WriteString("      source:\n")
+		b.WriteString("        path: " + filepath.ToSlash(uiManifests[name]) + "\n")
+	}
+	b.WriteString("plugins:\n")
+	for _, name := range slices.Sorted(maps.Keys(plugins)) {
+		b.WriteString("  " + name + ":\n")
+		b.WriteString("    source:\n")
+		b.WriteString("      path: " + filepath.ToSlash(plugins[name]) + "\n")
+		b.WriteString("    ui:\n")
+		b.WriteString("      bundle: " + name + "\n")
+		b.WriteString("      path: /" + name + "\n")
+	}
+	b.WriteString("server:\n")
+	b.WriteString("  providers:\n")
+	b.WriteString("    indexeddb: sqlite\n")
+	b.WriteString("  artifactsDir: " + filepath.ToSlash(filepath.Join(dir, "artifacts")) + "\n")
+	b.WriteString("  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n")
+
+	configPath := filepath.Join(dir, "gestaltd.yaml")
+	if err := os.WriteFile(configPath, []byte(b.String()), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	lock, err := NewLifecycle().LockAtPathsWithStatePaths([]string{configPath}, StatePaths{})
+	if err != nil {
+		t.Fatalf("write lockfile: %v", err)
+	}
+	return configPath, lock
 }
 
 func runGitTestCommand(t *testing.T, dir string, args ...string) {

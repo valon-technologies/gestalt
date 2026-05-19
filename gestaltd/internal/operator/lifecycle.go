@@ -3641,9 +3641,6 @@ func localUIParallelPrepareCandidate(paths lifecyclePaths, entry *config.UIEntry
 	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() {
 		return false
 	}
-	if strings.TrimSpace(entry.OwnerPlugin) != "" {
-		return false
-	}
 	if pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
 		return false
 	}
