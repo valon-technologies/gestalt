@@ -2128,6 +2128,16 @@ pub struct RecordsResponse {
     #[prost(message, repeated, tag = "1")]
     pub records: ::prost::alloc::vec::Vec<Record>,
 }
+/// RecordsPageResponse wraps one bounded query page.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RecordsPageResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub records: ::prost::alloc::vec::Vec<Record>,
+    #[prost(string, repeated, tag = "2")]
+    pub keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, tag = "3")]
+    pub next_page_token: ::prost::alloc::string::String,
+}
 /// KeysResponse wraps repeated primary keys.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct KeysResponse {
@@ -2155,6 +2165,35 @@ pub struct ObjectStoreRangeRequest {
     pub store: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub range: ::core::option::Option<KeyRange>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QueryFilter {
+    #[prost(string, tag = "1")]
+    pub column: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub value: ::core::option::Option<TypedValue>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct QueryOrder {
+    #[prost(string, tag = "1")]
+    pub column: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub descending: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ObjectStoreQueryRequest {
+    #[prost(string, tag = "1")]
+    pub store: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "2")]
+    pub filters: ::prost::alloc::vec::Vec<QueryFilter>,
+    #[prost(message, repeated, tag = "3")]
+    pub order_by: ::prost::alloc::vec::Vec<QueryOrder>,
+    #[prost(int32, tag = "4")]
+    pub page_size: i32,
+    #[prost(string, tag = "5")]
+    pub page_token: ::prost::alloc::string::String,
+    #[prost(bool, tag = "6")]
+    pub keys_only: bool,
 }
 /// CreateObjectStoreRequest creates a new object store.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3566,12 +3605,23 @@ pub struct GetWorkflowProviderRunRequest {
     #[prost(string, tag = "2")]
     pub run_id: ::prost::alloc::string::String,
 }
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListWorkflowProviderRunsRequest {}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListWorkflowProviderRunsRequest {
+    #[prost(int32, tag = "1")]
+    pub page_size: i32,
+    #[prost(string, tag = "2")]
+    pub page_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub target_plugin: ::prost::alloc::string::String,
+    #[prost(enumeration = "WorkflowRunStatus", tag = "4")]
+    pub status: i32,
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowProviderRunsResponse {
     #[prost(message, repeated, tag = "1")]
     pub runs: ::prost::alloc::vec::Vec<BoundWorkflowRun>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CancelWorkflowProviderRunRequest {

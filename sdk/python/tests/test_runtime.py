@@ -33,6 +33,8 @@ from gestalt import (
     ExternalTokenValidator,
     GetPluginRuntimeSupportRequest,
     HealthChecker,
+    ListWorkflowProviderRunsRequest,
+    ListWorkflowProviderRunsResponse,
     MetadataProvider,
     PauseWorkflowProviderEventTriggerRequest,
     PauseWorkflowProviderScheduleRequest,
@@ -1527,6 +1529,38 @@ class WorkflowRuntimeTests(unittest.TestCase):
         self.assertIsInstance(provider.request, StartWorkflowProviderRunRequest)
         self.assertEqual(provider.request.workflow_key, "sync")
         self.assertEqual(response.id, "run-native")
+
+    def test_workflow_wrapper_maps_list_runs_pagination(self) -> None:
+        class Provider(WorkflowProvider):
+            def list_runs(self, request: Any) -> Any:
+                self.request = request
+                return ListWorkflowProviderRunsResponse(
+                    runs=[BoundWorkflowRun(id="run-page")],
+                    next_page_token="next-page",
+                )
+
+        provider = Provider()
+        wrapped = _runtime._workflow_provider_servicer(provider)
+
+        response = wrapped.ListRuns(
+            workflow_pb2.ListWorkflowProviderRunsRequest(
+                page_size=25,
+                page_token="page-0",
+                target_plugin="slack",
+                status=workflow_pb2.WORKFLOW_RUN_STATUS_RUNNING,
+            ),
+            object(),
+        )
+
+        self.assertIsInstance(provider.request, ListWorkflowProviderRunsRequest)
+        self.assertEqual(provider.request.page_size, 25)
+        self.assertEqual(provider.request.page_token, "page-0")
+        self.assertEqual(provider.request.target_plugin, "slack")
+        self.assertEqual(
+            provider.request.status, workflow_pb2.WORKFLOW_RUN_STATUS_RUNNING
+        )
+        self.assertEqual([run.id for run in response.runs], ["run-page"])
+        self.assertEqual(response.next_page_token, "next-page")
 
     def test_workflow_wrapper_returns_pause_resume_schedule_and_trigger(self) -> None:
         class Provider(WorkflowProvider):

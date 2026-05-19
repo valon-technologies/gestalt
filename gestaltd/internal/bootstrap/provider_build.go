@@ -2478,7 +2478,7 @@ func (unavailableWorkflowManager) ResumeEventTrigger(context.Context, *principal
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
-func (unavailableWorkflowManager) ListRuns(context.Context, *principal.Principal) ([]*workflowmanager.ManagedRun, error) {
+func (unavailableWorkflowManager) ListRuns(context.Context, *principal.Principal, coreworkflow.ListRunsRequest) (*workflowmanager.ListRunsResponse, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 

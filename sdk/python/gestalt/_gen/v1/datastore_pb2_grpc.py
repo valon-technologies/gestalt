@@ -86,6 +86,11 @@ class IndexedDBStub(object):
                 request_serializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.KeysResponse.FromString,
                 _registered_method=True)
+        self.Query = channel.unary_unary(
+                '/gestalt.provider.v1.IndexedDB/Query',
+                request_serializer=v1_dot_datastore__pb2.ObjectStoreQueryRequest.SerializeToString,
+                response_deserializer=v1_dot_datastore__pb2.RecordsPageResponse.FromString,
+                _registered_method=True)
         self.Count = channel.unary_unary(
                 '/gestalt.provider.v1.IndexedDB/Count',
                 request_serializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
@@ -200,6 +205,12 @@ class IndexedDBServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetAllKeys(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Query(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -321,6 +332,11 @@ def add_IndexedDBServicer_to_server(servicer, server):
                     servicer.GetAllKeys,
                     request_deserializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.FromString,
                     response_serializer=v1_dot_datastore__pb2.KeysResponse.SerializeToString,
+            ),
+            'Query': grpc.unary_unary_rpc_method_handler(
+                    servicer.Query,
+                    request_deserializer=v1_dot_datastore__pb2.ObjectStoreQueryRequest.FromString,
+                    response_serializer=v1_dot_datastore__pb2.RecordsPageResponse.SerializeToString,
             ),
             'Count': grpc.unary_unary_rpc_method_handler(
                     servicer.Count,
@@ -644,6 +660,33 @@ class IndexedDB(object):
             '/gestalt.provider.v1.IndexedDB/GetAllKeys',
             v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
             v1_dot_datastore__pb2.KeysResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Query(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.IndexedDB/Query',
+            v1_dot_datastore__pb2.ObjectStoreQueryRequest.SerializeToString,
+            v1_dot_datastore__pb2.RecordsPageResponse.FromString,
             options,
             channel_credentials,
             insecure,

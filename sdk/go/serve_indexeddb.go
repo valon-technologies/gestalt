@@ -86,6 +86,29 @@ func (s indexedDBProviderServer) GetAllKeys(ctx context.Context, req *proto.Obje
 	return &proto.KeysResponse{Keys: keys}, nil
 }
 
+func (s indexedDBProviderServer) Query(ctx context.Context, req *proto.ObjectStoreQueryRequest) (*proto.RecordsPageResponse, error) {
+	query, err := objectStoreQueryRequestFromProto(req)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	resp, err := s.provider.Query(ctx, query)
+	if err != nil {
+		return nil, providerRPCError("indexeddb query", err)
+	}
+	if resp == nil {
+		resp = &IndexedDBQueryResponse{}
+	}
+	records, err := recordsToProto(resp.Records)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "marshal records: %v", err)
+	}
+	return &proto.RecordsPageResponse{
+		Records:       records,
+		Keys:          resp.Keys,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
 func (s indexedDBProviderServer) Count(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.CountResponse, error) {
 	count, err := s.provider.Count(ctx, objectStoreRangeRequestFromProto(req))
 	if err != nil {
