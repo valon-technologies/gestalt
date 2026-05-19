@@ -961,9 +961,11 @@ workflows:
   schedules:
     noisy:
       target:
-        plugin:
-          name: beta
-          operation: ping
+        steps:
+          - id: ping
+            plugin:
+              name: beta
+              operation: ping
       cron: "* * * * *"
       paused: ${GESTALT_SCOPED_PLUGIN_DROPPED_WORKFLOW_BOOL_MISSING_ENV}
       runAs:

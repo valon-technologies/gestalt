@@ -34,7 +34,9 @@ const definitions = new Map<string, BoundWorkflowDefinition>();
 let publishCount = 0;
 
 function pluginTarget(pluginName: string, operation: string): BoundWorkflowTarget {
-  return boundWorkflowTarget({ plugin: { pluginName, operation } });
+  return boundWorkflowTarget({
+    steps: [{ id: operation, plugin: { name: pluginName, operation } }],
+  });
 }
 
 export const provider = defineWorkflowProvider({
@@ -73,12 +75,9 @@ export const provider = defineWorkflowProvider({
     }
   },
   async startRun(request) {
-    const plugin =
-      request.target?.kind?.case === "plugin"
-        ? request.target.kind.value
-        : undefined;
+    const plugin = request.target?.steps?.[0]?.plugin;
     const run = createRun(
-      `${plugin?.pluginName ?? "plugin"}:${plugin?.operation ?? "operation"}:${runs.size + 1}`,
+      `${plugin?.name ?? "plugin"}:${plugin?.operation ?? "operation"}:${runs.size + 1}`,
       request,
       WorkflowRunStatus.PENDING,
       request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",

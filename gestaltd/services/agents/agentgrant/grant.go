@@ -51,7 +51,7 @@ type Grant struct {
 	Tools                   []coreagent.Tool
 	ToolSource              coreagent.ToolSourceMode
 	Connections             []ConnectionBinding
-	InheritedOutputDelivery *coreworkflow.OutputDelivery
+	InheritedOutputDelivery *coreworkflow.StepDelivery
 }
 
 type claims struct {
@@ -69,12 +69,12 @@ type claims struct {
 }
 
 type toolScope struct {
-	ToolRefs                []coreagent.ToolRef          `json:"tool_refs,omitempty"`
-	ToolRefsSet             bool                         `json:"tool_refs_set,omitempty"`
-	Tools                   []coreagent.Tool             `json:"tools,omitempty"`
-	ToolSource              coreagent.ToolSourceMode     `json:"tool_source,omitempty"`
-	Connections             []ConnectionBinding          `json:"connections,omitempty"`
-	InheritedOutputDelivery *coreworkflow.OutputDelivery `json:"inherited_output_delivery,omitempty"`
+	ToolRefs                []coreagent.ToolRef        `json:"tool_refs,omitempty"`
+	ToolRefsSet             bool                       `json:"tool_refs_set,omitempty"`
+	Tools                   []coreagent.Tool           `json:"tools,omitempty"`
+	ToolSource              coreagent.ToolSourceMode   `json:"tool_source,omitempty"`
+	Connections             []ConnectionBinding        `json:"connections,omitempty"`
+	InheritedOutputDelivery *coreworkflow.StepDelivery `json:"inherited_output_delivery,omitempty"`
 }
 
 func NewManager(secret []byte) (*Manager, error) {
@@ -126,7 +126,7 @@ func (m *Manager) Mint(grant Grant) (string, error) {
 		Tools:                   append([]coreagent.Tool(nil), grant.Tools...),
 		ToolSource:              grant.ToolSource,
 		Connections:             append([]ConnectionBinding(nil), grant.Connections...),
-		InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(grant.InheritedOutputDelivery),
+		InheritedOutputDelivery: coreworkflow.CloneStepDelivery(grant.InheritedOutputDelivery),
 	})
 	if err != nil {
 		return "", err
@@ -178,7 +178,7 @@ func (m *Manager) Resolve(token string) (Grant, error) {
 		Tools:                   append([]coreagent.Tool(nil), scope.Tools...),
 		ToolSource:              scope.ToolSource,
 		Connections:             append([]ConnectionBinding(nil), scope.Connections...),
-		InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(scope.InheritedOutputDelivery),
+		InheritedOutputDelivery: coreworkflow.CloneStepDelivery(scope.InheritedOutputDelivery),
 	}
 	if m.revokedTurn(grant) {
 		return Grant{}, fmt.Errorf("agent run grant is revoked")

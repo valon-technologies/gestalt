@@ -260,34 +260,40 @@ workflows:
     nightly_sync:
       cron: "0 2 * * *"
       target:
-        plugin:
-          name: roadmap
-          operation: sync
-          connection: default
-          instance: tenant-a
-          input:
-            mode: incremental
+        steps:
+          - id: sync
+            plugin:
+              name: roadmap
+              operation: sync
+              connection: default
+              instance: tenant-a
+              input:
+                mode: incremental
     nightly_summary:
       cron: "0 3 * * *"
       target:
-        agent:
-          provider: simple
-          model: fast
-          prompt: Summarize yesterday.
-          tools:
-            - plugin: roadmap
-              operation: sync
+        steps:
+          - id: summarize
+            agent:
+              provider: simple
+              model: fast
+              prompt: Summarize yesterday.
+              tools:
+                - plugin: roadmap
+                  operation: sync
   eventTriggers:
     roadmap_updated:
       match:
         type: roadmap.item.updated
         source: roadmap
       target:
-        plugin:
-          name: roadmap
-          operation: sync
-          input:
-            mode: event
+        steps:
+          - id: sync
+            plugin:
+              name: roadmap
+              operation: sync
+              input:
+                mode: event
 `, e2eLoopbackBaseURL(8080), indexedDBManifest, ui.ManifestPath, workflowManifest, agentManifest, pluginManifest)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)

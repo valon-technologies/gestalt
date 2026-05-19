@@ -12,22 +12,23 @@ use generated::v1::workflow_host_server::{
 };
 use generated::v1::workflow_provider_client::WorkflowProviderClient;
 use generated::v1::{
-    self as pb, BoundWorkflowPluginTarget as ProtoBoundWorkflowPluginTarget,
-    BoundWorkflowTarget as ProtoBoundWorkflowTarget, ConfigureProviderRequest,
+    self as pb, BoundWorkflowTarget as ProtoBoundWorkflowTarget, ConfigureProviderRequest,
     ListWorkflowProviderRunsRequest as ProtoListWorkflowProviderRunsRequest, ProviderKind,
     PublishWorkflowProviderEventRequest as ProtoPublishWorkflowProviderEventRequest,
     StartWorkflowProviderRunRequest as ProtoStartWorkflowProviderRunRequest,
     UpsertWorkflowProviderEventTriggerRequest as ProtoUpsertWorkflowProviderEventTriggerRequest,
     UpsertWorkflowProviderScheduleRequest as ProtoUpsertWorkflowProviderScheduleRequest,
     WorkflowEvent as ProtoWorkflowEvent, WorkflowRunStatus as ProtoWorkflowRunStatus,
-    bound_workflow_target,
+    WorkflowStep as ProtoWorkflowStep, WorkflowStepPluginCall as ProtoWorkflowStepPluginCall,
+    workflow_step,
 };
 use gestalt::{
-    BoundWorkflowEventTrigger, BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowSchedule,
-    BoundWorkflowTarget, InvokeWorkflowOperationInput, ListWorkflowProviderRunsRequest,
+    BoundWorkflowEventTrigger, BoundWorkflowRun, BoundWorkflowSchedule, BoundWorkflowTarget,
+    InvokeWorkflowOperationInput, ListWorkflowProviderRunsRequest,
     ListWorkflowProviderRunsResponse, PublishWorkflowProviderEventRequest, RuntimeMetadata,
     StartWorkflowProviderRunRequest, UpsertWorkflowProviderEventTriggerRequest,
     UpsertWorkflowProviderScheduleRequest, WorkflowHost, WorkflowProvider, WorkflowRunStatus,
+    WorkflowStep, WorkflowStepAction, WorkflowStepPluginCall,
 };
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::{TcpListener, UnixListener, UnixStream};
@@ -48,6 +49,20 @@ struct TestWorkflowProvider {
 #[derive(Default, Clone)]
 struct TestWorkflowHostService {
     relay_tokens: Arc<Mutex<Vec<String>>>,
+}
+
+fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
+    BoundWorkflowTarget {
+        steps: vec![WorkflowStep {
+            id: operation.to_string(),
+            action: WorkflowStepAction::Plugin(WorkflowStepPluginCall {
+                name: plugin_name.to_string(),
+                operation: operation.to_string(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }],
+    }
 }
 
 #[gestalt::async_trait]
@@ -168,9 +183,9 @@ impl WorkflowHostRpc for TestWorkflowHostService {
         let target = request
             .target
             .ok_or_else(|| Status::invalid_argument("missing target"))?;
-        let plugin = match target.kind {
-            Some(bound_workflow_target::Kind::Plugin(plugin)) => plugin,
-            _ => return Err(Status::invalid_argument("missing target.plugin")),
+        let plugin = match target.steps.first().and_then(|step| step.action.as_ref()) {
+            Some(workflow_step::Action::Plugin(plugin)) => plugin,
+            _ => return Err(Status::invalid_argument("missing target.steps[0].plugin")),
         };
         Ok(GrpcResponse::new(pb::InvokeWorkflowOperationResponse {
             status: 202,
@@ -235,16 +250,15 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
     let started = client
         .start_run(ProtoStartWorkflowProviderRunRequest {
             target: Some(ProtoBoundWorkflowTarget {
-                kind: Some(bound_workflow_target::Kind::Plugin(
-                    ProtoBoundWorkflowPluginTarget {
-                        plugin_name: "demo".to_string(),
+                steps: vec![ProtoWorkflowStep {
+                    id: "refresh".to_string(),
+                    action: Some(workflow_step::Action::Plugin(ProtoWorkflowStepPluginCall {
+                        name: "demo".to_string(),
                         operation: "refresh".to_string(),
-                        input: Some(helpers::struct_from_json(serde_json::json!({
-                            "customer_id": "cust_123"
-                        }))),
                         ..Default::default()
-                    },
-                )),
+                    })),
+                    ..Default::default()
+                }],
             }),
             idempotency_key: "run-42".to_string(),
             definition_id: "definition-42".to_string(),
@@ -263,16 +277,15 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
     assert_eq!(
         started.target.expect("target"),
         ProtoBoundWorkflowTarget {
-            kind: Some(bound_workflow_target::Kind::Plugin(
-                ProtoBoundWorkflowPluginTarget {
-                    plugin_name: "demo".to_string(),
+            steps: vec![ProtoWorkflowStep {
+                id: "refresh".to_string(),
+                action: Some(workflow_step::Action::Plugin(ProtoWorkflowStepPluginCall {
+                    name: "demo".to_string(),
                     operation: "refresh".to_string(),
-                    input: Some(helpers::struct_from_json(serde_json::json!({
-                        "customer_id": "cust_123"
-                    }))),
                     ..Default::default()
-                }
-            )),
+                })),
+                ..Default::default()
+            }],
         }
     );
 
@@ -393,11 +406,7 @@ async fn workflow_host_client_round_trip_over_unix_socket() {
         .expect("connect workflow host");
     let invoked = host
         .invoke_operation(InvokeWorkflowOperationInput {
-            target: Some(BoundWorkflowTarget::Plugin(BoundWorkflowPluginTarget {
-                plugin_name: "demo".to_string(),
-                operation: "sync".to_string(),
-                ..Default::default()
-            })),
+            target: Some(plugin_target("demo", "sync")),
             run_id: "run-42".to_string(),
             ..Default::default()
         })
@@ -436,11 +445,7 @@ async fn workflow_host_client_round_trip_over_tcp_and_sends_relay_token() {
         .expect("connect workflow host");
     let invoked = host
         .invoke_operation(InvokeWorkflowOperationInput {
-            target: Some(BoundWorkflowTarget::Plugin(BoundWorkflowPluginTarget {
-                plugin_name: "demo".to_string(),
-                operation: "sync".to_string(),
-                ..Default::default()
-            })),
+            target: Some(plugin_target("demo", "sync")),
             run_id: "run-42".to_string(),
             ..Default::default()
         })

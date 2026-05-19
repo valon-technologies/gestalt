@@ -67,10 +67,8 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     },
     async deleteDefinition() {},
     async startRun(request) {
-      const detail =
-        request.target?.kind?.case === "plugin"
-          ? request.target.kind.value.operation ?? ""
-          : "";
+      const firstStep = request.target?.steps?.[0];
+      const detail = firstStep?.plugin?.operation ?? "";
       calls.push({ method: "start-run", detail });
       return {
         id: request.idempotencyKey,
@@ -211,10 +209,13 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     const run = await client.startRun(create(StartWorkflowProviderRunRequestSchema, {
       idempotencyKey: "run-native-ts",
       target: {
-        kind: {
-          case: "plugin",
-          value: { pluginName: "demo", operation: "sync" },
-        },
+        steps: [{
+          id: "sync",
+          action: {
+            case: "plugin",
+            value: { name: "demo", operation: "sync" },
+          },
+        }],
       },
     }));
     expect(run.id).toBe("run-native-ts");
@@ -223,10 +224,13 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     const definition = await client.createDefinition({
       idempotencyKey: "definition-native-ts",
       target: {
-        kind: {
-          case: "plugin",
-          value: { pluginName: "demo", operation: "define" },
-        },
+        steps: [{
+          id: "define",
+          action: {
+            case: "plugin",
+            value: { name: "demo", operation: "define" },
+          },
+        }],
       },
     });
     expect(definition.id).toBe("definition-native-ts");

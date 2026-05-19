@@ -204,11 +204,13 @@ workflows:
         subject:
           id: service_account:workspace-review-nightly
       target:
-        plugin:
-          name: workspace_review
-          operation: reports.generateNightly
-          input:
-            bucket: workspace-review-reports
+        steps:
+          - id: generate_report
+            plugin:
+              name: workspace_review
+              operation: reports.generateNightly
+              input:
+                bucket: workspace-review-reports
 ```
 
 For the full configuration reference, see [Config File](/reference/config-file).

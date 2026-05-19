@@ -2,19 +2,19 @@ package bootstrap
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"maps"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
@@ -37,6 +37,13 @@ type workflowRuntime struct {
 	invoker             invocation.Invoker
 	agentManager        agentmanager.Service
 }
+
+const (
+	workflowSignalContextMaxSignals     = 10
+	workflowSignalContextMaxItems       = 20
+	workflowSignalContextMaxDepth       = 4
+	workflowSignalContextMaxStringBytes = 4096
+)
 
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 	runtime := &workflowRuntime{
@@ -206,22 +213,9 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 	invoker := r.invoker
 	agentManager := r.agentManager
 	r.mu.RUnlock()
-	if workflowTargetHasMixedKinds(req.Target) {
-		return nil, fmt.Errorf("workflow target cannot include both agent and plugin fields")
-	}
-	if req.Target.Agent != nil {
-		return r.invokeAgent(ctx, req, agentManager, invoker)
-	}
-	if invoker == nil {
-		return nil, fmt.Errorf("workflow runtime invoker is not configured")
-	}
-	if req.Target.Plugin == nil || strings.TrimSpace(req.Target.Plugin.PluginName) == "" {
-		return nil, fmt.Errorf("workflow target plugin is required")
-	}
 	principalValue := principal.Canonicalized(principal.FromContext(ctx))
 	target := req.Target
-	invokeConnection := ""
-	invokeInstance := ""
+	callerPluginName := ""
 	if strings.TrimSpace(req.ExecutionRef) != "" {
 		resolvedRef, err := r.resolveWorkflowExecutionRef(ctx, req)
 		if err != nil {
@@ -229,47 +223,554 @@ func (r *workflowRuntime) Invoke(ctx context.Context, req coreworkflow.InvokeOpe
 		}
 		principalValue = workflowprincipal.RuntimePrincipalFromExecutionReference(resolvedRef)
 		target = resolvedRef.Target
+		callerPluginName = strings.TrimSpace(resolvedRef.CallerPluginName)
 		ctx = workflowExecutionRefWithRunAsAudit(ctx, resolvedRef)
 		if workflowExecutionRefAllowsInternalConnectionAccess(resolvedRef) {
 			ctx = invocation.WithInternalConnectionAccess(ctx)
 		}
-		if target.Plugin != nil {
-			invokeConnection = strings.TrimSpace(target.Plugin.Connection)
-			invokeInstance = strings.TrimSpace(target.Plugin.Instance)
-		}
 	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
 		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
+	}
+	if len(target.Steps) == 0 {
+		return nil, fmt.Errorf("workflow target steps are required")
+	}
+	return r.invokeWorkflowSteps(ctx, req, target, agentManager, invoker, principalValue, callerPluginName)
+}
+
+const workflowStepOutputBodyMaxBytes = 64 * 1024
+
+type workflowStepResult struct {
+	ID            string             `json:"id"`
+	Status        string             `json:"status"`
+	TurnID        string             `json:"turnId,omitempty"`
+	SkippedReason string             `json:"skippedReason,omitempty"`
+	Error         *workflowStepError `json:"error,omitempty"`
+}
+
+type workflowStepError struct {
+	StepID  string `json:"stepId,omitempty"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type workflowStepsResult struct {
+	Version     int                  `json:"version"`
+	Status      string               `json:"status"`
+	Steps       []workflowStepResult `json:"steps"`
+	Outputs     map[string]any       `json:"outputs"`
+	FinalStepID string               `json:"finalStepId,omitempty"`
+	FinalOutput any                  `json:"finalOutput,omitempty"`
+	Error       *workflowStepError   `json:"error,omitempty"`
+}
+
+type workflowAgentSessionState struct {
+	session      *coreagent.Session
+	providerName string
+	model        string
+	options      string
+}
+
+func (r *workflowRuntime) invokeWorkflowSteps(ctx context.Context, req coreworkflow.InvokeOperationRequest, target coreworkflow.Target, agentManager agentmanager.Service, invoker invocation.Invoker, p *principal.Principal, callerPluginName string) (*coreworkflow.InvokeOperationResponse, error) {
+	result := workflowStepsResult{
+		Version: 1,
+		Status:  "succeeded",
+		Steps:   make([]workflowStepResult, 0, len(target.Steps)),
+		Outputs: map[string]any{},
+	}
+	skipped := map[string]struct{}{}
+	sessions := map[string]workflowAgentSessionState{}
+	invocationScope := workflowStepInvocationScope(req)
+	for i := range target.Steps {
+		step := target.Steps[i]
+		stepID := strings.TrimSpace(step.ID)
+		if stepID == "" {
+			return workflowFailedStepResponse(result, stepID, "invalid_step", "workflow step id is required")
+		}
+		runStep, skipReason, err := workflowStepWhenMatches(step.When, req, result.Outputs, skipped)
+		if err != nil {
+			return workflowFailedStepResponse(result, stepID, "invalid_when", err.Error())
+		}
+		if !runStep {
+			result.Steps = append(result.Steps, workflowStepResult{ID: stepID, Status: "skipped", SkippedReason: skipReason})
+			skipped[stepID] = struct{}{}
+			continue
+		}
+		inputs, err := workflowEvaluateStepInputs(step.Inputs, req, result.Outputs)
+		if err != nil {
+			return workflowFailedStepResponse(result, stepID, "invalid_input", err.Error())
+		}
+		stepCtx := ctx
+		cancelStep := func() {}
+		if step.TimeoutSeconds > 0 {
+			stepCtx, cancelStep = context.WithTimeout(ctx, time.Duration(step.TimeoutSeconds)*time.Second)
+		}
+		var output any
+		var turnID string
+		switch {
+		case step.Plugin != nil && step.Agent != nil:
+			cancelStep()
+			return workflowFailedStepResponse(result, stepID, "invalid_step", "workflow step cannot set both plugin and agent")
+		case step.Plugin != nil:
+			output, err = r.invokeWorkflowPluginStep(stepCtx, req, invoker, p, step.Plugin, inputs, result.Outputs, invocationScope, stepID, "step")
+		case step.Agent != nil:
+			output, turnID, err = r.invokeWorkflowAgentStep(stepCtx, req, agentManager, p, callerPluginName, step.Agent, inputs, sessions, invocationScope, stepID, step.TimeoutSeconds, step.Metadata)
+		default:
+			err = fmt.Errorf("workflow step must set plugin or agent")
+		}
+		cancelStep()
+		if err != nil {
+			return workflowFailedStepResponse(result, stepID, "step_failed", err.Error())
+		}
+		result.Outputs[stepID] = output
+		if step.OutputDelivery != nil {
+			if step.OutputDelivery.Plugin == nil {
+				delete(result.Outputs, stepID)
+				return workflowFailedStepResponse(result, stepID, "delivery_failed", "output_delivery.plugin is required")
+			}
+			if _, err := r.invokeWorkflowPluginStep(ctx, req, invoker, p, step.OutputDelivery.Plugin, inputs, result.Outputs, invocationScope, stepID, "output_delivery"); err != nil {
+				delete(result.Outputs, stepID)
+				return workflowFailedStepResponse(result, stepID, "delivery_failed", err.Error())
+			}
+		}
+		result.FinalStepID = stepID
+		result.FinalOutput = output
+		result.Steps = append(result.Steps, workflowStepResult{ID: stepID, Status: "succeeded", TurnID: turnID})
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	return &coreworkflow.InvokeOperationResponse{Status: http.StatusOK, Body: string(body)}, nil
+}
+
+func workflowFailedStepResponse(result workflowStepsResult, stepID, code, message string) (*coreworkflow.InvokeOperationResponse, error) {
+	errValue := &workflowStepError{StepID: stepID, Code: code, Message: message}
+	result.Status = "failed"
+	result.Error = errValue
+	if stepID != "" {
+		result.Steps = append(result.Steps, workflowStepResult{ID: stepID, Status: "failed", Error: errValue})
+	}
+	body, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	return &coreworkflow.InvokeOperationResponse{Status: http.StatusInternalServerError, Body: string(body)}, nil
+}
+
+func (r *workflowRuntime) invokeWorkflowPluginStep(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, plugin *coreworkflow.PluginCall, inputs map[string]any, outputs map[string]any, invocationScope, stepID, fieldName string) (any, error) {
+	if invoker == nil {
+		return nil, fmt.Errorf("%w: workflow %s requires an invoker", invocation.ErrInternal, fieldName)
+	}
+	pluginName := strings.TrimSpace(plugin.Name)
+	operation := strings.TrimSpace(plugin.Operation)
+	if pluginName == "" || operation == "" {
+		return nil, fmt.Errorf("%w: workflow %s plugin name and operation are required", invocation.ErrInvalidInvocation, fieldName)
+	}
+	paramsValue, ok, err := workflowEvaluateValue(plugin.Input, req, outputs, inputs, true)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fmt.Errorf("%w: workflow %s plugin input did not resolve", invocation.ErrInvalidInvocation, fieldName)
+	}
+	params := map[string]any{}
+	if paramsValue != nil {
+		object, ok := paramsValue.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%w: workflow %s plugin input must resolve to an object", invocation.ErrInvalidInvocation, fieldName)
+		}
+		params = object
+	}
+	if fieldName == "step" && req.Input != nil {
+		params = maps.Clone(params)
+		for key, value := range req.Input {
+			params[key] = value
+		}
 	}
 	if contextValue := workflowInvocationContext(req); len(contextValue) > 0 {
 		ctx = invocation.WithWorkflowContext(ctx, contextValue)
 	}
-	if invokeConnection != "" {
-		ctx = invocation.WithConnection(ctx, invokeConnection)
+	if connection := strings.TrimSpace(plugin.Connection); connection != "" {
+		ctx = invocation.WithConnection(ctx, connection)
 	}
-	params := workflowInvocationParams(req)
-	if target.Plugin == nil {
-		return nil, fmt.Errorf("workflow target plugin is required")
+	if mode := core.NormalizeOptionalConnectionMode(plugin.CredentialMode); mode != "" {
+		ctx = invocation.WithCredentialModeOverride(ctx, mode)
 	}
-	pluginTarget := target.Plugin
-	credentialMode := core.NormalizeOptionalConnectionMode(pluginTarget.CredentialMode)
-	switch credentialMode {
-	case "":
-	case core.ConnectionModeNone, core.ConnectionModeUser:
-		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
-	default:
-		return nil, fmt.Errorf("%w: workflow target credential_mode %q is not supported", invocation.ErrInvalidInvocation, credentialMode)
-	}
-	result, err := invoker.Invoke(ctx, principalValue, pluginTarget.PluginName, invokeInstance, pluginTarget.Operation, params)
+	ctx = invocation.WithIdempotencyKey(ctx, workflowStepIdempotencyKey(req, invocationScope, stepID, fieldName))
+	result, err := invoker.Invoke(ctx, p, pluginName, strings.TrimSpace(plugin.Instance), operation, params)
 	if err != nil {
 		return nil, err
 	}
-	if result == nil {
-		return &coreworkflow.InvokeOperationResponse{}, nil
+	output := workflowPluginOutputEnvelope(result)
+	if result != nil && result.Status >= http.StatusBadRequest {
+		return nil, fmt.Errorf("workflow %s plugin %s.%s returned status %d", fieldName, pluginName, operation, result.Status)
 	}
-	return &coreworkflow.InvokeOperationResponse{
-		Status: result.Status,
-		Body:   result.Body,
-	}, nil
+	return output, nil
+}
+
+func (r *workflowRuntime) invokeWorkflowAgentStep(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, p *principal.Principal, callerPluginName string, agent *coreworkflow.AgentTurn, inputs map[string]any, sessions map[string]workflowAgentSessionState, invocationScope, stepID string, timeoutSeconds int, stepMetadata map[string]any) (any, string, error) {
+	if agentManager == nil {
+		return nil, "", fmt.Errorf("workflow runtime agent manager is not configured")
+	}
+	ctx = runtimehost.WithWorkflowAgentProviderDeadline(ctx)
+	providerName := strings.TrimSpace(agent.ProviderName)
+	model := strings.TrimSpace(agent.Model)
+	if providerName == "" {
+		return nil, "", fmt.Errorf("%w: workflow agent provider is required", invocation.ErrInvalidInvocation)
+	}
+	sessionKey := strings.TrimSpace(agent.SessionKey)
+	if sessionKey == "" {
+		sessionKey = stepID
+	}
+	optionsKey := workflowStableJSON(agent.ModelOptions)
+	state, ok := sessions[sessionKey]
+	if ok {
+		if state.providerName != providerName || state.model != model || state.options != optionsKey {
+			return nil, "", fmt.Errorf("%w: workflow agent session_key %q uses incompatible provider, model, or model_options", invocation.ErrInvalidInvocation, sessionKey)
+		}
+	} else {
+		metadata := map[string]any{"workflow": workflowInvocationContext(req), "workflowStepId": stepID}
+		session, err := agentManager.CreateSession(ctx, p, coreagent.ManagerCreateSessionRequest{
+			ProviderName:   providerName,
+			Model:          model,
+			Metadata:       metadata,
+			IdempotencyKey: workflowStepIdempotencyKey(req, invocationScope, stepID, "agent-session:"+sessionKey),
+		})
+		if err != nil {
+			return nil, "", err
+		}
+		state = workflowAgentSessionState{session: session, providerName: providerName, model: model, options: optionsKey}
+		sessions[sessionKey] = state
+	}
+	messages, err := workflowAgentTurnMessages(agent, inputs, req, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	turn, err := agentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
+		CallerPluginName:  callerPluginName,
+		SessionID:         state.session.ID,
+		Model:             model,
+		Messages:          messages,
+		ToolRefs:          append([]coreagent.ToolRef(nil), agent.ToolRefs...),
+		ToolRefsSet:       true,
+		ResponseSchema:    maps.Clone(agent.ResponseSchema),
+		ResponseSchemaSet: len(agent.ResponseSchema) > 0,
+		Metadata:          maps.Clone(stepMetadata),
+		ModelOptions:      maps.Clone(agent.ModelOptions),
+		TimeoutSeconds:    timeoutSeconds,
+		IdempotencyKey:    workflowStepIdempotencyKey(req, invocationScope, stepID, "agent-turn"),
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	turn, err = waitForWorkflowAgentTurn(ctx, agentManager, p, turn)
+	if err != nil {
+		if turn != nil && strings.TrimSpace(turn.ID) != "" {
+			_, _ = agentManager.CancelTurn(context.WithoutCancel(ctx), p, turn.ID, err.Error())
+		}
+		return nil, workflowAgentTurnID(turn), err
+	}
+	switch turn.Status {
+	case coreagent.ExecutionStatusSucceeded:
+		return workflowAgentOutputEnvelope(state.session, turn), turn.ID, nil
+	case coreagent.ExecutionStatusCanceled:
+		return nil, turn.ID, fmt.Errorf("workflow agent turn %q was canceled: %s", turn.ID, strings.TrimSpace(turn.StatusMessage))
+	case coreagent.ExecutionStatusWaitingForInput:
+		_, _ = agentManager.CancelTurn(context.WithoutCancel(ctx), p, turn.ID, "workflow agent step turn cannot wait for input")
+		return nil, turn.ID, fmt.Errorf("workflow agent turn %q is waiting for input", turn.ID)
+	default:
+		return nil, turn.ID, fmt.Errorf("workflow agent turn %q finished with status %q: %s", turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
+	}
+}
+
+func workflowPluginOutputEnvelope(result *core.OperationResult) map[string]any {
+	status := 0
+	headers := map[string][]string{}
+	body := ""
+	if result != nil {
+		status = result.Status
+		body = result.Body
+		for key, values := range result.Headers {
+			headers[key] = append([]string(nil), values...)
+		}
+	}
+	bodyText := truncateWorkflowString(body, workflowStepOutputBodyMaxBytes)
+	bodyEnvelope := map[string]any{
+		"text":      bodyText,
+		"truncated": len(body) != len(bodyText),
+		"jsonValid": false,
+	}
+	if len(body) == len(bodyText) {
+		var parsed any
+		if err := json.Unmarshal([]byte(bodyText), &parsed); err == nil {
+			bodyEnvelope["jsonValid"] = true
+			bodyEnvelope["json"] = parsed
+		}
+	}
+	return map[string]any{
+		"version": 1,
+		"kind":    "plugin",
+		"plugin": map[string]any{
+			"status":  status,
+			"headers": headers,
+			"body":    bodyEnvelope,
+		},
+	}
+}
+
+func workflowAgentOutputEnvelope(session *coreagent.Session, turn *coreagent.Turn) map[string]any {
+	agent := map[string]any{}
+	if session != nil {
+		agent["sessionId"] = session.ID
+	}
+	if turn != nil {
+		agent["turnId"] = turn.ID
+		agent["text"] = turn.OutputText
+		agent["structuredOutput"] = maps.Clone(turn.StructuredOutput)
+	}
+	return map[string]any{"version": 1, "kind": "agent", "agent": agent}
+}
+
+func workflowStepWhenMatches(when *coreworkflow.StepWhen, req coreworkflow.InvokeOperationRequest, outputs map[string]any, skipped map[string]struct{}) (bool, string, error) {
+	if when == nil {
+		return true, "", nil
+	}
+	if source := when.Value.StepOutput; source != nil {
+		if _, ok := skipped[strings.TrimSpace(source.StepID)]; ok {
+			return false, "missing_dependency", nil
+		}
+	}
+	value, ok, err := workflowEvaluateValue(when.Value, req, outputs, nil, false)
+	if err != nil {
+		return false, "", err
+	}
+	if !ok {
+		return false, "", fmt.Errorf("%w: workflow step when value did not resolve", invocation.ErrInvalidInvocation)
+	}
+	if !jsonvalue.IsScalar(value) || !jsonvalue.IsScalar(when.Equals) {
+		return false, "", fmt.Errorf("%w: workflow step when values must be scalar JSON values", invocation.ErrInvalidInvocation)
+	}
+	if workflowAgentScalarEqual(value, when.Equals) {
+		return true, "", nil
+	}
+	return false, "when_false", nil
+}
+
+func workflowEvaluateStepInputs(values map[string]coreworkflow.Value, req coreworkflow.InvokeOperationRequest, outputs map[string]any) (map[string]any, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]any, len(values))
+	for key := range values {
+		resolved, ok, err := workflowEvaluateValue(values[key], req, outputs, nil, false)
+		if err != nil {
+			return nil, fmt.Errorf("inputs.%s: %w", key, err)
+		}
+		if !ok {
+			return nil, fmt.Errorf("%w: inputs.%s did not resolve", invocation.ErrInvalidInvocation, key)
+		}
+		out[key] = resolved
+	}
+	return out, nil
+}
+
+func workflowEvaluateValue(value coreworkflow.Value, req coreworkflow.InvokeOperationRequest, outputs map[string]any, inputs map[string]any, allowInputs bool) (any, bool, error) {
+	switch {
+	case value.LiteralSet:
+		return value.Literal, true, nil
+	case value.Object != nil:
+		out := make(map[string]any, len(value.Object))
+		for key := range value.Object {
+			resolved, ok, err := workflowEvaluateValue(value.Object[key], req, outputs, inputs, allowInputs)
+			if err != nil {
+				return nil, false, fmt.Errorf("%s: %w", key, err)
+			}
+			if !ok {
+				return nil, false, nil
+			}
+			out[key] = resolved
+		}
+		return out, true, nil
+	case value.Array != nil:
+		out := make([]any, 0, len(value.Array))
+		for i := range value.Array {
+			resolved, ok, err := workflowEvaluateValue(value.Array[i], req, outputs, inputs, allowInputs)
+			if err != nil {
+				return nil, false, fmt.Errorf("[%d]: %w", i, err)
+			}
+			if !ok {
+				return nil, false, nil
+			}
+			out = append(out, resolved)
+		}
+		return out, true, nil
+	case value.Template != nil:
+		rendered, err := workflowRenderTemplate(value.Template.Template, req, outputs, inputs, allowInputs)
+		return rendered, err == nil, err
+	case strings.TrimSpace(value.RunInput) != "":
+		return workflowMapPathValue(req.Input, value.RunInput)
+	case strings.TrimSpace(value.SignalPayload) != "":
+		signal := workflowOutputDeliverySignal(req.Signals)
+		if signal == nil {
+			return nil, false, nil
+		}
+		return workflowMapPathValue(signal.Payload, value.SignalPayload)
+	case value.StepOutput != nil:
+		stepID := strings.TrimSpace(value.StepOutput.StepID)
+		output, ok := outputs[stepID]
+		if !ok {
+			return nil, false, fmt.Errorf("%w: workflow step output references missing step %q", invocation.ErrInvalidInvocation, stepID)
+		}
+		return workflowPathValue(output, value.StepOutput.Path)
+	default:
+		return nil, true, nil
+	}
+}
+
+func workflowAgentTurnMessages(agent *coreworkflow.AgentTurn, inputs map[string]any, req coreworkflow.InvokeOperationRequest, outputs map[string]any) ([]coreagent.Message, error) {
+	messages := make([]coreagent.Message, 0, len(agent.Messages)+1)
+	for i := range agent.Messages {
+		message := agent.Messages[i]
+		text, err := workflowRenderTemplate(message.Text.Template, req, outputs, inputs, true)
+		if err != nil {
+			return nil, fmt.Errorf("messages[%d].text: %w", i, err)
+		}
+		messages = append(messages, coreagent.Message{
+			Role:     message.Role,
+			Text:     text,
+			Metadata: maps.Clone(message.Metadata),
+		})
+	}
+	if agent.Prompt.Template != "" {
+		text, err := workflowRenderTemplate(agent.Prompt.Template, req, outputs, inputs, true)
+		if err != nil {
+			return nil, fmt.Errorf("prompt: %w", err)
+		}
+		messages = append(messages, coreagent.Message{Role: "user", Text: text})
+	}
+	return messages, nil
+}
+
+func workflowRenderTemplate(template string, req coreworkflow.InvokeOperationRequest, outputs map[string]any, inputs map[string]any, allowInputs bool) (string, error) {
+	var b strings.Builder
+	for i := 0; i < len(template); {
+		if strings.HasPrefix(template[i:], "$${") {
+			b.WriteString("${")
+			i += 3
+			continue
+		}
+		if !strings.HasPrefix(template[i:], "${") {
+			b.WriteByte(template[i])
+			i++
+			continue
+		}
+		end := strings.IndexByte(template[i+2:], '}')
+		if end < 0 {
+			return "", fmt.Errorf("%w: unterminated template expression", invocation.ErrInvalidInvocation)
+		}
+		expr := strings.TrimSpace(template[i+2 : i+2+end])
+		value, ok, err := workflowTemplateExpressionValue(expr, req, outputs, inputs, allowInputs)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "", fmt.Errorf("%w: template expression %q did not resolve", invocation.ErrInvalidInvocation, expr)
+		}
+		rendered, err := workflowTemplateRenderValue(value)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(rendered)
+		i += 2 + end + 1
+	}
+	return b.String(), nil
+}
+
+func workflowTemplateExpressionValue(expr string, req coreworkflow.InvokeOperationRequest, outputs map[string]any, inputs map[string]any, allowInputs bool) (any, bool, error) {
+	switch {
+	case strings.HasPrefix(expr, "inputs."):
+		if !allowInputs {
+			return nil, false, fmt.Errorf("%w: inputs references are not allowed here", invocation.ErrInvalidInvocation)
+		}
+		return workflowMapPathValue(inputs, strings.TrimPrefix(expr, "inputs."))
+	case strings.HasPrefix(expr, "runInput."):
+		return workflowMapPathValue(req.Input, strings.TrimPrefix(expr, "runInput."))
+	case strings.HasPrefix(expr, "signalPayload."):
+		signal := workflowOutputDeliverySignal(req.Signals)
+		if signal == nil {
+			return nil, false, nil
+		}
+		return workflowMapPathValue(signal.Payload, strings.TrimPrefix(expr, "signalPayload."))
+	default:
+		return nil, false, fmt.Errorf("%w: unsupported template expression %q", invocation.ErrInvalidInvocation, expr)
+	}
+}
+
+func workflowTemplateRenderValue(value any) (string, error) {
+	if text, ok := value.(string); ok {
+		return text, nil
+	}
+	body, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func workflowStableJSON(value any) string {
+	if value == nil {
+		return ""
+	}
+	body, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%#v", value)
+	}
+	return string(body)
+}
+
+func workflowStepInvocationScope(req coreworkflow.InvokeOperationRequest) string {
+	if signal := workflowOutputDeliverySignal(req.Signals); signal != nil {
+		if signalID := strings.TrimSpace(signal.ID); signalID != "" {
+			return "signal-id:" + signalID
+		}
+		if key := strings.TrimSpace(signal.IdempotencyKey); key != "" {
+			return "signal-idempotency:" + key
+		}
+		if signal.Sequence != 0 {
+			return fmt.Sprintf("signal-sequence:%d", signal.Sequence)
+		}
+		if signal.CreatedAt != nil && !signal.CreatedAt.IsZero() {
+			return "signal-created-at:" + signal.CreatedAt.UTC().Format(time.RFC3339Nano)
+		}
+		return "signal-non-idempotent:" + uuid.NewString()
+	}
+	if req.Trigger.Event != nil {
+		event := req.Trigger.Event.Event
+		if eventID := strings.TrimSpace(event.ID); eventID != "" {
+			return "event-id:" + eventID
+		}
+		if event.Time != nil && !event.Time.IsZero() {
+			return "event-time:" + event.Time.UTC().Format(time.RFC3339Nano)
+		}
+		if triggerID := strings.TrimSpace(req.Trigger.Event.TriggerID); triggerID != "" {
+			return "event-trigger:" + triggerID + ":" + uuid.NewString()
+		}
+		return "event-non-idempotent:" + uuid.NewString()
+	}
+	return ""
+}
+
+func workflowStepIdempotencyKey(req coreworkflow.InvokeOperationRequest, invocationScope, stepID, suffix string) string {
+	parts := []string{
+		"workflow",
+		strings.TrimSpace(req.ProviderName),
+		strings.TrimSpace(req.RunID),
+	}
+	if scope := strings.TrimSpace(invocationScope); scope != "" {
+		parts = append(parts, "invocation", scope)
+	}
+	parts = append(parts, "step", strings.TrimSpace(stepID), strings.TrimSpace(suffix))
+	return strings.Join(parts, ":")
 }
 
 func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req coreworkflow.InvokeOperationRequest) (*coreworkflow.ExecutionReference, error) {
@@ -308,10 +809,6 @@ func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req c
 	return ref, nil
 }
 
-func workflowTargetHasMixedKinds(target coreworkflow.Target) bool {
-	return target.Agent != nil && target.Plugin != nil
-}
-
 func workflowExecutionRefAllowsInternalConnectionAccess(ref *coreworkflow.ExecutionReference) bool {
 	if ref == nil {
 		return false
@@ -340,347 +837,11 @@ func workflowExecutionRefWithRunAsAudit(ctx context.Context, ref *coreworkflow.E
 	return invocation.WithRunAsAudit(ctx, owner, runAs)
 }
 
-func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, invoker invocation.Invoker) (*coreworkflow.InvokeOperationResponse, error) {
-	if agentManager == nil {
-		return nil, fmt.Errorf("workflow runtime agent manager is not configured")
-	}
-	if strings.TrimSpace(req.RunID) == "" {
-		return nil, fmt.Errorf("workflow agent target requires run_id")
-	}
-	principalValue := principal.Canonicalized(principal.FromContext(ctx))
-	target := req.Target
-	callerPluginName := ""
-	if strings.TrimSpace(req.ExecutionRef) != "" {
-		resolvedRef, err := r.resolveWorkflowExecutionRef(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		principalValue = workflowprincipal.RuntimePrincipalFromExecutionReference(resolvedRef)
-		target = resolvedRef.Target
-		callerPluginName = strings.TrimSpace(resolvedRef.CallerPluginName)
-		ctx = workflowExecutionRefWithRunAsAudit(ctx, resolvedRef)
-		if workflowExecutionRefAllowsInternalConnectionAccess(resolvedRef) {
-			ctx = invocation.WithInternalConnectionAccess(ctx)
-		}
-	} else if principalValue == nil || strings.TrimSpace(principalValue.SubjectID) == "" {
-		return nil, fmt.Errorf("%w: workflow execution principal is required when execution_ref is omitted", invocation.ErrInternal)
-	}
-	if target.Agent == nil {
-		return nil, fmt.Errorf("workflow agent target is required")
-	}
-	agentTarget := *target.Agent
-	timeout := workflowAgentTimeout(agentTarget.TimeoutSeconds)
-	slog.InfoContext(ctx, "workflow agent target starting", workflowAgentLogAttrs(req, principalValue, &agentTarget, nil, nil)...)
-	runCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	runCtx = runtimehost.WithWorkflowAgentProviderDeadline(runCtx)
-
-	metadata := maps.Clone(agentTarget.Metadata)
-	if metadata == nil {
-		metadata = map[string]any{}
-	}
-	metadata["workflow"] = workflowInvocationContext(req)
-	session, err := agentManager.CreateSession(runCtx, principalValue, coreagent.ManagerCreateSessionRequest{
-		ProviderName:   agentTarget.ProviderName,
-		Model:          agentTarget.Model,
-		Metadata:       metadata,
-		IdempotencyKey: workflowAgentSessionIdempotencyKey(req),
-	})
-	if err != nil {
-		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, nil, nil)
-		attrs = append(attrs, "error", err)
-		slog.WarnContext(ctx, "workflow agent session create failed", attrs...)
-		return nil, err
-	}
-	slog.InfoContext(ctx, "workflow agent session created", workflowAgentLogAttrs(req, principalValue, &agentTarget, session, nil)...)
-	if agentTarget.SessionReadyDelivery != nil {
-		if err := r.deliverAgentSessionReady(ctx, req, invoker, principalValue, agentTarget, session); err != nil {
-			attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, nil)
-			attrs = append(attrs, "error", err)
-			slog.WarnContext(ctx, "workflow agent session-ready delivery failed", attrs...)
-		}
-	}
-	if len(agentTarget.Steps) > 0 {
-		return r.invokeAgentSteps(runCtx, ctx, req, agentManager, invoker, principalValue, callerPluginName, agentTarget, session, metadata)
-	}
-	messages := append([]coreagent.Message(nil), agentTarget.Messages...)
-	if prompt := strings.TrimSpace(agentTarget.Prompt); prompt != "" {
-		messages = append(messages, coreagent.Message{Role: "user", Text: prompt})
-	}
-	if signalMessage := workflowSignalMessage(req.Signals); signalMessage != nil {
-		messages = append(messages, *signalMessage)
-	}
-	turnCtx := runCtx
-	if inheritedDelivery := workflowInheritedOutputDelivery(agentTarget.OutputDelivery, workflowOutputDeliverySignal(req.Signals)); inheritedDelivery != nil {
-		turnCtx = agentmanager.WithInheritedOutputDelivery(turnCtx, inheritedDelivery)
-	}
-	turn, err := agentManager.CreateTurn(turnCtx, principalValue, coreagent.ManagerCreateTurnRequest{
-		CallerPluginName:  callerPluginName,
-		SessionID:         session.ID,
-		Model:             agentTarget.Model,
-		Messages:          messages,
-		ToolRefs:          append([]coreagent.ToolRef(nil), agentTarget.ToolRefs...),
-		ResponseSchema:    maps.Clone(agentTarget.ResponseSchema),
-		ResponseSchemaSet: len(agentTarget.ResponseSchema) > 0,
-		Metadata:          metadata,
-		ModelOptions:      maps.Clone(agentTarget.ModelOptions),
-		TimeoutSeconds:    agentTarget.TimeoutSeconds,
-		IdempotencyKey:    workflowAgentTurnIdempotencyKey(req),
-	})
-	if err != nil {
-		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, nil)
-		attrs = append(attrs, "error", err)
-		slog.WarnContext(ctx, "workflow agent turn create failed", attrs...)
-		return nil, err
-	}
-	slog.InfoContext(ctx, "workflow agent turn created", workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)...)
-	turn, err = waitForWorkflowAgentTurn(runCtx, agentManager, principalValue, turn)
-	if err != nil {
-		if turn != nil && strings.TrimSpace(turn.ID) != "" {
-			_, _ = agentManager.CancelTurn(context.WithoutCancel(ctx), principalValue, turn.ID, err.Error())
-		}
-		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)
-		attrs = append(attrs, "error", err)
-		slog.WarnContext(ctx, "workflow agent turn wait failed", attrs...)
-		return nil, err
-	}
-	switch turn.Status {
-	case coreagent.ExecutionStatusSucceeded:
-		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)
-		attrs = append(attrs, workflowAgentBodyLogAttrs("result", turn.OutputText)...)
-		slog.InfoContext(ctx, "workflow agent turn succeeded", attrs...)
-		if agentTarget.OutputDelivery != nil {
-			if err := r.deliverAgentOutput(ctx, req, invoker, principalValue, agentTarget, session, turn); err != nil {
-				return nil, err
-			}
-		}
-		return &coreworkflow.InvokeOperationResponse{Status: 200, Body: turn.OutputText}, nil
-	case coreagent.ExecutionStatusCanceled:
-		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)
-		attrs = append(attrs, "status_message", strings.TrimSpace(turn.StatusMessage))
-		slog.WarnContext(ctx, "workflow agent turn canceled", attrs...)
-		return nil, fmt.Errorf("workflow agent turn %q was canceled: %s", turn.ID, strings.TrimSpace(turn.StatusMessage))
-	case coreagent.ExecutionStatusWaitingForInput:
-		_, _ = agentManager.CancelTurn(context.WithoutCancel(ctx), principalValue, turn.ID, "workflow agent turn cannot wait for input")
-		slog.WarnContext(ctx, "workflow agent turn waiting for input", workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)...)
-		return nil, fmt.Errorf("workflow agent turn %q is waiting for input", turn.ID)
-	default:
-		attrs := workflowAgentLogAttrs(req, principalValue, &agentTarget, session, turn)
-		attrs = append(attrs, "status_message", strings.TrimSpace(turn.StatusMessage))
-		slog.WarnContext(ctx, "workflow agent turn failed", attrs...)
-		return nil, fmt.Errorf("workflow agent turn %q finished with status %q: %s", turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
-	}
-}
-
-type workflowAgentStepResult struct {
-	ID            string `json:"id"`
-	Status        string `json:"status"`
-	TurnID        string `json:"turn_id,omitempty"`
-	SkippedReason string `json:"skipped_reason,omitempty"`
-	Error         string `json:"error,omitempty"`
-}
-
-type workflowAgentStepOutput struct {
-	Text             string         `json:"text,omitempty"`
-	StructuredOutput map[string]any `json:"structured_output,omitempty"`
-}
-
-type workflowAgentStepsResult struct {
-	Steps           []workflowAgentStepResult          `json:"steps"`
-	Outputs         map[string]workflowAgentStepOutput `json:"outputs"`
-	FinalOutputText string                             `json:"final_output_text,omitempty"`
-}
-
-func (r *workflowRuntime) invokeAgentSteps(runCtx, rootCtx context.Context, req coreworkflow.InvokeOperationRequest, agentManager agentmanager.Service, invoker invocation.Invoker, p *principal.Principal, callerPluginName string, agentTarget coreworkflow.AgentTarget, session *coreagent.Session, metadata map[string]any) (*coreworkflow.InvokeOperationResponse, error) {
-	result := workflowAgentStepsResult{
-		Steps:   make([]workflowAgentStepResult, 0, len(agentTarget.Steps)),
-		Outputs: map[string]workflowAgentStepOutput{},
-	}
-	for i := range agentTarget.Steps {
-		step := agentTarget.Steps[i]
-		stepID := strings.TrimSpace(step.ID)
-		if step.When != nil {
-			ok, err := workflowAgentStepWhenMatches(step.When, result.Outputs)
-			if err != nil {
-				result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", Error: err.Error()})
-				return nil, err
-			}
-			if !ok {
-				result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "skipped", SkippedReason: "when_false"})
-				continue
-			}
-		}
-		stepCtx := runCtx
-		cancelStep := func() {}
-		if step.TimeoutSeconds > 0 {
-			stepCtx, cancelStep = context.WithTimeout(runCtx, workflowAgentTimeout(step.TimeoutSeconds))
-		}
-		messages := workflowAgentStepMessages(step, req.Signals, result.Outputs)
-		stepMetadata := workflowAgentStepMetadata(metadata, step.Metadata)
-		turnCtx := stepCtx
-		if inheritedDelivery := workflowInheritedOutputDelivery(step.OutputDelivery, workflowOutputDeliverySignal(req.Signals)); inheritedDelivery != nil {
-			turnCtx = agentmanager.WithInheritedOutputDelivery(turnCtx, inheritedDelivery)
-		}
-		turn, err := agentManager.CreateTurn(turnCtx, p, coreagent.ManagerCreateTurnRequest{
-			CallerPluginName:  callerPluginName,
-			SessionID:         session.ID,
-			Model:             agentTarget.Model,
-			Messages:          messages,
-			ToolRefs:          append([]coreagent.ToolRef(nil), step.ToolRefs...),
-			ToolRefsSet:       true,
-			ResponseSchema:    maps.Clone(step.ResponseSchema),
-			ResponseSchemaSet: len(step.ResponseSchema) > 0,
-			Metadata:          stepMetadata,
-			ModelOptions:      maps.Clone(step.ModelOptions),
-			TimeoutSeconds:    step.TimeoutSeconds,
-			IdempotencyKey:    workflowAgentStepTurnIdempotencyKey(req, stepID),
-		})
-		if err != nil {
-			cancelStep()
-			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", Error: err.Error()})
-			attrs := workflowAgentLogAttrs(req, p, &agentTarget, session, nil)
-			attrs = append(attrs, "workflow_agent_step_id", stepID, "error", err)
-			slog.WarnContext(rootCtx, "workflow agent step turn create failed", attrs...)
-			return nil, err
-		}
-		slog.InfoContext(rootCtx, "workflow agent step turn created", append(workflowAgentLogAttrs(req, p, &agentTarget, session, turn), "workflow_agent_step_id", stepID)...)
-		turn, err = waitForWorkflowAgentTurn(stepCtx, agentManager, p, turn)
-		cancelStep()
-		if err != nil {
-			if turn != nil && strings.TrimSpace(turn.ID) != "" {
-				_, _ = agentManager.CancelTurn(context.WithoutCancel(rootCtx), p, turn.ID, err.Error())
-			}
-			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", TurnID: workflowAgentTurnID(turn), Error: err.Error()})
-			attrs := workflowAgentLogAttrs(req, p, &agentTarget, session, turn)
-			attrs = append(attrs, "workflow_agent_step_id", stepID, "error", err)
-			slog.WarnContext(rootCtx, "workflow agent step turn wait failed", attrs...)
-			return nil, err
-		}
-		switch turn.Status {
-		case coreagent.ExecutionStatusSucceeded:
-			output := workflowAgentStepOutput{
-				Text:             turn.OutputText,
-				StructuredOutput: maps.Clone(turn.StructuredOutput),
-			}
-			result.Outputs[stepID] = output
-			result.FinalOutputText = turn.OutputText
-			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "succeeded", TurnID: turn.ID})
-			if step.OutputDelivery != nil {
-				if err := r.deliverWorkflowAgentDelivery(rootCtx, req, invoker, p, step.OutputDelivery, session, turn, "steps["+stepID+"].output_delivery", workflowAgentStepOutputDeliveryIdempotencyKey(req, stepID)); err != nil {
-					return nil, err
-				}
-			}
-		case coreagent.ExecutionStatusCanceled:
-			err := fmt.Errorf("workflow agent step %q turn %q was canceled: %s", stepID, turn.ID, strings.TrimSpace(turn.StatusMessage))
-			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", TurnID: turn.ID, Error: err.Error()})
-			return nil, err
-		case coreagent.ExecutionStatusWaitingForInput:
-			_, _ = agentManager.CancelTurn(context.WithoutCancel(rootCtx), p, turn.ID, "workflow agent step turn cannot wait for input")
-			err := fmt.Errorf("workflow agent step %q turn %q is waiting for input", stepID, turn.ID)
-			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", TurnID: turn.ID, Error: err.Error()})
-			return nil, err
-		default:
-			err := fmt.Errorf("workflow agent step %q turn %q finished with status %q: %s", stepID, turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
-			result.Steps = append(result.Steps, workflowAgentStepResult{ID: stepID, Status: "failed", TurnID: turn.ID, Error: err.Error()})
-			return nil, err
-		}
-	}
-	body, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	return &coreworkflow.InvokeOperationResponse{Status: http.StatusOK, Body: string(body)}, nil
-}
-
 func workflowAgentTurnID(turn *coreagent.Turn) string {
 	if turn == nil {
 		return ""
 	}
 	return strings.TrimSpace(turn.ID)
-}
-
-func workflowAgentStepMessages(step coreworkflow.AgentStep, signals []coreworkflow.Signal, outputs map[string]workflowAgentStepOutput) []coreagent.Message {
-	messages := make([]coreagent.Message, 0, len(step.Messages)+3)
-	messages = append(messages, step.Messages...)
-	if len(outputs) > 0 {
-		messages = append(messages, workflowAgentPriorStepOutputsMessage(outputs))
-	}
-	if prompt := strings.TrimSpace(step.Prompt); prompt != "" {
-		messages = append(messages, coreagent.Message{Role: "user", Text: prompt})
-	}
-	if signalMessage := workflowSignalMessage(signals); signalMessage != nil {
-		messages = append(messages, *signalMessage)
-	}
-	return messages
-}
-
-func workflowAgentStepMetadata(base map[string]any, step map[string]any) map[string]any {
-	out := maps.Clone(base)
-	if out == nil {
-		out = map[string]any{}
-	}
-	if len(step) > 0 {
-		stepMetadata := maps.Clone(step)
-		out["workflow_step"] = stepMetadata
-	}
-	return out
-}
-
-const (
-	workflowAgentStepOutputsMessagePrefix   = "Prior workflow agent step outputs:\n"
-	workflowAgentStepOutputsMessageMaxBytes = 64 * 1024
-)
-
-func workflowAgentPriorStepOutputsMessage(outputs map[string]workflowAgentStepOutput) coreagent.Message {
-	body, err := json.MarshalIndent(map[string]any{"outputs": outputs}, "", "  ")
-	if err != nil {
-		body = []byte(fmt.Sprintf("%#v", outputs))
-	}
-	textMaxBytes := workflowAgentStepOutputsMessageMaxBytes - len(workflowAgentStepOutputsMessagePrefix)
-	return coreagent.Message{
-		Role: "user",
-		Text: workflowAgentStepOutputsMessagePrefix + truncateWorkflowString(string(body), textMaxBytes),
-		Metadata: map[string]any{
-			"gestalt.workflow.prior_step_outputs": true,
-		},
-	}
-}
-
-func workflowAgentStepWhenMatches(when *coreworkflow.AgentStepWhen, outputs map[string]workflowAgentStepOutput) (bool, error) {
-	if when == nil {
-		return true, nil
-	}
-	stepID := strings.TrimSpace(when.StepID)
-	output, ok := outputs[stepID]
-	if !ok {
-		return false, fmt.Errorf("%w: workflow agent step when references missing or skipped step %q", invocation.ErrInvalidInvocation, stepID)
-	}
-	value, ok, err := workflowAgentStepOutputPathValue(output, when.OutputPath)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, fmt.Errorf("%w: workflow agent step when output path %q did not resolve for step %q", invocation.ErrInvalidInvocation, strings.TrimSpace(when.OutputPath), stepID)
-	}
-	if !jsonvalue.IsScalar(value) || !jsonvalue.IsScalar(when.Equals) {
-		return false, fmt.Errorf("%w: workflow agent step when values must be scalar JSON values", invocation.ErrInvalidInvocation)
-	}
-	return workflowAgentScalarEqual(value, when.Equals), nil
-}
-
-func workflowAgentStepOutputPathValue(output workflowAgentStepOutput, path string) (any, bool, error) {
-	path = strings.TrimSpace(path)
-	values := map[string]any{
-		"text":              output.Text,
-		"output_text":       output.Text,
-		"outputText":        output.Text,
-		"structured_output": output.StructuredOutput,
-		"structuredOutput":  output.StructuredOutput,
-	}
-	if value, ok := values[path]; ok {
-		return value, true, nil
-	}
-	return workflowMapPathValue(values, path)
 }
 
 func workflowAgentScalarEqual(left, right any) bool {
@@ -734,76 +895,6 @@ func workflowAgentNumber(value any) (float64, bool) {
 	}
 }
 
-func (r *workflowRuntime) deliverAgentSessionReady(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, agentTarget coreworkflow.AgentTarget, session *coreagent.Session) error {
-	return r.deliverWorkflowAgentDelivery(ctx, req, invoker, p, agentTarget.SessionReadyDelivery, session, nil, "session_ready_delivery", workflowAgentSessionReadyDeliveryIdempotencyKey(req))
-}
-
-func (r *workflowRuntime) deliverAgentOutput(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, agentTarget coreworkflow.AgentTarget, session *coreagent.Session, turn *coreagent.Turn) error {
-	return r.deliverWorkflowAgentDelivery(ctx, req, invoker, p, agentTarget.OutputDelivery, session, turn, "output_delivery", workflowAgentOutputDeliveryIdempotencyKey(req))
-}
-
-func (r *workflowRuntime) deliverWorkflowAgentDelivery(ctx context.Context, req coreworkflow.InvokeOperationRequest, invoker invocation.Invoker, p *principal.Principal, delivery *coreworkflow.OutputDelivery, session *coreagent.Session, turn *coreagent.Turn, fieldName, idempotencyKey string) error {
-	if invoker == nil {
-		return fmt.Errorf("%w: workflow agent %s requires an invoker", invocation.ErrInternal, fieldName)
-	}
-	if delivery == nil {
-		return nil
-	}
-	target := delivery.Target
-	pluginName := strings.TrimSpace(target.PluginName)
-	operation := strings.TrimSpace(target.Operation)
-	if pluginName == "" || operation == "" {
-		return fmt.Errorf("%w: workflow agent %s target is incomplete", invocation.ErrInvalidInvocation, fieldName)
-	}
-	params := maps.Clone(target.Input)
-	if params == nil {
-		params = map[string]any{}
-	}
-	signal := workflowOutputDeliverySignal(req.Signals)
-	for i := range delivery.InputBindings {
-		binding := delivery.InputBindings[i]
-		inputField := strings.TrimSpace(binding.InputField)
-		if inputField == "" {
-			return fmt.Errorf("%w: workflow agent %s input binding field is required", invocation.ErrInvalidInvocation, fieldName)
-		}
-		value, ok, err := workflowOutputBindingValue(turn, signal, session, binding.Value)
-		if err != nil {
-			return fmt.Errorf("workflow agent %s.%s: %w", fieldName, inputField, err)
-		}
-		if !ok {
-			return fmt.Errorf("%w: workflow agent %s.%s source did not resolve", invocation.ErrInvalidInvocation, fieldName, inputField)
-		}
-		params[inputField] = value
-	}
-	if contextValue := workflowInvocationContext(req); len(contextValue) > 0 {
-		ctx = invocation.WithWorkflowContext(ctx, contextValue)
-	}
-	if connection := strings.TrimSpace(target.Connection); connection != "" {
-		ctx = invocation.WithConnection(ctx, connection)
-	}
-	if strings.TrimSpace(string(delivery.CredentialMode)) != "" {
-		ctx = invocation.WithCredentialModeOverride(ctx, core.NormalizeConnectionMode(delivery.CredentialMode))
-	}
-	if idempotencyKey != "" {
-		ctx = invocation.WithIdempotencyKey(ctx, idempotencyKey)
-	}
-	attrs := workflowAgentDeliveryLogAttrs(req, p, delivery, session, turn, fieldName, idempotencyKey, params)
-	slog.InfoContext(ctx, "workflow agent delivery attempting", attrs...)
-	result, err := invoker.Invoke(ctx, p, pluginName, strings.TrimSpace(target.Instance), operation, params)
-	if err != nil {
-		attrs = append(attrs, "error", err)
-		slog.WarnContext(ctx, "workflow agent delivery failed", attrs...)
-		return err
-	}
-	attrs = append(attrs, workflowAgentOperationResultLogAttrs("delivery_result", result)...)
-	if result != nil && result.Status >= http.StatusBadRequest {
-		slog.WarnContext(ctx, "workflow agent delivery failed", attrs...)
-		return fmt.Errorf("workflow agent %s returned status %d", fieldName, result.Status)
-	}
-	slog.InfoContext(ctx, "workflow agent delivery completed", attrs...)
-	return nil
-}
-
 func workflowOutputDeliverySignal(signals []coreworkflow.Signal) *coreworkflow.Signal {
 	if len(signals) == 0 {
 		return nil
@@ -811,279 +902,89 @@ func workflowOutputDeliverySignal(signals []coreworkflow.Signal) *coreworkflow.S
 	return &signals[len(signals)-1]
 }
 
-func workflowInheritedOutputDelivery(delivery *coreworkflow.OutputDelivery, signal *coreworkflow.Signal) *coreworkflow.OutputDelivery {
-	if delivery == nil {
-		return nil
-	}
-	out := *delivery
-	out.Target.Input = maps.Clone(delivery.Target.Input)
-	out.InputBindings = make([]coreworkflow.OutputBinding, 0, len(delivery.InputBindings))
-	for i := range delivery.InputBindings {
-		binding := delivery.InputBindings[i]
-		source := binding.Value
-		switch {
-		case strings.TrimSpace(source.SignalPayload) != "":
-			if signal == nil {
-				return nil
-			}
-			value, ok, err := workflowMapPathValue(signal.Payload, source.SignalPayload)
-			if err != nil || !ok || value == nil {
-				return nil
-			}
-			binding.Value = coreworkflow.OutputValueSource{Literal: value}
-		case strings.TrimSpace(source.SignalMetadata) != "":
-			if signal == nil {
-				return nil
-			}
-			value, ok, err := workflowMapPathValue(signal.Metadata, source.SignalMetadata)
-			if err != nil || !ok || value == nil {
-				return nil
-			}
-			binding.Value = coreworkflow.OutputValueSource{Literal: value}
-		default:
-			binding.Value = source
-		}
-		out.InputBindings = append(out.InputBindings, binding)
-	}
-	return &out
-}
-
-func workflowOutputBindingValue(turn *coreagent.Turn, signal *coreworkflow.Signal, session *coreagent.Session, source coreworkflow.OutputValueSource) (any, bool, error) {
-	switch {
-	case strings.TrimSpace(source.AgentOutput) != "":
-		return workflowAgentOutputValue(turn, source.AgentOutput)
-	case strings.TrimSpace(source.SignalPayload) != "":
-		if signal == nil {
-			return nil, false, nil
-		}
-		return workflowMapPathValue(signal.Payload, source.SignalPayload)
-	case strings.TrimSpace(source.SignalMetadata) != "":
-		if signal == nil {
-			return nil, false, nil
-		}
-		return workflowMapPathValue(signal.Metadata, source.SignalMetadata)
-	case strings.TrimSpace(source.AgentSession) != "":
-		return workflowAgentSessionValue(session, source.AgentSession)
-	case source.Literal != nil:
-		return source.Literal, true, nil
-	default:
-		return nil, false, nil
-	}
-}
-
-func workflowAgentOutputValue(turn *coreagent.Turn, path string) (any, bool, error) {
-	path = strings.TrimSpace(path)
-	if turn == nil {
-		return nil, false, nil
-	}
-	switch path {
-	case "text", "output_text", "outputText":
-		return turn.OutputText, true, nil
-	case "structured_output", "structuredOutput":
-		if turn.StructuredOutput == nil {
-			return nil, false, nil
-		}
-		return maps.Clone(turn.StructuredOutput), true, nil
-	}
-	for _, prefix := range []string{"structured_output.", "structuredOutput."} {
-		if strings.HasPrefix(path, prefix) {
-			return workflowMapPathValue(turn.StructuredOutput, strings.TrimPrefix(path, prefix))
-		}
-	}
-	return nil, false, fmt.Errorf("%w: unsupported agent output source %q", invocation.ErrInvalidInvocation, path)
-}
-
-func workflowAgentSessionValue(session *coreagent.Session, path string) (any, bool, error) {
-	path = strings.TrimSpace(path)
-	if session == nil {
-		return nil, false, nil
-	}
-	switch path {
-	case "id", "session_id", "sessionId":
-		return session.ID, true, nil
-	case "provider_name", "providerName":
-		return session.ProviderName, true, nil
-	case "model":
-		return session.Model, true, nil
-	}
-	return nil, false, fmt.Errorf("%w: unsupported agent session source %q", invocation.ErrInvalidInvocation, path)
-}
-
 func workflowMapPathValue(values map[string]any, path string) (any, bool, error) {
 	if len(values) == 0 {
 		return nil, false, nil
 	}
+	return workflowPathValue(values, path)
+}
+
+func workflowPathValue(root any, path string) (any, bool, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return nil, false, nil
+		return root, true, nil
 	}
-	if value, ok := values[path]; ok {
-		return value, true, nil
+	segments, err := workflowPathSegments(path)
+	if err != nil {
+		return nil, false, err
 	}
-	parts := strings.Split(path, ".")
-	var current any = values
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			return nil, false, fmt.Errorf("%w: empty path segment in %q", invocation.ErrInvalidInvocation, path)
-		}
-		currentMap, ok := current.(map[string]any)
-		if !ok {
+	current := root
+	for _, segment := range segments {
+		switch typed := current.(type) {
+		case map[string]any:
+			next, ok := typed[segment.key]
+			if !ok {
+				return nil, false, nil
+			}
+			current = next
+		case []any:
+			if !segment.indexSet || segment.index < 0 || segment.index >= len(typed) {
+				return nil, false, nil
+			}
+			current = typed[segment.index]
+		default:
 			return nil, false, nil
 		}
-		next, ok := currentMap[part]
-		if !ok {
-			return nil, false, nil
-		}
-		current = next
 	}
 	return current, true, nil
 }
 
-func workflowAgentTimeout(seconds int) time.Duration {
-	if seconds <= 0 {
-		return 5 * time.Minute
-	}
-	return time.Duration(seconds) * time.Second
+type workflowPathSegment struct {
+	key      string
+	index    int
+	indexSet bool
 }
 
-func workflowAgentIdempotencyKey(req coreworkflow.InvokeOperationRequest, suffix string) string {
-	return strings.Join([]string{
-		"workflow",
-		strings.TrimSpace(req.ProviderName),
-		strings.TrimSpace(req.RunID),
-		strings.TrimSpace(suffix),
-	}, ":")
-}
-
-func workflowAgentSessionIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {
-	if workflowKey := workflowInvocationWorkflowKey(req.Metadata); workflowKey != "" {
-		return strings.Join([]string{
-			"workflow",
-			strings.TrimSpace(req.ProviderName),
-			"workflow-key",
-			workflowKey,
-			"session",
-		}, ":")
-	}
-	return workflowAgentIdempotencyKey(req, "session")
-}
-
-func workflowInvocationWorkflowKey(metadata map[string]any) string {
-	if len(metadata) == 0 {
-		return ""
-	}
-	for _, key := range []string{"workflow_key", "workflowKey"} {
-		if value, ok := metadata[key].(string); ok {
-			if value = strings.TrimSpace(value); value != "" {
-				return value
+func workflowPathSegments(path string) ([]workflowPathSegment, error) {
+	var out []workflowPathSegment
+	for i := 0; i < len(path); {
+		switch path[i] {
+		case '.':
+			i++
+			continue
+		case '[':
+			end := strings.IndexByte(path[i:], ']')
+			if end < 0 {
+				return nil, fmt.Errorf("%w: invalid workflow path %q", invocation.ErrInvalidInvocation, path)
 			}
+			token := strings.TrimSpace(path[i+1 : i+end])
+			if strings.HasPrefix(token, "'") || strings.HasPrefix(token, "\"") {
+				unquoted, err := strconv.Unquote(token)
+				if err != nil {
+					return nil, fmt.Errorf("%w: invalid workflow path %q", invocation.ErrInvalidInvocation, path)
+				}
+				out = append(out, workflowPathSegment{key: unquoted})
+			} else {
+				index, err := strconv.Atoi(token)
+				if err != nil {
+					return nil, fmt.Errorf("%w: invalid workflow path %q", invocation.ErrInvalidInvocation, path)
+				}
+				out = append(out, workflowPathSegment{index: index, indexSet: true})
+			}
+			i += end + 1
+		default:
+			start := i
+			for i < len(path) && path[i] != '.' && path[i] != '[' {
+				i++
+			}
+			key := strings.TrimSpace(path[start:i])
+			if key == "" {
+				return nil, fmt.Errorf("%w: invalid workflow path %q", invocation.ErrInvalidInvocation, path)
+			}
+			out = append(out, workflowPathSegment{key: key})
 		}
 	}
-	return ""
-}
-
-func workflowAgentTurnIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {
-	batchID := workflowSignalBatchID(req.Signals)
-	if batchID == "" {
-		return workflowAgentIdempotencyKey(req, "turn")
-	}
-	return workflowAgentIdempotencyKey(req, "turn:"+batchID)
-}
-
-func workflowAgentStepTurnIdempotencyKey(req coreworkflow.InvokeOperationRequest, stepID string) string {
-	batchID := workflowSignalBatchID(req.Signals)
-	suffix := "step:" + strings.TrimSpace(stepID) + ":turn"
-	if batchID != "" {
-		suffix += ":" + batchID
-	}
-	return workflowAgentIdempotencyKey(req, suffix)
-}
-
-func workflowAgentSessionReadyDeliveryIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {
-	batchID := workflowSignalBatchID(req.Signals)
-	if batchID == "" {
-		return workflowAgentIdempotencyKey(req, "session-ready")
-	}
-	return workflowAgentIdempotencyKey(req, "session-ready:"+batchID)
-}
-
-func workflowAgentOutputDeliveryIdempotencyKey(req coreworkflow.InvokeOperationRequest) string {
-	batchID := workflowSignalBatchID(req.Signals)
-	if batchID == "" {
-		return workflowAgentIdempotencyKey(req, "output")
-	}
-	return workflowAgentIdempotencyKey(req, "output:"+batchID)
-}
-
-func workflowAgentStepOutputDeliveryIdempotencyKey(req coreworkflow.InvokeOperationRequest, stepID string) string {
-	batchID := workflowSignalBatchID(req.Signals)
-	suffix := "step:" + strings.TrimSpace(stepID) + ":output"
-	if batchID != "" {
-		suffix += ":" + batchID
-	}
-	return workflowAgentIdempotencyKey(req, suffix)
-}
-
-func workflowSignalBatchID(signals []coreworkflow.Signal) string {
-	if len(signals) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(signals))
-	for i := range signals {
-		signal := &signals[i]
-		key := strings.TrimSpace(signal.IdempotencyKey)
-		if key == "" {
-			key = strings.TrimSpace(signal.ID)
-		}
-		if key == "" && signal.Sequence != 0 {
-			key = fmt.Sprintf("seq-%d", signal.Sequence)
-		}
-		if key == "" {
-			key = strings.TrimSpace(signal.Name)
-		}
-		parts = append(parts, key)
-	}
-	body, err := json.Marshal(parts)
-	if err != nil {
-		return "signal-batch-" + fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%#v", parts))))
-	}
-	return "signal-batch-" + fmt.Sprintf("%x", sha256.Sum256(body))
-}
-
-const (
-	workflowSignalContextMaxSignals     = 10
-	workflowSignalContextMaxItems       = 20
-	workflowSignalContextMaxDepth       = 4
-	workflowSignalContextMaxStringBytes = 4096
-	workflowRuntimeLogBodyMaxBytes      = 4096
-	workflowSignalMessageMaxBytes       = 64 * 1024
-	workflowSignalMessagePrefix         = "Workflow signal batch:\n"
-)
-
-func workflowSignalMessage(signals []coreworkflow.Signal) *coreagent.Message {
-	if len(signals) == 0 {
-		return nil
-	}
-	payload := map[string]any{
-		"signals": workflowSignalsContext(signals),
-	}
-	if omitted := len(signals) - workflowSignalContextMaxSignals; omitted > 0 {
-		payload["omittedSignals"] = omitted
-	}
-	body, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		body = []byte(fmt.Sprintf("%#v", payload))
-	}
-	textMaxBytes := workflowSignalMessageMaxBytes - len(workflowSignalMessagePrefix)
-	text := truncateWorkflowString(string(body), textMaxBytes)
-	return &coreagent.Message{
-		Role: "user",
-		Text: workflowSignalMessagePrefix + text,
-		Metadata: map[string]any{
-			"gestalt.workflow.signal_batch": true,
-		},
-	}
+	return out, nil
 }
 
 func waitForWorkflowAgentTurn(ctx context.Context, agentManager agentmanager.Service, p *principal.Principal, turn *coreagent.Turn) (*coreagent.Turn, error) {
@@ -1112,20 +1013,6 @@ func waitForWorkflowAgentTurn(ctx context.Context, agentManager agentmanager.Ser
 			current = next
 		}
 	}
-}
-
-func workflowInvocationParams(req coreworkflow.InvokeOperationRequest) map[string]any {
-	var params map[string]any
-	if req.Target.Plugin != nil {
-		params = maps.Clone(req.Target.Plugin.Input)
-	}
-	if req.Input != nil {
-		if params == nil {
-			params = map[string]any{}
-		}
-		maps.Copy(params, req.Input)
-	}
-	return params
 }
 
 func workflowInvocationContext(req coreworkflow.InvokeOperationRequest) map[string]any {
@@ -1160,197 +1047,6 @@ func workflowInvocationContext(req coreworkflow.InvokeOperationRequest) map[stri
 		ctxValue["executionRef"] = executionRef
 	}
 	return ctxValue
-}
-
-func workflowAgentLogAttrs(req coreworkflow.InvokeOperationRequest, p *principal.Principal, agentTarget *coreworkflow.AgentTarget, session *coreagent.Session, turn *coreagent.Turn) []any {
-	attrs := []any{
-		"workflow_provider", strings.TrimSpace(req.ProviderName),
-		"workflow_run_id", strings.TrimSpace(req.RunID),
-		"workflow_execution_ref", strings.TrimSpace(req.ExecutionRef),
-		"workflow_signal_count", len(req.Signals),
-		"workflow_signal_batch_id", workflowSignalBatchID(req.Signals),
-	}
-	attrs = append(attrs, workflowTriggerLogAttrs(req.Trigger)...)
-	if createdBy := req.CreatedBy; strings.TrimSpace(createdBy.SubjectID) != "" {
-		attrs = append(attrs,
-			"workflow_created_by_subject_id", strings.TrimSpace(createdBy.SubjectID),
-			"workflow_created_by_subject_kind", strings.TrimSpace(createdBy.SubjectKind),
-			"workflow_created_by_auth_source", strings.TrimSpace(createdBy.AuthSource),
-		)
-	}
-	if len(req.Signals) > 0 {
-		signal := req.Signals[len(req.Signals)-1]
-		attrs = append(attrs,
-			"workflow_last_signal_id", strings.TrimSpace(signal.ID),
-			"workflow_last_signal_name", strings.TrimSpace(signal.Name),
-			"workflow_last_signal_idempotency_key", strings.TrimSpace(signal.IdempotencyKey),
-			"workflow_last_signal_sequence", signal.Sequence,
-		)
-	}
-	if p = principal.Canonicalized(p); p != nil {
-		attrs = append(attrs,
-			"subject_id", strings.TrimSpace(p.SubjectID),
-			"subject_kind", workflowSubjectKind(p.SubjectID, string(p.Kind)),
-			"credential_subject_id", strings.TrimSpace(p.CredentialSubjectID),
-			"auth_source", strings.TrimSpace(p.AuthSource()),
-		)
-	}
-	if agentTarget != nil {
-		attrs = append(attrs,
-			"agent_provider", strings.TrimSpace(agentTarget.ProviderName),
-			"agent_model", strings.TrimSpace(agentTarget.Model),
-			"agent_timeout_seconds", agentTarget.TimeoutSeconds,
-			"agent_tool_refs", agentToolRefsLogValue(agentTarget.ToolRefs),
-		)
-		if agentTarget.SessionReadyDelivery != nil {
-			attrs = append(attrs, "agent_session_ready_delivery", workflowAgentDeliveryTargetLogValue(agentTarget.SessionReadyDelivery))
-		}
-		if agentTarget.OutputDelivery != nil {
-			attrs = append(attrs, "agent_output_delivery", workflowAgentDeliveryTargetLogValue(agentTarget.OutputDelivery))
-		}
-	}
-	if session != nil {
-		attrs = append(attrs,
-			"agent_session_id", strings.TrimSpace(session.ID),
-			"agent_session_provider", strings.TrimSpace(session.ProviderName),
-			"agent_session_model", strings.TrimSpace(session.Model),
-		)
-	}
-	if turn != nil {
-		attrs = append(attrs,
-			"agent_turn_id", strings.TrimSpace(turn.ID),
-			"agent_turn_status", strings.TrimSpace(string(turn.Status)),
-			"agent_turn_provider", strings.TrimSpace(turn.ProviderName),
-			"agent_turn_model", strings.TrimSpace(turn.Model),
-		)
-	}
-	return attrs
-}
-
-func workflowTriggerLogAttrs(trigger coreworkflow.RunTrigger) []any {
-	switch {
-	case trigger.Schedule != nil:
-		attrs := []any{
-			"workflow_trigger_kind", "schedule",
-			"workflow_schedule_id", strings.TrimSpace(trigger.Schedule.ScheduleID),
-		}
-		if trigger.Schedule.ScheduledFor != nil {
-			attrs = append(attrs, "workflow_scheduled_for", trigger.Schedule.ScheduledFor.UTC().Format(time.RFC3339Nano))
-		}
-		return attrs
-	case trigger.Event != nil:
-		attrs := []any{
-			"workflow_trigger_kind", "event",
-			"workflow_event_trigger_id", strings.TrimSpace(trigger.Event.TriggerID),
-			"workflow_event_id", strings.TrimSpace(trigger.Event.Event.ID),
-			"workflow_event_type", strings.TrimSpace(trigger.Event.Event.Type),
-			"workflow_event_source", strings.TrimSpace(trigger.Event.Event.Source),
-			"workflow_event_subject", strings.TrimSpace(trigger.Event.Event.Subject),
-		}
-		return attrs
-	case trigger.Manual:
-		return []any{"workflow_trigger_kind", "manual"}
-	default:
-		return nil
-	}
-}
-
-func workflowSubjectKind(subjectID, fallback string) string {
-	if kind := strings.TrimSpace(fallback); kind != "" {
-		return kind
-	}
-	if kind, _, ok := core.ParseSubjectID(subjectID); ok {
-		return kind
-	}
-	return ""
-}
-
-func workflowAgentDeliveryTargetLogValue(delivery *coreworkflow.OutputDelivery) map[string]any {
-	if delivery == nil {
-		return nil
-	}
-	target := delivery.Target
-	out := map[string]any{}
-	if pluginName := strings.TrimSpace(target.PluginName); pluginName != "" {
-		out["plugin"] = pluginName
-	}
-	if operation := strings.TrimSpace(target.Operation); operation != "" {
-		out["operation"] = operation
-	}
-	if connection := strings.TrimSpace(target.Connection); connection != "" {
-		out["connection"] = connection
-	}
-	if instance := strings.TrimSpace(target.Instance); instance != "" {
-		out["instance"] = instance
-	}
-	if credentialMode := strings.TrimSpace(string(delivery.CredentialMode)); credentialMode != "" {
-		out["credential_mode"] = credentialMode
-	}
-	if len(delivery.InputBindings) > 0 {
-		fields := make([]string, 0, len(delivery.InputBindings))
-		for i := range delivery.InputBindings {
-			if field := strings.TrimSpace(delivery.InputBindings[i].InputField); field != "" {
-				fields = append(fields, field)
-			}
-		}
-		sort.Strings(fields)
-		out["input_fields"] = fields
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func workflowAgentDeliveryLogAttrs(req coreworkflow.InvokeOperationRequest, p *principal.Principal, delivery *coreworkflow.OutputDelivery, session *coreagent.Session, turn *coreagent.Turn, fieldName, idempotencyKey string, params map[string]any) []any {
-	attrs := workflowAgentLogAttrs(req, p, nil, session, turn)
-	target := delivery.Target
-	attrs = append(attrs,
-		"delivery_field", strings.TrimSpace(fieldName),
-		"delivery_plugin", strings.TrimSpace(target.PluginName),
-		"delivery_operation", strings.TrimSpace(target.Operation),
-		"delivery_connection", strings.TrimSpace(target.Connection),
-		"delivery_instance", strings.TrimSpace(target.Instance),
-		"delivery_credential_mode", strings.TrimSpace(string(delivery.CredentialMode)),
-		"delivery_idempotency_key", strings.TrimSpace(idempotencyKey),
-		"delivery_input_fields", workflowMapKeys(params),
-	)
-	return attrs
-}
-
-func workflowMapKeys(value map[string]any) []string {
-	if len(value) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(value))
-	for key := range value {
-		if key = strings.TrimSpace(key); key != "" {
-			out = append(out, key)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func workflowAgentOperationResultLogAttrs(prefix string, result *core.OperationResult) []any {
-	if result == nil {
-		return []any{prefix + "_nil", true}
-	}
-	attrs := []any{prefix + "_status", result.Status}
-	attrs = append(attrs, workflowAgentBodyLogAttrs(prefix, result.Body)...)
-	return attrs
-}
-
-func workflowAgentBodyLogAttrs(prefix, body string) []any {
-	attrs := []any{
-		prefix + "_body", truncateWorkflowString(body, workflowRuntimeLogBodyMaxBytes),
-		prefix + "_body_bytes", len([]byte(body)),
-		prefix + "_body_truncated", len([]byte(body)) > workflowRuntimeLogBodyMaxBytes,
-	}
-	if body != "" {
-		attrs = append(attrs, prefix+"_body_sha256", fmt.Sprintf("%x", sha256.Sum256([]byte(body))))
-	}
-	return attrs
 }
 
 func workflowSignalsContext(signals []coreworkflow.Signal) []map[string]any {
@@ -1589,73 +1285,35 @@ func truncateWorkflowString(value string, maxBytes int) string {
 
 func workflowTargetContext(target coreworkflow.Target) map[string]any {
 	value := map[string]any{}
-	if target.Agent != nil {
-		agentTarget := *target.Agent
-		value["kind"] = "agent"
-		if providerName := strings.TrimSpace(agentTarget.ProviderName); providerName != "" {
-			value["agentProvider"] = providerName
-		}
-		if model := strings.TrimSpace(agentTarget.Model); model != "" {
-			value["model"] = model
-		}
-		if len(agentTarget.ToolRefs) > 0 {
-			tools := make([]map[string]any, 0, len(agentTarget.ToolRefs))
-			for i := range agentTarget.ToolRefs {
-				ref := agentTarget.ToolRefs[i]
-				tool := map[string]any{}
-				if systemName := strings.TrimSpace(ref.System); systemName != "" {
-					tool["system"] = systemName
-				}
-				if pluginName := strings.TrimSpace(ref.Plugin); pluginName != "" {
-					tool["plugin"] = pluginName
-				}
-				if operation := strings.TrimSpace(ref.Operation); operation != "" {
-					tool["operation"] = operation
-				}
-				if len(tool) > 0 {
-					tools = append(tools, tool)
-				}
-			}
-			value["tools"] = tools
-		}
-		if delivery := agentTarget.OutputDelivery; delivery != nil {
-			outputDelivery := map[string]any{}
-			if pluginName := strings.TrimSpace(delivery.Target.PluginName); pluginName != "" {
-				outputDelivery["plugin"] = pluginName
-			}
-			if operation := strings.TrimSpace(delivery.Target.Operation); operation != "" {
-				outputDelivery["operation"] = operation
-			}
-			if len(outputDelivery) > 0 {
-				value["outputDelivery"] = outputDelivery
-			}
-		}
+	if len(target.Steps) == 0 {
 		return value
 	}
-	if target.Plugin == nil {
-		return value
+	steps := make([]map[string]any, 0, len(target.Steps))
+	for i := range target.Steps {
+		step := target.Steps[i]
+		item := map[string]any{"id": strings.TrimSpace(step.ID)}
+		switch {
+		case step.Plugin != nil:
+			item["kind"] = "plugin"
+			item["plugin"] = strings.TrimSpace(step.Plugin.Name)
+			item["operation"] = strings.TrimSpace(step.Plugin.Operation)
+		case step.Agent != nil:
+			item["kind"] = "agent"
+			item["agentProvider"] = strings.TrimSpace(step.Agent.ProviderName)
+			item["model"] = strings.TrimSpace(step.Agent.Model)
+		default:
+			item["kind"] = "unknown"
+		}
+		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
+			item["outputDelivery"] = map[string]any{
+				"plugin":    strings.TrimSpace(step.OutputDelivery.Plugin.Name),
+				"operation": strings.TrimSpace(step.OutputDelivery.Plugin.Operation),
+			}
+		}
+		steps = append(steps, item)
 	}
-	pluginTarget := *target.Plugin
-	plugin := map[string]any{}
-	if pluginName := strings.TrimSpace(pluginTarget.PluginName); pluginName != "" {
-		value["kind"] = "plugin"
-		plugin["pluginName"] = pluginName
-	}
-	if operation := strings.TrimSpace(pluginTarget.Operation); operation != "" {
-		plugin["operation"] = operation
-	}
-	if connection := strings.TrimSpace(pluginTarget.Connection); connection != "" {
-		plugin["connection"] = connection
-	}
-	if instance := strings.TrimSpace(pluginTarget.Instance); instance != "" {
-		plugin["instance"] = instance
-	}
-	if pluginTarget.Input != nil {
-		plugin["input"] = maps.Clone(pluginTarget.Input)
-	}
-	if len(plugin) > 0 {
-		value["plugin"] = plugin
-	}
+	value["kind"] = "steps"
+	value["steps"] = steps
 	return value
 }
 

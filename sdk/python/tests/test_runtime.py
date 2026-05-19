@@ -1477,10 +1477,15 @@ class WorkflowRuntimeTests(unittest.TestCase):
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)
         target = workflow_pb2.BoundWorkflowTarget(
-            plugin=workflow_pb2.BoundWorkflowPluginTarget(
-                plugin_name="demo",
-                operation="sync",
-            )
+            steps=[
+                workflow_pb2.WorkflowStep(
+                    id="sync",
+                    plugin=workflow_pb2.WorkflowStepPluginCall(
+                        name="demo",
+                        operation="sync",
+                    ),
+                )
+            ]
         )
 
         created = wrapped.CreateDefinition(

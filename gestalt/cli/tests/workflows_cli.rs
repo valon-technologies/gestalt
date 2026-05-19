@@ -8,11 +8,14 @@ const SCHEDULE_JSON: &str = r#"{
     "cron":"0 0 * * *",
     "timezone":"UTC",
     "target":{
-        "plugin":{
-            "name":"dummy",
-            "operation":"doit",
-            "input":{"k":"v"}
-        }
+        "steps":[{
+            "id":"doit",
+            "plugin":{
+                "name":"dummy",
+                "operation":"doit",
+                "input":{"literal":{"k":"v"}}
+            }
+        }]
     },
     "paused":false,
     "createdAt":"2026-04-20T00:00:00Z",
@@ -25,11 +28,14 @@ const TRIGGER_JSON: &str = r#"{
     "provider":"test-provider",
     "match":{"type":"dummy.event","source":"dummy","subject":"item"},
     "target":{
-        "plugin":{
-            "name":"dummy",
-            "operation":"doit",
-            "input":{"k":"v"}
-        }
+        "steps":[{
+            "id":"doit",
+            "plugin":{
+                "name":"dummy",
+                "operation":"doit",
+                "input":{"literal":{"k":"v"}}
+            }
+        }]
     },
     "paused":false,
     "createdAt":"2026-04-20T00:00:00Z",
@@ -41,16 +47,49 @@ const AGENT_TRIGGER_JSON: &str = r#"{
     "provider":"local",
     "match":{"type":"roadmap.item.updated","source":"roadmap","subject":"item"},
     "target":{
-        "agent":{
-            "provider":"simple",
-            "model":"fast",
-            "prompt":"Summarize the updated roadmap item.",
-            "toolRefs":[{"plugin":"roadmap","operation":"items.get"}]
-        }
+        "steps":[{
+            "id":"summarize",
+            "agent":{
+                "provider":"simple",
+                "model":"fast",
+                "prompt":{"template":"Summarize the updated roadmap item."},
+                "tools":[{"plugin":"roadmap","operation":"items.get"}]
+            }
+        }]
     },
     "paused":false,
     "createdAt":"2026-04-20T00:00:00Z",
     "updatedAt":"2026-04-20T00:00:00Z"
+}"#;
+
+const MULTI_STEP_SCHEDULE_JSON: &str = r#"{
+    "id":"sched-multi",
+    "provider":"test-provider",
+    "cron":"0 0 * * *",
+    "timezone":"UTC",
+    "target":{
+        "steps":[
+            {
+                "id":"summarize",
+                "agent":{
+                    "provider":"simple",
+                    "prompt":{"template":"Summarize the updated roadmap item."}
+                }
+            },
+            {
+                "id":"notify",
+                "plugin":{
+                    "name":"dummy",
+                    "operation":"notify",
+                    "input":{"literal":{"k":"v"}}
+                }
+            }
+        ]
+    },
+    "paused":false,
+    "createdAt":"2026-04-20T00:00:00Z",
+    "updatedAt":"2026-04-20T00:00:00Z",
+    "nextRunAt":"2026-04-21T00:00:00Z"
 }"#;
 
 const RUN_JSON: &str = r#"{
@@ -58,11 +97,14 @@ const RUN_JSON: &str = r#"{
     "provider":"test-provider",
     "status":"succeeded",
     "target":{
-        "plugin":{
-            "name":"dummy",
-            "operation":"doit",
-            "input":{"k":"v"}
-        }
+        "steps":[{
+            "id":"doit",
+            "plugin":{
+                "name":"dummy",
+                "operation":"doit",
+                "input":{"literal":{"k":"v"}}
+            }
+        }]
     },
     "trigger":{"kind":"schedule","scheduleId":"sched-1"},
     "createdAt":"2026-04-20T00:00:00Z",
@@ -126,8 +168,9 @@ fn test_cli_lists_schedules() {
 #[test]
 fn test_cli_list_schedules_filters_by_plugin() {
     let body = r#"[
-        {"id":"sched-a","provider":"p","cron":"* * * * *","target":{"plugin":{"name":"alpha","operation":"x"}},"paused":false},
-        {"id":"sched-b","provider":"p","cron":"* * * * *","target":{"plugin":{"name":"beta","operation":"y"}},"paused":false}
+        {"id":"sched-a","provider":"p","cron":"* * * * *","target":{"steps":[{"id":"x","plugin":{"name":"alpha","operation":"x"}}]},"paused":false},
+        {"id":"sched-b","provider":"p","cron":"* * * * *","target":{"steps":[{"id":"y","plugin":{"name":"beta","operation":"y"}}]},"paused":false},
+        {"id":"sched-c","provider":"p","cron":"* * * * *","target":{"steps":[{"id":"inspect","agent":{"provider":"simple","prompt":{"template":"Inspect"}}},{"id":"z","plugin":{"name":"beta","operation":"z"}}]},"paused":false}
     ]"#;
     let mut server = Server::new();
     let _mock = authed_json_mock!(
@@ -145,6 +188,7 @@ fn test_cli_list_schedules_filters_by_plugin() {
         .assert()
         .success()
         .stdout(predicate::str::contains("sched-b"))
+        .stdout(predicate::str::contains("sched-c"))
         .stdout(predicate::str::contains("sched-a").not());
 }
 
@@ -183,7 +227,7 @@ fn test_cli_creates_schedule() {
         r#"{
             "cron":"0 */5 * * *",
             "timezone":"UTC",
-            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}}},
+            "target":{"steps":[{"id":"doit","plugin":{"name":"dummy","operation":"doit","input":{"literal":{"channel":"C1","text":"hi"}}}}]},
             "paused":false
         }"#
         .to_string(),
@@ -238,7 +282,7 @@ fn test_cli_updates_schedule_merges_existing_fields() {
         r#"{
             "cron":"15 * * * *",
             "timezone":"UTC",
-            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"k":"v"}}},
+            "target":{"steps":[{"id":"doit","plugin":{"name":"dummy","operation":"doit","input":{"literal":{"k":"v"}}}}]},
             "paused":true
         }"#
         .to_string(),
@@ -259,6 +303,183 @@ fn test_cli_updates_schedule_merges_existing_fields() {
         ])
         .assert()
         .success();
+}
+
+#[test]
+fn test_cli_updates_single_plugin_schedule_preserves_step_fields() {
+    let existing = r#"{
+        "id":"sched-custom",
+        "provider":"test-provider",
+        "cron":"0 0 * * *",
+        "timezone":"UTC",
+        "target":{
+            "steps":[{
+                "id":"custom-step",
+                "inputs":{"item":{"runInput":"item"}},
+                "plugin":{
+                    "name":"dummy",
+                    "operation":"doit",
+                    "credentialMode":"user",
+                    "input":{"literal":{"k":"v"}}
+                },
+                "when":{"value":{"runInput":"enabled"},"equals":true},
+                "timeoutSeconds":30,
+                "outputDelivery":{
+                    "plugin":{
+                        "name":"notify",
+                        "operation":"reply",
+                        "input":{"literal":{"channel":"C1"}}
+                    }
+                },
+                "metadata":{"owner":"ops"}
+            }]
+        },
+        "paused":false
+    }"#;
+    let mut server = Server::new();
+    let _get = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/schedules/sched-custom",
+        StatusCode::OK
+    )
+    .with_body(existing)
+    .create();
+
+    let _put = authed_json_mock!(
+        server,
+        Method::PUT,
+        "/api/v1/workflow/schedules/sched-custom",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{
+            "cron":"0 0 * * *",
+            "timezone":"UTC",
+            "target":{
+                "steps":[{
+                    "id":"custom-step",
+                    "inputs":{"item":{"runInput":"item"}},
+                    "plugin":{
+                        "name":"dummy",
+                        "operation":"doit.updated",
+                        "credentialMode":"user",
+                        "connection":"prod",
+                        "input":{"literal":{"k":"v"}}
+                    },
+                    "when":{"value":{"runInput":"enabled"},"equals":true},
+                    "timeoutSeconds":30,
+                    "outputDelivery":{
+                        "plugin":{
+                            "name":"notify",
+                            "operation":"reply",
+                            "input":{"literal":{"channel":"C1"}}
+                        }
+                    },
+                    "metadata":{"owner":"ops"}
+                }]
+            },
+            "paused":false
+        }"#
+        .to_string(),
+    ))
+    .with_body(existing)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflow",
+            "schedules",
+            "update",
+            "sched-custom",
+            "--operation",
+            "doit.updated",
+            "--connection",
+            "prod",
+        ])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_cli_updates_schedule_preserves_multistep_target_without_target_flags() {
+    let mut server = Server::new();
+    let _get = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/schedules/sched-multi",
+        StatusCode::OK
+    )
+    .with_body(MULTI_STEP_SCHEDULE_JSON)
+    .create();
+
+    let _put = authed_json_mock!(
+        server,
+        Method::PUT,
+        "/api/v1/workflow/schedules/sched-multi",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{
+            "cron":"15 * * * *",
+            "timezone":"UTC",
+            "target":{
+                "steps":[
+                    {"id":"summarize","agent":{"provider":"simple","prompt":{"template":"Summarize the updated roadmap item."}}},
+                    {"id":"notify","plugin":{"name":"dummy","operation":"notify","input":{"literal":{"k":"v"}}}}
+                ]
+            },
+            "paused":false
+        }"#
+        .to_string(),
+    ))
+    .with_body(MULTI_STEP_SCHEDULE_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflow",
+            "schedules",
+            "update",
+            "sched-multi",
+            "--cron",
+            "15 * * * *",
+        ])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_cli_rejects_partial_schedule_target_update_for_multistep_target() {
+    let mut server = Server::new();
+    let _get = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/schedules/sched-multi",
+        StatusCode::OK
+    )
+    .with_body(MULTI_STEP_SCHEDULE_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflow",
+            "schedules",
+            "update",
+            "sched-multi",
+            "--operation",
+            "notify.updated",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "cannot apply plugin target flags to an existing non-plugin or multi-step schedule",
+        ));
 }
 
 #[test]
@@ -369,8 +590,8 @@ fn test_cli_lists_event_triggers() {
 #[test]
 fn test_cli_list_event_triggers_filters() {
     let body = r#"[
-        {"id":"trg-a","match":{"type":"alpha.created"},"target":{"plugin":{"name":"alpha","operation":"x"}},"paused":false},
-        {"id":"trg-b","match":{"type":"beta.failed"},"target":{"plugin":{"name":"beta","operation":"y"}},"paused":false}
+        {"id":"trg-a","match":{"type":"alpha.created"},"target":{"steps":[{"id":"x","plugin":{"name":"alpha","operation":"x"}}]},"paused":false},
+        {"id":"trg-b","match":{"type":"beta.failed"},"target":{"steps":[{"id":"y","plugin":{"name":"beta","operation":"y"}}]},"paused":false}
     ]"#;
     let mut server = Server::new();
     let _mock = authed_json_mock!(
@@ -433,7 +654,7 @@ fn test_cli_creates_event_trigger() {
     .match_body(Matcher::JsonString(
         r#"{
             "match":{"type":"dummy.event","source":"dummy","subject":"item"},
-            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}}},
+            "target":{"steps":[{"id":"doit","plugin":{"name":"dummy","operation":"doit","input":{"literal":{"channel":"C1","text":"hi"}}}}]},
             "paused":false
         }"#
         .to_string(),
@@ -482,12 +703,15 @@ fn test_cli_creates_event_trigger_from_target_file() {
             "provider":"local",
             "match":{"type":"roadmap.item.updated","source":"roadmap","subject":"item"},
             "target":{
-                "agent":{
-                    "provider":"simple",
-                    "model":"fast",
-                    "prompt":"Summarize the updated roadmap item.",
-                    "toolRefs":[{"plugin":"roadmap","operation":"items.get"}]
-                }
+                "steps":[{
+                    "id":"summarize",
+                    "agent":{
+                        "provider":"simple",
+                        "model":"fast",
+                        "prompt":"Summarize the updated roadmap item.",
+                        "tools":[{"plugin":"roadmap","operation":"items.get"}]
+                    }
+                }]
             },
             "paused":false
         }"#
@@ -517,12 +741,15 @@ fn test_cli_creates_event_trigger_from_target_file() {
         ])
         .write_stdin(
             r#"{
-                "agent": {
-                    "provider": "simple",
-                    "model": "fast",
-                    "prompt": "Summarize the updated roadmap item.",
-                    "toolRefs": [{"plugin": "roadmap", "operation": "items.get"}]
-                }
+                "steps": [{
+                    "id": "summarize",
+                    "agent": {
+                        "provider": "simple",
+                        "model": "fast",
+                        "prompt": "Summarize the updated roadmap item.",
+                        "tools": [{"plugin": "roadmap", "operation": "items.get"}]
+                    }
+                }]
             }"#,
         )
         .assert()
@@ -553,7 +780,7 @@ fn test_cli_updates_event_trigger_merges_existing_fields() {
         r#"{
             "provider":"test-provider",
             "match":{"type":"dummy.event.updated","source":"dummy","subject":"item"},
-            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"k":"v"}}},
+            "target":{"steps":[{"id":"doit","plugin":{"name":"dummy","operation":"doit","input":{"literal":{"k":"v"}}}}]},
             "paused":true
         }"#
         .to_string(),
@@ -574,6 +801,90 @@ fn test_cli_updates_event_trigger_merges_existing_fields() {
         ])
         .assert()
         .success();
+}
+
+#[test]
+fn test_cli_updates_event_trigger_preserves_agent_target_without_target_flags() {
+    let mut server = Server::new();
+    let _get = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/event-triggers/trg-agent",
+        StatusCode::OK
+    )
+    .with_body(AGENT_TRIGGER_JSON)
+    .create();
+
+    let _put = authed_json_mock!(
+        server,
+        Method::PUT,
+        "/api/v1/workflow/event-triggers/trg-agent",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{
+            "provider":"local",
+            "match":{"type":"roadmap.item.changed","source":"roadmap","subject":"item"},
+            "target":{
+                "steps":[{
+                    "id":"summarize",
+                    "agent":{
+                        "provider":"simple",
+                        "model":"fast",
+                        "prompt":{"template":"Summarize the updated roadmap item."},
+                        "tools":[{"plugin":"roadmap","operation":"items.get"}]
+                    }
+                }]
+            },
+            "paused":false
+        }"#
+        .to_string(),
+    ))
+    .with_body(AGENT_TRIGGER_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflow",
+            "triggers",
+            "update",
+            "trg-agent",
+            "--type",
+            "roadmap.item.changed",
+        ])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_cli_rejects_partial_trigger_target_update_for_non_plugin_target() {
+    let mut server = Server::new();
+    let _get = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/workflow/event-triggers/trg-agent",
+        StatusCode::OK
+    )
+    .with_body(AGENT_TRIGGER_JSON)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "workflow",
+            "triggers",
+            "update",
+            "trg-agent",
+            "--operation",
+            "notify.updated",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "cannot apply plugin target flags to an existing non-plugin or multi-step trigger",
+        ));
 }
 
 #[test]
@@ -658,7 +969,7 @@ fn test_cli_lists_runs() {
 #[test]
 fn test_cli_list_runs_filters() {
     let body = r#"{
-        "runs":[{"id":"run-b","status":"failed","target":{"plugin":{"name":"beta","operation":"y"}},"trigger":{"kind":"event","triggerId":"evt-1"}}],
+        "runs":[{"id":"run-b","status":"failed","target":{"steps":[{"id":"y","plugin":{"name":"beta","operation":"y"}}]},"trigger":{"kind":"event","triggerId":"evt-1"}}],
         "nextPageToken":"next-filtered"
     }"#;
     let mut server = Server::new();
@@ -732,7 +1043,7 @@ fn test_cli_cancels_run() {
             "id":"run-1",
             "provider":"test-provider",
             "status":"canceled",
-            "target":{"plugin":{"name":"dummy","operation":"doit"}},
+            "target":{"steps":[{"id":"doit","plugin":{"name":"dummy","operation":"doit"}}]},
             "statusMessage":"operator requested"
         }"#,
     )

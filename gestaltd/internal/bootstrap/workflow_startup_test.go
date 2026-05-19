@@ -284,11 +284,11 @@ func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []runtimehost.Ho
 
 func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
-	pluginTarget := target.Plugin
-	if pluginTarget == nil {
-		t.Fatalf("workflow target plugin is nil: %#v", target)
+	if len(target.Steps) == 0 || target.Steps[0].Plugin == nil {
+		t.Fatalf("workflow target plugin step is missing: %#v", target)
 		return ""
 	}
+	pluginTarget := target.Steps[0].Plugin
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
 	if err != nil {
 		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
@@ -352,12 +352,13 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 		executionRef := storeStartupExecutionRef(t, deps, name, testWorkflowPluginTarget("roadmap", "status"))
 		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				Kind: &proto.BoundWorkflowTarget_Plugin{
-					Plugin: &proto.BoundWorkflowPluginTarget{
-						PluginName: "roadmap",
-						Operation:  "status",
-					},
-				},
+				Steps: []*proto.WorkflowStep{{
+					Id: "status",
+					Action: &proto.WorkflowStep_Plugin{Plugin: &proto.WorkflowStepPluginCall{
+						Name:      "roadmap",
+						Operation: "status",
+					}},
+				}},
 			},
 			ExecutionRef: executionRef,
 		})
@@ -484,12 +485,13 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 		}
 		_, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				Kind: &proto.BoundWorkflowTarget_Plugin{
-					Plugin: &proto.BoundWorkflowPluginTarget{
-						PluginName: "roadmap",
-						Operation:  "status",
-					},
-				},
+				Steps: []*proto.WorkflowStep{{
+					Id: "status",
+					Action: &proto.WorkflowStep_Plugin{Plugin: &proto.WorkflowStepPluginCall{
+						Name:      "roadmap",
+						Operation: "status",
+					}},
+				}},
 			},
 		})
 		if err == nil {

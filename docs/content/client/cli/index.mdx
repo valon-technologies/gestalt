@@ -171,10 +171,11 @@ gestalt workflow triggers resume <trigger-id>
 gestalt workflow triggers delete <trigger-id>
 ```
 
-Trigger creation uses the same plugin target input conventions as schedules.
+Trigger creation uses the same single plugin-step input conventions as
+schedules.
 `--type` is required. `--source` and `--subject` are optional exact match
 fields. Use `--target-file file.json` when you want to pass the full workflow
-target object directly, for example an agent target.
+target object directly, for example a multi-step target or an agent step.
 
 ### Event publishing
 

@@ -2129,16 +2129,10 @@ func validateWorkflowScheduleTarget(cfg *Config, key string, schedule *WorkflowS
 		return fmt.Errorf("config validation: workflows.schedules.%s is required", key)
 	}
 	targetPath := "workflows.schedules." + key + ".target"
-	if err := normalizeWorkflowTarget(targetPath, schedule.Target); err != nil {
+	if err := normalizeWorkflowTarget(cfg, targetPath, schedule.Target); err != nil {
 		return err
 	}
-	if schedule.Target.Plugin != nil {
-		if _, ok := cfg.Plugins[schedule.Target.Plugin.Name]; !ok {
-			return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", targetPath, schedule.Target.Plugin.Name)
-		}
-		return nil
-	}
-	return validateWorkflowAgentConfig(cfg, targetPath+".agent", schedule.Target.Agent)
+	return validateWorkflowTargetPlugins(cfg, targetPath, schedule.Target)
 }
 
 func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *WorkflowEventTriggerConfig) error {
@@ -2146,16 +2140,28 @@ func validateWorkflowEventTriggerTarget(cfg *Config, key string, trigger *Workfl
 		return fmt.Errorf("config validation: workflows.eventTriggers.%s is required", key)
 	}
 	targetPath := "workflows.eventTriggers." + key + ".target"
-	if err := normalizeWorkflowTarget(targetPath, trigger.Target); err != nil {
+	if err := normalizeWorkflowTarget(cfg, targetPath, trigger.Target); err != nil {
 		return err
 	}
-	if trigger.Target.Plugin != nil {
-		if _, ok := cfg.Plugins[trigger.Target.Plugin.Name]; !ok {
-			return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", targetPath, trigger.Target.Plugin.Name)
+	return validateWorkflowTargetPlugins(cfg, targetPath, trigger.Target)
+}
+
+func validateWorkflowTargetPlugins(cfg *Config, path string, target *WorkflowTargetConfig) error {
+	for i := range target.Steps {
+		step := &target.Steps[i]
+		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
+		if step.Plugin != nil {
+			if _, ok := cfg.Plugins[step.Plugin.Name]; !ok {
+				return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", stepPath, step.Plugin.Name)
+			}
 		}
-		return nil
+		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
+			if _, ok := cfg.Plugins[step.OutputDelivery.Plugin.Name]; !ok {
+				return fmt.Errorf("config validation: %s.outputDelivery.plugin.name references unknown plugin %q", stepPath, step.OutputDelivery.Plugin.Name)
+			}
+		}
 	}
-	return validateWorkflowAgentConfig(cfg, targetPath+".agent", trigger.Target.Agent)
+	return nil
 }
 
 func normalizeWorkflowRunAs(path string, runAs *WorkflowRunAsConfig) (*WorkflowRunAsConfig, error) {
@@ -2303,27 +2309,134 @@ func normalizeWorkflowExecutionPermissionNames(path string, values []string) ([]
 	return out, nil
 }
 
-func normalizeWorkflowTarget(path string, target *WorkflowTargetConfig) error {
-	if target == nil {
-		return fmt.Errorf("config validation: %s must set exactly one of plugin or agent", path)
+func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetConfig) error {
+	if target == nil || len(target.Steps) == 0 {
+		return fmt.Errorf("config validation: %s.steps is required", path)
 	}
-	hasPlugin := target.Plugin != nil
-	hasAgent := target.Agent != nil
-	if hasPlugin == hasAgent {
-		return fmt.Errorf("config validation: %s must set exactly one of plugin or agent", path)
-	}
-	if hasPlugin {
-		plugin := *target.Plugin
-		if err := normalizeWorkflowPluginTargetConfig(path+".plugin", &plugin, true); err != nil {
+	seen := map[string]struct{}{}
+	for i := range target.Steps {
+		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
+		step := &target.Steps[i]
+		step.ID = strings.TrimSpace(step.ID)
+		if step.ID == "" {
+			return fmt.Errorf("config validation: %s.id is required", stepPath)
+		}
+		if _, exists := seen[step.ID]; exists {
+			return fmt.Errorf("config validation: %s.id duplicates %q", stepPath, step.ID)
+		}
+		if err := normalizeWorkflowValueMapConfig(stepPath+".inputs", step.Inputs); err != nil {
 			return err
 		}
-		target.Plugin = &plugin
-		return nil
+		if err := validateWorkflowStepValueMapRefs(stepPath+".inputs", step.Inputs, seen); err != nil {
+			return err
+		}
+		if (step.Plugin == nil) == (step.Agent == nil) {
+			return fmt.Errorf("config validation: %s must set exactly one of plugin or agent", stepPath)
+		}
+		if step.Plugin != nil {
+			if err := normalizeWorkflowStepPluginCallConfig(stepPath+".plugin", step.Plugin, true); err != nil {
+				return err
+			}
+			if err := validateWorkflowStepValueRefs(stepPath+".plugin.input", step.Plugin.Input, seen); err != nil {
+				return err
+			}
+		}
+		if step.Agent != nil {
+			if err := validateWorkflowStepAgentConfig(cfg, stepPath+".agent", step.Agent); err != nil {
+				return err
+			}
+		}
+		step.Timeout = strings.TrimSpace(step.Timeout)
+		if step.Timeout != "" {
+			if _, err := time.ParseDuration(step.Timeout); err != nil {
+				return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", stepPath, step.Timeout, err)
+			}
+		}
+		if err := normalizeWorkflowStepDeliveryConfig(stepPath+".outputDelivery", step.OutputDelivery, false); err != nil {
+			return err
+		}
+		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
+			if err := validateWorkflowStepValueRefs(stepPath+".outputDelivery.plugin.input", step.OutputDelivery.Plugin.Input, workflowStepSeenWithCurrent(seen, step.ID)); err != nil {
+				return err
+			}
+		}
+		if step.When != nil {
+			if err := normalizeWorkflowValueConfig(stepPath+".when.value", &step.When.Value); err != nil {
+				return err
+			}
+			if !workflowValueConfigIsSet(step.When.Value) {
+				return fmt.Errorf("config validation: %s.when.value is required", stepPath)
+			}
+			if err := validateWorkflowStepValueRefs(stepPath+".when.value", step.When.Value, seen); err != nil {
+				return err
+			}
+			if !step.When.equalsSet {
+				return fmt.Errorf("config validation: %s.when.equals is required", stepPath)
+			}
+			if !jsonvalue.IsScalar(step.When.Equals) {
+				return fmt.Errorf("config validation: %s.when.equals must be a scalar JSON value", stepPath)
+			}
+		}
+		seen[step.ID] = struct{}{}
 	}
 	return nil
 }
 
-func normalizeWorkflowPluginTargetConfig(path string, plugin *WorkflowPluginTargetConfig, allowCredentialMode bool) error {
+func normalizeWorkflowValueMapConfig(path string, values map[string]WorkflowValueConfig) error {
+	for key := range values {
+		value := values[key]
+		if err := normalizeWorkflowValueConfig(path+"."+key, &value); err != nil {
+			return err
+		}
+		values[key] = value
+	}
+	return nil
+}
+
+func validateWorkflowStepValueMapRefs(path string, values map[string]WorkflowValueConfig, seen map[string]struct{}) error {
+	for key := range values {
+		if err := validateWorkflowStepValueRefs(path+"."+key, values[key], seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateWorkflowStepValueRefs(path string, value WorkflowValueConfig, seen map[string]struct{}) error {
+	if value.StepOutput != nil {
+		if value.StepOutput.StepID == "" {
+			return fmt.Errorf("config validation: %s.stepOutput.stepId is required", path)
+		}
+		if _, ok := seen[value.StepOutput.StepID]; !ok {
+			return fmt.Errorf("config validation: %s.stepOutput.stepId %q must reference an earlier step", path, value.StepOutput.StepID)
+		}
+		if value.StepOutput.Path == "" {
+			return fmt.Errorf("config validation: %s.stepOutput.path is required", path)
+		}
+	}
+	for key := range value.Object {
+		if err := validateWorkflowStepValueRefs(path+"."+key, value.Object[key], seen); err != nil {
+			return err
+		}
+	}
+	for i := range value.Array {
+		if err := validateWorkflowStepValueRefs(fmt.Sprintf("%s[%d]", path, i), value.Array[i], seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func workflowStepSeenWithCurrent(seen map[string]struct{}, stepID string) map[string]struct{} {
+	out := make(map[string]struct{}, len(seen)+1)
+	for key := range seen {
+		out[key] = struct{}{}
+	}
+	out[strings.TrimSpace(stepID)] = struct{}{}
+	return out
+}
+
+func normalizeWorkflowStepPluginCallConfig(path string, plugin *WorkflowStepPluginCallConfig, allowCredentialMode bool) error {
 	if plugin == nil {
 		return fmt.Errorf("config validation: %s is required", path)
 	}
@@ -2347,10 +2460,13 @@ func normalizeWorkflowPluginTargetConfig(path string, plugin *WorkflowPluginTarg
 	default:
 		return fmt.Errorf("config validation: %s.credentialMode %q is not supported", path, plugin.CredentialMode)
 	}
+	if err := normalizeWorkflowValueConfig(path+".input", &plugin.Input); err != nil {
+		return err
+	}
 	return nil
 }
 
-func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentConfig) error {
+func validateWorkflowStepAgentConfig(cfg *Config, path string, agent *WorkflowStepAgentConfig) error {
 	if agent == nil {
 		return fmt.Errorf("config validation: %s is required", path)
 	}
@@ -2364,92 +2480,17 @@ func validateWorkflowAgentConfig(cfg *Config, path string, agent *WorkflowAgentC
 	}
 	agent.Provider = providerName
 	agent.Model = strings.TrimSpace(agent.Model)
-	agent.Prompt = strings.TrimSpace(agent.Prompt)
+	agent.SessionKey = strings.TrimSpace(agent.SessionKey)
+	agent.Prompt.Template = strings.TrimSpace(agent.Prompt.Template)
 	for i := range agent.Messages {
 		agent.Messages[i].Role = strings.TrimSpace(agent.Messages[i].Role)
-		agent.Messages[i].Text = strings.TrimSpace(agent.Messages[i].Text)
+		agent.Messages[i].Text.Template = strings.TrimSpace(agent.Messages[i].Text.Template)
 	}
-	hasSteps := len(agent.Steps) > 0
-	if hasSteps {
-		if agent.Prompt != "" || len(agent.Messages) > 0 || len(agent.Tools) > 0 || len(agent.ResponseSchema) > 0 || len(agent.ModelOptions) > 0 || agent.OutputDelivery != nil {
-			return fmt.Errorf("config validation: %s must not set prompt, messages, tools, responseSchema, modelOptions, or outputDelivery when steps are set", path)
-		}
-	} else if agent.Prompt == "" && len(agent.Messages) == 0 {
+	if agent.Prompt.Template == "" && len(agent.Messages) == 0 {
 		return fmt.Errorf("config validation: %s.prompt or messages is required", path)
 	}
 	if err := validateWorkflowAgentToolsConfig(cfg, path+".tools", agent.Tools); err != nil {
 		return err
-	}
-	agent.Timeout = strings.TrimSpace(agent.Timeout)
-	if agent.Timeout != "" {
-		if _, err := time.ParseDuration(agent.Timeout); err != nil {
-			return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", path, agent.Timeout, err)
-		}
-	}
-	if err := normalizeWorkflowOutputDeliveryConfig(path+".outputDelivery", agent.OutputDelivery, false); err != nil {
-		return err
-	}
-	if err := normalizeWorkflowOutputDeliveryConfig(path+".sessionReadyDelivery", agent.SessionReadyDelivery, true); err != nil {
-		return err
-	}
-	if err := validateWorkflowAgentStepConfigs(cfg, path, agent.Steps); err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateWorkflowAgentStepConfigs(cfg *Config, path string, steps []WorkflowAgentStepConfig) error {
-	seen := map[string]struct{}{}
-	for i := range steps {
-		stepPath := fmt.Sprintf("%s.steps[%d]", path, i)
-		step := &steps[i]
-		step.ID = strings.TrimSpace(step.ID)
-		if step.ID == "" {
-			return fmt.Errorf("config validation: %s.id is required", stepPath)
-		}
-		if _, exists := seen[step.ID]; exists {
-			return fmt.Errorf("config validation: %s.id duplicates %q", stepPath, step.ID)
-		}
-		step.Prompt = strings.TrimSpace(step.Prompt)
-		for j := range step.Messages {
-			step.Messages[j].Role = strings.TrimSpace(step.Messages[j].Role)
-			step.Messages[j].Text = strings.TrimSpace(step.Messages[j].Text)
-		}
-		if step.Prompt == "" && len(step.Messages) == 0 {
-			return fmt.Errorf("config validation: %s.prompt or messages is required", stepPath)
-		}
-		if err := validateWorkflowAgentToolsConfig(cfg, stepPath+".tools", step.Tools); err != nil {
-			return err
-		}
-		step.Timeout = strings.TrimSpace(step.Timeout)
-		if step.Timeout != "" {
-			if _, err := time.ParseDuration(step.Timeout); err != nil {
-				return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", stepPath, step.Timeout, err)
-			}
-		}
-		if err := normalizeWorkflowOutputDeliveryConfig(stepPath+".outputDelivery", step.OutputDelivery, false); err != nil {
-			return err
-		}
-		if step.When != nil {
-			step.When.StepID = strings.TrimSpace(step.When.StepID)
-			step.When.OutputPath = strings.TrimSpace(step.When.OutputPath)
-			if step.When.StepID == "" {
-				return fmt.Errorf("config validation: %s.when.stepId is required", stepPath)
-			}
-			if _, ok := seen[step.When.StepID]; !ok {
-				return fmt.Errorf("config validation: %s.when.stepId %q must reference an earlier step", stepPath, step.When.StepID)
-			}
-			if step.When.OutputPath == "" {
-				return fmt.Errorf("config validation: %s.when.outputPath is required", stepPath)
-			}
-			if !step.When.equalsSet {
-				return fmt.Errorf("config validation: %s.when.equals is required", stepPath)
-			}
-			if !jsonvalue.IsScalar(step.When.Equals) {
-				return fmt.Errorf("config validation: %s.when.equals must be a scalar JSON value", stepPath)
-			}
-		}
-		seen[step.ID] = struct{}{}
 	}
 	return nil
 }
@@ -2499,27 +2540,86 @@ func validateWorkflowAgentToolsConfig(cfg *Config, path string, tools []Workflow
 	return nil
 }
 
-func normalizeWorkflowOutputDeliveryConfig(path string, delivery *WorkflowOutputDeliveryConfig, beforeTurn bool) error {
+func normalizeWorkflowStepDeliveryConfig(path string, delivery *WorkflowStepDeliveryConfig, allowCredentialMode bool) error {
 	if delivery == nil {
 		return nil
 	}
-	if err := normalizeWorkflowPluginTargetConfig(path+".target", &delivery.Target, false); err != nil {
-		return err
+	if delivery.Plugin == nil {
+		return fmt.Errorf("config validation: %s.plugin is required", path)
 	}
-	delivery.CredentialMode = providermanifestv1.NormalizeOptionalConnectionMode(delivery.CredentialMode)
-	switch delivery.CredentialMode {
-	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser:
-	default:
-		return fmt.Errorf("config validation: %s.credentialMode %q is not supported", path, delivery.CredentialMode)
+	return normalizeWorkflowStepPluginCallConfig(path+".plugin", delivery.Plugin, allowCredentialMode)
+}
+
+func normalizeWorkflowValueConfig(path string, value *WorkflowValueConfig) error {
+	if value == nil {
+		return nil
 	}
-	if beforeTurn {
-		for i := range delivery.InputBindings {
-			if strings.TrimSpace(delivery.InputBindings[i].Value.AgentOutput) != "" {
-				return fmt.Errorf("config validation: %s.inputBindings[%d].value.agentOutput is not available before the agent turn starts", path, i)
+	set := 0
+	if value.LiteralSet {
+		set++
+	}
+	if value.Object != nil {
+		set++
+		for key := range value.Object {
+			nested := value.Object[key]
+			if err := normalizeWorkflowValueConfig(path+"."+key, &nested); err != nil {
+				return err
+			}
+			value.Object[key] = nested
+		}
+	}
+	if value.Array != nil {
+		set++
+		for i := range value.Array {
+			if err := normalizeWorkflowValueConfig(fmt.Sprintf("%s[%d]", path, i), &value.Array[i]); err != nil {
+				return err
 			}
 		}
 	}
+	if value.Template != nil {
+		value.Template.Template = strings.TrimSpace(value.Template.Template)
+		if value.Template.Template != "" {
+			set++
+		}
+	}
+	if strings.TrimSpace(value.RunInput) != "" {
+		value.RunInput = strings.TrimSpace(value.RunInput)
+		set++
+	}
+	if strings.TrimSpace(value.SignalPayload) != "" {
+		value.SignalPayload = strings.TrimSpace(value.SignalPayload)
+		set++
+	}
+	if value.StepOutput != nil {
+		value.StepOutput.StepID = strings.TrimSpace(value.StepOutput.StepID)
+		value.StepOutput.Path = strings.TrimSpace(value.StepOutput.Path)
+		set++
+	}
+	if set > 1 {
+		return fmt.Errorf("config validation: %s must set exactly one value kind", path)
+	}
 	return nil
+}
+
+func workflowValueConfigIsSet(value WorkflowValueConfig) bool {
+	switch {
+	case value.LiteralSet:
+		return true
+	case value.Object != nil:
+		return true
+	case value.Array != nil:
+		return true
+	case value.Template != nil:
+		return true
+	case strings.TrimSpace(value.RunInput) != "":
+		return true
+	case strings.TrimSpace(value.SignalPayload) != "":
+		return true
+	case value.StepOutput != nil:
+		return true
+	default:
+		return false
+	}
 }
 
 func validatePluginCacheBindings(cfg *Config, name string, entry *ProviderEntry) error {
