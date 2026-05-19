@@ -87,7 +87,7 @@ _host_relay_tokens: list[str] = []
 _host_list_requests: list[dict[str, Any]] = []
 _host_execute_requests: list[dict[str, Any]] = []
 _host_connection_requests: list[dict[str, Any]] = []
-_manager_requests: list[dict[str, str]] = []
+_manager_requests: list[dict[str, Any]] = []
 _manager_relay_tokens: list[str] = []
 
 
