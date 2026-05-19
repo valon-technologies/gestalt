@@ -49,6 +49,19 @@ routes, passthrough surfaces, and release metadata. Use Python code for
 executable operations, provider lifecycle hooks, host-service clients, and
 provider-specific runtimes.
 
+## Build cache
+
+Python executable provider builds can opt into the generic Gestalt build cache
+by setting `GESTALT_BUILD_CACHE_DIR` to a writable directory before running
+`gestaltd sync` or another provider packaging command. The cache stores
+SDK-internal packaging accelerators only; it is safe to delete, and unsetting
+the variable returns builds to the default clean temporary behavior.
+
+```sh
+GESTALT_BUILD_CACHE_DIR="$PWD/.gestalt-build-cache" \
+  gestaltd sync --locked --config deploy/config.yaml
+```
+
 ## Public surface
 
 The top-level `gestalt` package exposes the supported authoring API:
