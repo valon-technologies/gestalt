@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,92 +22,187 @@ import (
 )
 
 type workflowScheduleTargetRequest struct {
-	Plugin *workflowPluginTargetRequest `json:"plugin,omitempty"`
-	Agent  *workflowAgentTargetRequest  `json:"agent,omitempty"`
+	Steps []workflowStepTargetRequest `json:"steps,omitempty"`
 }
 
 type workflowPluginTargetRequest struct {
-	Name           string         `json:"name,omitempty"`
-	Operation      string         `json:"operation"`
-	Connection     string         `json:"connection,omitempty"`
-	Instance       string         `json:"instance,omitempty"`
-	CredentialMode string         `json:"credentialMode,omitempty"`
-	Input          map[string]any `json:"input,omitempty"`
+	Name           string               `json:"name,omitempty"`
+	Operation      string               `json:"operation"`
+	Connection     string               `json:"connection,omitempty"`
+	Instance       string               `json:"instance,omitempty"`
+	CredentialMode string               `json:"credentialMode,omitempty"`
+	Input          workflowValueRequest `json:"input,omitempty"`
 }
 
 type workflowAgentTargetRequest struct {
-	ProviderName         string                         `json:"provider,omitempty"`
-	Model                string                         `json:"model,omitempty"`
-	Prompt               string                         `json:"prompt,omitempty"`
-	Messages             []agentMessageRequest          `json:"messages,omitempty"`
-	ToolRefs             []agentToolRefRequest          `json:"toolRefs,omitempty"`
-	OutputDelivery       *workflowOutputDeliveryRequest `json:"outputDelivery,omitempty"`
-	SessionReadyDelivery *workflowOutputDeliveryRequest `json:"sessionReadyDelivery,omitempty"`
-	ResponseSchema       map[string]any                 `json:"responseSchema,omitempty"`
-	Metadata             map[string]any                 `json:"metadata,omitempty"`
-	ModelOptions         map[string]any                 `json:"modelOptions,omitempty"`
-	TimeoutSeconds       int                            `json:"timeoutSeconds,omitempty"`
-	Steps                []workflowAgentStepRequest     `json:"steps,omitempty"`
+	ProviderName   string                   `json:"provider,omitempty"`
+	Model          string                   `json:"model,omitempty"`
+	SessionKey     string                   `json:"sessionKey,omitempty"`
+	Prompt         workflowTextRequest      `json:"prompt,omitempty"`
+	Messages       []workflowMessageRequest `json:"messages,omitempty"`
+	ToolRefs       []agentToolRefRequest    `json:"tools,omitempty"`
+	ResponseSchema map[string]any           `json:"responseSchema,omitempty"`
+	ModelOptions   map[string]any           `json:"modelOptions,omitempty"`
 }
 
-type workflowAgentStepRequest struct {
-	ID             string                         `json:"id,omitempty"`
-	Prompt         string                         `json:"prompt,omitempty"`
-	Messages       []agentMessageRequest          `json:"messages,omitempty"`
-	ToolRefs       []agentToolRefRequest          `json:"toolRefs,omitempty"`
-	OutputDelivery *workflowOutputDeliveryRequest `json:"outputDelivery,omitempty"`
-	ResponseSchema map[string]any                 `json:"responseSchema,omitempty"`
-	Metadata       map[string]any                 `json:"metadata,omitempty"`
-	ModelOptions   map[string]any                 `json:"modelOptions,omitempty"`
-	TimeoutSeconds int                            `json:"timeoutSeconds,omitempty"`
-	When           *workflowAgentStepWhenRequest  `json:"when,omitempty"`
+type workflowStepTargetRequest struct {
+	ID             string                          `json:"id,omitempty"`
+	Inputs         map[string]workflowValueRequest `json:"inputs,omitempty"`
+	Plugin         *workflowPluginTargetRequest    `json:"plugin,omitempty"`
+	Agent          *workflowAgentTargetRequest     `json:"agent,omitempty"`
+	OutputDelivery *workflowOutputDeliveryRequest  `json:"outputDelivery,omitempty"`
+	Metadata       map[string]any                  `json:"metadata,omitempty"`
+	TimeoutSeconds int                             `json:"timeoutSeconds,omitempty"`
+	When           *workflowStepWhenRequest        `json:"when,omitempty"`
 }
 
-type workflowAgentStepWhenRequest struct {
-	StepID     string `json:"stepId,omitempty"`
-	OutputPath string `json:"outputPath,omitempty"`
-	Equals     any    `json:"equals,omitempty"`
-	EqualsSet  bool   `json:"-"`
+type workflowTextRequest struct {
+	Template string `json:"template,omitempty"`
 }
 
-func (r *workflowAgentStepWhenRequest) UnmarshalJSON(data []byte) error {
-	type workflowAgentStepWhenRequestAlias struct {
-		StepID     string `json:"stepId,omitempty"`
-		OutputPath string `json:"outputPath,omitempty"`
-		Equals     any    `json:"equals,omitempty"`
+func (r *workflowTextRequest) UnmarshalJSON(data []byte) error {
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		r.Template = text
+		return nil
 	}
-	var alias workflowAgentStepWhenRequestAlias
-	if err := json.Unmarshal(data, &alias); err != nil {
+	type alias workflowTextRequest
+	var out alias
+	if err := json.Unmarshal(data, &out); err != nil {
+		return err
+	}
+	*r = workflowTextRequest(out)
+	return nil
+}
+
+type workflowOutputDeliveryRequest struct {
+	Plugin *workflowPluginTargetRequest `json:"plugin,omitempty"`
+}
+
+type workflowMessageRequest struct {
+	Role     string              `json:"role,omitempty"`
+	Text     workflowTextRequest `json:"text,omitempty"`
+	Metadata map[string]any      `json:"metadata,omitempty"`
+}
+
+type workflowStepWhenRequest struct {
+	Value     workflowValueRequest `json:"value,omitempty"`
+	Equals    any                  `json:"equals,omitempty"`
+	EqualsSet bool                 `json:"-"`
+}
+
+func (r *workflowStepWhenRequest) UnmarshalJSON(data []byte) error {
+	type alias struct {
+		Value  workflowValueRequest `json:"value,omitempty"`
+		Equals any                  `json:"equals,omitempty"`
+	}
+	var out alias
+	if err := json.Unmarshal(data, &out); err != nil {
 		return err
 	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	r.StepID = alias.StepID
-	r.OutputPath = alias.OutputPath
-	r.Equals = alias.Equals
+	r.Value = out.Value
+	r.Equals = out.Equals
 	_, r.EqualsSet = raw["equals"]
 	return nil
 }
 
-type workflowOutputDeliveryRequest struct {
-	Target         workflowPluginTargetRequest    `json:"target"`
-	InputBindings  []workflowOutputBindingRequest `json:"inputBindings,omitempty"`
-	CredentialMode string                         `json:"credentialMode,omitempty"`
+type workflowStepOutputSourceRequest struct {
+	StepID string `json:"stepId,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
-type workflowOutputBindingRequest struct {
-	InputField string                           `json:"inputField"`
-	Value      workflowOutputValueSourceRequest `json:"value"`
+type workflowValueRequest struct {
+	Literal         any
+	LiteralSet      bool
+	Object          map[string]workflowValueRequest
+	ObjectSet       bool
+	Array           []workflowValueRequest
+	ArraySet        bool
+	Template        *workflowTextRequest
+	RunInput      string
+	SignalPayload string
+	StepOutput    *workflowStepOutputSourceRequest
 }
 
-type workflowOutputValueSourceRequest struct {
-	AgentOutput    string `json:"agentOutput,omitempty"`
-	SignalPayload  string `json:"signalPayload,omitempty"`
-	SignalMetadata string `json:"signalMetadata,omitempty"`
-	AgentSession   string `json:"agentSession,omitempty"`
-	Literal        any    `json:"literal,omitempty"`
+func (r *workflowValueRequest) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		r.Literal = nil
+		r.LiteralSet = true
+		return nil
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(data, &object); err == nil {
+		if len(object) == 1 {
+			for key, raw := range object {
+				switch key {
+				case "literal":
+					if err := json.Unmarshal(raw, &r.Literal); err != nil {
+						return err
+					}
+					r.LiteralSet = true
+					return nil
+				case "object":
+					if err := json.Unmarshal(raw, &r.Object); err != nil {
+						return err
+					}
+					r.ObjectSet = true
+					return nil
+				case "array":
+					if err := json.Unmarshal(raw, &r.Array); err != nil {
+						return err
+					}
+					r.ArraySet = true
+					return nil
+				case "template":
+					var text workflowTextRequest
+					if err := json.Unmarshal(raw, &text); err != nil {
+						return err
+					}
+					r.Template = &text
+					return nil
+				case "runInput":
+					return json.Unmarshal(raw, &r.RunInput)
+				case "signalPayload":
+					return json.Unmarshal(raw, &r.SignalPayload)
+				case "stepOutput":
+					var source workflowStepOutputSourceRequest
+					if err := json.Unmarshal(raw, &source); err != nil {
+						return err
+					}
+					r.StepOutput = &source
+					return nil
+				}
+			}
+		}
+		values := make(map[string]workflowValueRequest, len(object))
+		for key, raw := range object {
+			var value workflowValueRequest
+			if err := json.Unmarshal(raw, &value); err != nil {
+				return err
+			}
+			values[key] = value
+		}
+		r.Object = values
+		r.ObjectSet = true
+		return nil
+	}
+	var array []workflowValueRequest
+	if err := json.Unmarshal(data, &array); err == nil {
+		r.Array = array
+		r.ArraySet = true
+		return nil
+	}
+	var literal any
+	if err := json.Unmarshal(data, &literal); err != nil {
+		return err
+	}
+	r.Literal = literal
+	r.LiteralSet = true
+	return nil
 }
 
 type workflowScheduleUpsertRequest struct {
@@ -118,70 +214,69 @@ type workflowScheduleUpsertRequest struct {
 }
 
 type workflowScheduleTargetInfo struct {
-	Plugin *workflowPluginTargetInfo `json:"plugin,omitempty"`
-	Agent  *workflowAgentTargetInfo  `json:"agent,omitempty"`
+	Steps []workflowStepTargetInfo `json:"steps,omitempty"`
 }
 
 type workflowPluginTargetInfo struct {
-	Name           string         `json:"name"`
-	Operation      string         `json:"operation"`
-	Connection     string         `json:"connection,omitempty"`
-	Instance       string         `json:"instance,omitempty"`
-	CredentialMode string         `json:"credentialMode,omitempty"`
-	Input          map[string]any `json:"input,omitempty"`
+	Name           string `json:"name"`
+	Operation      string `json:"operation"`
+	Connection     string `json:"connection,omitempty"`
+	Instance       string `json:"instance,omitempty"`
+	CredentialMode string `json:"credentialMode,omitempty"`
+	Input          any    `json:"input,omitempty"`
 }
 
 type workflowAgentTargetInfo struct {
-	ProviderName         string                      `json:"provider,omitempty"`
-	Model                string                      `json:"model,omitempty"`
-	Prompt               string                      `json:"prompt,omitempty"`
-	Messages             []agentMessageRequest       `json:"messages,omitempty"`
-	ToolRefs             []agentToolRefRequest       `json:"toolRefs,omitempty"`
-	OutputDelivery       *workflowOutputDeliveryInfo `json:"outputDelivery,omitempty"`
-	SessionReadyDelivery *workflowOutputDeliveryInfo `json:"sessionReadyDelivery,omitempty"`
-	ResponseSchema       map[string]any              `json:"responseSchema,omitempty"`
-	Metadata             map[string]any              `json:"metadata,omitempty"`
-	ModelOptions         map[string]any              `json:"modelOptions,omitempty"`
-	TimeoutSeconds       int                         `json:"timeoutSeconds,omitempty"`
-	Steps                []workflowAgentStepInfo     `json:"steps,omitempty"`
+	ProviderName   string                `json:"provider,omitempty"`
+	Model          string                `json:"model,omitempty"`
+	SessionKey     string                `json:"sessionKey,omitempty"`
+	Prompt         *workflowTextInfo     `json:"prompt,omitempty"`
+	Messages       []workflowMessageInfo `json:"messages,omitempty"`
+	ToolRefs       []agentToolRefRequest `json:"tools,omitempty"`
+	ResponseSchema map[string]any        `json:"responseSchema,omitempty"`
+	ModelOptions   map[string]any        `json:"modelOptions,omitempty"`
 }
 
-type workflowAgentStepInfo struct {
+type workflowStepTargetInfo struct {
 	ID             string                      `json:"id,omitempty"`
-	Prompt         string                      `json:"prompt,omitempty"`
-	Messages       []agentMessageRequest       `json:"messages,omitempty"`
-	ToolRefs       []agentToolRefRequest       `json:"toolRefs,omitempty"`
+	Inputs         map[string]any              `json:"inputs,omitempty"`
+	Plugin         *workflowPluginTargetInfo   `json:"plugin,omitempty"`
+	Agent          *workflowAgentTargetInfo    `json:"agent,omitempty"`
 	OutputDelivery *workflowOutputDeliveryInfo `json:"outputDelivery,omitempty"`
-	ResponseSchema map[string]any              `json:"responseSchema,omitempty"`
 	Metadata       map[string]any              `json:"metadata,omitempty"`
-	ModelOptions   map[string]any              `json:"modelOptions,omitempty"`
 	TimeoutSeconds int                         `json:"timeoutSeconds,omitempty"`
-	When           *workflowAgentStepWhenInfo  `json:"when,omitempty"`
+	When           *workflowStepWhenInfo       `json:"when,omitempty"`
 }
 
-type workflowAgentStepWhenInfo struct {
-	StepID     string `json:"stepId,omitempty"`
-	OutputPath string `json:"outputPath,omitempty"`
-	Equals     any    `json:"equals,omitempty"`
+type workflowTextInfo struct {
+	Template string `json:"template,omitempty"`
 }
 
 type workflowOutputDeliveryInfo struct {
-	Target         workflowPluginTargetInfo    `json:"target"`
-	InputBindings  []workflowOutputBindingInfo `json:"inputBindings,omitempty"`
-	CredentialMode string                      `json:"credentialMode,omitempty"`
+	Plugin *workflowPluginTargetInfo `json:"plugin,omitempty"`
 }
 
-type workflowOutputBindingInfo struct {
-	InputField string                        `json:"inputField"`
-	Value      workflowOutputValueSourceInfo `json:"value"`
+type workflowMessageInfo struct {
+	Role     string            `json:"role,omitempty"`
+	Text     *workflowTextInfo `json:"text,omitempty"`
+	Metadata map[string]any    `json:"metadata,omitempty"`
 }
 
-type workflowOutputValueSourceInfo struct {
-	AgentOutput    string `json:"agentOutput,omitempty"`
-	SignalPayload  string `json:"signalPayload,omitempty"`
-	SignalMetadata string `json:"signalMetadata,omitempty"`
-	AgentSession   string `json:"agentSession,omitempty"`
-	Literal        any    `json:"literal,omitempty"`
+type workflowStepWhenInfo struct {
+	Value     any
+	Equals    any
+	EqualsSet bool
+}
+
+func (i workflowStepWhenInfo) MarshalJSON() ([]byte, error) {
+	out := map[string]any{}
+	if i.Value != nil {
+		out["value"] = i.Value
+	}
+	if i.EqualsSet {
+		out["equals"] = i.Equals
+	}
+	return json.Marshal(out)
 }
 
 type workflowScheduleInfo struct {
@@ -224,8 +319,8 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
-		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
+	if len(req.Target.Steps) == 0 {
+		writeError(w, http.StatusBadRequest, "workflow target.steps is required")
 		return
 	}
 	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
@@ -272,7 +367,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
-		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
+		writeError(w, http.StatusBadRequest, "workflow target.steps is required")
 		return
 	}
 	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
@@ -348,22 +443,25 @@ func (s *Server) resolveWorkflowScheduleActor(w http.ResponseWriter, r *http.Req
 }
 
 func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) coreworkflow.Target {
-	if target.Agent != nil {
-		agentTarget := workflowAgentTargetFromRequest(target.Agent)
-		return coreworkflow.Target{Agent: &agentTarget}
+	steps := make([]coreworkflow.Step, 0, len(target.Steps))
+	for i := range target.Steps {
+		step := target.Steps[i]
+		steps = append(steps, coreworkflow.Step{
+			ID:             strings.TrimSpace(step.ID),
+			Inputs:         workflowValueMapFromRequest(step.Inputs),
+			Plugin:         workflowPluginCallFromRequest(step.Plugin),
+			Agent:          workflowAgentTurnFromRequest(step.Agent),
+			OutputDelivery: workflowStepDeliveryFromRequest(step.OutputDelivery),
+			Metadata:       maps.Clone(step.Metadata),
+			TimeoutSeconds: step.TimeoutSeconds,
+			When:           workflowStepWhenFromRequest(step.When),
+		})
 	}
-	plugin := workflowPluginTargetFromRequest(target.Plugin)
-	pluginTarget := coreworkflow.PluginTarget{
-		PluginName:     strings.TrimSpace(plugin.Name),
-		Operation:      strings.TrimSpace(plugin.Operation),
-		Connection:     strings.TrimSpace(plugin.Connection),
-		Instance:       strings.TrimSpace(plugin.Instance),
-		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(plugin.CredentialMode)),
-		Input:          maps.Clone(plugin.Input),
-	}
-	return coreworkflow.Target{
-		Plugin: &pluginTarget,
-	}
+	return coreworkflow.Target{Steps: steps}
+}
+
+func workflowScheduleTargetRequestHasOneKind(target workflowScheduleTargetRequest) bool {
+	return len(target.Steps) > 0
 }
 
 func decodeWorkflowJSONBody(r *http.Request, dst any) error {
@@ -381,147 +479,158 @@ func decodeWorkflowJSONBody(r *http.Request, dst any) error {
 	return nil
 }
 
-func workflowPluginTargetFromRequest(target *workflowPluginTargetRequest) workflowPluginTargetRequest {
-	if target == nil {
-		return workflowPluginTargetRequest{}
-	}
-	return *target
-}
-
 func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) error {
-	if target.Plugin != nil {
-		if strings.TrimSpace(target.Plugin.CredentialMode) != "" {
-			return fmt.Errorf("workflow target plugin.credentialMode is not supported on public requests")
+	for i := range target.Steps {
+		step := target.Steps[i]
+		if step.Plugin != nil && strings.TrimSpace(step.Plugin.CredentialMode) != "" {
+			return fmt.Errorf("workflow target.steps[%d].plugin.credentialMode is not supported on public requests", i)
 		}
-		return nil
-	}
-	if target.Agent != nil {
-		if target.Agent.OutputDelivery != nil && strings.TrimSpace(target.Agent.OutputDelivery.Target.CredentialMode) != "" {
-			return fmt.Errorf("workflow target agent.outputDelivery.target.credentialMode is not supported")
-		}
-		if target.Agent.SessionReadyDelivery != nil && strings.TrimSpace(target.Agent.SessionReadyDelivery.Target.CredentialMode) != "" {
-			return fmt.Errorf("workflow target agent.sessionReadyDelivery.target.credentialMode is not supported")
-		}
-		for i := range target.Agent.Steps {
-			if target.Agent.Steps[i].OutputDelivery != nil && strings.TrimSpace(target.Agent.Steps[i].OutputDelivery.Target.CredentialMode) != "" {
-				return fmt.Errorf("workflow target agent.steps[%d].outputDelivery.target.credentialMode is not supported", i)
-			}
+		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil && strings.TrimSpace(step.OutputDelivery.Plugin.CredentialMode) != "" {
+			return fmt.Errorf("workflow target.steps[%d].outputDelivery.plugin.credentialMode is not supported on public requests", i)
 		}
 	}
 	return nil
 }
 
-func workflowAgentTargetFromRequest(target *workflowAgentTargetRequest) coreworkflow.AgentTarget {
+func workflowPluginCallFromRequest(target *workflowPluginTargetRequest) *coreworkflow.PluginCall {
 	if target == nil {
-		return coreworkflow.AgentTarget{}
-	}
-	return coreworkflow.AgentTarget{
-		ProviderName:         strings.TrimSpace(target.ProviderName),
-		Model:                strings.TrimSpace(target.Model),
-		Prompt:               strings.TrimSpace(target.Prompt),
-		Messages:             agentMessagesFromRequest(target.Messages),
-		ToolRefs:             agentToolRefsFromRequest(target.ToolRefs),
-		OutputDelivery:       workflowOutputDeliveryFromRequest(target.OutputDelivery),
-		SessionReadyDelivery: workflowOutputDeliveryFromRequest(target.SessionReadyDelivery),
-		ResponseSchema:       maps.Clone(target.ResponseSchema),
-		Metadata:             maps.Clone(target.Metadata),
-		ModelOptions:         maps.Clone(target.ModelOptions),
-		TimeoutSeconds:       target.TimeoutSeconds,
-		Steps:                workflowAgentStepsFromRequest(target.Steps),
-	}
-}
-
-func workflowAgentStepsFromRequest(steps []workflowAgentStepRequest) []coreworkflow.AgentStep {
-	if len(steps) == 0 {
 		return nil
 	}
-	out := make([]coreworkflow.AgentStep, 0, len(steps))
-	for i := range steps {
-		step := &steps[i]
-		out = append(out, coreworkflow.AgentStep{
-			ID:             strings.TrimSpace(step.ID),
-			Prompt:         strings.TrimSpace(step.Prompt),
-			Messages:       agentMessagesFromRequest(step.Messages),
-			ToolRefs:       agentToolRefsFromRequest(step.ToolRefs),
-			OutputDelivery: workflowOutputDeliveryFromRequest(step.OutputDelivery),
-			ResponseSchema: maps.Clone(step.ResponseSchema),
-			Metadata:       maps.Clone(step.Metadata),
-			ModelOptions:   maps.Clone(step.ModelOptions),
-			TimeoutSeconds: step.TimeoutSeconds,
-			When:           workflowAgentStepWhenFromRequest(step.When),
-		})
+	return &coreworkflow.PluginCall{
+		Name:           strings.TrimSpace(target.Name),
+		Operation:      strings.TrimSpace(target.Operation),
+		Connection:     strings.TrimSpace(target.Connection),
+		Instance:       strings.TrimSpace(target.Instance),
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(target.CredentialMode)),
+		Input:          workflowValueFromRequest(target.Input),
 	}
-	return out
 }
 
-func workflowAgentStepWhenFromRequest(when *workflowAgentStepWhenRequest) *coreworkflow.AgentStepWhen {
+func workflowAgentTurnFromRequest(target *workflowAgentTargetRequest) *coreworkflow.AgentTurn {
+	if target == nil {
+		return nil
+	}
+	return &coreworkflow.AgentTurn{
+		ProviderName:   strings.TrimSpace(target.ProviderName),
+		Model:          strings.TrimSpace(target.Model),
+		SessionKey:     strings.TrimSpace(target.SessionKey),
+		Prompt:         workflowTextFromRequest(target.Prompt),
+		Messages:       workflowMessagesFromRequest(target.Messages),
+		ToolRefs:       agentToolRefsFromRequest(target.ToolRefs),
+		ResponseSchema: maps.Clone(target.ResponseSchema),
+		ModelOptions:   maps.Clone(target.ModelOptions),
+	}
+}
+
+func workflowStepWhenFromRequest(when *workflowStepWhenRequest) *coreworkflow.StepWhen {
 	if when == nil {
 		return nil
 	}
-	return &coreworkflow.AgentStepWhen{
-		StepID:     strings.TrimSpace(when.StepID),
-		OutputPath: strings.TrimSpace(when.OutputPath),
-		Equals:     when.Equals,
-		EqualsSet:  when.EqualsSet,
+	return &coreworkflow.StepWhen{
+		Value:     workflowValueFromRequest(when.Value),
+		Equals:    when.Equals,
+		EqualsSet: when.EqualsSet,
 	}
 }
 
-func workflowOutputDeliveryFromRequest(delivery *workflowOutputDeliveryRequest) *coreworkflow.OutputDelivery {
+func workflowStepDeliveryFromRequest(delivery *workflowOutputDeliveryRequest) *coreworkflow.StepDelivery {
 	if delivery == nil {
 		return nil
 	}
-	return &coreworkflow.OutputDelivery{
-		Target: coreworkflow.PluginTarget{
-			PluginName:     strings.TrimSpace(delivery.Target.Name),
-			Operation:      strings.TrimSpace(delivery.Target.Operation),
-			Connection:     strings.TrimSpace(delivery.Target.Connection),
-			Instance:       strings.TrimSpace(delivery.Target.Instance),
-			CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(delivery.Target.CredentialMode)),
-			Input:          maps.Clone(delivery.Target.Input),
-		},
-		InputBindings:  workflowOutputBindingsFromRequest(delivery.InputBindings),
-		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(delivery.CredentialMode)),
-	}
+	return &coreworkflow.StepDelivery{Plugin: workflowPluginCallFromRequest(delivery.Plugin)}
 }
 
-func workflowOutputBindingsFromRequest(bindings []workflowOutputBindingRequest) []coreworkflow.OutputBinding {
-	if len(bindings) == 0 {
+func workflowTextFromRequest(text workflowTextRequest) coreworkflow.Text {
+	return coreworkflow.Text{Template: strings.TrimSpace(text.Template)}
+}
+
+func workflowMessagesFromRequest(messages []workflowMessageRequest) []coreworkflow.AgentMessage {
+	if len(messages) == 0 {
 		return nil
 	}
-	out := make([]coreworkflow.OutputBinding, 0, len(bindings))
-	for _, binding := range bindings {
-		out = append(out, coreworkflow.OutputBinding{
-			InputField: strings.TrimSpace(binding.InputField),
-			Value: coreworkflow.OutputValueSource{
-				AgentOutput:    strings.TrimSpace(binding.Value.AgentOutput),
-				SignalPayload:  strings.TrimSpace(binding.Value.SignalPayload),
-				SignalMetadata: strings.TrimSpace(binding.Value.SignalMetadata),
-				AgentSession:   strings.TrimSpace(binding.Value.AgentSession),
-				Literal:        binding.Value.Literal,
-			},
+	out := make([]coreworkflow.AgentMessage, 0, len(messages))
+	for i := range messages {
+		out = append(out, coreworkflow.AgentMessage{
+			Role:     strings.TrimSpace(messages[i].Role),
+			Text:     workflowTextFromRequest(messages[i].Text),
+			Metadata: maps.Clone(messages[i].Metadata),
 		})
 	}
 	return out
 }
 
-func workflowScheduleTargetRequestHasOneKind(target workflowScheduleTargetRequest) bool {
-	hasPlugin := target.Plugin != nil
-	hasAgent := target.Agent != nil
-	return hasPlugin != hasAgent
+func workflowValueMapFromRequest(values map[string]workflowValueRequest) map[string]coreworkflow.Value {
+	if len(values) == 0 {
+		return nil
+	}
+	return workflowValueObjectMapFromRequest(values)
+}
+
+func workflowValueObjectMapFromRequest(values map[string]workflowValueRequest) map[string]coreworkflow.Value {
+	out := make(map[string]coreworkflow.Value, len(values))
+	for key := range values {
+		out[key] = workflowValueFromRequest(values[key])
+	}
+	return out
+}
+
+func workflowValueListFromRequest(values []workflowValueRequest) []coreworkflow.Value {
+	out := make([]coreworkflow.Value, 0, len(values))
+	for i := range values {
+		out = append(out, workflowValueFromRequest(values[i]))
+	}
+	return out
+}
+
+func workflowValueFromRequest(value workflowValueRequest) coreworkflow.Value {
+	out := coreworkflow.Value{
+		Literal:         value.Literal,
+		LiteralSet:      value.LiteralSet,
+		RunInput:      strings.TrimSpace(value.RunInput),
+		SignalPayload: strings.TrimSpace(value.SignalPayload),
+	}
+	if value.ObjectSet {
+		out.Object = workflowValueObjectMapFromRequest(value.Object)
+	}
+	if value.ArraySet {
+		out.Array = workflowValueListFromRequest(value.Array)
+	}
+	if value.Template != nil {
+		text := workflowTextFromRequest(*value.Template)
+		out.Template = &text
+	}
+	if value.StepOutput != nil {
+		out.StepOutput = &coreworkflow.StepOutputSource{StepID: strings.TrimSpace(value.StepOutput.StepID), Path: strings.TrimSpace(value.StepOutput.Path)}
+	}
+	return out
 }
 
 func workflowScheduleTargetErrorPlugin(target workflowScheduleTargetRequest) string {
-	if target.Agent != nil {
+	if len(target.Steps) == 0 {
+		return ""
+	}
+	step := target.Steps[0]
+	if step.Plugin != nil {
+		return strings.TrimSpace(step.Plugin.Name)
+	}
+	if step.Agent != nil {
 		return "agent"
 	}
-	return strings.TrimSpace(workflowPluginTargetFromRequest(target.Plugin).Name)
+	return ""
 }
 
 func workflowScheduleTargetErrorOperation(target workflowScheduleTargetRequest) string {
-	if target.Agent != nil {
+	if len(target.Steps) == 0 {
+		return ""
+	}
+	step := target.Steps[0]
+	if step.Plugin != nil {
+		return strings.TrimSpace(step.Plugin.Operation)
+	}
+	if step.Agent != nil {
 		return "turn"
 	}
-	return strings.TrimSpace(workflowPluginTargetFromRequest(target.Plugin).Operation)
+	return ""
 }
 
 func workflowScheduleInfoFromManaged(managed *workflowmanager.ManagedSchedule) workflowScheduleInfo {
@@ -550,110 +659,137 @@ func workflowScheduleInfoFromCore(schedule *coreworkflow.Schedule, providerName 
 }
 
 func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowScheduleTargetInfo {
-	if target.Agent != nil {
-		agentTarget := *target.Agent
-		return workflowScheduleTargetInfo{
-			Agent: &workflowAgentTargetInfo{
-				ProviderName:         agentTarget.ProviderName,
-				Model:                agentTarget.Model,
-				Prompt:               agentTarget.Prompt,
-				Messages:             agentMessageInfoFromCore(agentTarget.Messages),
-				ToolRefs:             agentToolRefsToRequest(agentTarget.ToolRefs),
-				OutputDelivery:       workflowOutputDeliveryInfoFromCore(agentTarget.OutputDelivery),
-				SessionReadyDelivery: workflowOutputDeliveryInfoFromCore(agentTarget.SessionReadyDelivery),
-				ResponseSchema:       maps.Clone(agentTarget.ResponseSchema),
-				Metadata:             maps.Clone(agentTarget.Metadata),
-				ModelOptions:         maps.Clone(agentTarget.ModelOptions),
-				TimeoutSeconds:       agentTarget.TimeoutSeconds,
-				Steps:                workflowAgentStepInfoFromCore(agentTarget.Steps),
-			},
-		}
+	info := workflowScheduleTargetInfo{Steps: make([]workflowStepTargetInfo, 0, len(target.Steps))}
+	for i := range target.Steps {
+		step := target.Steps[i]
+		info.Steps = append(info.Steps, workflowStepInfoFromCore(step))
 	}
-	if target.Plugin == nil {
-		return workflowScheduleTargetInfo{}
-	}
-	pluginTarget := *target.Plugin
-	return workflowScheduleTargetInfo{
-		Plugin: &workflowPluginTargetInfo{
-			Name:           pluginTarget.PluginName,
-			Operation:      pluginTarget.Operation,
-			Connection:     userFacingConnectionName(pluginTarget.Connection),
-			Instance:       pluginTarget.Instance,
-			CredentialMode: string(pluginTarget.CredentialMode),
-			Input:          maps.Clone(pluginTarget.Input),
-		},
+	return info
+}
+
+func workflowStepInfoFromCore(step coreworkflow.Step) workflowStepTargetInfo {
+	return workflowStepTargetInfo{
+		ID:             step.ID,
+		Inputs:         workflowValueMapInfoFromCore(step.Inputs),
+		Plugin:         workflowPluginInfoFromCore(step.Plugin),
+		Agent:          workflowAgentInfoFromCore(step.Agent),
+		OutputDelivery: workflowOutputDeliveryInfoFromCore(step.OutputDelivery),
+		Metadata:       maps.Clone(step.Metadata),
+		TimeoutSeconds: step.TimeoutSeconds,
+		When:           workflowStepWhenInfoFromCore(step.When),
 	}
 }
 
-func workflowAgentStepInfoFromCore(steps []coreworkflow.AgentStep) []workflowAgentStepInfo {
-	if len(steps) == 0 {
+func workflowPluginInfoFromCore(plugin *coreworkflow.PluginCall) *workflowPluginTargetInfo {
+	if plugin == nil {
 		return nil
 	}
-	out := make([]workflowAgentStepInfo, 0, len(steps))
-	for i := range steps {
-		step := &steps[i]
-		out = append(out, workflowAgentStepInfo{
-			ID:             step.ID,
-			Prompt:         step.Prompt,
-			Messages:       agentMessageInfoFromCore(step.Messages),
-			ToolRefs:       agentToolRefsToRequest(step.ToolRefs),
-			OutputDelivery: workflowOutputDeliveryInfoFromCore(step.OutputDelivery),
-			ResponseSchema: maps.Clone(step.ResponseSchema),
-			Metadata:       maps.Clone(step.Metadata),
-			ModelOptions:   maps.Clone(step.ModelOptions),
-			TimeoutSeconds: step.TimeoutSeconds,
-			When:           workflowAgentStepWhenInfoFromCore(step.When),
-		})
+	return &workflowPluginTargetInfo{
+		Name:           plugin.Name,
+		Operation:      plugin.Operation,
+		Connection:     userFacingConnectionName(plugin.Connection),
+		Instance:       plugin.Instance,
+		CredentialMode: string(plugin.CredentialMode),
+		Input:          workflowValueInfoFromCore(plugin.Input),
 	}
-	return out
 }
 
-func workflowAgentStepWhenInfoFromCore(when *coreworkflow.AgentStepWhen) *workflowAgentStepWhenInfo {
+func workflowAgentInfoFromCore(agent *coreworkflow.AgentTurn) *workflowAgentTargetInfo {
+	if agent == nil {
+		return nil
+	}
+	return &workflowAgentTargetInfo{
+		ProviderName:   agent.ProviderName,
+		Model:          agent.Model,
+		SessionKey:     agent.SessionKey,
+		Prompt:         workflowTextInfoFromCore(agent.Prompt),
+		Messages:       workflowMessagesInfoFromCore(agent.Messages),
+		ToolRefs:       agentToolRefsToRequest(agent.ToolRefs),
+		ResponseSchema: maps.Clone(agent.ResponseSchema),
+		ModelOptions:   maps.Clone(agent.ModelOptions),
+	}
+}
+
+func workflowStepWhenInfoFromCore(when *coreworkflow.StepWhen) *workflowStepWhenInfo {
 	if when == nil {
 		return nil
 	}
-	return &workflowAgentStepWhenInfo{
-		StepID:     when.StepID,
-		OutputPath: when.OutputPath,
-		Equals:     when.Equals,
+	return &workflowStepWhenInfo{
+		Value:     workflowValueInfoFromCore(when.Value),
+		Equals:    when.Equals,
+		EqualsSet: when.EqualsSet,
 	}
 }
 
-func workflowOutputDeliveryInfoFromCore(delivery *coreworkflow.OutputDelivery) *workflowOutputDeliveryInfo {
+func workflowOutputDeliveryInfoFromCore(delivery *coreworkflow.StepDelivery) *workflowOutputDeliveryInfo {
 	if delivery == nil {
 		return nil
 	}
 	return &workflowOutputDeliveryInfo{
-		Target: workflowPluginTargetInfo{
-			Name:       delivery.Target.PluginName,
-			Operation:  delivery.Target.Operation,
-			Connection: userFacingConnectionName(delivery.Target.Connection),
-			Instance:   delivery.Target.Instance,
-			Input:      maps.Clone(delivery.Target.Input),
-		},
-		InputBindings:  workflowOutputBindingInfoFromCore(delivery.InputBindings),
-		CredentialMode: string(delivery.CredentialMode),
+		Plugin: workflowPluginInfoFromCore(delivery.Plugin),
 	}
 }
 
-func workflowOutputBindingInfoFromCore(bindings []coreworkflow.OutputBinding) []workflowOutputBindingInfo {
-	if len(bindings) == 0 {
+func workflowTextInfoFromCore(text coreworkflow.Text) *workflowTextInfo {
+	if strings.TrimSpace(text.Template) == "" {
 		return nil
 	}
-	out := make([]workflowOutputBindingInfo, 0, len(bindings))
-	for _, binding := range bindings {
-		out = append(out, workflowOutputBindingInfo{
-			InputField: binding.InputField,
-			Value: workflowOutputValueSourceInfo{
-				AgentOutput:    binding.Value.AgentOutput,
-				SignalPayload:  binding.Value.SignalPayload,
-				SignalMetadata: binding.Value.SignalMetadata,
-				AgentSession:   binding.Value.AgentSession,
-				Literal:        binding.Value.Literal,
-			},
+	return &workflowTextInfo{Template: text.Template}
+}
+
+func workflowMessagesInfoFromCore(messages []coreworkflow.AgentMessage) []workflowMessageInfo {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]workflowMessageInfo, 0, len(messages))
+	for i := range messages {
+		out = append(out, workflowMessageInfo{
+			Role:     messages[i].Role,
+			Text:     workflowTextInfoFromCore(messages[i].Text),
+			Metadata: maps.Clone(messages[i].Metadata),
 		})
 	}
 	return out
+}
+
+func workflowValueMapInfoFromCore(values map[string]coreworkflow.Value) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	return workflowValueObjectInfoFromCore(values)
+}
+
+func workflowValueObjectInfoFromCore(values map[string]coreworkflow.Value) map[string]any {
+	out := make(map[string]any, len(values))
+	for key := range values {
+		out[key] = workflowValueInfoFromCore(values[key])
+	}
+	return out
+}
+
+func workflowValueInfoFromCore(value coreworkflow.Value) any {
+	switch {
+	case value.LiteralSet:
+		return map[string]any{"literal": value.Literal}
+	case value.Object != nil:
+		return map[string]any{"object": workflowValueObjectInfoFromCore(value.Object)}
+	case value.Array != nil:
+		items := make([]any, 0, len(value.Array))
+		for i := range value.Array {
+			items = append(items, workflowValueInfoFromCore(value.Array[i]))
+		}
+		return map[string]any{"array": items}
+	case value.Template != nil:
+		return map[string]any{"template": workflowTextInfoFromCore(*value.Template)}
+	case strings.TrimSpace(value.RunInput) != "":
+		return map[string]any{"runInput": value.RunInput}
+	case strings.TrimSpace(value.SignalPayload) != "":
+		return map[string]any{"signalPayload": value.SignalPayload}
+	case value.StepOutput != nil:
+		return map[string]any{"stepOutput": map[string]any{"stepId": value.StepOutput.StepID, "path": value.StepOutput.Path}}
+	default:
+		return nil
+	}
 }
 
 func (s *Server) writeWorkflowScheduleProviderError(ctx context.Context, w http.ResponseWriter, pluginName, scheduleID string, err error) {

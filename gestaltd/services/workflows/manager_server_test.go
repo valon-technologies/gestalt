@@ -63,7 +63,7 @@ func TestWorkflowManagerTargetOrDefinitionAllowsDefinitionOnlyRequests(t *testin
 			if err != nil {
 				t.Fatalf("workflowManagerTargetOrDefinition: %v", err)
 			}
-			if got.Plugin != nil || got.Agent != nil {
+			if len(got.Steps) != 0 {
 				t.Fatalf("target = %#v, want empty target for definition-only request", got)
 			}
 		})

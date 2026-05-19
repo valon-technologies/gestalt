@@ -21,10 +21,12 @@ type workflowRunResponse struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
 	Target struct {
-		Plugin *struct {
-			Name      string `json:"name"`
-			Operation string `json:"operation"`
-		} `json:"plugin"`
+		Steps []struct {
+			Plugin *struct {
+				Name      string `json:"name"`
+				Operation string `json:"operation"`
+			} `json:"plugin"`
+		} `json:"steps"`
 	} `json:"target"`
 	Trigger struct {
 		Kind       string `json:"kind"`
@@ -43,12 +45,15 @@ func workflowPluginTarget(pluginName, operation string) coreworkflow.Target {
 
 func workflowPluginTargetWithRouting(pluginName, operation, connection, instance string) coreworkflow.Target {
 	return coreworkflow.Target{
-		Plugin: &coreworkflow.PluginTarget{
-			PluginName: pluginName,
-			Operation:  operation,
-			Connection: connection,
-			Instance:   instance,
-		},
+		Steps: []coreworkflow.Step{{
+			ID: "plugin",
+			Plugin: &coreworkflow.PluginCall{
+				Name:       pluginName,
+				Operation:  operation,
+				Connection: connection,
+				Instance:   instance,
+			},
+		}},
 	}
 }
 

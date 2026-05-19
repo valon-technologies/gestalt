@@ -71,10 +71,38 @@ _MISSING = object()
 
 
 @_dataclasses.dataclass(slots=True)
-class BoundWorkflowPluginTarget:
-    """Native data for a bound plugin workflow target."""
+class WorkflowText:
+    """Native data for templated workflow text."""
 
-    plugin_name: str = ""
+    template: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowStepOutputSource:
+    """Native data for a workflow step output value source."""
+
+    step_id: str = ""
+    path: str = ""
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowValue:
+    """Native data for a workflow value expression."""
+
+    literal: Any = _MISSING
+    object: Mapping[str, Any] | None = None
+    array: Sequence[Any] | None = None
+    template: Any | None = None
+    run_input: str = ""
+    signal_payload: str = ""
+    step_output: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowStepPluginCall:
+    """Native data for a workflow plugin step call."""
+
+    name: str = ""
     operation: str = ""
     input: Any | None = None
     connection: str = ""
@@ -83,82 +111,62 @@ class BoundWorkflowPluginTarget:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowOutputValueSource:
-    """Native data for a workflow output value source."""
+class WorkflowStepDelivery:
+    """Native data for a workflow step output delivery."""
 
-    agent_output: str | None = None
-    signal_payload: str | None = None
-    signal_metadata: str | None = None
-    literal: Any = _MISSING
-    agent_session: str | None = None
+    plugin: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowOutputBinding:
-    """Native data for one workflow output binding."""
+class WorkflowStepAgentTurn:
+    """Native data for a workflow agent step turn."""
 
-    input_field: str = ""
-    value: Any | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class WorkflowOutputDelivery:
-    """Native data for a workflow output delivery."""
-
-    target: Any | None = None
-    input_bindings: Sequence[Any] | None = None
-    credential_mode: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class BoundWorkflowAgentTarget:
-    """Native data for a bound agent workflow target."""
-
-    provider_name: str = ""
+    provider: str = ""
     model: str = ""
-    prompt: str = ""
+    session_key: str = ""
+    prompt: Any | None = None
     messages: Sequence[Any] | None = None
-    tool_refs: Sequence[Any] | None = None
+    tools: Sequence[Any] | None = None
     response_schema: Any | None = None
-    metadata: Any | None = None
-    timeout_seconds: int = 0
-    output_delivery: Any | None = None
     model_options: Any | None = None
-    session_ready_delivery: Any | None = None
-    steps: Sequence[Any] | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowAgentStep:
-    """Native data for one workflow agent step."""
+class WorkflowAgentMessage:
+    """Native data for a workflow agent message."""
+
+    role: str = ""
+    text: Any | None = None
+    metadata: Any | None = None
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowStepWhen:
+    """Native data for a workflow step condition."""
+
+    value: Any | None = None
+    equals: Any = _MISSING
+
+
+@_dataclasses.dataclass(slots=True)
+class WorkflowStep:
+    """Native data for one workflow step."""
 
     id: str = ""
-    prompt: str = ""
-    messages: Sequence[Any] | None = None
-    tool_refs: Sequence[Any] | None = None
-    response_schema: Any | None = None
-    model_options: Any | None = None
+    inputs: Mapping[str, Any] | None = None
+    plugin: Any | None = None
+    agent: Any | None = None
+    when: Any | None = None
     timeout_seconds: int = 0
     output_delivery: Any | None = None
-    when: Any | None = None
     metadata: Any | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class WorkflowAgentStepWhen:
-    """Native data for a workflow agent step condition."""
-
-    step_id: str = ""
-    output_path: str = ""
-    equals: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class BoundWorkflowTarget:
     """Native data for a bound workflow target."""
 
-    plugin: Any | None = None
-    agent: Any | None = None
+    steps: Sequence[Any] | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -773,309 +781,398 @@ def workflow_event_match_input_from_match(
     )
 
 
-def workflow_output_value_source(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow output value source ."""
+def workflow_text(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create workflow text."""
 
-    if isinstance(value, pb.WorkflowOutputValueSource):
+    if isinstance(value, pb.WorkflowText):
+        return _copy(value)
+    if isinstance(value, str):
+        data = {"template": value}
+        data.update(kwargs)
+    else:
+        data = _data(value, kwargs)
+    return pb.WorkflowText(template=data.get("template", ""))
+
+
+def workflow_text_input_from_text(value: Any | None) -> WorkflowText | None:
+    """Return input copied from workflow text."""
+
+    if value is None:
+        return None
+    return WorkflowText(template=value.template)
+
+
+def workflow_step_output_source(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow step output source."""
+
+    if isinstance(value, pb.WorkflowStepOutputSource):
         return _copy(value)
     data = _data(value, kwargs)
-    literal = data.get("literal", _MISSING)
-    choices = [
-        ("agent_output", data.get("agent_output")),
-        ("signal_payload", data.get("signal_payload")),
-        ("signal_metadata", data.get("signal_metadata")),
-        ("agent_session", data.get("agent_session")),
-    ]
-    selected = [(name, item) for name, item in choices if item is not None]
-    if literal is not _MISSING:
-        selected.append(("literal", literal))
-    if not selected:
-        return pb.WorkflowOutputValueSource()
-    if len(selected) > 1:
-        raise ValueError("workflow output value source must set exactly one source")
-    name, item = selected[0]
-    if name == "literal":
-        return pb.WorkflowOutputValueSource(literal=_value(item))
-    return pb.WorkflowOutputValueSource(**{name: item})
+    return pb.WorkflowStepOutputSource(
+        step_id=data.get("step_id", ""),
+        path=data.get("path", ""),
+    )
 
 
-def workflow_output_value_source_input_from_source(
+def workflow_step_output_source_input_from_source(
     value: Any | None,
-) -> WorkflowOutputValueSource | None:
-    """Return input copied from a workflow output value source."""
+) -> WorkflowStepOutputSource | None:
+    """Return input copied from a workflow step output source."""
+
+    if value is None:
+        return None
+    return WorkflowStepOutputSource(step_id=value.step_id, path=value.path)
+
+
+def _workflow_path_source(path: str) -> Any:
+    return pb.WorkflowPathSource(path=path)
+
+
+def workflow_value(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow value expression."""
+
+    if isinstance(value, pb.WorkflowValue):
+        return _copy(value)
+    if value is not None and _dataclass_mapping(value) is None and not isinstance(value, Mapping):
+        data = {"literal": value}
+        data.update(kwargs)
+    else:
+        data = _data(value, kwargs)
+
+    literal = data.get("literal", _MISSING)
+    choices: list[tuple[str, Any]] = []
+    if literal is not _MISSING:
+        choices.append(("literal", literal))
+    for name in (
+        "object",
+        "array",
+        "template",
+        "run_input",
+        "signal_payload",
+        "step_output",
+    ):
+        item = data.get(name)
+        if item is not None and item != "":
+            choices.append((name, item))
+    if not choices and value is not None:
+        choices.append(("object", data))
+    if not choices:
+        return pb.WorkflowValue()
+    if len(choices) > 1:
+        raise ValueError("workflow value must set exactly one value kind")
+
+    name, item = choices[0]
+    if name == "literal":
+        return pb.WorkflowValue(literal=_value(item))
+    if name == "object":
+        return pb.WorkflowValue(
+            object=pb.WorkflowObject(
+                fields={key: workflow_value(nested) for key, nested in item.items()}
+            )
+        )
+    if name == "array":
+        return pb.WorkflowValue(
+            array=pb.WorkflowArray(values=[workflow_value(nested) for nested in item])
+        )
+    if name == "template":
+        return pb.WorkflowValue(template=workflow_text(item))
+    if name == "run_input":
+        return pb.WorkflowValue(run_input=_workflow_path_source(item))
+    if name == "signal_payload":
+        return pb.WorkflowValue(signal_payload=_workflow_path_source(item))
+    if name == "step_output":
+        return pb.WorkflowValue(step_output=workflow_step_output_source(item))
+    raise AssertionError(f"unknown workflow value kind {name}")
+
+
+def workflow_value_input_from_value(value: Any | None) -> WorkflowValue | None:
+    """Return input copied from a workflow value expression."""
 
     if value is None:
         return None
     kind = which_oneof(value, "kind")
-    if kind == "agent_output":
-        return WorkflowOutputValueSource(agent_output=value.agent_output)
-    if kind == "signal_payload":
-        return WorkflowOutputValueSource(signal_payload=value.signal_payload)
-    if kind == "signal_metadata":
-        return WorkflowOutputValueSource(signal_metadata=value.signal_metadata)
-    if kind == "agent_session":
-        return WorkflowOutputValueSource(agent_session=value.agent_session)
     if kind == "literal":
-        return WorkflowOutputValueSource(literal=value_to_json(value.literal))
-    return WorkflowOutputValueSource()
+        return WorkflowValue(literal=value_to_json(value.literal))
+    if kind == "object":
+        return WorkflowValue(
+            object={
+                key: workflow_value_input_from_value(item)
+                for key, item in value.object.fields.items()
+            }
+        )
+    if kind == "array":
+        return WorkflowValue(
+            array=[
+                workflow_value_input_from_value(item)
+                for item in value.array.values
+            ]
+        )
+    if kind == "template":
+        return WorkflowValue(template=workflow_text_input_from_text(value.template))
+    if kind == "run_input":
+        return WorkflowValue(run_input=value.run_input.path)
+    if kind == "signal_payload":
+        return WorkflowValue(signal_payload=value.signal_payload.path)
+    if kind == "step_output":
+        return WorkflowValue(
+            step_output=workflow_step_output_source_input_from_source(value.step_output)
+        )
+    return WorkflowValue()
 
 
-def workflow_output_binding(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow output binding ."""
+def workflow_step_plugin_call(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow plugin step call."""
 
-    if isinstance(value, pb.WorkflowOutputBinding):
+    if isinstance(value, pb.WorkflowStepPluginCall):
         return _copy(value)
     data = _data(value, kwargs)
-    source = data.get("value")
-    return pb.WorkflowOutputBinding(
-        input_field=data.get("input_field", ""),
-        value=workflow_output_value_source(source) if source is not None else None,
-    )
-
-
-def workflow_output_binding_input_from_binding(
-    value: Any,
-) -> WorkflowOutputBinding:
-    """Return input copied from a workflow output binding."""
-
-    return WorkflowOutputBinding(
-        input_field=value.input_field,
-        value=workflow_output_value_source_input_from_source(value.value)
-        if has_field(value, "value")
-        else None,
-    )
-
-
-def workflow_output_delivery(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow output delivery ."""
-
-    if isinstance(value, pb.WorkflowOutputDelivery):
-        return _copy(value)
-    data = _data(value, kwargs)
-    target = data.get("target")
-    return pb.WorkflowOutputDelivery(
-        target=bound_workflow_plugin_target(target) if target is not None else None,
-        input_bindings=[
-            workflow_output_binding(item) for item in (data.get("input_bindings") or [])
-        ],
-        credential_mode=data.get("credential_mode", ""),
-    )
-
-
-def workflow_output_delivery_input_from_delivery(
-    value: Any | None,
-) -> WorkflowOutputDelivery | None:
-    """Return input copied from a workflow output delivery."""
-
-    if value is None:
-        return None
-    return WorkflowOutputDelivery(
-        target=bound_workflow_plugin_target_input_from_target(value.target)
-        if has_field(value, "target")
-        else None,
-        input_bindings=[
-            workflow_output_binding_input_from_binding(binding)
-            for binding in value.input_bindings
-        ],
-        credential_mode=value.credential_mode,
-    )
-
-
-def bound_workflow_plugin_target(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a bound plugin workflow target ."""
-
-    if isinstance(value, pb.BoundWorkflowPluginTarget):
-        return _copy(value)
-    data = _data(value, kwargs)
-    return pb.BoundWorkflowPluginTarget(
-        plugin_name=data.get("plugin_name", ""),
+    input_value = data.get("input")
+    return pb.WorkflowStepPluginCall(
+        name=data.get("name", ""),
         operation=data.get("operation", ""),
-        input=_optional_struct(data.get("input")),
+        input=workflow_value(input_value) if input_value is not None else None,
         connection=data.get("connection", ""),
         instance=data.get("instance", ""),
         credential_mode=data.get("credential_mode", ""),
     )
 
 
-def bound_workflow_plugin_target_input_from_target(
+def workflow_step_plugin_call_input_from_call(
     value: Any | None,
-) -> BoundWorkflowPluginTarget | None:
-    """Return input copied from a bound plugin workflow target."""
+) -> WorkflowStepPluginCall | None:
+    """Return input copied from a workflow plugin step call."""
 
     if value is None:
         return None
-    return BoundWorkflowPluginTarget(
-        plugin_name=value.plugin_name,
+    return WorkflowStepPluginCall(
+        name=value.name,
         operation=value.operation,
-        input=struct_to_dict(value.input) if has_field(value, "input") else None,
+        input=workflow_value_input_from_value(value.input)
+        if has_field(value, "input")
+        else None,
         connection=value.connection,
         instance=value.instance,
         credential_mode=value.credential_mode,
     )
 
 
-def bound_workflow_agent_target(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a bound agent workflow target ."""
+def workflow_step_delivery(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow step output delivery."""
 
-    if isinstance(value, pb.BoundWorkflowAgentTarget):
+    if isinstance(value, pb.WorkflowStepDelivery):
         return _copy(value)
     data = _data(value, kwargs)
-    output_delivery = data.get("output_delivery")
-    session_ready_delivery = data.get("session_ready_delivery")
-    return pb.BoundWorkflowAgentTarget(
-        provider_name=data.get("provider_name", ""),
+    plugin = data.get("plugin")
+    return pb.WorkflowStepDelivery(
+        plugin=workflow_step_plugin_call(plugin) if plugin is not None else None,
+    )
+
+
+def workflow_step_delivery_input_from_delivery(
+    value: Any | None,
+) -> WorkflowStepDelivery | None:
+    """Return input copied from a workflow step output delivery."""
+
+    if value is None:
+        return None
+    return WorkflowStepDelivery(
+        plugin=workflow_step_plugin_call_input_from_call(value.plugin)
+        if has_field(value, "plugin")
+        else None,
+    )
+
+
+def workflow_agent_message(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow agent message."""
+
+    if isinstance(value, pb.WorkflowAgentMessage):
+        return _copy(value)
+    data = _data(value, kwargs)
+    text = data.get("text")
+    return pb.WorkflowAgentMessage(
+        role=data.get("role", ""),
+        text=workflow_text(text) if text is not None else None,
+        metadata=_optional_struct(data.get("metadata")),
+    )
+
+
+def workflow_agent_message_input_from_message(
+    value: Any | None,
+) -> WorkflowAgentMessage | None:
+    """Return input copied from a workflow agent message."""
+
+    if value is None:
+        return None
+    return WorkflowAgentMessage(
+        role=value.role,
+        text=workflow_text_input_from_text(value.text)
+        if has_field(value, "text")
+        else None,
+        metadata=struct_to_dict(value.metadata)
+        if has_field(value, "metadata")
+        else None,
+    )
+
+
+def _workflow_agent_message_proto_list(values: Sequence[Any] | None) -> list[Any]:
+    if values is None:
+        return []
+    return [workflow_agent_message(item) for item in values]
+
+
+def _workflow_agent_message_input_list(values: Sequence[Any] | None) -> list[Any]:
+    if values is None:
+        return []
+    return [workflow_agent_message_input_from_message(item) for item in values]
+
+
+def workflow_step_agent_turn(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow agent step turn."""
+
+    if isinstance(value, pb.WorkflowStepAgentTurn):
+        return _copy(value)
+    data = _data(value, kwargs)
+    prompt = data.get("prompt")
+    return pb.WorkflowStepAgentTurn(
+        provider=data.get("provider", ""),
         model=data.get("model", ""),
-        prompt=data.get("prompt", ""),
-        messages=_message_proto_list(data.get("messages"), _agent_pb.AgentMessage),
-        tool_refs=_message_proto_list(data.get("tool_refs"), _plugin_pb.AgentToolRef),
+        session_key=data.get("session_key", ""),
+        prompt=workflow_text(prompt) if prompt is not None else None,
+        messages=_workflow_agent_message_proto_list(data.get("messages")),
+        tools=_message_proto_list(data.get("tools"), _plugin_pb.AgentToolRef),
         response_schema=_optional_struct(data.get("response_schema")),
-        metadata=_optional_struct(data.get("metadata")),
-        timeout_seconds=data.get("timeout_seconds", 0),
-        output_delivery=workflow_output_delivery(output_delivery)
-        if output_delivery is not None
-        else None,
         model_options=_optional_struct(data.get("model_options")),
-        session_ready_delivery=workflow_output_delivery(session_ready_delivery)
-        if session_ready_delivery is not None
-        else None,
-        steps=[workflow_agent_step(step) for step in (data.get("steps") or [])],
     )
 
 
-def bound_workflow_agent_target_input_from_target(
+def workflow_step_agent_turn_input_from_turn(
     value: Any | None,
-) -> BoundWorkflowAgentTarget | None:
-    """Return input copied from a bound agent workflow target."""
+) -> WorkflowStepAgentTurn | None:
+    """Return input copied from a workflow agent step turn."""
 
     if value is None:
         return None
-    return BoundWorkflowAgentTarget(
-        provider_name=value.provider_name,
+    return WorkflowStepAgentTurn(
+        provider=value.provider,
         model=value.model,
-        prompt=value.prompt,
-        messages=_agent_message_input_list(value.messages),
-        tool_refs=_agent_tool_ref_input_list(value.tool_refs),
-        response_schema=struct_to_dict(value.response_schema)
-        if has_field(value, "response_schema")
+        session_key=value.session_key,
+        prompt=workflow_text_input_from_text(value.prompt)
+        if has_field(value, "prompt")
         else None,
-        metadata=struct_to_dict(value.metadata)
-        if has_field(value, "metadata")
-        else None,
-        timeout_seconds=value.timeout_seconds,
-        output_delivery=workflow_output_delivery_input_from_delivery(
-            value.output_delivery
-        )
-        if has_field(value, "output_delivery")
-        else None,
-        model_options=struct_to_dict(value.model_options)
-        if has_field(value, "model_options")
-        else None,
-        session_ready_delivery=workflow_output_delivery_input_from_delivery(
-            value.session_ready_delivery
-        )
-        if has_field(value, "session_ready_delivery")
-        else None,
-        steps=[workflow_agent_step_input_from_step(step) for step in value.steps],
-    )
-
-
-def workflow_agent_step(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow agent step."""
-
-    if isinstance(value, pb.WorkflowAgentStep):
-        return _copy(value)
-    data = _data(value, kwargs)
-    output_delivery = data.get("output_delivery")
-    when = data.get("when")
-    return pb.WorkflowAgentStep(
-        id=data.get("id", ""),
-        prompt=data.get("prompt", ""),
-        messages=_message_proto_list(data.get("messages"), _agent_pb.AgentMessage),
-        tool_refs=_message_proto_list(data.get("tool_refs"), _plugin_pb.AgentToolRef),
-        response_schema=_optional_struct(data.get("response_schema")),
-        model_options=_optional_struct(data.get("model_options")),
-        timeout_seconds=data.get("timeout_seconds", 0),
-        output_delivery=workflow_output_delivery(output_delivery)
-        if output_delivery is not None
-        else None,
-        when=workflow_agent_step_when(when) if when is not None else None,
-        metadata=_optional_struct(data.get("metadata")),
-    )
-
-
-def workflow_agent_step_input_from_step(value: Any | None) -> WorkflowAgentStep | None:
-    """Return input copied from a workflow agent step."""
-
-    if value is None:
-        return None
-    return WorkflowAgentStep(
-        id=value.id,
-        prompt=value.prompt,
-        messages=_agent_message_input_list(value.messages),
-        tool_refs=_agent_tool_ref_input_list(value.tool_refs),
+        messages=_workflow_agent_message_input_list(value.messages),
+        tools=_agent_tool_ref_input_list(value.tools),
         response_schema=struct_to_dict(value.response_schema)
         if has_field(value, "response_schema")
         else None,
         model_options=struct_to_dict(value.model_options)
         if has_field(value, "model_options")
         else None,
-        timeout_seconds=value.timeout_seconds,
-        output_delivery=workflow_output_delivery_input_from_delivery(
-            value.output_delivery
-        )
-        if has_field(value, "output_delivery")
-        else None,
-        when=workflow_agent_step_when_input_from_when(value.when)
-        if has_field(value, "when")
-        else None,
-        metadata=struct_to_dict(value.metadata)
-        if has_field(value, "metadata")
-        else None,
     )
 
 
-def workflow_agent_step_when(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow agent step condition."""
+def workflow_step_when(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow step condition."""
 
-    if isinstance(value, pb.WorkflowAgentStepWhen):
+    if isinstance(value, pb.WorkflowStepWhen):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.WorkflowAgentStepWhen(
-        step_id=data.get("step_id", ""),
-        output_path=data.get("output_path", ""),
-        equals=_optional_value(data.get("equals")),
-    )
+    condition = pb.WorkflowStepWhen()
+    if data.get("value") is not None:
+        condition.value.CopyFrom(workflow_value(data["value"]))
+    equals = data.get("equals", _MISSING)
+    if equals is not _MISSING:
+        condition.equals.CopyFrom(_value(equals))
+    return condition
 
 
-def workflow_agent_step_when_input_from_when(
+def workflow_step_when_input_from_when(
     value: Any | None,
-) -> WorkflowAgentStepWhen | None:
-    """Return input copied from a workflow agent step condition."""
+) -> WorkflowStepWhen | None:
+    """Return input copied from a workflow step condition."""
 
     if value is None:
         return None
-    return WorkflowAgentStepWhen(
-        step_id=value.step_id,
-        output_path=value.output_path,
-        equals=value_to_json(value.equals) if has_field(value, "equals") else None,
+    return WorkflowStepWhen(
+        value=workflow_value_input_from_value(value.value)
+        if has_field(value, "value")
+        else None,
+        equals=value_to_json(value.equals) if has_field(value, "equals") else _MISSING,
     )
 
 
-def bound_workflow_target(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a bound workflow target ."""
+def workflow_step(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a workflow step."""
 
-    if isinstance(value, pb.BoundWorkflowTarget):
+    if isinstance(value, pb.WorkflowStep):
         return _copy(value)
     data = _data(value, kwargs)
     plugin = data.get("plugin")
     agent = data.get("agent")
     if plugin is not None and agent is not None:
-        raise ValueError("bound workflow target must set either plugin or agent")
+        raise ValueError("workflow step must set either plugin or agent")
+    step = pb.WorkflowStep(
+        id=data.get("id", ""),
+        inputs={
+            key: workflow_value(item)
+            for key, item in (data.get("inputs") or {}).items()
+        },
+        timeout_seconds=data.get("timeout_seconds", 0),
+        metadata=_optional_struct(data.get("metadata")),
+    )
     if plugin is not None:
-        return pb.BoundWorkflowTarget(plugin=bound_workflow_plugin_target(plugin))
+        step.plugin.CopyFrom(workflow_step_plugin_call(plugin))
     if agent is not None:
-        return pb.BoundWorkflowTarget(agent=bound_workflow_agent_target(agent))
-    return pb.BoundWorkflowTarget()
+        step.agent.CopyFrom(workflow_step_agent_turn(agent))
+    when = data.get("when")
+    if when is not None:
+        step.when.CopyFrom(workflow_step_when(when))
+    output_delivery = data.get("output_delivery")
+    if output_delivery is not None:
+        step.output_delivery.CopyFrom(workflow_step_delivery(output_delivery))
+    return step
+
+
+def workflow_step_input_from_step(value: Any | None) -> WorkflowStep | None:
+    """Return input copied from a workflow step."""
+
+    if value is None:
+        return None
+    return WorkflowStep(
+        id=value.id,
+        inputs={
+            key: workflow_value_input_from_value(item)
+            for key, item in value.inputs.items()
+        },
+        plugin=workflow_step_plugin_call_input_from_call(value.plugin)
+        if has_field(value, "plugin")
+        else None,
+        agent=workflow_step_agent_turn_input_from_turn(value.agent)
+        if has_field(value, "agent")
+        else None,
+        when=workflow_step_when_input_from_when(value.when)
+        if has_field(value, "when")
+        else None,
+        timeout_seconds=value.timeout_seconds,
+        output_delivery=workflow_step_delivery_input_from_delivery(
+            value.output_delivery
+        )
+        if has_field(value, "output_delivery")
+        else None,
+        metadata=struct_to_dict(value.metadata)
+        if has_field(value, "metadata")
+        else None,
+    )
+
+
+def bound_workflow_target(value: Any | None = None, **kwargs: Any) -> Any:
+    """Create a bound workflow target."""
+
+    if isinstance(value, pb.BoundWorkflowTarget):
+        return _copy(value)
+    data = _data(value, kwargs)
+    return pb.BoundWorkflowTarget(
+        steps=[workflow_step(step) for step in (data.get("steps") or [])],
+    )
 
 
 def bound_workflow_target_input_from_target(
@@ -1085,16 +1182,9 @@ def bound_workflow_target_input_from_target(
 
     if value is None:
         return None
-    kind = which_oneof(value, "kind")
-    if kind == "plugin":
-        return BoundWorkflowTarget(
-            plugin=bound_workflow_plugin_target_input_from_target(value.plugin)
-        )
-    if kind == "agent":
-        return BoundWorkflowTarget(
-            agent=bound_workflow_agent_target_input_from_target(value.agent)
-        )
-    return BoundWorkflowTarget()
+    return BoundWorkflowTarget(
+        steps=[workflow_step_input_from_step(step) for step in value.steps],
+    )
 
 
 def bound_workflow_target_from_target(value: Any | None) -> Any | None:

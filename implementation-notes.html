@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Workflow Steps Implementation Notes</title>
+</head>
+<body>
+  <h1>Workflow Steps Implementation Notes</h1>
+
+  <h2>2026-05-20 Review Iteration</h2>
+  <ul>
+    <li>Accepted the review feedback that manager validation must reject invalid <code>stepOutput</code> references outside <code>when</code>. Config validation already covered <code>inputs</code>, plugin input, and delivery input; REST/SDK-created targets now use the same rule.</li>
+    <li>Accepted the review feedback that <code>TargetPlugin</code> run filtering must match any plugin step, not only the first plugin step.</li>
+    <li>Accepted the review feedback that inherited <code>deliverResultToCaller</code> delivery is only valid when the final step is an agent turn. The inherited delivery template uses a local <code>final</code> placeholder, so it is rewritten to the actual final step ID before the target is stored.</li>
+    <li>Decided to remove deployment identity from the phase-2 host-action selector instead of validating it there. Deployment/definition binding is introduced in the later definition PR; keeping unused selector fields in the action-only PR created an authority contract that the host could not honestly enforce.</li>
+    <li>Trimmed author-facing <code>WorkflowValue</code> to seven roots: <code>literal</code>, <code>object</code>, <code>array</code>, <code>template</code>, <code>runInput</code>, <code>signalPayload</code>, and <code>stepOutput</code>. Removed <code>signalMetadata</code> and <code>workflowContext</code> from proto (reserved tags 7/8). Activation and event data are normalized into <code>runInput</code> or canonical <code>signalPayload</code> before evaluation (#2071).</li>
+  </ul>
+</body>
+</html>

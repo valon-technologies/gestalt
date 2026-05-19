@@ -54,20 +54,8 @@ func (s *HostServer) InvokeOperation(ctx context.Context, req *proto.InvokeWorkf
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "workflow invoke operation: %v", err)
 	}
-	if value.Target.Agent == nil {
-		if value.Target.Plugin == nil {
-			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.plugin.plugin_name is required")
-		}
-		value.Target.Plugin.PluginName = strings.TrimSpace(value.Target.Plugin.PluginName)
-		if value.Target.Plugin.PluginName == "" {
-			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.plugin.plugin_name is required")
-		}
-		value.Target.Plugin.Operation = strings.TrimSpace(value.Target.Plugin.Operation)
-		if value.Target.Plugin.Operation == "" {
-			return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.plugin.operation is required")
-		}
-	} else if strings.TrimSpace(value.Target.Agent.ProviderName) == "" {
-		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.agent.provider_name is required")
+	if len(value.Target.Steps) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.steps is required")
 	}
 	if strings.TrimSpace(value.ExecutionRef) == "" {
 		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: execution_ref is required")
@@ -81,11 +69,8 @@ func (s *HostServer) InvokeOperation(ctx context.Context, req *proto.InvokeWorkf
 }
 
 func workflowProtoTargetKind(target *proto.BoundWorkflowTarget) string {
-	if target.GetPlugin() != nil {
-		return observability.WorkflowTargetKindPlugin
-	}
-	if target.GetAgent() != nil {
-		return observability.WorkflowTargetKindAgent
+	if len(target.GetSteps()) > 0 {
+		return observability.WorkflowTargetKindSteps
 	}
 	return observability.WorkflowTargetKindUnknown
 }

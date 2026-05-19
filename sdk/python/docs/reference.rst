@@ -128,17 +128,23 @@ non-aliased message copies.
 .. autosummary::
    :nosignatures:
 
-   BoundWorkflowPluginTarget
-   BoundWorkflowAgentTarget
    BoundWorkflowTarget
+   WorkflowStep
+   WorkflowStepPluginCall
+   WorkflowStepAgentTurn
+   WorkflowStepDelivery
+   WorkflowValue
    BoundWorkflowRun
    BoundWorkflowSchedule
    BoundWorkflowEventTrigger
    WorkflowExecutionReference
-   bound_workflow_plugin_target
-   bound_workflow_agent_target
    bound_workflow_target
    bound_workflow_target_from_target
+   workflow_step
+   workflow_step_plugin_call
+   workflow_step_agent_turn
+   workflow_step_delivery
+   workflow_value
    workflow_event
    workflow_event_from_event
    workflow_signal
@@ -154,11 +160,17 @@ non-aliased message copies.
    workflow_execution_reference
    workflow_execution_reference_from_reference
 
-.. autoclass:: BoundWorkflowPluginTarget
-
-.. autoclass:: BoundWorkflowAgentTarget
-
 .. autoclass:: BoundWorkflowTarget
+
+.. autoclass:: WorkflowStep
+
+.. autoclass:: WorkflowStepPluginCall
+
+.. autoclass:: WorkflowStepAgentTurn
+
+.. autoclass:: WorkflowStepDelivery
+
+.. autoclass:: WorkflowValue
 
 .. autoclass:: BoundWorkflowRun
 
@@ -168,13 +180,19 @@ non-aliased message copies.
 
 .. autoclass:: WorkflowExecutionReference
 
-.. autofunction:: bound_workflow_plugin_target
-
-.. autofunction:: bound_workflow_agent_target
-
 .. autofunction:: bound_workflow_target
 
 .. autofunction:: bound_workflow_target_from_target
+
+.. autofunction:: workflow_step
+
+.. autofunction:: workflow_step_plugin_call
+
+.. autofunction:: workflow_step_agent_turn
+
+.. autofunction:: workflow_step_delivery
+
+.. autofunction:: workflow_value
 
 .. autofunction:: workflow_event
 

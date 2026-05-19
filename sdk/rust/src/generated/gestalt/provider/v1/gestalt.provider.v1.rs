@@ -3203,27 +3203,45 @@ pub struct GetSecretResponse {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowTarget {
-    #[prost(oneof = "bound_workflow_target::Kind", tags = "6, 7")]
-    pub kind: ::core::option::Option<bound_workflow_target::Kind>,
+    #[prost(message, repeated, tag = "8")]
+    pub steps: ::prost::alloc::vec::Vec<WorkflowStep>,
 }
-/// Nested message and enum types in `BoundWorkflowTarget`.
-pub mod bound_workflow_target {
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowStep {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, message", tag = "2")]
+    pub inputs:
+        ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, WorkflowValue>,
+    #[prost(message, optional, tag = "3")]
+    pub when: ::core::option::Option<WorkflowStepWhen>,
+    #[prost(int32, tag = "4")]
+    pub timeout_seconds: i32,
+    #[prost(message, optional, tag = "5")]
+    pub output_delivery: ::core::option::Option<WorkflowStepDelivery>,
+    #[prost(message, optional, tag = "6")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
+    #[prost(oneof = "workflow_step::Action", tags = "10, 11")]
+    pub action: ::core::option::Option<workflow_step::Action>,
+}
+/// Nested message and enum types in `WorkflowStep`.
+pub mod workflow_step {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "6")]
-        Plugin(super::BoundWorkflowPluginTarget),
-        #[prost(message, tag = "7")]
-        Agent(super::BoundWorkflowAgentTarget),
+    pub enum Action {
+        #[prost(message, tag = "10")]
+        Plugin(super::WorkflowStepPluginCall),
+        #[prost(message, tag = "11")]
+        Agent(super::WorkflowStepAgentTurn),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BoundWorkflowPluginTarget {
+pub struct WorkflowStepPluginCall {
     #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
+    pub name: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub operation: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
-    pub input: ::core::option::Option<::prost_types::Struct>,
+    pub input: ::core::option::Option<WorkflowValue>,
     #[prost(string, tag = "4")]
     pub connection: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
@@ -3232,100 +3250,97 @@ pub struct BoundWorkflowPluginTarget {
     pub credential_mode: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BoundWorkflowAgentTarget {
+pub struct WorkflowStepDelivery {
+    #[prost(message, optional, tag = "1")]
+    pub plugin: ::core::option::Option<WorkflowStepPluginCall>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowStepAgentTurn {
     #[prost(string, tag = "1")]
-    pub provider_name: ::prost::alloc::string::String,
+    pub provider: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub model: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
-    pub prompt: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "4")]
-    pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
+    pub session_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub prompt: ::core::option::Option<WorkflowText>,
     #[prost(message, repeated, tag = "5")]
-    pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
+    pub messages: ::prost::alloc::vec::Vec<WorkflowAgentMessage>,
+    #[prost(message, repeated, tag = "6")]
+    pub tools: ::prost::alloc::vec::Vec<AgentToolRef>,
     #[prost(message, optional, tag = "7")]
     pub response_schema: ::core::option::Option<::prost_types::Struct>,
     #[prost(message, optional, tag = "8")]
-    pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "10")]
-    pub timeout_seconds: i32,
-    #[prost(message, optional, tag = "11")]
-    pub output_delivery: ::core::option::Option<WorkflowOutputDelivery>,
-    #[prost(message, optional, tag = "12")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "13")]
-    pub session_ready_delivery: ::core::option::Option<WorkflowOutputDelivery>,
-    #[prost(message, repeated, tag = "14")]
-    pub steps: ::prost::alloc::vec::Vec<WorkflowAgentStep>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowAgentStep {
+pub struct WorkflowAgentMessage {
     #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub prompt: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "3")]
-    pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
-    #[prost(message, repeated, tag = "4")]
-    pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
-    #[prost(message, optional, tag = "5")]
-    pub response_schema: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "6")]
-    pub model_options: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "7")]
-    pub timeout_seconds: i32,
-    #[prost(message, optional, tag = "8")]
-    pub output_delivery: ::core::option::Option<WorkflowOutputDelivery>,
-    #[prost(message, optional, tag = "9")]
-    pub when: ::core::option::Option<WorkflowAgentStepWhen>,
-    #[prost(message, optional, tag = "10")]
-    pub metadata: ::core::option::Option<::prost_types::Struct>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowAgentStepWhen {
-    #[prost(string, tag = "1")]
-    pub step_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub output_path: ::prost::alloc::string::String,
+    pub role: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub text: ::core::option::Option<WorkflowText>,
     #[prost(message, optional, tag = "3")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowText {
+    #[prost(string, tag = "1")]
+    pub template: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowStepWhen {
+    #[prost(message, optional, tag = "1")]
+    pub value: ::core::option::Option<WorkflowValue>,
+    #[prost(message, optional, tag = "2")]
     pub equals: ::core::option::Option<::prost_types::Value>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowOutputDelivery {
-    #[prost(message, optional, tag = "1")]
-    pub target: ::core::option::Option<BoundWorkflowPluginTarget>,
-    #[prost(message, repeated, tag = "2")]
-    pub input_bindings: ::prost::alloc::vec::Vec<WorkflowOutputBinding>,
-    #[prost(string, tag = "3")]
-    pub credential_mode: ::prost::alloc::string::String,
+pub struct WorkflowValue {
+    #[prost(oneof = "workflow_value::Kind", tags = "1, 2, 3, 4, 5, 6, 9")]
+    pub kind: ::core::option::Option<workflow_value::Kind>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowOutputBinding {
-    #[prost(string, tag = "1")]
-    pub input_field: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub value: ::core::option::Option<WorkflowOutputValueSource>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowOutputValueSource {
-    #[prost(oneof = "workflow_output_value_source::Kind", tags = "1, 2, 3, 4, 5")]
-    pub kind: ::core::option::Option<workflow_output_value_source::Kind>,
-}
-/// Nested message and enum types in `WorkflowOutputValueSource`.
-pub mod workflow_output_value_source {
+/// Nested message and enum types in `WorkflowValue`.
+pub mod workflow_value {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
-        #[prost(string, tag = "1")]
-        AgentOutput(::prost::alloc::string::String),
-        #[prost(string, tag = "2")]
-        SignalPayload(::prost::alloc::string::String),
-        #[prost(string, tag = "3")]
-        SignalMetadata(::prost::alloc::string::String),
-        #[prost(message, tag = "4")]
+        #[prost(message, tag = "1")]
         Literal(::prost_types::Value),
-        #[prost(string, tag = "5")]
-        AgentSession(::prost::alloc::string::String),
+        #[prost(message, tag = "2")]
+        Object(super::WorkflowObject),
+        #[prost(message, tag = "3")]
+        Array(super::WorkflowArray),
+        #[prost(message, tag = "4")]
+        Template(super::WorkflowText),
+        #[prost(message, tag = "5")]
+        RunInput(super::WorkflowPathSource),
+        #[prost(message, tag = "6")]
+        SignalPayload(super::WorkflowPathSource),
+        #[prost(message, tag = "9")]
+        StepOutput(super::WorkflowStepOutputSource),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowObject {
+    #[prost(btree_map = "string, message", tag = "1")]
+    pub fields:
+        ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, WorkflowValue>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowArray {
+    #[prost(message, repeated, tag = "1")]
+    pub values: ::prost::alloc::vec::Vec<WorkflowValue>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowPathSource {
+    #[prost(string, tag = "1")]
+    pub path: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowStepOutputSource {
+    #[prost(string, tag = "1")]
+    pub step_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub path: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowActor {

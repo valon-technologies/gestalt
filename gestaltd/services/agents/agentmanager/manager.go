@@ -1222,7 +1222,7 @@ func agentProviderReadFallbackAllowed(err error) bool {
 	return false
 }
 
-func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerPluginName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode, inheritedOutputDelivery *coreworkflow.OutputDelivery) (string, error) {
+func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerPluginName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode, inheritedOutputDelivery *coreworkflow.StepDelivery) (string, error) {
 	if m == nil || m.runGrants == nil {
 		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
 	}
@@ -1249,7 +1249,7 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 		Tools:                   append([]coreagent.Tool(nil), tools...),
 		ToolSource:              toolSource,
 		Connections:             connections,
-		InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(inheritedOutputDelivery),
+		InheritedOutputDelivery: coreworkflow.CloneStepDelivery(inheritedOutputDelivery),
 	})
 }
 
@@ -3254,12 +3254,15 @@ func agentRunPermissions(ctx context.Context, p *principal.Principal, callerPlug
 	return principal.PermissionsToAccessPermissions(p.TokenPermissions)
 }
 
-func agentRunPermissionsWithInheritedOutputDelivery(p *principal.Principal, permissions []core.AccessPermission, delivery *coreworkflow.OutputDelivery) []core.AccessPermission {
+func agentRunPermissionsWithInheritedOutputDelivery(p *principal.Principal, permissions []core.AccessPermission, delivery *coreworkflow.StepDelivery) []core.AccessPermission {
 	if permissions == nil || delivery == nil {
 		return permissions
 	}
-	pluginName := strings.TrimSpace(delivery.Target.PluginName)
-	operation := strings.TrimSpace(delivery.Target.Operation)
+	if delivery.Plugin == nil {
+		return permissions
+	}
+	pluginName := strings.TrimSpace(delivery.Plugin.Name)
+	operation := strings.TrimSpace(delivery.Plugin.Operation)
 	if pluginName == "" || operation == "" || !principal.AllowsOperationPermission(p, pluginName, operation) {
 		return permissions
 	}

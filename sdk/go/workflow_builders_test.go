@@ -102,27 +102,33 @@ func TestNewWorkflowEventUsesNativeDataExtensionsAndTime(t *testing.T) {
 	}
 }
 
-func TestNewBoundWorkflowPluginTargetUsesNativeValues(t *testing.T) {
+func TestNewBoundWorkflowStepsTargetUsesNativeValues(t *testing.T) {
 	target, err := boundWorkflowTargetToProto(BoundWorkflowTarget{
-		Plugin: &BoundWorkflowPluginTarget{
-			PluginName: "slack",
-			Operation:  "chat.postMessage",
-			Input: struct {
-				Channel string `json:"channel"`
-			}{Channel: "C123"},
-			Connection:     "workspace",
-			Instance:       "T123",
-			CredentialMode: "subject",
-		},
+		Steps: []WorkflowStep{{
+			ID: "post",
+			Plugin: &WorkflowStepPluginCall{
+				Name:      "slack",
+				Operation: "chat.postMessage",
+				Input: WorkflowValue{Object: map[string]WorkflowValue{
+					"channel": {Literal: "C123", LiteralSet: true},
+				}},
+				Connection:     "workspace",
+				Instance:       "T123",
+				CredentialMode: "subject",
+			},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("boundWorkflowTargetToProto: %v", err)
 	}
-	plugin := target.GetPlugin()
-	if plugin.GetPluginName() != "slack" || plugin.GetOperation() != "chat.postMessage" {
-		t.Fatalf("plugin target = %q/%q, want slack/chat.postMessage", plugin.GetPluginName(), plugin.GetOperation())
+	if len(target.GetSteps()) != 1 {
+		t.Fatalf("steps = %d, want 1", len(target.GetSteps()))
 	}
-	if got := plugin.GetInput().AsMap()["channel"]; got != "C123" {
+	plugin := target.GetSteps()[0].GetPlugin()
+	if plugin.GetName() != "slack" || plugin.GetOperation() != "chat.postMessage" {
+		t.Fatalf("plugin target = %q/%q, want slack/chat.postMessage", plugin.GetName(), plugin.GetOperation())
+	}
+	if got := plugin.GetInput().GetObject().GetFields()["channel"].GetLiteral().AsInterface(); got != "C123" {
 		t.Fatalf("plugin input channel = %#v, want C123", got)
 	}
 }
@@ -170,77 +176,59 @@ func TestAgentToolRefCarriesRunAs(t *testing.T) {
 	}
 }
 
-func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
+func TestNewBoundWorkflowAgentStepCopiesNativeFields(t *testing.T) {
 	target, err := boundWorkflowTargetToProto(BoundWorkflowTarget{
-		Agent: &BoundWorkflowAgentTarget{
-			ProviderName: "agent",
-			Model:        "gpt-5.5",
-			Prompt:       "Summarize",
-			Messages: []AgentMessage{
-				{Role: "user", Parts: []AgentMessagePart{{Type: AgentMessagePartTypeText, Text: "hello"}}},
-			},
-			ToolRefs:       []AgentToolRef{{Plugin: "search", Operation: "query"}},
-			ResponseSchema: map[string]any{"type": "object"},
-			Metadata:       map[string]any{"source": "test"},
-			TimeoutSeconds: 30,
-			OutputDelivery: &WorkflowOutputDelivery{
-				Target: &BoundWorkflowPluginTarget{
-					PluginName: "slack",
-					Operation:  "chat.postMessage",
-					Input:      map[string]any{"channel": "C123"},
+		Steps: []WorkflowStep{
+			{
+				ID: "diagnosis",
+				Inputs: map[string]WorkflowValue{
+					"thread_ts": {SignalPayload: "event.ts"},
 				},
-				InputBindings: []WorkflowOutputBinding{
-					{
-						InputField: "text",
-						Value:      &WorkflowOutputValueSource{AgentOutput: "text"},
-					},
-				},
-			},
-			SessionReadyDelivery: &WorkflowOutputDelivery{
-				Target: &BoundWorkflowPluginTarget{
-					PluginName: "slack",
-					Operation:  "chat.postMessage",
-					Input:      map[string]any{"channel": "C123"},
-				},
-				InputBindings: []WorkflowOutputBinding{
-					{
-						InputField: "session_id",
-						Value:      &WorkflowOutputValueSource{AgentSession: "id"},
-					},
-				},
-			},
-			Steps: []WorkflowAgentStep{
-				{
-					ID:             "diagnosis",
-					Prompt:         "Diagnose",
-					Messages:       []AgentMessage{{Role: "system", Parts: []AgentMessagePart{{Type: AgentMessagePartTypeText, Text: "brief"}}}},
-					ToolRefs:       []AgentToolRef{{Plugin: "datadog", Operation: "queryLogs"}},
+				Agent: &WorkflowStepAgentTurn{
+					Provider: "agent",
+					Model:    "gpt-5.5",
+					Prompt:   WorkflowText{Template: "Diagnose ${inputs.thread_ts}"},
+					Messages: []WorkflowAgentMessage{{
+						Role: "system",
+						Text: WorkflowText{Template: "brief"},
+					}},
+					Tools:          []AgentToolRef{{Plugin: "datadog", Operation: "queryLogs"}},
 					ResponseSchema: map[string]any{"type": "object"},
 					ModelOptions:   map[string]any{"temperature": 0},
-					TimeoutSeconds: 45,
-					Metadata:       map[string]any{"kind": "diagnosis"},
-					OutputDelivery: &WorkflowOutputDelivery{
-						Target: &BoundWorkflowPluginTarget{
-							PluginName: "slack",
-							Operation:  "chat.postMessage",
-						},
-						InputBindings: []WorkflowOutputBinding{
-							{
-								InputField: "text",
-								Value:      &WorkflowOutputValueSource{AgentOutput: "text"},
+				},
+				TimeoutSeconds: 45,
+				Metadata:       map[string]any{"kind": "diagnosis"},
+				OutputDelivery: &WorkflowStepDelivery{
+					Plugin: &WorkflowStepPluginCall{
+						Name:      "slack",
+						Operation: "chat.postMessage",
+						Input: WorkflowValue{Object: map[string]WorkflowValue{
+							"text": {
+								StepOutput: &WorkflowStepOutputSource{
+									StepID: "diagnosis",
+									Path:   "agent.text",
+								},
 							},
-						},
+						}},
 					},
 				},
-				{
-					ID:       "pr_fix",
-					Prompt:   "Open a PR",
-					ToolRefs: []AgentToolRef{{Plugin: "github", Operation: "createPullRequest"}},
-					When: &WorkflowAgentStepWhen{
-						StepID:     "diagnosis",
-						OutputPath: "structured_output.actionable_for_pr",
-						Equals:     true,
+			},
+			{
+				ID: "pr_fix",
+				Agent: &WorkflowStepAgentTurn{
+					Provider: "agent",
+					Model:    "gpt-5.5",
+					Prompt:   WorkflowText{Template: "Open a PR"},
+					Tools:    []AgentToolRef{{Plugin: "github", Operation: "createPullRequest"}},
+				},
+				When: &WorkflowStepWhen{
+					Value: WorkflowValue{
+						StepOutput: &WorkflowStepOutputSource{
+							StepID: "diagnosis",
+							Path:   "agent.structuredOutput.actionableForPr",
+						},
 					},
+					Equals: true,
 				},
 			},
 		},
@@ -248,26 +236,27 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("boundWorkflowTargetToProto: %v", err)
 	}
-	agent := target.GetAgent()
-	if agent.GetProviderName() != "agent" || agent.GetModel() != "gpt-5.5" {
-		t.Fatalf("agent target = %q/%q, want agent/gpt-5.5", agent.GetProviderName(), agent.GetModel())
+	if len(target.GetSteps()) != 2 {
+		t.Fatalf("steps = %d, want two", len(target.GetSteps()))
+	}
+	diagnosis := target.GetSteps()[0]
+	agent := diagnosis.GetAgent()
+	if agent.GetProvider() != "agent" || agent.GetModel() != "gpt-5.5" {
+		t.Fatalf("agent target = %q/%q, want agent/gpt-5.5", agent.GetProvider(), agent.GetModel())
 	}
 	if got := agent.GetResponseSchema().AsMap()["type"]; got != "object" {
 		t.Fatalf("response schema type = %#v, want object", got)
 	}
-	if got := agent.GetOutputDelivery().GetInputBindings()[0].GetValue().GetAgentOutput(); got != "text" {
-		t.Fatalf("output binding = %#v, want text", got)
+	if got := diagnosis.GetOutputDelivery().GetPlugin().GetInput().GetObject().GetFields()["text"].GetStepOutput().GetPath(); got != "agent.text" {
+		t.Fatalf("output delivery text path = %#v, want agent.text", got)
 	}
-	if got := agent.GetSessionReadyDelivery().GetInputBindings()[0].GetValue().GetAgentSession(); got != "id" {
-		t.Fatalf("session ready binding = %#v, want id", got)
-	}
-	if got := agent.GetSteps()[0].GetToolRefs()[0].GetPlugin(); got != "datadog" {
+	if got := agent.GetTools()[0].GetPlugin(); got != "datadog" {
 		t.Fatalf("step tool ref plugin = %q, want datadog", got)
 	}
-	if got := agent.GetSteps()[1].GetWhen().GetEquals().GetBoolValue(); got != true {
+	if got := target.GetSteps()[1].GetWhen().GetEquals().GetBoolValue(); got != true {
 		t.Fatalf("step when equals = %v, want true", got)
 	}
-	roundTrip := boundWorkflowAgentTargetFromProto(agent)
+	roundTrip := boundWorkflowTargetFromProto(target)
 	if len(roundTrip.Steps) != 2 {
 		t.Fatalf("round trip steps = %#v, want two", roundTrip.Steps)
 	}
@@ -281,11 +270,16 @@ func TestNewBoundWorkflowAgentTargetCopiesNativeFields(t *testing.T) {
 
 func TestBoundWorkflowTargetFromTargetDoesNotAliasJSONFields(t *testing.T) {
 	original, err := boundWorkflowTargetToProto(BoundWorkflowTarget{
-		Plugin: &BoundWorkflowPluginTarget{
-			PluginName: "slack",
-			Operation:  "chat.postMessage",
-			Input:      map[string]any{"channel": "C123"},
-		},
+		Steps: []WorkflowStep{{
+			ID: "post",
+			Plugin: &WorkflowStepPluginCall{
+				Name:      "slack",
+				Operation: "chat.postMessage",
+				Input: WorkflowValue{Object: map[string]WorkflowValue{
+					"channel": {Literal: "C123", LiteralSet: true},
+				}},
+			},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("boundWorkflowTargetToProto(original): %v", err)
@@ -295,11 +289,11 @@ func TestBoundWorkflowTargetFromTargetDoesNotAliasJSONFields(t *testing.T) {
 		t.Fatalf("boundWorkflowTargetToProto(roundTrip): %v", err)
 	}
 
-	original.GetPlugin().GetInput().Fields["channel"], err = valueFromAny("C999")
+	original.GetSteps()[0].GetPlugin().GetInput().GetObject().Fields["channel"], err = workflowValueToProto(WorkflowValue{Literal: "C999", LiteralSet: true})
 	if err != nil {
-		t.Fatalf("valueFromAny: %v", err)
+		t.Fatalf("workflowValueToProto: %v", err)
 	}
-	if got := roundTrip.GetPlugin().GetInput().AsMap()["channel"]; got != "C123" {
+	if got := roundTrip.GetSteps()[0].GetPlugin().GetInput().GetObject().GetFields()["channel"].GetLiteral().AsInterface(); got != "C123" {
 		t.Fatalf("round-trip input channel = %#v, want C123", got)
 	}
 }
@@ -309,11 +303,16 @@ func TestWorkflowRunFromRunDoesNotAliasNestedFields(t *testing.T) {
 	run, err := boundWorkflowRunToProto(BoundWorkflowRun{
 		ID: "run-1",
 		Target: &BoundWorkflowTarget{
-			Plugin: &BoundWorkflowPluginTarget{
-				PluginName: "slack",
-				Operation:  "chat.postMessage",
-				Input:      map[string]any{"channel": "C123"},
-			},
+			Steps: []WorkflowStep{{
+				ID: "post",
+				Plugin: &WorkflowStepPluginCall{
+					Name:      "slack",
+					Operation: "chat.postMessage",
+					Input: WorkflowValue{Object: map[string]WorkflowValue{
+						"channel": {Literal: "C123", LiteralSet: true},
+					}},
+				},
+			}},
 		},
 		Trigger: &WorkflowRunTrigger{
 			Event: &WorkflowEventTriggerInvocation{
@@ -337,16 +336,16 @@ func TestWorkflowRunFromRunDoesNotAliasNestedFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cloneBoundWorkflowRunProto: %v", err)
 	}
-	run.GetTarget().GetPlugin().GetInput().Fields["channel"], err = valueFromAny("C999")
+	run.GetTarget().GetSteps()[0].GetPlugin().GetInput().GetObject().Fields["channel"], err = workflowValueToProto(WorkflowValue{Literal: "C999", LiteralSet: true})
 	if err != nil {
-		t.Fatalf("valueFromAny(channel): %v", err)
+		t.Fatalf("workflowValueToProto(channel): %v", err)
 	}
 	run.GetTrigger().GetEvent().GetEvent().GetData().Fields["ok"], err = valueFromAny(false)
 	if err != nil {
 		t.Fatalf("valueFromAny(ok): %v", err)
 	}
 
-	if got := copied.GetTarget().GetPlugin().GetInput().AsMap()["channel"]; got != "C123" {
+	if got := copied.GetTarget().GetSteps()[0].GetPlugin().GetInput().GetObject().GetFields()["channel"].GetLiteral().AsInterface(); got != "C123" {
 		t.Fatalf("copied target channel = %#v, want C123", got)
 	}
 	if got := copied.GetTrigger().GetEvent().GetEvent().GetData().AsMap()["ok"]; got != true {
@@ -358,11 +357,16 @@ func TestWorkflowExecutionReferenceFromReferenceDoesNotAliasNestedFields(t *test
 	ref, err := workflowExecutionReferenceToProto(WorkflowExecutionReference{
 		ID: "ref-1",
 		Target: &BoundWorkflowTarget{
-			Plugin: &BoundWorkflowPluginTarget{
-				PluginName: "slack",
-				Operation:  "chat.postMessage",
-				Input:      map[string]any{"channel": "C123"},
-			},
+			Steps: []WorkflowStep{{
+				ID: "post",
+				Plugin: &WorkflowStepPluginCall{
+					Name:      "slack",
+					Operation: "chat.postMessage",
+					Input: WorkflowValue{Object: map[string]WorkflowValue{
+						"channel": {Literal: "C123", LiteralSet: true},
+					}},
+				},
+			}},
 		},
 		Permissions: []WorkflowAccessPermission{{Plugin: "slack", Operations: []string{"chat.postMessage"}}},
 		RunAs:       &WorkflowRunAsSubject{SubjectID: "service_account:slack"},
@@ -375,14 +379,14 @@ func TestWorkflowExecutionReferenceFromReferenceDoesNotAliasNestedFields(t *test
 	if err != nil {
 		t.Fatalf("cloneWorkflowExecutionReferenceProto: %v", err)
 	}
-	ref.GetTarget().GetPlugin().GetInput().Fields["channel"], err = valueFromAny("C999")
+	ref.GetTarget().GetSteps()[0].GetPlugin().GetInput().GetObject().Fields["channel"], err = workflowValueToProto(WorkflowValue{Literal: "C999", LiteralSet: true})
 	if err != nil {
-		t.Fatalf("valueFromAny(channel): %v", err)
+		t.Fatalf("workflowValueToProto(channel): %v", err)
 	}
 	ref.GetPermissions()[0].Operations[0] = "changed"
 	ref.GetRunAs().SubjectId = "changed"
 
-	if got := copied.GetTarget().GetPlugin().GetInput().AsMap()["channel"]; got != "C123" {
+	if got := copied.GetTarget().GetSteps()[0].GetPlugin().GetInput().GetObject().GetFields()["channel"].GetLiteral().AsInterface(); got != "C123" {
 		t.Fatalf("copied target channel = %#v, want C123", got)
 	}
 	if got := copied.GetPermissions()[0].GetOperations()[0]; got != "chat.postMessage" {

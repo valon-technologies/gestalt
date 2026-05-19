@@ -42,6 +42,45 @@ func (i *recordingWorkflowManagerInvoker) ResolveToken(ctx context.Context, _ *p
 	return ctx, "token", nil
 }
 
+func testWorkflowPluginTarget(pluginName, operation string, input map[string]any, credentialMode ...core.ConnectionMode) coreworkflow.Target {
+	return coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID:     "run",
+		Plugin: testWorkflowPluginCall(pluginName, operation, input, credentialMode...),
+	}}}
+}
+
+func testWorkflowPluginCall(pluginName, operation string, input map[string]any, credentialMode ...core.ConnectionMode) *coreworkflow.PluginCall {
+	call := &coreworkflow.PluginCall{
+		Name:      pluginName,
+		Operation: operation,
+	}
+	if len(credentialMode) > 0 {
+		call.CredentialMode = credentialMode[0]
+	}
+	if input != nil {
+		call.Input = coreworkflow.Value{Object: map[string]coreworkflow.Value{}}
+		for key, value := range input {
+			call.Input.Object[key] = coreworkflow.Value{Literal: value, LiteralSet: true}
+		}
+	}
+	return call
+}
+
+func testWorkflowAgentTarget(agent coreworkflow.AgentTurn) coreworkflow.Target {
+	return coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID:    "run",
+		Agent: &agent,
+	}}}
+}
+
+func requireWorkflowPluginStep(t *testing.T, target coreworkflow.Target, stepIndex int) *coreworkflow.PluginCall {
+	t.Helper()
+	if len(target.Steps) <= stepIndex || target.Steps[stepIndex].Plugin == nil {
+		t.Fatalf("target steps = %#v, want plugin step at index %d", target.Steps, stepIndex)
+	}
+	return target.Steps[stepIndex].Plugin
+}
+
 func TestDefinitionCanStartRunFromStoredTargetSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -75,11 +114,7 @@ func TestDefinitionCanStartRunFromStoredTargetSnapshot(t *testing.T) {
 		ProviderName:     "local",
 		CallerPluginName: "github",
 		IdempotencyKey:   "triage-definition",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName: "github",
-			Operation:  "issues.triage",
-			Input:      map[string]any{"mode": "full"},
-		}},
+		Target:           testWorkflowPluginTarget("github", "issues.triage", map[string]any{"mode": "full"}),
 	})
 	if err != nil {
 		t.Fatalf("CreateDefinition: %v", err)
@@ -97,13 +132,14 @@ func TestDefinitionCanStartRunFromStoredTargetSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartRun by definition: %v", err)
 	}
-	if run == nil || run.Run == nil || run.Run.Target.Plugin == nil {
+	if run == nil || run.Run == nil {
 		t.Fatalf("run = %#v, want plugin target", run)
 	}
-	if got := run.Run.Target.Plugin.Operation; got != "issues.triage" {
+	runPlugin := requireWorkflowPluginStep(t, run.Run.Target, 0)
+	if got := runPlugin.Operation; got != "issues.triage" {
 		t.Fatalf("run target operation = %q, want issues.triage", got)
 	}
-	if got := run.Run.Target.Plugin.Input["mode"]; got != "full" {
+	if got := runPlugin.Input.Object["mode"].Literal; got != "full" {
 		t.Fatalf("run target input mode = %v, want full", got)
 	}
 	if run.ExecutionRef == nil || !strings.HasPrefix(run.ExecutionRef.ID, workflowRunExecutionRefBasePrefix) {
@@ -150,10 +186,7 @@ func TestStartRunRejectsProviderReplayWithDifferentExecutionRef(t *testing.T) {
 		CallerPluginName: "github",
 		IdempotencyKey:   "same-idempotency-key",
 		WorkflowKey:      "github:issues:triage:first",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName: "github",
-			Operation:  "issues.triage",
-		}},
+		Target:           testWorkflowPluginTarget("github", "issues.triage", nil),
 	}
 
 	first, err := manager.StartRun(context.Background(), caller, req)
@@ -254,11 +287,7 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
 		ProviderName:     "local",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName: "github",
-			Operation:  "issues.triage",
-			Input:      map[string]any{"mode": "full"},
-		}},
+		Target:           testWorkflowPluginTarget("github", "issues.triage", map[string]any{"mode": "full"}),
 	})
 	if err != nil {
 		t.Fatalf("CreateDefinition: %v", err)
@@ -274,10 +303,10 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 	if err != nil {
 		t.Fatalf("CreateSchedule by definition: %v", err)
 	}
-	if schedule == nil || schedule.Schedule == nil || schedule.Schedule.Target.Plugin == nil {
+	if schedule == nil || schedule.Schedule == nil {
 		t.Fatalf("schedule = %#v, want plugin target", schedule)
 	}
-	if got := schedule.Schedule.Target.Plugin.Operation; got != "issues.triage" {
+	if got := requireWorkflowPluginStep(t, schedule.Schedule.Target, 0).Operation; got != "issues.triage" {
 		t.Fatalf("schedule target operation = %q, want issues.triage", got)
 	}
 	if schedule.ExecutionRef == nil || !strings.HasPrefix(schedule.ExecutionRef.ID, workflowScheduleExecutionRefBasePrefix) {
@@ -299,10 +328,10 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 	if err != nil {
 		t.Fatalf("CreateEventTrigger by definition: %v", err)
 	}
-	if trigger == nil || trigger.Trigger == nil || trigger.Trigger.Target.Plugin == nil {
+	if trigger == nil || trigger.Trigger == nil {
 		t.Fatalf("trigger = %#v, want plugin target", trigger)
 	}
-	if got := trigger.Trigger.Target.Plugin.Operation; got != "issues.triage" {
+	if got := requireWorkflowPluginStep(t, trigger.Trigger.Target, 0).Operation; got != "issues.triage" {
 		t.Fatalf("trigger target operation = %q, want issues.triage", got)
 	}
 	if trigger.ExecutionRef == nil || !strings.HasPrefix(trigger.ExecutionRef.ID, workflowEventTriggerExecutionRefBasePrefix) {
@@ -349,11 +378,7 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
 		ProviderName:     "local",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName: "github",
-			Operation:  "issues.triage",
-			Input:      map[string]any{"mode": "initial"},
-		}},
+		Target:           testWorkflowPluginTarget("github", "issues.triage", map[string]any{"mode": "initial"}),
 	})
 	if err != nil {
 		t.Fatalf("CreateDefinition: %v", err)
@@ -375,11 +400,7 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	if _, err := manager.UpdateDefinition(context.Background(), caller, definition.Definition.ID, DefinitionUpsert{
 		ProviderName:     "local",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName: "github",
-			Operation:  "issues.updated",
-			Input:      map[string]any{"mode": "updated"},
-		}},
+		Target:           testWorkflowPluginTarget("github", "issues.updated", map[string]any{"mode": "updated"}),
 	}); err != nil {
 		t.Fatalf("UpdateDefinition: %v", err)
 	}
@@ -391,7 +412,7 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	if replayedSchedule.Schedule.ID != schedule.Schedule.ID {
 		t.Fatalf("replayed schedule ID = %q, want %q", replayedSchedule.Schedule.ID, schedule.Schedule.ID)
 	}
-	if got := replayedSchedule.Schedule.Target.Plugin.Operation; got != "issues.triage" {
+	if got := requireWorkflowPluginStep(t, replayedSchedule.Schedule.Target, 0).Operation; got != "issues.triage" {
 		t.Fatalf("replayed schedule target operation = %q, want original snapshot", got)
 	}
 	if len(provider.upsertedSchedules) != 1 {
@@ -401,11 +422,7 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	otherDefinition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
 		ProviderName:     "local",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName: "github",
-			Operation:  "issues.updated",
-			Input:      map[string]any{"mode": "other"},
-		}},
+		Target:           testWorkflowPluginTarget("github", "issues.updated", map[string]any{"mode": "other"}),
 	})
 	if err != nil {
 		t.Fatalf("CreateDefinition(other): %v", err)
@@ -445,7 +462,7 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	if replayedTrigger.Trigger.ID != trigger.Trigger.ID {
 		t.Fatalf("replayed trigger ID = %q, want %q", replayedTrigger.Trigger.ID, trigger.Trigger.ID)
 	}
-	if got := replayedTrigger.Trigger.Target.Plugin.Operation; got != "issues.updated" {
+	if got := requireWorkflowPluginStep(t, replayedTrigger.Trigger.Target, 0).Operation; got != "issues.updated" {
 		t.Fatalf("replayed trigger target operation = %q, want stored snapshot", got)
 	}
 	if len(provider.upsertedEventTriggers) != 1 {
@@ -493,10 +510,7 @@ func TestDefinitionRunsUseDefinitionProvider(t *testing.T) {
 	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
 		ProviderName:     "remote",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName: "github",
-			Operation:  "issues.triage",
-		}},
+		Target:           testWorkflowPluginTarget("github", "issues.triage", nil),
 	})
 	if err != nil {
 		t.Fatalf("CreateDefinition: %v", err)
@@ -559,10 +573,7 @@ func TestListRunsResumesTokenlessProviderOverrun(t *testing.T) {
 		TokenPermissions: permissions,
 		Scopes:           principal.PermissionPlugins(permissions),
 	})
-	target := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-		PluginName: "github",
-		Operation:  "issues.triage",
-	}}
+	target := testWorkflowPluginTarget("github", "issues.triage", nil)
 	for _, id := range []string{"1", "2", "3"} {
 		refID := "ref-" + id
 		provider.refs[refID] = &coreworkflow.ExecutionReference{
@@ -601,10 +612,7 @@ func TestListRunsSkipsFilteredProviderPages(t *testing.T) {
 	t.Parallel()
 
 	provider := newTestWorkflowProvider()
-	target := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-		PluginName: "github",
-		Operation:  "issues.triage",
-	}}
+	target := testWorkflowPluginTarget("github", "issues.triage", nil)
 	provider.refs["ref-hidden"] = &coreworkflow.ExecutionReference{
 		ID:           "ref-hidden",
 		ProviderName: "local",
@@ -684,10 +692,7 @@ func TestListRunsOrdersCandidatesAcrossProvidersNewestFirst(t *testing.T) {
 
 	localProvider := newTestWorkflowProvider()
 	remoteProvider := newTestWorkflowProvider()
-	target := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-		PluginName: "github",
-		Operation:  "issues.triage",
-	}}
+	target := testWorkflowPluginTarget("github", "issues.triage", nil)
 	addRun := func(provider *testWorkflowProvider, providerName, runID string, createdAt time.Time) {
 		refID := "ref-" + runID
 		provider.refs[refID] = &coreworkflow.ExecutionReference{
@@ -761,13 +766,17 @@ func TestListRunsFiltersTargetPluginInManager(t *testing.T) {
 	t.Parallel()
 
 	provider := newTestWorkflowProvider()
-	githubTarget := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-		PluginName: "github",
-		Operation:  "issues.triage",
-	}}
-	slackTarget := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-		PluginName: "slack",
-		Operation:  "chat.postMessage",
+	githubTarget := testWorkflowPluginTarget("github", "issues.triage", nil)
+	slackTarget := testWorkflowPluginTarget("slack", "chat.postMessage", nil)
+	multiTarget := coreworkflow.Target{Steps: []coreworkflow.Step{
+		{
+			ID:     "triage",
+			Plugin: testWorkflowPluginCall("github", "issues.triage", nil),
+		},
+		{
+			ID:     "notify",
+			Plugin: testWorkflowPluginCall("slack", "chat.postMessage", nil),
+		},
 	}}
 	provider.refs["ref-github"] = &coreworkflow.ExecutionReference{
 		ID:           "ref-github",
@@ -780,6 +789,13 @@ func TestListRunsFiltersTargetPluginInManager(t *testing.T) {
 		ID:           "ref-slack",
 		ProviderName: "local",
 		Target:       slackTarget,
+		SubjectID:    principal.UserSubjectID("ada"),
+		SubjectKind:  string(principal.KindUser),
+	}
+	provider.refs["ref-multi"] = &coreworkflow.ExecutionReference{
+		ID:           "ref-multi",
+		ProviderName: "local",
+		Target:       multiTarget,
 		SubjectID:    principal.UserSubjectID("ada"),
 		SubjectKind:  string(principal.KindUser),
 	}
@@ -799,6 +815,12 @@ func TestListRunsFiltersTargetPluginInManager(t *testing.T) {
 				Status:       coreworkflow.RunStatusRunning,
 				Target:       slackTarget,
 				ExecutionRef: "ref-slack",
+			},
+			{
+				ID:           "run-multi",
+				Status:       coreworkflow.RunStatusRunning,
+				Target:       multiTarget,
+				ExecutionRef: "ref-multi",
 			},
 		}}, nil
 	}
@@ -839,8 +861,8 @@ func TestListRunsFiltersTargetPluginInManager(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListRuns: %v", err)
 	}
-	if got := workflowManagerRunIDs(resp.Runs); !reflect.DeepEqual(got, []string{"run-slack"}) {
-		t.Fatalf("ListRuns ids = %v, want slack run only", got)
+	if got := workflowManagerRunIDs(resp.Runs); !reflect.DeepEqual(got, []string{"run-multi", "run-slack"}) {
+		t.Fatalf("ListRuns ids = %v, want runs with any slack step", got)
 	}
 }
 
@@ -848,10 +870,7 @@ func TestListRunsKeepsUnorderedTokenlessProviderRunsReachable(t *testing.T) {
 	t.Parallel()
 
 	provider := newTestWorkflowProvider()
-	target := coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-		PluginName: "github",
-		Operation:  "issues.triage",
-	}}
+	target := testWorkflowPluginTarget("github", "issues.triage", nil)
 	for _, id := range []string{"old", "new"} {
 		refID := "ref-" + id
 		provider.refs[refID] = &coreworkflow.ExecutionReference{
@@ -1002,10 +1021,7 @@ func TestUpdateDefinitionProviderChangeDoesNotExposeDuplicateActiveRefs(t *testi
 	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
 		ProviderName:     "local",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName: "github",
-			Operation:  "issues.triage",
-		}},
+		Target:           testWorkflowPluginTarget("github", "issues.triage", nil),
 	})
 	if err != nil {
 		t.Fatalf("CreateDefinition: %v", err)
@@ -1029,10 +1045,7 @@ func TestUpdateDefinitionProviderChangeDoesNotExposeDuplicateActiveRefs(t *testi
 	updated, err := manager.UpdateDefinition(context.Background(), caller, definition.Definition.ID, DefinitionUpsert{
 		ProviderName:     "remote",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName: "github",
-			Operation:  "issues.triage",
-		}},
+		Target:           testWorkflowPluginTarget("github", "issues.triage", nil),
 	})
 	if err != nil {
 		t.Fatalf("UpdateDefinition: %v", err)
@@ -1058,6 +1071,17 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 
 	provider := newTestWorkflowProvider()
 	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t, &coretesting.StubIntegration{
+			N:        "github",
+			ConnMode: core.ConnectionModeNone,
+			CatalogVal: &catalog.Catalog{
+				Name: "github",
+				Operations: []catalog.CatalogOperation{
+					{ID: "bot.commentFinal", Method: "POST"},
+					{ID: "bot.commentStarted", Method: "POST"},
+				},
+			},
+		}),
 		Workflow:     testWorkflowControl{provider: provider},
 		Agent:        testAgentControl{},
 		AgentManager: testAgentManager{},
@@ -1088,30 +1112,24 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
-			ToolRefs: []coreagent.ToolRef{
-				{Plugin: "github", Operation: "bot.commitFiles"},
-				{Plugin: "github", Operation: "bot.openPullRequest"},
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{
+			{
+				ID: "run",
+				Agent: &coreworkflow.AgentTurn{
+					ProviderName: "simple",
+					Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+					ToolRefs: []coreagent.ToolRef{
+						{Plugin: "github", Operation: "bot.commitFiles"},
+						{Plugin: "github", Operation: "bot.openPullRequest"},
+					},
+				},
+				OutputDelivery: &coreworkflow.StepDelivery{
+					Plugin: testWorkflowPluginCall("github", "bot.commentFinal", nil, core.ConnectionModeNone),
+				},
 			},
-			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName: "github",
-					Operation:  "bot.commentFinal",
-				},
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "body", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-				},
-			},
-			SessionReadyDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName: "github",
-					Operation:  "bot.commentStarted",
-				},
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
-				},
+			{
+				ID:     "session_ready",
+				Plugin: testWorkflowPluginCall("github", "bot.commentStarted", nil, core.ConnectionModeNone),
 			},
 		}},
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
@@ -1141,11 +1159,11 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	if managed.ExecutionRef.CallerPluginName != "github" {
 		t.Fatalf("caller plugin = %q, want github", managed.ExecutionRef.CallerPluginName)
 	}
-	if got := managed.ExecutionRef.Target.Agent.OutputDelivery.CredentialMode; got != core.ConnectionModeNone {
+	if got := managed.ExecutionRef.Target.Steps[0].OutputDelivery.Plugin.CredentialMode; got != core.ConnectionModeNone {
 		t.Fatalf("output delivery credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
-	if got := managed.ExecutionRef.Target.Agent.SessionReadyDelivery.CredentialMode; got != core.ConnectionModeNone {
-		t.Fatalf("session ready delivery credential mode = %q, want %q", got, core.ConnectionModeNone)
+	if got := requireWorkflowPluginStep(t, managed.ExecutionRef.Target, 1).CredentialMode; got != core.ConnectionModeNone {
+		t.Fatalf("session ready plugin credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 }
 
@@ -1170,23 +1188,213 @@ func TestSignalOrStartRunRejectsStepWhenMissingEquals(t *testing.T) {
 	_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
 		ProviderName: "local",
 		WorkflowKey:  "agent:steps:missing-equals",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "simple",
-			Steps: []coreworkflow.AgentStep{
-				{ID: "diagnosis", Prompt: "Diagnose the alert."},
-				{
-					ID:     "pr_fix",
-					Prompt: "Open a PR.",
-					When: &coreworkflow.AgentStepWhen{
-						StepID:     "diagnosis",
-						OutputPath: "structured_output.actionable_for_pr",
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{
+			{
+				ID: "diagnosis",
+				Agent: &coreworkflow.AgentTurn{
+					ProviderName: "simple",
+					Prompt:       coreworkflow.Text{Template: "Diagnose the alert."},
+				},
+			},
+			{
+				ID: "pr_fix",
+				Agent: &coreworkflow.AgentTurn{
+					ProviderName: "simple",
+					Prompt:       coreworkflow.Text{Template: "Open a PR."},
+				},
+				When: &coreworkflow.StepWhen{
+					Value: coreworkflow.Value{
+						StepOutput: &coreworkflow.StepOutputSource{
+							StepID: "diagnosis",
+							Path:   "structured_output.actionable_for_pr",
+						},
 					},
 				},
 			},
 		}},
 	})
-	if err == nil || !strings.Contains(err.Error(), "workflow agent steps[1].when.equals is required") {
+	if err == nil || !strings.Contains(err.Error(), "workflow target.steps[1].when.equals is required") {
 		t.Fatalf("SignalOrStartRun error = %v, want missing when.equals validation", err)
+	}
+	if provider.signalOrStartCalls != 0 {
+		t.Fatalf("SignalOrStartRun provider calls = %d, want 0", provider.signalOrStartCalls)
+	}
+}
+
+func TestSignalOrStartRunRejectsStepWhenMissingValue(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{Plugin: "simple"}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: callerPermissions,
+		Scopes:           principal.PermissionPlugins(callerPermissions),
+	})
+
+	_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName: "local",
+		WorkflowKey:  "agent:steps:missing-when-value",
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{
+			{
+				ID: "diagnosis",
+				Agent: &coreworkflow.AgentTurn{
+					ProviderName: "simple",
+					Prompt:       coreworkflow.Text{Template: "Diagnose the alert."},
+				},
+			},
+			{
+				ID: "pr_fix",
+				Agent: &coreworkflow.AgentTurn{
+					ProviderName: "simple",
+					Prompt:       coreworkflow.Text{Template: "Open a PR."},
+				},
+				When: &coreworkflow.StepWhen{
+					Equals:    nil,
+					EqualsSet: true,
+				},
+			},
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "workflow target.steps[1].when.value is required") {
+		t.Fatalf("SignalOrStartRun error = %v, want missing when.value validation", err)
+	}
+	if provider.signalOrStartCalls != 0 {
+		t.Fatalf("SignalOrStartRun provider calls = %d, want 0", provider.signalOrStartCalls)
+	}
+}
+
+func TestResolveTargetRejectsInvalidStepOutputRefsOutsideWhen(t *testing.T) {
+	t.Parallel()
+
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t,
+			&coretesting.StubIntegration{
+				N:        "github",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name:       "github",
+					Operations: []catalog.CatalogOperation{{ID: "issues.triage", Method: "POST"}},
+				},
+			},
+			&coretesting.StubIntegration{
+				N:        "slack",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name:       "slack",
+					Operations: []catalog.CatalogOperation{{ID: "chat.postMessage", Method: "POST"}},
+				},
+			},
+		),
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{
+		{Plugin: "github", Operations: []string{"issues.triage"}},
+		{Plugin: "slack", Operations: []string{"chat.postMessage"}},
+	})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+	stepOutput := func(stepID, path string) coreworkflow.Value {
+		return coreworkflow.Value{StepOutput: &coreworkflow.StepOutputSource{StepID: stepID, Path: path}}
+	}
+	baseTarget := func() coreworkflow.Target {
+		return coreworkflow.Target{Steps: []coreworkflow.Step{
+			{
+				ID:     "diagnosis",
+				Plugin: testWorkflowPluginCall("github", "issues.triage", nil),
+			},
+			{
+				ID:     "notify",
+				Plugin: testWorkflowPluginCall("slack", "chat.postMessage", nil),
+			},
+		}}
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*coreworkflow.Target)
+		want   string
+	}{
+		{
+			name: "step inputs",
+			mutate: func(target *coreworkflow.Target) {
+				target.Steps[1].Inputs = map[string]coreworkflow.Value{"summary": stepOutput("future", "plugin.body")}
+			},
+			want: `workflow target.steps[1].inputs.summary.step_output.step_id "future" must reference an earlier step`,
+		},
+		{
+			name: "plugin input",
+			mutate: func(target *coreworkflow.Target) {
+				target.Steps[1].Plugin.Input = coreworkflow.Value{Object: map[string]coreworkflow.Value{
+					"text": stepOutput("future", "plugin.body"),
+				}}
+			},
+			want: `workflow target.steps[1].plugin.input.text.step_output.step_id "future" must reference an earlier step`,
+		},
+		{
+			name: "output delivery input",
+			mutate: func(target *coreworkflow.Target) {
+				target.Steps[1].OutputDelivery = &coreworkflow.StepDelivery{Plugin: testWorkflowPluginCall("slack", "chat.postMessage", map[string]any{})}
+				target.Steps[1].OutputDelivery.Plugin.Input = coreworkflow.Value{Object: map[string]coreworkflow.Value{
+					"text": stepOutput("future", "plugin.body"),
+				}}
+			},
+			want: `workflow target.steps[1].output_delivery.plugin.input.text.step_output.step_id "future" must reference an earlier step`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			target := baseTarget()
+			tt.mutate(&target)
+			_, err := manager.resolveTarget(context.Background(), caller, target, "")
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("resolveTarget error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestSignalOrStartRunRejectsAgentStepWithoutPromptOrMessages(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Workflow:     testWorkflowControl{provider: provider},
+		Agent:        testAgentControl{},
+		AgentManager: testAgentManager{},
+	})
+	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{Plugin: "simple"}})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: callerPermissions,
+		Scopes:           principal.PermissionPlugins(callerPermissions),
+	})
+
+	_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName: "local",
+		WorkflowKey:  "agent:steps:empty-agent",
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID: "agent",
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "simple",
+			},
+		}}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "workflow target agent prompt or messages is required") {
+		t.Fatalf("SignalOrStartRun error = %v, want missing agent prompt/messages validation", err)
 	}
 	if provider.signalOrStartCalls != 0 {
 		t.Fatalf("SignalOrStartRun provider calls = %d, want 0", provider.signalOrStartCalls)
@@ -1225,21 +1433,16 @@ func TestSignalOrStartRunRejectsOutputDeliveryTargetCredentialMode(t *testing.T)
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
-			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
-			OutputDelivery: &coreworkflow.OutputDelivery{
-				Target: coreworkflow.PluginTarget{
-					PluginName:     "github",
-					Operation:      "bot.commentFinal",
-					CredentialMode: core.ConnectionModeNone,
-				},
-				InputBindings: []coreworkflow.OutputBinding{
-					{InputField: "body", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-				},
-				CredentialMode: core.ConnectionModeNone,
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+			ID: "run",
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "simple",
+				Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
 			},
-		}},
+			OutputDelivery: &coreworkflow.StepDelivery{
+				Plugin: testWorkflowPluginCall("github", "bot.commentFinal", nil, core.ConnectionMode("unsupported")),
+			},
+		}}},
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
 	if !errors.Is(err, invocation.ErrInvalidInvocation) {
@@ -1286,20 +1489,16 @@ func TestSignalOrStartRunPluginTargetCredentialModeUsesDeclaredInvoke(t *testing
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7:policy:pr-review",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName:     "github",
-			Operation:      "reviewPullRequest",
-			CredentialMode: core.ConnectionModeNone,
-		}},
-		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+		Target:           testWorkflowPluginTarget("github", "reviewPullRequest", nil, core.ConnectionModeNone),
+		Signal:           coreworkflow.Signal{Name: "github.app.webhook"},
 	})
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
 	}
-	if managed == nil || managed.ExecutionRef == nil || managed.ExecutionRef.Target.Plugin == nil {
+	if managed == nil || managed.ExecutionRef == nil {
 		t.Fatalf("managed signal = %#v, want plugin execution ref", managed)
 	}
-	if got := managed.ExecutionRef.Target.Plugin.CredentialMode; got != core.ConnectionModeNone {
+	if got := requireWorkflowPluginStep(t, managed.ExecutionRef.Target, 0).CredentialMode; got != core.ConnectionModeNone {
 		t.Fatalf("stored credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 	if len(invoker.modes) == 0 || invoker.modes[len(invoker.modes)-1] != core.ConnectionModeNone {
@@ -1343,16 +1542,13 @@ func TestSignalOrStartRunPluginTargetCredentialModeKeepsBlankModeBlank(t *testin
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7:policy:pr-review",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName: "github",
-			Operation:  "reviewPullRequest",
-		}},
-		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+		Target:           testWorkflowPluginTarget("github", "reviewPullRequest", nil),
+		Signal:           coreworkflow.Signal{Name: "github.app.webhook"},
 	})
 	if err != nil {
 		t.Fatalf("SignalOrStartRun: %v", err)
 	}
-	if got := managed.ExecutionRef.Target.Plugin.CredentialMode; got != "" {
+	if got := requireWorkflowPluginStep(t, managed.ExecutionRef.Target, 0).CredentialMode; got != "" {
 		t.Fatalf("stored credential mode = %q, want empty", got)
 	}
 	if len(invoker.modes) == 0 || invoker.modes[len(invoker.modes)-1] != "" {
@@ -1364,12 +1560,8 @@ func TestSignalOrStartRunPluginTargetCredentialModeKeepsBlankModeBlank(t *testin
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7:policy:pr-review",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName:     "github",
-			Operation:      "reviewPullRequest",
-			CredentialMode: core.ConnectionModeNone,
-		}},
-		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
+		Target:           testWorkflowPluginTarget("github", "reviewPullRequest", nil, core.ConnectionModeNone),
+		Signal:           coreworkflow.Signal{Name: "github.app.webhook"},
 	})
 	if err != nil {
 		t.Fatalf("SignalOrStartRun explicit mode: %v", err)
@@ -1406,11 +1598,7 @@ func TestCreateScheduleRejectsPluginTargetCredentialModeWithoutCaller(t *testing
 	_, err := manager.CreateSchedule(context.Background(), caller, ScheduleUpsert{
 		ProviderName: "local",
 		Cron:         "*/5 * * * *",
-		Target: coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{
-			PluginName:     "github",
-			Operation:      "reviewPullRequest",
-			CredentialMode: core.ConnectionModeNone,
-		}},
+		Target:       testWorkflowPluginTarget("github", "reviewPullRequest", nil, core.ConnectionModeNone),
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
 		t.Fatalf("CreateSchedule error = %v, want authorization denied", err)
@@ -1433,10 +1621,10 @@ func TestSignalOrStartRunReusesExecutionRefForSameWorkflowKeyAndTarget(t *testin
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		Target: testWorkflowAgentTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
-		}},
+			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	}
 
@@ -1475,13 +1663,13 @@ func TestSignalOrStartRunRejectsDeniedExecutionRefPermissionsBeforeEnqueue(t *te
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		Target: testWorkflowAgentTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
+			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
 			ToolRefs: []coreagent.ToolRef{
 				{Plugin: "github", Operation: "bot.admin"},
 			},
-		}},
+		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	}
 
@@ -1517,10 +1705,10 @@ func TestSignalOrStartRunFailureDoesNotRevokeStableExecutionRef(t *testing.T) {
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		Target: testWorkflowAgentTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
-		}},
+			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	}
 
@@ -1563,10 +1751,10 @@ func TestSignalOrStartRunFirstFailureKeepsStableExecutionRef(t *testing.T) {
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		Target: testWorkflowAgentTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
-		}},
+			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	}
 
@@ -1603,10 +1791,10 @@ func TestSignalOrStartRunCreatesExecutionRefAfterGRPCNotFound(t *testing.T) {
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		Target: testWorkflowAgentTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
-		}},
+			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
 	if err != nil {
@@ -1644,10 +1832,10 @@ func TestSignalOrStartRunDoesNotRewriteExecutionRefForDifferentPermissions(t *te
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		Target: testWorkflowAgentTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
-		}},
+			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	}
 
@@ -1738,13 +1926,13 @@ func TestSignalOrStartRunExecutionRefDoesNotInheritSurfaceInvokes(t *testing.T) 
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		Target: testWorkflowAgentTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
+			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
 			ToolRefs: []coreagent.ToolRef{
 				{Plugin: "github", Operation: "bot.createPullRequest"},
 			},
-		}},
+		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
 	if !errors.Is(err, core.ErrNotFound) {
@@ -1775,10 +1963,10 @@ func TestSignalOrStartRunRejectsUnauthorizedAgentProvider(t *testing.T) {
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		Target: testWorkflowAgentTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
-		}},
+			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
@@ -1826,10 +2014,10 @@ func TestSignalOrStartRunRejectsRuntimeDeniedAgentProvider(t *testing.T) {
 		ProviderName:     "local",
 		WorkflowKey:      "github:99:acme/widgets:7",
 		CallerPluginName: "github",
-		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+		Target: testWorkflowAgentTarget(coreworkflow.AgentTurn{
 			ProviderName: "simple",
-			Prompt:       "Handle the webhook.",
-		}},
+			Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
+		}),
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
 	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
@@ -1849,13 +2037,13 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 		Agent:        testAgentControl{},
 		AgentManager: testAgentManager{},
 	})
-	target := coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
+	target := testWorkflowAgentTarget(coreworkflow.AgentTurn{
 		ProviderName: "simple",
-		Prompt:       "Handle the webhook.",
+		Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
 		ToolRefs: []coreagent.ToolRef{
 			{Plugin: "github", Operation: "bot.openPullRequest"},
 		},
-	}}
+	})
 	ref := &coreworkflow.ExecutionReference{
 		ID:           "workflow_run:stale-permissions",
 		ProviderName: "local",
@@ -1918,7 +2106,7 @@ func TestCreateScheduleIdempotencyKeyIsScopedByCallerPlugin(t *testing.T) {
 		ProviderName:   "local",
 		Cron:           "*/5 * * * *",
 		Timezone:       "UTC",
-		Target:         coreworkflow.Target{Agent: &coreworkflow.AgentTarget{ProviderName: "simple", Prompt: "Sync roadmap."}},
+		Target:         testWorkflowAgentTarget(coreworkflow.AgentTurn{ProviderName: "simple", Prompt: coreworkflow.Text{Template: "Sync roadmap."}}),
 		IdempotencyKey: "same-operation-key",
 	}
 
@@ -2115,7 +2303,7 @@ func (p *testWorkflowProvider) ListRuns(_ context.Context, req coreworkflow.List
 		if run == nil {
 			continue
 		}
-		if req.TargetPlugin != "" && (run.Target.Plugin == nil || strings.TrimSpace(run.Target.Plugin.PluginName) != strings.TrimSpace(req.TargetPlugin)) {
+		if req.TargetPlugin != "" && !workflowTargetHasPlugin(run.Target, req.TargetPlugin) {
 			continue
 		}
 		if req.Status != "" && run.Status != req.Status {
