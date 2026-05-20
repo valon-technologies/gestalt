@@ -1038,7 +1038,7 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 				"default": model(map[string]AuthorizationResourceTypeDef{
 					"team": resourceType(
 						map[string]AuthorizationRelationDef{"member": subjectRelation("subject")},
-						map[string]AuthorizationActionDef{"manage": AuthorizationActionDef{Relations: []string{"admin"}}},
+						map[string]AuthorizationActionDef{"manage": {Relations: []string{"admin"}}},
 					),
 				}),
 			}},
@@ -1065,6 +1065,37 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 				}),
 			}},
 			wantErr: `allowedTargets[0].resourceType references unknown resource type "missing"`,
+		},
+		{
+			name: "invalid allowed subject set relation",
+			authz: AuthorizationConfig{Models: map[string]AuthorizationModelDef{
+				"default": model(map[string]AuthorizationResourceTypeDef{
+					"team": resourceType(map[string]AuthorizationRelationDef{
+						"member": subjectRelation("subject"),
+						"parent": {
+							AllowedTargets: []AuthorizationAllowedTargetDef{{SubjectSet: &AuthorizationSubjectSetTargetDef{
+								ResourceType: "team",
+								Relation:     "missing",
+							}}},
+						},
+					}, nil),
+				}),
+			}},
+			wantErr: `allowedTargets[0].subjectSet.relation references unknown relation "missing"`,
+		},
+		{
+			name: "unknown dynamic resource policy type",
+			authz: AuthorizationConfig{
+				Models: map[string]AuthorizationModelDef{
+					"default": model(map[string]AuthorizationResourceTypeDef{
+						"team": resourceType(map[string]AuthorizationRelationDef{"admin": subjectRelation("subject")}, nil),
+					}),
+				},
+				ResourceTypes: map[string]AuthorizationResourcePolicyDef{
+					"missing": {Dynamic: AuthorizationResourceDynamicPolicyDef{AllowAdditionalRelationships: true}},
+				},
+			},
+			wantErr: `authorization.resourceTypes.missing references unknown resource type "missing"`,
 		},
 		{
 			name: "malformed relationship resource",
@@ -1112,13 +1143,6 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 			},
 			wantErr: `resource.type references unknown resource type "team"`,
 		},
-		{
-			name: "unsupported static override flag",
-			authz: AuthorizationConfig{ResourceTypes: map[string]AuthorizationResourcePolicyDef{
-				"team": {Dynamic: AuthorizationResourceDynamicPolicyDef{AllowStaticRelationshipOverrides: true}},
-			}},
-			wantErr: "allowStaticRelationshipOverrides is not supported",
-		},
 	}
 
 	for _, tc := range tests {
@@ -1134,6 +1158,36 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 				t.Fatalf("ValidateStructure error = %v, want substring %q", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestNormalizedAuthorizationRelationshipTargetDefCopiesSubjectSet(t *testing.T) {
+	t.Parallel()
+
+	subjectSet := &AuthorizationSubjectSetDef{
+		Resource: AuthorizationResourceDef{
+			Type:       " team ",
+			ID:         " servicing ",
+			Properties: map[string]string{" role ": " owner "},
+		},
+		Relation: " member ",
+	}
+
+	normalized := normalizedAuthorizationRelationshipTargetDef(AuthorizationRelationshipTargetDef{
+		SubjectSet: subjectSet,
+	})
+
+	if normalized.SubjectSet == subjectSet {
+		t.Fatal("normalized subject set reused original pointer")
+	}
+	if subjectSet.Resource.Type != " team " || subjectSet.Resource.ID != " servicing " || subjectSet.Relation != " member " {
+		t.Fatalf("original subject set mutated: %#v", subjectSet)
+	}
+	if normalized.SubjectSet.Resource.Type != "team" ||
+		normalized.SubjectSet.Resource.ID != "servicing" ||
+		normalized.SubjectSet.Resource.Properties["role"] != "owner" ||
+		normalized.SubjectSet.Relation != "member" {
+		t.Fatalf("normalized subject set = %#v", normalized.SubjectSet)
 	}
 }
 

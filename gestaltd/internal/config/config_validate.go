@@ -1610,7 +1610,7 @@ func validateAuthorizationModelConfig(cfg *Config) error {
 		}
 		for resourceTypeName, resourceType := range model.ResourceTypes {
 			resourcePath := fmt.Sprintf("authorization.models.%s.resourceTypes.%s", modelName, resourceTypeName)
-			if err := validateAuthorizationResourceTypeDef(resourcePath, resourceTypeName, resourceType); err != nil {
+			if err := validateAuthorizationResourceTypeDef(fmt.Sprintf("authorization.models.%s.resourceTypes", modelName), resourceTypeName, resourcePath, resourceType); err != nil {
 				return err
 			}
 			if prev, exists := definedResourceTypes[resourceTypeName]; exists {
@@ -1623,29 +1623,30 @@ func validateAuthorizationModelConfig(cfg *Config) error {
 	for modelName, model := range cfg.Authorization.Models {
 		for resourceTypeName, resourceType := range model.ResourceTypes {
 			resourcePath := fmt.Sprintf("authorization.models.%s.resourceTypes.%s", modelName, resourceTypeName)
-			if err := validateAuthorizationResourceTypeReferences(resourcePath, resourceType, definedResourceTypes); err != nil {
+			if err := validateAuthorizationResourceTypeReferences(resourcePath, resourceType, resourceTypeRelations); err != nil {
 				return err
 			}
 		}
 	}
-	for resourceTypeName, policy := range cfg.Authorization.ResourceTypes {
+	for resourceTypeName := range cfg.Authorization.ResourceTypes {
 		if err := validateAuthorizationMapKey("authorization.resourceTypes", resourceTypeName); err != nil {
 			return err
 		}
-		if policy.Dynamic.AllowStaticRelationshipOverrides {
-			return fmt.Errorf("config validation: authorization.resourceTypes.%s.dynamic.allowStaticRelationshipOverrides is not supported", resourceTypeName)
+		if _, ok := definedResourceTypes[resourceTypeName]; !ok {
+			return fmt.Errorf("config validation: authorization.resourceTypes.%s references unknown resource type %q", resourceTypeName, resourceTypeName)
 		}
 	}
-	for i, relationship := range cfg.Authorization.Relationships {
+	for i := range cfg.Authorization.Relationships {
+		relationship := &cfg.Authorization.Relationships[i]
 		path := fmt.Sprintf("authorization.relationships[%d]", i)
-		if err := validateAuthorizationRelationshipDef(path, relationship, resourceTypeRelations); err != nil {
+		if err := validateAuthorizationRelationshipDef(path, *relationship, resourceTypeRelations); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateAuthorizationResourceTypeReferences(path string, def AuthorizationResourceTypeDef, resourceTypes map[string]string) error {
+func validateAuthorizationResourceTypeReferences(path string, def AuthorizationResourceTypeDef, resourceTypes map[string]map[string]AuthorizationRelationDef) error {
 	for relationName, relation := range def.Relations {
 		relationPath := path + ".relations." + relationName
 		for i := range relation.AllowedTargets {
@@ -1658,8 +1659,13 @@ func validateAuthorizationResourceTypeReferences(path string, def AuthorizationR
 			}
 			if target.SubjectSet != nil {
 				resourceType := strings.TrimSpace(target.SubjectSet.ResourceType)
-				if _, ok := resourceTypes[resourceType]; !ok {
+				relations, ok := resourceTypes[resourceType]
+				if !ok {
 					return fmt.Errorf("config validation: %s.subjectSet.resourceType references unknown resource type %q", targetPath, resourceType)
+				}
+				relation := strings.TrimSpace(target.SubjectSet.Relation)
+				if _, ok := relations[relation]; !ok {
+					return fmt.Errorf("config validation: %s.subjectSet.relation references unknown relation %q for resource type %q", targetPath, relation, resourceType)
 				}
 			}
 		}
@@ -1667,8 +1673,8 @@ func validateAuthorizationResourceTypeReferences(path string, def AuthorizationR
 	return nil
 }
 
-func validateAuthorizationResourceTypeDef(path, name string, def AuthorizationResourceTypeDef) error {
-	if err := validateAuthorizationMapKey(path, name); err != nil {
+func validateAuthorizationResourceTypeDef(parentPath, name, path string, def AuthorizationResourceTypeDef) error {
+	if err := validateAuthorizationMapKey(parentPath, name); err != nil {
 		return err
 	}
 	if len(def.Relations) == 0 {
@@ -1677,12 +1683,9 @@ func validateAuthorizationResourceTypeDef(path, name string, def AuthorizationRe
 	if err := validateAuthorizationSourceMetadata(path+".source", def.Source); err != nil {
 		return err
 	}
-	if def.Dynamic.AllowStaticRelationshipOverrides {
-		return fmt.Errorf("config validation: %s.dynamic.allowStaticRelationshipOverrides is not supported", path)
-	}
 	for relationName, relation := range def.Relations {
 		relationPath := path + ".relations." + relationName
-		if err := validateAuthorizationMapKey(relationPath, relationName); err != nil {
+		if err := validateAuthorizationMapKey(path+".relations", relationName); err != nil {
 			return err
 		}
 		if err := validateStringList(relationPath+".subjectTypes", relation.SubjectTypes); err != nil {
@@ -1702,7 +1705,7 @@ func validateAuthorizationResourceTypeDef(path, name string, def AuthorizationRe
 	}
 	for actionName, action := range def.Actions {
 		actionPath := path + ".actions." + actionName
-		if err := validateAuthorizationMapKey(actionPath, actionName); err != nil {
+		if err := validateAuthorizationMapKey(path+".actions", actionName); err != nil {
 			return err
 		}
 		if err := validateStringList(actionPath+".relations", action.Relations); err != nil {

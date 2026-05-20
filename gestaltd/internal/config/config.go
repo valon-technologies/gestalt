@@ -1896,8 +1896,7 @@ type AuthorizationResourcePolicyDef struct {
 }
 
 type AuthorizationResourceDynamicPolicyDef struct {
-	AllowAdditionalRelationships     bool `yaml:"allowAdditionalRelationships,omitempty"`
-	AllowStaticRelationshipOverrides bool `yaml:"allowStaticRelationshipOverrides,omitempty"`
+	AllowAdditionalRelationships bool `yaml:"allowAdditionalRelationships,omitempty"`
 }
 
 type ListenerConfig struct {
@@ -3830,8 +3829,10 @@ func normalizedAuthorizationRelationshipTargetDef(def AuthorizationRelationshipT
 		def.Resource = &resource
 	}
 	if def.SubjectSet != nil {
-		def.SubjectSet.Resource = normalizedAuthorizationResourceDef(def.SubjectSet.Resource)
-		def.SubjectSet.Relation = strings.TrimSpace(def.SubjectSet.Relation)
+		subjectSet := *def.SubjectSet
+		subjectSet.Resource = normalizedAuthorizationResourceDef(subjectSet.Resource)
+		subjectSet.Relation = strings.TrimSpace(subjectSet.Relation)
+		def.SubjectSet = &subjectSet
 	}
 	return def
 }
