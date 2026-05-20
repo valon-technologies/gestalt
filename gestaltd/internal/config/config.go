@@ -1802,7 +1802,10 @@ type EgressConfig struct {
 }
 
 type AuthorizationConfig struct {
-	Policies map[string]SubjectPolicyDef `yaml:"policies,omitempty"`
+	Policies      map[string]SubjectPolicyDef               `yaml:"policies,omitempty"`
+	Models        map[string]AuthorizationModelDef          `yaml:"models,omitempty"`
+	Relationships []AuthorizationRelationshipDef            `yaml:"relationships,omitempty"`
+	ResourceTypes map[string]AuthorizationResourcePolicyDef `yaml:"resourceTypes,omitempty"`
 }
 
 type SubjectPolicyDef struct {
@@ -1813,6 +1816,87 @@ type SubjectPolicyDef struct {
 type SubjectPolicyMemberDef struct {
 	SubjectID string `yaml:"subjectID,omitempty"`
 	Role      string `yaml:"role"`
+}
+
+type AuthorizationModelDef struct {
+	ResourceTypes map[string]AuthorizationResourceTypeDef `yaml:"resourceTypes,omitempty"`
+	Source        AuthorizationSourceMetadataDef          `yaml:"source,omitempty"`
+}
+
+type AuthorizationResourceTypeDef struct {
+	Relations map[string]AuthorizationRelationDef   `yaml:"relations,omitempty"`
+	Actions   map[string]AuthorizationActionDef     `yaml:"actions,omitempty"`
+	Dynamic   AuthorizationResourceDynamicPolicyDef `yaml:"dynamic,omitempty"`
+	Source    AuthorizationSourceMetadataDef        `yaml:"source,omitempty"`
+}
+
+type AuthorizationRelationDef struct {
+	SubjectTypes   []string                        `yaml:"subjectTypes,omitempty"`
+	AllowedTargets []AuthorizationAllowedTargetDef `yaml:"allowedTargets,omitempty"`
+	Source         AuthorizationSourceMetadataDef  `yaml:"source,omitempty"`
+}
+
+type AuthorizationActionDef struct {
+	Relations []string                       `yaml:"relations,omitempty"`
+	Source    AuthorizationSourceMetadataDef `yaml:"source,omitempty"`
+}
+
+type AuthorizationAllowedTargetDef struct {
+	SubjectType  string                            `yaml:"subjectType,omitempty"`
+	ResourceType string                            `yaml:"resourceType,omitempty"`
+	SubjectSet   *AuthorizationSubjectSetTargetDef `yaml:"subjectSet,omitempty"`
+}
+
+type AuthorizationSubjectSetTargetDef struct {
+	ResourceType string `yaml:"resourceType,omitempty"`
+	Relation     string `yaml:"relation,omitempty"`
+}
+
+type AuthorizationRelationshipDef struct {
+	Subject    AuthorizationSubjectDef            `yaml:"subject,omitempty"`
+	Target     AuthorizationRelationshipTargetDef `yaml:"target,omitempty"`
+	Relation   string                             `yaml:"relation,omitempty"`
+	Resource   AuthorizationResourceDef           `yaml:"resource,omitempty"`
+	Source     AuthorizationSourceMetadataDef     `yaml:"source,omitempty"`
+	Properties map[string]string                  `yaml:"properties,omitempty"`
+}
+
+type AuthorizationSubjectDef struct {
+	Type       string            `yaml:"type,omitempty"`
+	ID         string            `yaml:"id,omitempty"`
+	Properties map[string]string `yaml:"properties,omitempty"`
+}
+
+type AuthorizationResourceDef struct {
+	Type       string            `yaml:"type,omitempty"`
+	ID         string            `yaml:"id,omitempty"`
+	Properties map[string]string `yaml:"properties,omitempty"`
+}
+
+type AuthorizationRelationshipTargetDef struct {
+	Subject    *AuthorizationSubjectDef    `yaml:"subject,omitempty"`
+	Resource   *AuthorizationResourceDef   `yaml:"resource,omitempty"`
+	SubjectSet *AuthorizationSubjectSetDef `yaml:"subjectSet,omitempty"`
+}
+
+type AuthorizationSubjectSetDef struct {
+	Resource AuthorizationResourceDef `yaml:"resource,omitempty"`
+	Relation string                   `yaml:"relation,omitempty"`
+}
+
+type AuthorizationSourceMetadataDef struct {
+	Layer     string `yaml:"layer,omitempty"`
+	ID        string `yaml:"id,omitempty"`
+	OwnerKind string `yaml:"ownerKind,omitempty"`
+	OwnerID   string `yaml:"ownerId,omitempty"`
+}
+
+type AuthorizationResourcePolicyDef struct {
+	Dynamic AuthorizationResourceDynamicPolicyDef `yaml:"dynamic,omitempty"`
+}
+
+type AuthorizationResourceDynamicPolicyDef struct {
+	AllowAdditionalRelationships bool `yaml:"allowAdditionalRelationships,omitempty"`
 }
 
 type ListenerConfig struct {
@@ -3602,7 +3686,174 @@ func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig 
 		}
 		cfg.Policies = policies
 	}
+	if len(cfg.Models) == 0 {
+		cfg.Models = nil
+	} else {
+		models := make(map[string]AuthorizationModelDef, len(cfg.Models))
+		for name, model := range cfg.Models {
+			models[name] = normalizedAuthorizationModelDef(model)
+		}
+		cfg.Models = models
+	}
+	if len(cfg.Relationships) == 0 {
+		cfg.Relationships = nil
+	} else {
+		for i := range cfg.Relationships {
+			cfg.Relationships[i] = normalizedAuthorizationRelationshipDef(cfg.Relationships[i])
+		}
+	}
+	if len(cfg.ResourceTypes) == 0 {
+		cfg.ResourceTypes = nil
+	} else {
+		resourceTypes := make(map[string]AuthorizationResourcePolicyDef, len(cfg.ResourceTypes))
+		for name, policy := range cfg.ResourceTypes {
+			resourceTypes[name] = policy
+		}
+		cfg.ResourceTypes = resourceTypes
+	}
 	return cfg
+}
+
+func normalizedAuthorizationModelDef(def AuthorizationModelDef) AuthorizationModelDef {
+	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
+	if len(def.ResourceTypes) == 0 {
+		def.ResourceTypes = nil
+		return def
+	}
+	resourceTypes := make(map[string]AuthorizationResourceTypeDef, len(def.ResourceTypes))
+	for name, resourceType := range def.ResourceTypes {
+		resourceTypes[name] = normalizedAuthorizationResourceTypeDef(resourceType)
+	}
+	def.ResourceTypes = resourceTypes
+	return def
+}
+
+func normalizedAuthorizationResourceTypeDef(def AuthorizationResourceTypeDef) AuthorizationResourceTypeDef {
+	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
+	if len(def.Relations) == 0 {
+		def.Relations = nil
+	} else {
+		relations := make(map[string]AuthorizationRelationDef, len(def.Relations))
+		for name, relation := range def.Relations {
+			relations[name] = normalizedAuthorizationRelationDef(relation)
+		}
+		def.Relations = relations
+	}
+	if len(def.Actions) == 0 {
+		def.Actions = nil
+	} else {
+		actions := make(map[string]AuthorizationActionDef, len(def.Actions))
+		for name, action := range def.Actions {
+			actions[name] = normalizedAuthorizationActionDef(action)
+		}
+		def.Actions = actions
+	}
+	return def
+}
+
+func normalizedAuthorizationRelationDef(def AuthorizationRelationDef) AuthorizationRelationDef {
+	def.SubjectTypes = trimAuthorizationStringSlice(def.SubjectTypes)
+	for i := range def.AllowedTargets {
+		def.AllowedTargets[i].SubjectType = strings.TrimSpace(def.AllowedTargets[i].SubjectType)
+		def.AllowedTargets[i].ResourceType = strings.TrimSpace(def.AllowedTargets[i].ResourceType)
+		if def.AllowedTargets[i].SubjectSet != nil {
+			def.AllowedTargets[i].SubjectSet.ResourceType = strings.TrimSpace(def.AllowedTargets[i].SubjectSet.ResourceType)
+			def.AllowedTargets[i].SubjectSet.Relation = strings.TrimSpace(def.AllowedTargets[i].SubjectSet.Relation)
+		}
+	}
+	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
+	return def
+}
+
+func normalizedAuthorizationActionDef(def AuthorizationActionDef) AuthorizationActionDef {
+	def.Relations = trimAuthorizationStringSlice(def.Relations)
+	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
+	return def
+}
+
+func normalizedAuthorizationRelationshipDef(def AuthorizationRelationshipDef) AuthorizationRelationshipDef {
+	def.Subject = normalizedAuthorizationSubjectDef(def.Subject)
+	def.Relation = strings.TrimSpace(def.Relation)
+	def.Resource = normalizedAuthorizationResourceDef(def.Resource)
+	def.Target = normalizedAuthorizationRelationshipTargetDef(def.Target)
+	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
+	if len(def.Properties) == 0 {
+		def.Properties = nil
+	} else {
+		properties := make(map[string]string, len(def.Properties))
+		for key, value := range def.Properties {
+			properties[strings.TrimSpace(key)] = strings.TrimSpace(value)
+		}
+		def.Properties = properties
+	}
+	return def
+}
+
+func normalizedAuthorizationSubjectDef(def AuthorizationSubjectDef) AuthorizationSubjectDef {
+	def.Type = strings.TrimSpace(def.Type)
+	def.ID = strings.TrimSpace(def.ID)
+	if len(def.Properties) == 0 {
+		def.Properties = nil
+	} else {
+		properties := make(map[string]string, len(def.Properties))
+		for key, value := range def.Properties {
+			properties[strings.TrimSpace(key)] = strings.TrimSpace(value)
+		}
+		def.Properties = properties
+	}
+	return def
+}
+
+func normalizedAuthorizationResourceDef(def AuthorizationResourceDef) AuthorizationResourceDef {
+	def.Type = strings.TrimSpace(def.Type)
+	def.ID = strings.TrimSpace(def.ID)
+	if len(def.Properties) == 0 {
+		def.Properties = nil
+	} else {
+		properties := make(map[string]string, len(def.Properties))
+		for key, value := range def.Properties {
+			properties[strings.TrimSpace(key)] = strings.TrimSpace(value)
+		}
+		def.Properties = properties
+	}
+	return def
+}
+
+func normalizedAuthorizationRelationshipTargetDef(def AuthorizationRelationshipTargetDef) AuthorizationRelationshipTargetDef {
+	if def.Subject != nil {
+		subject := normalizedAuthorizationSubjectDef(*def.Subject)
+		def.Subject = &subject
+	}
+	if def.Resource != nil {
+		resource := normalizedAuthorizationResourceDef(*def.Resource)
+		def.Resource = &resource
+	}
+	if def.SubjectSet != nil {
+		subjectSet := *def.SubjectSet
+		subjectSet.Resource = normalizedAuthorizationResourceDef(subjectSet.Resource)
+		subjectSet.Relation = strings.TrimSpace(subjectSet.Relation)
+		def.SubjectSet = &subjectSet
+	}
+	return def
+}
+
+func normalizedAuthorizationSourceMetadataDef(def AuthorizationSourceMetadataDef) AuthorizationSourceMetadataDef {
+	def.Layer = strings.TrimSpace(def.Layer)
+	def.ID = strings.TrimSpace(def.ID)
+	def.OwnerKind = strings.TrimSpace(def.OwnerKind)
+	def.OwnerID = strings.TrimSpace(def.OwnerID)
+	return def
+}
+
+func trimAuthorizationStringSlice(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	out := make([]string, len(values))
+	for i, value := range values {
+		out[i] = strings.TrimSpace(value)
+	}
+	return out
 }
 
 func normalizeAdminConfig(cfg *Config) error {
