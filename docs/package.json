@@ -30,7 +30,7 @@
   "devDependencies": {
     "@types/node": "25.9.1",
     "pagefind": "^1.5.2",
-    "@types/react": "^19.2.14",
+    "@types/react": "^19.2.15",
     "typescript": "6.0.3"
   }
 }
