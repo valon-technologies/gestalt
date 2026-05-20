@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 )
@@ -32,8 +33,16 @@ func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, subject 
 		Type: authorization.ProviderResourceTypePluginDynamic,
 		Id:   strings.TrimSpace(plugin),
 	}
+	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
+		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: authorization.ProviderSubjectTypeSubject, ID: strings.TrimSpace(subject.SubjectID)},
+		Relation: strings.TrimSpace(role),
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
+	}
 	_, _, err := s.replaceProviderDynamicMembership(ctx, resource, subject.SubjectID, strings.TrimSpace(role))
 	if err != nil {
+		return nil, err
+	}
+	if _, err := s.upsertAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationPluginFragmentOwner(plugin), fragmentRel, "plugin_member_upsert"); err != nil {
 		return nil, err
 	}
 	return &providerPluginAuthorizationMembership{
@@ -51,12 +60,23 @@ func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, 
 		Type: authorization.ProviderResourceTypePluginDynamic,
 		Id:   strings.TrimSpace(plugin),
 	}
+	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
+		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: authorization.ProviderSubjectTypeSubject, ID: strings.TrimSpace(subjectID)},
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
+	}
 	existing, _, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
 	if err != nil {
 		return err
 	}
 	if len(existing) == 0 {
 		return core.ErrNotFound
+	}
+	for _, rel := range existing {
+		fragmentRel.Relation = strings.TrimSpace(rel.GetRelation())
+		_, _, err := s.deleteAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationPluginFragmentOwner(plugin), fragmentRel, "plugin_member_delete")
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -72,8 +92,16 @@ func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, subject *
 		Type: authorization.ProviderResourceTypeAdminDynamic,
 		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
 	}
+	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
+		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: authorization.ProviderSubjectTypeSubject, ID: strings.TrimSpace(subject.SubjectID)},
+		Relation: strings.TrimSpace(role),
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
+	}
 	_, _, err := s.replaceProviderDynamicMembership(ctx, resource, subject.SubjectID, strings.TrimSpace(role))
 	if err != nil {
+		return nil, err
+	}
+	if _, err := s.upsertAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationGlobalFragmentOwner(), fragmentRel, "admin_member_upsert"); err != nil {
 		return nil, err
 	}
 	return &providerAdminAuthorizationMembership{
@@ -90,12 +118,23 @@ func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, subjectID
 		Type: authorization.ProviderResourceTypeAdminDynamic,
 		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
 	}
+	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
+		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: authorization.ProviderSubjectTypeSubject, ID: strings.TrimSpace(subjectID)},
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
+	}
 	existing, _, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
 	if err != nil {
 		return err
 	}
 	if len(existing) == 0 {
 		return core.ErrNotFound
+	}
+	for _, rel := range existing {
+		fragmentRel.Relation = strings.TrimSpace(rel.GetRelation())
+		_, _, err := s.deleteAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationGlobalFragmentOwner(), fragmentRel, "admin_member_delete")
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

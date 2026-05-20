@@ -14,6 +14,7 @@ type Services struct {
 	ExternalCredentials core.ExternalCredentialProvider
 	APITokens           *APITokenService
 	ManagedSubjects     *ManagedSubjectService
+	AuthzFragments      *AuthorizationDynamicFragmentService
 	RuntimeSessionLogs  runtimelogs.Store
 	DB                  indexeddb.IndexedDB
 }
@@ -35,17 +36,22 @@ func NewWithContext(ctx context.Context, ds indexeddb.IndexedDB) (*Services, err
 	if err := ds.CreateObjectStore(ctx, StoreManagedSubjects, ManagedSubjectsSchema); err != nil {
 		return nil, fmt.Errorf("create managed_subjects store: %w", err)
 	}
+	if err := ds.CreateObjectStore(ctx, StoreAuthorizationDynamicFragments, AuthorizationDynamicFragmentsSchema); err != nil {
+		return nil, fmt.Errorf("create authz_dynamic_fragments store: %w", err)
+	}
 
 	runtimeSessionLogs := runtimelogs.NewMemoryStore()
 
 	users := NewUserService(ds)
 	apiTokens := NewAPITokenService(ds)
 	managedSubjects := NewManagedSubjectService(ds)
+	authzFragments := NewAuthorizationDynamicFragmentService(ds)
 	return &Services{
 		ExternalCredentials: nil,
 		Users:               users,
 		APITokens:           apiTokens,
 		ManagedSubjects:     managedSubjects,
+		AuthzFragments:      authzFragments,
 		RuntimeSessionLogs:  runtimeSessionLogs,
 		DB:                  ds,
 	}, nil

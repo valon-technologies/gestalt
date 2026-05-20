@@ -5966,12 +5966,37 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	dynamicUser := seedUser(t, svc, "dynamic@example.test")
-	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
-	req.Header.Set("Content-Type", "application/json")
+	rawSubjectID := principal.UserSubjectID("raw-subject")
+	provider.putRelationship(provider.activeModelID, &core.Relationship{
+		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: rawSubjectID},
+		Relation: "viewer",
+		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "sample_plugin"},
+	})
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/fragments/"+url.PathEscape("plugin/sample_plugin"), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET plugin fragment: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("plugin fragment status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	var pluginFragmentResp coredata.AuthorizationDynamicFragment
+	if err := json.NewDecoder(resp.Body).Decode(&pluginFragmentResp); err != nil {
+		t.Fatalf("decoding plugin fragment: %v", err)
+	}
+	if len(pluginFragmentResp.Relationships) != 1 || pluginFragmentResp.Relationships[0].Subject.ID != rawSubjectID {
+		t.Fatalf("plugin fragment relationships = %#v, want backfilled provider relationship", pluginFragmentResp.Relationships)
+	}
+
+	dynamicUser := seedUser(t, svc, "dynamic@example.test")
+	body := bytes.NewBufferString(fmt.Sprintf(`{"subjectId":%q,"role":"viewer"}`, principal.UserSubjectID(dynamicUser.ID)))
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PUT dynamic member: %v", err)
 	}
@@ -5980,16 +6005,27 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		respBody, _ := io.ReadAll(resp.Body)
 		t.Fatalf("put dynamic member status = %d, want 200: %s", resp.StatusCode, respBody)
 	}
+	pluginFragment, err := svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationPluginFragmentOwner("sample_plugin"))
+	if err != nil {
+		t.Fatalf("GetFragmentByOwner plugin: %v", err)
+	}
+	if pluginFragment.ID != "plugin/sample_plugin" || len(pluginFragment.Relationships) != 2 {
+		t.Fatalf("plugin fragment = %#v, want backfilled and write path source relationships", pluginFragment)
+	}
+	foundDynamicUser := false
+	for _, relationship := range pluginFragment.Relationships {
+		if relationship.Subject.ID == principal.UserSubjectID(dynamicUser.ID) {
+			foundDynamicUser = true
+			break
+		}
+	}
+	if !foundDynamicUser {
+		t.Fatalf("plugin fragment relationships = %#v, want dynamic user", pluginFragment.Relationships)
+	}
 
 	if err := authz.ReloadAuthorizationState(context.Background()); err != nil {
 		t.Fatalf("ReloadAuthorizationState after provider-backed plugin write: %v", err)
 	}
-	rawSubjectID := principal.UserSubjectID("raw-subject")
-	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Target:   &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: rawSubjectID}}},
-		Relation: "viewer",
-		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "sample_plugin"},
-	})
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -6267,6 +6303,16 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	if putAdminMembershipResp.Membership.Email != dynamicAdminEmail {
 		t.Fatalf("admin membership email = %q, want %q", putAdminMembershipResp.Membership.Email, dynamicAdminEmail)
 	}
+	adminFragment, err := svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationGlobalFragmentOwner())
+	if err != nil {
+		t.Fatalf("GetFragmentByOwner global: %v", err)
+	}
+	if adminFragment.ID != "global" || len(adminFragment.Relationships) != 1 {
+		t.Fatalf("admin fragment = %#v, want one source relationship", adminFragment)
+	}
+	if got := adminFragment.Relationships[0].Relation; got != "owner" {
+		t.Fatalf("admin fragment role = %q, want owner", got)
+	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -6331,6 +6377,13 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		t.Fatalf("put dynamic admin role change status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	adminFragment, err = svc.AuthzFragments.GetFragmentByOwner(context.Background(), coredata.AuthorizationGlobalFragmentOwner())
+	if err != nil {
+		t.Fatalf("GetFragmentByOwner global after role change: %v", err)
+	}
+	if len(adminFragment.Relationships) != 1 || adminFragment.Relationships[0].Relation != "operator" {
+		t.Fatalf("admin fragment after role change = %#v, want single operator relationship", adminFragment.Relationships)
 	}
 
 	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(principal.UserSubjectID(dynamicAdmin.ID)), nil)

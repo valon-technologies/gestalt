@@ -1,0 +1,105 @@
+package coredata_test
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/valon-technologies/gestalt/server/core"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
+)
+
+func TestAuthorizationDynamicFragmentServiceUpsertsOwnerRecord(t *testing.T) {
+	t.Parallel()
+
+	svc, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	ctx := context.Background()
+	relationship := coredata.AuthorizationDynamicFragmentRelationship{
+		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "user:alice"},
+		Relation: "viewer",
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "plugin_dynamic", ID: "github"},
+	}
+
+	fragment, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test"})
+	if err != nil {
+		t.Fatalf("UpsertRelationship: %v", err)
+	}
+	if fragment.ID != "plugin/github" || fragment.Owner.Kind != coredata.AuthorizationFragmentOwnerKindPlugin || fragment.Owner.Plugin != "github" {
+		t.Fatalf("fragment owner = %#v id=%q, want plugin/github", fragment.Owner, fragment.ID)
+	}
+	if fragment.Version != 1 {
+		t.Fatalf("version = %d, want 1", fragment.Version)
+	}
+
+	relationship.Relation = "admin"
+	updated, err := svc.AuthzFragments.ReplaceSubjectResourceRelationships(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "role_change"})
+	if err != nil {
+		t.Fatalf("ReplaceSubjectResourceRelationships role change: %v", err)
+	}
+	if updated.Version != 2 {
+		t.Fatalf("version after role change = %d, want 2", updated.Version)
+	}
+	if len(updated.Relationships) != 1 || updated.Relationships[0].Relation != "admin" {
+		t.Fatalf("relationships = %#v, want only admin role", updated.Relationships)
+	}
+
+	deleted, updated, err := svc.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "delete"})
+	if err != nil {
+		t.Fatalf("DeleteRelationship: %v", err)
+	}
+	if !deleted {
+		t.Fatal("DeleteRelationship deleted = false, want true")
+	}
+	if updated.Version != 3 {
+		t.Fatalf("version after delete = %d, want 3", updated.Version)
+	}
+}
+
+func TestAuthorizationDynamicFragmentServiceRejectsVersionMismatch(t *testing.T) {
+	t.Parallel()
+
+	svc, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	ctx := context.Background()
+	fragment, err := svc.AuthzFragments.PutFragment(ctx, &coredata.AuthorizationDynamicFragment{
+		Owner: coredata.AuthorizationGlobalFragmentOwner(),
+		Relationships: []coredata.AuthorizationDynamicFragmentRelationship{{
+			Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "user:alice"},
+			Relation: "admin",
+			Resource: coredata.AuthorizationDynamicFragmentResource{Type: "admin_dynamic", ID: "global"},
+		}},
+	}, coredata.AuthorizationDynamicFragmentUpdate{})
+	if err != nil {
+		t.Fatalf("PutFragment: %v", err)
+	}
+	stale := fragment.Version - 1
+	_, err = svc.AuthzFragments.PutFragment(ctx, fragment, coredata.AuthorizationDynamicFragmentUpdate{ExpectedVersion: &stale})
+	if err == nil || !strings.Contains(err.Error(), "version mismatch") {
+		t.Fatalf("PutFragment stale version error = %v, want version mismatch", err)
+	}
+}
+
+func TestAuthorizationDynamicFragmentsStoreCreatedWithCoreData(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	svc, err := coredata.New(db)
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	if svc.AuthzFragments == nil {
+		t.Fatal("AuthzFragments = nil")
+	}
+	if !db.HasObjectStore(coredata.StoreAuthorizationDynamicFragments) {
+		t.Fatalf("missing object store %q", coredata.StoreAuthorizationDynamicFragments)
+	}
+	if _, err := svc.AuthzFragments.GetFragment(context.Background(), "missing"); err != core.ErrNotFound {
+		t.Fatalf("GetFragment missing error = %v, want core.ErrNotFound", err)
+	}
+}
