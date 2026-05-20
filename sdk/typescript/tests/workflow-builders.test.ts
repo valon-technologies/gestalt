@@ -6,7 +6,7 @@ import {
   WorkflowRunStatus,
   boundWorkflowTarget,
   workflowActivation,
-  workflowDeploymentSpec,
+  workflowDefinitionSpec,
   workflowLiteral,
   workflowObject,
   workflowRun,
@@ -51,7 +51,7 @@ test("step workflow targets carry plugin actions and workflow values", () => {
   expect(boundWorkflowTargetToProto(target).steps.map((candidate) => candidate.id)).toEqual(["notify"]);
 });
 
-test("deployment activations and runs use the new deployment API", () => {
+test("definition activations and runs use the new definition API", () => {
   const target = boundWorkflowTarget({
     steps: [
       workflowStep({
@@ -73,7 +73,7 @@ test("deployment activations and runs use the new deployment API", () => {
     input: workflowRunInput(),
     kind: { case: "manual", value: {} },
   });
-  const spec = workflowDeploymentSpec({
+  const spec = workflowDefinitionSpec({
     id: "roadmap-sync",
     generation: 7n,
     target,
@@ -83,8 +83,8 @@ test("deployment activations and runs use the new deployment API", () => {
   const signal = workflowSignal({ name: "roadmap.changed", sequence: 0n });
   const run = workflowRun({
     id: "run-1",
-    deploymentId: spec.id,
-    deploymentGeneration: spec.generation,
+    definitionId: spec.id,
+    definitionGeneration: spec.generation,
     workflowKey: "roadmap:item-1",
     status: WorkflowRunStatus.PENDING,
   });
@@ -92,7 +92,7 @@ test("deployment activations and runs use the new deployment API", () => {
   expect(spec.target?.steps[0]?.id).toBe("sync");
   expect(spec.activations[0]?.kind.case).toBe("manual");
   expect(signal.name).toBe("roadmap.changed");
-  expect(run.deploymentGeneration).toBe(7n);
+  expect(run.definitionGeneration).toBe(7n);
 });
 
 test("workflow targets round-trip through proto helpers", () => {

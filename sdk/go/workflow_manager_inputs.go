@@ -6,46 +6,40 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
 
-type WorkflowManagerPlanDeployment struct {
+type WorkflowManagerApplyDefinition struct {
 	ProviderName   string
-	Spec           *WorkflowDeploymentSpec
+	Spec           *WorkflowDefinitionSpec
 	IdempotencyKey string
 }
 
-type WorkflowManagerApplyDeployment struct {
-	ProviderName   string
-	Spec           *WorkflowDeploymentSpec
-	IdempotencyKey string
+type WorkflowManagerGetDefinition struct {
+	DefinitionID string
 }
 
-type WorkflowManagerGetDeployment struct {
-	DeploymentID string
-}
-
-type WorkflowManagerListDeployments struct {
+type WorkflowManagerListDefinitions struct {
 	ProviderName string
 }
 
-type WorkflowManagerDeleteDeployment struct {
-	DeploymentID string
+type WorkflowManagerDeleteDefinition struct {
+	DefinitionID string
 	Generation   int64
 }
 
-type WorkflowManagerSetDeploymentPaused struct {
-	DeploymentID string
+type WorkflowManagerSetDefinitionPaused struct {
+	DefinitionID string
 	Paused       bool
 }
 
 type WorkflowManagerSetActivationPaused struct {
-	DeploymentID string
+	DefinitionID string
 	ActivationID string
 	Paused       bool
 }
 
 type WorkflowManagerStartRun struct {
 	ProviderName         string
-	DeploymentID         string
-	DeploymentGeneration int64
+	DefinitionID         string
+	DefinitionGeneration int64
 	ActivationID         string
 	WorkflowKey          string
 	Input                any
@@ -59,8 +53,8 @@ type WorkflowManagerSignalRun struct {
 
 type WorkflowManagerSignalOrStartRun struct {
 	ProviderName         string
-	DeploymentID         string
-	DeploymentGeneration int64
+	DefinitionID         string
+	DefinitionGeneration int64
 	ActivationID         string
 	WorkflowKey          string
 	Input                any
@@ -79,20 +73,20 @@ type WorkflowManagerDeliverEvent struct {
 	IdempotencyKey string
 }
 
-type WorkflowManagerDeployment struct {
+type WorkflowManagerDefinition struct {
 	ProviderName string
-	Deployment   *WorkflowDeployment
+	Definition   *WorkflowDefinition
 }
 
-type WorkflowManagerListDeploymentsResponse struct {
-	Deployments []WorkflowManagerDeployment
+type WorkflowManagerListDefinitionsResponse struct {
+	Definitions []WorkflowManagerDefinition
 }
 
-func (r *WorkflowManagerListDeploymentsResponse) GetDeployments() []WorkflowManagerDeployment {
+func (r *WorkflowManagerListDefinitionsResponse) GetDefinitions() []WorkflowManagerDefinition {
 	if r == nil {
 		return nil
 	}
-	return r.Deployments
+	return r.Definitions
 }
 
 type WorkflowManagerRun struct {
@@ -119,55 +113,43 @@ func (r *WorkflowManagerDeliverEventResponse) GetResults() []WorkflowEventDelive
 	return r.Results
 }
 
-func newWorkflowManagerPlanDeploymentRequest(input WorkflowManagerPlanDeployment) (*proto.WorkflowManagerPlanDeploymentRequest, error) {
-	spec, err := newOptionalWorkflowDeploymentSpec(input.Spec)
+func newWorkflowManagerApplyDefinitionRequest(input WorkflowManagerApplyDefinition) (*proto.WorkflowManagerApplyDefinitionRequest, error) {
+	spec, err := newOptionalWorkflowDefinitionSpec(input.Spec)
 	if err != nil {
 		return nil, err
 	}
-	return &proto.WorkflowManagerPlanDeploymentRequest{
+	return &proto.WorkflowManagerApplyDefinitionRequest{
 		ProviderName:   input.ProviderName,
 		Spec:           spec,
 		IdempotencyKey: input.IdempotencyKey,
 	}, nil
 }
 
-func newWorkflowManagerApplyDeploymentRequest(input WorkflowManagerApplyDeployment) (*proto.WorkflowManagerApplyDeploymentRequest, error) {
-	spec, err := newOptionalWorkflowDeploymentSpec(input.Spec)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowManagerApplyDeploymentRequest{
-		ProviderName:   input.ProviderName,
-		Spec:           spec,
-		IdempotencyKey: input.IdempotencyKey,
-	}, nil
+func newWorkflowManagerGetDefinitionRequest(input WorkflowManagerGetDefinition) *proto.WorkflowManagerGetDefinitionRequest {
+	return &proto.WorkflowManagerGetDefinitionRequest{DefinitionId: input.DefinitionID}
 }
 
-func newWorkflowManagerGetDeploymentRequest(input WorkflowManagerGetDeployment) *proto.WorkflowManagerGetDeploymentRequest {
-	return &proto.WorkflowManagerGetDeploymentRequest{DeploymentId: input.DeploymentID}
+func newWorkflowManagerListDefinitionsRequest(input WorkflowManagerListDefinitions) *proto.WorkflowManagerListDefinitionsRequest {
+	return &proto.WorkflowManagerListDefinitionsRequest{ProviderName: input.ProviderName}
 }
 
-func newWorkflowManagerListDeploymentsRequest(input WorkflowManagerListDeployments) *proto.WorkflowManagerListDeploymentsRequest {
-	return &proto.WorkflowManagerListDeploymentsRequest{ProviderName: input.ProviderName}
-}
-
-func newWorkflowManagerDeleteDeploymentRequest(input WorkflowManagerDeleteDeployment) *proto.WorkflowManagerDeleteDeploymentRequest {
-	return &proto.WorkflowManagerDeleteDeploymentRequest{
-		DeploymentId: input.DeploymentID,
+func newWorkflowManagerDeleteDefinitionRequest(input WorkflowManagerDeleteDefinition) *proto.WorkflowManagerDeleteDefinitionRequest {
+	return &proto.WorkflowManagerDeleteDefinitionRequest{
+		DefinitionId: input.DefinitionID,
 		Generation:   input.Generation,
 	}
 }
 
-func newWorkflowManagerSetDeploymentPausedRequest(input WorkflowManagerSetDeploymentPaused) *proto.WorkflowManagerSetDeploymentPausedRequest {
-	return &proto.WorkflowManagerSetDeploymentPausedRequest{
-		DeploymentId: input.DeploymentID,
+func newWorkflowManagerSetDefinitionPausedRequest(input WorkflowManagerSetDefinitionPaused) *proto.WorkflowManagerSetDefinitionPausedRequest {
+	return &proto.WorkflowManagerSetDefinitionPausedRequest{
+		DefinitionId: input.DefinitionID,
 		Paused:       input.Paused,
 	}
 }
 
 func newWorkflowManagerSetActivationPausedRequest(input WorkflowManagerSetActivationPaused) *proto.WorkflowManagerSetActivationPausedRequest {
 	return &proto.WorkflowManagerSetActivationPausedRequest{
-		DeploymentId: input.DeploymentID,
+		DefinitionId: input.DefinitionID,
 		ActivationId: input.ActivationID,
 		Paused:       input.Paused,
 	}
@@ -180,8 +162,8 @@ func newWorkflowManagerStartRunRequest(input WorkflowManagerStartRun) (*proto.Wo
 	}
 	return &proto.WorkflowManagerStartRunRequest{
 		ProviderName:         input.ProviderName,
-		DeploymentId:         input.DeploymentID,
-		DeploymentGeneration: input.DeploymentGeneration,
+		DefinitionId:         input.DefinitionID,
+		DefinitionGeneration: input.DefinitionGeneration,
 		ActivationId:         input.ActivationID,
 		WorkflowKey:          input.WorkflowKey,
 		Input:                body,
@@ -211,8 +193,8 @@ func newWorkflowManagerSignalOrStartRunRequest(input WorkflowManagerSignalOrStar
 	}
 	return &proto.WorkflowManagerSignalOrStartRunRequest{
 		ProviderName:         input.ProviderName,
-		DeploymentId:         input.DeploymentID,
-		DeploymentGeneration: input.DeploymentGeneration,
+		DefinitionId:         input.DefinitionID,
+		DefinitionGeneration: input.DefinitionGeneration,
 		ActivationId:         input.ActivationID,
 		WorkflowKey:          input.WorkflowKey,
 		Input:                body,
@@ -240,26 +222,26 @@ func newWorkflowManagerDeliverEventRequest(input WorkflowManagerDeliverEvent) (*
 	}, nil
 }
 
-func workflowManagerDeploymentFromProto(value *proto.ManagedWorkflowDeployment) (*WorkflowManagerDeployment, error) {
+func workflowManagerDefinitionFromProto(value *proto.ManagedWorkflowDefinition) (*WorkflowManagerDefinition, error) {
 	if value == nil {
 		return nil, nil
 	}
-	deployment, err := workflowDeploymentFromProto(value.GetDeployment())
+	definition, err := workflowDefinitionFromProto(value.GetDefinition())
 	if err != nil {
 		return nil, err
 	}
-	return &WorkflowManagerDeployment{ProviderName: value.GetProviderName(), Deployment: deployment}, nil
+	return &WorkflowManagerDefinition{ProviderName: value.GetProviderName(), Definition: definition}, nil
 }
 
-func workflowManagerDeploymentsFromProto(values []*proto.ManagedWorkflowDeployment) ([]WorkflowManagerDeployment, error) {
+func workflowManagerDefinitionsFromProto(values []*proto.ManagedWorkflowDefinition) ([]WorkflowManagerDefinition, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
-	out := make([]WorkflowManagerDeployment, 0, len(values))
+	out := make([]WorkflowManagerDefinition, 0, len(values))
 	for i, value := range values {
-		deployment, err := workflowManagerDeploymentFromProto(value)
+		deployment, err := workflowManagerDefinitionFromProto(value)
 		if err != nil {
-			return nil, fmt.Errorf("deployments[%d]: %w", i, err)
+			return nil, fmt.Errorf("definitions[%d]: %w", i, err)
 		}
 		if deployment != nil {
 			out = append(out, *deployment)

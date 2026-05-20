@@ -24,35 +24,23 @@ func (p *workflowProviderHarness) Configure(_ context.Context, _ string, _ map[s
 	return nil
 }
 
-func (p *workflowProviderHarness) PlanWorkflow(_ context.Context, req *gestalt.PlanWorkflowRequest) (*gestalt.PlanWorkflowResponse, error) {
-	return &gestalt.PlanWorkflowResponse{
-		AcceptedSpecDigest:        req.SpecDigest,
-		ProviderPlanID:            "plan-1",
-		ProviderPlanDigest:        "plan-digest-1",
-		SupportedFeatureFlags:     []string{"provider_interpreted_steps_v1"},
-		ProviderPlanFormatVersion: "workflow-steps-v1",
-	}, nil
-}
-
-func (p *workflowProviderHarness) ApplyWorkflowDeployment(_ context.Context, req *gestalt.ApplyWorkflowDeploymentRequest) (*gestalt.WorkflowDeployment, error) {
-	return &gestalt.WorkflowDeployment{
-		Spec:               req.Spec,
-		Status:             gestalt.WorkflowDeploymentStatusValueActive,
-		AppliedGeneration:  req.Spec.Generation,
-		SpecDigest:         req.Binding.SpecDigest,
-		TargetDigest:       req.Binding.TargetDigest,
-		ActionTableDigest:  req.Binding.ActionTableDigest,
-		ProviderPlanID:     req.Plan.ProviderPlanID,
-		ProviderPlanDigest: req.Plan.ProviderPlanDigest,
-		Binding:            req.Binding,
+func (p *workflowProviderHarness) ApplyWorkflowDefinition(_ context.Context, req *gestalt.ApplyWorkflowDefinitionRequest) (*gestalt.WorkflowDefinition, error) {
+	return &gestalt.WorkflowDefinition{
+		Spec:              req.Spec,
+		Status:            gestalt.WorkflowDefinitionStatusValueActive,
+		AppliedGeneration: req.Spec.Generation,
+		SpecDigest:        req.Binding.SpecDigest,
+		TargetDigest:      req.Binding.TargetDigest,
+		ActionTableDigest: req.Binding.ActionTableDigest,
+		Binding:           req.Binding,
 	}, nil
 }
 
 func (p *workflowProviderHarness) StartWorkflowRun(_ context.Context, req *gestalt.StartWorkflowRunRequest) (*gestalt.WorkflowRun, error) {
 	return &gestalt.WorkflowRun{
 		ID:                   "run-1",
-		DeploymentID:         req.DeploymentID,
-		DeploymentGeneration: req.DeploymentGeneration,
+		DefinitionID:         req.DefinitionID,
+		DefinitionGeneration: req.DefinitionGeneration,
 		WorkflowKey:          req.WorkflowKey,
 		Status:               gestalt.WorkflowRunStatusValueRunning,
 		Input:                req.Input,
@@ -94,41 +82,32 @@ func TestWorkflowProviderDeploymentTransport(t *testing.T) {
 			}}},
 		}},
 	}}}
-	spec := &proto.WorkflowDeploymentSpec{
+	spec := &proto.WorkflowDefinitionSpec{
 		Id:         "deploy-1",
 		Generation: 1,
 		Target:     target,
 	}
 
-	plan, err := client.PlanWorkflow(rpcCtx, &proto.PlanWorkflowRequest{Spec: spec, SpecDigest: "spec-digest-1"})
-	if err != nil {
-		t.Fatalf("PlanWorkflow: %v", err)
-	}
-	if plan.GetProviderPlanDigest() != "plan-digest-1" {
-		t.Fatalf("provider plan digest = %q", plan.GetProviderPlanDigest())
-	}
-
-	deployment, err := client.ApplyWorkflowDeployment(rpcCtx, &proto.ApplyWorkflowDeploymentRequest{
+	definition, err := client.ApplyWorkflowDefinition(rpcCtx, &proto.ApplyWorkflowDefinitionRequest{
 		Spec: spec,
-		Plan: plan,
-		Binding: &proto.WorkflowDeploymentBinding{
-			DeploymentId:         "deploy-1",
-			DeploymentGeneration: 1,
+		Binding: &proto.WorkflowDefinitionBinding{
+			DefinitionId:         "deploy-1",
+			DefinitionGeneration: 1,
 			SpecDigest:           "spec-digest-1",
 			TargetDigest:         "target-digest-1",
 			ActionTableDigest:    "action-table-digest-1",
 		},
 	})
 	if err != nil {
-		t.Fatalf("ApplyWorkflowDeployment: %v", err)
+		t.Fatalf("ApplyWorkflowDefinition: %v", err)
 	}
-	if deployment.GetStatus() != proto.WorkflowDeploymentStatus_WORKFLOW_DEPLOYMENT_STATUS_ACTIVE {
-		t.Fatalf("deployment status = %v", deployment.GetStatus())
+	if definition.GetStatus() != proto.WorkflowDefinitionStatus_WORKFLOW_DEFINITION_STATUS_ACTIVE {
+		t.Fatalf("definition status = %v", definition.GetStatus())
 	}
 
 	run, err := client.StartWorkflowRun(rpcCtx, &proto.StartWorkflowRunRequest{
-		DeploymentId:         "deploy-1",
-		DeploymentGeneration: 1,
+		DefinitionId:         "deploy-1",
+		DefinitionGeneration: 1,
 		WorkflowKey:          "wf-key",
 		Input:                &structpb.Struct{Fields: map[string]*structpb.Value{"severity": structpb.NewStringValue("high")}},
 	})
@@ -144,26 +123,26 @@ type workflowManagerHarness struct {
 	proto.UnimplementedWorkflowManagerHostServer
 
 	mu      sync.Mutex
-	applies []*proto.WorkflowManagerApplyDeploymentRequest
+	applies []*proto.WorkflowManagerApplyDefinitionRequest
 	signals []*proto.WorkflowManagerSignalOrStartRunRequest
 	tokens  []string
 }
 
-func (h *workflowManagerHarness) ApplyDeployment(ctx context.Context, req *proto.WorkflowManagerApplyDeploymentRequest) (*proto.ManagedWorkflowDeployment, error) {
+func (h *workflowManagerHarness) ApplyDefinition(ctx context.Context, req *proto.WorkflowManagerApplyDefinitionRequest) (*proto.ManagedWorkflowDefinition, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.applies = append(h.applies, gproto.Clone(req).(*proto.WorkflowManagerApplyDeploymentRequest))
+	h.applies = append(h.applies, gproto.Clone(req).(*proto.WorkflowManagerApplyDefinitionRequest))
 	h.mu.Unlock()
 
-	return &proto.ManagedWorkflowDeployment{
+	return &proto.ManagedWorkflowDefinition{
 		ProviderName: req.GetProviderName(),
-		Deployment: &proto.WorkflowDeployment{
+		Definition: &proto.WorkflowDefinition{
 			Spec:              req.GetSpec(),
-			Status:            proto.WorkflowDeploymentStatus_WORKFLOW_DEPLOYMENT_STATUS_ACTIVE,
+			Status:            proto.WorkflowDefinitionStatus_WORKFLOW_DEFINITION_STATUS_ACTIVE,
 			AppliedGeneration: req.GetSpec().GetGeneration(),
 		},
 	}, nil
@@ -183,7 +162,7 @@ func (h *workflowManagerHarness) SignalOrStartRun(ctx context.Context, req *prot
 		ProviderName: req.GetProviderName(),
 		Run: &proto.WorkflowRun{
 			Id:           "run-1",
-			DeploymentId: req.GetDeploymentId(),
+			DefinitionId: req.GetDefinitionId(),
 			WorkflowKey:  req.GetWorkflowKey(),
 			Input:        req.GetInput(),
 			Status:       proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING,
@@ -194,7 +173,7 @@ func (h *workflowManagerHarness) SignalOrStartRun(ctx context.Context, req *prot
 	}, nil
 }
 
-func TestWorkflowManagerDeploymentTransport(t *testing.T) {
+func TestWorkflowManagerDefinitionTransport(t *testing.T) {
 	address := reserveTCPAddress()
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -219,10 +198,10 @@ func TestWorkflowManagerDeploymentTransport(t *testing.T) {
 	}
 	defer func() { _ = client.Close() }()
 
-	applied, err := client.ApplyDeployment(context.Background(), gestalt.WorkflowManagerApplyDeployment{
+	applied, err := client.ApplyDefinition(context.Background(), gestalt.WorkflowManagerApplyDefinition{
 		ProviderName:   "managed",
 		IdempotencyKey: "apply-key",
-		Spec: &gestalt.WorkflowDeploymentSpec{
+		Spec: &gestalt.WorkflowDefinitionSpec{
 			ID:         "deploy-1",
 			Generation: 2,
 			Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
@@ -235,16 +214,16 @@ func TestWorkflowManagerDeploymentTransport(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("ApplyDeployment: %v", err)
+		t.Fatalf("ApplyDefinition: %v", err)
 	}
-	if applied.ProviderName != "managed" || applied.Deployment == nil || applied.Deployment.Status != gestalt.WorkflowDeploymentStatusValueActive {
-		t.Fatalf("applied deployment = %#v", applied)
+	if applied.ProviderName != "managed" || applied.Definition == nil || applied.Definition.Status != gestalt.WorkflowDefinitionStatusValueActive {
+		t.Fatalf("applied definition = %#v", applied)
 	}
 
 	signaled, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRun{
 		ProviderName:         "managed",
-		DeploymentID:         "deploy-1",
-		DeploymentGeneration: 2,
+		DefinitionID:         "deploy-1",
+		DefinitionGeneration: 2,
 		WorkflowKey:          "wf-key",
 		Input:                map[string]any{"severity": "high"},
 		IdempotencyKey:       "signal-key",

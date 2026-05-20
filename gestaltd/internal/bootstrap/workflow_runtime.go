@@ -1045,32 +1045,34 @@ func (r *workflowRuntime) resolveWorkflowHostAction(ctx context.Context, provide
 	if strings.TrimSpace(ref.ProviderName) != providerName {
 		return nil, fmt.Errorf("%w: workflow execution ref %q is not valid for provider %q", invocation.ErrAuthorizationDenied, selector.ExecutionRef, providerName)
 	}
+	if selectorDefinitionID := strings.TrimSpace(selector.DefinitionID); selectorDefinitionID != "" {
+		refDefinitionID := workflowDefinitionIDForExecutionRef(ref)
+		if refDefinitionID == "" || selectorDefinitionID != refDefinitionID {
+			return nil, fmt.Errorf("%w: workflow host action definition_id mismatch", invocation.ErrAuthorizationDenied)
+		}
+	}
+	if selector.DefinitionGeneration > 0 {
+		refDefinitionGeneration := workflowDefinitionGenerationForExecutionRef(ref)
+		if refDefinitionGeneration == 0 || selector.DefinitionGeneration != refDefinitionGeneration {
+			return nil, fmt.Errorf("%w: workflow host action definition_generation mismatch", invocation.ErrAuthorizationDenied)
+		}
+	}
 	if ref.Generation == 0 || selector.ExecutionRefGeneration != ref.Generation {
 		return nil, fmt.Errorf("%w: workflow host action execution ref generation mismatch", invocation.ErrAuthorizationDenied)
 	}
-	if strings.TrimSpace(ref.Seal) == "" || strings.TrimSpace(selector.ExecutionRefSeal) != strings.TrimSpace(ref.Seal) {
-		return nil, fmt.Errorf("%w: workflow host action execution ref seal mismatch", invocation.ErrAuthorizationDenied)
+	computedTargetDigest, fingerprintErr := coreworkflow.TargetFingerprint(ref.Target)
+	if fingerprintErr != nil {
+		return nil, fmt.Errorf("%w: workflow execution ref %q target digest is invalid: %v", invocation.ErrAuthorizationDenied, selector.ExecutionRef, fingerprintErr)
 	}
-	targetDigest := strings.TrimSpace(ref.TargetDigest)
-	if targetDigest == "" {
-		var fingerprintErr error
-		targetDigest, fingerprintErr = coreworkflow.TargetFingerprint(ref.Target)
-		if fingerprintErr != nil {
-			return nil, fmt.Errorf("%w: workflow execution ref %q target digest is invalid: %v", invocation.ErrAuthorizationDenied, selector.ExecutionRef, fingerprintErr)
-		}
-	}
-	if strings.TrimSpace(selector.TargetDigest) != targetDigest {
-		return nil, fmt.Errorf("%w: workflow host action target digest mismatch", invocation.ErrAuthorizationDenied)
+	if targetDigest := strings.TrimSpace(ref.TargetDigest); targetDigest != "" && targetDigest != computedTargetDigest {
+		return nil, fmt.Errorf("%w: workflow execution ref %q target digest mismatch", invocation.ErrAuthorizationDenied, selector.ExecutionRef)
 	}
 	actionTableDigest, err := coreworkflow.TargetActionTableDigest(ref.Target)
 	if err != nil {
 		return nil, fmt.Errorf("%w: workflow execution ref %q action table digest is invalid: %v", invocation.ErrAuthorizationDenied, selector.ExecutionRef, err)
 	}
-	if strings.TrimSpace(selector.ActionTableDigest) != actionTableDigest {
-		return nil, fmt.Errorf("%w: workflow host action action table digest mismatch", invocation.ErrAuthorizationDenied)
-	}
-	if strings.TrimSpace(selector.ProviderPlanDigest) != strings.TrimSpace(ref.ProviderPlanDigest) {
-		return nil, fmt.Errorf("%w: workflow host action provider plan digest mismatch", invocation.ErrAuthorizationDenied)
+	if refActionTableDigest := strings.TrimSpace(ref.ActionTableDigest); refActionTableDigest != "" && refActionTableDigest != actionTableDigest {
+		return nil, fmt.Errorf("%w: workflow execution ref %q action table digest does not match target", invocation.ErrAuthorizationDenied, selector.ExecutionRef)
 	}
 	if !workflowExecutionRefAllowsStepAction(ref, selector.ActionID) {
 		return nil, fmt.Errorf("%w: workflow host action %q is not allowed", invocation.ErrAuthorizationDenied, selector.ActionID)
@@ -1092,6 +1094,61 @@ func (r *workflowRuntime) resolveWorkflowHostAction(ctx context.Context, provide
 		}
 	}
 	return &workflowHostActionResolution{ref: ref, step: step}, nil
+}
+
+func workflowDefinitionIDForExecutionRef(ref *coreworkflow.ExecutionReference) string {
+	if ref == nil {
+		return ""
+	}
+	if sourceDefinitionID := strings.TrimSpace(ref.SourceDefinitionID); sourceDefinitionID != "" {
+		return sourceDefinitionID
+	}
+	return workflowDefinitionIDFromExecutionRefID(ref.ID)
+}
+
+func workflowDefinitionGenerationForExecutionRef(ref *coreworkflow.ExecutionReference) int64 {
+	if ref == nil {
+		return 0
+	}
+	if ref.SourceDefinitionGeneration > 0 {
+		return ref.SourceDefinitionGeneration
+	}
+	return workflowDefinitionGenerationFromExecutionRefID(ref.ID)
+}
+
+func workflowDefinitionIDFromExecutionRefID(executionRefID string) string {
+	trimmed := strings.TrimSpace(executionRefID)
+	const prefix = "workflow_definition:"
+	if strings.HasPrefix(trimmed, prefix) {
+		rest := strings.TrimPrefix(trimmed, prefix)
+		if rest == "" {
+			return ""
+		}
+		lastColon := strings.LastIndex(rest, ":")
+		if lastColon <= 0 {
+			return rest
+		}
+		return rest[:lastColon]
+	}
+	return ""
+}
+
+func workflowDefinitionGenerationFromExecutionRefID(executionRefID string) int64 {
+	trimmed := strings.TrimSpace(executionRefID)
+	const prefix = "workflow_definition:"
+	if strings.HasPrefix(trimmed, prefix) {
+		rest := strings.TrimPrefix(trimmed, prefix)
+		lastColon := strings.LastIndex(rest, ":")
+		if lastColon <= 0 || lastColon == len(rest)-1 {
+			return 0
+		}
+		generation, err := strconv.ParseInt(rest[lastColon+1:], 10, 64)
+		if err != nil || generation < 0 {
+			return 0
+		}
+		return generation
+	}
+	return 0
 }
 
 func workflowExecutionRefAllowsStepAction(ref *coreworkflow.ExecutionReference, actionID string) bool {
@@ -1145,14 +1202,20 @@ func workflowHostActionMetadata(input map[string]any, ref *coreworkflow.Executio
 	if metadata == nil {
 		metadata = map[string]any{}
 	}
+	targetDigest := ""
+	actionTableDigest := ""
+	if ref != nil {
+		targetDigest = strings.TrimSpace(ref.TargetDigest)
+		actionTableDigest = strings.TrimSpace(ref.ActionTableDigest)
+	}
 	metadata["workflow"] = map[string]any{
-		"executionRef":       strings.TrimSpace(selector.ExecutionRef),
-		"runId":              strings.TrimSpace(selector.RunID),
-		"stepId":             strings.TrimSpace(selector.StepID),
-		"actionId":           strings.TrimSpace(selector.ActionID),
-		"attemptNumber":      selector.AttemptNumber,
-		"targetDigest":       strings.TrimSpace(selector.TargetDigest),
-		"providerPlanDigest": strings.TrimSpace(selector.ProviderPlanDigest),
+		"executionRef":      strings.TrimSpace(selector.ExecutionRef),
+		"runId":             strings.TrimSpace(selector.RunID),
+		"stepId":            strings.TrimSpace(selector.StepID),
+		"actionId":          strings.TrimSpace(selector.ActionID),
+		"attemptNumber":     selector.AttemptNumber,
+		"targetDigest":      targetDigest,
+		"actionTableDigest": actionTableDigest,
 	}
 	if ref != nil {
 		metadata["workflowExecutionRef"] = map[string]any{

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
@@ -854,9 +855,10 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 	}
 	var definitionBody struct {
 		Definition struct {
-			ID       string `json:"id"`
-			Provider string `json:"provider"`
-			Target   struct {
+			ID           string `json:"id"`
+			ExecutionRef string `json:"executionRef"`
+			Provider     string `json:"provider"`
+			Target       struct {
 				Steps []struct {
 					Agent struct {
 						Provider string         `json:"provider"`
@@ -873,7 +875,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 	if definitionID == "" || definitionBody.Definition.Provider != "temporal" || len(definitionBody.Definition.Target.Steps) != 1 || definitionBody.Definition.Target.Steps[0].Agent.Provider != "managed" {
 		t.Fatalf("definition response = %#v", definitionBody.Definition)
 	}
-	definitionRef, err := workflowProvider.GetExecutionReference(context.Background(), definitionID)
+	definitionRef, err := workflowProvider.GetExecutionReference(context.Background(), definitionBody.Definition.ExecutionRef)
 	if err != nil {
 		t.Fatalf("GetExecutionReference(definition): %v", err)
 	}
@@ -1021,13 +1023,14 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRe
 	}
 	var body struct {
 		Definition struct {
-			ID string `json:"id"`
+			ID           string `json:"id"`
+			ExecutionRef string `json:"executionRef"`
 		} `json:"definition"`
 	}
 	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
 		t.Fatalf("decode definition response body: %v", err)
 	}
-	ref, err := workflowProvider.GetExecutionReference(context.Background(), body.Definition.ID)
+	ref, err := workflowProvider.GetExecutionReference(context.Background(), body.Definition.ExecutionRef)
 	if err != nil {
 		t.Fatalf("GetExecutionReference(definition): %v", err)
 	}
@@ -1292,7 +1295,8 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 	}
 	var createBody struct {
 		Definition struct {
-			ID string `json:"id"`
+			ID           string `json:"id"`
+			ExecutionRef string `json:"executionRef"`
 		} `json:"definition"`
 	}
 	if err := json.Unmarshal([]byte(createResp.Body), &createBody); err != nil {
@@ -1327,7 +1331,15 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 	if updateResp == nil || updateResp.Status != http.StatusOK {
 		t.Fatalf("update definition response = %#v, want 200", updateResp)
 	}
-	ref, err := workflowProvider.GetExecutionReference(context.Background(), definitionID)
+	var updateBody struct {
+		Definition struct {
+			ExecutionRef string `json:"executionRef"`
+		} `json:"definition"`
+	}
+	if err := json.Unmarshal([]byte(updateResp.Body), &updateBody); err != nil {
+		t.Fatalf("decode update definition response body: %v", err)
+	}
+	ref, err := workflowProvider.GetExecutionReference(context.Background(), updateBody.Definition.ExecutionRef)
 	if err != nil {
 		t.Fatalf("GetExecutionReference(definition): %v", err)
 	}
@@ -2050,6 +2062,7 @@ type workflowSystemToolRecordingProvider struct {
 	runs              map[string]*coreworkflow.Run
 	runIdempotency    map[string]string
 	upsertedSchedules []coreworkflow.UpsertScheduleRequest
+	definitions       map[string]*coreworkflow.Definition
 	schedules         map[string]*coreworkflow.Schedule
 	executionRefs     map[string]*coreworkflow.ExecutionReference
 }
@@ -2067,6 +2080,9 @@ func (p *workflowSystemToolRecordingProvider) StartRun(_ context.Context, req co
 				run := p.runs[runID]
 				if run.ExecutionRef != req.ExecutionRef {
 					return nil, errors.New("idempotent run replay used a different execution ref")
+				}
+				if run.WorkflowKey != req.WorkflowKey {
+					return nil, errors.New("idempotent run replay used a different workflow key")
 				}
 				value := *run
 				return &value, nil
@@ -2165,15 +2181,50 @@ func (p *workflowSystemToolRecordingProvider) SignalOrStartRun(context.Context, 
 	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
 }
 
-func (p *workflowSystemToolRecordingProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
-	return &coreworkflow.CompileTargetResponse{
-		AcceptedSpecDigest: req.SpecDigest,
-		ProviderPlanID:     "plan-test",
-		ProviderPlanDigest: "plan-test-" + req.TargetDigest,
-	}, nil
+func cloneCoreWorkflowDefinition(value *coreworkflow.Definition) *coreworkflow.Definition {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	out.Spec = cloneWorkflowDefinitionSpec(value.Spec)
+	out.Binding = cloneWorkflowDefinitionBinding(value.Binding)
+	if value.Error != nil {
+		runErr := *value.Error
+		out.Error = &runErr
+	}
+	return &out
 }
 
-func (p *workflowSystemToolRecordingProvider) ApplyWorkflowDeployment(ctx context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
+func cloneWorkflowDefinitionBinding(value *coreworkflow.DefinitionBinding) *coreworkflow.DefinitionBinding {
+	if value == nil {
+		return nil
+	}
+	out := *value
+	return &out
+}
+
+func (p *workflowSystemToolRecordingProvider) ApplyWorkflowDefinition(ctx context.Context, req coreworkflow.ApplyDefinitionRequest) (*coreworkflow.Definition, error) {
+	if p.definitions == nil {
+		p.definitions = map[string]*coreworkflow.Definition{}
+	}
+	var storedRef *coreworkflow.ExecutionReference
+	if req.ExecutionRef != nil {
+		if p.executionRefs == nil {
+			p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
+		}
+		ref := *req.ExecutionRef
+		for id, existing := range p.executionRefs {
+			if id == ref.ID || existing == nil {
+				continue
+			}
+			if definitionIDFromWorkflowExecutionRefID(id) == definitionIDFromWorkflowExecutionRefID(ref.ID) {
+				now := time.Now()
+				existing.RevokedAt = &now
+			}
+		}
+		p.executionRefs[ref.ID] = &ref
+		storedRef = &ref
+	}
 	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Schedule != nil {
 		activation := req.Spec.Activations[0]
 		executionRef := ""
@@ -2181,28 +2232,41 @@ func (p *workflowSystemToolRecordingProvider) ApplyWorkflowDeployment(ctx contex
 			executionRef = req.Binding.ExecutionRef
 		}
 		if _, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{
-			ScheduleID:   req.Spec.ID,
-			Cron:         activation.Schedule.Cron,
-			Timezone:     activation.Schedule.Timezone,
-			Target:       req.Spec.Target,
-			Paused:       req.Spec.Paused || activation.Paused,
-			ExecutionRef: executionRef,
-			PlanBinding:  req.Binding,
+			ScheduleID:        req.Spec.ID,
+			Cron:              activation.Schedule.Cron,
+			Timezone:          activation.Schedule.Timezone,
+			Target:            req.Spec.Target,
+			Paused:            req.Spec.Paused || activation.Paused,
+			ExecutionRef:      executionRef,
+			DefinitionBinding: req.Binding,
 		}); err != nil {
 			return nil, err
 		}
 	}
-	status := coreworkflow.DeploymentStatusActive
+	status := coreworkflow.DefinitionStatusActive
 	if req.Spec.Paused {
-		status = coreworkflow.DeploymentStatusPaused
+		status = coreworkflow.DefinitionStatusPaused
 	}
-	return &coreworkflow.Deployment{Spec: req.Spec, Status: status, Binding: req.Binding}, nil
+	definition := &coreworkflow.Definition{
+		Spec:              cloneWorkflowDefinitionSpec(req.Spec),
+		Status:            status,
+		AppliedGeneration: req.Spec.Generation,
+		Binding:           cloneWorkflowDefinitionBinding(req.Binding),
+	}
+	p.definitions[strings.TrimSpace(req.Spec.ID)] = definition
+	if storedRef != nil && strings.TrimSpace(storedRef.ID) != "" {
+		p.executionRefs[storedRef.ID] = storedRef
+	}
+	return cloneCoreWorkflowDefinition(definition), nil
 }
 
-func (p *workflowSystemToolRecordingProvider) GetWorkflowDeployment(_ context.Context, req coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
-	if schedule := p.schedules[req.DeploymentID]; schedule != nil {
-		return &coreworkflow.Deployment{
-			Spec: coreworkflow.DeploymentSpec{
+func (p *workflowSystemToolRecordingProvider) GetWorkflowDefinition(_ context.Context, req coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	if definition := p.definitions[strings.TrimSpace(req.DefinitionID)]; definition != nil {
+		return cloneCoreWorkflowDefinition(definition), nil
+	}
+	if schedule := p.schedules[req.DefinitionID]; schedule != nil {
+		return &coreworkflow.Definition{
+			Spec: coreworkflow.DefinitionSpec{
 				ID:     schedule.ID,
 				Target: schedule.Target,
 				Paused: schedule.Paused,
@@ -2216,18 +2280,21 @@ func (p *workflowSystemToolRecordingProvider) GetWorkflowDeployment(_ context.Co
 					},
 				}},
 			},
-			Status:  coreworkflow.DeploymentStatusActive,
-			Binding: &coreworkflow.DeploymentBinding{ExecutionRef: schedule.ExecutionRef},
+			Status:  coreworkflow.DefinitionStatusActive,
+			Binding: &coreworkflow.DefinitionBinding{ExecutionRef: schedule.ExecutionRef},
 		}, nil
 	}
 	return nil, core.ErrNotFound
 }
 
-func (p *workflowSystemToolRecordingProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
-	out := &coreworkflow.ListDeploymentsResponse{}
+func (p *workflowSystemToolRecordingProvider) ListWorkflowDefinitions(context.Context, coreworkflow.ListDefinitionsRequest) (*coreworkflow.ListDefinitionsResponse, error) {
+	out := &coreworkflow.ListDefinitionsResponse{}
+	for _, definition := range p.definitions {
+		out.Definitions = append(out.Definitions, cloneCoreWorkflowDefinition(definition))
+	}
 	for _, schedule := range p.schedules {
-		out.Deployments = append(out.Deployments, &coreworkflow.Deployment{
-			Spec: coreworkflow.DeploymentSpec{
+		out.Definitions = append(out.Definitions, &coreworkflow.Definition{
+			Spec: coreworkflow.DefinitionSpec{
 				ID:     schedule.ID,
 				Target: schedule.Target,
 				Paused: schedule.Paused,
@@ -2241,27 +2308,28 @@ func (p *workflowSystemToolRecordingProvider) ListWorkflowDeployments(context.Co
 					},
 				}},
 			},
-			Status:  coreworkflow.DeploymentStatusActive,
-			Binding: &coreworkflow.DeploymentBinding{ExecutionRef: schedule.ExecutionRef},
+			Status:  coreworkflow.DefinitionStatusActive,
+			Binding: &coreworkflow.DefinitionBinding{ExecutionRef: schedule.ExecutionRef},
 		})
 	}
 	return out, nil
 }
 
-func (p *workflowSystemToolRecordingProvider) DeleteWorkflowDeployment(_ context.Context, req coreworkflow.DeleteDeploymentRequest) error {
-	delete(p.schedules, req.DeploymentID)
+func (p *workflowSystemToolRecordingProvider) DeleteWorkflowDefinition(_ context.Context, req coreworkflow.DeleteDefinitionRequest) error {
+	delete(p.definitions, strings.TrimSpace(req.DefinitionID))
+	delete(p.schedules, req.DefinitionID)
 	return nil
 }
 
-func (p *workflowSystemToolRecordingProvider) SetWorkflowDeploymentPaused(ctx context.Context, req coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
-	if schedule := p.schedules[req.DeploymentID]; schedule != nil {
+func (p *workflowSystemToolRecordingProvider) SetWorkflowDefinitionPaused(ctx context.Context, req coreworkflow.SetDefinitionPausedRequest) (*coreworkflow.Definition, error) {
+	if schedule := p.schedules[req.DefinitionID]; schedule != nil {
 		schedule.Paused = req.Paused
 	}
-	return p.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: req.DeploymentID})
+	return p.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: req.DefinitionID})
 }
 
-func (p *workflowSystemToolRecordingProvider) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
-	return p.SetWorkflowDeploymentPaused(ctx, coreworkflow.SetDeploymentPausedRequest{DeploymentID: req.DeploymentID, Paused: req.Paused})
+func (p *workflowSystemToolRecordingProvider) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (*coreworkflow.Definition, error) {
+	return p.SetWorkflowDefinitionPaused(ctx, coreworkflow.SetDefinitionPausedRequest{DefinitionID: req.DefinitionID, Paused: req.Paused})
 }
 
 func (p *workflowSystemToolRecordingProvider) DeliverWorkflowEvent(context.Context, coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
@@ -2367,6 +2435,20 @@ func (p *workflowSystemToolRecordingProvider) ListExecutionReferences(_ context.
 }
 func (p *workflowSystemToolRecordingProvider) Ping(context.Context) error { return nil }
 func (p *workflowSystemToolRecordingProvider) Close() error               { return nil }
+
+func definitionIDFromWorkflowExecutionRefID(id string) string {
+	const prefix = "workflow_definition:"
+	id = strings.TrimSpace(id)
+	if !strings.HasPrefix(id, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(id, prefix)
+	lastColon := strings.LastIndex(rest, ":")
+	if lastColon <= 0 {
+		return ""
+	}
+	return rest[:lastColon]
+}
 
 type workflowSystemRunGrantScope struct {
 	CallerPluginName        string

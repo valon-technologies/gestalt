@@ -9,12 +9,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func TestWorkflowManagerPlanDeploymentRequiresTokenResolver(t *testing.T) {
+func TestWorkflowManagerApplyDefinitionRequiresTokenResolver(t *testing.T) {
 	t.Parallel()
 
 	server := NewManagerServer("caller", nil, nil)
-	_, err := server.PlanDeployment(context.Background(), &proto.WorkflowManagerPlanDeploymentRequest{})
+	_, err := server.ApplyDefinition(context.Background(), &proto.WorkflowManagerApplyDefinitionRequest{})
 	if status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("PlanDeployment error = %v, want FailedPrecondition", err)
+		t.Fatalf("ApplyDefinition error = %v, want FailedPrecondition", err)
 	}
 }

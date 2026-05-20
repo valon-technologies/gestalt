@@ -998,11 +998,11 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewWorkflowManagerHostClient(conn)
-	created, err := client.ApplyDeployment(ctx, &proto.WorkflowManagerApplyDeploymentRequest{
+	created, err := client.ApplyDefinition(ctx, &proto.WorkflowManagerApplyDefinitionRequest{
 		InvocationToken: invocationToken,
 		ProviderName:    "managed",
 		IdempotencyKey:  "workflow-manager-roundtrip",
-		Spec: &proto.WorkflowDeploymentSpec{
+		Spec: &proto.WorkflowDefinitionSpec{
 			Activations: []*proto.WorkflowActivation{{
 				Id:   "schedule",
 				Mode: proto.WorkflowActivationMode_WORKFLOW_ACTIVATION_MODE_START,
@@ -1032,29 +1032,29 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("apply workflow deployment: %w", err)
+		return nil, fmt.Errorf("apply workflow definition: %w", err)
 	}
-	deploymentID := strings.TrimSpace(created.GetDeployment().GetSpec().GetId())
+	deploymentID := strings.TrimSpace(created.GetDefinition().GetSpec().GetId())
 	if deploymentID == "" {
 		return nil, fmt.Errorf("workflow manager apply did not return a deployment id")
 	}
-	fetched, err := client.GetDeployment(ctx, &proto.WorkflowManagerGetDeploymentRequest{
+	fetched, err := client.GetDefinition(ctx, &proto.WorkflowManagerGetDefinitionRequest{
 		InvocationToken: invocationToken,
-		DeploymentId:    deploymentID,
+		DefinitionId:    deploymentID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get workflow deployment: %w", err)
+		return nil, fmt.Errorf("get workflow definition: %w", err)
 	}
 
-	activation := fetched.GetDeployment().GetSpec().GetActivations()[0].GetSchedule()
-	step := fetched.GetDeployment().GetSpec().GetTarget().GetSteps()[0]
+	activation := fetched.GetDefinition().GetSpec().GetActivations()[0].GetSchedule()
+	step := fetched.GetDefinition().GetSpec().GetTarget().GetSteps()[0]
 	return map[string]any{
 		"provider_name":  created.GetProviderName(),
-		"deployment_id":  deploymentID,
+		"definition_id":  deploymentID,
 		"cron":           activation.GetCron(),
 		"operation":      step.GetPlugin().GetOperation(),
-		"activation_id":  fetched.GetDeployment().GetSpec().GetActivations()[0].GetId(),
-		"deployment_gen": fetched.GetDeployment().GetSpec().GetGeneration(),
+		"activation_id":  fetched.GetDefinition().GetSpec().GetActivations()[0].GetId(),
+		"deployment_gen": fetched.GetDefinition().GetSpec().GetGeneration(),
 	}, nil
 }
 
@@ -1472,13 +1472,12 @@ type stubWorkflowManager struct {
 	nextScheduleID         int
 	nextTriggerID          int
 	definitions            map[string]*workflowmanager.ManagedDefinition
-	deployments            map[string]*workflowmanager.ManagedDeployment
 	runs                   map[string]*workflowmanager.ManagedRun
 	schedules              map[string]*workflowmanager.ManagedSchedule
 	triggers               map[string]*workflowmanager.ManagedEventTrigger
 	publishedEvents        []coreworkflow.Event
 	publishedProviderNames []string
-	deploymentKeys         []string
+	definitionApplyKeys    []string
 	scheduleKeys           []string
 	triggerKeys            []string
 }
@@ -1486,31 +1485,58 @@ type stubWorkflowManager struct {
 func newStubWorkflowManager() *stubWorkflowManager {
 	return &stubWorkflowManager{
 		definitions: make(map[string]*workflowmanager.ManagedDefinition),
-		deployments: make(map[string]*workflowmanager.ManagedDeployment),
 		runs:        make(map[string]*workflowmanager.ManagedRun),
 		schedules:   make(map[string]*workflowmanager.ManagedSchedule),
 		triggers:    make(map[string]*workflowmanager.ManagedEventTrigger),
 	}
 }
 
-func (m *stubWorkflowManager) CreateDefinition(_ context.Context, p *principal.Principal, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (m *stubWorkflowManager) ApplyDefinition(_ context.Context, p *principal.Principal, req workflowmanager.DefinitionApply) (*workflowmanager.ManagedDefinition, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.nextDefinitionID++
-	id := fmt.Sprintf("def-%d", m.nextDefinitionID)
+	m.subjects = append(m.subjects, subjectIDOf(p))
+	spec := req.Spec
+	if strings.TrimSpace(spec.ID) == "" {
+		spec.ID = fmt.Sprintf("definition-%d", len(m.definitions)+1)
+	}
+	if spec.Generation == 0 {
+		spec.Generation = 1
+	}
+	spec = cloneWorkflowDefinitionSpec(spec)
+	providerName := defaultWorkflowProviderName(req.ProviderName)
 	now := time.Now().UTC().Truncate(time.Second)
+	executionRefID := fmt.Sprintf("workflow-definition:%s:%d", spec.ID, spec.Generation)
 	value := &workflowmanager.ManagedDefinition{
-		ProviderName: defaultWorkflowProviderName(req.ProviderName),
-		Definition: &coreworkflow.ExecutionReference{
-			ID:           id,
-			ProviderName: defaultWorkflowProviderName(req.ProviderName),
-			Target:       cloneWorkflowTarget(req.Target),
-			SubjectID:    subjectIDOf(p),
-			CreatedAt:    &now,
+		ProviderName: providerName,
+		Definition: &coreworkflow.Definition{
+			Spec:              spec,
+			Status:            coreworkflow.DefinitionStatusActive,
+			AppliedGeneration: spec.Generation,
+			Binding: &coreworkflow.DefinitionBinding{
+				ExecutionRef:           executionRefID,
+				ExecutionRefGeneration: spec.Generation,
+				DefinitionID:           spec.ID,
+				DefinitionGeneration:   spec.Generation,
+			},
+		},
+		ExecutionRef: &coreworkflow.ExecutionReference{
+			ID:                  executionRefID,
+			ProviderName:        providerName,
+			Target:              cloneWorkflowTarget(spec.Target),
+			Permissions:         slices.Clone(spec.Permissions),
+			SubjectID:           subjectIDOf(p),
+			CredentialSubjectID: subjectIDOf(p),
+			CallerPluginName:    strings.TrimSpace(req.CallerPluginName),
+			CreatedAt:           &now,
+			SemanticsVersion:    strings.TrimSpace(spec.WorkflowSemanticsVersion),
+			Generation:          spec.Generation,
+			TargetDigest:        "target-digest",
+			ActionTableDigest:   "action-table-digest",
+			PermissionsDigest:   "permissions-digest",
 		},
 	}
-	m.definitions[id] = value
-	m.subjects = append(m.subjects, subjectIDOf(p))
+	m.definitionApplyKeys = append(m.definitionApplyKeys, strings.TrimSpace(req.IdempotencyKey))
+	m.definitions[spec.ID] = value
 	return cloneManagedDefinition(value), nil
 }
 
@@ -1518,129 +1544,56 @@ func (m *stubWorkflowManager) GetDefinition(_ context.Context, p *principal.Prin
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.definitions[definitionID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	return cloneManagedDefinition(value), nil
-}
-
-func (m *stubWorkflowManager) UpdateDefinition(_ context.Context, p *principal.Principal, definitionID string, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	value, ok := m.definitions[definitionID]
-	if !ok {
-		return nil, core.ErrNotFound
-	}
-	value.ProviderName = defaultWorkflowProviderName(req.ProviderName)
-	value.Definition.ProviderName = defaultWorkflowProviderName(req.ProviderName)
-	value.Definition.Target = cloneWorkflowTarget(req.Target)
-	return cloneManagedDefinition(value), nil
-}
-
-func (m *stubWorkflowManager) DeleteDefinition(_ context.Context, p *principal.Principal, definitionID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	if _, ok := m.definitions[definitionID]; !ok {
-		return core.ErrNotFound
-	}
-	delete(m.definitions, definitionID)
-	return nil
-}
-
-func (m *stubWorkflowManager) PlanDeployment(_ context.Context, p *principal.Principal, req workflowmanager.DeploymentPlan) (*coreworkflow.CompileTargetResponse, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	return &coreworkflow.CompileTargetResponse{
-		AcceptedSpecDigest:        "stub-spec-digest",
-		ProviderPlanID:            "stub-plan",
-		ProviderPlanDigest:        "stub-plan-digest",
-		ProviderPlanFormatVersion: "stub",
-	}, nil
-}
-
-func (m *stubWorkflowManager) ApplyDeployment(_ context.Context, p *principal.Principal, req workflowmanager.DeploymentApply) (*workflowmanager.ManagedDeployment, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	spec := req.Spec
-	if strings.TrimSpace(spec.ID) == "" {
-		spec.ID = fmt.Sprintf("deployment-%d", len(m.deployments)+1)
-	}
-	if spec.Generation == 0 {
-		spec.Generation = 1
-	}
-	spec = cloneWorkflowDeploymentSpec(spec)
-	value := &workflowmanager.ManagedDeployment{
-		ProviderName: defaultWorkflowProviderName(req.ProviderName),
-		Deployment: &coreworkflow.Deployment{
-			Spec:              spec,
-			Status:            coreworkflow.DeploymentStatusActive,
-			AppliedGeneration: spec.Generation,
-		},
-	}
-	m.deploymentKeys = append(m.deploymentKeys, strings.TrimSpace(req.IdempotencyKey))
-	m.deployments[spec.ID] = value
-	return cloneManagedDeployment(value), nil
-}
-
-func (m *stubWorkflowManager) GetDeployment(_ context.Context, p *principal.Principal, deploymentID string) (*workflowmanager.ManagedDeployment, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.subjects = append(m.subjects, subjectIDOf(p))
-	value := m.deployments[strings.TrimSpace(deploymentID)]
+	value := m.definitions[strings.TrimSpace(definitionID)]
 	if value == nil {
 		return nil, core.ErrNotFound
 	}
-	return cloneManagedDeployment(value), nil
+	return cloneManagedDefinition(value), nil
 }
 
-func (m *stubWorkflowManager) ListDeployments(context.Context, *principal.Principal) ([]*workflowmanager.ManagedDeployment, error) {
+func (m *stubWorkflowManager) ListDefinitions(context.Context, *principal.Principal) ([]*workflowmanager.ManagedDefinition, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]*workflowmanager.ManagedDeployment, 0, len(m.deployments))
-	for _, value := range m.deployments {
-		out = append(out, cloneManagedDeployment(value))
+	out := make([]*workflowmanager.ManagedDefinition, 0, len(m.definitions))
+	for _, value := range m.definitions {
+		out = append(out, cloneManagedDefinition(value))
 	}
 	return out, nil
 }
 
-func (m *stubWorkflowManager) DeleteDeployment(_ context.Context, _ *principal.Principal, deploymentID string) error {
+func (m *stubWorkflowManager) DeleteDefinition(_ context.Context, _ *principal.Principal, definitionID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.deployments, strings.TrimSpace(deploymentID))
+	delete(m.definitions, strings.TrimSpace(definitionID))
 	return nil
 }
 
-func (m *stubWorkflowManager) SetDeploymentPaused(ctx context.Context, p *principal.Principal, deploymentID string, paused bool) (*workflowmanager.ManagedDeployment, error) {
+func (m *stubWorkflowManager) SetDefinitionPaused(ctx context.Context, p *principal.Principal, definitionID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
 	m.mu.Lock()
-	value := m.deployments[strings.TrimSpace(deploymentID)]
+	value := m.definitions[strings.TrimSpace(definitionID)]
 	if value != nil {
-		value.Deployment.Spec.Paused = paused
-		value.Deployment.Status = coreworkflow.DeploymentStatusActive
+		value.Definition.Spec.Paused = paused
+		value.Definition.Status = coreworkflow.DefinitionStatusActive
 		if paused {
-			value.Deployment.Status = coreworkflow.DeploymentStatusPaused
+			value.Definition.Status = coreworkflow.DefinitionStatusPaused
 		}
 	}
 	m.mu.Unlock()
-	return m.GetDeployment(ctx, p, deploymentID)
+	return m.GetDefinition(ctx, p, definitionID)
 }
 
-func (m *stubWorkflowManager) SetActivationPaused(ctx context.Context, p *principal.Principal, deploymentID, activationID string, paused bool) (*workflowmanager.ManagedDeployment, error) {
+func (m *stubWorkflowManager) SetActivationPaused(ctx context.Context, p *principal.Principal, definitionID, activationID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
 	m.mu.Lock()
-	value := m.deployments[strings.TrimSpace(deploymentID)]
+	value := m.definitions[strings.TrimSpace(definitionID)]
 	if value != nil {
-		for i := range value.Deployment.Spec.Activations {
-			if strings.TrimSpace(value.Deployment.Spec.Activations[i].ID) == strings.TrimSpace(activationID) {
-				value.Deployment.Spec.Activations[i].Paused = paused
+		for i := range value.Definition.Spec.Activations {
+			if strings.TrimSpace(value.Definition.Spec.Activations[i].ID) == strings.TrimSpace(activationID) {
+				value.Definition.Spec.Activations[i].Paused = paused
 			}
 		}
 	}
 	m.mu.Unlock()
-	return m.GetDeployment(ctx, p, deploymentID)
+	return m.GetDefinition(ctx, p, definitionID)
 }
 
 func (m *stubWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
@@ -1924,10 +1877,10 @@ func (m *stubWorkflowManager) ScheduleIdempotencyKeys() []string {
 	return slices.Clone(m.scheduleKeys)
 }
 
-func (m *stubWorkflowManager) DeploymentIdempotencyKeys() []string {
+func (m *stubWorkflowManager) DefinitionIdempotencyKeys() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return slices.Clone(m.deploymentKeys)
+	return slices.Clone(m.definitionApplyKeys)
 }
 
 func (m *stubWorkflowManager) ScheduleCount() int {
@@ -2253,23 +2206,23 @@ func cloneManagedSchedule(value *workflowmanager.ManagedSchedule) *workflowmanag
 	return &out
 }
 
-func cloneManagedDeployment(value *workflowmanager.ManagedDeployment) *workflowmanager.ManagedDeployment {
+func cloneManagedDefinition(value *workflowmanager.ManagedDefinition) *workflowmanager.ManagedDefinition {
 	if value == nil {
 		return nil
 	}
 	out := *value
-	if value.Deployment != nil {
-		deployment := *value.Deployment
-		deployment.Spec = cloneWorkflowDeploymentSpec(value.Deployment.Spec)
-		if value.Deployment.Binding != nil {
-			binding := *value.Deployment.Binding
+	if value.Definition != nil {
+		deployment := *value.Definition
+		deployment.Spec = cloneWorkflowDefinitionSpec(value.Definition.Spec)
+		if value.Definition.Binding != nil {
+			binding := *value.Definition.Binding
 			deployment.Binding = &binding
 		}
-		if value.Deployment.Error != nil {
-			runErr := *value.Deployment.Error
+		if value.Definition.Error != nil {
+			runErr := *value.Definition.Error
 			deployment.Error = &runErr
 		}
-		out.Deployment = &deployment
+		out.Definition = &deployment
 	}
 	if value.ExecutionRef != nil {
 		executionRef := *value.ExecutionRef
@@ -2279,7 +2232,7 @@ func cloneManagedDeployment(value *workflowmanager.ManagedDeployment) *workflowm
 	return &out
 }
 
-func cloneWorkflowDeploymentSpec(value coreworkflow.DeploymentSpec) coreworkflow.DeploymentSpec {
+func cloneWorkflowDefinitionSpec(value coreworkflow.DefinitionSpec) coreworkflow.DefinitionSpec {
 	out := value
 	out.Target = cloneWorkflowTarget(value.Target)
 	out.Permissions = slices.Clone(value.Permissions)
@@ -2319,19 +2272,6 @@ func cloneManagedEventTrigger(value *workflowmanager.ManagedEventTrigger) *workf
 		executionRef := *value.ExecutionRef
 		executionRef.Target = cloneWorkflowTarget(value.ExecutionRef.Target)
 		out.ExecutionRef = &executionRef
-	}
-	return &out
-}
-
-func cloneManagedDefinition(value *workflowmanager.ManagedDefinition) *workflowmanager.ManagedDefinition {
-	if value == nil {
-		return nil
-	}
-	out := *value
-	if value.Definition != nil {
-		definition := *value.Definition
-		definition.Target = cloneWorkflowTarget(value.Definition.Target)
-		out.Definition = &definition
 	}
 	return &out
 }
@@ -4996,8 +4936,8 @@ func TestPluginWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
 	if err := json.Unmarshal([]byte(createResult.Body), &createBody); err != nil {
 		t.Fatalf("json.Unmarshal(create): %v", err)
 	}
-	if !strings.Contains(createBody.Error, "PermissionDenied") || !strings.Contains(createBody.Error, workflowgrants.OperationDeploymentsCreate) {
-		t.Fatalf("create workflow schedule error = %q, want permission denied for %s", createBody.Error, workflowgrants.OperationDeploymentsCreate)
+	if !strings.Contains(createBody.Error, "PermissionDenied") || !strings.Contains(createBody.Error, workflowgrants.OperationDefinitionsCreate) {
+		t.Fatalf("create workflow schedule error = %q, want permission denied for %s", createBody.Error, workflowgrants.OperationDefinitionsCreate)
 	}
 	if got := manager.ScheduleCount(); got != 0 {
 		t.Fatalf("schedule count = %d, want 0 denied calls to skip manager", got)
@@ -8202,7 +8142,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 
 	var body struct {
 		ProviderName string `json:"provider_name"`
-		DeploymentID string `json:"deployment_id"`
+		DefinitionID string `json:"definition_id"`
 		Cron         string `json:"cron"`
 		Operation    string `json:"operation"`
 	}
@@ -8212,7 +8152,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	if body.ProviderName != "managed" {
 		t.Fatalf("provider_name = %q, want %q", body.ProviderName, "managed")
 	}
-	if body.DeploymentID == "" {
+	if body.DefinitionID == "" {
 		t.Fatal("workflow_manager_roundtrip should return a deployment id")
 	}
 	if body.Cron != "*/5 * * * *" {
@@ -8222,24 +8162,24 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 		t.Fatalf("operation = %q, want %q", body.Operation, "sync")
 	}
 
-	deployments, err := manager.ListDeployments(context.Background(), nil)
+	definitions, err := manager.ListDefinitions(context.Background(), nil)
 	if err != nil {
-		t.Fatalf("manager.ListDeployments: %v", err)
+		t.Fatalf("manager.ListDefinitions: %v", err)
 	}
-	if len(deployments) != 1 {
-		t.Fatalf("manager deployments len = %d, want 1", len(deployments))
+	if len(definitions) != 1 {
+		t.Fatalf("manager definitions len = %d, want 1", len(definitions))
 	}
-	if len(deployments[0].Deployment.Spec.Target.Steps) != 1 || deployments[0].Deployment.Spec.Target.Steps[0].Plugin == nil {
-		t.Fatalf("stored target steps = %#v, want one plugin step", deployments[0].Deployment.Spec.Target.Steps)
+	if len(definitions[0].Definition.Spec.Target.Steps) != 1 || definitions[0].Definition.Spec.Target.Steps[0].Plugin == nil {
+		t.Fatalf("stored target steps = %#v, want one plugin step", definitions[0].Definition.Spec.Target.Steps)
 		return
 	}
-	if got := deployments[0].Deployment.Spec.Target.Steps[0].Plugin.Operation; got != "sync" {
+	if got := definitions[0].Definition.Spec.Target.Steps[0].Plugin.Operation; got != "sync" {
 		t.Fatalf("stored target operation = %q, want %q", got, "sync")
 	}
 	if got := manager.Subjects(); !slices.Equal(got, []string{"user:user-123", "user:user-123"}) {
 		t.Fatalf("manager subjects = %v, want two user:user-123 entries", got)
 	}
-	if got := manager.DeploymentIdempotencyKeys(); !slices.Equal(got, []string{"workflow-manager-roundtrip"}) {
+	if got := manager.DefinitionIdempotencyKeys(); !slices.Equal(got, []string{"workflow-manager-roundtrip"}) {
 		t.Fatalf("manager deployment idempotency keys = %v, want [workflow-manager-roundtrip]", got)
 	}
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"google.golang.org/grpc"
@@ -14,14 +13,14 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func TestRemoteWorkflowUsesDeploymentProviderRPCs(t *testing.T) {
+func TestRemoteWorkflowUsesDefinitionProviderRPCs(t *testing.T) {
 	t.Parallel()
 
 	client := &recordingWorkflowProviderClient{}
 	provider := &remoteWorkflow{client: client, name: "temporal"}
 
-	plan, err := provider.PlanWorkflow(context.Background(), coreworkflow.PlanWorkflowRequest{
-		Spec: coreworkflow.DeploymentSpec{
+	definition, err := provider.ApplyWorkflowDefinition(context.Background(), coreworkflow.ApplyDefinitionRequest{
+		Spec: coreworkflow.DefinitionSpec{
 			ID: "deploy-1",
 			Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
 				ID: "notify",
@@ -32,23 +31,47 @@ func TestRemoteWorkflowUsesDeploymentProviderRPCs(t *testing.T) {
 				},
 			}}},
 		},
-		SpecDigest:        "sha256:spec",
-		TargetDigest:      "sha256:target",
-		ActionTableDigest: "sha256:actions",
+		Binding: &coreworkflow.DefinitionBinding{
+			ExecutionRef:             "exec-1",
+			ExecutionRefGeneration:   1,
+			DefinitionID:             "deploy-1",
+			DefinitionGeneration:     1,
+			SpecDigest:               "sha256:spec",
+			TargetDigest:             "sha256:target",
+			ActionTableDigest:        "sha256:actions",
+			PermissionsDigest:        "sha256:permissions",
+			WorkflowSemanticsVersion: "workflow_steps_v1",
+		},
+		ExecutionRef: &coreworkflow.ExecutionReference{
+			ID:           "exec-1",
+			ProviderName: "temporal",
+			Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+				ID:     "notify",
+				Plugin: &coreworkflow.PluginCall{Name: "slack", Operation: "reply"},
+			}}},
+			SubjectID:         "user:1",
+			SubjectKind:       "user",
+			TargetDigest:      "sha256:target",
+			PermissionsDigest: "sha256:permissions",
+			Generation:        1,
+		},
 	})
 	if err != nil {
-		t.Fatalf("PlanWorkflow: %v", err)
+		t.Fatalf("ApplyWorkflowDefinition: %v", err)
 	}
-	if plan.ProviderPlanDigest != "sha256:plan" {
-		t.Fatalf("provider plan digest = %q", plan.ProviderPlanDigest)
+	if definition.TargetDigest != "sha256:target" {
+		t.Fatalf("target digest = %q", definition.TargetDigest)
 	}
-	if client.planReq == nil || client.planReq.GetSpec().GetTarget().GetSteps()[0].GetPlugin().GetName() != "slack" {
-		t.Fatalf("plan request = %#v", client.planReq)
+	if client.applyReq == nil || client.applyReq.GetSpec().GetTarget().GetSteps()[0].GetPlugin().GetName() != "slack" {
+		t.Fatalf("apply request = %#v", client.applyReq)
+	}
+	if client.applyReq.GetExecutionRef().GetId() != "exec-1" {
+		t.Fatalf("apply execution ref = %#v, want exec-1", client.applyReq.GetExecutionRef())
 	}
 
 	run, err := provider.StartRun(context.Background(), coreworkflow.StartRunRequest{
-		DeploymentID:         "deploy-1",
-		DeploymentGeneration: 2,
+		DefinitionID:         "deploy-1",
+		DefinitionGeneration: 2,
 		ActivationID:         "manual",
 		WorkflowKey:          "customer-1",
 		Input:                map[string]any{"message": "hello"},
@@ -57,10 +80,10 @@ func TestRemoteWorkflowUsesDeploymentProviderRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
-	if run.ID != "run-1" || run.DeploymentID != "deploy-1" {
+	if run.ID != "run-1" || run.DefinitionID != "deploy-1" {
 		t.Fatalf("run = %#v", run)
 	}
-	if client.startReq == nil || client.startReq.GetDeploymentId() != "deploy-1" || client.startReq.GetInput().AsMap()["message"] != "hello" {
+	if client.startReq == nil || client.startReq.GetDefinitionId() != "deploy-1" || client.startReq.GetInput().AsMap()["message"] != "hello" {
 		t.Fatalf("start request = %#v", client.startReq)
 	}
 }
@@ -88,31 +111,18 @@ func TestRemoteWorkflowPublishEventUsesDeliverWorkflowEvent(t *testing.T) {
 	}
 }
 
-func TestRemoteWorkflowExecutionReferencesUseProviderRPCs(t *testing.T) {
+func TestRemoteWorkflowExecutionReferencesUseProviderReadRPCs(t *testing.T) {
 	t.Parallel()
 
 	client := &recordingWorkflowProviderClient{}
 	provider := &remoteWorkflow{client: client, name: "temporal"}
-	ref := &coreworkflow.ExecutionReference{
-		ID:           "ref-1",
-		ProviderName: "temporal",
-		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
-			ID:     "notify",
-			Plugin: &coreworkflow.PluginCall{Name: "slack", Operation: "reply"},
-		}}},
-		SubjectID:         "user:1",
-		Permissions:       []core.AccessPermission{{Plugin: "slack", Operations: []string{"reply"}}},
+	client.executionRef = &proto.WorkflowExecutionReference{
+		Id:                "ref-1",
+		ProviderName:      "temporal",
+		SubjectId:         "user:1",
 		TargetDigest:      "sha256:target",
 		PermissionsDigest: "sha256:permissions",
 		Generation:        2,
-	}
-
-	stored, err := provider.PutExecutionReference(context.Background(), ref)
-	if err != nil {
-		t.Fatalf("PutExecutionReference: %v", err)
-	}
-	if stored.ID != "ref-1" || client.putExecutionRefReq.GetExecutionRef().GetId() != "ref-1" {
-		t.Fatalf("put execution ref request = %#v stored=%#v", client.putExecutionRefReq, stored)
 	}
 
 	loaded, err := provider.GetExecutionReference(context.Background(), "ref-1")
@@ -140,7 +150,7 @@ func TestHostServerInvokeWorkflowActionReturnsActionResult(t *testing.T) {
 		t.Fatalf("NewStruct: %v", err)
 	}
 	server := NewHostServerWithActions("temporal", nil, func(_ context.Context, req coreworkflow.InvokeActionRequest) (*coreworkflow.HostActionResponse, error) {
-		if req.ProviderName != "temporal" || req.Selector.RunID != "run-1" {
+		if req.ProviderName != "temporal" || req.Selector.DefinitionID != "deploy-1" {
 			t.Fatalf("invoke request = %#v", req)
 		}
 		return &coreworkflow.HostActionResponse{
@@ -153,9 +163,10 @@ func TestHostServerInvokeWorkflowActionReturnsActionResult(t *testing.T) {
 
 	resp, err := server.InvokeWorkflowAction(context.Background(), &proto.InvokeWorkflowActionRequest{
 		Selector: &proto.WorkflowHostActionSelector{
-			RunId:    "run-1",
-			StepId:   "notify",
-			ActionId: "step/notify/plugin",
+			DefinitionId: "deploy-1",
+			RunId:        "run-1",
+			StepId:       "notify",
+			ActionId:     "step/notify/plugin",
 		},
 		Action: &proto.InvokeWorkflowActionRequest_Plugin{
 			Plugin: &proto.WorkflowPluginActionPayload{Input: input},
@@ -170,45 +181,43 @@ func TestHostServerInvokeWorkflowActionReturnsActionResult(t *testing.T) {
 }
 
 type recordingWorkflowProviderClient struct {
-	planReq              *proto.PlanWorkflowRequest
+	applyReq             *proto.ApplyWorkflowDefinitionRequest
 	startReq             *proto.StartWorkflowRunRequest
 	deliverReq           *proto.DeliverWorkflowEventRequest
-	putExecutionRefReq   *proto.PutWorkflowExecutionReferenceRequest
+	executionRef         *proto.WorkflowExecutionReference
 	getExecutionRefReq   *proto.GetWorkflowExecutionReferenceRequest
 	listExecutionRefsReq *proto.ListWorkflowExecutionReferencesRequest
 }
 
-func (c *recordingWorkflowProviderClient) PlanWorkflow(_ context.Context, req *proto.PlanWorkflowRequest, _ ...grpc.CallOption) (*proto.PlanWorkflowResponse, error) {
-	c.planReq = req
-	return &proto.PlanWorkflowResponse{
-		AcceptedSpecDigest:    req.GetSpecDigest(),
-		ProviderPlanId:        "plan-1",
-		ProviderPlanDigest:    "sha256:plan",
-		SupportedFeatureFlags: []string{"steps"},
+func (c *recordingWorkflowProviderClient) ApplyWorkflowDefinition(_ context.Context, req *proto.ApplyWorkflowDefinitionRequest, _ ...grpc.CallOption) (*proto.WorkflowDefinition, error) {
+	c.applyReq = req
+	return &proto.WorkflowDefinition{
+		Spec:              req.GetSpec(),
+		Status:            proto.WorkflowDefinitionStatus_WORKFLOW_DEFINITION_STATUS_ACTIVE,
+		SpecDigest:        req.GetBinding().GetSpecDigest(),
+		TargetDigest:      req.GetBinding().GetTargetDigest(),
+		ActionTableDigest: req.GetBinding().GetActionTableDigest(),
+		Binding:           req.GetBinding(),
 	}, nil
 }
 
-func (c *recordingWorkflowProviderClient) ApplyWorkflowDeployment(context.Context, *proto.ApplyWorkflowDeploymentRequest, ...grpc.CallOption) (*proto.WorkflowDeployment, error) {
+func (c *recordingWorkflowProviderClient) GetWorkflowDefinition(context.Context, *proto.GetWorkflowDefinitionRequest, ...grpc.CallOption) (*proto.WorkflowDefinition, error) {
 	return nil, unimplementedTestRPC()
 }
 
-func (c *recordingWorkflowProviderClient) GetWorkflowDeployment(context.Context, *proto.GetWorkflowDeploymentRequest, ...grpc.CallOption) (*proto.WorkflowDeployment, error) {
+func (c *recordingWorkflowProviderClient) ListWorkflowDefinitions(context.Context, *proto.ListWorkflowDefinitionsRequest, ...grpc.CallOption) (*proto.ListWorkflowDefinitionsResponse, error) {
 	return nil, unimplementedTestRPC()
 }
 
-func (c *recordingWorkflowProviderClient) ListWorkflowDeployments(context.Context, *proto.ListWorkflowDeploymentsRequest, ...grpc.CallOption) (*proto.ListWorkflowDeploymentsResponse, error) {
+func (c *recordingWorkflowProviderClient) DeleteWorkflowDefinition(context.Context, *proto.DeleteWorkflowDefinitionRequest, ...grpc.CallOption) (*emptypb.Empty, error) {
 	return nil, unimplementedTestRPC()
 }
 
-func (c *recordingWorkflowProviderClient) DeleteWorkflowDeployment(context.Context, *proto.DeleteWorkflowDeploymentRequest, ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *recordingWorkflowProviderClient) SetWorkflowDefinitionPaused(context.Context, *proto.SetWorkflowDefinitionPausedRequest, ...grpc.CallOption) (*proto.WorkflowDefinition, error) {
 	return nil, unimplementedTestRPC()
 }
 
-func (c *recordingWorkflowProviderClient) SetWorkflowDeploymentPaused(context.Context, *proto.SetWorkflowDeploymentPausedRequest, ...grpc.CallOption) (*proto.WorkflowDeployment, error) {
-	return nil, unimplementedTestRPC()
-}
-
-func (c *recordingWorkflowProviderClient) SetWorkflowActivationPaused(context.Context, *proto.SetWorkflowActivationPausedRequest, ...grpc.CallOption) (*proto.WorkflowDeployment, error) {
+func (c *recordingWorkflowProviderClient) SetWorkflowActivationPaused(context.Context, *proto.SetWorkflowActivationPausedRequest, ...grpc.CallOption) (*proto.WorkflowDefinition, error) {
 	return nil, unimplementedTestRPC()
 }
 
@@ -216,8 +225,8 @@ func (c *recordingWorkflowProviderClient) StartWorkflowRun(_ context.Context, re
 	c.startReq = req
 	return &proto.WorkflowRun{
 		Id:                   "run-1",
-		DeploymentId:         req.GetDeploymentId(),
-		DeploymentGeneration: req.GetDeploymentGeneration(),
+		DefinitionId:         req.GetDefinitionId(),
+		DefinitionGeneration: req.GetDefinitionGeneration(),
 		WorkflowKey:          req.GetWorkflowKey(),
 		Status:               proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_RUNNING,
 		Input:                req.GetInput(),
@@ -257,25 +266,20 @@ func (c *recordingWorkflowProviderClient) GetWorkflowRunOutput(context.Context, 
 	return nil, unimplementedTestRPC()
 }
 
-func (c *recordingWorkflowProviderClient) PutExecutionReference(_ context.Context, req *proto.PutWorkflowExecutionReferenceRequest, _ ...grpc.CallOption) (*proto.WorkflowExecutionReference, error) {
-	c.putExecutionRefReq = req
-	return req.GetExecutionRef(), nil
-}
-
 func (c *recordingWorkflowProviderClient) GetExecutionReference(_ context.Context, req *proto.GetWorkflowExecutionReferenceRequest, _ ...grpc.CallOption) (*proto.WorkflowExecutionReference, error) {
 	c.getExecutionRefReq = req
-	if c.putExecutionRefReq != nil && c.putExecutionRefReq.GetExecutionRef().GetId() == req.GetId() {
-		return c.putExecutionRefReq.GetExecutionRef(), nil
+	if c.executionRef != nil && c.executionRef.GetId() == req.GetId() {
+		return c.executionRef, nil
 	}
 	return nil, status.Error(codes.NotFound, "not found")
 }
 
 func (c *recordingWorkflowProviderClient) ListExecutionReferences(_ context.Context, req *proto.ListWorkflowExecutionReferencesRequest, _ ...grpc.CallOption) (*proto.ListWorkflowExecutionReferencesResponse, error) {
 	c.listExecutionRefsReq = req
-	if c.putExecutionRefReq == nil || c.putExecutionRefReq.GetExecutionRef().GetSubjectId() != req.GetSubjectId() {
+	if c.executionRef == nil || c.executionRef.GetSubjectId() != req.GetSubjectId() {
 		return &proto.ListWorkflowExecutionReferencesResponse{}, nil
 	}
-	return &proto.ListWorkflowExecutionReferencesResponse{ExecutionRefs: []*proto.WorkflowExecutionReference{c.putExecutionRefReq.GetExecutionRef()}}, nil
+	return &proto.ListWorkflowExecutionReferencesResponse{ExecutionRefs: []*proto.WorkflowExecutionReference{c.executionRef}}, nil
 }
 
 func unimplementedTestRPC() error {

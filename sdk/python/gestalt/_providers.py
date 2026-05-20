@@ -104,28 +104,26 @@ if TYPE_CHECKING:
         WriteOptions,
     )
     from ._workflow import (
-        ApplyWorkflowDeploymentRequest,
+        ApplyWorkflowDefinitionRequest,
         CancelWorkflowRunRequest,
-        DeleteWorkflowDeploymentRequest,
+        DeleteWorkflowDefinitionRequest,
         DeliverWorkflowEventRequest,
         DeliverWorkflowEventResponse,
-        GetWorkflowDeploymentRequest,
+        GetWorkflowDefinitionRequest,
         GetWorkflowRunEventsRequest,
         GetWorkflowRunOutputRequest,
         GetWorkflowRunRequest,
-        ListWorkflowDeploymentsRequest,
-        ListWorkflowDeploymentsResponse,
+        ListWorkflowDefinitionsRequest,
+        ListWorkflowDefinitionsResponse,
         ListWorkflowRunEventsResponse,
         ListWorkflowRunsRequest,
         ListWorkflowRunsResponse,
-        PlanWorkflowRequest,
-        PlanWorkflowResponse,
         SetWorkflowActivationPausedRequest,
-        SetWorkflowDeploymentPausedRequest,
+        SetWorkflowDefinitionPausedRequest,
         SignalOrStartWorkflowRunRequest,
         SignalWorkflowRunRequest,
         StartWorkflowRunRequest,
-        WorkflowDeployment,
+        WorkflowDefinition,
         WorkflowRun,
         WorkflowRunOutput,
         WorkflowRunSignal,
@@ -637,44 +635,41 @@ class WorkflowProvider(PluginProvider):
     """Base class for workflow-provider runtimes.
 
     Subclasses implement snake_case handler methods such as
-    ``plan_workflow(request)``, ``apply_deployment(request)``,
-    ``start_run(request)``, ``signal_run(request)``, and ``deliver_event(request)``.
+    ``apply_definition(request)``, ``start_run(request)``,
+    ``signal_run(request)``, and ``deliver_event(request)``.
     """
 
-    def plan_workflow(self, request: PlanWorkflowRequest) -> PlanWorkflowResponse:
-        self._unimplemented("plan_workflow")
-
-    def apply_deployment(
+    def apply_definition(
         self,
-        request: ApplyWorkflowDeploymentRequest,
-    ) -> WorkflowDeployment:
-        self._unimplemented("apply_deployment")
+        request: ApplyWorkflowDefinitionRequest,
+    ) -> WorkflowDefinition:
+        self._unimplemented("apply_definition")
 
-    def get_deployment(
+    def get_definition(
         self,
-        request: GetWorkflowDeploymentRequest,
-    ) -> WorkflowDeployment:
-        self._unimplemented("get_deployment")
+        request: GetWorkflowDefinitionRequest,
+    ) -> WorkflowDefinition:
+        self._unimplemented("get_definition")
 
-    def list_deployments(
+    def list_definitions(
         self,
-        request: ListWorkflowDeploymentsRequest,
-    ) -> ListWorkflowDeploymentsResponse:
-        self._unimplemented("list_deployments")
+        request: ListWorkflowDefinitionsRequest,
+    ) -> ListWorkflowDefinitionsResponse:
+        self._unimplemented("list_definitions")
 
-    def delete_deployment(self, request: DeleteWorkflowDeploymentRequest) -> None:
-        self._unimplemented("delete_deployment")
+    def delete_definition(self, request: DeleteWorkflowDefinitionRequest) -> None:
+        self._unimplemented("delete_definition")
 
-    def set_deployment_paused(
+    def set_definition_paused(
         self,
-        request: SetWorkflowDeploymentPausedRequest,
-    ) -> WorkflowDeployment:
-        self._unimplemented("set_deployment_paused")
+        request: SetWorkflowDefinitionPausedRequest,
+    ) -> WorkflowDefinition:
+        self._unimplemented("set_definition_paused")
 
     def set_activation_paused(
         self,
         request: SetWorkflowActivationPausedRequest,
-    ) -> WorkflowDeployment:
+    ) -> WorkflowDefinition:
         self._unimplemented("set_activation_paused")
 
     def start_run(

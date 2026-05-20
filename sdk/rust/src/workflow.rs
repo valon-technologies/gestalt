@@ -35,21 +35,21 @@ const WORKFLOW_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-tok
 pub type WorkflowJson = serde_json::Value;
 
 pub use crate::generated::v1::{
-    ApplyWorkflowDeploymentRequest, BoundWorkflowTarget, CancelWorkflowRunRequest,
-    DeleteWorkflowDeploymentRequest, DeliverWorkflowEventRequest, DeliverWorkflowEventResponse,
-    GetWorkflowDeploymentRequest, GetWorkflowExecutionReferenceRequest,
+    ApplyWorkflowDefinitionRequest, BoundWorkflowTarget, CancelWorkflowRunRequest,
+    DeleteWorkflowDefinitionRequest, DeliverWorkflowEventRequest, DeliverWorkflowEventResponse,
+    GetWorkflowDefinitionRequest, GetWorkflowExecutionReferenceRequest,
     GetWorkflowRunEventsRequest, GetWorkflowRunOutputRequest, GetWorkflowRunRequest,
-    InvokeWorkflowActionRequest, ListWorkflowDeploymentsRequest, ListWorkflowDeploymentsResponse,
+    InvokeWorkflowActionRequest, ListWorkflowDefinitionsRequest, ListWorkflowDefinitionsResponse,
     ListWorkflowExecutionReferencesRequest, ListWorkflowExecutionReferencesResponse,
     ListWorkflowRunEventsResponse, ListWorkflowRunsRequest, ListWorkflowRunsResponse,
-    ManagedWorkflowDeployment, ManagedWorkflowRun, ManagedWorkflowRunSignal, PlanWorkflowRequest,
-    PlanWorkflowResponse, PutWorkflowExecutionReferenceRequest, SetWorkflowActivationPausedRequest,
-    SetWorkflowDeploymentPausedRequest, SignalOrStartWorkflowRunRequest, SignalWorkflowRunRequest,
-    StartWorkflowRunRequest, WorkflowAccessPermission, WorkflowActionDescriptor,
-    WorkflowActionKind, WorkflowActionResult, WorkflowActionTable, WorkflowActivation,
+    ManagedWorkflowDefinition, ManagedWorkflowRun, ManagedWorkflowRunSignal,
+    SetWorkflowActivationPausedRequest, SetWorkflowDefinitionPausedRequest,
+    SignalOrStartWorkflowRunRequest, SignalWorkflowRunRequest, StartWorkflowRunRequest,
+    WorkflowAccessPermission, WorkflowActionDescriptor, WorkflowActionKind, WorkflowActionResult,
+    WorkflowActionTable, WorkflowActivation,
     WorkflowActivationMode, WorkflowActor, WorkflowAgentMessage, WorkflowAgentTurnPayload,
-    WorkflowDeployment, WorkflowDeploymentBinding, WorkflowDeploymentSpec,
-    WorkflowDeploymentStatus, WorkflowEvent, WorkflowEventActivation, WorkflowEventDeliveryResult,
+    WorkflowDefinition, WorkflowDefinitionBinding, WorkflowDefinitionSpec,
+    WorkflowDefinitionStatus, WorkflowEvent, WorkflowEventActivation, WorkflowEventDeliveryResult,
     WorkflowEventMatch, WorkflowEventTrigger, WorkflowExecutionReference,
     WorkflowHostActionSelector, WorkflowManualActivation, WorkflowManualTrigger,
     WorkflowOutputSummary, WorkflowPathSource, WorkflowPluginActionPayload, WorkflowRun,
@@ -57,30 +57,30 @@ pub use crate::generated::v1::{
     WorkflowRunOutput, WorkflowRunSignal, WorkflowRunStatus, WorkflowRunTrigger,
     WorkflowScheduleActivation, WorkflowScheduleTrigger, WorkflowSignal, WorkflowStep,
     WorkflowStepAgentTurn, WorkflowStepDelivery, WorkflowStepOutputSource, WorkflowStepPluginCall,
-    WorkflowStepState, WorkflowStepStatus, WorkflowStepWhen, WorkflowText,
-    WorkflowUnsupportedFeature, WorkflowValue, invoke_workflow_action_request, workflow_activation,
-    workflow_run_trigger, workflow_step, workflow_value,
+    WorkflowStepState, WorkflowStepStatus, WorkflowStepWhen, WorkflowText, WorkflowValue,
+    invoke_workflow_action_request, workflow_activation, workflow_run_trigger, workflow_step,
+    workflow_value,
 };
 
 /// Workflow agent-tool reference used inside workflow agent steps.
 pub type WorkflowAgentToolRef = pb::AgentToolRef;
 
-/// Converts any JSON-object-like value into a workflow struct value.
+/// Converts any JSON-object-like value into the workflow struct payload.
 pub fn workflow_struct<T: Serialize>(value: T) -> ProviderResult<prost_types::Struct> {
     protocol::struct_from_json(protocol::json_from_serializable(value)?)
 }
 
-/// Converts a workflow struct value into a JSON object.
+/// Converts a workflow struct payload into a JSON object.
 pub fn workflow_json_from_struct(value: &prost_types::Struct) -> WorkflowJson {
     protocol::json_from_struct(value)
 }
 
-/// Converts a `SystemTime` into a workflow timestamp.
+/// Converts a `SystemTime` into the workflow timestamp payload.
 pub fn workflow_timestamp_from_system_time(value: SystemTime) -> prost_types::Timestamp {
     protocol::timestamp_from_system_time(value)
 }
 
-/// Converts a workflow timestamp into a `SystemTime`.
+/// Converts a workflow timestamp payload into a `SystemTime`.
 pub fn workflow_system_time_from_timestamp(
     value: &prost_types::Timestamp,
 ) -> ProviderResult<SystemTime> {
@@ -336,10 +336,10 @@ pub fn new_workflow_signal_from_signal(input: &WorkflowSignal) -> WorkflowSignal
     input.clone()
 }
 
-/// Returns a workflow deployment spec after validating builder-owned nested values.
-pub fn new_workflow_deployment_spec(
-    input: WorkflowDeploymentSpec,
-) -> ProviderResult<WorkflowDeploymentSpec> {
+/// Returns a workflow definition spec after validating builder-owned nested values.
+pub fn new_workflow_definition_spec(
+    input: WorkflowDefinitionSpec,
+) -> ProviderResult<WorkflowDefinitionSpec> {
     Ok(input)
 }
 
@@ -550,63 +550,53 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         Ok(())
     }
 
-    /// Plans a workflow deployment.
-    async fn plan_workflow(
+    /// Applies a workflow definition.
+    async fn apply_workflow_definition(
         &self,
-        _request: PlanWorkflowRequest,
-    ) -> ProviderResult<PlanWorkflowResponse> {
+        _request: ApplyWorkflowDefinitionRequest,
+    ) -> ProviderResult<WorkflowDefinition> {
         Err(crate::Error::unimplemented(
-            "workflow plan is not implemented",
+            "workflow definition apply is not implemented",
         ))
     }
 
-    /// Applies a workflow deployment.
-    async fn apply_workflow_deployment(
+    /// Returns one workflow definition.
+    async fn get_workflow_definition(
         &self,
-        _request: ApplyWorkflowDeploymentRequest,
-    ) -> ProviderResult<WorkflowDeployment> {
+        _request: GetWorkflowDefinitionRequest,
+    ) -> ProviderResult<WorkflowDefinition> {
         Err(crate::Error::unimplemented(
-            "workflow deployment apply is not implemented",
+            "workflow definition get is not implemented",
         ))
     }
 
-    /// Returns one workflow deployment.
-    async fn get_workflow_deployment(
+    /// Lists workflow definitions.
+    async fn list_workflow_definitions(
         &self,
-        _request: GetWorkflowDeploymentRequest,
-    ) -> ProviderResult<WorkflowDeployment> {
+        _request: ListWorkflowDefinitionsRequest,
+    ) -> ProviderResult<ListWorkflowDefinitionsResponse> {
         Err(crate::Error::unimplemented(
-            "workflow deployment get is not implemented",
+            "workflow definition list is not implemented",
         ))
     }
 
-    /// Lists workflow deployments.
-    async fn list_workflow_deployments(
+    /// Deletes a workflow definition.
+    async fn delete_workflow_definition(
         &self,
-        _request: ListWorkflowDeploymentsRequest,
-    ) -> ProviderResult<ListWorkflowDeploymentsResponse> {
-        Err(crate::Error::unimplemented(
-            "workflow deployment list is not implemented",
-        ))
-    }
-
-    /// Deletes a workflow deployment.
-    async fn delete_workflow_deployment(
-        &self,
-        _request: DeleteWorkflowDeploymentRequest,
+        _request: DeleteWorkflowDefinitionRequest,
     ) -> ProviderResult<()> {
         Err(crate::Error::unimplemented(
-            "workflow deployment delete is not implemented",
+            "workflow definition delete is not implemented",
         ))
     }
 
-    /// Pauses or resumes a workflow deployment.
-    async fn set_workflow_deployment_paused(
+    /// Pauses or resumes a workflow definition.
+    async fn set_workflow_definition_paused(
         &self,
-        _request: SetWorkflowDeploymentPausedRequest,
-    ) -> ProviderResult<WorkflowDeployment> {
+        _request: SetWorkflowDefinitionPausedRequest,
+    ) -> ProviderResult<WorkflowDefinition> {
         Err(crate::Error::unimplemented(
-            "workflow deployment pause is not implemented",
+            "workflow definition pause is not implemented",
         ))
     }
 
@@ -614,7 +604,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     async fn set_workflow_activation_paused(
         &self,
         _request: SetWorkflowActivationPausedRequest,
-    ) -> ProviderResult<WorkflowDeployment> {
+    ) -> ProviderResult<WorkflowDefinition> {
         Err(crate::Error::unimplemented(
             "workflow activation pause is not implemented",
         ))
@@ -710,16 +700,6 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         ))
     }
 
-    /// Stores a provider-owned workflow execution reference.
-    async fn put_execution_reference(
-        &self,
-        _request: PutWorkflowExecutionReferenceRequest,
-    ) -> ProviderResult<WorkflowExecutionReference> {
-        Err(crate::Error::unimplemented(
-            "workflow put execution reference is not implemented",
-        ))
-    }
-
     /// Returns one workflow execution reference.
     async fn get_execution_reference(
         &self,
@@ -757,81 +737,69 @@ impl<P> pb::workflow_provider_server::WorkflowProvider for WorkflowServer<P>
 where
     P: WorkflowProvider,
 {
-    async fn plan_workflow(
+    async fn apply_workflow_definition(
         &self,
-        request: GrpcRequest<PlanWorkflowRequest>,
-    ) -> std::result::Result<GrpcResponse<PlanWorkflowResponse>, Status> {
+        request: GrpcRequest<ApplyWorkflowDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<WorkflowDefinition>, Status> {
         let response = self
             .provider
-            .plan_workflow(request.into_inner())
+            .apply_workflow_definition(request.into_inner())
             .await
-            .map_err(|error| rpc_status("workflow plan", error))?;
+            .map_err(|error| rpc_status("workflow definition apply", error))?;
         Ok(GrpcResponse::new(response))
     }
 
-    async fn apply_workflow_deployment(
+    async fn get_workflow_definition(
         &self,
-        request: GrpcRequest<ApplyWorkflowDeploymentRequest>,
-    ) -> std::result::Result<GrpcResponse<WorkflowDeployment>, Status> {
+        request: GrpcRequest<GetWorkflowDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<WorkflowDefinition>, Status> {
         let response = self
             .provider
-            .apply_workflow_deployment(request.into_inner())
+            .get_workflow_definition(request.into_inner())
             .await
-            .map_err(|error| rpc_status("workflow deployment apply", error))?;
+            .map_err(|error| rpc_status("workflow definition get", error))?;
         Ok(GrpcResponse::new(response))
     }
 
-    async fn get_workflow_deployment(
+    async fn list_workflow_definitions(
         &self,
-        request: GrpcRequest<GetWorkflowDeploymentRequest>,
-    ) -> std::result::Result<GrpcResponse<WorkflowDeployment>, Status> {
+        request: GrpcRequest<ListWorkflowDefinitionsRequest>,
+    ) -> std::result::Result<GrpcResponse<ListWorkflowDefinitionsResponse>, Status> {
         let response = self
             .provider
-            .get_workflow_deployment(request.into_inner())
+            .list_workflow_definitions(request.into_inner())
             .await
-            .map_err(|error| rpc_status("workflow deployment get", error))?;
+            .map_err(|error| rpc_status("workflow definition list", error))?;
         Ok(GrpcResponse::new(response))
     }
 
-    async fn list_workflow_deployments(
+    async fn delete_workflow_definition(
         &self,
-        request: GrpcRequest<ListWorkflowDeploymentsRequest>,
-    ) -> std::result::Result<GrpcResponse<ListWorkflowDeploymentsResponse>, Status> {
-        let response = self
-            .provider
-            .list_workflow_deployments(request.into_inner())
-            .await
-            .map_err(|error| rpc_status("workflow deployment list", error))?;
-        Ok(GrpcResponse::new(response))
-    }
-
-    async fn delete_workflow_deployment(
-        &self,
-        request: GrpcRequest<DeleteWorkflowDeploymentRequest>,
+        request: GrpcRequest<DeleteWorkflowDefinitionRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         self.provider
-            .delete_workflow_deployment(request.into_inner())
+            .delete_workflow_definition(request.into_inner())
             .await
-            .map_err(|error| rpc_status("workflow deployment delete", error))?;
+            .map_err(|error| rpc_status("workflow definition delete", error))?;
         Ok(GrpcResponse::new(()))
     }
 
-    async fn set_workflow_deployment_paused(
+    async fn set_workflow_definition_paused(
         &self,
-        request: GrpcRequest<SetWorkflowDeploymentPausedRequest>,
-    ) -> std::result::Result<GrpcResponse<WorkflowDeployment>, Status> {
+        request: GrpcRequest<SetWorkflowDefinitionPausedRequest>,
+    ) -> std::result::Result<GrpcResponse<WorkflowDefinition>, Status> {
         let response = self
             .provider
-            .set_workflow_deployment_paused(request.into_inner())
+            .set_workflow_definition_paused(request.into_inner())
             .await
-            .map_err(|error| rpc_status("workflow deployment pause", error))?;
+            .map_err(|error| rpc_status("workflow definition pause", error))?;
         Ok(GrpcResponse::new(response))
     }
 
     async fn set_workflow_activation_paused(
         &self,
         request: GrpcRequest<SetWorkflowActivationPausedRequest>,
-    ) -> std::result::Result<GrpcResponse<WorkflowDeployment>, Status> {
+    ) -> std::result::Result<GrpcResponse<WorkflowDefinition>, Status> {
         let response = self
             .provider
             .set_workflow_activation_paused(request.into_inner())
@@ -945,18 +913,6 @@ where
             .get_workflow_run_output(request.into_inner())
             .await
             .map_err(|error| rpc_status("workflow get run output", error))?;
-        Ok(GrpcResponse::new(response))
-    }
-
-    async fn put_execution_reference(
-        &self,
-        request: GrpcRequest<PutWorkflowExecutionReferenceRequest>,
-    ) -> std::result::Result<GrpcResponse<WorkflowExecutionReference>, Status> {
-        let response = self
-            .provider
-            .put_execution_reference(request.into_inner())
-            .await
-            .map_err(|error| rpc_status("workflow put execution reference", error))?;
         Ok(GrpcResponse::new(response))
     }
 

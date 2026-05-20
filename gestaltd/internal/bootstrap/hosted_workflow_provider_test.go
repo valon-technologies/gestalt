@@ -72,9 +72,9 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	result := &Result{ExtraWorkflows: []workflow.Provider{provider}}
 	t.Cleanup(func() { _ = provider.Close() })
 	assertPublicHostServicesVerified(t, deps.PublicHostServices, "workflow_host", workflowservice.DefaultHostSocketEnv)
-	executionRefs, ok := provider.(workflow.ExecutionReferenceStore)
+	executionRefs, ok := provider.(workflow.ExecutionReferenceMutableStore)
 	if !ok {
-		t.Fatalf("hosted workflow pool does not expose ExecutionReferenceStore")
+		t.Fatalf("hosted workflow pool does not expose ExecutionReferenceMutableStore")
 	}
 	ref, err := executionRefs.PutExecutionReference(ctx, &workflow.ExecutionReference{
 		ID:           "workflow_schedule:sched-test:ref-test",
@@ -818,8 +818,8 @@ func (p *notifyingRuntimeWorkflowControlProvider) UpsertSchedule(ctx context.Con
 	return schedule, err
 }
 
-func (p *notifyingRuntimeWorkflowControlProvider) ApplyWorkflowDeployment(ctx context.Context, req workflow.ApplyDeploymentRequest) (*workflow.Deployment, error) {
-	deployment, err := p.recordingWorkflowControlProvider.ApplyWorkflowDeployment(ctx, req)
+func (p *notifyingRuntimeWorkflowControlProvider) ApplyWorkflowDefinition(ctx context.Context, req workflow.ApplyDefinitionRequest) (*workflow.Definition, error) {
+	deployment, err := p.recordingWorkflowControlProvider.ApplyWorkflowDefinition(ctx, req)
 	if err == nil {
 		p.once.Do(func() {
 			close(p.upsertedSchedule)
@@ -947,13 +947,7 @@ func (p *recordingWorkflowControlProvider) ListEventTriggers(context.Context, wo
 	return out, nil
 }
 
-func (p *recordingWorkflowControlProvider) PlanWorkflow(_ context.Context, req workflow.PlanWorkflowRequest) (*workflow.CompileTargetResponse, error) {
-	return &workflow.CompileTargetResponse{
-		ProviderPlanDigest: "hosted-plan-" + req.TargetDigest,
-	}, nil
-}
-
-func (p *recordingWorkflowControlProvider) ApplyWorkflowDeployment(ctx context.Context, req workflow.ApplyDeploymentRequest) (*workflow.Deployment, error) {
+func (p *recordingWorkflowControlProvider) ApplyWorkflowDefinition(ctx context.Context, req workflow.ApplyDefinitionRequest) (*workflow.Definition, error) {
 	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Schedule != nil {
 		activation := req.Spec.Activations[0]
 		executionRef := ""
@@ -987,53 +981,53 @@ func (p *recordingWorkflowControlProvider) ApplyWorkflowDeployment(ctx context.C
 			return nil, err
 		}
 	}
-	return workflowDeploymentFromSpec(req.Spec, req.Binding), nil
+	return workflowDefinitionFromSpec(req.Spec, req.Binding), nil
 }
 
-func (p *recordingWorkflowControlProvider) GetWorkflowDeployment(_ context.Context, req workflow.GetDeploymentRequest) (*workflow.Deployment, error) {
-	if schedule := p.schedules[req.DeploymentID]; schedule != nil {
-		return workflowDeploymentFromSchedule(schedule), nil
+func (p *recordingWorkflowControlProvider) GetWorkflowDefinition(_ context.Context, req workflow.GetDefinitionRequest) (*workflow.Definition, error) {
+	if schedule := p.schedules[req.DefinitionID]; schedule != nil {
+		return workflowDefinitionFromSchedule(schedule), nil
 	}
-	if trigger := p.eventTriggers[req.DeploymentID]; trigger != nil {
-		return workflowDeploymentFromEventTrigger(trigger), nil
+	if trigger := p.eventTriggers[req.DefinitionID]; trigger != nil {
+		return workflowDefinitionFromEventTrigger(trigger), nil
 	}
 	return nil, core.ErrNotFound
 }
 
-func (p *recordingWorkflowControlProvider) ListWorkflowDeployments(context.Context, workflow.ListDeploymentsRequest) (*workflow.ListDeploymentsResponse, error) {
-	out := &workflow.ListDeploymentsResponse{Deployments: make([]*workflow.Deployment, 0, len(p.schedules)+len(p.eventTriggers))}
+func (p *recordingWorkflowControlProvider) ListWorkflowDefinitions(context.Context, workflow.ListDefinitionsRequest) (*workflow.ListDefinitionsResponse, error) {
+	out := &workflow.ListDefinitionsResponse{Definitions: make([]*workflow.Definition, 0, len(p.schedules)+len(p.eventTriggers))}
 	for _, schedule := range p.schedules {
-		out.Deployments = append(out.Deployments, workflowDeploymentFromSchedule(schedule))
+		out.Definitions = append(out.Definitions, workflowDefinitionFromSchedule(schedule))
 	}
 	for _, trigger := range p.eventTriggers {
-		out.Deployments = append(out.Deployments, workflowDeploymentFromEventTrigger(trigger))
+		out.Definitions = append(out.Definitions, workflowDefinitionFromEventTrigger(trigger))
 	}
 	return out, nil
 }
 
-func (p *recordingWorkflowControlProvider) DeleteWorkflowDeployment(ctx context.Context, req workflow.DeleteDeploymentRequest) error {
+func (p *recordingWorkflowControlProvider) DeleteWorkflowDefinition(ctx context.Context, req workflow.DeleteDefinitionRequest) error {
 	if p.schedules != nil {
-		delete(p.schedules, req.DeploymentID)
+		delete(p.schedules, req.DefinitionID)
 	}
 	if p.eventTriggers != nil {
-		delete(p.eventTriggers, req.DeploymentID)
+		delete(p.eventTriggers, req.DefinitionID)
 	}
 	return nil
 }
 
-func workflowDeploymentFromSchedule(schedule *workflow.Schedule) *workflow.Deployment {
+func workflowDefinitionFromSchedule(schedule *workflow.Schedule) *workflow.Definition {
 	if schedule == nil {
 		return nil
 	}
-	spec := workflow.DeploymentSpec{
+	spec := workflow.DefinitionSpec{
 		ID:         schedule.ID,
 		Generation: 1,
 		Target:     schedule.Target,
 		Paused:     schedule.Paused,
 		Labels: map[string]string{
-			workflowConfigDeploymentLabelKind:        workflowConfigDeploymentKindSchedule,
-			workflowConfigDeploymentLabelScheduleKey: strings.TrimPrefix(schedule.ID, workflow.ConfigManagedSchedulePrefix),
-			workflowConfigDeploymentLabelPlugin:      workflowConfigTargetLabel(schedule.Target),
+			workflowConfigDefinitionLabelKind:        workflowConfigDefinitionKindSchedule,
+			workflowConfigDefinitionLabelScheduleKey: strings.TrimPrefix(schedule.ID, workflow.ConfigManagedSchedulePrefix),
+			workflowConfigDefinitionLabelPlugin:      workflowConfigTargetLabel(schedule.Target),
 		},
 		Activations: []workflow.Activation{{
 			ID:     "schedule",
@@ -1045,22 +1039,22 @@ func workflowDeploymentFromSchedule(schedule *workflow.Schedule) *workflow.Deplo
 			},
 		}},
 	}
-	return workflowDeploymentFromSpec(spec, &workflow.DeploymentBinding{ExecutionRef: schedule.ExecutionRef})
+	return workflowDefinitionFromSpec(spec, &workflow.DefinitionBinding{ExecutionRef: schedule.ExecutionRef})
 }
 
-func workflowDeploymentFromEventTrigger(trigger *workflow.EventTrigger) *workflow.Deployment {
+func workflowDefinitionFromEventTrigger(trigger *workflow.EventTrigger) *workflow.Definition {
 	if trigger == nil {
 		return nil
 	}
-	spec := workflow.DeploymentSpec{
+	spec := workflow.DefinitionSpec{
 		ID:         trigger.ID,
 		Generation: 1,
 		Target:     trigger.Target,
 		Paused:     trigger.Paused,
 		Labels: map[string]string{
-			workflowConfigDeploymentLabelKind:       workflowConfigDeploymentKindEventTrigger,
-			workflowConfigDeploymentLabelTriggerKey: strings.TrimPrefix(trigger.ID, workflow.ConfigManagedSchedulePrefix),
-			workflowConfigDeploymentLabelPlugin:     workflowConfigTargetLabel(trigger.Target),
+			workflowConfigDefinitionLabelKind:       workflowConfigDefinitionKindEventTrigger,
+			workflowConfigDefinitionLabelTriggerKey: strings.TrimPrefix(trigger.ID, workflow.ConfigManagedSchedulePrefix),
+			workflowConfigDefinitionLabelPlugin:     workflowConfigTargetLabel(trigger.Target),
 		},
 		Activations: []workflow.Activation{{
 			ID:     "event",
@@ -1071,15 +1065,15 @@ func workflowDeploymentFromEventTrigger(trigger *workflow.EventTrigger) *workflo
 			},
 		}},
 	}
-	return workflowDeploymentFromSpec(spec, &workflow.DeploymentBinding{ExecutionRef: trigger.ExecutionRef})
+	return workflowDefinitionFromSpec(spec, &workflow.DefinitionBinding{ExecutionRef: trigger.ExecutionRef})
 }
 
-func workflowDeploymentFromSpec(spec workflow.DeploymentSpec, binding *workflow.DeploymentBinding) *workflow.Deployment {
-	status := workflow.DeploymentStatusActive
+func workflowDefinitionFromSpec(spec workflow.DefinitionSpec, binding *workflow.DefinitionBinding) *workflow.Definition {
+	status := workflow.DefinitionStatusActive
 	if spec.Paused {
-		status = workflow.DeploymentStatusPaused
+		status = workflow.DefinitionStatusPaused
 	}
-	return &workflow.Deployment{Spec: spec, Status: status, AppliedGeneration: spec.Generation, Binding: binding}
+	return &workflow.Definition{Spec: spec, Status: status, AppliedGeneration: spec.Generation, Binding: binding}
 }
 
 func cloneWorkflowExecutionReference(ref *workflow.ExecutionReference) *workflow.ExecutionReference {

@@ -7,11 +7,10 @@ import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-nod
 import { expect, test } from "bun:test";
 
 import {
-  ApplyWorkflowDeploymentRequestSchema,
+  ApplyWorkflowDefinitionRequestSchema,
   DeliverWorkflowEventRequestSchema,
   InvokeWorkflowActionRequestSchema,
   WorkflowActionResultSchema,
-  PlanWorkflowRequestSchema,
   StartWorkflowRunRequestSchema,
   WorkflowHost as WorkflowHostService,
   WorkflowProvider as WorkflowProviderService,
@@ -19,15 +18,14 @@ import {
 import {
   ENV_WORKFLOW_HOST_SOCKET,
   ENV_WORKFLOW_HOST_SOCKET_TOKEN,
-  WorkflowDeploymentStatus,
+  WorkflowDefinitionStatus,
   WorkflowHost,
   WorkflowRunStatus,
   createWorkflowProviderService,
   defineWorkflowProvider,
   deliverWorkflowEventResponse,
-  planWorkflowResponse,
   workflowActionResult,
-  workflowDeployment,
+  workflowDefinition,
   workflowRun,
   workflowRunOutput,
   workflowRunSignal,
@@ -61,56 +59,47 @@ test("WorkflowProvider service serves deployment, run, and event APIs", async ()
   const calls: Array<{ method: string; detail: string }> = [];
   const provider = defineWorkflowProvider({
     displayName: "Workflow transport fixture",
-    async planWorkflow(request) {
-      calls.push({ method: "plan", detail: request.specDigest });
-      return planWorkflowResponse({
-        acceptedSpecDigest: request.specDigest,
-        providerPlanId: "plan-typescript",
-        providerPlanDigest: "plan-digest-typescript",
-        providerPlanFormatVersion: "workflow-plan-v1",
-      });
-    },
-    async applyDeployment(request) {
+    async applyDefinition(request) {
       calls.push({ method: "apply", detail: request.spec?.id ?? "" });
-      return workflowDeployment({
-        spec: request.spec,
-        status: WorkflowDeploymentStatus.ACTIVE,
+      return workflowDefinition({
+        ...(request.spec !== undefined ? { spec: request.spec } : {}),
+        status: WorkflowDefinitionStatus.ACTIVE,
         appliedGeneration: request.spec?.generation ?? 0n,
-        providerPlanId: request.plan?.providerPlanId ?? "",
+        providerPlanId: "apply-typescript",
       });
     },
-    async getDeployment(request) {
-      return workflowDeployment({
-        spec: { id: request.deploymentId },
-        status: WorkflowDeploymentStatus.ACTIVE,
+    async getDefinition(request) {
+      return workflowDefinition({
+        spec: { id: request.definitionId },
+        status: WorkflowDefinitionStatus.ACTIVE,
       });
     },
-    async listDeployments() {
+    async listDefinitions() {
       return [];
     },
-    async deleteDeployment() {},
-    async setDeploymentPaused(request) {
-      return workflowDeployment({
-        spec: { id: request.deploymentId },
+    async deleteDefinition() {},
+    async setDefinitionPaused(request) {
+      return workflowDefinition({
+        spec: { id: request.definitionId },
         status: request.paused
-          ? WorkflowDeploymentStatus.PAUSED
-          : WorkflowDeploymentStatus.ACTIVE,
+          ? WorkflowDefinitionStatus.PAUSED
+          : WorkflowDefinitionStatus.ACTIVE,
       });
     },
     async setActivationPaused(request) {
-      return workflowDeployment({
-        spec: { id: request.deploymentId },
+      return workflowDefinition({
+        spec: { id: request.definitionId },
         status: request.paused
-          ? WorkflowDeploymentStatus.PAUSED
-          : WorkflowDeploymentStatus.ACTIVE,
+          ? WorkflowDefinitionStatus.PAUSED
+          : WorkflowDefinitionStatus.ACTIVE,
       });
     },
     async startRun(request) {
-      calls.push({ method: "start", detail: request.deploymentId });
+      calls.push({ method: "start", detail: request.definitionId });
       return workflowRun({
         id: request.idempotencyKey || "run-1",
-        deploymentId: request.deploymentId,
-        deploymentGeneration: request.deploymentGeneration,
+        definitionId: request.definitionId,
+        definitionGeneration: request.definitionGeneration,
         workflowKey: request.workflowKey,
         status: WorkflowRunStatus.PENDING,
       });
@@ -121,17 +110,17 @@ test("WorkflowProvider service serves deployment, run, and event APIs", async ()
           id: request.runId,
           status: WorkflowRunStatus.RUNNING,
         }),
-        signal: request.signal,
+        ...(request.signal !== undefined ? { signal: request.signal } : {}),
       });
     },
     async signalOrStartRun(request) {
       return workflowRunSignal({
         run: workflowRun({
           id: request.workflowKey || "run-2",
-          deploymentId: request.deploymentId,
+          definitionId: request.definitionId,
           status: WorkflowRunStatus.PENDING,
         }),
-        signal: request.signal,
+        ...(request.signal !== undefined ? { signal: request.signal } : {}),
         startedRun: true,
         workflowKey: request.workflowKey,
       });
@@ -184,25 +173,19 @@ test("WorkflowProvider service serves deployment, run, and event APIs", async ()
       WorkflowProviderService,
       createGrpcTransport({ baseUrl: `http://${address}` }),
     );
-    const plan = await client.planWorkflow(create(PlanWorkflowRequestSchema, {
-      specDigest: "spec-digest-typescript",
-    }));
-    expect(plan.providerPlanId).toBe("plan-typescript");
-
-    const deployment = await client.applyWorkflowDeployment(
-      create(ApplyWorkflowDeploymentRequestSchema, {
+    const deployment = await client.applyWorkflowDefinition(
+      create(ApplyWorkflowDefinitionRequestSchema, {
         spec: {
           id: "deployment-typescript",
           generation: 2n,
         },
-        plan,
       }),
     );
     expect(deployment.appliedGeneration).toBe(2n);
 
     const run = await client.startWorkflowRun(create(StartWorkflowRunRequestSchema, {
-      deploymentId: "deployment-typescript",
-      deploymentGeneration: 2n,
+      definitionId: "deployment-typescript",
+      definitionGeneration: 2n,
       idempotencyKey: "run-native-ts",
     }));
     expect(run.id).toBe("run-native-ts");
@@ -214,7 +197,6 @@ test("WorkflowProvider service serves deployment, run, and event APIs", async ()
     }));
 
     expect(calls).toEqual([
-      { method: "plan", detail: "spec-digest-typescript" },
       { method: "apply", detail: "deployment-typescript" },
       { method: "start", detail: "deployment-typescript" },
       { method: "deliver", detail: "demo.synced" },

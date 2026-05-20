@@ -44,25 +44,25 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
-		deploymentProvider, ok := provider.(coreworkflow.DeploymentProvider)
+		deploymentProvider, ok := provider.(coreworkflow.DefinitionProvider)
 		if !ok {
-			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q: workflow provider %q does not support deployments", desiredEntry.TriggerKey, pluginName, providerName)
+			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q: workflow provider %q does not support definitions", desiredEntry.TriggerKey, pluginName, providerName)
 		}
-		spec := workflowConfigEventTriggerDeploymentSpec(desiredEntry, target, trigger)
+		spec := workflowConfigEventTriggerDefinitionSpec(desiredEntry, target, trigger)
 		existingExecutionRef := ""
 		providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
-		existing, err := deploymentProvider.GetWorkflowDeployment(providerCtx, coreworkflow.GetDeploymentRequest{
-			DeploymentID: desiredEntry.TriggerID,
+		existing, err := deploymentProvider.GetWorkflowDefinition(providerCtx, coreworkflow.GetDefinitionRequest{
+			DefinitionID: desiredEntry.TriggerID,
 		})
 		switch {
 		case err == nil:
-			if !isWorkflowConfigOwnedEventDeployment(existing, pluginName, desiredEntry) {
+			if !isWorkflowConfigOwnedEventDefinition(existing, pluginName, desiredEntry) {
 				return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q conflicts with existing unmanaged trigger id %q", desiredEntry.TriggerKey, pluginName, desiredEntry.TriggerID)
 			}
 		case isWorkflowObjectNotFound(err):
 			existing = nil
 		default:
-			return fmt.Errorf("bootstrap: get workflow deployment %q for plugin %q: %w", desiredEntry.TriggerID, pluginName, err)
+			return fmt.Errorf("bootstrap: get workflow definition %q for plugin %q: %w", desiredEntry.TriggerID, pluginName, err)
 		}
 		if existing != nil && existing.Binding != nil {
 			existingExecutionRef = strings.TrimSpace(existing.Binding.ExecutionRef)
@@ -81,6 +81,8 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
+		desiredExecutionRef.SourceDefinitionID = desiredEntry.TriggerID
+		desiredExecutionRef.SourceDefinitionGeneration = spec.Generation
 		targetDigest, err := coreworkflow.TargetFingerprint(target)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q target digest: %w", desiredEntry.TriggerKey, pluginName, err)
@@ -89,26 +91,12 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q action table digest: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
-		specDigest, err := coreworkflow.DeploymentSpecDigest(spec)
+		specDigest, err := coreworkflow.DefinitionSpecDigest(spec)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q spec digest: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
-		plan, err := deploymentProvider.PlanWorkflow(providerCtx, coreworkflow.PlanWorkflowRequest{
-			Spec:                          spec,
-			SpecDigest:                    specDigest,
-			TargetDigest:                  targetDigest,
-			ActionTableDigest:             actionTableDigest,
-			TargetCanonicalizationVersion: workflowConfigTargetCanonicalizationV1,
-			WorkflowSemanticsVersion:      workflowConfigSemanticsVersionSteps,
-		})
-		if err != nil {
-			return fmt.Errorf("bootstrap: plan workflow event trigger %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
-		}
-		if plan == nil || strings.TrimSpace(plan.ProviderPlanDigest) == "" {
-			return fmt.Errorf("bootstrap: workflow event trigger %q for plugin %q provider returned empty plan digest", desiredEntry.TriggerKey, pluginName)
-		}
 		desiredExecutionRef.TargetDigest = targetDigest
-		desiredExecutionRef.ProviderPlanDigest = strings.TrimSpace(plan.ProviderPlanDigest)
+		desiredExecutionRef.ActionTableDigest = actionTableDigest
 		desiredExecutionRef.SemanticsVersion = workflowConfigSemanticsVersionSteps
 		executionRefs, err := workflowExecutionReferenceStore(providerName, provider)
 		if err != nil {
@@ -124,31 +112,28 @@ func reconcileWorkflowConfigEventTriggers(ctx context.Context, cfg *config.Confi
 		if err != nil {
 			return fmt.Errorf("bootstrap: store workflow execution ref for event trigger %q on plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
-		binding := &coreworkflow.DeploymentBinding{
-			ID:                     workflowConfigSHA256(strings.Join([]string{"config-binding", providerName, desiredEntry.TriggerID, executionRefID, strings.TrimSpace(plan.ProviderPlanDigest)}, "\x00")),
-			ExecutionRef:           executionRefID,
-			ExecutionRefGeneration: desiredExecutionRef.Generation,
-			ExecutionRefSeal:       strings.TrimSpace(desiredExecutionRef.Seal),
-			DeploymentID:           desiredEntry.TriggerID,
-			DeploymentGeneration:   spec.Generation,
-			SpecDigest:             specDigest,
-			TargetDigest:           targetDigest,
-			ActionTableDigest:      actionTableDigest,
-			ProviderPlanID:         strings.TrimSpace(plan.ProviderPlanID),
-			ProviderPlanDigest:     strings.TrimSpace(plan.ProviderPlanDigest),
-			SemanticsVersion:       workflowConfigSemanticsVersionSteps,
-			IdempotencyKey:         desiredEntry.TriggerID,
+		binding := &coreworkflow.DefinitionBinding{
+			ID:                       workflowConfigSHA256(strings.Join([]string{"config-binding", providerName, desiredEntry.TriggerID, executionRefID, targetDigest, actionTableDigest}, "\x00")),
+			ExecutionRef:             executionRefID,
+			ExecutionRefGeneration:   desiredExecutionRef.Generation,
+			DefinitionID:             desiredEntry.TriggerID,
+			DefinitionGeneration:     spec.Generation,
+			SpecDigest:               specDigest,
+			TargetDigest:             targetDigest,
+			ActionTableDigest:        actionTableDigest,
+			PermissionsDigest:        desiredExecutionRef.PermissionsDigest,
+			WorkflowSemanticsVersion: workflowConfigSemanticsVersionSteps,
+			RequestID:                desiredEntry.TriggerID,
 		}
-		if _, err := deploymentProvider.ApplyWorkflowDeployment(providerCtx, coreworkflow.ApplyDeploymentRequest{
+		if _, err := deploymentProvider.ApplyWorkflowDefinition(providerCtx, coreworkflow.ApplyDefinitionRequest{
 			Spec:      spec,
-			Plan:      plan,
 			Binding:   binding,
 			RequestID: desiredEntry.TriggerID,
 		}); err != nil {
 			if createdExecutionRef {
 				_ = workflowRevokeExecutionRefByID(ctx, executionRefs, executionRefID)
 			}
-			return fmt.Errorf("bootstrap: workflow deployment %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
+			return fmt.Errorf("bootstrap: workflow definition %q for plugin %q: %w", desiredEntry.TriggerKey, pluginName, err)
 		}
 		if replacedUnreadableExecutionRef != "" {
 			workflowLogReplacedUnreadableExecutionRef(ctx, "event_trigger", desiredEntry.TriggerKey, desiredEntry.TriggerID, providerName, pluginName, replacedUnreadableExecutionRef, executionRefID, replacedUnreadableExecutionRefErr)
@@ -205,21 +190,21 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow event triggers requires provider %q: %w", providerName, err)
 		}
-		deploymentProvider, ok := provider.(coreworkflow.DeploymentProvider)
+		deploymentProvider, ok := provider.(coreworkflow.DefinitionProvider)
 		if !ok {
-			workflowLogSkippedConfigWorkflowCleanup(ctx, "deployments", providerName, fmt.Errorf("workflow provider does not support deployments"))
+			workflowLogSkippedConfigWorkflowCleanup(ctx, "definitions", providerName, fmt.Errorf("workflow provider does not support definitions"))
 			continue
 		}
-		deployments, err := deploymentProvider.ListWorkflowDeployments(ctx, coreworkflow.ListDeploymentsRequest{
-			Labels: map[string]string{workflowConfigDeploymentLabelKind: workflowConfigDeploymentKindEventTrigger},
+		definitions, err := deploymentProvider.ListWorkflowDefinitions(ctx, coreworkflow.ListDefinitionsRequest{
+			Labels: map[string]string{workflowConfigDefinitionLabelKind: workflowConfigDefinitionKindEventTrigger},
 		})
 		if err != nil {
-			workflowLogSkippedConfigWorkflowCleanup(ctx, "deployments", providerName, err)
+			workflowLogSkippedConfigWorkflowCleanup(ctx, "definitions", providerName, err)
 			continue
 		}
-		var executionRefs coreworkflow.ExecutionReferenceStore
-		for _, deployment := range deployments.Deployments {
-			if deployment == nil || !isWorkflowConfigOwnedEventDeployment(deployment, workflowConfigTargetLabel(deployment.Spec.Target), desiredWorkflowConfigEventTrigger{TriggerKey: deployment.Spec.Labels[workflowConfigDeploymentLabelTriggerKey], TriggerID: deployment.Spec.ID}) {
+		var executionRefs coreworkflow.ExecutionReferenceMutableStore
+		for _, deployment := range definitions.Definitions {
+			if deployment == nil || !isWorkflowConfigOwnedEventDefinition(deployment, workflowConfigTargetLabel(deployment.Spec.Target), desiredWorkflowConfigEventTrigger{TriggerKey: deployment.Spec.Labels[workflowConfigDefinitionLabelTriggerKey], TriggerID: deployment.Spec.ID}) {
 				continue
 			}
 			if _, ok := desiredByProviderTrigger[workflowConfigProviderObjectKey(providerName, deployment.Spec.ID)]; ok {
@@ -227,18 +212,18 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 			}
 			pluginName := workflowConfigTargetLabel(deployment.Spec.Target)
 			providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
-			if err := deploymentProvider.DeleteWorkflowDeployment(providerCtx, coreworkflow.DeleteDeploymentRequest{DeploymentID: deployment.Spec.ID, Generation: deployment.Spec.Generation}); err != nil && !isWorkflowObjectNotFound(err) {
-				return fmt.Errorf("bootstrap: delete workflow deployment %q for plugin %q: %w", deployment.Spec.ID, pluginName, err)
+			if err := deploymentProvider.DeleteWorkflowDefinition(providerCtx, coreworkflow.DeleteDefinitionRequest{DefinitionID: deployment.Spec.ID, Generation: deployment.Spec.Generation}); err != nil && !isWorkflowObjectNotFound(err) {
+				return fmt.Errorf("bootstrap: delete workflow definition %q for plugin %q: %w", deployment.Spec.ID, pluginName, err)
+			}
+			executionRefID := ""
+			if deployment.Binding != nil {
+				executionRefID = strings.TrimSpace(deployment.Binding.ExecutionRef)
 			}
 			if executionRefs == nil {
 				executionRefs, err = workflowExecutionReferenceStore(providerName, provider)
 				if err != nil {
 					return fmt.Errorf("bootstrap: cleanup workflow event triggers for provider %q: %w", providerName, err)
 				}
-			}
-			executionRefID := ""
-			if deployment.Binding != nil {
-				executionRefID = strings.TrimSpace(deployment.Binding.ExecutionRef)
 			}
 			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, executionRefID); err != nil {
 				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for deployment %q on plugin %q: %w", executionRefID, deployment.Spec.ID, pluginName, err)
@@ -248,18 +233,18 @@ func cleanupRemovedWorkflowConfigEventTriggers(ctx context.Context, runtime *wor
 	return nil
 }
 
-func workflowConfigEventTriggerDeploymentSpec(entry desiredWorkflowConfigEventTrigger, target coreworkflow.Target, trigger config.WorkflowEventTriggerConfig) coreworkflow.DeploymentSpec {
+func workflowConfigEventTriggerDefinitionSpec(entry desiredWorkflowConfigEventTrigger, target coreworkflow.Target, trigger config.WorkflowEventTriggerConfig) coreworkflow.DefinitionSpec {
 	pluginName := workflowConfigTargetLabel(target)
-	return coreworkflow.DeploymentSpec{
+	return coreworkflow.DefinitionSpec{
 		ID:                       entry.TriggerID,
 		Generation:               1,
 		Target:                   target,
 		Paused:                   trigger.Paused,
 		WorkflowSemanticsVersion: workflowConfigSemanticsVersionSteps,
 		Labels: map[string]string{
-			workflowConfigDeploymentLabelKind:       workflowConfigDeploymentKindEventTrigger,
-			workflowConfigDeploymentLabelTriggerKey: strings.TrimSpace(entry.TriggerKey),
-			workflowConfigDeploymentLabelPlugin:     pluginName,
+			workflowConfigDefinitionLabelKind:       workflowConfigDefinitionKindEventTrigger,
+			workflowConfigDefinitionLabelTriggerKey: strings.TrimSpace(entry.TriggerKey),
+			workflowConfigDefinitionLabelPlugin:     pluginName,
 		},
 		Activations: []coreworkflow.Activation{{
 			ID:     "event",
@@ -272,17 +257,17 @@ func workflowConfigEventTriggerDeploymentSpec(entry desiredWorkflowConfigEventTr
 	}
 }
 
-func isWorkflowConfigOwnedEventDeployment(existing *coreworkflow.Deployment, pluginName string, desired desiredWorkflowConfigEventTrigger) bool {
+func isWorkflowConfigOwnedEventDefinition(existing *coreworkflow.Definition, pluginName string, desired desiredWorkflowConfigEventTrigger) bool {
 	if existing == nil {
 		return false
 	}
 	labels := existing.Spec.Labels
 	if strings.TrimSpace(existing.Spec.ID) != strings.TrimSpace(desired.TriggerID) ||
-		strings.TrimSpace(labels[workflowConfigDeploymentLabelKind]) != workflowConfigDeploymentKindEventTrigger ||
-		strings.TrimSpace(labels[workflowConfigDeploymentLabelPlugin]) != strings.TrimSpace(pluginName) {
+		strings.TrimSpace(labels[workflowConfigDefinitionLabelKind]) != workflowConfigDefinitionKindEventTrigger ||
+		strings.TrimSpace(labels[workflowConfigDefinitionLabelPlugin]) != strings.TrimSpace(pluginName) {
 		return false
 	}
-	if triggerKey := strings.TrimSpace(labels[workflowConfigDeploymentLabelTriggerKey]); triggerKey != "" && triggerKey != strings.TrimSpace(desired.TriggerKey) {
+	if triggerKey := strings.TrimSpace(labels[workflowConfigDefinitionLabelTriggerKey]); triggerKey != "" && triggerKey != strings.TrimSpace(desired.TriggerKey) {
 		return false
 	}
 	return true

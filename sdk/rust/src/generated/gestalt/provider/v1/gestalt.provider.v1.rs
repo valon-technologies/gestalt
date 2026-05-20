@@ -4,192 +4,192 @@
 /// catalog for an operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatalogParameter {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub r#type: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub description: ::prost::alloc::string::String,
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag="4")]
     pub required: bool,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub default: ::core::option::Option<::prost_types::Value>,
 }
 /// OperationAnnotations carries optional host hints about how an operation
 /// behaves.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OperationAnnotations {
-    #[prost(bool, optional, tag = "1")]
+    #[prost(bool, optional, tag="1")]
     pub read_only_hint: ::core::option::Option<bool>,
-    #[prost(bool, optional, tag = "2")]
+    #[prost(bool, optional, tag="2")]
     pub idempotent_hint: ::core::option::Option<bool>,
-    #[prost(bool, optional, tag = "3")]
+    #[prost(bool, optional, tag="3")]
     pub destructive_hint: ::core::option::Option<bool>,
-    #[prost(bool, optional, tag = "4")]
+    #[prost(bool, optional, tag="4")]
     pub open_world_hint: ::core::option::Option<bool>,
 }
 /// CatalogOperation is one executable operation exposed by an integration
 /// provider.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatalogOperation {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub method: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub title: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub description: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub input_schema: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub output_schema: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub annotations: ::core::option::Option<OperationAnnotations>,
-    #[prost(message, repeated, tag = "8")]
+    #[prost(message, repeated, tag="8")]
     pub parameters: ::prost::alloc::vec::Vec<CatalogParameter>,
-    #[prost(string, repeated, tag = "9")]
+    #[prost(string, repeated, tag="9")]
     pub required_scopes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, repeated, tag = "10")]
+    #[prost(string, repeated, tag="10")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(bool, tag = "11")]
+    #[prost(bool, tag="11")]
     pub read_only: bool,
-    #[prost(bool, optional, tag = "12")]
+    #[prost(bool, optional, tag="12")]
     pub visible: ::core::option::Option<bool>,
-    #[prost(string, tag = "13")]
+    #[prost(string, tag="13")]
     pub transport: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "14")]
+    #[prost(string, repeated, tag="14")]
     pub allowed_roles: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// Catalog is the static or request-scoped executable surface exposed by a
 /// provider.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Catalog {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub description: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub icon_svg: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "5")]
+    #[prost(message, repeated, tag="5")]
     pub operations: ::prost::alloc::vec::Vec<CatalogOperation>,
 }
 /// ConnectionParamDef describes one provider-defined connection parameter.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConnectionParamDef {
-    #[prost(bool, tag = "1")]
+    #[prost(bool, tag="1")]
     pub required: bool,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub description: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub default_value: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub from: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub field: ::prost::alloc::string::String,
 }
 /// ProviderMetadata describes an integration provider's static capabilities.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProviderMetadata {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub description: ::prost::alloc::string::String,
-    #[prost(enumeration = "ConnectionMode", tag = "4")]
+    #[prost(enumeration="ConnectionMode", tag="4")]
     pub connection_mode: i32,
-    #[prost(string, repeated, tag = "5")]
+    #[prost(string, repeated, tag="5")]
     pub auth_types: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(btree_map = "string, message", tag = "6")]
+    #[prost(btree_map="string, message", tag="6")]
     pub connection_params: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ConnectionParamDef>,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub static_catalog: ::core::option::Option<Catalog>,
-    #[prost(bool, tag = "8")]
+    #[prost(bool, tag="8")]
     pub supports_session_catalog: bool,
-    #[prost(bool, tag = "9")]
+    #[prost(bool, tag="9")]
     pub supports_post_connect: bool,
-    #[prost(int32, tag = "11")]
+    #[prost(int32, tag="11")]
     pub min_protocol_version: i32,
-    #[prost(int32, tag = "12")]
+    #[prost(int32, tag="12")]
     pub max_protocol_version: i32,
 }
 /// OperationResult is the serialized result returned from an Execute call.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OperationResult {
-    #[prost(int32, tag = "1")]
+    #[prost(int32, tag="1")]
     pub status: i32,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub body: ::prost::alloc::string::String,
 }
 /// PluginInvocationGrant describes one plugin operation grant minted into an
 /// exchanged invocation token.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PluginInvocationGrant {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub plugin: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "2")]
+    #[prost(string, repeated, tag="2")]
     pub operations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, repeated, tag = "3")]
+    #[prost(string, repeated, tag="3")]
     pub surfaces: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag="4")]
     pub all_operations: bool,
 }
 /// ExchangeInvocationTokenRequest narrows an existing invocation token to a
 /// child token that carries only the requested plugin grants.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExchangeInvocationTokenRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub parent_invocation_token: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "2")]
+    #[prost(message, repeated, tag="2")]
     pub grants: ::prost::alloc::vec::Vec<PluginInvocationGrant>,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag="3")]
     pub ttl_seconds: i64,
 }
 /// ExchangeInvocationTokenResponse returns the child invocation token.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExchangeInvocationTokenResponse {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 /// PluginInvokeRequest invokes a declared operation on another plugin through
 /// the host-side invoker service.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PluginInvokeRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub plugin: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub operation: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub params: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub connection: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="8")]
     pub idempotency_key: ::prost::alloc::string::String,
 }
 /// PluginInvokeGraphQLRequest invokes the raw GraphQL surface on another plugin
 /// through the host-side invoker service.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PluginInvokeGraphQlRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub plugin: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub document: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub variables: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub connection: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub idempotency_key: ::prost::alloc::string::String,
 }
 /// PostConnectCredential is the host-managed credential payload passed into
@@ -198,170 +198,170 @@ pub struct PluginInvokeGraphQlRequest {
 /// the request during rolling upgrades.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PostConnectCredential {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub integration: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub access_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub refresh_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub scopes: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub last_refreshed_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(int32, tag = "10")]
+    #[prost(int32, tag="10")]
     pub refresh_error_count: i32,
-    #[prost(string, tag = "11")]
+    #[prost(string, tag="11")]
     pub metadata_json: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "12")]
+    #[prost(message, optional, tag="12")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "13")]
+    #[prost(message, optional, tag="13")]
     pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "14")]
+    #[prost(string, tag="14")]
     pub connection: ::prost::alloc::string::String,
 }
 /// SubjectContext identifies the caller that initiated an operation.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SubjectContext {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub auth_source: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub email: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub credential_subject_id: ::prost::alloc::string::String,
 }
 /// ExternalIdentityContext identifies the caller in a provider-owned external
 /// identity namespace, as discovered from that caller's stored connection.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExternalIdentityContext {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub r#type: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentToolRef {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub plugin: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub operation: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub connection: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub title: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub description: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="8")]
     pub system: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub run_as: ::core::option::Option<SubjectContext>,
-    #[prost(message, optional, tag = "10")]
+    #[prost(message, optional, tag="10")]
     pub run_as_external_identity: ::core::option::Option<ExternalIdentityContext>,
 }
 /// StringList is a helper map value for repeated HTTP header and query values.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StringList {
-    #[prost(string, repeated, tag = "1")]
+    #[prost(string, repeated, tag="1")]
     pub values: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// CredentialContext describes the resolved credential used for an operation.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CredentialContext {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub mode: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub connection: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub instance: ::prost::alloc::string::String,
 }
 /// AccessContext describes the host-side access decision for an operation.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AccessContext {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub policy: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub role: ::prost::alloc::string::String,
 }
 /// HostContext describes stable public host metadata available to provider code.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HostContext {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub public_base_url: ::prost::alloc::string::String,
 }
 /// RequestContext bundles the caller, credential, access, and host metadata for
 /// one operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestContext {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub credential: ::core::option::Option<CredentialContext>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub access: ::core::option::Option<AccessContext>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub workflow: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub host: ::core::option::Option<HostContext>,
     /// Original agent caller when an agent tool executes with delegated run-as identity.
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub agent_subject: ::core::option::Option<SubjectContext>,
     /// The original agent caller's provider-owned external identity, when known.
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub agent_external_identity: ::core::option::Option<ExternalIdentityContext>,
     /// Provider-owned external identity the invocation is authorized to assume.
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub external_identity: ::core::option::Option<ExternalIdentityContext>,
     /// Agent tool refs granted to the operation request, when the request is
     /// executing as an agent tool.
-    #[prost(message, repeated, tag = "9")]
+    #[prost(message, repeated, tag="9")]
     pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
     /// Preserves the distinction between an omitted tool-ref context and an
     /// explicitly empty inherited tool-ref context.
-    #[prost(bool, tag = "10")]
+    #[prost(bool, tag="10")]
     pub tool_refs_set: bool,
 }
 /// HTTPSubjectRequest carries one verified hosted HTTP request into an optional
 /// plugin-local subject resolution hook.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpSubjectRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub binding: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub method: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub path: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub content_type: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, message", tag = "5")]
+    #[prost(btree_map="string, message", tag="5")]
     pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, StringList>,
-    #[prost(btree_map = "string, message", tag = "6")]
+    #[prost(btree_map="string, message", tag="6")]
     pub query: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, StringList>,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub params: ::core::option::Option<::prost_types::Struct>,
-    #[prost(bytes = "vec", tag = "8")]
+    #[prost(bytes="vec", tag="8")]
     pub raw_body: ::prost::alloc::vec::Vec<u8>,
-    #[prost(string, tag = "9")]
+    #[prost(string, tag="9")]
     pub security_scheme: ::prost::alloc::string::String,
-    #[prost(string, tag = "10")]
+    #[prost(string, tag="10")]
     pub verified_subject: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "11")]
+    #[prost(btree_map="string, string", tag="11")]
     pub verified_claims: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// ResolveHTTPSubjectRequest asks a provider to map a verified hosted HTTP
@@ -369,9 +369,9 @@ pub struct HttpSubjectRequest {
 /// and dispatch.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolveHttpSubjectRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub request: ::core::option::Option<HttpSubjectRequest>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub context: ::core::option::Option<RequestContext>,
 }
 /// ResolveHTTPSubjectResponse returns the concrete Gestalt subject a hosted HTTP
@@ -380,80 +380,80 @@ pub struct ResolveHttpSubjectRequest {
 /// request with the provided status and message.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResolveHttpSubjectResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(int32, tag = "2")]
+    #[prost(int32, tag="2")]
     pub reject_status: i32,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub reject_message: ::prost::alloc::string::String,
 }
 /// ExecuteRequest invokes one executable operation.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecuteRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub operation: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub params: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub token: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "4")]
+    #[prost(btree_map="string, string", tag="4")]
     pub connection_params: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub invocation_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub context: ::core::option::Option<RequestContext>,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="8")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
+    #[prost(string, tag="9")]
     pub idempotency_key: ::prost::alloc::string::String,
 }
 /// GetSessionCatalogRequest asks a provider for request-scoped catalog
 /// extensions.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSessionCatalogRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub token: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "2")]
+    #[prost(btree_map="string, string", tag="2")]
     pub connection_params: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub context: ::core::option::Option<RequestContext>,
 }
 /// GetSessionCatalogResponse returns request-scoped catalog extensions.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetSessionCatalogResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub catalog: ::core::option::Option<Catalog>,
 }
 /// PostConnectRequest notifies a provider that a connection has completed.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PostConnectRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub token: ::core::option::Option<PostConnectCredential>,
 }
 /// PostConnectResponse returns provider-defined metadata captured after
 /// connection.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PostConnectResponse {
-    #[prost(btree_map = "string, string", tag = "1")]
+    #[prost(btree_map="string, string", tag="1")]
     pub metadata: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// StartProviderRequest configures an integration provider for one runtime
 /// session.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartProviderRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub config: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "4")]
+    #[prost(int32, tag="4")]
     pub protocol_version: i32,
 }
 /// StartProviderResponse confirms the protocol version the provider is serving.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StartProviderResponse {
-    #[prost(int32, tag = "1")]
+    #[prost(int32, tag="1")]
     pub protocol_version: i32,
 }
 /// ConnectionMode describes which credential sources a provider accepts.
@@ -488,128 +488,128 @@ impl ConnectionMode {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentMessage {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub role: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub text: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "3")]
+    #[prost(message, repeated, tag="3")]
     pub parts: ::prost::alloc::vec::Vec<AgentMessagePart>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentMessagePartToolCall {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub tool_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub arguments: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentMessagePartToolResult {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub tool_call_id: ::prost::alloc::string::String,
-    #[prost(int32, tag = "2")]
+    #[prost(int32, tag="2")]
     pub status: i32,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub content: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub output: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentMessagePartImageRef {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub uri: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub mime_type: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentMessagePart {
-    #[prost(enumeration = "AgentMessagePartType", tag = "1")]
+    #[prost(enumeration="AgentMessagePartType", tag="1")]
     pub r#type: i32,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub text: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub json: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub tool_call: ::core::option::Option<AgentMessagePartToolCall>,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub tool_result: ::core::option::Option<AgentMessagePartToolResult>,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub image_ref: ::core::option::Option<AgentMessagePartImageRef>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentActor {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub subject_kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub auth_source: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentWorkspace {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub checkouts: ::prost::alloc::vec::Vec<AgentWorkspaceGitCheckout>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub cwd: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentWorkspaceGitCheckout {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub url: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub r#ref: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub path: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PreparedAgentWorkspace {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub root: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub cwd: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolvedAgentTool {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub description: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub parameters_schema: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentProviderCapabilities {
-    #[prost(bool, tag = "1")]
+    #[prost(bool, tag="1")]
     pub streaming_text: bool,
-    #[prost(bool, tag = "2")]
+    #[prost(bool, tag="2")]
     pub tool_calls: bool,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag="3")]
     pub parallel_tool_calls: bool,
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag="4")]
     pub structured_output: bool,
-    #[prost(bool, tag = "5")]
+    #[prost(bool, tag="5")]
     pub interactions: bool,
-    #[prost(bool, tag = "6")]
+    #[prost(bool, tag="6")]
     pub resumable_turns: bool,
-    #[prost(bool, tag = "7")]
+    #[prost(bool, tag="7")]
     pub reasoning_summaries: bool,
     /// Provider list APIs can apply non-zero limits and summary projections without
     /// hydrating every source record. Providers that set this must order sessions
     /// and turns by the relevant newest-first recency fields before applying limit.
-    #[prost(bool, tag = "9")]
+    #[prost(bool, tag="9")]
     pub bounded_list_hydration: bool,
-    #[prost(enumeration = "AgentToolSourceMode", repeated, tag = "10")]
+    #[prost(enumeration="AgentToolSourceMode", repeated, tag="10")]
     pub supported_tool_sources: ::prost::alloc::vec::Vec<i32>,
-    #[prost(bool, tag = "11")]
+    #[prost(bool, tag="11")]
     pub supports_session_start: bool,
-    #[prost(bool, tag = "12")]
+    #[prost(bool, tag="12")]
     pub supports_prepared_workspace: bool,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -617,597 +617,597 @@ pub struct GetAgentProviderCapabilitiesRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentInteraction {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(enumeration = "AgentInteractionType", tag = "2")]
+    #[prost(enumeration="AgentInteractionType", tag="2")]
     pub r#type: i32,
-    #[prost(enumeration = "AgentInteractionState", tag = "3")]
+    #[prost(enumeration="AgentInteractionState", tag="3")]
     pub state: i32,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub title: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub prompt: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub request: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub resolution: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub resolved_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "10")]
+    #[prost(string, tag="10")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
+    #[prost(string, tag="11")]
     pub session_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentSession {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub client_ref: ::prost::alloc::string::String,
-    #[prost(enumeration = "AgentSessionState", tag = "5")]
+    #[prost(enumeration="AgentSessionState", tag="5")]
     pub state: i32,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub created_by: ::core::option::Option<AgentActor>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "10")]
+    #[prost(message, optional, tag="10")]
     pub last_turn_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateAgentProviderSessionRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub client_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub created_by: ::core::option::Option<AgentActor>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub session_start: ::core::option::Option<AgentSessionStartConfig>,
-    #[prost(message, optional, tag = "10")]
+    #[prost(message, optional, tag="10")]
     pub prepared_workspace: ::core::option::Option<PreparedAgentWorkspace>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentSessionStartConfig {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub hooks: ::prost::alloc::vec::Vec<AgentSessionStartHook>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentSessionStartHook {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub r#type: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "3")]
+    #[prost(string, repeated, tag="3")]
     pub command: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub cwd: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub timeout: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "6")]
+    #[prost(btree_map="string, string", tag="6")]
     pub env: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub output: ::core::option::Option<AgentSessionStartHookOutput>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentSessionStartHookOutput {
-    #[prost(bool, tag = "1")]
+    #[prost(bool, tag="1")]
     pub additional_context: bool,
-    #[prost(bool, tag = "2")]
+    #[prost(bool, tag="2")]
     pub metadata: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderSessionRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub subject: ::core::option::Option<SubjectContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListAgentProviderSessionsRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(string, repeated, tag = "2")]
+    #[prost(string, repeated, tag="2")]
     pub session_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(enumeration = "AgentSessionState", tag = "3")]
+    #[prost(enumeration="AgentSessionState", tag="3")]
     pub state: i32,
     /// When non-zero and bounded_list_hydration is supported, cap results after
     /// ordering sessions newest-first by last_turn_at, updated_at, then created_at.
-    #[prost(int32, tag = "4")]
+    #[prost(int32, tag="4")]
     pub limit: i32,
     /// When true and bounded_list_hydration is supported, omit heavy fields such as
     /// metadata unless exact session_ids require direct lookup.
-    #[prost(bool, tag = "5")]
+    #[prost(bool, tag="5")]
     pub summary_only: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderSessionsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub sessions: ::prost::alloc::vec::Vec<AgentSession>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct UpdateAgentProviderSessionRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub client_ref: ::prost::alloc::string::String,
-    #[prost(enumeration = "AgentSessionState", tag = "3")]
+    #[prost(enumeration="AgentSessionState", tag="3")]
     pub state: i32,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub subject: ::core::option::Option<SubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentTurn {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub model: ::prost::alloc::string::String,
-    #[prost(enumeration = "AgentExecutionStatus", tag = "5")]
+    #[prost(enumeration="AgentExecutionStatus", tag="5")]
     pub status: i32,
-    #[prost(message, repeated, tag = "6")]
+    #[prost(message, repeated, tag="6")]
     pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub output_text: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub structured_output: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "9")]
+    #[prost(string, tag="9")]
     pub status_message: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "10")]
+    #[prost(message, optional, tag="10")]
     pub created_by: ::core::option::Option<AgentActor>,
-    #[prost(message, optional, tag = "11")]
+    #[prost(message, optional, tag="11")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "12")]
+    #[prost(message, optional, tag="12")]
     pub started_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "13")]
+    #[prost(message, optional, tag="13")]
     pub completed_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "14")]
+    #[prost(string, tag="14")]
     pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentTurnDisplay {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub phase: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub text: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub label: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub r#ref: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub parent_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub input: ::core::option::Option<::prost_types::Value>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub output: ::core::option::Option<::prost_types::Value>,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub error: ::core::option::Option<::prost_types::Value>,
-    #[prost(string, tag = "10")]
+    #[prost(string, tag="10")]
     pub action: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
+    #[prost(string, tag="11")]
     pub format: ::prost::alloc::string::String,
-    #[prost(string, tag = "12")]
+    #[prost(string, tag="12")]
     pub language: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateAgentProviderTurnRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub model: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "5")]
+    #[prost(message, repeated, tag="5")]
     pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
-    #[prost(message, repeated, tag = "6")]
+    #[prost(message, repeated, tag="6")]
     pub tools: ::prost::alloc::vec::Vec<ResolvedAgentTool>,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub response_schema: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "10")]
+    #[prost(message, optional, tag="10")]
     pub created_by: ::core::option::Option<AgentActor>,
-    #[prost(string, tag = "11")]
+    #[prost(string, tag="11")]
     pub execution_ref: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "12")]
+    #[prost(message, repeated, tag="12")]
     pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
-    #[prost(enumeration = "AgentToolSourceMode", tag = "13")]
+    #[prost(enumeration="AgentToolSourceMode", tag="13")]
     pub tool_source: i32,
-    #[prost(message, optional, tag = "14")]
+    #[prost(message, optional, tag="14")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(message, optional, tag = "16")]
+    #[prost(message, optional, tag="16")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "17")]
+    #[prost(string, tag="17")]
     pub run_grant: ::prost::alloc::string::String,
-    #[prost(int32, tag = "18")]
+    #[prost(int32, tag="18")]
     pub timeout_seconds: i32,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderTurnRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub subject: ::core::option::Option<SubjectContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListAgentProviderTurnsRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub subject: ::core::option::Option<SubjectContext>,
-    #[prost(string, repeated, tag = "3")]
+    #[prost(string, repeated, tag="3")]
     pub turn_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(enumeration = "AgentExecutionStatus", tag = "4")]
+    #[prost(enumeration="AgentExecutionStatus", tag="4")]
     pub status: i32,
     /// When non-zero and bounded_list_hydration is supported, cap results after
     /// ordering turns newest-first by created_at.
-    #[prost(int32, tag = "5")]
+    #[prost(int32, tag="5")]
     pub limit: i32,
     /// When true and bounded_list_hydration is supported, omit heavy fields such as
     /// messages, output text, and structured output unless exact turn_ids require
     /// direct lookup.
-    #[prost(bool, tag = "6")]
+    #[prost(bool, tag="6")]
     pub summary_only: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderTurnsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub turns: ::prost::alloc::vec::Vec<AgentTurn>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CancelAgentProviderTurnRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub reason: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub subject: ::core::option::Option<SubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentTurnEvent {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag="3")]
     pub seq: i64,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub r#type: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub source: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub visibility: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub data: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub display: ::core::option::Option<AgentTurnDisplay>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListAgentProviderTurnEventsRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "2")]
+    #[prost(int64, tag="2")]
     pub after_seq: i64,
-    #[prost(int32, tag = "3")]
+    #[prost(int32, tag="3")]
     pub limit: i32,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub subject: ::core::option::Option<SubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderTurnEventsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub events: ::prost::alloc::vec::Vec<AgentTurnEvent>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetAgentProviderInteractionRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub interaction_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub subject: ::core::option::Option<SubjectContext>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListAgentProviderInteractionsRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub subject: ::core::option::Option<SubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentProviderInteractionsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub interactions: ::prost::alloc::vec::Vec<AgentInteraction>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolveAgentProviderInteractionRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub interaction_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub resolution: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub subject: ::core::option::Option<SubjectContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecuteAgentToolRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub tool_call_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub tool_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub arguments: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="8")]
     pub run_grant: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExecuteAgentToolResponse {
-    #[prost(int32, tag = "1")]
+    #[prost(int32, tag="1")]
     pub status: i32,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub body: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListedAgentTool {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub mcp_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub title: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub description: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub input_schema: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub output_schema: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub annotations: ::core::option::Option<OperationAnnotations>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub r#ref: ::core::option::Option<AgentToolRef>,
-    #[prost(string, repeated, tag = "9")]
+    #[prost(string, repeated, tag="9")]
     pub tags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, tag = "10")]
+    #[prost(string, tag="10")]
     pub search_text: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListAgentToolsRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(int32, tag = "3")]
+    #[prost(int32, tag="3")]
     pub page_size: i32,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub page_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub run_grant: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub query: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListAgentToolsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub tools: ::prost::alloc::vec::Vec<ListedAgentTool>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResolveAgentConnectionRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub connection: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub run_grant: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResolvedAgentConnection {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub connection_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub connection: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub mode: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "5")]
+    #[prost(btree_map="string, string", tag="5")]
     pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(btree_map = "string, string", tag = "6")]
+    #[prost(btree_map="string, string", tag="6")]
     pub params: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerCreateSessionRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub client_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="8")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub workspace: ::core::option::Option<AgentWorkspace>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentManagerGetSessionRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentManagerListSessionsRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(enumeration = "AgentSessionState", tag = "4")]
+    #[prost(enumeration="AgentSessionState", tag="4")]
     pub state: i32,
     /// Manager response cap after provider responses are normalized and globally
     /// sorted by session recency.
-    #[prost(int32, tag = "5")]
+    #[prost(int32, tag="5")]
     pub limit: i32,
-    #[prost(bool, tag = "6")]
+    #[prost(bool, tag="6")]
     pub summary_only: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerListSessionsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub sessions: ::prost::alloc::vec::Vec<AgentSession>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerUpdateSessionRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub client_ref: ::prost::alloc::string::String,
-    #[prost(enumeration = "AgentSessionState", tag = "4")]
+    #[prost(enumeration="AgentSessionState", tag="4")]
     pub state: i32,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerCreateTurnRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "4")]
+    #[prost(message, repeated, tag="4")]
     pub messages: ::prost::alloc::vec::Vec<AgentMessage>,
-    #[prost(message, repeated, tag = "5")]
+    #[prost(message, repeated, tag="5")]
     pub tool_refs: ::prost::alloc::vec::Vec<AgentToolRef>,
-    #[prost(enumeration = "AgentToolSourceMode", tag = "6")]
+    #[prost(enumeration="AgentToolSourceMode", tag="6")]
     pub tool_source: i32,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub response_schema: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "10")]
+    #[prost(string, tag="10")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
+    #[prost(string, tag="11")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "12")]
+    #[prost(message, optional, tag="12")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "13")]
+    #[prost(int32, tag="13")]
     pub timeout_seconds: i32,
-    #[prost(bool, tag = "14")]
+    #[prost(bool, tag="14")]
     pub tool_refs_set: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentManagerGetTurnRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentManagerListTurnsRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(enumeration = "AgentExecutionStatus", tag = "4")]
+    #[prost(enumeration="AgentExecutionStatus", tag="4")]
     pub status: i32,
-    #[prost(int32, tag = "5")]
+    #[prost(int32, tag="5")]
     pub limit: i32,
-    #[prost(bool, tag = "6")]
+    #[prost(bool, tag="6")]
     pub summary_only: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerListTurnsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub turns: ::prost::alloc::vec::Vec<AgentTurn>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentManagerCancelTurnRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub reason: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentManagerListTurnEventsRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag="3")]
     pub after_seq: i64,
-    #[prost(int32, tag = "4")]
+    #[prost(int32, tag="4")]
     pub limit: i32,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerListTurnEventsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub events: ::prost::alloc::vec::Vec<AgentTurnEvent>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AgentManagerListInteractionsRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerListInteractionsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub interactions: ::prost::alloc::vec::Vec<AgentInteraction>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentManagerResolveInteractionRequest {
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub turn_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub interaction_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub resolution: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -1415,43 +1415,43 @@ impl AgentInteractionState {
 /// provider after a login or token-validation flow.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthenticatedUser {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub subject: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub email: ::prost::alloc::string::String,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag="3")]
     pub email_verified: bool,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub avatar_url: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "6")]
+    #[prost(btree_map="string, string", tag="6")]
     pub claims: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// BeginLoginRequest starts an interactive login flow.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BeginLoginRequest {
     /// callback_url is the host-managed URL the provider should redirect back to.
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub callback_url: ::prost::alloc::string::String,
     /// host_state is opaque state generated by the host and echoed back on
     /// completion.
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub host_state: ::prost::alloc::string::String,
     /// scopes are the provider-specific scopes the host is requesting.
-    #[prost(string, repeated, tag = "3")]
+    #[prost(string, repeated, tag="3")]
     pub scopes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// options carries provider-specific login parameters.
-    #[prost(btree_map = "string, string", tag = "4")]
+    #[prost(btree_map="string, string", tag="4")]
     pub options: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// BeginLoginResponse returns the provider-managed authorization URL and opaque
 /// provider state that must be preserved until completion.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BeginLoginResponse {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub authorization_url: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "2")]
+    #[prost(bytes="vec", tag="2")]
     pub provider_state: ::prost::alloc::vec::Vec<u8>,
 }
 /// CompleteLoginRequest finishes an interactive login flow.
@@ -1459,51 +1459,51 @@ pub struct BeginLoginResponse {
 pub struct CompleteLoginRequest {
     /// query contains the callback URL query parameters returned by the identity
     /// provider.
-    #[prost(btree_map = "string, string", tag = "1")]
+    #[prost(btree_map="string, string", tag="1")]
     pub query: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     /// provider_state is the opaque state returned from BeginLoginResponse.
-    #[prost(bytes = "vec", tag = "2")]
+    #[prost(bytes="vec", tag="2")]
     pub provider_state: ::prost::alloc::vec::Vec<u8>,
     /// callback_url is the fully qualified callback URL used by the host.
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub callback_url: ::prost::alloc::string::String,
 }
 /// ValidateExternalTokenRequest asks the provider to validate a token minted
 /// outside the interactive login flow.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ValidateExternalTokenRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub token: ::prost::alloc::string::String,
 }
 /// AuthSessionSettings configures how the host persists authenticated sessions.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuthSessionSettings {
-    #[prost(int64, tag = "1")]
+    #[prost(int64, tag="1")]
     pub session_ttl_seconds: i64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Subject {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub r#type: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub properties: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Resource {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub r#type: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub properties: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubjectSet {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub resource: ::core::option::Option<Resource>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub relation: ::prost::alloc::string::String,
 }
 /// RelationshipTarget identifies the left side of an authorization relationship.
@@ -1513,301 +1513,301 @@ pub struct SubjectSet {
 /// document:roadmap#viewer@group:eng#member.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RelationshipTarget {
-    #[prost(oneof = "relationship_target::Kind", tags = "1, 2, 3")]
+    #[prost(oneof="relationship_target::Kind", tags="1, 2, 3")]
     pub kind: ::core::option::Option<relationship_target::Kind>,
 }
 /// Nested message and enum types in `RelationshipTarget`.
 pub mod relationship_target {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
-        #[prost(message, tag = "1")]
+        #[prost(message, tag="1")]
         Subject(super::Subject),
-        #[prost(message, tag = "2")]
+        #[prost(message, tag="2")]
         Resource(super::Resource),
-        #[prost(message, tag = "3")]
+        #[prost(message, tag="3")]
         SubjectSet(super::SubjectSet),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Action {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub properties: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AccessEvaluationRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub subject: ::core::option::Option<Subject>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub action: ::core::option::Option<Action>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub resource: ::core::option::Option<Resource>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub context: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AccessDecision {
-    #[prost(bool, tag = "1")]
+    #[prost(bool, tag="1")]
     pub allowed: bool,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub context: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AccessEvaluationsRequest {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub requests: ::prost::alloc::vec::Vec<AccessEvaluationRequest>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AccessEvaluationsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub decisions: ::prost::alloc::vec::Vec<AccessDecision>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResourceSearchRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub subject: ::core::option::Option<Subject>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub action: ::core::option::Option<Action>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub resource_type: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub context: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "5")]
+    #[prost(int32, tag="5")]
     pub page_size: i32,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResourceSearchResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub resources: ::prost::alloc::vec::Vec<Resource>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub next_page_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubjectSearchRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub resource: ::core::option::Option<Resource>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub action: ::core::option::Option<Action>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub subject_type: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub context: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "5")]
+    #[prost(int32, tag="5")]
     pub page_size: i32,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubjectSearchResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub subjects: ::prost::alloc::vec::Vec<Subject>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub next_page_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EffectiveSubjectSearchRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub resource: ::core::option::Option<Resource>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub action: ::core::option::Option<Action>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub context: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "4")]
+    #[prost(int32, tag="4")]
     pub page_size: i32,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EffectiveSubjectSearchResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub targets: ::prost::alloc::vec::Vec<RelationshipTarget>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub next_page_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model_id: ::prost::alloc::string::String,
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag="4")]
     pub truncated: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ActionSearchRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub subject: ::core::option::Option<Subject>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub resource: ::core::option::Option<Resource>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub context: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "4")]
+    #[prost(int32, tag="4")]
     pub page_size: i32,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ActionSearchResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub actions: ::prost::alloc::vec::Vec<Action>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub next_page_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuthorizationMetadata {
-    #[prost(string, repeated, tag = "1")]
+    #[prost(string, repeated, tag="1")]
     pub capabilities: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub active_model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Relationship {
     /// Deprecated for generalized Zanzibar tuples. Writers should prefer target.
     /// Providers accepting both fields must reject mismatched subject and target values.
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub subject: ::core::option::Option<Subject>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub relation: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub resource: ::core::option::Option<Resource>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub properties: ::core::option::Option<::prost_types::Struct>,
     /// Generalized tuple target. For compatibility, subject-only tuples may still
     /// be written using subject without setting target.
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub target: ::core::option::Option<RelationshipTarget>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RelationshipKey {
     /// Deprecated for generalized Zanzibar tuples. Callers should prefer target.
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub subject: ::core::option::Option<Subject>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub relation: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub resource: ::core::option::Option<Resource>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub target: ::core::option::Option<RelationshipTarget>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadRelationshipsRequest {
     /// Direct tuple filter only. This RPC does not expand computed usersets or
     /// inheritance rewrites.
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub subject: ::core::option::Option<Subject>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub relation: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub resource: ::core::option::Option<Resource>,
-    #[prost(int32, tag = "4")]
+    #[prost(int32, tag="4")]
     pub page_size: i32,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub page_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub model_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub target: ::core::option::Option<RelationshipTarget>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadRelationshipsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub relationships: ::prost::alloc::vec::Vec<Relationship>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub next_page_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WriteRelationshipsRequest {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub writes: ::prost::alloc::vec::Vec<Relationship>,
-    #[prost(message, repeated, tag = "2")]
+    #[prost(message, repeated, tag="2")]
     pub deletes: ::prost::alloc::vec::Vec<RelationshipKey>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizationModel {
-    #[prost(int32, tag = "1")]
+    #[prost(int32, tag="1")]
     pub version: i32,
-    #[prost(message, repeated, tag = "2")]
+    #[prost(message, repeated, tag="2")]
     pub resource_types: ::prost::alloc::vec::Vec<AuthorizationModelResourceType>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizationModelResourceType {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "2")]
+    #[prost(message, repeated, tag="2")]
     pub relations: ::prost::alloc::vec::Vec<AuthorizationModelRelation>,
-    #[prost(message, repeated, tag = "3")]
+    #[prost(message, repeated, tag="3")]
     pub actions: ::prost::alloc::vec::Vec<AuthorizationModelAction>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizationModelRelation {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "2")]
+    #[prost(string, repeated, tag="2")]
     pub subject_types: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(message, repeated, tag = "3")]
+    #[prost(message, repeated, tag="3")]
     pub allowed_targets: ::prost::alloc::vec::Vec<AuthorizationModelAllowedTarget>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub rewrite: ::core::option::Option<AuthorizationModelRewrite>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizationModelAction {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "2")]
+    #[prost(string, repeated, tag="2")]
     pub relations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub rewrite: ::core::option::Option<AuthorizationModelRewrite>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuthorizationModelAllowedTarget {
-    #[prost(oneof = "authorization_model_allowed_target::Kind", tags = "1, 2, 3")]
+    #[prost(oneof="authorization_model_allowed_target::Kind", tags="1, 2, 3")]
     pub kind: ::core::option::Option<authorization_model_allowed_target::Kind>,
 }
 /// Nested message and enum types in `AuthorizationModelAllowedTarget`.
 pub mod authorization_model_allowed_target {
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum Kind {
-        #[prost(string, tag = "1")]
+        #[prost(string, tag="1")]
         SubjectType(::prost::alloc::string::String),
-        #[prost(string, tag = "2")]
+        #[prost(string, tag="2")]
         ResourceType(::prost::alloc::string::String),
-        #[prost(message, tag = "3")]
+        #[prost(message, tag="3")]
         SubjectSet(super::AuthorizationModelSubjectSetTarget),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuthorizationModelSubjectSetTarget {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub resource_type: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub relation: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizationModelRewrite {
-    #[prost(oneof = "authorization_model_rewrite::Kind", tags = "1, 2, 3, 4")]
+    #[prost(oneof="authorization_model_rewrite::Kind", tags="1, 2, 3, 4")]
     pub kind: ::core::option::Option<authorization_model_rewrite::Kind>,
 }
 /// Nested message and enum types in `AuthorizationModelRewrite`.
 pub mod authorization_model_rewrite {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
-        #[prost(message, tag = "1")]
+        #[prost(message, tag="1")]
         This(super::AuthorizationModelRewriteThis),
-        #[prost(message, tag = "2")]
+        #[prost(message, tag="2")]
         ComputedUserset(super::AuthorizationModelComputedUserset),
-        #[prost(message, tag = "3")]
+        #[prost(message, tag="3")]
         TupleToUserset(super::AuthorizationModelTupleToUserset),
-        #[prost(message, tag = "4")]
+        #[prost(message, tag="4")]
         Union(super::AuthorizationModelRewriteUnion),
     }
 }
@@ -1816,434 +1816,434 @@ pub struct AuthorizationModelRewriteThis {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuthorizationModelComputedUserset {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub relation: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuthorizationModelTupleToUserset {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub tupleset_relation: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub computed_relation: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AuthorizationModelRewriteUnion {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub children: ::prost::alloc::vec::Vec<AuthorizationModelRewrite>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuthorizationModelRef {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub version: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExpandRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub resource: ::core::option::Option<Resource>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub relation: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub context: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "4")]
+    #[prost(int32, tag="4")]
     pub max_depth: i32,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExpandNode {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub target: ::core::option::Option<RelationshipTarget>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub relation: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "3")]
+    #[prost(message, repeated, tag="3")]
     pub children: ::prost::alloc::vec::Vec<ExpandNode>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExpandResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub root: ::core::option::Option<ExpandNode>,
-    #[prost(bool, tag = "2")]
+    #[prost(bool, tag="2")]
     pub truncated: bool,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag="3")]
     pub cycle_detected: bool,
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag="4")]
     pub max_depth_reached: bool,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub model_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetActiveModelResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub model: ::core::option::Option<AuthorizationModelRef>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListModelsRequest {
-    #[prost(int32, tag = "1")]
+    #[prost(int32, tag="1")]
     pub page_size: i32,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListModelsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub models: ::prost::alloc::vec::Vec<AuthorizationModelRef>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WriteModelRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub model: ::core::option::Option<AuthorizationModel>,
 }
 /// CacheSetEntry is one key/value pair written by SetMany.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheSetEntry {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub key: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "2")]
+    #[prost(bytes="vec", tag="2")]
     pub value: ::prost::alloc::vec::Vec<u8>,
 }
 /// CacheResult is one lookup result returned by GetMany.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheResult {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub key: ::prost::alloc::string::String,
-    #[prost(bool, tag = "2")]
+    #[prost(bool, tag="2")]
     pub found: bool,
-    #[prost(bytes = "vec", tag = "3")]
+    #[prost(bytes="vec", tag="3")]
     pub value: ::prost::alloc::vec::Vec<u8>,
 }
 /// CacheGetRequest loads one cache key.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheGetRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub key: ::prost::alloc::string::String,
 }
 /// CacheGetResponse is the result of looking up one cache key.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheGetResponse {
-    #[prost(bool, tag = "1")]
+    #[prost(bool, tag="1")]
     pub found: bool,
-    #[prost(bytes = "vec", tag = "2")]
+    #[prost(bytes="vec", tag="2")]
     pub value: ::prost::alloc::vec::Vec<u8>,
 }
 /// CacheGetManyRequest loads multiple cache keys in one RPC.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheGetManyRequest {
-    #[prost(string, repeated, tag = "1")]
+    #[prost(string, repeated, tag="1")]
     pub keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// CacheGetManyResponse returns every lookup result for GetMany.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CacheGetManyResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub entries: ::prost::alloc::vec::Vec<CacheResult>,
 }
 /// CacheSetRequest writes one cache key.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheSetRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub key: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "2")]
+    #[prost(bytes="vec", tag="2")]
     pub value: ::prost::alloc::vec::Vec<u8>,
     /// ttl applies an optional expiration to the entry.
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub ttl: ::core::option::Option<::prost_types::Duration>,
 }
 /// CacheSetManyRequest writes multiple cache keys in one RPC.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CacheSetManyRequest {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub entries: ::prost::alloc::vec::Vec<CacheSetEntry>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub ttl: ::core::option::Option<::prost_types::Duration>,
 }
 /// CacheDeleteRequest removes one cache key.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheDeleteRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub key: ::prost::alloc::string::String,
 }
 /// CacheDeleteResponse reports whether one key existed and was deleted.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheDeleteResponse {
-    #[prost(bool, tag = "1")]
+    #[prost(bool, tag="1")]
     pub deleted: bool,
 }
 /// CacheDeleteManyRequest removes multiple cache keys in one RPC.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheDeleteManyRequest {
-    #[prost(string, repeated, tag = "1")]
+    #[prost(string, repeated, tag="1")]
     pub keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// CacheDeleteManyResponse reports how many keys were deleted.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheDeleteManyResponse {
-    #[prost(int64, tag = "1")]
+    #[prost(int64, tag="1")]
     pub deleted: i64,
 }
 /// CacheTouchRequest extends the TTL for one cache key.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheTouchRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub ttl: ::core::option::Option<::prost_types::Duration>,
 }
 /// CacheTouchResponse reports whether a key existed and had its TTL updated.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CacheTouchResponse {
-    #[prost(bool, tag = "1")]
+    #[prost(bool, tag="1")]
     pub touched: bool,
 }
 /// TypedValue stores one scalar or structured value in an IndexedDB record.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TypedValue {
-    #[prost(oneof = "typed_value::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 8")]
+    #[prost(oneof="typed_value::Kind", tags="1, 2, 3, 4, 5, 6, 7, 8")]
     pub kind: ::core::option::Option<typed_value::Kind>,
 }
 /// Nested message and enum types in `TypedValue`.
 pub mod typed_value {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
-        #[prost(enumeration = "::prost_types::NullValue", tag = "1")]
+        #[prost(enumeration="::prost_types::NullValue", tag="1")]
         NullValue(i32),
-        #[prost(string, tag = "2")]
+        #[prost(string, tag="2")]
         StringValue(::prost::alloc::string::String),
-        #[prost(int64, tag = "3")]
+        #[prost(int64, tag="3")]
         IntValue(i64),
-        #[prost(double, tag = "4")]
+        #[prost(double, tag="4")]
         FloatValue(f64),
-        #[prost(bool, tag = "5")]
+        #[prost(bool, tag="5")]
         BoolValue(bool),
-        #[prost(message, tag = "6")]
+        #[prost(message, tag="6")]
         TimeValue(::prost_types::Timestamp),
-        #[prost(bytes, tag = "7")]
+        #[prost(bytes, tag="7")]
         BytesValue(::prost::alloc::vec::Vec<u8>),
-        #[prost(message, tag = "8")]
+        #[prost(message, tag="8")]
         JsonValue(::prost_types::Value),
     }
 }
 /// Record is one JSON-like row in an object store.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Record {
-    #[prost(btree_map = "string, message", tag = "1")]
+    #[prost(btree_map="string, message", tag="1")]
     pub fields: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, TypedValue>,
 }
 /// ObjectStoreSchema describes the indexes and columns attached to an object
 /// store.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ObjectStoreSchema {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub indexes: ::prost::alloc::vec::Vec<IndexSchema>,
-    #[prost(message, repeated, tag = "2")]
+    #[prost(message, repeated, tag="2")]
     pub columns: ::prost::alloc::vec::Vec<ColumnDef>,
 }
 /// IndexSchema describes one secondary index on an object store.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct IndexSchema {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "2")]
+    #[prost(string, repeated, tag="2")]
     pub key_path: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag="3")]
     pub unique: bool,
 }
 /// ColumnDef is reserved for providers that preserve SQL-style column metadata.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ColumnDef {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(int32, tag = "2")]
+    #[prost(int32, tag="2")]
     pub r#type: i32,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag="3")]
     pub primary_key: bool,
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag="4")]
     pub not_null: bool,
-    #[prost(bool, tag = "5")]
+    #[prost(bool, tag="5")]
     pub unique: bool,
 }
 /// KeyRange constrains a query or cursor by lower and upper bounds.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyRange {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub lower: ::core::option::Option<TypedValue>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub upper: ::core::option::Option<TypedValue>,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag="3")]
     pub lower_open: bool,
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag="4")]
     pub upper_open: bool,
 }
 /// RecordRequest addresses one object store and carries one row payload.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RecordRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub store: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub record: ::core::option::Option<Record>,
 }
 /// RecordResponse wraps one row payload.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RecordResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub record: ::core::option::Option<Record>,
 }
 /// RecordsResponse wraps repeated row payloads.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RecordsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub records: ::prost::alloc::vec::Vec<Record>,
 }
 /// KeysResponse wraps repeated primary keys.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct KeysResponse {
-    #[prost(string, repeated, tag = "1")]
+    #[prost(string, repeated, tag="1")]
     pub keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 /// ObjectStoreRequest addresses one object store row by primary key.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ObjectStoreRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub store: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub id: ::prost::alloc::string::String,
 }
 /// ObjectStoreNameRequest addresses an object store without a specific row key.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ObjectStoreNameRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub store: ::prost::alloc::string::String,
 }
 /// ObjectStoreRangeRequest addresses an object store plus an optional key range.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ObjectStoreRangeRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub store: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub range: ::core::option::Option<KeyRange>,
 }
 /// CreateObjectStoreRequest creates a new object store.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateObjectStoreRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub schema: ::core::option::Option<ObjectStoreSchema>,
 }
 /// DeleteObjectStoreRequest removes an object store.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DeleteObjectStoreRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
 }
 /// IndexQueryRequest addresses a secondary index plus optional key values and
 /// range constraints.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IndexQueryRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub store: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub index: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "3")]
+    #[prost(message, repeated, tag="3")]
     pub values: ::prost::alloc::vec::Vec<TypedValue>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub range: ::core::option::Option<KeyRange>,
 }
 /// CountResponse reports how many rows matched a query.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CountResponse {
-    #[prost(int64, tag = "1")]
+    #[prost(int64, tag="1")]
     pub count: i64,
 }
 /// OpenCursorRequest starts a streaming cursor over an object store or index.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OpenCursorRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub store: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub range: ::core::option::Option<KeyRange>,
-    #[prost(enumeration = "CursorDirection", tag = "3")]
+    #[prost(enumeration="CursorDirection", tag="3")]
     pub direction: i32,
     /// keys_only suppresses row payloads and returns only keys.
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag="4")]
     pub keys_only: bool,
     /// index selects a secondary index when non-empty.
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub index: ::prost::alloc::string::String,
     /// values selects a compound index key prefix when index is set.
-    #[prost(message, repeated, tag = "6")]
+    #[prost(message, repeated, tag="6")]
     pub values: ::prost::alloc::vec::Vec<TypedValue>,
 }
 /// KeyValue represents a single IndexedDB key, which can be a scalar
 /// (string, number, date, binary) or a nested array of keys per the W3C spec.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyValue {
-    #[prost(oneof = "key_value::Kind", tags = "1, 2")]
+    #[prost(oneof="key_value::Kind", tags="1, 2")]
     pub kind: ::core::option::Option<key_value::Kind>,
 }
 /// Nested message and enum types in `KeyValue`.
 pub mod key_value {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
-        #[prost(message, tag = "1")]
+        #[prost(message, tag="1")]
         Scalar(super::TypedValue),
-        #[prost(message, tag = "2")]
+        #[prost(message, tag="2")]
         Array(super::KeyValueArray),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KeyValueArray {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub elements: ::prost::alloc::vec::Vec<KeyValue>,
 }
 /// CursorKeyTarget addresses a specific cursor position.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CursorKeyTarget {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub key: ::prost::alloc::vec::Vec<KeyValue>,
 }
 /// CursorCommand advances, mutates, or closes an open cursor.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CursorCommand {
-    #[prost(oneof = "cursor_command::Command", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof="cursor_command::Command", tags="1, 2, 3, 4, 5, 6")]
     pub command: ::core::option::Option<cursor_command::Command>,
 }
 /// Nested message and enum types in `CursorCommand`.
 pub mod cursor_command {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Command {
-        #[prost(bool, tag = "1")]
+        #[prost(bool, tag="1")]
         Next(bool),
-        #[prost(message, tag = "2")]
+        #[prost(message, tag="2")]
         ContinueToKey(super::CursorKeyTarget),
-        #[prost(int32, tag = "3")]
+        #[prost(int32, tag="3")]
         Advance(i32),
-        #[prost(message, tag = "4")]
+        #[prost(message, tag="4")]
         Update(super::Record),
-        #[prost(bool, tag = "5")]
+        #[prost(bool, tag="5")]
         Delete(bool),
-        #[prost(bool, tag = "6")]
+        #[prost(bool, tag="6")]
         Close(bool),
     }
 }
 /// CursorClientMessage is one frame in the bidirectional cursor stream.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CursorClientMessage {
-    #[prost(oneof = "cursor_client_message::Msg", tags = "1, 2")]
+    #[prost(oneof="cursor_client_message::Msg", tags="1, 2")]
     pub msg: ::core::option::Option<cursor_client_message::Msg>,
 }
 /// Nested message and enum types in `CursorClientMessage`.
 pub mod cursor_client_message {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Msg {
-        #[prost(message, tag = "1")]
+        #[prost(message, tag="1")]
         Open(super::OpenCursorRequest),
-        #[prost(message, tag = "2")]
+        #[prost(message, tag="2")]
         Command(super::CursorCommand),
     }
 }
@@ -2253,49 +2253,49 @@ pub struct CursorEntry {
     /// Key components per index KeyPath field. Each component is a KeyValue
     /// that can be a scalar or a nested array, preserving the full W3C IndexedDB
     /// key structure including array-valued keys.
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub key: ::prost::alloc::vec::Vec<KeyValue>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub primary_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub record: ::core::option::Option<Record>,
 }
 /// CursorResponse is one streamed cursor frame.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CursorResponse {
-    #[prost(oneof = "cursor_response::Result", tags = "1, 2")]
+    #[prost(oneof="cursor_response::Result", tags="1, 2")]
     pub result: ::core::option::Option<cursor_response::Result>,
 }
 /// Nested message and enum types in `CursorResponse`.
 pub mod cursor_response {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Result {
-        #[prost(message, tag = "1")]
+        #[prost(message, tag="1")]
         Entry(super::CursorEntry),
-        #[prost(bool, tag = "2")]
+        #[prost(bool, tag="2")]
         Done(bool),
     }
 }
 /// DeleteResponse reports how many rows were deleted.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DeleteResponse {
-    #[prost(int64, tag = "1")]
+    #[prost(int64, tag="1")]
     pub deleted: i64,
 }
 /// KeyResponse wraps one primary key.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct KeyResponse {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub key: ::prost::alloc::string::String,
 }
 /// BeginTransactionRequest starts an IndexedDB transaction stream.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct BeginTransactionRequest {
-    #[prost(string, repeated, tag = "1")]
+    #[prost(string, repeated, tag="1")]
     pub stores: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(enumeration = "TransactionMode", tag = "2")]
+    #[prost(enumeration="TransactionMode", tag="2")]
     pub mode: i32,
-    #[prost(enumeration = "TransactionDurabilityHint", tag = "3")]
+    #[prost(enumeration="TransactionDurabilityHint", tag="3")]
     pub durability_hint: i32,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2308,18 +2308,18 @@ pub struct TransactionCommitRequest {
 /// the provider accepted the commit frame and rolled the transaction back.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransactionCommitResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub error: ::core::option::Option<super::super::super::google::rpc::Status>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct TransactionAbortRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub reason: ::prost::alloc::string::String,
 }
 /// TransactionAbortResponse acknowledges abort or reports an abort failure.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransactionAbortResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub error: ::core::option::Option<super::super::super::google::rpc::Status>,
 }
 /// TransactionOperation is one ordered transaction-scoped object store or index
@@ -2327,46 +2327,46 @@ pub struct TransactionAbortResponse {
 /// transaction contract.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransactionOperation {
-    #[prost(uint64, tag = "1")]
+    #[prost(uint64, tag="1")]
     pub request_id: u64,
-    #[prost(oneof = "transaction_operation::Operation", tags = "10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25")]
+    #[prost(oneof="transaction_operation::Operation", tags="10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25")]
     pub operation: ::core::option::Option<transaction_operation::Operation>,
 }
 /// Nested message and enum types in `TransactionOperation`.
 pub mod transaction_operation {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Operation {
-        #[prost(message, tag = "10")]
+        #[prost(message, tag="10")]
         Get(super::ObjectStoreRequest),
-        #[prost(message, tag = "11")]
+        #[prost(message, tag="11")]
         GetKey(super::ObjectStoreRequest),
-        #[prost(message, tag = "12")]
+        #[prost(message, tag="12")]
         Add(super::RecordRequest),
-        #[prost(message, tag = "13")]
+        #[prost(message, tag="13")]
         Put(super::RecordRequest),
-        #[prost(message, tag = "14")]
+        #[prost(message, tag="14")]
         Delete(super::ObjectStoreRequest),
-        #[prost(message, tag = "15")]
+        #[prost(message, tag="15")]
         Clear(super::ObjectStoreNameRequest),
-        #[prost(message, tag = "16")]
+        #[prost(message, tag="16")]
         GetAll(super::ObjectStoreRangeRequest),
-        #[prost(message, tag = "17")]
+        #[prost(message, tag="17")]
         GetAllKeys(super::ObjectStoreRangeRequest),
-        #[prost(message, tag = "18")]
+        #[prost(message, tag="18")]
         Count(super::ObjectStoreRangeRequest),
-        #[prost(message, tag = "19")]
+        #[prost(message, tag="19")]
         DeleteRange(super::ObjectStoreRangeRequest),
-        #[prost(message, tag = "20")]
+        #[prost(message, tag="20")]
         IndexGet(super::IndexQueryRequest),
-        #[prost(message, tag = "21")]
+        #[prost(message, tag="21")]
         IndexGetKey(super::IndexQueryRequest),
-        #[prost(message, tag = "22")]
+        #[prost(message, tag="22")]
         IndexGetAll(super::IndexQueryRequest),
-        #[prost(message, tag = "23")]
+        #[prost(message, tag="23")]
         IndexGetAllKeys(super::IndexQueryRequest),
-        #[prost(message, tag = "24")]
+        #[prost(message, tag="24")]
         IndexCount(super::IndexQueryRequest),
-        #[prost(message, tag = "25")]
+        #[prost(message, tag="25")]
         IndexDelete(super::IndexQueryRequest),
     }
 }
@@ -2374,30 +2374,30 @@ pub mod transaction_operation {
 /// Non-OK error marks the transaction failed and causes rollback in phase 1.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransactionOperationResponse {
-    #[prost(uint64, tag = "1")]
+    #[prost(uint64, tag="1")]
     pub request_id: u64,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub error: ::core::option::Option<super::super::super::google::rpc::Status>,
-    #[prost(oneof = "transaction_operation_response::Result", tags = "10, 11, 12, 13, 14, 15, 16")]
+    #[prost(oneof="transaction_operation_response::Result", tags="10, 11, 12, 13, 14, 15, 16")]
     pub result: ::core::option::Option<transaction_operation_response::Result>,
 }
 /// Nested message and enum types in `TransactionOperationResponse`.
 pub mod transaction_operation_response {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Result {
-        #[prost(message, tag = "10")]
+        #[prost(message, tag="10")]
         Empty(()),
-        #[prost(message, tag = "11")]
+        #[prost(message, tag="11")]
         Record(super::RecordResponse),
-        #[prost(message, tag = "12")]
+        #[prost(message, tag="12")]
         Records(super::RecordsResponse),
-        #[prost(message, tag = "13")]
+        #[prost(message, tag="13")]
         Key(super::KeyResponse),
-        #[prost(message, tag = "14")]
+        #[prost(message, tag="14")]
         Keys(super::KeysResponse),
-        #[prost(message, tag = "15")]
+        #[prost(message, tag="15")]
         Count(super::CountResponse),
-        #[prost(message, tag = "16")]
+        #[prost(message, tag="16")]
         Delete(super::DeleteResponse),
     }
 }
@@ -2405,39 +2405,39 @@ pub mod transaction_operation_response {
 /// first frame must be BeginTransactionRequest.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransactionClientMessage {
-    #[prost(oneof = "transaction_client_message::Msg", tags = "1, 2, 3, 4")]
+    #[prost(oneof="transaction_client_message::Msg", tags="1, 2, 3, 4")]
     pub msg: ::core::option::Option<transaction_client_message::Msg>,
 }
 /// Nested message and enum types in `TransactionClientMessage`.
 pub mod transaction_client_message {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Msg {
-        #[prost(message, tag = "1")]
+        #[prost(message, tag="1")]
         Begin(super::BeginTransactionRequest),
-        #[prost(message, tag = "2")]
+        #[prost(message, tag="2")]
         Operation(super::TransactionOperation),
-        #[prost(message, tag = "3")]
+        #[prost(message, tag="3")]
         Commit(super::TransactionCommitRequest),
-        #[prost(message, tag = "4")]
+        #[prost(message, tag="4")]
         Abort(super::TransactionAbortRequest),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TransactionServerMessage {
-    #[prost(oneof = "transaction_server_message::Msg", tags = "1, 2, 3, 4")]
+    #[prost(oneof="transaction_server_message::Msg", tags="1, 2, 3, 4")]
     pub msg: ::core::option::Option<transaction_server_message::Msg>,
 }
 /// Nested message and enum types in `TransactionServerMessage`.
 pub mod transaction_server_message {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Msg {
-        #[prost(message, tag = "1")]
+        #[prost(message, tag="1")]
         Begin(super::TransactionBeginResponse),
-        #[prost(message, tag = "2")]
+        #[prost(message, tag="2")]
         Operation(super::TransactionOperationResponse),
-        #[prost(message, tag = "3")]
+        #[prost(message, tag="3")]
         Commit(super::TransactionCommitResponse),
-        #[prost(message, tag = "4")]
+        #[prost(message, tag="4")]
         Abort(super::TransactionAbortResponse),
     }
 }
@@ -2534,58 +2534,58 @@ impl TransactionDurabilityHint {
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PluginRuntimeSupport {
-    #[prost(bool, tag = "1")]
+    #[prost(bool, tag="1")]
     pub can_host_plugins: bool,
-    #[prost(enumeration = "PluginRuntimeEgressMode", tag = "3")]
+    #[prost(enumeration="PluginRuntimeEgressMode", tag="3")]
     pub egress_mode: i32,
-    #[prost(bool, tag = "7")]
+    #[prost(bool, tag="7")]
     pub supports_prepare_workspace: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PluginRuntimeSession {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub state: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "3")]
+    #[prost(btree_map="string, string", tag="3")]
     pub metadata: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub lifecycle: ::core::option::Option<PluginRuntimeSessionLifecycle>,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub state_reason: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub state_message: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PluginRuntimeSessionLifecycle {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub started_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub recommended_drain_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PluginRuntimeImagePullAuth {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub docker_config_json: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartPluginRuntimeSessionRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub plugin_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub template: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub image: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "4")]
+    #[prost(btree_map="string, string", tag="4")]
     pub metadata: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub image_pull_auth: ::core::option::Option<PluginRuntimeImagePullAuth>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetPluginRuntimeSessionRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -2593,33 +2593,33 @@ pub struct ListPluginRuntimeSessionsRequest {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListPluginRuntimeSessionsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub sessions: ::prost::alloc::vec::Vec<PluginRuntimeSession>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StopPluginRuntimeSessionRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PreparePluginRuntimeWorkspaceRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub agent_session_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub workspace: ::core::option::Option<AgentWorkspace>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PreparePluginRuntimeWorkspaceResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub workspace: ::core::option::Option<PreparedAgentWorkspace>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RemovePluginRuntimeWorkspaceRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub agent_session_id: ::prost::alloc::string::String,
 }
 /// StartHostedPluginRequest describes the plugin process to launch inside a
@@ -2628,57 +2628,57 @@ pub struct RemovePluginRuntimeWorkspaceRequest {
 /// HostedPlugin response.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartHostedPluginRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub plugin_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub command: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "4")]
+    #[prost(string, repeated, tag="4")]
     pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(btree_map = "string, string", tag = "5")]
+    #[prost(btree_map="string, string", tag="5")]
     pub env: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(string, repeated, tag = "7")]
+    #[prost(string, repeated, tag="7")]
     pub allowed_hosts: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="8")]
     pub default_action: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
+    #[prost(string, tag="9")]
     pub host_binary: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
+    #[prost(string, tag="11")]
     pub workdir: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HostedPlugin {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub plugin_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub dial_target: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct PluginRuntimeLogEntry {
-    #[prost(enumeration = "PluginRuntimeLogStream", tag = "1")]
+    #[prost(enumeration="PluginRuntimeLogStream", tag="1")]
     pub stream: i32,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub message: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub observed_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(int64, tag = "4")]
+    #[prost(int64, tag="4")]
     pub source_seq: i64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AppendPluginRuntimeLogsRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub session_id: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "2")]
+    #[prost(message, repeated, tag="2")]
     pub logs: ::prost::alloc::vec::Vec<PluginRuntimeLogEntry>,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AppendPluginRuntimeLogsResponse {
-    #[prost(int64, tag = "1")]
+    #[prost(int64, tag="1")]
     pub last_seq: i64,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -2749,54 +2749,54 @@ impl PluginRuntimeLogStream {
 /// supports.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ProviderIdentity {
-    #[prost(enumeration = "ProviderKind", tag = "1")]
+    #[prost(enumeration="ProviderKind", tag="1")]
     pub kind: i32,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub description: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub version: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "6")]
+    #[prost(string, repeated, tag="6")]
     pub warnings: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(int32, tag = "10")]
+    #[prost(int32, tag="10")]
     pub min_protocol_version: i32,
-    #[prost(int32, tag = "11")]
+    #[prost(int32, tag="11")]
     pub max_protocol_version: i32,
 }
 /// ConfigureProviderRequest configures a non-integration provider for one
 /// runtime session.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConfigureProviderRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub config: ::core::option::Option<::prost_types::Struct>,
-    #[prost(int32, tag = "3")]
+    #[prost(int32, tag="3")]
     pub protocol_version: i32,
 }
 /// ConfigureProviderResponse confirms the protocol version the provider is
 /// serving.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ConfigureProviderResponse {
-    #[prost(int32, tag = "1")]
+    #[prost(int32, tag="1")]
     pub protocol_version: i32,
 }
 /// HealthCheckResponse reports runtime readiness for a provider surface.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HealthCheckResponse {
-    #[prost(bool, tag = "1")]
+    #[prost(bool, tag="1")]
     pub ready: bool,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub message: ::prost::alloc::string::String,
 }
 /// StartRuntimeProviderResponse confirms the protocol version the provider is
 /// serving after the optional runtime start phase.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct StartRuntimeProviderResponse {
-    #[prost(int32, tag = "1")]
+    #[prost(int32, tag="1")]
     pub protocol_version: i32,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -2861,80 +2861,80 @@ impl ProviderKind {
 /// S3ObjectRef identifies one object or object version.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct S3ObjectRef {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub bucket: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub key: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub version_id: ::prost::alloc::string::String,
 }
 /// S3ObjectMeta describes one object returned by the provider.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct S3ObjectMeta {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub r#ref: ::core::option::Option<S3ObjectRef>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub etag: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag="3")]
     pub size: i64,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub content_type: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub last_modified: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(btree_map = "string, string", tag = "6")]
+    #[prost(btree_map="string, string", tag="6")]
     pub metadata: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub storage_class: ::prost::alloc::string::String,
 }
 /// ByteRange requests a half-open slice of an object's bytes.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ByteRange {
-    #[prost(int64, optional, tag = "1")]
+    #[prost(int64, optional, tag="1")]
     pub start: ::core::option::Option<i64>,
-    #[prost(int64, optional, tag = "2")]
+    #[prost(int64, optional, tag="2")]
     pub end: ::core::option::Option<i64>,
 }
 /// HeadObjectRequest fetches metadata for one object.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct HeadObjectRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub r#ref: ::core::option::Option<S3ObjectRef>,
 }
 /// HeadObjectResponse returns object metadata.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HeadObjectResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub meta: ::core::option::Option<S3ObjectMeta>,
 }
 /// ReadObjectRequest opens a streaming object read.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ReadObjectRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub r#ref: ::core::option::Option<S3ObjectRef>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub range: ::core::option::Option<ByteRange>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub if_match: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub if_none_match: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub if_modified_since: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub if_unmodified_since: ::core::option::Option<::prost_types::Timestamp>,
 }
 /// ReadObjectChunk is one frame in a streaming object read.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReadObjectChunk {
-    #[prost(oneof = "read_object_chunk::Result", tags = "1, 2")]
+    #[prost(oneof="read_object_chunk::Result", tags="1, 2")]
     pub result: ::core::option::Option<read_object_chunk::Result>,
 }
 /// Nested message and enum types in `ReadObjectChunk`.
 pub mod read_object_chunk {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Result {
-        #[prost(message, tag = "1")]
+        #[prost(message, tag="1")]
         Meta(super::S3ObjectMeta),
-        #[prost(bytes, tag = "2")]
+        #[prost(bytes, tag="2")]
         Data(::prost::alloc::vec::Vec<u8>),
     }
 }
@@ -2942,125 +2942,125 @@ pub mod read_object_chunk {
 /// write-object stream.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WriteObjectOpen {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub r#ref: ::core::option::Option<S3ObjectRef>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub content_type: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub cache_control: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub content_disposition: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub content_encoding: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub content_language: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "7")]
+    #[prost(btree_map="string, string", tag="7")]
     pub metadata: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="8")]
     pub if_match: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
+    #[prost(string, tag="9")]
     pub if_none_match: ::prost::alloc::string::String,
 }
 /// WriteObjectRequest is one frame in a write-object stream.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WriteObjectRequest {
-    #[prost(oneof = "write_object_request::Msg", tags = "1, 2")]
+    #[prost(oneof="write_object_request::Msg", tags="1, 2")]
     pub msg: ::core::option::Option<write_object_request::Msg>,
 }
 /// Nested message and enum types in `WriteObjectRequest`.
 pub mod write_object_request {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Msg {
-        #[prost(message, tag = "1")]
+        #[prost(message, tag="1")]
         Open(super::WriteObjectOpen),
-        #[prost(bytes, tag = "2")]
+        #[prost(bytes, tag="2")]
         Data(::prost::alloc::vec::Vec<u8>),
     }
 }
 /// WriteObjectResponse returns metadata for the committed object.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WriteObjectResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub meta: ::core::option::Option<S3ObjectMeta>,
 }
 /// DeleteObjectRequest removes one object.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DeleteObjectRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub r#ref: ::core::option::Option<S3ObjectRef>,
 }
 /// ListObjectsRequest lists objects in a bucket.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListObjectsRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub bucket: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub prefix: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub delimiter: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub continuation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub start_after: ::prost::alloc::string::String,
-    #[prost(int32, tag = "6")]
+    #[prost(int32, tag="6")]
     pub max_keys: i32,
 }
 /// ListObjectsResponse is one page of list-objects results.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListObjectsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub objects: ::prost::alloc::vec::Vec<S3ObjectMeta>,
-    #[prost(string, repeated, tag = "2")]
+    #[prost(string, repeated, tag="2")]
     pub common_prefixes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub next_continuation_token: ::prost::alloc::string::String,
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag="4")]
     pub has_more: bool,
 }
 /// CopyObjectRequest copies one object to another location.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CopyObjectRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub source: ::core::option::Option<S3ObjectRef>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub destination: ::core::option::Option<S3ObjectRef>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub if_match: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub if_none_match: ::prost::alloc::string::String,
 }
 /// CopyObjectResponse returns metadata for the copied object.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CopyObjectResponse {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub meta: ::core::option::Option<S3ObjectMeta>,
 }
 /// PresignObjectRequest asks the provider to mint a presigned URL.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PresignObjectRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub r#ref: ::core::option::Option<S3ObjectRef>,
-    #[prost(enumeration = "PresignMethod", tag = "2")]
+    #[prost(enumeration="PresignMethod", tag="2")]
     pub method: i32,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag="3")]
     pub expires_seconds: i64,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub content_type: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub content_disposition: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "6")]
+    #[prost(btree_map="string, string", tag="6")]
     pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// PresignObjectResponse returns a presigned URL plus any required headers.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PresignObjectResponse {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub url: ::prost::alloc::string::String,
-    #[prost(enumeration = "PresignMethod", tag = "2")]
+    #[prost(enumeration="PresignMethod", tag="2")]
     pub method: i32,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(btree_map = "string, string", tag = "4")]
+    #[prost(btree_map="string, string", tag="4")]
     pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// CreateObjectAccessURLRequest asks the host to mint an HTTP object-access URL
@@ -3068,30 +3068,30 @@ pub struct PresignObjectResponse {
 /// streams object bytes through the backing S3 provider.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateObjectAccessUrlRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub r#ref: ::core::option::Option<S3ObjectRef>,
-    #[prost(enumeration = "PresignMethod", tag = "2")]
+    #[prost(enumeration="PresignMethod", tag="2")]
     pub method: i32,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag="3")]
     pub expires_seconds: i64,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub content_type: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub content_disposition: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "6")]
+    #[prost(btree_map="string, string", tag="6")]
     pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// CreateObjectAccessURLResponse returns a hosted object-access URL plus any
 /// headers the caller must include when using it.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CreateObjectAccessUrlResponse {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub url: ::prost::alloc::string::String,
-    #[prost(enumeration = "PresignMethod", tag = "2")]
+    #[prost(enumeration="PresignMethod", tag="2")]
     pub method: i32,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(btree_map = "string, string", tag = "4")]
+    #[prost(btree_map="string, string", tag="4")]
     pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// PresignMethod identifies the HTTP verb encoded into a presigned URL.
@@ -3133,206 +3133,206 @@ impl PresignMethod {
 /// GetSecretRequest looks up one named secret.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetSecretRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
 }
 /// GetSecretResponse returns the secret value.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetSecretResponse {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub value: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BoundWorkflowTarget {
-    #[prost(message, repeated, tag = "8")]
+    #[prost(message, repeated, tag="8")]
     pub steps: ::prost::alloc::vec::Vec<WorkflowStep>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowStep {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, message", tag = "2")]
+    #[prost(btree_map="string, message", tag="2")]
     pub inputs: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, WorkflowValue>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub when: ::core::option::Option<WorkflowStepWhen>,
-    #[prost(int32, tag = "4")]
+    #[prost(int32, tag="4")]
     pub timeout_seconds: i32,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub output_delivery: ::core::option::Option<WorkflowStepDelivery>,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(oneof = "workflow_step::Action", tags = "10, 11")]
+    #[prost(oneof="workflow_step::Action", tags="10, 11")]
     pub action: ::core::option::Option<workflow_step::Action>,
 }
 /// Nested message and enum types in `WorkflowStep`.
 pub mod workflow_step {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Action {
-        #[prost(message, tag = "10")]
+        #[prost(message, tag="10")]
         Plugin(super::WorkflowStepPluginCall),
-        #[prost(message, tag = "11")]
+        #[prost(message, tag="11")]
         Agent(super::WorkflowStepAgentTurn),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowStepPluginCall {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub operation: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub input: ::core::option::Option<WorkflowValue>,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub connection: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub instance: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub credential_mode: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowStepDelivery {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub plugin: ::core::option::Option<WorkflowStepPluginCall>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowStepAgentTurn {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub provider: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub model: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub session_key: ::core::option::Option<WorkflowText>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub prompt: ::core::option::Option<WorkflowText>,
-    #[prost(message, repeated, tag = "5")]
+    #[prost(message, repeated, tag="5")]
     pub messages: ::prost::alloc::vec::Vec<WorkflowAgentMessage>,
-    #[prost(message, repeated, tag = "6")]
+    #[prost(message, repeated, tag="6")]
     pub tools: ::prost::alloc::vec::Vec<AgentToolRef>,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub response_schema: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub model_options: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowAgentMessage {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub role: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub text: ::core::option::Option<WorkflowText>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowText {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub template: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowStepWhen {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub value: ::core::option::Option<WorkflowValue>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub equals: ::core::option::Option<::prost_types::Value>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowValue {
-    #[prost(oneof = "workflow_value::Kind", tags = "1, 2, 3, 4, 5, 6, 9")]
+    #[prost(oneof="workflow_value::Kind", tags="1, 2, 3, 4, 5, 6, 9")]
     pub kind: ::core::option::Option<workflow_value::Kind>,
 }
 /// Nested message and enum types in `WorkflowValue`.
 pub mod workflow_value {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
-        #[prost(message, tag = "1")]
+        #[prost(message, tag="1")]
         Literal(::prost_types::Value),
-        #[prost(message, tag = "2")]
+        #[prost(message, tag="2")]
         Object(super::WorkflowObject),
-        #[prost(message, tag = "3")]
+        #[prost(message, tag="3")]
         Array(super::WorkflowArray),
-        #[prost(message, tag = "4")]
+        #[prost(message, tag="4")]
         Template(super::WorkflowText),
-        #[prost(message, tag = "5")]
+        #[prost(message, tag="5")]
         RunInput(super::WorkflowPathSource),
-        #[prost(message, tag = "6")]
+        #[prost(message, tag="6")]
         SignalPayload(super::WorkflowPathSource),
-        #[prost(message, tag = "9")]
+        #[prost(message, tag="9")]
         StepOutput(super::WorkflowStepOutputSource),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowObject {
-    #[prost(btree_map = "string, message", tag = "1")]
+    #[prost(btree_map="string, message", tag="1")]
     pub fields: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, WorkflowValue>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowArray {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub values: ::prost::alloc::vec::Vec<WorkflowValue>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowPathSource {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub path: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowStepOutputSource {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub step_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub path: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowActor {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub subject_kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub auth_source: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowRunAsSubject {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub subject_kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub auth_source: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub credential_subject_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowEvent {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub source: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub spec_version: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub r#type: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub subject: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub time: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub datacontenttype: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub data: ::core::option::Option<::prost_types::Struct>,
-    #[prost(btree_map = "string, message", tag = "9")]
+    #[prost(btree_map="string, message", tag="9")]
     pub extensions: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost_types::Value>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowEventMatch {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub r#type: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub source: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub subject: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3340,312 +3340,264 @@ pub struct WorkflowManualActivation {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowScheduleActivation {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub cron: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub timezone: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowEventActivation {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub r#match: ::core::option::Option<WorkflowEventMatch>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowActivation {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(bool, tag = "2")]
+    #[prost(bool, tag="2")]
     pub paused: bool,
-    #[prost(enumeration = "WorkflowActivationMode", tag = "3")]
+    #[prost(enumeration="WorkflowActivationMode", tag="3")]
     pub mode: i32,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub input: ::core::option::Option<WorkflowValue>,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub run_key: ::core::option::Option<WorkflowValue>,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub idempotency_key: ::core::option::Option<WorkflowValue>,
-    #[prost(oneof = "workflow_activation::Kind", tags = "10, 11, 12")]
+    #[prost(oneof="workflow_activation::Kind", tags="10, 11, 12")]
     pub kind: ::core::option::Option<workflow_activation::Kind>,
 }
 /// Nested message and enum types in `WorkflowActivation`.
 pub mod workflow_activation {
     #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
     pub enum Kind {
-        #[prost(message, tag = "10")]
+        #[prost(message, tag="10")]
         Manual(super::WorkflowManualActivation),
-        #[prost(message, tag = "11")]
+        #[prost(message, tag="11")]
         Schedule(super::WorkflowScheduleActivation),
-        #[prost(message, tag = "12")]
+        #[prost(message, tag="12")]
         Event(super::WorkflowEventActivation),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowAccessPermission {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub plugin: ::prost::alloc::string::String,
-    #[prost(string, repeated, tag = "2")]
+    #[prost(string, repeated, tag="2")]
     pub operations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    #[prost(string, repeated, tag = "3")]
+    #[prost(string, repeated, tag="3")]
     pub actions: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowExecutionReference {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub caller_plugin_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub source_definition_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "10")]
+    #[prost(int64, tag="6")]
+    pub source_definition_generation: i64,
+    #[prost(string, tag="10")]
     pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
+    #[prost(string, tag="11")]
     pub subject_kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "12")]
+    #[prost(string, tag="12")]
     pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "13")]
+    #[prost(string, tag="13")]
     pub auth_source: ::prost::alloc::string::String,
-    #[prost(string, tag = "14")]
+    #[prost(string, tag="14")]
     pub credential_subject_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "15")]
+    #[prost(message, optional, tag="15")]
     pub run_as: ::core::option::Option<WorkflowRunAsSubject>,
-    #[prost(message, repeated, tag = "20")]
+    #[prost(message, repeated, tag="20")]
     pub permissions: ::prost::alloc::vec::Vec<WorkflowAccessPermission>,
-    #[prost(message, optional, tag = "21")]
+    #[prost(message, optional, tag="21")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "22")]
+    #[prost(message, optional, tag="22")]
     pub revoked_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "30")]
+    #[prost(string, tag="30")]
     pub target_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "31")]
-    pub provider_plan_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "32")]
+    #[prost(string, tag="31")]
+    pub action_table_digest: ::prost::alloc::string::String,
+    #[prost(string, tag="32")]
     pub permissions_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "33")]
+    #[prost(string, tag="33")]
     pub semantics_version: ::prost::alloc::string::String,
-    #[prost(int64, tag = "34")]
+    #[prost(int64, tag="34")]
     pub generation: i64,
-    #[prost(string, tag = "35")]
-    pub seal: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PutWorkflowExecutionReferenceRequest {
-    #[prost(message, optional, tag = "1")]
-    pub execution_ref: ::core::option::Option<WorkflowExecutionReference>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowExecutionReferenceRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListWorkflowExecutionReferencesRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub subject_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowExecutionReferencesResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub execution_refs: ::prost::alloc::vec::Vec<WorkflowExecutionReference>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowDeploymentSpec {
-    #[prost(string, tag = "1")]
+pub struct WorkflowDefinitionSpec {
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "2")]
+    #[prost(int64, tag="2")]
     pub generation: i64,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(message, repeated, tag = "4")]
+    #[prost(message, repeated, tag="4")]
     pub activations: ::prost::alloc::vec::Vec<WorkflowActivation>,
-    #[prost(bool, tag = "5")]
+    #[prost(bool, tag="5")]
     pub paused: bool,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub run_as: ::core::option::Option<WorkflowRunAsSubject>,
-    #[prost(message, repeated, tag = "7")]
+    #[prost(message, repeated, tag="7")]
     pub permissions: ::prost::alloc::vec::Vec<WorkflowAccessPermission>,
-    #[prost(btree_map = "string, string", tag = "8")]
+    #[prost(btree_map="string, string", tag="8")]
     pub labels: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
-    #[prost(string, tag = "9")]
+    #[prost(string, tag="9")]
     pub workflow_semantics_version: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowActionDescriptor {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub action_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub step_id: ::prost::alloc::string::String,
-    #[prost(enumeration = "WorkflowActionKind", tag = "3")]
+    #[prost(enumeration="WorkflowActionKind", tag="3")]
     pub kind: i32,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub plugin: ::core::option::Option<WorkflowStepPluginCall>,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub agent: ::core::option::Option<WorkflowStepAgentTurn>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowActionTable {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub actions: ::prost::alloc::vec::Vec<WorkflowActionDescriptor>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub digest: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowUnsupportedFeature {
-    #[prost(string, tag = "1")]
-    pub feature: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub reason: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PlanWorkflowRequest {
-    #[prost(message, optional, tag = "1")]
-    pub spec: ::core::option::Option<WorkflowDeploymentSpec>,
-    #[prost(string, tag = "2")]
-    pub spec_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub target_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub action_table_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub target_canonicalization_version: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub workflow_semantics_version: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PlanWorkflowResponse {
-    #[prost(string, tag = "1")]
-    pub accepted_spec_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub provider_plan_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub provider_plan_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub provider_plan_format_version: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "5")]
-    pub unsupported: ::prost::alloc::vec::Vec<WorkflowUnsupportedFeature>,
-    #[prost(string, repeated, tag = "6")]
-    pub supported_feature_flags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowDeploymentBinding {
-    #[prost(string, tag = "1")]
+pub struct WorkflowDefinitionBinding {
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub execution_ref: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag="3")]
     pub execution_ref_generation: i64,
-    #[prost(string, tag = "4")]
-    pub execution_ref_seal: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "6")]
-    pub deployment_generation: i64,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="4")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int64, tag="5")]
+    pub definition_generation: i64,
+    #[prost(string, tag="6")]
     pub spec_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="7")]
     pub target_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
+    #[prost(string, tag="8")]
     pub action_table_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "10")]
-    pub provider_plan_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
-    pub provider_plan_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "12")]
+    #[prost(string, tag="9")]
+    pub permissions_digest: ::prost::alloc::string::String,
+    #[prost(string, tag="10")]
     pub workflow_semantics_version: ::prost::alloc::string::String,
-    #[prost(string, tag = "13")]
+    #[prost(string, tag="11")]
     pub request_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowDeployment {
-    #[prost(message, optional, tag = "1")]
-    pub spec: ::core::option::Option<WorkflowDeploymentSpec>,
-    #[prost(enumeration = "WorkflowDeploymentStatus", tag = "2")]
+pub struct WorkflowDefinition {
+    #[prost(message, optional, tag="1")]
+    pub spec: ::core::option::Option<WorkflowDefinitionSpec>,
+    #[prost(enumeration="WorkflowDefinitionStatus", tag="2")]
     pub status: i32,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(int64, tag = "5")]
+    #[prost(int64, tag="5")]
     pub applied_generation: i64,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub spec_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub target_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="8")]
     pub action_table_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
+    #[prost(string, tag="9")]
     pub provider_plan_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "10")]
+    #[prost(string, tag="10")]
     pub provider_plan_digest: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "11")]
-    pub binding: ::core::option::Option<WorkflowDeploymentBinding>,
-    #[prost(message, optional, tag = "12")]
+    #[prost(message, optional, tag="11")]
+    pub binding: ::core::option::Option<WorkflowDefinitionBinding>,
+    #[prost(message, optional, tag="12")]
     pub error: ::core::option::Option<WorkflowRunError>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ApplyWorkflowDeploymentRequest {
-    #[prost(message, optional, tag = "1")]
-    pub spec: ::core::option::Option<WorkflowDeploymentSpec>,
-    #[prost(message, optional, tag = "2")]
-    pub plan: ::core::option::Option<PlanWorkflowResponse>,
-    #[prost(message, optional, tag = "3")]
-    pub binding: ::core::option::Option<WorkflowDeploymentBinding>,
-    #[prost(string, tag = "4")]
+pub struct ApplyWorkflowDefinitionRequest {
+    #[prost(message, optional, tag="1")]
+    pub spec: ::core::option::Option<WorkflowDefinitionSpec>,
+    #[prost(message, optional, tag="2")]
+    pub binding: ::core::option::Option<WorkflowDefinitionBinding>,
+    #[prost(message, optional, tag="3")]
+    pub execution_ref: ::core::option::Option<WorkflowExecutionReference>,
+    #[prost(string, tag="4")]
     pub request_id: ::prost::alloc::string::String,
-    #[prost(bool, tag = "5")]
-    pub validate_only: bool,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetWorkflowDeploymentRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
+pub struct GetWorkflowDefinitionRequest {
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListWorkflowDeploymentsRequest {
-    #[prost(int32, tag = "1")]
+pub struct ListWorkflowDefinitionsRequest {
+    #[prost(int32, tag="1")]
     pub page_size: i32,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub page_token: ::prost::alloc::string::String,
-    #[prost(btree_map = "string, string", tag = "3")]
+    #[prost(btree_map="string, string", tag="3")]
     pub labels: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListWorkflowDeploymentsResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub deployments: ::prost::alloc::vec::Vec<WorkflowDeployment>,
-    #[prost(string, tag = "2")]
+pub struct ListWorkflowDefinitionsResponse {
+    #[prost(message, repeated, tag="1")]
+    pub definitions: ::prost::alloc::vec::Vec<WorkflowDefinition>,
+    #[prost(string, tag="2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct DeleteWorkflowDeploymentRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "2")]
+pub struct DeleteWorkflowDefinitionRequest {
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int64, tag="2")]
     pub generation: i64,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub request_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct SetWorkflowDeploymentPausedRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(bool, tag = "2")]
+pub struct SetWorkflowDefinitionPausedRequest {
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(bool, tag="2")]
     pub paused: bool,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub request_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct SetWorkflowActivationPausedRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
     pub activation_id: ::prost::alloc::string::String,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag="3")]
     pub paused: bool,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub request_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
@@ -3653,570 +3605,553 @@ pub struct WorkflowManualTrigger {
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowScheduleTrigger {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub activation_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub scheduled_for: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowEventTrigger {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub activation_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub event: ::core::option::Option<WorkflowEvent>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowRunTrigger {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "2")]
-    pub deployment_generation: i64,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int64, tag="2")]
+    pub definition_generation: i64,
+    #[prost(string, tag="3")]
     pub activation_id: ::prost::alloc::string::String,
-    #[prost(oneof = "workflow_run_trigger::Kind", tags = "10, 11, 12")]
+    #[prost(oneof="workflow_run_trigger::Kind", tags="10, 11, 12")]
     pub kind: ::core::option::Option<workflow_run_trigger::Kind>,
 }
 /// Nested message and enum types in `WorkflowRunTrigger`.
 pub mod workflow_run_trigger {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Kind {
-        #[prost(message, tag = "10")]
+        #[prost(message, tag="10")]
         Manual(super::WorkflowManualTrigger),
-        #[prost(message, tag = "11")]
+        #[prost(message, tag="11")]
         Schedule(super::WorkflowScheduleTrigger),
-        #[prost(message, tag = "12")]
+        #[prost(message, tag="12")]
         Event(super::WorkflowEventTrigger),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowSignal {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub payload: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub created_by: ::core::option::Option<WorkflowActor>,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(int64, tag = "8")]
+    #[prost(int64, tag="8")]
     pub sequence: i64,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowOutputSummary {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub envelope_version: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub kind: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag="3")]
     pub size_bytes: i64,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub sha256: ::prost::alloc::string::String,
-    #[prost(bool, tag = "5")]
+    #[prost(bool, tag="5")]
     pub truncated: bool,
-    #[prost(bool, tag = "6")]
+    #[prost(bool, tag="6")]
     pub redacted: bool,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub media_type: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowRunError {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub code: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub message: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub step_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub action_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowStepState {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub step_id: ::prost::alloc::string::String,
-    #[prost(int32, tag = "2")]
+    #[prost(int32, tag="2")]
     pub step_index: i32,
-    #[prost(enumeration = "WorkflowStepStatus", tag = "3")]
+    #[prost(enumeration="WorkflowStepStatus", tag="3")]
     pub status: i32,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub skipped_reason: ::prost::alloc::string::String,
-    #[prost(int32, tag = "5")]
+    #[prost(int32, tag="5")]
     pub attempt_number: i32,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub output_summary: ::core::option::Option<WorkflowOutputSummary>,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub output_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub error: ::core::option::Option<WorkflowRunError>,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowRun {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
-    pub deployment_generation: i64,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="2")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int64, tag="3")]
+    pub definition_generation: i64,
+    #[prost(string, tag="4")]
     pub workflow_key: ::prost::alloc::string::String,
-    #[prost(enumeration = "WorkflowRunStatus", tag = "5")]
+    #[prost(enumeration="WorkflowRunStatus", tag="5")]
     pub status: i32,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub trigger: ::core::option::Option<WorkflowRunTrigger>,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub input: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub created_by: ::core::option::Option<WorkflowActor>,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "10")]
+    #[prost(message, optional, tag="10")]
     pub started_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "11")]
+    #[prost(message, optional, tag="11")]
     pub completed_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "12")]
+    #[prost(string, tag="12")]
     pub status_message: ::prost::alloc::string::String,
-    #[prost(string, tag = "13")]
+    #[prost(string, tag="13")]
     pub execution_ref: ::prost::alloc::string::String,
-    #[prost(int64, tag = "14")]
+    #[prost(int64, tag="14")]
     pub execution_ref_generation: i64,
-    #[prost(string, tag = "15")]
+    #[prost(string, tag="15")]
     pub target_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "16")]
+    #[prost(string, tag="16")]
     pub spec_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "17")]
+    #[prost(string, tag="17")]
     pub action_table_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "18")]
-    pub provider_plan_digest: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "19")]
+    #[prost(message, repeated, tag="19")]
     pub steps: ::prost::alloc::vec::Vec<WorkflowStepState>,
-    #[prost(message, optional, tag = "20")]
+    #[prost(message, optional, tag="20")]
     pub error: ::core::option::Option<WorkflowRunError>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StartWorkflowRunRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "2")]
-    pub deployment_generation: i64,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int64, tag="2")]
+    pub definition_generation: i64,
+    #[prost(string, tag="3")]
     pub activation_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub workflow_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub input: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub created_by: ::core::option::Option<WorkflowActor>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignalWorkflowRunRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub signal: ::core::option::Option<WorkflowSignal>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignalOrStartWorkflowRunRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "2")]
-    pub deployment_generation: i64,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int64, tag="2")]
+    pub definition_generation: i64,
+    #[prost(string, tag="3")]
     pub activation_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub workflow_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag="5")]
     pub input: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "7")]
+    #[prost(message, optional, tag="7")]
     pub signal: ::core::option::Option<WorkflowSignal>,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub created_by: ::core::option::Option<WorkflowActor>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct CancelWorkflowRunRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub reason: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowRunRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub run_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ListWorkflowRunsRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(int32, tag = "2")]
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int32, tag="2")]
     pub page_size: i32,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub page_token: ::prost::alloc::string::String,
-    #[prost(enumeration = "WorkflowRunStatus", tag = "4")]
+    #[prost(enumeration="WorkflowRunStatus", tag="4")]
     pub status: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowRunsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub runs: ::prost::alloc::vec::Vec<WorkflowRun>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowRunSignal {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub run: ::core::option::Option<WorkflowRun>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub signal: ::core::option::Option<WorkflowSignal>,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag="3")]
     pub started_run: bool,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub workflow_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeliverWorkflowEventRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub delivery_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub event: ::core::option::Option<WorkflowEvent>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub published_by: ::core::option::Option<WorkflowActor>,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub idempotency_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowEventDeliveryResult {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
     pub activation_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub run: ::core::option::Option<WorkflowRun>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub signal: ::core::option::Option<WorkflowSignal>,
-    #[prost(bool, tag = "5")]
+    #[prost(bool, tag="5")]
     pub started_run: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DeliverWorkflowEventResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub results: ::prost::alloc::vec::Vec<WorkflowEventDeliveryResult>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowRunEvent {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
+    #[prost(int64, tag="3")]
     pub sequence: i64,
-    #[prost(enumeration = "WorkflowRunEventType", tag = "4")]
+    #[prost(enumeration="WorkflowRunEventType", tag="4")]
     pub r#type: i32,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub step_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
+    #[prost(string, tag="6")]
     pub action_id: ::prost::alloc::string::String,
-    #[prost(int32, tag = "7")]
+    #[prost(int32, tag="7")]
     pub attempt_number: i32,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="8")]
     pub message: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "9")]
+    #[prost(message, optional, tag="9")]
     pub output_summary: ::core::option::Option<WorkflowOutputSummary>,
-    #[prost(string, tag = "10")]
+    #[prost(string, tag="10")]
     pub output_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "11")]
+    #[prost(message, optional, tag="11")]
     pub error: ::core::option::Option<WorkflowRunError>,
-    #[prost(message, optional, tag = "12")]
+    #[prost(message, optional, tag="12")]
     pub observed_at: ::core::option::Option<::prost_types::Timestamp>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowRunEventsRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(int32, tag = "2")]
+    #[prost(int32, tag="2")]
     pub page_size: i32,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListWorkflowRunEventsResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub events: ::prost::alloc::vec::Vec<WorkflowRunEvent>,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct GetWorkflowRunOutputRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub output_ref: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub step_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowRunOutput {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub output_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub summary: ::core::option::Option<WorkflowOutputSummary>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub body: ::core::option::Option<::prost_types::Value>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowHostActionSelector {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub execution_ref: ::prost::alloc::string::String,
-    #[prost(int64, tag = "2")]
+    #[prost(int64, tag="2")]
     pub execution_ref_generation: i64,
-    #[prost(string, tag = "3")]
-    pub execution_ref_seal: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="3")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="4")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int64, tag="5")]
+    pub definition_generation: i64,
+    #[prost(string, tag="6")]
     pub step_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="7")]
     pub action_id: ::prost::alloc::string::String,
-    #[prost(int32, tag = "9")]
+    #[prost(int32, tag="8")]
     pub attempt_number: i32,
-    #[prost(string, tag = "10")]
+    #[prost(string, tag="9")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
-    pub target_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "12")]
-    pub action_table_digest: ::prost::alloc::string::String,
-    #[prost(string, tag = "13")]
-    pub provider_plan_digest: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowPluginActionPayload {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub input: ::core::option::Option<::prost_types::Struct>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowAgentTurnPayload {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub prompt: ::core::option::Option<WorkflowText>,
-    #[prost(message, repeated, tag = "2")]
+    #[prost(message, repeated, tag="2")]
     pub messages: ::prost::alloc::vec::Vec<WorkflowAgentMessage>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InvokeWorkflowActionRequest {
-    #[prost(message, optional, tag = "1")]
+    #[prost(message, optional, tag="1")]
     pub selector: ::core::option::Option<WorkflowHostActionSelector>,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub trigger: ::core::option::Option<WorkflowRunTrigger>,
-    #[prost(message, repeated, tag = "4")]
+    #[prost(message, repeated, tag="4")]
     pub signals: ::prost::alloc::vec::Vec<WorkflowSignal>,
-    #[prost(oneof = "invoke_workflow_action_request::Action", tags = "10, 11")]
+    #[prost(oneof="invoke_workflow_action_request::Action", tags="10, 11")]
     pub action: ::core::option::Option<invoke_workflow_action_request::Action>,
 }
 /// Nested message and enum types in `InvokeWorkflowActionRequest`.
 pub mod invoke_workflow_action_request {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Action {
-        #[prost(message, tag = "10")]
+        #[prost(message, tag="10")]
         Plugin(super::WorkflowPluginActionPayload),
-        #[prost(message, tag = "11")]
+        #[prost(message, tag="11")]
         AgentTurn(super::WorkflowAgentTurnPayload),
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowActionResult {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub action_event_id: ::prost::alloc::string::String,
-    #[prost(int32, tag = "2")]
+    #[prost(int32, tag="2")]
     pub status: i32,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub body: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag="4")]
     pub output_summary: ::core::option::Option<WorkflowOutputSummary>,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub output_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub error: ::core::option::Option<WorkflowRunError>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ManagedWorkflowDeployment {
-    #[prost(string, tag = "1")]
+pub struct ManagedWorkflowDefinition {
+    #[prost(string, tag="1")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub deployment: ::core::option::Option<WorkflowDeployment>,
+    #[prost(message, optional, tag="2")]
+    pub definition: ::core::option::Option<WorkflowDefinition>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ManagedWorkflowRun {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub run: ::core::option::Option<WorkflowRun>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ManagedWorkflowRunSignal {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub run: ::core::option::Option<WorkflowRun>,
-    #[prost(message, optional, tag = "3")]
+    #[prost(message, optional, tag="3")]
     pub signal: ::core::option::Option<WorkflowSignal>,
-    #[prost(bool, tag = "4")]
+    #[prost(bool, tag="4")]
     pub started_run: bool,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub workflow_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerPlanDeploymentRequest {
-    #[prost(string, tag = "1")]
+pub struct WorkflowManagerApplyDefinitionRequest {
+    #[prost(string, tag="1")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub spec: ::core::option::Option<WorkflowDeploymentSpec>,
-    #[prost(string, tag = "3")]
+    #[prost(message, optional, tag="2")]
+    pub spec: ::core::option::Option<WorkflowDefinitionSpec>,
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub idempotency_key: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerApplyDeploymentRequest {
-    #[prost(string, tag = "1")]
-    pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub spec: ::core::option::Option<WorkflowDeploymentSpec>,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub idempotency_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerGetDeploymentRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+pub struct WorkflowManagerGetDefinitionRequest {
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerListDeploymentsRequest {
-    #[prost(string, tag = "1")]
+pub struct WorkflowManagerListDefinitionsRequest {
+    #[prost(string, tag="1")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerListDeploymentsResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub deployments: ::prost::alloc::vec::Vec<ManagedWorkflowDeployment>,
+pub struct WorkflowManagerListDefinitionsResponse {
+    #[prost(message, repeated, tag="1")]
+    pub definitions: ::prost::alloc::vec::Vec<ManagedWorkflowDefinition>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerDeleteDeploymentRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "2")]
+pub struct WorkflowManagerDeleteDefinitionRequest {
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int64, tag="2")]
     pub generation: i64,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerSetDeploymentPausedRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(bool, tag = "2")]
+pub struct WorkflowManagerSetDefinitionPausedRequest {
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(bool, tag="2")]
     pub paused: bool,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerSetActivationPausedRequest {
-    #[prost(string, tag = "1")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="1")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(string, tag="2")]
     pub activation_id: ::prost::alloc::string::String,
-    #[prost(bool, tag = "3")]
+    #[prost(bool, tag="3")]
     pub paused: bool,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowManagerStartRunRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
-    pub deployment_generation: i64,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="2")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int64, tag="3")]
+    pub definition_generation: i64,
+    #[prost(string, tag="4")]
     pub activation_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub workflow_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub input: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag="8")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowManagerSignalRunRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub signal: ::core::option::Option<WorkflowSignal>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowManagerSignalOrStartRunRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub deployment_id: ::prost::alloc::string::String,
-    #[prost(int64, tag = "3")]
-    pub deployment_generation: i64,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="2")]
+    pub definition_id: ::prost::alloc::string::String,
+    #[prost(int64, tag="3")]
+    pub definition_generation: i64,
+    #[prost(string, tag="4")]
     pub activation_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
+    #[prost(string, tag="5")]
     pub workflow_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag="6")]
     pub input: ::core::option::Option<::prost_types::Struct>,
-    #[prost(string, tag = "7")]
+    #[prost(string, tag="7")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "8")]
+    #[prost(message, optional, tag="8")]
     pub signal: ::core::option::Option<WorkflowSignal>,
-    #[prost(string, tag = "9")]
+    #[prost(string, tag="9")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowManagerCancelRunRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag="2")]
     pub reason: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowManagerDeliverEventRequest {
-    #[prost(string, tag = "1")]
+    #[prost(string, tag="1")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+    #[prost(message, optional, tag="2")]
     pub event: ::core::option::Option<WorkflowEvent>,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag="3")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
+    #[prost(string, tag="4")]
     pub idempotency_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowManagerDeliverEventResponse {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, repeated, tag="1")]
     pub results: ::prost::alloc::vec::Vec<WorkflowEventDeliveryResult>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -4285,7 +4220,7 @@ impl WorkflowActionKind {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
-pub enum WorkflowDeploymentStatus {
+pub enum WorkflowDefinitionStatus {
     Unspecified = 0,
     Pending = 1,
     Active = 2,
@@ -4293,30 +4228,30 @@ pub enum WorkflowDeploymentStatus {
     Deleted = 4,
     Failed = 5,
 }
-impl WorkflowDeploymentStatus {
+impl WorkflowDefinitionStatus {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED",
-            Self::Pending => "WORKFLOW_DEPLOYMENT_STATUS_PENDING",
-            Self::Active => "WORKFLOW_DEPLOYMENT_STATUS_ACTIVE",
-            Self::Paused => "WORKFLOW_DEPLOYMENT_STATUS_PAUSED",
-            Self::Deleted => "WORKFLOW_DEPLOYMENT_STATUS_DELETED",
-            Self::Failed => "WORKFLOW_DEPLOYMENT_STATUS_FAILED",
+            Self::Unspecified => "WORKFLOW_DEFINITION_STATUS_UNSPECIFIED",
+            Self::Pending => "WORKFLOW_DEFINITION_STATUS_PENDING",
+            Self::Active => "WORKFLOW_DEFINITION_STATUS_ACTIVE",
+            Self::Paused => "WORKFLOW_DEFINITION_STATUS_PAUSED",
+            Self::Deleted => "WORKFLOW_DEFINITION_STATUS_DELETED",
+            Self::Failed => "WORKFLOW_DEFINITION_STATUS_FAILED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
-            "WORKFLOW_DEPLOYMENT_STATUS_PENDING" => Some(Self::Pending),
-            "WORKFLOW_DEPLOYMENT_STATUS_ACTIVE" => Some(Self::Active),
-            "WORKFLOW_DEPLOYMENT_STATUS_PAUSED" => Some(Self::Paused),
-            "WORKFLOW_DEPLOYMENT_STATUS_DELETED" => Some(Self::Deleted),
-            "WORKFLOW_DEPLOYMENT_STATUS_FAILED" => Some(Self::Failed),
+            "WORKFLOW_DEFINITION_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "WORKFLOW_DEFINITION_STATUS_PENDING" => Some(Self::Pending),
+            "WORKFLOW_DEFINITION_STATUS_ACTIVE" => Some(Self::Active),
+            "WORKFLOW_DEFINITION_STATUS_PAUSED" => Some(Self::Paused),
+            "WORKFLOW_DEFINITION_STATUS_DELETED" => Some(Self::Deleted),
+            "WORKFLOW_DEFINITION_STATUS_FAILED" => Some(Self::Failed),
             _ => None,
         }
     }

@@ -300,10 +300,21 @@ type workflowProviderWithRuntimeWorkersAndExecutionReferences struct {
 	coreworkflow.ExecutionReferenceStore
 }
 
+type workflowProviderWithRuntimeWorkersAndMutableExecutionReferences struct {
+	*workflowProviderWithRuntimeWorkers
+	coreworkflow.ExecutionReferenceMutableStore
+}
+
 func wrapWorkflowProviderWithRuntimeWorkers(provider coreworkflow.Provider, workers *hostedWorkflowWorkerPool) coreworkflow.Provider {
 	wrapped := &workflowProviderWithRuntimeWorkers{
 		Provider: provider,
 		workers:  workers,
+	}
+	if executionRefs, ok := provider.(coreworkflow.ExecutionReferenceMutableStore); ok {
+		return &workflowProviderWithRuntimeWorkersAndMutableExecutionReferences{
+			workflowProviderWithRuntimeWorkers: wrapped,
+			ExecutionReferenceMutableStore:     executionRefs,
+		}
 	}
 	if executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore); ok {
 		return &workflowProviderWithRuntimeWorkersAndExecutionReferences{

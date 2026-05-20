@@ -35,14 +35,13 @@ type desiredWorkflowConfigSchedule struct {
 type workflowConfigProviderFilter func(providerName string) bool
 
 const (
-	workflowConfigDeploymentLabelKind        = "gestalt.config.kind"
-	workflowConfigDeploymentLabelScheduleKey = "gestalt.config.schedule_key"
-	workflowConfigDeploymentLabelTriggerKey  = "gestalt.config.trigger_key"
-	workflowConfigDeploymentLabelPlugin      = "gestalt.config.plugin"
-	workflowConfigDeploymentKindSchedule     = "schedule"
-	workflowConfigDeploymentKindEventTrigger = "event_trigger"
+	workflowConfigDefinitionLabelKind        = "gestalt.config.kind"
+	workflowConfigDefinitionLabelScheduleKey = "gestalt.config.schedule_key"
+	workflowConfigDefinitionLabelTriggerKey  = "gestalt.config.trigger_key"
+	workflowConfigDefinitionLabelPlugin      = "gestalt.config.plugin"
+	workflowConfigDefinitionKindSchedule     = "schedule"
+	workflowConfigDefinitionKindEventTrigger = "event_trigger"
 	workflowConfigSemanticsVersionSteps      = "workflow_steps_v1"
-	workflowConfigTargetCanonicalizationV1   = "target_fingerprint_v1"
 )
 
 func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
@@ -66,25 +65,25 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
-		deploymentProvider, ok := provider.(coreworkflow.DeploymentProvider)
+		deploymentProvider, ok := provider.(coreworkflow.DefinitionProvider)
 		if !ok {
-			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: workflow provider %q does not support deployments", desiredEntry.ScheduleKey, pluginName, providerName)
+			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: workflow provider %q does not support definitions", desiredEntry.ScheduleKey, pluginName, providerName)
 		}
-		spec := workflowConfigScheduleDeploymentSpec(desiredEntry, target, schedule)
+		spec := workflowConfigScheduleDefinitionSpec(desiredEntry, target, schedule)
 		existingExecutionRef := ""
 		providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
-		existing, err := deploymentProvider.GetWorkflowDeployment(providerCtx, coreworkflow.GetDeploymentRequest{
-			DeploymentID: desiredEntry.ScheduleID,
+		existing, err := deploymentProvider.GetWorkflowDefinition(providerCtx, coreworkflow.GetDefinitionRequest{
+			DefinitionID: desiredEntry.ScheduleID,
 		})
 		switch {
 		case err == nil:
-			if !isWorkflowConfigOwnedDeployment(existing, pluginName, desiredEntry) {
+			if !isWorkflowConfigOwnedDefinition(existing, pluginName, desiredEntry) {
 				return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q conflicts with existing unmanaged schedule id %q", desiredEntry.ScheduleKey, pluginName, desiredEntry.ScheduleID)
 			}
 		case isWorkflowObjectNotFound(err):
 			existing = nil
 		default:
-			return fmt.Errorf("bootstrap: get workflow deployment %q for plugin %q: %w", desiredEntry.ScheduleID, pluginName, err)
+			return fmt.Errorf("bootstrap: get workflow definition %q for plugin %q: %w", desiredEntry.ScheduleID, pluginName, err)
 		}
 		if existing != nil && existing.Binding != nil {
 			existingExecutionRef = strings.TrimSpace(existing.Binding.ExecutionRef)
@@ -103,6 +102,8 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
+		desiredExecutionRef.SourceDefinitionID = desiredEntry.ScheduleID
+		desiredExecutionRef.SourceDefinitionGeneration = spec.Generation
 		targetDigest, err := coreworkflow.TargetFingerprint(target)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q target digest: %w", desiredEntry.ScheduleKey, pluginName, err)
@@ -111,26 +112,12 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q action table digest: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
-		specDigest, err := coreworkflow.DeploymentSpecDigest(spec)
+		specDigest, err := coreworkflow.DefinitionSpecDigest(spec)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q spec digest: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
-		plan, err := deploymentProvider.PlanWorkflow(providerCtx, coreworkflow.PlanWorkflowRequest{
-			Spec:                          spec,
-			SpecDigest:                    specDigest,
-			TargetDigest:                  targetDigest,
-			ActionTableDigest:             actionTableDigest,
-			TargetCanonicalizationVersion: workflowConfigTargetCanonicalizationV1,
-			WorkflowSemanticsVersion:      workflowConfigSemanticsVersionSteps,
-		})
-		if err != nil {
-			return fmt.Errorf("bootstrap: plan workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
-		}
-		if plan == nil || strings.TrimSpace(plan.ProviderPlanDigest) == "" {
-			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q provider returned empty plan digest", desiredEntry.ScheduleKey, pluginName)
-		}
 		desiredExecutionRef.TargetDigest = targetDigest
-		desiredExecutionRef.ProviderPlanDigest = strings.TrimSpace(plan.ProviderPlanDigest)
+		desiredExecutionRef.ActionTableDigest = actionTableDigest
 		desiredExecutionRef.SemanticsVersion = workflowConfigSemanticsVersionSteps
 		executionRefs, err := workflowExecutionReferenceStore(providerName, provider)
 		if err != nil {
@@ -146,31 +133,28 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: store workflow execution ref for schedule %q on plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
-		binding := &coreworkflow.DeploymentBinding{
-			ID:                     workflowConfigSHA256(strings.Join([]string{"config-binding", providerName, desiredEntry.ScheduleID, executionRefID, strings.TrimSpace(plan.ProviderPlanDigest)}, "\x00")),
-			ExecutionRef:           executionRefID,
-			ExecutionRefGeneration: desiredExecutionRef.Generation,
-			ExecutionRefSeal:       strings.TrimSpace(desiredExecutionRef.Seal),
-			DeploymentID:           desiredEntry.ScheduleID,
-			DeploymentGeneration:   spec.Generation,
-			SpecDigest:             specDigest,
-			TargetDigest:           targetDigest,
-			ActionTableDigest:      actionTableDigest,
-			ProviderPlanID:         strings.TrimSpace(plan.ProviderPlanID),
-			ProviderPlanDigest:     strings.TrimSpace(plan.ProviderPlanDigest),
-			SemanticsVersion:       workflowConfigSemanticsVersionSteps,
-			IdempotencyKey:         desiredEntry.ScheduleID,
+		binding := &coreworkflow.DefinitionBinding{
+			ID:                       workflowConfigSHA256(strings.Join([]string{"config-binding", providerName, desiredEntry.ScheduleID, executionRefID, targetDigest, actionTableDigest}, "\x00")),
+			ExecutionRef:             executionRefID,
+			ExecutionRefGeneration:   desiredExecutionRef.Generation,
+			DefinitionID:             desiredEntry.ScheduleID,
+			DefinitionGeneration:     spec.Generation,
+			SpecDigest:               specDigest,
+			TargetDigest:             targetDigest,
+			ActionTableDigest:        actionTableDigest,
+			PermissionsDigest:        desiredExecutionRef.PermissionsDigest,
+			WorkflowSemanticsVersion: workflowConfigSemanticsVersionSteps,
+			RequestID:                desiredEntry.ScheduleID,
 		}
-		if _, err := deploymentProvider.ApplyWorkflowDeployment(providerCtx, coreworkflow.ApplyDeploymentRequest{
+		if _, err := deploymentProvider.ApplyWorkflowDefinition(providerCtx, coreworkflow.ApplyDefinitionRequest{
 			Spec:      spec,
-			Plan:      plan,
 			Binding:   binding,
 			RequestID: desiredEntry.ScheduleID,
 		}); err != nil {
 			if createdExecutionRef {
 				_ = workflowRevokeExecutionRefByID(ctx, executionRefs, executionRefID)
 			}
-			return fmt.Errorf("bootstrap: workflow deployment %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+			return fmt.Errorf("bootstrap: workflow definition %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		if replacedUnreadableExecutionRef != "" {
 			workflowLogReplacedUnreadableExecutionRef(ctx, "schedule", desiredEntry.ScheduleKey, desiredEntry.ScheduleID, providerName, pluginName, replacedUnreadableExecutionRef, executionRefID, replacedUnreadableExecutionRefErr)
@@ -195,18 +179,18 @@ func workflowConfigProviderIncluded(includeProvider workflowConfigProviderFilter
 	return includeProvider(strings.TrimSpace(providerName))
 }
 
-func workflowConfigScheduleDeploymentSpec(entry desiredWorkflowConfigSchedule, target coreworkflow.Target, schedule config.WorkflowScheduleConfig) coreworkflow.DeploymentSpec {
+func workflowConfigScheduleDefinitionSpec(entry desiredWorkflowConfigSchedule, target coreworkflow.Target, schedule config.WorkflowScheduleConfig) coreworkflow.DefinitionSpec {
 	pluginName := workflowConfigTargetLabel(target)
-	return coreworkflow.DeploymentSpec{
+	return coreworkflow.DefinitionSpec{
 		ID:                       entry.ScheduleID,
 		Generation:               1,
 		Target:                   target,
 		Paused:                   schedule.Paused,
 		WorkflowSemanticsVersion: workflowConfigSemanticsVersionSteps,
 		Labels: map[string]string{
-			workflowConfigDeploymentLabelKind:        workflowConfigDeploymentKindSchedule,
-			workflowConfigDeploymentLabelScheduleKey: strings.TrimSpace(entry.ScheduleKey),
-			workflowConfigDeploymentLabelPlugin:      pluginName,
+			workflowConfigDefinitionLabelKind:        workflowConfigDefinitionKindSchedule,
+			workflowConfigDefinitionLabelScheduleKey: strings.TrimSpace(entry.ScheduleKey),
+			workflowConfigDefinitionLabelPlugin:      pluginName,
 		},
 		Activations: []coreworkflow.Activation{{
 			ID:     "schedule",
@@ -263,21 +247,21 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow schedules requires provider %q: %w", providerName, err)
 		}
-		deploymentProvider, ok := provider.(coreworkflow.DeploymentProvider)
+		deploymentProvider, ok := provider.(coreworkflow.DefinitionProvider)
 		if !ok {
-			workflowLogSkippedConfigWorkflowCleanup(ctx, "deployments", providerName, fmt.Errorf("workflow provider does not support deployments"))
+			workflowLogSkippedConfigWorkflowCleanup(ctx, "definitions", providerName, fmt.Errorf("workflow provider does not support definitions"))
 			continue
 		}
-		deployments, err := deploymentProvider.ListWorkflowDeployments(ctx, coreworkflow.ListDeploymentsRequest{
-			Labels: map[string]string{workflowConfigDeploymentLabelKind: workflowConfigDeploymentKindSchedule},
+		definitions, err := deploymentProvider.ListWorkflowDefinitions(ctx, coreworkflow.ListDefinitionsRequest{
+			Labels: map[string]string{workflowConfigDefinitionLabelKind: workflowConfigDefinitionKindSchedule},
 		})
 		if err != nil {
-			workflowLogSkippedConfigWorkflowCleanup(ctx, "deployments", providerName, err)
+			workflowLogSkippedConfigWorkflowCleanup(ctx, "definitions", providerName, err)
 			continue
 		}
-		var executionRefs coreworkflow.ExecutionReferenceStore
-		for _, deployment := range deployments.Deployments {
-			if deployment == nil || !isWorkflowConfigOwnedDeployment(deployment, workflowConfigTargetLabel(deployment.Spec.Target), desiredWorkflowConfigSchedule{ScheduleKey: deployment.Spec.Labels[workflowConfigDeploymentLabelScheduleKey], ScheduleID: deployment.Spec.ID}) {
+		var executionRefs coreworkflow.ExecutionReferenceMutableStore
+		for _, deployment := range definitions.Definitions {
+			if deployment == nil || !isWorkflowConfigOwnedDefinition(deployment, workflowConfigTargetLabel(deployment.Spec.Target), desiredWorkflowConfigSchedule{ScheduleKey: deployment.Spec.Labels[workflowConfigDefinitionLabelScheduleKey], ScheduleID: deployment.Spec.ID}) {
 				continue
 			}
 			if _, ok := desiredByProviderSchedule[workflowConfigProviderObjectKey(providerName, deployment.Spec.ID)]; ok {
@@ -285,18 +269,18 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 			}
 			pluginName := workflowConfigTargetLabel(deployment.Spec.Target)
 			providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
-			if err := deploymentProvider.DeleteWorkflowDeployment(providerCtx, coreworkflow.DeleteDeploymentRequest{DeploymentID: deployment.Spec.ID, Generation: deployment.Spec.Generation}); err != nil && !isWorkflowObjectNotFound(err) {
-				return fmt.Errorf("bootstrap: delete workflow deployment %q for plugin %q: %w", deployment.Spec.ID, pluginName, err)
+			if err := deploymentProvider.DeleteWorkflowDefinition(providerCtx, coreworkflow.DeleteDefinitionRequest{DefinitionID: deployment.Spec.ID, Generation: deployment.Spec.Generation}); err != nil && !isWorkflowObjectNotFound(err) {
+				return fmt.Errorf("bootstrap: delete workflow definition %q for plugin %q: %w", deployment.Spec.ID, pluginName, err)
+			}
+			executionRefID := ""
+			if deployment.Binding != nil {
+				executionRefID = strings.TrimSpace(deployment.Binding.ExecutionRef)
 			}
 			if executionRefs == nil {
 				executionRefs, err = workflowExecutionReferenceStore(providerName, provider)
 				if err != nil {
 					return fmt.Errorf("bootstrap: cleanup workflow schedules for provider %q: %w", providerName, err)
 				}
-			}
-			executionRefID := ""
-			if deployment.Binding != nil {
-				executionRefID = strings.TrimSpace(deployment.Binding.ExecutionRef)
 			}
 			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, executionRefID); err != nil {
 				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for deployment %q on plugin %q: %w", executionRefID, deployment.Spec.ID, pluginName, err)
@@ -318,17 +302,17 @@ func workflowLogSkippedConfigWorkflowCleanup(ctx context.Context, objectType, pr
 	)
 }
 
-func isWorkflowConfigOwnedDeployment(existing *coreworkflow.Deployment, pluginName string, desired desiredWorkflowConfigSchedule) bool {
+func isWorkflowConfigOwnedDefinition(existing *coreworkflow.Definition, pluginName string, desired desiredWorkflowConfigSchedule) bool {
 	if existing == nil {
 		return false
 	}
 	labels := existing.Spec.Labels
 	if strings.TrimSpace(existing.Spec.ID) != strings.TrimSpace(desired.ScheduleID) ||
-		strings.TrimSpace(labels[workflowConfigDeploymentLabelKind]) != workflowConfigDeploymentKindSchedule ||
-		strings.TrimSpace(labels[workflowConfigDeploymentLabelPlugin]) != strings.TrimSpace(pluginName) {
+		strings.TrimSpace(labels[workflowConfigDefinitionLabelKind]) != workflowConfigDefinitionKindSchedule ||
+		strings.TrimSpace(labels[workflowConfigDefinitionLabelPlugin]) != strings.TrimSpace(pluginName) {
 		return false
 	}
-	if scheduleKey := strings.TrimSpace(labels[workflowConfigDeploymentLabelScheduleKey]); scheduleKey != "" && scheduleKey != strings.TrimSpace(desired.ScheduleKey) {
+	if scheduleKey := strings.TrimSpace(labels[workflowConfigDefinitionLabelScheduleKey]); scheduleKey != "" && scheduleKey != strings.TrimSpace(desired.ScheduleKey) {
 		return false
 	}
 	return true
@@ -338,19 +322,6 @@ func workflowConfigTargetLabel(target coreworkflow.Target) string {
 	for i := range target.Steps {
 		step := target.Steps[i]
 		if step.Plugin != nil {
-			return strings.TrimSpace(step.Plugin.Name)
-		}
-		if step.Agent != nil {
-			providerName := strings.TrimSpace(step.Agent.ProviderName)
-			if providerName == "" {
-				providerName = "default"
-			}
-			return "agent:" + providerName
-		}
-	}
-	for i := range target.Steps {
-		step := target.Steps[i]
-		if step.Plugin != nil && strings.TrimSpace(step.Plugin.Name) != "" {
 			return strings.TrimSpace(step.Plugin.Name)
 		}
 		if step.Agent != nil {
@@ -588,7 +559,7 @@ func workflowConfigScheduleExecutionRefID(scheduleID string) string {
 
 func workflowEnsureConfigExecutionRef(
 	ctx context.Context,
-	store coreworkflow.ExecutionReferenceStore,
+	store coreworkflow.ExecutionReferenceMutableStore,
 	desired *coreworkflow.ExecutionReference,
 	refID string,
 	candidateIDs ...string,
@@ -658,20 +629,17 @@ func workflowConfigFinalizeExecutionRef(ref *coreworkflow.ExecutionReference) er
 		}
 		ref.TargetDigest = digest
 	}
-	if strings.TrimSpace(ref.ProviderPlanDigest) == "" {
-		ref.ProviderPlanDigest = workflowConfigSHA256(strings.Join([]string{
-			"config-managed",
-			strings.TrimSpace(ref.ProviderName),
-			strings.TrimSpace(ref.TargetDigest),
-		}, "\x00"))
+	if strings.TrimSpace(ref.ActionTableDigest) == "" {
+		digest, err := coreworkflow.TargetActionTableDigest(ref.Target)
+		if err != nil {
+			return err
+		}
+		ref.ActionTableDigest = digest
 	}
 	if ref.Generation == 0 {
 		ref.Generation = 1
 	}
 	ref.PermissionsDigest = workflowConfigPermissionsDigest(ref.Permissions)
-	if strings.TrimSpace(ref.Seal) == "" {
-		ref.Seal = workflowConfigExecutionRefSeal(ref)
-	}
 	return nil
 }
 
@@ -681,24 +649,6 @@ func workflowConfigPermissionsDigest(permissions []core.AccessPermission) string
 		return ""
 	}
 	return workflowConfigSHA256(string(data))
-}
-
-func workflowConfigExecutionRefSeal(ref *coreworkflow.ExecutionReference) string {
-	if ref == nil {
-		return ""
-	}
-	return workflowConfigSHA256(strings.Join([]string{
-		strings.TrimSpace(ref.ID),
-		strings.TrimSpace(ref.ProviderName),
-		strings.TrimSpace(ref.SubjectID),
-		strings.TrimSpace(ref.CredentialSubjectID),
-		strings.TrimSpace(ref.CallerPluginName),
-		strings.TrimSpace(ref.TargetDigest),
-		strings.TrimSpace(ref.ProviderPlanDigest),
-		strings.TrimSpace(ref.PermissionsDigest),
-		strings.TrimSpace(ref.SemanticsVersion),
-		fmt.Sprintf("%d", ref.Generation),
-	}, "\x00"))
 }
 
 func workflowConfigSHA256(value string) string {
@@ -1088,16 +1038,19 @@ func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.Execution
 	if strings.TrimSpace(existing.TargetDigest) != strings.TrimSpace(desired.TargetDigest) {
 		return false
 	}
-	if strings.TrimSpace(existing.ProviderPlanDigest) != strings.TrimSpace(desired.ProviderPlanDigest) {
+	if strings.TrimSpace(existing.ActionTableDigest) != strings.TrimSpace(desired.ActionTableDigest) {
+		return false
+	}
+	if strings.TrimSpace(existing.SourceDefinitionID) != strings.TrimSpace(desired.SourceDefinitionID) {
+		return false
+	}
+	if existing.SourceDefinitionGeneration != desired.SourceDefinitionGeneration {
 		return false
 	}
 	if strings.TrimSpace(existing.PermissionsDigest) != strings.TrimSpace(desired.PermissionsDigest) {
 		return false
 	}
 	if existing.Generation != desired.Generation {
-		return false
-	}
-	if strings.TrimSpace(existing.Seal) != strings.TrimSpace(desired.Seal) {
 		return false
 	}
 	existingJSON, existingErr := json.Marshal(existing.Permissions)
@@ -1112,8 +1065,8 @@ func workflowConfigExecutionRefPersistenceError(refID string, stored, desired *c
 	return fmt.Errorf("workflow execution ref %q was written but provider did not preserve config-managed execution reference metadata", refID)
 }
 
-func workflowExecutionReferenceStore(providerName string, provider coreworkflow.Provider) (coreworkflow.ExecutionReferenceStore, error) {
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+func workflowExecutionReferenceStore(providerName string, provider coreworkflow.Provider) (coreworkflow.ExecutionReferenceMutableStore, error) {
+	store, ok := provider.(coreworkflow.ExecutionReferenceMutableStore)
 	if !ok {
 		return nil, fmt.Errorf("workflow provider %q does not support execution refs", strings.TrimSpace(providerName))
 	}
@@ -1133,7 +1086,7 @@ func workflowLogReplacedUnreadableExecutionRef(ctx context.Context, objectType, 
 	)
 }
 
-func workflowRevokeExecutionRefByID(ctx context.Context, store coreworkflow.ExecutionReferenceStore, refID string) error {
+func workflowRevokeExecutionRefByID(ctx context.Context, store coreworkflow.ExecutionReferenceMutableStore, refID string) error {
 	if store == nil || strings.TrimSpace(refID) == "" {
 		return nil
 	}

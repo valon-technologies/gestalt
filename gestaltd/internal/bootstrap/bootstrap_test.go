@@ -74,23 +74,14 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 	if err != nil {
 		t.Fatalf("target fingerprint: %v", err)
 	}
-	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
-	if err != nil {
-		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
-	}
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
-	if !ok {
-		t.Fatalf("workflow provider %q does not support execution refs", providerName)
-	}
+	store := bootstrapWorkflowExecutionRefStore(t, deps.WorkflowRuntime, providerName)
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:                 fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
-		ProviderName:       providerName,
-		Target:             target,
-		SubjectID:          "system:config",
-		TargetDigest:       targetDigest,
-		ProviderPlanDigest: "test-plan",
-		Generation:         1,
-		Seal:               "test-seal",
+		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
+		ProviderName: providerName,
+		Target:       target,
+		SubjectID:    "system:config",
+		TargetDigest: targetDigest,
+		Generation:   1,
 		Permissions: []core.AccessPermission{{
 			Plugin:     pluginTarget.Name,
 			Operations: []string{pluginTarget.Operation},
@@ -103,6 +94,67 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 		t.Fatalf("store workflow execution ref: %v", err)
 	}
 	return ref.ID
+}
+
+type bootstrapWorkflowResolver interface {
+	ResolveProvider(name string) (coreworkflow.Provider, error)
+	ProviderNames() []string
+}
+
+func bootstrapWorkflowExecutionRefStore(t *testing.T, resolver bootstrapWorkflowResolver, providerName string) coreworkflow.ExecutionReferenceMutableStore {
+	t.Helper()
+	if resolver == nil {
+		t.Fatal("workflow resolver is not configured")
+	}
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		names := resolver.ProviderNames()
+		if len(names) != 1 {
+			t.Fatalf("workflow provider name is required; providers = %#v", names)
+		}
+		providerName = names[0]
+	}
+	provider, err := resolver.ResolveProvider(providerName)
+	if err != nil {
+		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
+	}
+	store, ok := provider.(coreworkflow.ExecutionReferenceMutableStore)
+	if !ok {
+		t.Fatalf("workflow provider %q does not expose execution refs", providerName)
+	}
+	return store
+}
+
+func getBootstrapWorkflowExecutionRef(t *testing.T, resolver bootstrapWorkflowResolver, refID string) (*coreworkflow.ExecutionReference, error) {
+	t.Helper()
+	if resolver == nil {
+		return nil, fmt.Errorf("workflow resolver is not configured")
+	}
+	for _, providerName := range resolver.ProviderNames() {
+		store := bootstrapWorkflowExecutionRefStore(t, resolver, providerName)
+		ref, err := store.GetExecutionReference(context.Background(), refID)
+		if err == nil {
+			return ref, nil
+		}
+		if errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound {
+			continue
+		}
+		return nil, fmt.Errorf("get workflow execution ref %q from provider %q: %w", refID, providerName, err)
+	}
+	return nil, core.ErrNotFound
+}
+
+func putBootstrapWorkflowExecutionRef(t *testing.T, resolver bootstrapWorkflowResolver, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	t.Helper()
+	if ref == nil {
+		return nil, fmt.Errorf("workflow execution ref is nil")
+	}
+	store := bootstrapWorkflowExecutionRefStore(t, resolver, ref.ProviderName)
+	stored, err := store.PutExecutionReference(context.Background(), ref)
+	if err != nil {
+		return nil, fmt.Errorf("put workflow execution ref %q: %w", ref.ID, err)
+	}
+	return stored, nil
 }
 
 func workflowHostPluginStepTargetFromTarget(t *testing.T, target coreworkflow.Target) coreworkflow.Target {
@@ -122,27 +174,15 @@ func workflowHostPluginActionRequest(t *testing.T, executionRef string, target c
 	if !ok {
 		t.Fatalf("workflow step action id is invalid for step %q", step.ID)
 	}
-	targetDigest, err := coreworkflow.TargetFingerprint(target)
-	if err != nil {
-		t.Fatalf("target fingerprint: %v", err)
-	}
-	actionTableDigest, err := coreworkflow.TargetActionTableDigest(target)
-	if err != nil {
-		t.Fatalf("target action table digest: %v", err)
-	}
 	return &proto.InvokeWorkflowActionRequest{
 		Selector: &proto.WorkflowHostActionSelector{
 			ExecutionRef:           executionRef,
 			ExecutionRefGeneration: 1,
-			ExecutionRefSeal:       "test-seal",
 			RunId:                  "test-run",
 			StepId:                 step.ID,
 			ActionId:               actionID,
 			AttemptNumber:          1,
 			IdempotencyKey:         "test-run:" + step.ID + ":plugin:1",
-			TargetDigest:           targetDigest,
-			ActionTableDigest:      actionTableDigest,
-			ProviderPlanDigest:     "test-plan",
 		},
 		Action: &proto.InvokeWorkflowActionRequest_Plugin{
 			Plugin: &proto.WorkflowPluginActionPayload{Input: &structpb.Struct{}},
@@ -157,12 +197,6 @@ func workflowHostPluginActionRequestForRef(t *testing.T, ref *coreworkflow.Execu
 	}
 	req := workflowHostPluginActionRequest(t, ref.ID, ref.Target)
 	req.Selector.ExecutionRefGeneration = ref.Generation
-	req.Selector.ExecutionRefSeal = ref.Seal
-	req.Selector.ProviderPlanDigest = ref.ProviderPlanDigest
-	req.Selector.TargetDigest = ref.TargetDigest
-	if actionTableDigest, err := coreworkflow.TargetActionTableDigest(ref.Target); err == nil {
-		req.Selector.ActionTableDigest = actionTableDigest
-	}
 	return req
 }
 
@@ -616,26 +650,23 @@ func (s *stubWorkflowProvider) SignalRun(context.Context, coreworkflow.SignalRun
 func (s *stubWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
 	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
 }
-func (s *stubWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
-	return &coreworkflow.CompileTargetResponse{AcceptedSpecDigest: req.SpecDigest, ProviderPlanDigest: "plan-digest"}, nil
+func (s *stubWorkflowProvider) ApplyWorkflowDefinition(_ context.Context, req coreworkflow.ApplyDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{Spec: req.Spec, Status: coreworkflow.DefinitionStatusActive, Binding: req.Binding}, nil
 }
-func (s *stubWorkflowProvider) ApplyWorkflowDeployment(_ context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{Spec: req.Spec, Status: coreworkflow.DeploymentStatusActive, Binding: req.Binding}, nil
+func (s *stubWorkflowProvider) GetWorkflowDefinition(context.Context, coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
-func (s *stubWorkflowProvider) GetWorkflowDeployment(context.Context, coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
+func (s *stubWorkflowProvider) ListWorkflowDefinitions(context.Context, coreworkflow.ListDefinitionsRequest) (*coreworkflow.ListDefinitionsResponse, error) {
+	return &coreworkflow.ListDefinitionsResponse{}, nil
 }
-func (s *stubWorkflowProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
-	return &coreworkflow.ListDeploymentsResponse{}, nil
-}
-func (s *stubWorkflowProvider) DeleteWorkflowDeployment(context.Context, coreworkflow.DeleteDeploymentRequest) error {
+func (s *stubWorkflowProvider) DeleteWorkflowDefinition(context.Context, coreworkflow.DeleteDefinitionRequest) error {
 	return nil
 }
-func (s *stubWorkflowProvider) SetWorkflowDeploymentPaused(context.Context, coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
+func (s *stubWorkflowProvider) SetWorkflowDefinitionPaused(context.Context, coreworkflow.SetDefinitionPausedRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
-func (s *stubWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
+func (s *stubWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
 func (s *stubWorkflowProvider) DeliverWorkflowEvent(context.Context, coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
 	return &coreworkflow.DeliverEventResponse{}, nil
@@ -1458,14 +1489,7 @@ type recordingWorkflowProvider struct {
 	closed                      *atomic.Bool
 }
 
-func (p *recordingWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
-	return &coreworkflow.CompileTargetResponse{
-		ProviderPlanID:     "test-plan",
-		ProviderPlanDigest: "test-plan-" + req.TargetDigest,
-	}, nil
-}
-
-func (p *recordingWorkflowProvider) ApplyWorkflowDeployment(ctx context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
+func (p *recordingWorkflowProvider) ApplyWorkflowDefinition(ctx context.Context, req coreworkflow.ApplyDefinitionRequest) (*coreworkflow.Definition, error) {
 	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Schedule != nil {
 		activation := req.Spec.Activations[0]
 		executionRef := ""
@@ -1511,36 +1535,36 @@ func (p *recordingWorkflowProvider) ApplyWorkflowDeployment(ctx context.Context,
 			return nil, err
 		}
 	}
-	return p.workflowDeploymentFromSpec(req.Spec, req.Binding), nil
+	return p.workflowDefinitionFromSpec(req.Spec, req.Binding), nil
 }
 
-func (p *recordingWorkflowProvider) GetWorkflowDeployment(_ context.Context, req coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
+func (p *recordingWorkflowProvider) GetWorkflowDefinition(_ context.Context, req coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
 	if p.getSchedule != nil || p.getScheduleErr != nil {
 		if p.getScheduleErr != nil {
 			return nil, p.getScheduleErr
 		}
-		return p.workflowDeploymentFromSchedule(p.scheduleGetResponse(p.getSchedule)), nil
+		return p.workflowDefinitionFromSchedule(p.scheduleGetResponse(p.getSchedule)), nil
 	}
 	if p.schedules != nil {
-		if schedule, ok := p.schedules[req.DeploymentID]; ok {
-			return p.workflowDeploymentFromSchedule(p.scheduleGetResponse(schedule)), nil
+		if schedule, ok := p.schedules[req.DefinitionID]; ok {
+			return p.workflowDefinitionFromSchedule(p.scheduleGetResponse(schedule)), nil
 		}
 	}
 	if p.getEventTrigger != nil || p.getEventTriggerErr != nil {
 		if p.getEventTriggerErr != nil {
 			return nil, p.getEventTriggerErr
 		}
-		return p.workflowDeploymentFromEventTrigger(p.getEventTrigger), nil
+		return p.workflowDefinitionFromEventTrigger(p.getEventTrigger), nil
 	}
 	if p.eventTriggers != nil {
-		if trigger, ok := p.eventTriggers[req.DeploymentID]; ok {
-			return p.workflowDeploymentFromEventTrigger(trigger), nil
+		if trigger, ok := p.eventTriggers[req.DefinitionID]; ok {
+			return p.workflowDefinitionFromEventTrigger(trigger), nil
 		}
 	}
 	return nil, core.ErrNotFound
 }
 
-func (p *recordingWorkflowProvider) ListWorkflowDeployments(_ context.Context, req coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
+func (p *recordingWorkflowProvider) ListWorkflowDefinitions(_ context.Context, req coreworkflow.ListDefinitionsRequest) (*coreworkflow.ListDefinitionsResponse, error) {
 	if p.listSchedulesErr != nil {
 		return nil, p.listSchedulesErr
 	}
@@ -1559,7 +1583,7 @@ func (p *recordingWorkflowProvider) ListWorkflowDeployments(_ context.Context, r
 			triggers = append(triggers, trigger)
 		}
 	}
-	out := &coreworkflow.ListDeploymentsResponse{Deployments: make([]*coreworkflow.Deployment, 0, len(schedules)+len(triggers))}
+	out := &coreworkflow.ListDefinitionsResponse{Definitions: make([]*coreworkflow.Definition, 0, len(schedules)+len(triggers))}
 	kind := strings.TrimSpace(req.Labels["gestalt.config.kind"])
 	for _, schedule := range schedules {
 		if kind == "" || kind == "schedule" {
@@ -1567,7 +1591,7 @@ func (p *recordingWorkflowProvider) ListWorkflowDeployments(_ context.Context, r
 				p.schedules = map[string]*coreworkflow.Schedule{}
 			}
 			p.schedules[schedule.ID] = schedule
-			out.Deployments = append(out.Deployments, p.workflowDeploymentFromSchedule(p.scheduleGetResponse(schedule)))
+			out.Definitions = append(out.Definitions, p.workflowDefinitionFromSchedule(p.scheduleGetResponse(schedule)))
 		}
 	}
 	for _, trigger := range triggers {
@@ -1576,33 +1600,33 @@ func (p *recordingWorkflowProvider) ListWorkflowDeployments(_ context.Context, r
 				p.eventTriggers = map[string]*coreworkflow.EventTrigger{}
 			}
 			p.eventTriggers[trigger.ID] = trigger
-			out.Deployments = append(out.Deployments, p.workflowDeploymentFromEventTrigger(trigger))
+			out.Definitions = append(out.Definitions, p.workflowDefinitionFromEventTrigger(trigger))
 		}
 	}
 	return out, nil
 }
 
-func (p *recordingWorkflowProvider) DeleteWorkflowDeployment(ctx context.Context, req coreworkflow.DeleteDeploymentRequest) error {
-	if _, ok := p.eventTriggers[req.DeploymentID]; ok {
-		return p.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: req.DeploymentID})
+func (p *recordingWorkflowProvider) DeleteWorkflowDefinition(ctx context.Context, req coreworkflow.DeleteDefinitionRequest) error {
+	if _, ok := p.eventTriggers[req.DefinitionID]; ok {
+		return p.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: req.DefinitionID})
 	}
-	if _, ok := p.schedules[req.DeploymentID]; ok {
-		return p.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: req.DeploymentID})
+	if _, ok := p.schedules[req.DefinitionID]; ok {
+		return p.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: req.DefinitionID})
 	}
 	if !p.deleteMissingNotFound {
-		if err := p.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: req.DeploymentID}); err == nil || !errors.Is(err, core.ErrNotFound) {
+		if err := p.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: req.DefinitionID}); err == nil || !errors.Is(err, core.ErrNotFound) {
 			return err
 		}
 	}
-	return p.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: req.DeploymentID})
+	return p.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: req.DefinitionID})
 }
 
-func (p *recordingWorkflowProvider) SetWorkflowDeploymentPaused(context.Context, coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
+func (p *recordingWorkflowProvider) SetWorkflowDefinitionPaused(context.Context, coreworkflow.SetDefinitionPausedRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
 
-func (p *recordingWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
+func (p *recordingWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
 
 func (p *recordingWorkflowProvider) DeliverWorkflowEvent(context.Context, coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
@@ -1617,7 +1641,7 @@ func (p *recordingWorkflowProvider) GetWorkflowRunOutput(context.Context, corewo
 	return &coreworkflow.RunOutput{}, nil
 }
 
-func (p *recordingWorkflowProvider) workflowDeploymentFromSchedule(schedule *coreworkflow.Schedule) *coreworkflow.Deployment {
+func (p *recordingWorkflowProvider) workflowDefinitionFromSchedule(schedule *coreworkflow.Schedule) *coreworkflow.Definition {
 	if schedule == nil {
 		return nil
 	}
@@ -1628,7 +1652,7 @@ func (p *recordingWorkflowProvider) workflowDeploymentFromSchedule(schedule *cor
 			"gestalt.config.plugin": recordingWorkflowTargetLabel(schedule.Target),
 		}
 	}
-	spec := coreworkflow.DeploymentSpec{
+	spec := coreworkflow.DefinitionSpec{
 		ID:         schedule.ID,
 		Generation: 1,
 		Target:     schedule.Target,
@@ -1644,10 +1668,10 @@ func (p *recordingWorkflowProvider) workflowDeploymentFromSchedule(schedule *cor
 			},
 		}},
 	}
-	return p.workflowDeploymentFromSpec(spec, &coreworkflow.DeploymentBinding{ExecutionRef: schedule.ExecutionRef})
+	return p.workflowDefinitionFromSpec(spec, &coreworkflow.DefinitionBinding{ExecutionRef: schedule.ExecutionRef})
 }
 
-func (p *recordingWorkflowProvider) workflowDeploymentFromEventTrigger(trigger *coreworkflow.EventTrigger) *coreworkflow.Deployment {
+func (p *recordingWorkflowProvider) workflowDefinitionFromEventTrigger(trigger *coreworkflow.EventTrigger) *coreworkflow.Definition {
 	if trigger == nil {
 		return nil
 	}
@@ -1658,7 +1682,7 @@ func (p *recordingWorkflowProvider) workflowDeploymentFromEventTrigger(trigger *
 			"gestalt.config.plugin": recordingWorkflowTargetLabel(trigger.Target),
 		}
 	}
-	spec := coreworkflow.DeploymentSpec{
+	spec := coreworkflow.DefinitionSpec{
 		ID:         trigger.ID,
 		Generation: 1,
 		Target:     trigger.Target,
@@ -1673,7 +1697,7 @@ func (p *recordingWorkflowProvider) workflowDeploymentFromEventTrigger(trigger *
 			},
 		}},
 	}
-	return p.workflowDeploymentFromSpec(spec, &coreworkflow.DeploymentBinding{ExecutionRef: trigger.ExecutionRef})
+	return p.workflowDefinitionFromSpec(spec, &coreworkflow.DefinitionBinding{ExecutionRef: trigger.ExecutionRef})
 }
 
 func recordingWorkflowActorIsConfig(actor coreworkflow.Actor) bool {
@@ -1696,12 +1720,12 @@ func recordingWorkflowTargetLabel(target coreworkflow.Target) string {
 	return ""
 }
 
-func (p *recordingWorkflowProvider) workflowDeploymentFromSpec(spec coreworkflow.DeploymentSpec, binding *coreworkflow.DeploymentBinding) *coreworkflow.Deployment {
-	status := coreworkflow.DeploymentStatusActive
+func (p *recordingWorkflowProvider) workflowDefinitionFromSpec(spec coreworkflow.DefinitionSpec, binding *coreworkflow.DefinitionBinding) *coreworkflow.Definition {
+	status := coreworkflow.DefinitionStatusActive
 	if spec.Paused {
-		status = coreworkflow.DeploymentStatusPaused
+		status = coreworkflow.DefinitionStatusPaused
 	}
-	return &coreworkflow.Deployment{
+	return &coreworkflow.Definition{
 		Spec:              spec,
 		Status:            status,
 		AppliedGeneration: spec.Generation,
@@ -5006,14 +5030,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 		t.Fatal("missing workflow indexeddb host service")
 	}
 
-	provider, err := result.WorkflowControl.ResolveProvider("basic")
-	if err != nil {
-		t.Fatalf("ResolveProvider(basic): %v", err)
-	}
-	executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore)
-	if !ok {
-		t.Fatal("workflow provider with indexeddb cleanup does not preserve execution reference store")
-	}
+	executionRefs := bootstrapWorkflowExecutionRefStore(t, result.WorkflowControl, "basic")
 	target := coreWorkflowPluginTarget("roadmap", "sync")
 	if _, err := executionRefs.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "workflow_schedule:sched-test:ref-test",
@@ -5023,8 +5040,8 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("PutExecutionReference: %v", err)
 	}
-	if _, err := workflowProvider.GetExecutionReference(context.Background(), "workflow_schedule:sched-test:ref-test"); err != nil {
-		t.Fatalf("underlying workflow provider missing execution ref: %v", err)
+	if _, err := executionRefs.GetExecutionReference(context.Background(), "workflow_schedule:sched-test:ref-test"); err != nil {
+		t.Fatalf("host execution ref store missing execution ref: %v", err)
 	}
 
 	withIndexedDBHostClient(t, indexedDBHost, func(client proto.IndexedDBClient) {
@@ -5161,12 +5178,15 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if strings.TrimSpace(got.ExecutionRef) == "" {
 		t.Fatal("execution ref = empty")
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), got.ExecutionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, got.ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
 	if ref.SubjectID != "system:config" {
 		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
+	}
+	if ref.SourceDefinitionID != workflowConfigScheduleID("nightly_sync") || ref.SourceDefinitionGeneration != 1 {
+		t.Fatalf("source definition = (%q, %d), want (%q, 1)", ref.SourceDefinitionID, ref.SourceDefinitionGeneration, workflowConfigScheduleID("nightly_sync"))
 	}
 	wantPermissions := []core.AccessPermission{
 		{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/sync/plugin"}},
@@ -5182,6 +5202,8 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 	t.Parallel()
 
 	factories := validFactories()
+	db := &coretesting.StubIndexedDB{}
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
 	recorders := []*recordingWorkflowProvider{}
 	sharedSchedules := map[string]*coreworkflow.Schedule{}
 	sharedExecutionRefs := map[string]*coreworkflow.ExecutionReference{}
@@ -5267,14 +5289,14 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 	if nextExecutionRef == initialExecutionRef {
 		t.Fatalf("execution ref = %q, want recreated after permissions change", nextExecutionRef)
 	}
-	oldRef, err := recorders[1].GetExecutionReference(context.Background(), initialExecutionRef)
+	oldRef, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get old execution ref: %v", err)
 	}
 	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
 		t.Fatalf("old execution ref revokedAt = %#v, want set", oldRef.RevokedAt)
 	}
-	nextRef, err := recorders[1].GetExecutionReference(context.Background(), nextExecutionRef)
+	nextRef, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, nextExecutionRef)
 	if err != nil {
 		t.Fatalf("Get new execution ref: %v", err)
 	}
@@ -5387,7 +5409,7 @@ func TestBootstrapFailsConfiguredWorkflowScheduleWhenExecutionRefRefreshFails(t 
 	if len(recorders[1].upsertedSchedules) != 0 {
 		t.Fatalf("second upserts = %d, want 0", len(recorders[1].upsertedSchedules))
 	}
-	if _, err := recorders[1].GetExecutionReference(context.Background(), initialExecutionRef); err != nil {
+	if _, err := recorders[0].GetExecutionReference(context.Background(), initialExecutionRef); err != nil {
 		t.Fatalf("existing execution ref should remain available: %v", err)
 	}
 }
@@ -5553,7 +5575,7 @@ func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t 
 	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedSchedules[0].ExecutionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, recorder.upsertedSchedules[0].ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
@@ -5568,41 +5590,6 @@ func TestBootstrapConfiguredWorkflowScheduleRunAsAllowsUserCredentialedTarget(t 
 	}
 	if ref.RunAs.DisplayName != "Roadmap sync" {
 		t.Fatalf("runAs displayName = %q", ref.RunAs.DisplayName)
-	}
-}
-
-func TestBootstrapRejectsConfiguredWorkflowScheduleWhenProviderDropsRunAs(t *testing.T) {
-	t.Parallel()
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	cfg.Plugins["roadmap"].ConnectionMode = providermanifestv1.ConnectionModeUser
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.RunAs = &config.WorkflowRunAsConfig{
-		Subject: &config.WorkflowRunAsSubjectConfig{ID: "service_account:roadmap-sync"},
-	}
-	cfg.Workflows.Schedules["nightly_sync"] = nightly
-
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return &recordingWorkflowProvider{dropExecutionReferenceRunAs: true}, nil
-	}
-
-	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil {
-		t.Fatal("expected Bootstrap to reject a provider that drops config-managed runAs metadata")
-	}
-	if !strings.Contains(err.Error(), `provider did not preserve runAs subject "service_account:roadmap-sync"`) {
-		t.Fatalf("Bootstrap error = %v, want runAs preservation error", err)
 	}
 }
 
@@ -5747,7 +5734,7 @@ func TestBootstrapAllowsConfiguredWorkflowSchedulePermissionScopesForUserCredent
 	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedSchedules[0].ExecutionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, recorder.upsertedSchedules[0].ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
@@ -5816,7 +5803,7 @@ func TestBootstrapConfiguredWorkflowScheduleInvokesScopesExecutionRef(t *testing
 	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedSchedules[0].ExecutionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, recorder.upsertedSchedules[0].ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
@@ -5938,7 +5925,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
 	if len(recorder.upsertedSchedules) != 0 {
 		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), initialExecutionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get revoked execution ref: %v", err)
 	}
@@ -6074,14 +6061,14 @@ func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
 		t.Fatalf("backup upserted schedules = %d, want 1", len(recorders["backup"][1].upsertedSchedules))
 	}
 	backupExecutionRef := recorders["backup"][1].upsertedSchedules[0].ExecutionRef
-	oldRef, err := recorders["temporal"][1].GetExecutionReference(context.Background(), initialExecutionRef)
+	oldRef, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get initial execution ref: %v", err)
 	}
 	if oldRef.RevokedAt == nil || oldRef.RevokedAt.IsZero() {
 		t.Fatalf("initial revokedAt = %#v, want set", oldRef.RevokedAt)
 	}
-	newRef, err := recorders["backup"][1].GetExecutionReference(context.Background(), backupExecutionRef)
+	newRef, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, backupExecutionRef)
 	if err != nil {
 		t.Fatalf("Get backup execution ref: %v", err)
 	}
@@ -6285,7 +6272,14 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
 	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
-	provider.executionRefs[initialExecutionRef].Target.Steps[0].Plugin.Input.Object["limit"] = coreworkflow.Value{Literal: float64(1), LiteralSet: true}
+	storedRef, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get initial execution ref: %v", err)
+	}
+	storedRef.Target.Steps[0].Plugin.Input.Object["limit"] = coreworkflow.Value{Literal: float64(1), LiteralSet: true}
+	if _, err := putBootstrapWorkflowExecutionRef(t, result.WorkflowControl, storedRef); err != nil {
+		t.Fatalf("Put normalized execution ref: %v", err)
+	}
 	_ = result.Close(context.Background())
 
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -6302,7 +6296,7 @@ func TestBootstrapReusesConfiguredWorkflowExecutionRefAcrossUnchangedBootstrap(t
 	if reusedExecutionRef != initialExecutionRef {
 		t.Fatalf("execution ref = %q, want reuse of %q", reusedExecutionRef, initialExecutionRef)
 	}
-	ref, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
@@ -6369,7 +6363,7 @@ func TestBootstrapReplacesUnreadableConfiguredWorkflowExecutionRef(t *testing.T)
 	if replacementExecutionRef == "" || replacementExecutionRef == staleExecutionRef {
 		t.Fatalf("replacement execution ref = %q, want fresh ref", replacementExecutionRef)
 	}
-	if _, err := provider.GetExecutionReference(context.Background(), replacementExecutionRef); err != nil {
+	if _, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, replacementExecutionRef); err != nil {
 		t.Fatalf("Get replacement execution ref: %v", err)
 	}
 }
@@ -6405,8 +6399,15 @@ func TestBootstrapRefreshesConfiguredWorkflowExecutionRefWhenMetadataChanges(t *
 		t.Fatalf("Bootstrap initial: %v", err)
 	}
 	initialExecutionRef := provider.upsertedSchedules[0].ExecutionRef
+	staleRef, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, initialExecutionRef)
+	if err != nil {
+		t.Fatalf("Get initial execution ref: %v", err)
+	}
+	staleRef.DisplayName = "Stale config name"
+	if _, err := putBootstrapWorkflowExecutionRef(t, result.WorkflowControl, staleRef); err != nil {
+		t.Fatalf("Put stale execution ref: %v", err)
+	}
 	_ = result.Close(context.Background())
-	provider.executionRefs[initialExecutionRef].DisplayName = "Stale config name"
 
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
 	if err != nil {
@@ -6422,14 +6423,14 @@ func TestBootstrapRefreshesConfiguredWorkflowExecutionRefWhenMetadataChanges(t *
 	if refreshedExecutionRef == initialExecutionRef {
 		t.Fatalf("execution ref = %q, want refreshed ref after display name drift", refreshedExecutionRef)
 	}
-	ref, err := provider.GetExecutionReference(context.Background(), refreshedExecutionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, refreshedExecutionRef)
 	if err != nil {
 		t.Fatalf("Get refreshed execution ref: %v", err)
 	}
 	if ref.DisplayName != "Gestalt config" {
 		t.Fatalf("displayName = %q, want refreshed config display name", ref.DisplayName)
 	}
-	oldRef, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
+	oldRef, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get old execution ref: %v", err)
 	}
@@ -6619,7 +6620,7 @@ func TestBootstrapDeletesRemovedConfiguredWorkflowSchedulesWhenProviderDropsExec
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	ref, err := provider.GetExecutionReference(context.Background(), initialExecutionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, initialExecutionRef)
 	if err != nil {
 		t.Fatalf("Get revoked execution ref: %v", err)
 	}
@@ -6746,7 +6747,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if strings.TrimSpace(got.ExecutionRef) == "" {
 		t.Fatal("execution ref = empty")
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), got.ExecutionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, got.ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
@@ -6808,7 +6809,7 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 	if recorder == nil || len(recorder.upsertedEventTriggers) != 1 {
 		t.Fatalf("recorded event triggers = %#v", recorders)
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), recorder.upsertedEventTriggers[0].ExecutionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, recorder.upsertedEventTriggers[0].ExecutionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}
@@ -6899,13 +6900,16 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 			t.Fatalf("%s plugin tool ref = %#v", label, target.Steps[0].Agent.ToolRefs[1])
 		}
 	}
-	for _, executionRef := range []string{
-		recorder.upsertedSchedules[0].ExecutionRef,
-		recorder.upsertedEventTriggers[0].ExecutionRef,
+	for sourceDefinitionID, executionRef := range map[string]string{
+		workflowConfigScheduleID("agent_schedule"):  recorder.upsertedSchedules[0].ExecutionRef,
+		workflowConfigEventTriggerID("agent_event"): recorder.upsertedEventTriggers[0].ExecutionRef,
 	} {
-		ref, err := recorder.GetExecutionReference(context.Background(), executionRef)
+		ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, executionRef)
 		if err != nil {
 			t.Fatalf("Get execution ref %q: %v", executionRef, err)
+		}
+		if ref.SourceDefinitionID != sourceDefinitionID || ref.SourceDefinitionGeneration != 1 {
+			t.Fatalf("source definition for %q = (%q, %d), want (%q, 1)", executionRef, ref.SourceDefinitionID, ref.SourceDefinitionGeneration, sourceDefinitionID)
 		}
 		if len(ref.Permissions) != 3 {
 			t.Fatalf("permissions = %#v", ref.Permissions)
@@ -8089,7 +8093,7 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPl
 	if executionRef == "" {
 		t.Fatal("execution ref is empty")
 	}
-	ref, err := recorder.GetExecutionReference(context.Background(), executionRef)
+	ref, err := getBootstrapWorkflowExecutionRef(t, result.WorkflowControl, executionRef)
 	if err != nil {
 		t.Fatalf("Get execution ref: %v", err)
 	}

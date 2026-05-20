@@ -18,7 +18,7 @@ const EnvWorkflowManagerSocket = proto.EnvWorkflowManagerSocket
 // variable.
 const EnvWorkflowManagerSocketToken = EnvWorkflowManagerSocket + "_TOKEN"
 
-// WorkflowManagerClient manages workflow deployments and runs.
+// WorkflowManagerClient manages workflow definitions and runs.
 type WorkflowManagerClient struct {
 	client          proto.WorkflowManagerHostClient
 	invocationToken string
@@ -64,12 +64,12 @@ func (c *WorkflowManagerClient) Close() error {
 	return nil
 }
 
-// PlanDeployment validates and plans a workflow deployment.
-func (c *WorkflowManagerClient) PlanDeployment(ctx context.Context, input WorkflowManagerPlanDeployment) (*PlanWorkflowResponse, error) {
+// ApplyDefinition creates or updates a workflow definition.
+func (c *WorkflowManagerClient) ApplyDefinition(ctx context.Context, input WorkflowManagerApplyDefinition) (*WorkflowManagerDefinition, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := newWorkflowManagerPlanDeploymentRequest(input)
+	req, err := newWorkflowManagerApplyDefinitionRequest(input)
 	if err != nil {
 		return nil, err
 	}
@@ -77,92 +77,72 @@ func (c *WorkflowManagerClient) PlanDeployment(ctx context.Context, input Workfl
 	if req.IdempotencyKey == "" {
 		req.IdempotencyKey = c.idempotencyKey
 	}
-	resp, err := c.client.PlanDeployment(ctx, req)
+	resp, err := c.client.ApplyDefinition(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return planWorkflowResponseFromProto(resp), nil
+	return workflowManagerDefinitionFromProto(resp)
 }
 
-// ApplyDeployment creates or updates a workflow deployment.
-func (c *WorkflowManagerClient) ApplyDeployment(ctx context.Context, input WorkflowManagerApplyDeployment) (*WorkflowManagerDeployment, error) {
+// GetDefinition fetches one workflow definition.
+func (c *WorkflowManagerClient) GetDefinition(ctx context.Context, input WorkflowManagerGetDefinition) (*WorkflowManagerDefinition, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req, err := newWorkflowManagerApplyDeploymentRequest(input)
-	if err != nil {
-		return nil, err
-	}
+	req := newWorkflowManagerGetDefinitionRequest(input)
 	req.InvocationToken = c.invocationToken
-	if req.IdempotencyKey == "" {
-		req.IdempotencyKey = c.idempotencyKey
-	}
-	resp, err := c.client.ApplyDeployment(ctx, req)
+	resp, err := c.client.GetDefinition(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerDeploymentFromProto(resp)
+	return workflowManagerDefinitionFromProto(resp)
 }
 
-// GetDeployment fetches one workflow deployment.
-func (c *WorkflowManagerClient) GetDeployment(ctx context.Context, input WorkflowManagerGetDeployment) (*WorkflowManagerDeployment, error) {
+// ListDefinitions lists workflow definitions.
+func (c *WorkflowManagerClient) ListDefinitions(ctx context.Context, input WorkflowManagerListDefinitions) (*WorkflowManagerListDefinitionsResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := newWorkflowManagerGetDeploymentRequest(input)
+	req := newWorkflowManagerListDefinitionsRequest(input)
 	req.InvocationToken = c.invocationToken
-	resp, err := c.client.GetDeployment(ctx, req)
+	resp, err := c.client.ListDefinitions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerDeploymentFromProto(resp)
+	definitions, err := workflowManagerDefinitionsFromProto(resp.GetDefinitions())
+	if err != nil {
+		return nil, err
+	}
+	return &WorkflowManagerListDefinitionsResponse{Definitions: definitions}, nil
 }
 
-// ListDeployments lists workflow deployments.
-func (c *WorkflowManagerClient) ListDeployments(ctx context.Context, input WorkflowManagerListDeployments) (*WorkflowManagerListDeploymentsResponse, error) {
-	if c == nil || c.client == nil {
-		return nil, fmt.Errorf("workflow manager: client is not initialized")
-	}
-	req := newWorkflowManagerListDeploymentsRequest(input)
-	req.InvocationToken = c.invocationToken
-	resp, err := c.client.ListDeployments(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	deployments, err := workflowManagerDeploymentsFromProto(resp.GetDeployments())
-	if err != nil {
-		return nil, err
-	}
-	return &WorkflowManagerListDeploymentsResponse{Deployments: deployments}, nil
-}
-
-// DeleteDeployment deletes a workflow deployment.
-func (c *WorkflowManagerClient) DeleteDeployment(ctx context.Context, input WorkflowManagerDeleteDeployment) error {
+// DeleteDefinition deletes a workflow definition.
+func (c *WorkflowManagerClient) DeleteDefinition(ctx context.Context, input WorkflowManagerDeleteDefinition) error {
 	if c == nil || c.client == nil {
 		return fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := newWorkflowManagerDeleteDeploymentRequest(input)
+	req := newWorkflowManagerDeleteDefinitionRequest(input)
 	req.InvocationToken = c.invocationToken
-	_, err := c.client.DeleteDeployment(ctx, req)
+	_, err := c.client.DeleteDefinition(ctx, req)
 	return err
 }
 
-// SetDeploymentPaused pauses or resumes a workflow deployment.
-func (c *WorkflowManagerClient) SetDeploymentPaused(ctx context.Context, input WorkflowManagerSetDeploymentPaused) (*WorkflowManagerDeployment, error) {
+// SetDefinitionPaused pauses or resumes a workflow definition.
+func (c *WorkflowManagerClient) SetDefinitionPaused(ctx context.Context, input WorkflowManagerSetDefinitionPaused) (*WorkflowManagerDefinition, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
-	req := newWorkflowManagerSetDeploymentPausedRequest(input)
+	req := newWorkflowManagerSetDefinitionPausedRequest(input)
 	req.InvocationToken = c.invocationToken
-	resp, err := c.client.SetDeploymentPaused(ctx, req)
+	resp, err := c.client.SetDefinitionPaused(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerDeploymentFromProto(resp)
+	return workflowManagerDefinitionFromProto(resp)
 }
 
 // SetActivationPaused pauses or resumes one workflow activation.
-func (c *WorkflowManagerClient) SetActivationPaused(ctx context.Context, input WorkflowManagerSetActivationPaused) (*WorkflowManagerDeployment, error) {
+func (c *WorkflowManagerClient) SetActivationPaused(ctx context.Context, input WorkflowManagerSetActivationPaused) (*WorkflowManagerDefinition, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("workflow manager: client is not initialized")
 	}
@@ -172,7 +152,7 @@ func (c *WorkflowManagerClient) SetActivationPaused(ctx context.Context, input W
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerDeploymentFromProto(resp)
+	return workflowManagerDefinitionFromProto(resp)
 }
 
 // StartRun starts a workflow run.

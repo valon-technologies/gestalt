@@ -59,12 +59,12 @@ WORKFLOW_ACTION_KIND_PLUGIN = pb.WORKFLOW_ACTION_KIND_PLUGIN
 WORKFLOW_ACTION_KIND_AGENT_TURN = pb.WORKFLOW_ACTION_KIND_AGENT_TURN
 WORKFLOW_ACTION_KIND_DELIVERY = pb.WORKFLOW_ACTION_KIND_DELIVERY
 
-WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED = pb.WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED
-WORKFLOW_DEPLOYMENT_STATUS_PENDING = pb.WORKFLOW_DEPLOYMENT_STATUS_PENDING
-WORKFLOW_DEPLOYMENT_STATUS_ACTIVE = pb.WORKFLOW_DEPLOYMENT_STATUS_ACTIVE
-WORKFLOW_DEPLOYMENT_STATUS_PAUSED = pb.WORKFLOW_DEPLOYMENT_STATUS_PAUSED
-WORKFLOW_DEPLOYMENT_STATUS_DELETED = pb.WORKFLOW_DEPLOYMENT_STATUS_DELETED
-WORKFLOW_DEPLOYMENT_STATUS_FAILED = pb.WORKFLOW_DEPLOYMENT_STATUS_FAILED
+WORKFLOW_DEFINITION_STATUS_UNSPECIFIED = pb.WORKFLOW_DEFINITION_STATUS_UNSPECIFIED
+WORKFLOW_DEFINITION_STATUS_PENDING = pb.WORKFLOW_DEFINITION_STATUS_PENDING
+WORKFLOW_DEFINITION_STATUS_ACTIVE = pb.WORKFLOW_DEFINITION_STATUS_ACTIVE
+WORKFLOW_DEFINITION_STATUS_PAUSED = pb.WORKFLOW_DEFINITION_STATUS_PAUSED
+WORKFLOW_DEFINITION_STATUS_DELETED = pb.WORKFLOW_DEFINITION_STATUS_DELETED
+WORKFLOW_DEFINITION_STATUS_FAILED = pb.WORKFLOW_DEFINITION_STATUS_FAILED
 
 WORKFLOW_RUN_STATUS_UNSPECIFIED = pb.WORKFLOW_RUN_STATUS_UNSPECIFIED
 WORKFLOW_RUN_STATUS_PENDING = pb.WORKFLOW_RUN_STATUS_PENDING
@@ -266,7 +266,7 @@ class WorkflowAccessPermission:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowDeploymentSpec:
+class WorkflowDefinitionSpec:
     id: str = ""
     generation: int = 0
     target: Any | None = None
@@ -294,44 +294,16 @@ class WorkflowActionTable:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowUnsupportedFeature:
-    feature: str = ""
-    reason: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class PlanWorkflowRequest:
-    spec: Any | None = None
-    spec_digest: str = ""
-    target_digest: str = ""
-    action_table_digest: str = ""
-    target_canonicalization_version: str = ""
-    workflow_semantics_version: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class PlanWorkflowResponse:
-    accepted_spec_digest: str = ""
-    provider_plan_id: str = ""
-    provider_plan_digest: str = ""
-    provider_plan_format_version: str = ""
-    unsupported: Sequence[Any] | None = None
-    supported_feature_flags: Sequence[str] | None = None
-
-
-@_dataclasses.dataclass(slots=True)
-class WorkflowDeploymentBinding:
+class WorkflowDefinitionBinding:
     id: str = ""
     execution_ref: str = ""
     execution_ref_generation: int = 0
-    execution_ref_seal: str = ""
-    deployment_id: str = ""
-    deployment_generation: int = 0
+    definition_id: str = ""
+    definition_generation: int = 0
     spec_digest: str = ""
     target_digest: str = ""
     action_table_digest: str = ""
-    provider_plan_id: str = ""
-    provider_plan_digest: str = ""
+    permissions_digest: str = ""
     workflow_semantics_version: str = ""
     request_id: str = ""
 
@@ -345,9 +317,9 @@ class WorkflowRunError:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowDeployment:
+class WorkflowDefinition:
     spec: Any | None = None
-    status: int = WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED
+    status: int = WORKFLOW_DEFINITION_STATUS_UNSPECIFIED
     created_at: _dt.datetime | Any | None = None
     updated_at: _dt.datetime | Any | None = None
     applied_generation: int = 0
@@ -361,49 +333,48 @@ class WorkflowDeployment:
 
 
 @_dataclasses.dataclass(slots=True)
-class ApplyWorkflowDeploymentRequest:
+class ApplyWorkflowDefinitionRequest:
     spec: Any | None = None
-    plan: Any | None = None
     binding: Any | None = None
+    execution_ref: Any | None = None
     request_id: str = ""
-    validate_only: bool = False
 
 
 @_dataclasses.dataclass(slots=True)
-class GetWorkflowDeploymentRequest:
-    deployment_id: str = ""
+class GetWorkflowDefinitionRequest:
+    definition_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class ListWorkflowDeploymentsRequest:
+class ListWorkflowDefinitionsRequest:
     page_size: int = 0
     page_token: str = ""
     labels: Mapping[str, str] | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class ListWorkflowDeploymentsResponse:
-    deployments: Sequence[Any] | None = None
+class ListWorkflowDefinitionsResponse:
+    definitions: Sequence[Any] | None = None
     next_page_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class DeleteWorkflowDeploymentRequest:
-    deployment_id: str = ""
+class DeleteWorkflowDefinitionRequest:
+    definition_id: str = ""
     generation: int = 0
     request_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class SetWorkflowDeploymentPausedRequest:
-    deployment_id: str = ""
+class SetWorkflowDefinitionPausedRequest:
+    definition_id: str = ""
     paused: bool = False
     request_id: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class SetWorkflowActivationPausedRequest:
-    deployment_id: str = ""
+    definition_id: str = ""
     activation_id: str = ""
     paused: bool = False
     request_id: str = ""
@@ -428,8 +399,8 @@ class WorkflowEventTrigger:
 
 @_dataclasses.dataclass(slots=True)
 class WorkflowRunTrigger:
-    deployment_id: str = ""
-    deployment_generation: int = 0
+    definition_id: str = ""
+    definition_generation: int = 0
     activation_id: str = ""
     manual: Any | None = None
     schedule: Any | None = None
@@ -475,8 +446,8 @@ class WorkflowStepState:
 @_dataclasses.dataclass(slots=True)
 class WorkflowRun:
     id: str = ""
-    deployment_id: str = ""
-    deployment_generation: int = 0
+    definition_id: str = ""
+    definition_generation: int = 0
     workflow_key: str = ""
     status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
     trigger: Any | None = None
@@ -491,15 +462,14 @@ class WorkflowRun:
     target_digest: str = ""
     spec_digest: str = ""
     action_table_digest: str = ""
-    provider_plan_digest: str = ""
     steps: Sequence[Any] | None = None
     error: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
 class StartWorkflowRunRequest:
-    deployment_id: str = ""
-    deployment_generation: int = 0
+    definition_id: str = ""
+    definition_generation: int = 0
     activation_id: str = ""
     workflow_key: str = ""
     input: Any | None = None
@@ -515,8 +485,8 @@ class SignalWorkflowRunRequest:
 
 @_dataclasses.dataclass(slots=True)
 class SignalOrStartWorkflowRunRequest:
-    deployment_id: str = ""
-    deployment_generation: int = 0
+    definition_id: str = ""
+    definition_generation: int = 0
     activation_id: str = ""
     workflow_key: str = ""
     input: Any | None = None
@@ -538,7 +508,7 @@ class GetWorkflowRunRequest:
 
 @_dataclasses.dataclass(slots=True)
 class ListWorkflowRunsRequest:
-    deployment_id: str = ""
+    definition_id: str = ""
     page_size: int = 0
     page_token: str = ""
     status: int = WORKFLOW_RUN_STATUS_UNSPECIFIED
@@ -568,7 +538,7 @@ class DeliverWorkflowEventRequest:
 
 @_dataclasses.dataclass(slots=True)
 class WorkflowEventDeliveryResult:
-    deployment_id: str = ""
+    definition_id: str = ""
     activation_id: str = ""
     run: Any | None = None
     signal: Any | None = None
@@ -627,15 +597,13 @@ class WorkflowRunOutput:
 class WorkflowHostActionSelector:
     execution_ref: str = ""
     execution_ref_generation: int = 0
-    execution_ref_seal: str = ""
     run_id: str = ""
+    definition_id: str = ""
+    definition_generation: int = 0
     step_id: str = ""
     action_id: str = ""
     attempt_number: int = 0
     idempotency_key: str = ""
-    target_digest: str = ""
-    action_table_digest: str = ""
-    provider_plan_digest: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
@@ -670,9 +638,9 @@ class WorkflowActionResult:
 
 
 @_dataclasses.dataclass(slots=True)
-class ManagedWorkflowDeployment:
+class ManagedWorkflowDefinition:
     provider_name: str = ""
-    deployment: Any | None = None
+    definition: Any | None = None
 
 
 @_dataclasses.dataclass(slots=True)
@@ -691,7 +659,7 @@ class ManagedWorkflowRunSignal:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerPlanDeploymentRequest:
+class WorkflowManagerApplyDefinitionRequest:
     provider_name: str = ""
     spec: Any | None = None
     invocation_token: str = ""
@@ -699,47 +667,39 @@ class WorkflowManagerPlanDeploymentRequest:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerApplyDeploymentRequest:
-    provider_name: str = ""
-    spec: Any | None = None
-    invocation_token: str = ""
-    idempotency_key: str = ""
-
-
-@_dataclasses.dataclass(slots=True)
-class WorkflowManagerGetDeploymentRequest:
-    deployment_id: str = ""
+class WorkflowManagerGetDefinitionRequest:
+    definition_id: str = ""
     invocation_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerListDeploymentsRequest:
+class WorkflowManagerListDefinitionsRequest:
     provider_name: str = ""
     invocation_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerListDeploymentsResponse:
-    deployments: Sequence[Any] | None = None
+class WorkflowManagerListDefinitionsResponse:
+    definitions: Sequence[Any] | None = None
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerDeleteDeploymentRequest:
-    deployment_id: str = ""
+class WorkflowManagerDeleteDefinitionRequest:
+    definition_id: str = ""
     generation: int = 0
     invocation_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowManagerSetDeploymentPausedRequest:
-    deployment_id: str = ""
+class WorkflowManagerSetDefinitionPausedRequest:
+    definition_id: str = ""
     paused: bool = False
     invocation_token: str = ""
 
 
 @_dataclasses.dataclass(slots=True)
 class WorkflowManagerSetActivationPausedRequest:
-    deployment_id: str = ""
+    definition_id: str = ""
     activation_id: str = ""
     paused: bool = False
     invocation_token: str = ""
@@ -748,8 +708,8 @@ class WorkflowManagerSetActivationPausedRequest:
 @_dataclasses.dataclass(slots=True)
 class WorkflowManagerStartRunRequest:
     provider_name: str = ""
-    deployment_id: str = ""
-    deployment_generation: int = 0
+    definition_id: str = ""
+    definition_generation: int = 0
     activation_id: str = ""
     workflow_key: str = ""
     input: Any | None = None
@@ -767,8 +727,8 @@ class WorkflowManagerSignalRunRequest:
 @_dataclasses.dataclass(slots=True)
 class WorkflowManagerSignalOrStartRunRequest:
     provider_name: str = ""
-    deployment_id: str = ""
-    deployment_generation: int = 0
+    definition_id: str = ""
+    definition_generation: int = 0
     activation_id: str = ""
     workflow_key: str = ""
     input: Any | None = None
@@ -797,7 +757,7 @@ class WorkflowManagerDeliverEventResponse:
     results: Sequence[Any] | None = None
 
 
-WorkflowManagerDeployment = ManagedWorkflowDeployment
+WorkflowManagerDefinition = ManagedWorkflowDefinition
 WorkflowManagerRun = ManagedWorkflowRun
 WorkflowManagerRunSignal = ManagedWorkflowRunSignal
 
@@ -1186,13 +1146,13 @@ def workflow_access_permission(value: Any | None = None, **kwargs: Any) -> Any:
     )
 
 
-def workflow_deployment_spec(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.WorkflowDeploymentSpec):
+def workflow_definition_spec(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.WorkflowDefinitionSpec):
         return _copy(value)
     data = _data(value, kwargs)
     target = data.get("target")
     run_as = data.get("run_as")
-    return pb.WorkflowDeploymentSpec(
+    return pb.WorkflowDefinitionSpec(
         id=data.get("id", ""),
         generation=data.get("generation", 0),
         target=bound_workflow_target(target) if target is not None else None,
@@ -1234,50 +1194,11 @@ def workflow_action_table(value: Any | None = None, **kwargs: Any) -> Any:
     )
 
 
-def workflow_unsupported_feature(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.WorkflowUnsupportedFeature):
+def workflow_definition_binding(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.WorkflowDefinitionBinding):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.WorkflowUnsupportedFeature(
-        feature=data.get("feature", ""),
-        reason=data.get("reason", ""),
-    )
-
-
-def plan_workflow_request(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.PlanWorkflowRequest):
-        return _copy(value)
-    data = _data(value, kwargs)
-    spec = data.get("spec")
-    return pb.PlanWorkflowRequest(
-        spec=workflow_deployment_spec(spec) if spec is not None else None,
-        spec_digest=data.get("spec_digest", ""),
-        target_digest=data.get("target_digest", ""),
-        action_table_digest=data.get("action_table_digest", ""),
-        target_canonicalization_version=data.get("target_canonicalization_version", ""),
-        workflow_semantics_version=data.get("workflow_semantics_version", ""),
-    )
-
-
-def plan_workflow_response(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.PlanWorkflowResponse):
-        return _copy(value)
-    data = _data(value, kwargs)
-    return pb.PlanWorkflowResponse(
-        accepted_spec_digest=data.get("accepted_spec_digest", ""),
-        provider_plan_id=data.get("provider_plan_id", ""),
-        provider_plan_digest=data.get("provider_plan_digest", ""),
-        provider_plan_format_version=data.get("provider_plan_format_version", ""),
-        unsupported=_message_list(data.get("unsupported"), workflow_unsupported_feature),
-        supported_feature_flags=list(data.get("supported_feature_flags") or []),
-    )
-
-
-def workflow_deployment_binding(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.WorkflowDeploymentBinding):
-        return _copy(value)
-    data = _data(value, kwargs)
-    return pb.WorkflowDeploymentBinding(**_message_mapping(WorkflowDeploymentBinding(**data)))
+    return pb.WorkflowDefinitionBinding(**_message_mapping(WorkflowDefinitionBinding(**data)))
 
 
 def workflow_run_error(value: Any | None = None, **kwargs: Any) -> Any:
@@ -1292,13 +1213,13 @@ def workflow_run_error(value: Any | None = None, **kwargs: Any) -> Any:
     )
 
 
-def workflow_deployment(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.WorkflowDeployment):
+def workflow_definition(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.WorkflowDefinition):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.WorkflowDeployment(
-        spec=workflow_deployment_spec(data["spec"]) if data.get("spec") is not None else None,
-        status=data.get("status", WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED),
+    return pb.WorkflowDefinition(
+        spec=workflow_definition_spec(data["spec"]) if data.get("spec") is not None else None,
+        status=data.get("status", WORKFLOW_DEFINITION_STATUS_UNSPECIFIED),
         created_at=_optional_timestamp(data.get("created_at")),
         updated_at=_optional_timestamp(data.get("updated_at")),
         applied_generation=data.get("applied_generation", 0),
@@ -1307,75 +1228,76 @@ def workflow_deployment(value: Any | None = None, **kwargs: Any) -> Any:
         action_table_digest=data.get("action_table_digest", ""),
         provider_plan_id=data.get("provider_plan_id", ""),
         provider_plan_digest=data.get("provider_plan_digest", ""),
-        binding=workflow_deployment_binding(data["binding"])
+        binding=workflow_definition_binding(data["binding"])
         if data.get("binding") is not None
         else None,
         error=workflow_run_error(data["error"]) if data.get("error") is not None else None,
     )
 
 
-def apply_workflow_deployment_request(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.ApplyWorkflowDeploymentRequest):
+def apply_workflow_definition_request(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.ApplyWorkflowDefinitionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.ApplyWorkflowDeploymentRequest(
-        spec=workflow_deployment_spec(data["spec"]) if data.get("spec") is not None else None,
-        plan=plan_workflow_response(data["plan"]) if data.get("plan") is not None else None,
-        binding=workflow_deployment_binding(data["binding"])
+    return pb.ApplyWorkflowDefinitionRequest(
+        spec=workflow_definition_spec(data["spec"]) if data.get("spec") is not None else None,
+        binding=workflow_definition_binding(data["binding"])
         if data.get("binding") is not None
         else None,
+        execution_ref=workflow_execution_reference(data["execution_ref"])
+        if data.get("execution_ref") is not None
+        else None,
         request_id=data.get("request_id", ""),
-        validate_only=data.get("validate_only", False),
     )
 
 
-def get_workflow_deployment_request(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.GetWorkflowDeploymentRequest):
+def get_workflow_definition_request(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.GetWorkflowDefinitionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.GetWorkflowDeploymentRequest(deployment_id=data.get("deployment_id", ""))
+    return pb.GetWorkflowDefinitionRequest(definition_id=data.get("definition_id", ""))
 
 
-def list_workflow_deployments_request(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.ListWorkflowDeploymentsRequest):
+def list_workflow_definitions_request(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.ListWorkflowDefinitionsRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.ListWorkflowDeploymentsRequest(
+    return pb.ListWorkflowDefinitionsRequest(
         page_size=data.get("page_size", 0),
         page_token=data.get("page_token", ""),
         labels=dict(data.get("labels") or {}),
     )
 
 
-def list_workflow_deployments_response(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.ListWorkflowDeploymentsResponse):
+def list_workflow_definitions_response(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.ListWorkflowDefinitionsResponse):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.ListWorkflowDeploymentsResponse(
-        deployments=_message_list(data.get("deployments"), workflow_deployment),
+    return pb.ListWorkflowDefinitionsResponse(
+        definitions=_message_list(data.get("definitions"), workflow_definition),
         next_page_token=data.get("next_page_token", ""),
     )
 
 
-def delete_workflow_deployment_request(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.DeleteWorkflowDeploymentRequest):
+def delete_workflow_definition_request(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.DeleteWorkflowDefinitionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.DeleteWorkflowDeploymentRequest(
-        deployment_id=data.get("deployment_id", ""),
+    return pb.DeleteWorkflowDefinitionRequest(
+        definition_id=data.get("definition_id", ""),
         generation=data.get("generation", 0),
         request_id=data.get("request_id", ""),
     )
 
 
-def set_workflow_deployment_paused_request(
+def set_workflow_definition_paused_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.SetWorkflowDeploymentPausedRequest):
+    if isinstance(value, pb.SetWorkflowDefinitionPausedRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.SetWorkflowDeploymentPausedRequest(
-        deployment_id=data.get("deployment_id", ""),
+    return pb.SetWorkflowDefinitionPausedRequest(
+        definition_id=data.get("definition_id", ""),
         paused=data.get("paused", False),
         request_id=data.get("request_id", ""),
     )
@@ -1388,7 +1310,7 @@ def set_workflow_activation_paused_request(
         return _copy(value)
     data = _data(value, kwargs)
     return pb.SetWorkflowActivationPausedRequest(
-        deployment_id=data.get("deployment_id", ""),
+        definition_id=data.get("definition_id", ""),
         activation_id=data.get("activation_id", ""),
         paused=data.get("paused", False),
         request_id=data.get("request_id", ""),
@@ -1430,8 +1352,8 @@ def workflow_run_trigger(value: Any | None = None, **kwargs: Any) -> Any:
     if len(selected) > 1:
         raise ValueError("workflow run trigger must set exactly one kind")
     trigger = pb.WorkflowRunTrigger(
-        deployment_id=data.get("deployment_id", ""),
-        deployment_generation=data.get("deployment_generation", 0),
+        definition_id=data.get("definition_id", ""),
+        definition_generation=data.get("definition_generation", 0),
         activation_id=data.get("activation_id", ""),
     )
     if selected == ["manual"]:
@@ -1500,8 +1422,8 @@ def workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
     data = _data(value, kwargs)
     return pb.WorkflowRun(
         id=data.get("id", ""),
-        deployment_id=data.get("deployment_id", ""),
-        deployment_generation=data.get("deployment_generation", 0),
+        definition_id=data.get("definition_id", ""),
+        definition_generation=data.get("definition_generation", 0),
         workflow_key=data.get("workflow_key", ""),
         status=data.get("status", WORKFLOW_RUN_STATUS_UNSPECIFIED),
         trigger=workflow_run_trigger(data["trigger"]) if data.get("trigger") is not None else None,
@@ -1516,7 +1438,6 @@ def workflow_run(value: Any | None = None, **kwargs: Any) -> Any:
         target_digest=data.get("target_digest", ""),
         spec_digest=data.get("spec_digest", ""),
         action_table_digest=data.get("action_table_digest", ""),
-        provider_plan_digest=data.get("provider_plan_digest", ""),
         steps=_message_list(data.get("steps"), workflow_step_state),
         error=workflow_run_error(data["error"]) if data.get("error") is not None else None,
     )
@@ -1527,8 +1448,8 @@ def start_workflow_run_request(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     return pb.StartWorkflowRunRequest(
-        deployment_id=data.get("deployment_id", ""),
-        deployment_generation=data.get("deployment_generation", 0),
+        definition_id=data.get("definition_id", ""),
+        definition_generation=data.get("definition_generation", 0),
         activation_id=data.get("activation_id", ""),
         workflow_key=data.get("workflow_key", ""),
         input=_optional_struct(data.get("input")),
@@ -1554,8 +1475,8 @@ def signal_or_start_workflow_run_request(
         return _copy(value)
     data = _data(value, kwargs)
     return pb.SignalOrStartWorkflowRunRequest(
-        deployment_id=data.get("deployment_id", ""),
-        deployment_generation=data.get("deployment_generation", 0),
+        definition_id=data.get("definition_id", ""),
+        definition_generation=data.get("definition_generation", 0),
         activation_id=data.get("activation_id", ""),
         workflow_key=data.get("workflow_key", ""),
         input=_optional_struct(data.get("input")),
@@ -1587,7 +1508,7 @@ def list_workflow_runs_request(value: Any | None = None, **kwargs: Any) -> Any:
         return _copy(value)
     data = _data(value, kwargs)
     return pb.ListWorkflowRunsRequest(
-        deployment_id=data.get("deployment_id", ""),
+        definition_id=data.get("definition_id", ""),
         page_size=data.get("page_size", 0),
         page_token=data.get("page_token", ""),
         status=data.get("status", WORKFLOW_RUN_STATUS_UNSPECIFIED),
@@ -1635,7 +1556,7 @@ def workflow_event_delivery_result(value: Any | None = None, **kwargs: Any) -> A
         return _copy(value)
     data = _data(value, kwargs)
     return pb.WorkflowEventDeliveryResult(
-        deployment_id=data.get("deployment_id", ""),
+        definition_id=data.get("definition_id", ""),
         activation_id=data.get("activation_id", ""),
         run=workflow_run(data["run"]) if data.get("run") is not None else None,
         signal=workflow_signal(data["signal"]) if data.get("signal") is not None else None,
@@ -1782,14 +1703,14 @@ def workflow_action_result(value: Any | None = None, **kwargs: Any) -> Any:
     )
 
 
-def managed_workflow_deployment(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.ManagedWorkflowDeployment):
+def managed_workflow_definition(value: Any | None = None, **kwargs: Any) -> Any:
+    if isinstance(value, pb.ManagedWorkflowDefinition):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.ManagedWorkflowDeployment(
+    return pb.ManagedWorkflowDefinition(
         provider_name=data.get("provider_name", ""),
-        deployment=workflow_deployment(data["deployment"])
-        if data.get("deployment") is not None
+        definition=workflow_definition(data["definition"])
+        if data.get("definition") is not None
         else None,
     )
 
@@ -1817,90 +1738,76 @@ def managed_workflow_run_signal(value: Any | None = None, **kwargs: Any) -> Any:
     )
 
 
-def workflow_manager_plan_deployment_request(
+def workflow_manager_apply_definition_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.WorkflowManagerPlanDeploymentRequest):
+    if isinstance(value, pb.WorkflowManagerApplyDefinitionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.WorkflowManagerPlanDeploymentRequest(
+    return pb.WorkflowManagerApplyDefinitionRequest(
         provider_name=data.get("provider_name", ""),
-        spec=workflow_deployment_spec(data["spec"]) if data.get("spec") is not None else None,
+        spec=workflow_definition_spec(data["spec"]) if data.get("spec") is not None else None,
         invocation_token=data.get("invocation_token", ""),
         idempotency_key=data.get("idempotency_key", ""),
     )
 
 
-def workflow_manager_apply_deployment_request(
+def workflow_manager_get_definition_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.WorkflowManagerApplyDeploymentRequest):
+    if isinstance(value, pb.WorkflowManagerGetDefinitionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.WorkflowManagerApplyDeploymentRequest(
-        provider_name=data.get("provider_name", ""),
-        spec=workflow_deployment_spec(data["spec"]) if data.get("spec") is not None else None,
-        invocation_token=data.get("invocation_token", ""),
-        idempotency_key=data.get("idempotency_key", ""),
-    )
-
-
-def workflow_manager_get_deployment_request(
-    value: Any | None = None, **kwargs: Any
-) -> Any:
-    if isinstance(value, pb.WorkflowManagerGetDeploymentRequest):
-        return _copy(value)
-    data = _data(value, kwargs)
-    return pb.WorkflowManagerGetDeploymentRequest(
-        deployment_id=data.get("deployment_id", ""),
+    return pb.WorkflowManagerGetDefinitionRequest(
+        definition_id=data.get("definition_id", ""),
         invocation_token=data.get("invocation_token", ""),
     )
 
 
-def workflow_manager_list_deployments_request(
+def workflow_manager_list_definitions_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.WorkflowManagerListDeploymentsRequest):
+    if isinstance(value, pb.WorkflowManagerListDefinitionsRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.WorkflowManagerListDeploymentsRequest(
+    return pb.WorkflowManagerListDefinitionsRequest(
         provider_name=data.get("provider_name", ""),
         invocation_token=data.get("invocation_token", ""),
     )
 
 
-def workflow_manager_list_deployments_response(
+def workflow_manager_list_definitions_response(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.WorkflowManagerListDeploymentsResponse):
+    if isinstance(value, pb.WorkflowManagerListDefinitionsResponse):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.WorkflowManagerListDeploymentsResponse(
-        deployments=_message_list(data.get("deployments"), managed_workflow_deployment)
+    return pb.WorkflowManagerListDefinitionsResponse(
+        definitions=_message_list(data.get("definitions"), managed_workflow_definition)
     )
 
 
-def workflow_manager_delete_deployment_request(
+def workflow_manager_delete_definition_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.WorkflowManagerDeleteDeploymentRequest):
+    if isinstance(value, pb.WorkflowManagerDeleteDefinitionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.WorkflowManagerDeleteDeploymentRequest(
-        deployment_id=data.get("deployment_id", ""),
+    return pb.WorkflowManagerDeleteDefinitionRequest(
+        definition_id=data.get("definition_id", ""),
         generation=data.get("generation", 0),
         invocation_token=data.get("invocation_token", ""),
     )
 
 
-def workflow_manager_set_deployment_paused_request(
+def workflow_manager_set_definition_paused_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.WorkflowManagerSetDeploymentPausedRequest):
+    if isinstance(value, pb.WorkflowManagerSetDefinitionPausedRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.WorkflowManagerSetDeploymentPausedRequest(
-        deployment_id=data.get("deployment_id", ""),
+    return pb.WorkflowManagerSetDefinitionPausedRequest(
+        definition_id=data.get("definition_id", ""),
         paused=data.get("paused", False),
         invocation_token=data.get("invocation_token", ""),
     )
@@ -1913,7 +1820,7 @@ def workflow_manager_set_activation_paused_request(
         return _copy(value)
     data = _data(value, kwargs)
     return pb.WorkflowManagerSetActivationPausedRequest(
-        deployment_id=data.get("deployment_id", ""),
+        definition_id=data.get("definition_id", ""),
         activation_id=data.get("activation_id", ""),
         paused=data.get("paused", False),
         invocation_token=data.get("invocation_token", ""),
@@ -1928,8 +1835,8 @@ def workflow_manager_start_run_request(
     data = _data(value, kwargs)
     return pb.WorkflowManagerStartRunRequest(
         provider_name=data.get("provider_name", ""),
-        deployment_id=data.get("deployment_id", ""),
-        deployment_generation=data.get("deployment_generation", 0),
+        definition_id=data.get("definition_id", ""),
+        definition_generation=data.get("definition_generation", 0),
         activation_id=data.get("activation_id", ""),
         workflow_key=data.get("workflow_key", ""),
         input=_optional_struct(data.get("input")),
@@ -1959,8 +1866,8 @@ def workflow_manager_signal_or_start_run_request(
     data = _data(value, kwargs)
     return pb.WorkflowManagerSignalOrStartRunRequest(
         provider_name=data.get("provider_name", ""),
-        deployment_id=data.get("deployment_id", ""),
-        deployment_generation=data.get("deployment_generation", 0),
+        definition_id=data.get("definition_id", ""),
+        definition_generation=data.get("definition_generation", 0),
         activation_id=data.get("activation_id", ""),
         workflow_key=data.get("workflow_key", ""),
         input=_optional_struct(data.get("input")),
@@ -2033,21 +1940,18 @@ _NATIVE_BY_PROTO_NAME: dict[str, type[Any]] = {
         WorkflowEventActivation,
         WorkflowActivation,
         WorkflowAccessPermission,
-        WorkflowDeploymentSpec,
+        WorkflowDefinitionSpec,
         WorkflowActionDescriptor,
         WorkflowActionTable,
-        WorkflowUnsupportedFeature,
-        PlanWorkflowRequest,
-        PlanWorkflowResponse,
-        WorkflowDeploymentBinding,
+        WorkflowDefinitionBinding,
         WorkflowRunError,
-        WorkflowDeployment,
-        ApplyWorkflowDeploymentRequest,
-        GetWorkflowDeploymentRequest,
-        ListWorkflowDeploymentsRequest,
-        ListWorkflowDeploymentsResponse,
-        DeleteWorkflowDeploymentRequest,
-        SetWorkflowDeploymentPausedRequest,
+        WorkflowDefinition,
+        ApplyWorkflowDefinitionRequest,
+        GetWorkflowDefinitionRequest,
+        ListWorkflowDefinitionsRequest,
+        ListWorkflowDefinitionsResponse,
+        DeleteWorkflowDefinitionRequest,
+        SetWorkflowDefinitionPausedRequest,
         SetWorkflowActivationPausedRequest,
         WorkflowManualTrigger,
         WorkflowScheduleTrigger,
@@ -2078,16 +1982,15 @@ _NATIVE_BY_PROTO_NAME: dict[str, type[Any]] = {
         WorkflowAgentTurnPayload,
         InvokeWorkflowActionRequest,
         WorkflowActionResult,
-        ManagedWorkflowDeployment,
+        ManagedWorkflowDefinition,
         ManagedWorkflowRun,
         ManagedWorkflowRunSignal,
-        WorkflowManagerPlanDeploymentRequest,
-        WorkflowManagerApplyDeploymentRequest,
-        WorkflowManagerGetDeploymentRequest,
-        WorkflowManagerListDeploymentsRequest,
-        WorkflowManagerListDeploymentsResponse,
-        WorkflowManagerDeleteDeploymentRequest,
-        WorkflowManagerSetDeploymentPausedRequest,
+        WorkflowManagerApplyDefinitionRequest,
+        WorkflowManagerGetDefinitionRequest,
+        WorkflowManagerListDefinitionsRequest,
+        WorkflowManagerListDefinitionsResponse,
+        WorkflowManagerDeleteDefinitionRequest,
+        WorkflowManagerSetDefinitionPausedRequest,
         WorkflowManagerSetActivationPausedRequest,
         WorkflowManagerStartRunRequest,
         WorkflowManagerSignalRunRequest,
@@ -2144,45 +2047,37 @@ def _from_proto(value: Any) -> Any:
     return _native_from_proto(value)
 
 
-def plan_workflow_request_from_proto(value: Any) -> PlanWorkflowRequest:
+def apply_workflow_definition_request_from_proto(
+    value: Any,
+) -> ApplyWorkflowDefinitionRequest:
     return _from_proto(value)
 
 
-def plan_workflow_response_to_proto(value: Any) -> Any:
-    return plan_workflow_response(value)
-
-
-def apply_workflow_deployment_request_from_proto(
+def get_workflow_definition_request_from_proto(
     value: Any,
-) -> ApplyWorkflowDeploymentRequest:
+) -> GetWorkflowDefinitionRequest:
     return _from_proto(value)
 
 
-def get_workflow_deployment_request_from_proto(
+def list_workflow_definitions_request_from_proto(
     value: Any,
-) -> GetWorkflowDeploymentRequest:
+) -> ListWorkflowDefinitionsRequest:
     return _from_proto(value)
 
 
-def list_workflow_deployments_request_from_proto(
+def list_workflow_definitions_response_to_proto(value: Any) -> Any:
+    return list_workflow_definitions_response(value)
+
+
+def delete_workflow_definition_request_from_proto(
     value: Any,
-) -> ListWorkflowDeploymentsRequest:
+) -> DeleteWorkflowDefinitionRequest:
     return _from_proto(value)
 
 
-def list_workflow_deployments_response_to_proto(value: Any) -> Any:
-    return list_workflow_deployments_response(value)
-
-
-def delete_workflow_deployment_request_from_proto(
+def set_workflow_definition_paused_request_from_proto(
     value: Any,
-) -> DeleteWorkflowDeploymentRequest:
-    return _from_proto(value)
-
-
-def set_workflow_deployment_paused_request_from_proto(
-    value: Any,
-) -> SetWorkflowDeploymentPausedRequest:
+) -> SetWorkflowDefinitionPausedRequest:
     return _from_proto(value)
 
 
@@ -2248,8 +2143,8 @@ def get_workflow_run_output_request_from_proto(
     return _from_proto(value)
 
 
-def workflow_deployment_to_proto(value: Any) -> Any:
-    return workflow_deployment(value)
+def workflow_definition_to_proto(value: Any) -> Any:
+    return workflow_definition(value)
 
 
 def workflow_run_to_proto(value: Any) -> Any:
@@ -2268,7 +2163,7 @@ def workflow_action_result_from_proto(value: Any) -> WorkflowActionResult:
     return _from_proto(value)
 
 
-def managed_workflow_deployment_from_proto(value: Any) -> ManagedWorkflowDeployment:
+def managed_workflow_definition_from_proto(value: Any) -> ManagedWorkflowDefinition:
     return _from_proto(value)
 
 
@@ -2280,9 +2175,9 @@ def managed_workflow_run_signal_from_proto(value: Any) -> ManagedWorkflowRunSign
     return _from_proto(value)
 
 
-def workflow_manager_list_deployments_response_from_proto(
+def workflow_manager_list_definitions_response_from_proto(
     value: Any,
-) -> WorkflowManagerListDeploymentsResponse:
+) -> WorkflowManagerListDefinitionsResponse:
     return _from_proto(value)
 
 
@@ -2330,7 +2225,7 @@ class WorkflowHost:
 
 
 class WorkflowManager:
-    """Client for workflow deployment and run management from provider code."""
+    """Client for workflow definition and run management from provider code."""
 
     def __init__(self, invocation_token: str, *, idempotency_key: str = "") -> None:
         trimmed_token = invocation_token.strip()
@@ -2358,68 +2253,59 @@ class WorkflowManager:
             request.idempotency_key = self._idempotency_key
         return request
 
-    def plan_deployment(
+    def apply_definition(
         self, request: Any | None = None, **kwargs: Any
-    ) -> PlanWorkflowResponse:
+    ) -> ManagedWorkflowDefinition:
         req = self._attach_token(
-            workflow_manager_plan_deployment_request(request, **kwargs),
+            workflow_manager_apply_definition_request(request, **kwargs),
             idempotent=True,
         )
-        return _from_proto(_grpc_call(self._stub.PlanDeployment, req))
+        return managed_workflow_definition_from_proto(
+            _grpc_call(self._stub.ApplyDefinition, req)
+        )
 
-    def apply_deployment(
+    def get_definition(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ManagedWorkflowDeployment:
-        req = self._attach_token(
-            workflow_manager_apply_deployment_request(request, **kwargs),
-            idempotent=True,
-        )
-        return managed_workflow_deployment_from_proto(
-            _grpc_call(self._stub.ApplyDeployment, req)
+    ) -> ManagedWorkflowDefinition:
+        req = self._attach_token(workflow_manager_get_definition_request(request, **kwargs))
+        return managed_workflow_definition_from_proto(
+            _grpc_call(self._stub.GetDefinition, req)
         )
 
-    def get_deployment(
+    def list_definitions(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ManagedWorkflowDeployment:
-        req = self._attach_token(workflow_manager_get_deployment_request(request, **kwargs))
-        return managed_workflow_deployment_from_proto(
-            _grpc_call(self._stub.GetDeployment, req)
+    ) -> WorkflowManagerListDefinitionsResponse:
+        req = self._attach_token(
+            workflow_manager_list_definitions_request(request, **kwargs)
+        )
+        return workflow_manager_list_definitions_response_from_proto(
+            _grpc_call(self._stub.ListDefinitions, req)
         )
 
-    def list_deployments(
-        self, request: Any | None = None, **kwargs: Any
-    ) -> WorkflowManagerListDeploymentsResponse:
+    def delete_definition(self, request: Any | None = None, **kwargs: Any) -> None:
         req = self._attach_token(
-            workflow_manager_list_deployments_request(request, **kwargs)
+            workflow_manager_delete_definition_request(request, **kwargs)
         )
-        return workflow_manager_list_deployments_response_from_proto(
-            _grpc_call(self._stub.ListDeployments, req)
-        )
-
-    def delete_deployment(self, request: Any | None = None, **kwargs: Any) -> None:
-        req = self._attach_token(
-            workflow_manager_delete_deployment_request(request, **kwargs)
-        )
-        _grpc_call(self._stub.DeleteDeployment, req)
+        _grpc_call(self._stub.DeleteDefinition, req)
         return None
 
-    def set_deployment_paused(
+    def set_definition_paused(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ManagedWorkflowDeployment:
+    ) -> ManagedWorkflowDefinition:
         req = self._attach_token(
-            workflow_manager_set_deployment_paused_request(request, **kwargs)
+            workflow_manager_set_definition_paused_request(request, **kwargs)
         )
-        return managed_workflow_deployment_from_proto(
-            _grpc_call(self._stub.SetDeploymentPaused, req)
+        return managed_workflow_definition_from_proto(
+            _grpc_call(self._stub.SetDefinitionPaused, req)
         )
 
     def set_activation_paused(
         self, request: Any | None = None, **kwargs: Any
-    ) -> ManagedWorkflowDeployment:
+    ) -> ManagedWorkflowDefinition:
         req = self._attach_token(
             workflow_manager_set_activation_paused_request(request, **kwargs)
         )
-        return managed_workflow_deployment_from_proto(
+        return managed_workflow_definition_from_proto(
             _grpc_call(self._stub.SetActivationPaused, req)
         )
 

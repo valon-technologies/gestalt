@@ -27,6 +27,7 @@ type stubWorkflowControl struct {
 	defaultProviderName string
 	provider            coreworkflow.Provider
 	providers           map[string]coreworkflow.Provider
+	executionRefs       map[string]*coreworkflow.ExecutionReference
 	selectionErr        error
 	providerErr         error
 }
@@ -81,6 +82,78 @@ func (s *stubWorkflowControl) ProviderNames() []string {
 	return nil
 }
 
+func (s *stubWorkflowControl) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
+	if s.executionRefs == nil {
+		s.executionRefs = map[string]*coreworkflow.ExecutionReference{}
+	}
+	stored := cloneWorkflowExecutionReference(ref)
+	s.executionRefs[stored.ID] = stored
+	if provider, err := s.ResolveProvider(stored.ProviderName); err == nil {
+		if store, ok := provider.(coreworkflow.ExecutionReferenceMutableStore); ok {
+			_, _ = store.PutExecutionReference(ctx, stored)
+		}
+	}
+	return cloneWorkflowExecutionReference(stored), nil
+}
+
+func (s *stubWorkflowControl) GetExecutionReference(ctx context.Context, id string) (*coreworkflow.ExecutionReference, error) {
+	if ref := s.executionRefs[strings.TrimSpace(id)]; ref != nil {
+		return cloneWorkflowExecutionReference(ref), nil
+	}
+	for _, provider := range s.executionReferenceProviders() {
+		ref, err := provider.GetExecutionReference(ctx, id)
+		if err == nil {
+			return cloneWorkflowExecutionReference(ref), nil
+		}
+	}
+	return nil, core.ErrNotFound
+}
+
+func (s *stubWorkflowControl) ListExecutionReferences(ctx context.Context, subjectID string) ([]*coreworkflow.ExecutionReference, error) {
+	byID := map[string]*coreworkflow.ExecutionReference{}
+	for id, ref := range s.executionRefs {
+		if ref != nil {
+			byID[id] = cloneWorkflowExecutionReference(ref)
+		}
+	}
+	for _, provider := range s.executionReferenceProviders() {
+		refs, err := provider.ListExecutionReferences(ctx, subjectID)
+		if err != nil {
+			continue
+		}
+		for _, ref := range refs {
+			if ref != nil {
+				byID[ref.ID] = cloneWorkflowExecutionReference(ref)
+			}
+		}
+	}
+	out := make([]*coreworkflow.ExecutionReference, 0, len(byID))
+	for _, ref := range byID {
+		if strings.TrimSpace(subjectID) != "" && strings.TrimSpace(ref.SubjectID) != strings.TrimSpace(subjectID) {
+			continue
+		}
+		out = append(out, cloneWorkflowExecutionReference(ref))
+	}
+	return out, nil
+}
+
+func (s *stubWorkflowControl) executionReferenceProviders() []coreworkflow.ExecutionReferenceStore {
+	providers := []coreworkflow.Provider{}
+	if s.provider != nil {
+		providers = append(providers, s.provider)
+	}
+	for _, provider := range s.providers {
+		providers = append(providers, provider)
+	}
+	stores := make([]coreworkflow.ExecutionReferenceStore, 0, len(providers))
+	for _, provider := range providers {
+		if store, ok := provider.(coreworkflow.ExecutionReferenceStore); ok {
+			stores = append(stores, store)
+		}
+	}
+	return stores
+}
+
 type memoryWorkflowProvider struct {
 	schedules            map[string]*coreworkflow.Schedule
 	triggers             map[string]*coreworkflow.EventTrigger
@@ -131,14 +204,7 @@ func (p *memoryWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.
 	return nil, errors.New("not implemented")
 }
 
-func (p *memoryWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
-	return &coreworkflow.CompileTargetResponse{
-		AcceptedSpecDigest: req.SpecDigest,
-		ProviderPlanDigest: "plan-digest",
-	}, nil
-}
-
-func (p *memoryWorkflowProvider) ApplyWorkflowDeployment(ctx context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
+func (p *memoryWorkflowProvider) ApplyWorkflowDefinition(ctx context.Context, req coreworkflow.ApplyDefinitionRequest) (*coreworkflow.Definition, error) {
 	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Schedule != nil {
 		activation := req.Spec.Activations[0]
 		executionRef := ""
@@ -146,13 +212,13 @@ func (p *memoryWorkflowProvider) ApplyWorkflowDeployment(ctx context.Context, re
 			executionRef = req.Binding.ExecutionRef
 		}
 		if _, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{
-			ScheduleID:   req.Spec.ID,
-			Cron:         activation.Schedule.Cron,
-			Timezone:     activation.Schedule.Timezone,
-			Target:       req.Spec.Target,
-			Paused:       req.Spec.Paused || activation.Paused,
-			ExecutionRef: executionRef,
-			PlanBinding:  req.Binding,
+			ScheduleID:        req.Spec.ID,
+			Cron:              activation.Schedule.Cron,
+			Timezone:          activation.Schedule.Timezone,
+			Target:            req.Spec.Target,
+			Paused:            req.Spec.Paused || activation.Paused,
+			ExecutionRef:      executionRef,
+			DefinitionBinding: req.Binding,
 		}); err != nil {
 			return nil, err
 		}
@@ -164,84 +230,122 @@ func (p *memoryWorkflowProvider) ApplyWorkflowDeployment(ctx context.Context, re
 			executionRef = req.Binding.ExecutionRef
 		}
 		if _, err := p.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{
-			TriggerID:    req.Spec.ID,
-			Match:        activation.Event.Match,
-			Target:       req.Spec.Target,
-			Paused:       req.Spec.Paused || activation.Paused,
-			ExecutionRef: executionRef,
-			PlanBinding:  req.Binding,
+			TriggerID:         req.Spec.ID,
+			Match:             activation.Event.Match,
+			Target:            req.Spec.Target,
+			Paused:            req.Spec.Paused || activation.Paused,
+			ExecutionRef:      executionRef,
+			DefinitionBinding: req.Binding,
 		}); err != nil {
 			return nil, err
 		}
 	}
-	status := coreworkflow.DeploymentStatusActive
-	if req.Spec.Paused {
-		status = coreworkflow.DeploymentStatusPaused
+	if req.ExecutionRef != nil {
+		p.storeAppliedExecutionReference(req.ExecutionRef)
 	}
-	return &coreworkflow.Deployment{Spec: req.Spec, Status: status, Binding: req.Binding}, nil
+	status := coreworkflow.DefinitionStatusActive
+	if req.Spec.Paused {
+		status = coreworkflow.DefinitionStatusPaused
+	}
+	return &coreworkflow.Definition{Spec: req.Spec, Status: status, Binding: req.Binding}, nil
 }
 
-func (p *memoryWorkflowProvider) GetWorkflowDeployment(_ context.Context, req coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
-	if schedule := p.schedules[req.DeploymentID]; schedule != nil {
-		return workflowDeploymentFromSchedule(schedule), nil
+func (p *memoryWorkflowProvider) storeAppliedExecutionReference(ref *coreworkflow.ExecutionReference) {
+	if ref == nil {
+		return
 	}
-	if trigger := p.triggers[req.DeploymentID]; trigger != nil {
-		return workflowDeploymentFromEventTrigger(trigger), nil
+	if p.executionRefs == nil {
+		p.executionRefs = map[string]*coreworkflow.ExecutionReference{}
+	}
+	stored := cloneWorkflowExecutionReference(ref)
+	refKey := serverExecutionRefDefinitionKey(stored.ID)
+	for id, existing := range p.executionRefs {
+		if id == stored.ID || existing == nil {
+			continue
+		}
+		if refKey != "" && serverExecutionRefDefinitionKey(id) == refKey {
+			now := time.Now().UTC().Truncate(time.Second)
+			existing.RevokedAt = &now
+		}
+	}
+	p.executionRefs[stored.ID] = stored
+}
+
+func (p *memoryWorkflowProvider) revokeExecutionRefsByKey(refKey string) {
+	refKey = strings.TrimSpace(refKey)
+	if refKey == "" {
+		return
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	for id, existing := range p.executionRefs {
+		if existing == nil || serverExecutionRefDefinitionKey(id) != refKey {
+			continue
+		}
+		existing.RevokedAt = &now
+	}
+}
+
+func (p *memoryWorkflowProvider) GetWorkflowDefinition(_ context.Context, req coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	if schedule := p.schedules[req.DefinitionID]; schedule != nil {
+		return workflowDefinitionFromSchedule(schedule), nil
+	}
+	if trigger := p.triggers[req.DefinitionID]; trigger != nil {
+		return workflowDefinitionFromEventTrigger(trigger), nil
 	}
 	return nil, core.ErrNotFound
 }
 
-func (p *memoryWorkflowProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
-	out := &coreworkflow.ListDeploymentsResponse{}
+func (p *memoryWorkflowProvider) ListWorkflowDefinitions(context.Context, coreworkflow.ListDefinitionsRequest) (*coreworkflow.ListDefinitionsResponse, error) {
+	out := &coreworkflow.ListDefinitionsResponse{}
 	for _, schedule := range p.schedules {
-		out.Deployments = append(out.Deployments, workflowDeploymentFromSchedule(schedule))
+		out.Definitions = append(out.Definitions, workflowDefinitionFromSchedule(schedule))
 	}
 	for _, trigger := range p.triggers {
-		out.Deployments = append(out.Deployments, workflowDeploymentFromEventTrigger(trigger))
+		out.Definitions = append(out.Definitions, workflowDefinitionFromEventTrigger(trigger))
 	}
 	return out, nil
 }
 
-func (p *memoryWorkflowProvider) DeleteWorkflowDeployment(ctx context.Context, req coreworkflow.DeleteDeploymentRequest) error {
-	if _, ok := p.schedules[req.DeploymentID]; ok {
-		return p.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: req.DeploymentID})
+func (p *memoryWorkflowProvider) DeleteWorkflowDefinition(ctx context.Context, req coreworkflow.DeleteDefinitionRequest) error {
+	if _, ok := p.schedules[req.DefinitionID]; ok {
+		return p.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: req.DefinitionID})
 	}
-	if _, ok := p.triggers[req.DeploymentID]; ok {
-		return p.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: req.DeploymentID})
+	if _, ok := p.triggers[req.DefinitionID]; ok {
+		return p.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: req.DefinitionID})
 	}
 	return core.ErrNotFound
 }
 
-func (p *memoryWorkflowProvider) SetWorkflowDeploymentPaused(ctx context.Context, req coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
-	if _, ok := p.schedules[req.DeploymentID]; ok {
+func (p *memoryWorkflowProvider) SetWorkflowDefinitionPaused(ctx context.Context, req coreworkflow.SetDefinitionPausedRequest) (*coreworkflow.Definition, error) {
+	if _, ok := p.schedules[req.DefinitionID]; ok {
 		var err error
 		if req.Paused {
-			_, err = p.PauseSchedule(ctx, coreworkflow.PauseScheduleRequest{ScheduleID: req.DeploymentID})
+			_, err = p.PauseSchedule(ctx, coreworkflow.PauseScheduleRequest{ScheduleID: req.DefinitionID})
 		} else {
-			_, err = p.ResumeSchedule(ctx, coreworkflow.ResumeScheduleRequest{ScheduleID: req.DeploymentID})
+			_, err = p.ResumeSchedule(ctx, coreworkflow.ResumeScheduleRequest{ScheduleID: req.DefinitionID})
 		}
 		if err != nil {
 			return nil, err
 		}
-		return p.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: req.DeploymentID})
+		return p.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: req.DefinitionID})
 	}
-	if _, ok := p.triggers[req.DeploymentID]; ok {
+	if _, ok := p.triggers[req.DefinitionID]; ok {
 		var err error
 		if req.Paused {
-			_, err = p.PauseEventTrigger(ctx, coreworkflow.PauseEventTriggerRequest{TriggerID: req.DeploymentID})
+			_, err = p.PauseEventTrigger(ctx, coreworkflow.PauseEventTriggerRequest{TriggerID: req.DefinitionID})
 		} else {
-			_, err = p.ResumeEventTrigger(ctx, coreworkflow.ResumeEventTriggerRequest{TriggerID: req.DeploymentID})
+			_, err = p.ResumeEventTrigger(ctx, coreworkflow.ResumeEventTriggerRequest{TriggerID: req.DefinitionID})
 		}
 		if err != nil {
 			return nil, err
 		}
-		return p.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: req.DeploymentID})
+		return p.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: req.DefinitionID})
 	}
 	return nil, core.ErrNotFound
 }
 
-func (p *memoryWorkflowProvider) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
-	return p.SetWorkflowDeploymentPaused(ctx, coreworkflow.SetDeploymentPausedRequest{DeploymentID: req.DeploymentID, Paused: req.Paused})
+func (p *memoryWorkflowProvider) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (*coreworkflow.Definition, error) {
+	return p.SetWorkflowDefinitionPaused(ctx, coreworkflow.SetDefinitionPausedRequest{DefinitionID: req.DefinitionID, Paused: req.Paused})
 }
 
 func (p *memoryWorkflowProvider) DeliverWorkflowEvent(ctx context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
@@ -361,6 +465,7 @@ func (p *memoryWorkflowProvider) DeleteSchedule(_ context.Context, req coreworkf
 	}
 	delete(p.schedules, req.ScheduleID)
 	p.deleteReqs = append(p.deleteReqs, req)
+	p.revokeExecutionRefsByKey("schedule:" + strings.TrimSpace(req.ScheduleID))
 	return nil
 }
 
@@ -446,6 +551,7 @@ func (p *memoryWorkflowProvider) DeleteEventTrigger(_ context.Context, req corew
 	}
 	delete(p.triggers, req.TriggerID)
 	p.deleteTriggerReqs = append(p.deleteTriggerReqs, req)
+	p.revokeExecutionRefsByKey("event_trigger:" + strings.TrimSpace(req.TriggerID))
 	return nil
 }
 
@@ -514,19 +620,74 @@ func (p *memoryWorkflowProvider) ListExecutionReferences(_ context.Context, subj
 	return out, nil
 }
 
+func serverDefinitionIDFromExecutionRefID(id string) string {
+	const prefix = "workflow_definition:"
+	id = strings.TrimSpace(id)
+	if !strings.HasPrefix(id, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(id, prefix)
+	lastColon := strings.LastIndex(rest, ":")
+	if lastColon <= 0 {
+		return ""
+	}
+	return rest[:lastColon]
+}
+
+func serverScheduleIDFromExecutionRefID(id string) string {
+	const prefix = "workflow_schedule:"
+	id = strings.TrimSpace(id)
+	if !strings.HasPrefix(id, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(id, prefix)
+	lastColon := strings.LastIndex(rest, ":")
+	if lastColon <= 0 {
+		return ""
+	}
+	return rest[:lastColon]
+}
+
+func serverEventTriggerIDFromExecutionRefID(id string) string {
+	const prefix = "workflow_event_trigger:"
+	id = strings.TrimSpace(id)
+	if !strings.HasPrefix(id, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(id, prefix)
+	lastColon := strings.LastIndex(rest, ":")
+	if lastColon <= 0 {
+		return ""
+	}
+	return rest[:lastColon]
+}
+
+func serverExecutionRefDefinitionKey(id string) string {
+	switch {
+	case serverDefinitionIDFromExecutionRefID(id) != "":
+		return "definition:" + serverDefinitionIDFromExecutionRefID(id)
+	case serverScheduleIDFromExecutionRefID(id) != "":
+		return "schedule:" + serverScheduleIDFromExecutionRefID(id)
+	case serverEventTriggerIDFromExecutionRefID(id) != "":
+		return "event_trigger:" + serverEventTriggerIDFromExecutionRefID(id)
+	default:
+		return ""
+	}
+}
+
 func (p *memoryWorkflowProvider) Ping(context.Context) error { return nil }
 func (p *memoryWorkflowProvider) Close() error               { return nil }
 
-func workflowDeploymentFromSchedule(schedule *coreworkflow.Schedule) *coreworkflow.Deployment {
+func workflowDefinitionFromSchedule(schedule *coreworkflow.Schedule) *coreworkflow.Definition {
 	if schedule == nil {
 		return nil
 	}
-	status := coreworkflow.DeploymentStatusActive
+	status := coreworkflow.DefinitionStatusActive
 	if schedule.Paused {
-		status = coreworkflow.DeploymentStatusPaused
+		status = coreworkflow.DefinitionStatusPaused
 	}
-	return &coreworkflow.Deployment{
-		Spec: coreworkflow.DeploymentSpec{
+	return &coreworkflow.Definition{
+		Spec: coreworkflow.DefinitionSpec{
 			ID:     schedule.ID,
 			Target: schedule.Target,
 			Paused: schedule.Paused,
@@ -543,20 +704,20 @@ func workflowDeploymentFromSchedule(schedule *coreworkflow.Schedule) *coreworkfl
 		Status:    status,
 		CreatedAt: schedule.CreatedAt,
 		UpdatedAt: schedule.UpdatedAt,
-		Binding:   &coreworkflow.DeploymentBinding{ExecutionRef: schedule.ExecutionRef},
+		Binding:   &coreworkflow.DefinitionBinding{ExecutionRef: schedule.ExecutionRef},
 	}
 }
 
-func workflowDeploymentFromEventTrigger(trigger *coreworkflow.EventTrigger) *coreworkflow.Deployment {
+func workflowDefinitionFromEventTrigger(trigger *coreworkflow.EventTrigger) *coreworkflow.Definition {
 	if trigger == nil {
 		return nil
 	}
-	status := coreworkflow.DeploymentStatusActive
+	status := coreworkflow.DefinitionStatusActive
 	if trigger.Paused {
-		status = coreworkflow.DeploymentStatusPaused
+		status = coreworkflow.DefinitionStatusPaused
 	}
-	return &coreworkflow.Deployment{
-		Spec: coreworkflow.DeploymentSpec{
+	return &coreworkflow.Definition{
+		Spec: coreworkflow.DefinitionSpec{
 			ID:     trigger.ID,
 			Target: trigger.Target,
 			Paused: trigger.Paused,
@@ -572,7 +733,7 @@ func workflowDeploymentFromEventTrigger(trigger *coreworkflow.EventTrigger) *cor
 		Status:    status,
 		CreatedAt: trigger.CreatedAt,
 		UpdatedAt: trigger.UpdatedAt,
-		Binding:   &coreworkflow.DeploymentBinding{ExecutionRef: trigger.ExecutionRef},
+		Binding:   &coreworkflow.DefinitionBinding{ExecutionRef: trigger.ExecutionRef},
 	}
 }
 
@@ -1814,12 +1975,8 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	if oldRef.RevokedAt != nil && !oldRef.RevokedAt.IsZero() {
 		t.Fatalf("expected old ref to remain active, got %#v", oldRef)
 	}
-	newRef, err := provider.GetExecutionReference(context.Background(), provider.upsertReqs[0].ExecutionRef)
-	if err != nil {
-		t.Fatalf("Get new ref: %v", err)
-	}
-	if newRef.RevokedAt == nil || newRef.RevokedAt.IsZero() {
-		t.Fatalf("expected failed-update ref to be revoked, got %#v", newRef)
+	if _, err := provider.GetExecutionReference(context.Background(), provider.upsertReqs[0].ExecutionRef); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("failed-update ref lookup error = %v, want not found", err)
 	}
 }
 
@@ -2767,7 +2924,7 @@ func TestWorkflowEventTriggerAgentTargetSessionReadyDeliveryCreateAndList(t *tes
 	createReq, _ := http.NewRequest(
 		http.MethodPost,
 		ts.URL+"/api/v1/workflow/event-triggers/",
-		bytes.NewBufferString(`{"provider":"basic","match":{"type":"slack.message.created","source":"slack","subject":"thread"},"target":{"steps":[{"id":"agent","agent":{"provider":"managed","model":"deep","prompt":"Reply to the Slack thread"},"outputDelivery":{"plugin":{"name":"roadmap","operation":"sync","input":{"object":{"format":{"literal":"final"},"text":{"stepOutput":{"stepId":"agent","path":"text"}},"thread_ts":{"signalPayload":"extensions.slack_thread_ts"}}}}}}]}}`),
+		bytes.NewBufferString(`{"provider":"basic","match":{"type":"slack.message.created","source":"slack","subject":"thread"},"target":{"steps":[{"id":"agent","agent":{"provider":"managed","model":"deep","prompt":"Reply to the Slack thread"},"outputDelivery":{"plugin":{"name":"roadmap","operation":"sync","input":{"object":{"format":{"literal":"final"},"text":{"stepOutput":{"stepId":"agent","path":"text"}},"thread_ts":{"signalPayload":"slack_thread_ts"}}}}}}]}}`),
 	)
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})

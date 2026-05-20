@@ -354,9 +354,9 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := client.ApplyDeployment(ctx, gestalt.WorkflowManagerApplyDeployment{
+		result, err := client.ApplyDefinition(ctx, gestalt.WorkflowManagerApplyDefinition{
 			ProviderName: input.ProviderName,
-			Spec:         workflowScheduleDeploymentSpec("", input.Cron, input.Timezone, target, input.Paused),
+			Spec:         workflowScheduleDefinitionSpec("", input.Cron, input.Timezone, target, input.Paused),
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
@@ -373,8 +373,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		result, err := client.GetDeployment(ctx, gestalt.WorkflowManagerGetDeployment{
-			DeploymentID: input.ScheduleID,
+		result, err := client.GetDefinition(ctx, gestalt.WorkflowManagerGetDefinition{
+			DefinitionID: input.ScheduleID,
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
@@ -395,9 +395,9 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := client.ApplyDeployment(ctx, gestalt.WorkflowManagerApplyDeployment{
+		result, err := client.ApplyDefinition(ctx, gestalt.WorkflowManagerApplyDefinition{
 			ProviderName: input.ProviderName,
-			Spec:         workflowScheduleDeploymentSpec(input.ScheduleID, input.Cron, input.Timezone, target, input.Paused),
+			Spec:         workflowScheduleDefinitionSpec(input.ScheduleID, input.Cron, input.Timezone, target, input.Paused),
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
@@ -414,8 +414,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		if err := client.DeleteDeployment(ctx, gestalt.WorkflowManagerDeleteDeployment{
-			DeploymentID: input.ScheduleID,
+		if err := client.DeleteDefinition(ctx, gestalt.WorkflowManagerDeleteDefinition{
+			DefinitionID: input.ScheduleID,
 		}); err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -431,8 +431,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		result, err := client.SetDeploymentPaused(ctx, gestalt.WorkflowManagerSetDeploymentPaused{
-			DeploymentID: input.ScheduleID,
+		result, err := client.SetDefinitionPaused(ctx, gestalt.WorkflowManagerSetDefinitionPaused{
+			DefinitionID: input.ScheduleID,
 			Paused:       true,
 		})
 		if err != nil {
@@ -450,8 +450,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		result, err := client.SetDeploymentPaused(ctx, gestalt.WorkflowManagerSetDeploymentPaused{
-			DeploymentID: input.ScheduleID,
+		result, err := client.SetDefinitionPaused(ctx, gestalt.WorkflowManagerSetDefinitionPaused{
+			DefinitionID: input.ScheduleID,
 			Paused:       false,
 		})
 		if err != nil {
@@ -473,9 +473,9 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := client.ApplyDeployment(ctx, gestalt.WorkflowManagerApplyDeployment{
+		result, err := client.ApplyDefinition(ctx, gestalt.WorkflowManagerApplyDefinition{
 			ProviderName: input.ProviderName,
-			Spec:         workflowEventDeploymentSpec("", input.Match, target, input.Paused),
+			Spec:         workflowEventDefinitionSpec("", input.Match, target, input.Paused),
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
@@ -492,8 +492,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		result, err := client.GetDeployment(ctx, gestalt.WorkflowManagerGetDeployment{
-			DeploymentID: input.TriggerID,
+		result, err := client.GetDefinition(ctx, gestalt.WorkflowManagerGetDefinition{
+			DefinitionID: input.TriggerID,
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
@@ -514,9 +514,9 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 		if err != nil {
 			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
 		}
-		result, err := client.ApplyDeployment(ctx, gestalt.WorkflowManagerApplyDeployment{
+		result, err := client.ApplyDefinition(ctx, gestalt.WorkflowManagerApplyDefinition{
 			ProviderName: input.ProviderName,
-			Spec:         workflowEventDeploymentSpec(input.TriggerID, input.Match, target, input.Paused),
+			Spec:         workflowEventDefinitionSpec(input.TriggerID, input.Match, target, input.Paused),
 		})
 		if err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
@@ -533,8 +533,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		if err := client.DeleteDeployment(ctx, gestalt.WorkflowManagerDeleteDeployment{
-			DeploymentID: input.TriggerID,
+		if err := client.DeleteDefinition(ctx, gestalt.WorkflowManagerDeleteDefinition{
+			DefinitionID: input.TriggerID,
 		}); err != nil {
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
@@ -550,8 +550,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		result, err := client.SetDeploymentPaused(ctx, gestalt.WorkflowManagerSetDeploymentPaused{
-			DeploymentID: input.TriggerID,
+		result, err := client.SetDefinitionPaused(ctx, gestalt.WorkflowManagerSetDefinitionPaused{
+			DefinitionID: input.TriggerID,
 			Paused:       true,
 		})
 		if err != nil {
@@ -569,8 +569,8 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return jsonResult(http.StatusOK, map[string]any{"error": err.Error()}), nil
 		}
 		defer func() { _ = client.Close() }()
-		result, err := client.SetDeploymentPaused(ctx, gestalt.WorkflowManagerSetDeploymentPaused{
-			DeploymentID: input.TriggerID,
+		result, err := client.SetDefinitionPaused(ctx, gestalt.WorkflowManagerSetDefinitionPaused{
+			DefinitionID: input.TriggerID,
 			Paused:       false,
 		})
 		if err != nil {
@@ -796,8 +796,8 @@ func workflowTargetInput(target workflowScheduleTargetInput) (*gestalt.BoundWork
 	}, nil
 }
 
-func workflowScheduleDeploymentSpec(id, cron, timezone string, target *gestalt.BoundWorkflowTarget, paused bool) *gestalt.WorkflowDeploymentSpec {
-	return &gestalt.WorkflowDeploymentSpec{
+func workflowScheduleDefinitionSpec(id, cron, timezone string, target *gestalt.BoundWorkflowTarget, paused bool) *gestalt.WorkflowDefinitionSpec {
+	return &gestalt.WorkflowDefinitionSpec{
 		ID:     id,
 		Target: target,
 		Paused: paused,
@@ -813,8 +813,8 @@ func workflowScheduleDeploymentSpec(id, cron, timezone string, target *gestalt.B
 	}
 }
 
-func workflowEventDeploymentSpec(id string, match workflowEventMatchInput, target *gestalt.BoundWorkflowTarget, paused bool) *gestalt.WorkflowDeploymentSpec {
-	return &gestalt.WorkflowDeploymentSpec{
+func workflowEventDefinitionSpec(id string, match workflowEventMatchInput, target *gestalt.BoundWorkflowTarget, paused bool) *gestalt.WorkflowDefinitionSpec {
+	return &gestalt.WorkflowDefinitionSpec{
 		ID:     id,
 		Target: target,
 		Paused: paused,
@@ -858,27 +858,27 @@ func workflowEvent(input publishWorkflowEventInput) (*gestalt.WorkflowEvent, err
 	return event, nil
 }
 
-func managedWorkflowScheduleBody(value *gestalt.WorkflowManagerDeployment) map[string]any {
+func managedWorkflowScheduleBody(value *gestalt.WorkflowManagerDefinition) map[string]any {
 	if value == nil {
 		return map[string]any{}
 	}
-	deployment := value.Deployment
+	definition := value.Definition
 	body := map[string]any{
 		"provider_name": value.ProviderName,
 	}
-	if deployment == nil || deployment.Spec == nil {
+	if definition == nil || definition.Spec == nil {
 		return body
 	}
-	spec := deployment.Spec
-	activation := workflowDeploymentScheduleActivation(spec)
-	target := workflowDeploymentFirstPluginStep(spec.Target)
+	spec := definition.Spec
+	activation := workflowDefinitionScheduleActivation(spec)
+	target := workflowDefinitionFirstPluginStep(spec.Target)
 	body["schedule"] = map[string]any{
 		"id":         spec.ID,
 		"cron":       "",
 		"timezone":   "",
 		"paused":     spec.Paused,
-		"created_at": timeBody(deployment.CreatedAt),
-		"updated_at": timeBody(deployment.UpdatedAt),
+		"created_at": timeBody(definition.CreatedAt),
+		"updated_at": timeBody(definition.UpdatedAt),
 		"next_run_at": func() any {
 			return nil
 		}(),
@@ -906,25 +906,25 @@ func managedWorkflowScheduleBody(value *gestalt.WorkflowManagerDeployment) map[s
 	return body
 }
 
-func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerDeployment) map[string]any {
+func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerDefinition) map[string]any {
 	if value == nil {
 		return map[string]any{}
 	}
-	deployment := value.Deployment
+	definition := value.Definition
 	body := map[string]any{
 		"provider_name": value.ProviderName,
 	}
-	if deployment == nil || deployment.Spec == nil {
+	if definition == nil || definition.Spec == nil {
 		return body
 	}
-	spec := deployment.Spec
-	target := workflowDeploymentFirstPluginStep(spec.Target)
-	match := workflowDeploymentEventMatch(spec)
+	spec := definition.Spec
+	target := workflowDefinitionFirstPluginStep(spec.Target)
+	match := workflowDefinitionEventMatch(spec)
 	body["trigger"] = map[string]any{
 		"id":         spec.ID,
 		"paused":     spec.Paused,
-		"created_at": timeBody(deployment.CreatedAt),
-		"updated_at": timeBody(deployment.UpdatedAt),
+		"created_at": timeBody(definition.CreatedAt),
+		"updated_at": timeBody(definition.UpdatedAt),
 		"match": map[string]any{
 			"type":    "",
 			"source":  "",
@@ -957,7 +957,7 @@ func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerDeployment) map[st
 	return body
 }
 
-func workflowDeploymentScheduleActivation(spec *gestalt.WorkflowDeploymentSpec) *gestalt.WorkflowScheduleActivation {
+func workflowDefinitionScheduleActivation(spec *gestalt.WorkflowDefinitionSpec) *gestalt.WorkflowScheduleActivation {
 	if spec == nil {
 		return nil
 	}
@@ -969,7 +969,7 @@ func workflowDeploymentScheduleActivation(spec *gestalt.WorkflowDeploymentSpec) 
 	return nil
 }
 
-func workflowDeploymentEventMatch(spec *gestalt.WorkflowDeploymentSpec) *gestalt.WorkflowEventMatch {
+func workflowDefinitionEventMatch(spec *gestalt.WorkflowDefinitionSpec) *gestalt.WorkflowEventMatch {
 	if spec == nil {
 		return nil
 	}
@@ -981,7 +981,7 @@ func workflowDeploymentEventMatch(spec *gestalt.WorkflowDeploymentSpec) *gestalt
 	return nil
 }
 
-func workflowDeploymentFirstPluginStep(target *gestalt.BoundWorkflowTarget) *gestalt.WorkflowStepPluginCall {
+func workflowDefinitionFirstPluginStep(target *gestalt.BoundWorkflowTarget) *gestalt.WorkflowStepPluginCall {
 	if target == nil {
 		return nil
 	}

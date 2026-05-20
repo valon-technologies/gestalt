@@ -55,7 +55,6 @@ const (
 	WorkflowOperationResumeEventTrigger      = "resume_event_trigger"
 	WorkflowOperationPublishEvent            = "publish_event"
 	WorkflowOperationPing                    = "ping"
-	WorkflowOperationPutExecutionReference   = "put_execution_reference"
 	WorkflowOperationGetExecutionReference   = "get_execution_reference"
 	WorkflowOperationListExecutionReferences = "list_execution_references"
 	WorkflowOperationInvokeOperation         = "invoke_operation"

@@ -24,12 +24,11 @@ pub const ENV_WORKFLOW_MANAGER_SOCKET: &str = "GESTALT_WORKFLOW_MANAGER_SOCKET";
 pub const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_MANAGER_SOCKET_TOKEN";
 const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
-pub type WorkflowManagerPlanDeployment = pb::WorkflowManagerPlanDeploymentRequest;
-pub type WorkflowManagerApplyDeployment = pb::WorkflowManagerApplyDeploymentRequest;
-pub type WorkflowManagerGetDeployment = pb::WorkflowManagerGetDeploymentRequest;
-pub type WorkflowManagerListDeployments = pb::WorkflowManagerListDeploymentsRequest;
-pub type WorkflowManagerDeleteDeployment = pb::WorkflowManagerDeleteDeploymentRequest;
-pub type WorkflowManagerSetDeploymentPaused = pb::WorkflowManagerSetDeploymentPausedRequest;
+pub type WorkflowManagerApplyDefinition = pb::WorkflowManagerApplyDefinitionRequest;
+pub type WorkflowManagerGetDefinition = pb::WorkflowManagerGetDefinitionRequest;
+pub type WorkflowManagerListDefinitions = pb::WorkflowManagerListDefinitionsRequest;
+pub type WorkflowManagerDeleteDefinition = pb::WorkflowManagerDeleteDefinitionRequest;
+pub type WorkflowManagerSetDefinitionPaused = pb::WorkflowManagerSetDefinitionPausedRequest;
 pub type WorkflowManagerSetActivationPaused = pb::WorkflowManagerSetActivationPausedRequest;
 pub type WorkflowManagerStartRun = pb::WorkflowManagerStartRunRequest;
 pub type WorkflowManagerSignalRun = pb::WorkflowManagerSignalRunRequest;
@@ -73,7 +72,7 @@ impl pb::WorkflowManagerSignalOrStartRunRequest {
     }
 }
 
-/// Client for planning deployments, starting runs, and delivering workflow events.
+/// Client for applying definitions, starting runs, and delivering workflow events.
 pub struct WorkflowManager {
     client: ProtoWorkflowManagerHostClient<WorkflowManagerTransport>,
     invocation_token: String,
@@ -134,72 +133,60 @@ impl WorkflowManager {
         })
     }
 
-    /// Plans a workflow deployment.
-    pub async fn plan_deployment(
+    /// Applies a workflow definition.
+    pub async fn apply_definition(
         &mut self,
-        mut input: WorkflowManagerPlanDeployment,
-    ) -> std::result::Result<pb::PlanWorkflowResponse, WorkflowManagerError> {
+        mut input: WorkflowManagerApplyDefinition,
+    ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
         self.fill_invocation_and_idempotency(
             &mut input.invocation_token,
             &mut input.idempotency_key,
         );
-        Ok(self.client.plan_deployment(input).await?.into_inner())
+        Ok(self.client.apply_definition(input).await?.into_inner())
     }
 
-    /// Applies a workflow deployment.
-    pub async fn apply_deployment(
+    /// Fetches one workflow definition.
+    pub async fn get_definition(
         &mut self,
-        mut input: WorkflowManagerApplyDeployment,
-    ) -> std::result::Result<pb::ManagedWorkflowDeployment, WorkflowManagerError> {
-        self.fill_invocation_and_idempotency(
-            &mut input.invocation_token,
-            &mut input.idempotency_key,
-        );
-        Ok(self.client.apply_deployment(input).await?.into_inner())
-    }
-
-    /// Fetches one workflow deployment.
-    pub async fn get_deployment(
-        &mut self,
-        mut input: WorkflowManagerGetDeployment,
-    ) -> std::result::Result<pb::ManagedWorkflowDeployment, WorkflowManagerError> {
+        mut input: WorkflowManagerGetDefinition,
+    ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
         input.invocation_token = self.invocation_token.clone();
-        Ok(self.client.get_deployment(input).await?.into_inner())
+        Ok(self.client.get_definition(input).await?.into_inner())
     }
 
-    /// Lists workflow deployments.
-    pub async fn list_deployments(
+    /// Lists workflow definitions.
+    pub async fn list_definitions(
         &mut self,
-        mut input: WorkflowManagerListDeployments,
-    ) -> std::result::Result<pb::WorkflowManagerListDeploymentsResponse, WorkflowManagerError> {
+        mut input: WorkflowManagerListDefinitions,
+    ) -> std::result::Result<pb::WorkflowManagerListDefinitionsResponse, WorkflowManagerError> {
         input.invocation_token = self.invocation_token.clone();
-        Ok(self.client.list_deployments(input).await?.into_inner())
+        Ok(self.client.list_definitions(input).await?.into_inner())
     }
 
-    /// Deletes a workflow deployment.
-    pub async fn delete_deployment(
+    /// Deletes a workflow definition.
+    pub async fn delete_definition(
         &mut self,
-        mut input: WorkflowManagerDeleteDeployment,
+        mut input: WorkflowManagerDeleteDefinition,
     ) -> std::result::Result<(), WorkflowManagerError> {
         input.invocation_token = self.invocation_token.clone();
-        self.client.delete_deployment(input).await?;
+        self.client.delete_definition(input).await?;
         Ok(())
     }
 
-    /// Pauses or resumes a workflow deployment.
-    pub async fn set_deployment_paused(
+    /// Pauses or resumes a workflow definition.
+    pub async fn set_definition_paused(
         &mut self,
-        mut input: WorkflowManagerSetDeploymentPaused,
-    ) -> std::result::Result<pb::ManagedWorkflowDeployment, WorkflowManagerError> {
+        mut input: WorkflowManagerSetDefinitionPaused,
+    ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
         input.invocation_token = self.invocation_token.clone();
-        Ok(self.client.set_deployment_paused(input).await?.into_inner())
+        Ok(self.client.set_definition_paused(input).await?.into_inner())
     }
 
     /// Pauses or resumes one workflow activation.
     pub async fn set_activation_paused(
         &mut self,
         mut input: WorkflowManagerSetActivationPaused,
-    ) -> std::result::Result<pb::ManagedWorkflowDeployment, WorkflowManagerError> {
+    ) -> std::result::Result<pb::ManagedWorkflowDefinition, WorkflowManagerError> {
         input.invocation_token = self.invocation_token.clone();
         Ok(self.client.set_activation_paused(input).await?.into_inner())
     }

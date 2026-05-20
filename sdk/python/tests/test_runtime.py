@@ -18,7 +18,7 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
     AgentProvider,
-    ApplyWorkflowDeploymentRequest,
+    ApplyWorkflowDefinitionRequest,
     AuthenticationProvider,
     BeginLoginRequest,
     CacheEntry,
@@ -33,8 +33,6 @@ from gestalt import (
     ListWorkflowRunsRequest,
     ListWorkflowRunsResponse,
     MetadataProvider,
-    PlanWorkflowRequest,
-    PlanWorkflowResponse,
     Plugin,
     PluginProviderAdapter,
     PluginRuntimeProvider,
@@ -45,11 +43,11 @@ from gestalt import (
     S3Provider,
     SessionTTLProvider,
     SetWorkflowActivationPausedRequest,
-    SetWorkflowDeploymentPausedRequest,
+    SetWorkflowDefinitionPausedRequest,
     StartWorkflowRunRequest,
     WarningsProvider,
-    WorkflowDeployment,
-    WorkflowDeploymentSpec,
+    WorkflowDefinition,
+    WorkflowDefinitionSpec,
     WorkflowProvider,
     WorkflowRun,
     _bootstrap,
@@ -1461,7 +1459,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
 
         response = wrapped.ListWorkflowRuns(
             workflow_pb2.ListWorkflowRunsRequest(
-                deployment_id="deployment-1",
+                definition_id="deployment-1",
                 page_size=25,
                 page_token="page-0",
                 status=workflow_pb2.WORKFLOW_RUN_STATUS_RUNNING,
@@ -1470,7 +1468,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
         )
 
         self.assertIsInstance(provider.request, ListWorkflowRunsRequest)
-        self.assertEqual(provider.request.deployment_id, "deployment-1")
+        self.assertEqual(provider.request.definition_id, "deployment-1")
         self.assertEqual(provider.request.page_size, 25)
         self.assertEqual(provider.request.page_token, "page-0")
         self.assertEqual(
@@ -1481,33 +1479,33 @@ class WorkflowRuntimeTests(unittest.TestCase):
 
     def test_workflow_wrapper_returns_deployment_pause_updates(self) -> None:
         class Provider(WorkflowProvider):
-            def set_deployment_paused(self, request: Any) -> Any:
-                self.deployment_request = request
-                return WorkflowDeployment(
-                    spec=WorkflowDeploymentSpec(id=request.deployment_id),
-                    status=workflow_pb2.WORKFLOW_DEPLOYMENT_STATUS_PAUSED,
+            def set_definition_paused(self, request: Any) -> Any:
+                self.definition_request = request
+                return WorkflowDefinition(
+                    spec=WorkflowDefinitionSpec(id=request.definition_id),
+                    status=workflow_pb2.WORKFLOW_DEFINITION_STATUS_PAUSED,
                 )
 
             def set_activation_paused(self, request: Any) -> Any:
                 self.activation_request = request
-                return WorkflowDeployment(
-                    spec=WorkflowDeploymentSpec(id=request.deployment_id),
-                    status=workflow_pb2.WORKFLOW_DEPLOYMENT_STATUS_ACTIVE,
+                return WorkflowDefinition(
+                    spec=WorkflowDefinitionSpec(id=request.definition_id),
+                    status=workflow_pb2.WORKFLOW_DEFINITION_STATUS_ACTIVE,
                 )
 
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)
 
-        paused_deployment = wrapped.SetWorkflowDeploymentPaused(
-            workflow_pb2.SetWorkflowDeploymentPausedRequest(
-                deployment_id="deployment-1",
+        paused_deployment = wrapped.SetWorkflowDefinitionPaused(
+            workflow_pb2.SetWorkflowDefinitionPausedRequest(
+                definition_id="deployment-1",
                 paused=True,
             ),
             object(),
         )
         active_deployment = wrapped.SetWorkflowActivationPaused(
             workflow_pb2.SetWorkflowActivationPausedRequest(
-                deployment_id="deployment-1",
+                definition_id="deployment-1",
                 activation_id="manual",
                 paused=False,
             ),
@@ -1515,8 +1513,8 @@ class WorkflowRuntimeTests(unittest.TestCase):
         )
 
         self.assertIsInstance(
-            provider.deployment_request,
-            SetWorkflowDeploymentPausedRequest,
+            provider.definition_request,
+            SetWorkflowDefinitionPausedRequest,
         )
         self.assertIsInstance(
             provider.activation_request,
@@ -1526,52 +1524,35 @@ class WorkflowRuntimeTests(unittest.TestCase):
         self.assertEqual(paused_deployment.spec.id, "deployment-1")
         self.assertEqual(
             paused_deployment.status,
-            workflow_pb2.WORKFLOW_DEPLOYMENT_STATUS_PAUSED,
+            workflow_pb2.WORKFLOW_DEFINITION_STATUS_PAUSED,
         )
         self.assertEqual(active_deployment.spec.id, "deployment-1")
         self.assertEqual(
             active_deployment.status,
-            workflow_pb2.WORKFLOW_DEPLOYMENT_STATUS_ACTIVE,
+            workflow_pb2.WORKFLOW_DEFINITION_STATUS_ACTIVE,
         )
 
-    def test_workflow_wrapper_maps_plan_and_apply_deployment(self) -> None:
+    def test_workflow_wrapper_maps_apply_definition(self) -> None:
         class Provider(WorkflowProvider):
-            def plan_workflow(self, request: Any) -> Any:
-                self.plan_request = request
-                return PlanWorkflowResponse(
-                    accepted_spec_digest=request.spec_digest,
-                    provider_plan_id="plan-1",
-                )
-
-            def apply_deployment(self, request: Any) -> Any:
+            def apply_definition(self, request: Any) -> Any:
                 self.apply_request = request
-                return WorkflowDeployment(
+                return WorkflowDefinition(
                     spec=request.spec,
-                    status=workflow_pb2.WORKFLOW_DEPLOYMENT_STATUS_ACTIVE,
+                    status=workflow_pb2.WORKFLOW_DEFINITION_STATUS_ACTIVE,
                 )
 
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)
 
-        plan = wrapped.PlanWorkflow(
-            workflow_pb2.PlanWorkflowRequest(
-                spec=workflow_pb2.WorkflowDeploymentSpec(id="deployment-1"),
-                spec_digest="spec-digest",
-            ),
-            object(),
-        )
-        applied = wrapped.ApplyWorkflowDeployment(
-            workflow_pb2.ApplyWorkflowDeploymentRequest(
-                spec=workflow_pb2.WorkflowDeploymentSpec(id="deployment-1"),
+        applied = wrapped.ApplyWorkflowDefinition(
+            workflow_pb2.ApplyWorkflowDefinitionRequest(
+                spec=workflow_pb2.WorkflowDefinitionSpec(id="deployment-1"),
                 request_id="request-1",
             ),
             object(),
         )
 
-        self.assertIsInstance(provider.plan_request, PlanWorkflowRequest)
-        self.assertEqual(provider.plan_request.spec.id, "deployment-1")
-        self.assertEqual(plan.provider_plan_id, "plan-1")
-        self.assertIsInstance(provider.apply_request, ApplyWorkflowDeploymentRequest)
+        self.assertIsInstance(provider.apply_request, ApplyWorkflowDefinitionRequest)
         self.assertEqual(provider.apply_request.request_id, "request-1")
         self.assertEqual(applied.spec.id, "deployment-1")
 

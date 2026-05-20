@@ -21,76 +21,72 @@ type workflowProviderServer struct {
 	provider WorkflowProvider
 }
 
-func (s workflowProviderServer) PlanWorkflow(ctx context.Context, req *proto.PlanWorkflowRequest) (*proto.PlanWorkflowResponse, error) {
-	resp, err := s.provider.PlanWorkflow(ctx, planWorkflowRequestFromProto(req))
-	if err != nil {
-		return nil, providerRPCError("workflow plan", err)
-	}
-	return planWorkflowResponseToProto(resp), nil
-}
-
-func (s workflowProviderServer) ApplyWorkflowDeployment(ctx context.Context, req *proto.ApplyWorkflowDeploymentRequest) (*proto.WorkflowDeployment, error) {
-	deployment, err := s.provider.ApplyWorkflowDeployment(ctx, applyWorkflowDeploymentRequestFromProto(req))
+func (s workflowProviderServer) ApplyWorkflowDefinition(ctx context.Context, req *proto.ApplyWorkflowDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	input, err := applyWorkflowDefinitionRequestFromProto(req)
 	if err != nil {
 		return nil, providerRPCError("workflow apply deployment", err)
 	}
-	out, err := workflowDeploymentToProto(deployment)
+	deployment, err := s.provider.ApplyWorkflowDefinition(ctx, input)
+	if err != nil {
+		return nil, providerRPCError("workflow apply deployment", err)
+	}
+	out, err := workflowDefinitionToProto(deployment)
 	return out, providerRPCError("workflow apply deployment", err)
 }
 
-func (s workflowProviderServer) GetWorkflowDeployment(ctx context.Context, req *proto.GetWorkflowDeploymentRequest) (*proto.WorkflowDeployment, error) {
-	deployment, err := s.provider.GetWorkflowDeployment(ctx, &GetWorkflowDeploymentRequest{DeploymentID: req.GetDeploymentId()})
+func (s workflowProviderServer) GetWorkflowDefinition(ctx context.Context, req *proto.GetWorkflowDefinitionRequest) (*proto.WorkflowDefinition, error) {
+	deployment, err := s.provider.GetWorkflowDefinition(ctx, &GetWorkflowDefinitionRequest{DefinitionID: req.GetDefinitionId()})
 	if err != nil {
 		return nil, providerRPCError("workflow get deployment", err)
 	}
-	out, err := workflowDeploymentToProto(deployment)
+	out, err := workflowDefinitionToProto(deployment)
 	return out, providerRPCError("workflow get deployment", err)
 }
 
-func (s workflowProviderServer) ListWorkflowDeployments(ctx context.Context, req *proto.ListWorkflowDeploymentsRequest) (*proto.ListWorkflowDeploymentsResponse, error) {
-	resp, err := s.provider.ListWorkflowDeployments(ctx, &ListWorkflowDeploymentsRequest{
+func (s workflowProviderServer) ListWorkflowDefinitions(ctx context.Context, req *proto.ListWorkflowDefinitionsRequest) (*proto.ListWorkflowDefinitionsResponse, error) {
+	resp, err := s.provider.ListWorkflowDefinitions(ctx, &ListWorkflowDefinitionsRequest{
 		PageSize:  int(req.GetPageSize()),
 		PageToken: req.GetPageToken(),
 		Labels:    cloneStringMap(req.GetLabels()),
 	})
 	if err != nil {
-		return nil, providerRPCError("workflow list deployments", err)
+		return nil, providerRPCError("workflow list definitions", err)
 	}
-	deployments, err := workflowDeploymentsToProto(resp.GetDeployments())
+	definitions, err := workflowDefinitionsToProto(resp.GetDefinitions())
 	if err != nil {
-		return nil, providerRPCError("workflow list deployments", err)
+		return nil, providerRPCError("workflow list definitions", err)
 	}
-	return &proto.ListWorkflowDeploymentsResponse{
-		Deployments:   deployments,
+	return &proto.ListWorkflowDefinitionsResponse{
+		Definitions:   definitions,
 		NextPageToken: resp.GetNextPageToken(),
 	}, nil
 }
 
-func (s workflowProviderServer) DeleteWorkflowDeployment(ctx context.Context, req *proto.DeleteWorkflowDeploymentRequest) (*emptypb.Empty, error) {
-	err := s.provider.DeleteWorkflowDeployment(ctx, &DeleteWorkflowDeploymentRequest{
-		DeploymentID: req.GetDeploymentId(),
+func (s workflowProviderServer) DeleteWorkflowDefinition(ctx context.Context, req *proto.DeleteWorkflowDefinitionRequest) (*emptypb.Empty, error) {
+	err := s.provider.DeleteWorkflowDefinition(ctx, &DeleteWorkflowDefinitionRequest{
+		DefinitionID: req.GetDefinitionId(),
 		Generation:   req.GetGeneration(),
 		RequestID:    req.GetRequestId(),
 	})
 	return &emptypb.Empty{}, providerRPCError("workflow delete deployment", err)
 }
 
-func (s workflowProviderServer) SetWorkflowDeploymentPaused(ctx context.Context, req *proto.SetWorkflowDeploymentPausedRequest) (*proto.WorkflowDeployment, error) {
-	deployment, err := s.provider.SetWorkflowDeploymentPaused(ctx, &SetWorkflowDeploymentPausedRequest{
-		DeploymentID: req.GetDeploymentId(),
+func (s workflowProviderServer) SetWorkflowDefinitionPaused(ctx context.Context, req *proto.SetWorkflowDefinitionPausedRequest) (*proto.WorkflowDefinition, error) {
+	deployment, err := s.provider.SetWorkflowDefinitionPaused(ctx, &SetWorkflowDefinitionPausedRequest{
+		DefinitionID: req.GetDefinitionId(),
 		Paused:       req.GetPaused(),
 		RequestID:    req.GetRequestId(),
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow set deployment paused", err)
 	}
-	out, err := workflowDeploymentToProto(deployment)
+	out, err := workflowDefinitionToProto(deployment)
 	return out, providerRPCError("workflow set deployment paused", err)
 }
 
-func (s workflowProviderServer) SetWorkflowActivationPaused(ctx context.Context, req *proto.SetWorkflowActivationPausedRequest) (*proto.WorkflowDeployment, error) {
+func (s workflowProviderServer) SetWorkflowActivationPaused(ctx context.Context, req *proto.SetWorkflowActivationPausedRequest) (*proto.WorkflowDefinition, error) {
 	deployment, err := s.provider.SetWorkflowActivationPaused(ctx, &SetWorkflowActivationPausedRequest{
-		DeploymentID: req.GetDeploymentId(),
+		DefinitionID: req.GetDefinitionId(),
 		ActivationID: req.GetActivationId(),
 		Paused:       req.GetPaused(),
 		RequestID:    req.GetRequestId(),
@@ -98,7 +94,7 @@ func (s workflowProviderServer) SetWorkflowActivationPaused(ctx context.Context,
 	if err != nil {
 		return nil, providerRPCError("workflow set activation paused", err)
 	}
-	out, err := workflowDeploymentToProto(deployment)
+	out, err := workflowDefinitionToProto(deployment)
 	return out, providerRPCError("workflow set activation paused", err)
 }
 
@@ -161,7 +157,7 @@ func (s workflowProviderServer) GetWorkflowRun(ctx context.Context, req *proto.G
 
 func (s workflowProviderServer) ListWorkflowRuns(ctx context.Context, req *proto.ListWorkflowRunsRequest) (*proto.ListWorkflowRunsResponse, error) {
 	resp, err := s.provider.ListWorkflowRuns(ctx, &ListWorkflowRunsRequest{
-		DeploymentID: req.GetDeploymentId(),
+		DefinitionID: req.GetDefinitionId(),
 		PageSize:     int(req.GetPageSize()),
 		PageToken:    req.GetPageToken(),
 		Status:       WorkflowRunStatus(req.GetStatus()),
@@ -207,21 +203,6 @@ func (s workflowProviderServer) GetWorkflowRunOutput(ctx context.Context, req *p
 	return out, providerRPCError("workflow get run output", err)
 }
 
-func (s workflowProviderServer) PutExecutionReference(ctx context.Context, req *proto.PutWorkflowExecutionReferenceRequest) (*proto.WorkflowExecutionReference, error) {
-	ref, err := workflowExecutionReferenceFromProto(req.GetExecutionRef())
-	if err != nil {
-		return nil, providerRPCError("workflow put execution reference", err)
-	}
-	stored, err := s.provider.PutExecutionReference(ctx, &PutWorkflowExecutionReferenceRequest{
-		ExecutionRef: ref,
-	})
-	if err != nil {
-		return nil, providerRPCError("workflow put execution reference", err)
-	}
-	out, err := workflowExecutionReferenceToProto(stored)
-	return out, providerRPCError("workflow put execution reference", err)
-}
-
 func (s workflowProviderServer) GetExecutionReference(ctx context.Context, req *proto.GetWorkflowExecutionReferenceRequest) (*proto.WorkflowExecutionReference, error) {
 	ref, err := s.provider.GetExecutionReference(ctx, &GetWorkflowExecutionReferenceRequest{ID: req.GetId()})
 	if err != nil {
@@ -243,31 +224,20 @@ func (s workflowProviderServer) ListExecutionReferences(ctx context.Context, req
 	return &proto.ListWorkflowExecutionReferencesResponse{ExecutionRefs: refs}, nil
 }
 
-func planWorkflowRequestFromProto(req *proto.PlanWorkflowRequest) *PlanWorkflowRequest {
+func applyWorkflowDefinitionRequestFromProto(req *proto.ApplyWorkflowDefinitionRequest) (*ApplyWorkflowDefinitionRequest, error) {
 	if req == nil {
-		return &PlanWorkflowRequest{}
+		return &ApplyWorkflowDefinitionRequest{}, nil
 	}
-	return &PlanWorkflowRequest{
-		Spec:                          workflowDeploymentSpecInputPtrFromSpec(req.GetSpec()),
-		SpecDigest:                    req.GetSpecDigest(),
-		TargetDigest:                  req.GetTargetDigest(),
-		ActionTableDigest:             req.GetActionTableDigest(),
-		TargetCanonicalizationVersion: req.GetTargetCanonicalizationVersion(),
-		WorkflowSemanticsVersion:      req.GetWorkflowSemanticsVersion(),
+	ref, err := workflowExecutionReferenceFromProto(req.GetExecutionRef())
+	if err != nil {
+		return nil, err
 	}
-}
-
-func applyWorkflowDeploymentRequestFromProto(req *proto.ApplyWorkflowDeploymentRequest) *ApplyWorkflowDeploymentRequest {
-	if req == nil {
-		return &ApplyWorkflowDeploymentRequest{}
-	}
-	return &ApplyWorkflowDeploymentRequest{
-		Spec:         workflowDeploymentSpecInputPtrFromSpec(req.GetSpec()),
-		Plan:         planWorkflowResponseFromProto(req.GetPlan()),
-		Binding:      workflowDeploymentBindingFromProto(req.GetBinding()),
+	return &ApplyWorkflowDefinitionRequest{
+		Spec:         workflowDefinitionSpecInputPtrFromSpec(req.GetSpec()),
+		Binding:      workflowDefinitionBindingFromProto(req.GetBinding()),
+		ExecutionRef: ref,
 		RequestID:    req.GetRequestId(),
-		ValidateOnly: req.GetValidateOnly(),
-	}
+	}, nil
 }
 
 func startWorkflowRunRequestFromProto(req *proto.StartWorkflowRunRequest) *StartWorkflowRunRequest {
@@ -275,8 +245,8 @@ func startWorkflowRunRequestFromProto(req *proto.StartWorkflowRunRequest) *Start
 		return &StartWorkflowRunRequest{}
 	}
 	return &StartWorkflowRunRequest{
-		DeploymentID:         req.GetDeploymentId(),
-		DeploymentGeneration: req.GetDeploymentGeneration(),
+		DefinitionID:         req.GetDefinitionId(),
+		DefinitionGeneration: req.GetDefinitionGeneration(),
 		ActivationID:         req.GetActivationId(),
 		WorkflowKey:          req.GetWorkflowKey(),
 		Input:                mapFromStruct(req.GetInput()),
@@ -310,8 +280,8 @@ func signalOrStartWorkflowRunRequestFromProto(req *proto.SignalOrStartWorkflowRu
 		signal = &input
 	}
 	return &SignalOrStartWorkflowRunRequest{
-		DeploymentID:         req.GetDeploymentId(),
-		DeploymentGeneration: req.GetDeploymentGeneration(),
+		DefinitionID:         req.GetDefinitionId(),
+		DefinitionGeneration: req.GetDefinitionGeneration(),
 		ActivationID:         req.GetActivationId(),
 		WorkflowKey:          req.GetWorkflowKey(),
 		Input:                mapFromStruct(req.GetInput()),

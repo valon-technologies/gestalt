@@ -41,11 +41,11 @@ class WorkflowHelperTests(unittest.TestCase):
         )
         run = gestalt.workflow_run(
             id="run-1",
-            deployment_id="deployment-1",
+            definition_id="deployment-1",
             status=gestalt.WORKFLOW_RUN_STATUS_PENDING,
             created_at=created_at,
             trigger=gestalt.WorkflowRunTrigger(
-                deployment_id="deployment-1",
+                definition_id="deployment-1",
                 activation_id="manual",
                 manual=True,
             ),
@@ -58,7 +58,7 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(activation.WhichOneof("kind"), "manual")
         self.assertEqual(signal.payload.fields["ok"].bool_value, True)
         self.assertEqual(signal.sequence, 0)
-        self.assertEqual(run.trigger.deployment_id, "deployment-1")
+        self.assertEqual(run.trigger.definition_id, "deployment-1")
         self.assertEqual(run.created_at.ToDatetime(tzinfo=dt.timezone.utc), created_at)
 
     def test_copy_helpers_do_not_alias_nested_payloads(self) -> None:
@@ -162,7 +162,7 @@ class WorkflowHelperTests(unittest.TestCase):
         self.assertEqual(step.output_delivery.plugin.name, "audit")
 
     def test_deployment_spec_carries_activations_and_run_as(self) -> None:
-        spec = gestalt.workflow_deployment_spec(
+        spec = gestalt.workflow_definition_spec(
             id="deployment-1",
             generation=2,
             target=gestalt.BoundWorkflowTarget(
@@ -210,6 +210,7 @@ class WorkflowHelperTests(unittest.TestCase):
         request = gestalt.invoke_workflow_action_request(
             selector=gestalt.WorkflowHostActionSelector(
                 run_id="run-1",
+                definition_id="deployment-1",
                 step_id="sync",
                 action_id="sync.plugin",
             ),

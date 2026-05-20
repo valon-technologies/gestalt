@@ -145,28 +145,23 @@ func (p *noopWorkflowProvider) ResumeEventTrigger(context.Context, coreworkflow.
 func (p *noopWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
 	return nil
 }
-func (p *noopWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
-	return &coreworkflow.CompileTargetResponse{
-		ProviderPlanDigest: "noop-plan",
-	}, nil
+func (p *noopWorkflowProvider) ApplyWorkflowDefinition(context.Context, coreworkflow.ApplyDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
-func (p *noopWorkflowProvider) ApplyWorkflowDeployment(context.Context, coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
-}
-func (p *noopWorkflowProvider) GetWorkflowDeployment(context.Context, coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
+func (p *noopWorkflowProvider) GetWorkflowDefinition(context.Context, coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
 	return nil, core.ErrNotFound
 }
-func (p *noopWorkflowProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
-	return &coreworkflow.ListDeploymentsResponse{}, nil
+func (p *noopWorkflowProvider) ListWorkflowDefinitions(context.Context, coreworkflow.ListDefinitionsRequest) (*coreworkflow.ListDefinitionsResponse, error) {
+	return &coreworkflow.ListDefinitionsResponse{}, nil
 }
-func (p *noopWorkflowProvider) DeleteWorkflowDeployment(context.Context, coreworkflow.DeleteDeploymentRequest) error {
+func (p *noopWorkflowProvider) DeleteWorkflowDefinition(context.Context, coreworkflow.DeleteDefinitionRequest) error {
 	return nil
 }
-func (p *noopWorkflowProvider) SetWorkflowDeploymentPaused(context.Context, coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
+func (p *noopWorkflowProvider) SetWorkflowDefinitionPaused(context.Context, coreworkflow.SetDefinitionPausedRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
-func (p *noopWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
+func (p *noopWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
 func (p *noopWorkflowProvider) DeliverWorkflowEvent(context.Context, coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
 	return &coreworkflow.DeliverEventResponse{}, nil

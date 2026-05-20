@@ -49,17 +49,9 @@ func (p *startableStartupTestWorkflowProvider) Start(context.Context) error {
 	return nil
 }
 
-type compilingStartupTestWorkflowProvider struct {
+type applyingStartupTestWorkflowProvider struct {
 	startupTestWorkflowProvider
-	compileRequests []coreworkflow.PlanWorkflowRequest
-}
-
-func (p *compilingStartupTestWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
-	p.compileRequests = append(p.compileRequests, req)
-	return &coreworkflow.CompileTargetResponse{
-		AcceptedSpecDigest: req.SpecDigest,
-		ProviderPlanDigest: "plan-digest",
-	}, nil
+	applyRequests []coreworkflow.ApplyDefinitionRequest
 }
 
 type noopTelemetryProvider struct{}
@@ -91,35 +83,33 @@ func (p startupTestWorkflowProvider) SignalOrStartRun(context.Context, coreworkf
 	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
 }
 
-func (p startupTestWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
-	return &coreworkflow.CompileTargetResponse{
-		AcceptedSpecDigest: req.SpecDigest,
-		ProviderPlanDigest: "plan-digest",
-	}, nil
+func (p startupTestWorkflowProvider) ApplyWorkflowDefinition(_ context.Context, req coreworkflow.ApplyDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{Spec: req.Spec, Status: coreworkflow.DefinitionStatusActive, Binding: req.Binding}, nil
 }
 
-func (p startupTestWorkflowProvider) ApplyWorkflowDeployment(_ context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{Spec: req.Spec, Status: coreworkflow.DeploymentStatusActive, Binding: req.Binding}, nil
+func (p *applyingStartupTestWorkflowProvider) ApplyWorkflowDefinition(_ context.Context, req coreworkflow.ApplyDefinitionRequest) (*coreworkflow.Definition, error) {
+	p.applyRequests = append(p.applyRequests, req)
+	return &coreworkflow.Definition{Spec: req.Spec, Status: coreworkflow.DefinitionStatusActive, Binding: req.Binding}, nil
 }
 
-func (p startupTestWorkflowProvider) GetWorkflowDeployment(context.Context, coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
+func (p startupTestWorkflowProvider) GetWorkflowDefinition(context.Context, coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
 
-func (p startupTestWorkflowProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
-	return &coreworkflow.ListDeploymentsResponse{}, nil
+func (p startupTestWorkflowProvider) ListWorkflowDefinitions(context.Context, coreworkflow.ListDefinitionsRequest) (*coreworkflow.ListDefinitionsResponse, error) {
+	return &coreworkflow.ListDefinitionsResponse{}, nil
 }
 
-func (p startupTestWorkflowProvider) DeleteWorkflowDeployment(context.Context, coreworkflow.DeleteDeploymentRequest) error {
+func (p startupTestWorkflowProvider) DeleteWorkflowDefinition(context.Context, coreworkflow.DeleteDefinitionRequest) error {
 	return nil
 }
 
-func (p startupTestWorkflowProvider) SetWorkflowDeploymentPaused(context.Context, coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
+func (p startupTestWorkflowProvider) SetWorkflowDefinitionPaused(context.Context, coreworkflow.SetDefinitionPausedRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
 
-func (p startupTestWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
-	return &coreworkflow.Deployment{}, nil
+func (p startupTestWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Definition, error) {
+	return &coreworkflow.Definition{}, nil
 }
 
 func (p startupTestWorkflowProvider) DeliverWorkflowEvent(context.Context, coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
@@ -352,9 +342,9 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 	if err != nil {
 		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
 	}
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	store, ok := provider.(coreworkflow.ExecutionReferenceMutableStore)
 	if !ok {
-		t.Fatalf("workflow provider %q does not support execution refs", providerName)
+		t.Fatalf("workflow provider %q does not expose execution refs", providerName)
 	}
 	targetDigest, err := coreworkflow.TargetFingerprint(target)
 	if err != nil {
@@ -365,15 +355,13 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 		t.Fatalf("workflow step action id for %q", target.Steps[0].ID)
 	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:                 fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
-		ProviderName:       providerName,
-		Target:             target,
-		SubjectID:          "system:config",
-		Permissions:        workflowExecutionRefPermissionsForTarget(target, []core.AccessPermission{{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{actionID}}}),
-		TargetDigest:       targetDigest,
-		ProviderPlanDigest: "startup-plan",
-		Generation:         1,
-		Seal:               "startup-seal",
+		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
+		ProviderName: providerName,
+		Target:       target,
+		SubjectID:    "system:config",
+		Permissions:  workflowExecutionRefPermissionsForTarget(target, []core.AccessPermission{{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{actionID}}}),
+		TargetDigest: targetDigest,
+		Generation:   1,
 	})
 	if err != nil {
 		t.Fatalf("store workflow execution ref: %v", err)
@@ -392,21 +380,15 @@ func startupWorkflowStepTarget(pluginName, operation string) coreworkflow.Target
 }
 
 func startupWorkflowActionRequest(executionRef string, target coreworkflow.Target) *proto.InvokeWorkflowActionRequest {
-	targetDigest, _ := coreworkflow.TargetFingerprint(target)
-	actionTableDigest, _ := coreworkflow.TargetActionTableDigest(target)
 	return &proto.InvokeWorkflowActionRequest{
 		Selector: &proto.WorkflowHostActionSelector{
 			ExecutionRef:           executionRef,
 			ExecutionRefGeneration: 1,
-			ExecutionRefSeal:       "startup-seal",
 			RunId:                  "startup-run",
 			StepId:                 "startup",
 			ActionId:               "step/startup/plugin",
 			AttemptNumber:          1,
 			IdempotencyKey:         "startup-run:startup:plugin:1",
-			TargetDigest:           targetDigest,
-			ActionTableDigest:      actionTableDigest,
-			ProviderPlanDigest:     "startup-plan",
 		},
 		Action: &proto.InvokeWorkflowActionRequest_Plugin{
 			Plugin: &proto.WorkflowPluginActionPayload{Input: &structpb.Struct{}},
@@ -545,27 +527,27 @@ func TestWorkflowCleanupWrappersForwardStart(t *testing.T) {
 	}
 }
 
-func TestWorkflowWrappersForwardPlanInterfaces(t *testing.T) {
+func TestWorkflowWrappersForwardDefinitionInterfaces(t *testing.T) {
 	t.Parallel()
 
-	makeProxy := func(inner *compilingStartupTestWorkflowProvider) coreworkflow.Provider {
+	makeProxy := func(inner *applyingStartupTestWorkflowProvider) coreworkflow.Provider {
 		proxy := newStartupWorkflowProviderProxy("basic", nil)
 		proxy.publish(inner)
 		return proxy
 	}
 	cases := []struct {
 		name     string
-		provider func(*compilingStartupTestWorkflowProvider) coreworkflow.Provider
+		provider func(*applyingStartupTestWorkflowProvider) coreworkflow.Provider
 	}{
 		{
 			name: "cleanup",
-			provider: func(inner *compilingStartupTestWorkflowProvider) coreworkflow.Provider {
+			provider: func(inner *applyingStartupTestWorkflowProvider) coreworkflow.Provider {
 				return &workflowProviderWithCleanup{Provider: inner}
 			},
 		},
 		{
 			name: "execution references cleanup",
-			provider: func(inner *compilingStartupTestWorkflowProvider) coreworkflow.Provider {
+			provider: func(inner *applyingStartupTestWorkflowProvider) coreworkflow.Provider {
 				return &workflowProviderWithExecutionReferencesAndCleanup{
 					Provider:                inner,
 					ExecutionReferenceStore: newWorkflowRuntimeExecutionRefProvider(),
@@ -574,13 +556,13 @@ func TestWorkflowWrappersForwardPlanInterfaces(t *testing.T) {
 		},
 		{
 			name: "runtime workers",
-			provider: func(inner *compilingStartupTestWorkflowProvider) coreworkflow.Provider {
+			provider: func(inner *applyingStartupTestWorkflowProvider) coreworkflow.Provider {
 				return &workflowProviderWithRuntimeWorkers{Provider: inner}
 			},
 		},
 		{
 			name: "runtime workers execution references",
-			provider: func(inner *compilingStartupTestWorkflowProvider) coreworkflow.Provider {
+			provider: func(inner *applyingStartupTestWorkflowProvider) coreworkflow.Provider {
 				return &workflowProviderWithRuntimeWorkersAndExecutionReferences{
 					workflowProviderWithRuntimeWorkers: &workflowProviderWithRuntimeWorkers{Provider: inner},
 					ExecutionReferenceStore:            newWorkflowRuntimeExecutionRefProvider(),
@@ -598,23 +580,23 @@ func TestWorkflowWrappersForwardPlanInterfaces(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			inner := &compilingStartupTestWorkflowProvider{}
+			inner := &applyingStartupTestWorkflowProvider{}
 			provider := tc.provider(inner)
-			planner, ok := provider.(coreworkflow.DeploymentProvider)
+			definitions, ok := provider.(coreworkflow.DefinitionProvider)
 			if !ok {
-				t.Fatalf("%T does not expose DeploymentProvider", provider)
+				t.Fatalf("%T does not expose DefinitionProvider", provider)
 			}
 
-			resp, err := planner.PlanWorkflow(context.Background(), coreworkflow.PlanWorkflowRequest{SpecDigest: "spec-digest"})
+			resp, err := definitions.ApplyWorkflowDefinition(context.Background(), coreworkflow.ApplyDefinitionRequest{Spec: coreworkflow.DefinitionSpec{ID: "definition-1"}})
 			if err != nil {
-				t.Fatalf("PlanWorkflow: %v", err)
+				t.Fatalf("ApplyWorkflowDefinition: %v", err)
 			}
-			if resp == nil || resp.AcceptedSpecDigest != "spec-digest" {
-				t.Fatalf("PlanWorkflow response = %#v", resp)
+			if resp == nil || resp.Spec.ID != "definition-1" {
+				t.Fatalf("ApplyWorkflowDefinition response = %#v", resp)
 			}
 
-			if got := len(inner.compileRequests); got != 1 {
-				t.Fatalf("inner plan requests = %d, want 1", got)
+			if got := len(inner.applyRequests); got != 1 {
+				t.Fatalf("inner apply requests = %d, want 1", got)
 			}
 		})
 	}

@@ -11,15 +11,14 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 import { expect, test } from "bun:test";
 
 import {
-  ManagedWorkflowDeploymentSchema,
+  ManagedWorkflowDefinitionSchema,
   ManagedWorkflowRunSchema,
   ManagedWorkflowRunSignalSchema,
-  PlanWorkflowResponseSchema,
-  WorkflowDeploymentSchema,
-  WorkflowDeploymentStatus,
+  WorkflowDefinitionSchema,
+  WorkflowDefinitionStatus,
   WorkflowManagerDeliverEventResponseSchema,
   WorkflowManagerHost as WorkflowManagerHostService,
-  WorkflowManagerListDeploymentsResponseSchema,
+  WorkflowManagerListDefinitionsResponseSchema,
   WorkflowRunSchema,
   WorkflowRunStatus,
 } from "../src/internal/gen/v1/workflow_pb.ts";
@@ -40,7 +39,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     invocationToken: string;
     idempotencyKey?: string;
     providerName?: string;
-    deploymentId?: string | undefined;
+    definitionId?: string | undefined;
     runId?: string;
     signalName?: string | undefined;
     workflowKey?: string;
@@ -52,85 +51,72 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     connect: false,
     routes(router) {
       router.service(WorkflowManagerHostService, {
-        async planDeployment(input) {
-          calls.push({
-            method: "plan-deployment",
-            invocationToken: input.invocationToken,
-            idempotencyKey: input.idempotencyKey,
-            providerName: input.providerName,
-            deploymentId: input.spec?.id,
-          });
-          return create(PlanWorkflowResponseSchema, {
-            acceptedSpecDigest: "spec-digest",
-            providerPlanId: "plan-1",
-          });
-        },
-        async applyDeployment(input) {
+        async applyDefinition(input) {
           calls.push({
             method: "apply-deployment",
             invocationToken: input.invocationToken,
             idempotencyKey: input.idempotencyKey,
             providerName: input.providerName,
-            deploymentId: input.spec?.id,
+            definitionId: input.spec?.id,
           });
-          return create(ManagedWorkflowDeploymentSchema, {
+          return create(ManagedWorkflowDefinitionSchema, {
             providerName: input.providerName || "basic",
-            deployment: create(WorkflowDeploymentSchema, {
-              spec: input.spec,
-              status: WorkflowDeploymentStatus.ACTIVE,
+            definition: create(WorkflowDefinitionSchema, {
+              ...(input.spec !== undefined ? { spec: input.spec } : {}),
+              status: WorkflowDefinitionStatus.ACTIVE,
             }),
           });
         },
-        async getDeployment(input) {
+        async getDefinition(input) {
           calls.push({
             method: "get-deployment",
             invocationToken: input.invocationToken,
-            deploymentId: input.deploymentId,
+            definitionId: input.definitionId,
           });
-          return create(ManagedWorkflowDeploymentSchema, {
+          return create(ManagedWorkflowDefinitionSchema, {
             providerName: "basic",
-            deployment: create(WorkflowDeploymentSchema, {
-              spec: { id: input.deploymentId },
-              status: WorkflowDeploymentStatus.ACTIVE,
+            definition: create(WorkflowDefinitionSchema, {
+              spec: { id: input.definitionId },
+              status: WorkflowDefinitionStatus.ACTIVE,
             }),
           });
         },
-        async listDeployments(input) {
+        async listDefinitions(input) {
           calls.push({
-            method: "list-deployments",
+            method: "list-definitions",
             invocationToken: input.invocationToken,
             providerName: input.providerName,
           });
-          return create(WorkflowManagerListDeploymentsResponseSchema, {
-            deployments: [create(ManagedWorkflowDeploymentSchema, {
+          return create(WorkflowManagerListDefinitionsResponseSchema, {
+            definitions: [create(ManagedWorkflowDefinitionSchema, {
               providerName: input.providerName,
-              deployment: create(WorkflowDeploymentSchema, {
+              definition: create(WorkflowDefinitionSchema, {
                 spec: { id: "deployment-1" },
               }),
             })],
           });
         },
-        async deleteDeployment(input) {
+        async deleteDefinition(input) {
           calls.push({
             method: "delete-deployment",
             invocationToken: input.invocationToken,
-            deploymentId: input.deploymentId,
+            definitionId: input.definitionId,
           });
           return create(EmptySchema, {});
         },
-        async setDeploymentPaused(input) {
+        async setDefinitionPaused(input) {
           calls.push({
             method: "set-deployment-paused",
             invocationToken: input.invocationToken,
-            deploymentId: input.deploymentId,
+            definitionId: input.definitionId,
           });
-          return create(ManagedWorkflowDeploymentSchema, {
+          return create(ManagedWorkflowDefinitionSchema, {
             providerName: "basic",
-            deployment: create(WorkflowDeploymentSchema, {
-              spec: { id: input.deploymentId },
+            definition: create(WorkflowDefinitionSchema, {
+              spec: { id: input.definitionId },
               status: input.paused
-                ? WorkflowDeploymentStatus.PAUSED
-                : WorkflowDeploymentStatus.ACTIVE,
+                ? WorkflowDefinitionStatus.PAUSED
+                : WorkflowDefinitionStatus.ACTIVE,
             }),
           });
         },
@@ -138,12 +124,12 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
           calls.push({
             method: "set-activation-paused",
             invocationToken: input.invocationToken,
-            deploymentId: input.deploymentId,
+            definitionId: input.definitionId,
           });
-          return create(ManagedWorkflowDeploymentSchema, {
+          return create(ManagedWorkflowDefinitionSchema, {
             providerName: "basic",
-            deployment: create(WorkflowDeploymentSchema, {
-              spec: { id: input.deploymentId },
+            definition: create(WorkflowDefinitionSchema, {
+              spec: { id: input.definitionId },
             }),
           });
         },
@@ -153,14 +139,14 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             invocationToken: input.invocationToken,
             idempotencyKey: input.idempotencyKey,
             providerName: input.providerName,
-            deploymentId: input.deploymentId,
+            definitionId: input.definitionId,
             workflowKey: input.workflowKey,
           });
           return create(ManagedWorkflowRunSchema, {
             providerName: input.providerName || "basic",
             run: create(WorkflowRunSchema, {
               id: "run-1",
-              deploymentId: input.deploymentId,
+              definitionId: input.definitionId,
               workflowKey: input.workflowKey,
               status: WorkflowRunStatus.PENDING,
             }),
@@ -176,7 +162,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
           return create(ManagedWorkflowRunSignalSchema, {
             providerName: "basic",
             run: create(WorkflowRunSchema, { id: input.runId }),
-            signal: input.signal,
+            ...(input.signal !== undefined ? { signal: input.signal } : {}),
           });
         },
         async signalOrStartRun(input) {
@@ -185,7 +171,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             invocationToken: input.invocationToken,
             idempotencyKey: input.idempotencyKey,
             providerName: input.providerName,
-            deploymentId: input.deploymentId,
+            definitionId: input.definitionId,
             signalName: input.signal?.name,
             workflowKey: input.workflowKey,
           });
@@ -193,9 +179,9 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             providerName: input.providerName || "basic",
             run: create(WorkflowRunSchema, {
               id: "run-2",
-              deploymentId: input.deploymentId,
+              definitionId: input.definitionId,
             }),
-            signal: input.signal,
+            ...(input.signal !== undefined ? { signal: input.signal } : {}),
             startedRun: true,
             workflowKey: input.workflowKey,
           });
@@ -223,7 +209,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
           });
           return create(WorkflowManagerDeliverEventResponseSchema, {
             results: [{
-              deploymentId: "deployment-1",
+              definitionId: "deployment-1",
               activationId: "event",
               run: create(WorkflowRunSchema, { id: "run-event" }),
             }],
@@ -245,14 +231,6 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
 
     process.env[ENV_WORKFLOW_MANAGER_SOCKET] = socketPath;
 
-    const fromHandle = new WorkflowManager("invocation-token-123");
-    const plan = await fromHandle.planDeployment({
-      providerName: "basic",
-      spec: { id: "deployment-1" } as any,
-      idempotencyKey: "workflow-plan-key-ts",
-    });
-    expect(plan.providerPlanId).toBe("plan-1");
-
     const fromRequest = new WorkflowManager(
       request(
         "tok",
@@ -265,26 +243,26 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         "workflow-request-key-ts",
       ),
     );
-    const applied = await fromRequest.applyDeployment({
+    const applied = await fromRequest.applyDefinition({
       providerName: "basic",
       spec: { id: "deployment-1" } as any,
     });
-    const fetched = await fromRequest.getDeployment({
-      deploymentId: "deployment-1",
+    const fetched = await fromRequest.getDefinition({
+      definitionId: "deployment-1",
     });
-    const listed = await fromRequest.listDeployments({ providerName: "basic" });
-    const paused = await fromRequest.setDeploymentPaused({
-      deploymentId: "deployment-1",
+    const listed = await fromRequest.listDefinitions({ providerName: "basic" });
+    const paused = await fromRequest.setDefinitionPaused({
+      definitionId: "deployment-1",
       paused: true,
     });
     await fromRequest.setActivationPaused({
-      deploymentId: "deployment-1",
+      definitionId: "deployment-1",
       activationId: "manual",
       paused: true,
     });
     const startedRun = await fromRequest.startRun({
       providerName: "basic",
-      deploymentId: "deployment-1",
+      definitionId: "deployment-1",
       workflowKey: "roadmap-summary:item-1",
     });
     const signaledRun = await fromRequest.signalRun({
@@ -295,7 +273,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     });
     const signaledOrStartedRun = await fromRequest.signalOrStartRun({
       providerName: "basic",
-      deploymentId: "deployment-1",
+      definitionId: "deployment-1",
       workflowKey: "roadmap-summary:item-1",
       signal: {
         name: "roadmap.item.updated",
@@ -312,12 +290,12 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         source: "roadmap",
       } as any,
     });
-    await fromRequest.deleteDeployment({ deploymentId: "deployment-1" });
+    await fromRequest.deleteDefinition({ definitionId: "deployment-1" });
 
-    expect(applied.deployment?.spec?.id).toBe("deployment-1");
-    expect(fetched.deployment?.spec?.id).toBe("deployment-1");
+    expect(applied.definition?.spec?.id).toBe("deployment-1");
+    expect(fetched.definition?.spec?.id).toBe("deployment-1");
     expect(listed).toHaveLength(1);
-    expect(paused.deployment?.status).toBe(WorkflowDeploymentStatus.PAUSED);
+    expect(paused.definition?.status).toBe(WorkflowDefinitionStatus.PAUSED);
     expect(startedRun.run?.id).toBe("run-1");
     expect(signaledRun.signal?.name).toBe("roadmap.item.updated");
     expect(signaledOrStartedRun.startedRun).toBe(true);
@@ -325,45 +303,38 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     expect(delivered.results[0]?.run?.id).toBe("run-event");
     expect(calls).toEqual([
       {
-        method: "plan-deployment",
-        invocationToken: "invocation-token-123",
-        idempotencyKey: "workflow-plan-key-ts",
-        providerName: "basic",
-        deploymentId: "deployment-1",
-      },
-      {
         method: "apply-deployment",
         invocationToken: "invocation-token-456",
         idempotencyKey: "workflow-request-key-ts",
         providerName: "basic",
-        deploymentId: "deployment-1",
+        definitionId: "deployment-1",
       },
       {
         method: "get-deployment",
         invocationToken: "invocation-token-456",
-        deploymentId: "deployment-1",
+        definitionId: "deployment-1",
       },
       {
-        method: "list-deployments",
+        method: "list-definitions",
         invocationToken: "invocation-token-456",
         providerName: "basic",
       },
       {
         method: "set-deployment-paused",
         invocationToken: "invocation-token-456",
-        deploymentId: "deployment-1",
+        definitionId: "deployment-1",
       },
       {
         method: "set-activation-paused",
         invocationToken: "invocation-token-456",
-        deploymentId: "deployment-1",
+        definitionId: "deployment-1",
       },
       {
         method: "start-run",
         invocationToken: "invocation-token-456",
         idempotencyKey: "workflow-request-key-ts",
         providerName: "basic",
-        deploymentId: "deployment-1",
+        definitionId: "deployment-1",
         workflowKey: "roadmap-summary:item-1",
       },
       {
@@ -377,7 +348,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         invocationToken: "invocation-token-456",
         idempotencyKey: "workflow-request-key-ts",
         providerName: "basic",
-        deploymentId: "deployment-1",
+        definitionId: "deployment-1",
         signalName: "roadmap.item.updated",
         workflowKey: "roadmap-summary:item-1",
       },
@@ -395,7 +366,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       {
         method: "delete-deployment",
         invocationToken: "invocation-token-456",
-        deploymentId: "deployment-1",
+        definitionId: "deployment-1",
       },
     ]);
   } finally {
@@ -465,12 +436,12 @@ test("WorkflowManager honors tcp target env and relay token env", async () => {
     connect: false,
     routes(router) {
       router.service(WorkflowManagerHostService, {
-        async applyDeployment(input) {
-          return create(ManagedWorkflowDeploymentSchema, {
+        async applyDefinition(input) {
+          return create(ManagedWorkflowDefinitionSchema, {
             providerName: input.providerName || "basic",
-            deployment: create(WorkflowDeploymentSchema, {
-              spec: input.spec,
-              status: WorkflowDeploymentStatus.ACTIVE,
+            definition: create(WorkflowDefinitionSchema, {
+              ...(input.spec !== undefined ? { spec: input.spec } : {}),
+              status: WorkflowDefinitionStatus.ACTIVE,
             }),
           });
         },
@@ -498,13 +469,13 @@ test("WorkflowManager honors tcp target env and relay token env", async () => {
     process.env[ENV_WORKFLOW_MANAGER_SOCKET_TOKEN] = "relay-token-typescript";
 
     const manager = new WorkflowManager("invoke-token");
-    const applied = await manager.applyDeployment({
+    const applied = await manager.applyDefinition({
       providerName: "basic",
       spec: { id: "deployment-1" } as any,
     });
 
     expect(applied.providerName).toBe("basic");
-    expect(applied.deployment?.spec?.id).toBe("deployment-1");
+    expect(applied.definition?.spec?.id).toBe("deployment-1");
     expect(seenTokens).toEqual(["relay-token-typescript"]);
   } finally {
     if (previousSocket === undefined) {

@@ -9,10 +9,10 @@ use gestalt::proto::v1::workflow_host_server::{
 };
 use gestalt::proto::v1::workflow_provider_client::WorkflowProviderClient;
 use gestalt::proto::v1::{
-    self as pb, ApplyWorkflowDeploymentRequest, BoundWorkflowTarget, ConfigureProviderRequest,
-    DeliverWorkflowEventRequest, InvokeWorkflowActionRequest, PlanWorkflowRequest, ProviderKind,
+    self as pb, ApplyWorkflowDefinitionRequest, BoundWorkflowTarget, ConfigureProviderRequest,
+    DeliverWorkflowEventRequest, InvokeWorkflowActionRequest, ProviderKind,
     StartWorkflowRunRequest, WorkflowActionResult, WorkflowActivation, WorkflowActivationMode,
-    WorkflowDeployment, WorkflowDeploymentSpec, WorkflowDeploymentStatus, WorkflowEvent,
+    WorkflowDefinition, WorkflowDefinitionSpec, WorkflowDefinitionStatus, WorkflowEvent,
     WorkflowEventDeliveryResult, WorkflowHostActionSelector, WorkflowPluginActionPayload,
     WorkflowRun, WorkflowRunStatus, WorkflowStep, WorkflowStepPluginCall,
     invoke_workflow_action_request, workflow_step,
@@ -30,7 +30,6 @@ const ENV_WORKFLOW_HOST_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_HOST_SOCKET_TOKEN
 #[derive(Default)]
 struct TestWorkflowProvider {
     configured_name: Mutex<String>,
-    plan_requests: Mutex<Vec<PlanWorkflowRequest>>,
     delivered_events: Mutex<Vec<String>>,
 }
 
@@ -63,36 +62,14 @@ impl WorkflowProvider for TestWorkflowProvider {
         vec!["set TEMPORAL_ADDRESS".to_string()]
     }
 
-    async fn plan_workflow(
+    async fn apply_workflow_definition(
         &self,
-        request: PlanWorkflowRequest,
-    ) -> gestalt::Result<pb::PlanWorkflowResponse> {
-        self.plan_requests
-            .lock()
-            .expect("plan_requests lock")
-            .push(request.clone());
-        Ok(pb::PlanWorkflowResponse {
-            accepted_spec_digest: request.spec_digest,
-            provider_plan_id: "plan-local-1".to_string(),
-            provider_plan_digest: "sha256:plan".to_string(),
-            provider_plan_format_version: "temporal-plan.v1".to_string(),
-            supported_feature_flags: vec!["steps".to_string()],
-            ..Default::default()
-        })
-    }
-
-    async fn apply_workflow_deployment(
-        &self,
-        request: ApplyWorkflowDeploymentRequest,
-    ) -> gestalt::Result<WorkflowDeployment> {
-        Ok(WorkflowDeployment {
+        request: ApplyWorkflowDefinitionRequest,
+    ) -> gestalt::Result<WorkflowDefinition> {
+        Ok(WorkflowDefinition {
             spec: request.spec,
-            status: WorkflowDeploymentStatus::Active as i32,
-            provider_plan_id: request
-                .plan
-                .as_ref()
-                .map(|plan| plan.provider_plan_id.clone())
-                .unwrap_or_default(),
+            status: WorkflowDefinitionStatus::Active as i32,
+            provider_plan_id: "apply-local-1".to_string(),
             ..Default::default()
         })
     }
@@ -103,8 +80,8 @@ impl WorkflowProvider for TestWorkflowProvider {
     ) -> gestalt::Result<WorkflowRun> {
         Ok(WorkflowRun {
             id: request.idempotency_key,
-            deployment_id: request.deployment_id,
-            deployment_generation: request.deployment_generation,
+            definition_id: request.definition_id,
+            definition_generation: request.definition_generation,
             workflow_key: request.workflow_key,
             input: request.input,
             status: WorkflowRunStatus::Pending as i32,
@@ -127,7 +104,7 @@ impl WorkflowProvider for TestWorkflowProvider {
             .push(event_type);
         Ok(pb::DeliverWorkflowEventResponse {
             results: vec![WorkflowEventDeliveryResult {
-                deployment_id: "deployment-1".to_string(),
+                definition_id: "deployment-1".to_string(),
                 activation_id: "evt".to_string(),
                 started_run: true,
                 ..Default::default()
@@ -231,7 +208,7 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
         })),
         ..Default::default()
     }]);
-    let spec = WorkflowDeploymentSpec {
+    let spec = WorkflowDefinitionSpec {
         id: "deployment-1".to_string(),
         generation: 7,
         target: Some(target.clone()),
@@ -243,25 +220,9 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
         workflow_semantics_version: "workflow.steps.v1".to_string(),
         ..Default::default()
     };
-    let planned = client
-        .plan_workflow(PlanWorkflowRequest {
-            spec: Some(spec.clone()),
-            spec_digest: "sha256:spec".to_string(),
-            target_digest: "sha256:target".to_string(),
-            action_table_digest: "sha256:actions".to_string(),
-            target_canonicalization_version: "target.canonical.v1".to_string(),
-            workflow_semantics_version: "workflow.steps.v1".to_string(),
-        })
-        .await
-        .expect("plan workflow")
-        .into_inner();
-    assert_eq!(planned.accepted_spec_digest, "sha256:spec");
-    assert_eq!(planned.provider_plan_id, "plan-local-1");
-
     let applied = client
-        .apply_workflow_deployment(ApplyWorkflowDeploymentRequest {
+        .apply_workflow_definition(ApplyWorkflowDefinitionRequest {
             spec: Some(spec),
-            plan: Some(planned),
             request_id: "apply-1".to_string(),
             ..Default::default()
         })
@@ -269,17 +230,17 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
         .expect("apply deployment")
         .into_inner();
     assert_eq!(
-        WorkflowDeploymentStatus::try_from(applied.status)
+        WorkflowDefinitionStatus::try_from(applied.status)
             .expect("deployment status")
             .as_str_name(),
-        "WORKFLOW_DEPLOYMENT_STATUS_ACTIVE"
+        "WORKFLOW_DEFINITION_STATUS_ACTIVE"
     );
 
     let started = client
         .start_workflow_run(
             StartWorkflowRunRequest {
-                deployment_id: "deployment-1".to_string(),
-                deployment_generation: 7,
+                definition_id: "deployment-1".to_string(),
+                definition_generation: 7,
                 activation_id: "manual".to_string(),
                 workflow_key: "workflow-key".to_string(),
                 idempotency_key: "run-1".to_string(),
@@ -309,7 +270,7 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
         .await
         .expect("deliver event")
         .into_inner();
-    assert_eq!(delivered.results[0].deployment_id, "deployment-1");
+    assert_eq!(delivered.results[0].definition_id, "deployment-1");
 
     assert_eq!(
         *provider
@@ -317,14 +278,6 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
             .lock()
             .expect("configured_name lock"),
         "workflow-runtime"
-    );
-    assert_eq!(
-        provider
-            .plan_requests
-            .lock()
-            .expect("plan_requests lock")
-            .len(),
-        1
     );
     assert_eq!(
         provider

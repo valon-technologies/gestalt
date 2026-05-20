@@ -1083,85 +1083,72 @@ def _workflow_provider_servicer(provider: PluginProvider) -> Any:
         def __init__(self, inner: PluginProvider) -> None:
             self._provider = inner
 
-        @_grpc_handler("workflow plan")
-        def PlanWorkflow(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow apply definition")
+        def ApplyWorkflowDefinition(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "plan_workflow",
-                "PlanWorkflow",
-                _workflow_native.plan_workflow_request_from_proto(request),
+                "apply_definition",
+                "ApplyWorkflowDefinition",
+                _workflow_native.apply_workflow_definition_request_from_proto(request),
                 request,
                 context,
             )
-            return _workflow_native.plan_workflow_response_to_proto(result)
+            return _workflow_native.workflow_definition_to_proto(result)
 
-        @_grpc_handler("workflow apply deployment")
-        def ApplyWorkflowDeployment(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow get definition")
+        def GetWorkflowDefinition(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "apply_deployment",
-                "ApplyWorkflowDeployment",
-                _workflow_native.apply_workflow_deployment_request_from_proto(request),
+                "get_definition",
+                "GetWorkflowDefinition",
+                _workflow_native.get_workflow_definition_request_from_proto(request),
                 request,
                 context,
             )
-            return _workflow_native.workflow_deployment_to_proto(result)
+            return _workflow_native.workflow_definition_to_proto(result)
 
-        @_grpc_handler("workflow get deployment")
-        def GetWorkflowDeployment(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow list definitions")
+        def ListWorkflowDefinitions(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "get_deployment",
-                "GetWorkflowDeployment",
-                _workflow_native.get_workflow_deployment_request_from_proto(request),
+                "list_definitions",
+                "ListWorkflowDefinitions",
+                _workflow_native.list_workflow_definitions_request_from_proto(request),
                 request,
                 context,
             )
-            return _workflow_native.workflow_deployment_to_proto(result)
+            return _workflow_native.list_workflow_definitions_response_to_proto(result)
 
-        @_grpc_handler("workflow list deployments")
-        def ListWorkflowDeployments(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow delete definition")
+        def DeleteWorkflowDefinition(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "list_deployments",
-                "ListWorkflowDeployments",
-                _workflow_native.list_workflow_deployments_request_from_proto(request),
-                request,
-                context,
-            )
-            return _workflow_native.list_workflow_deployments_response_to_proto(result)
-
-        @_grpc_handler("workflow delete deployment")
-        def DeleteWorkflowDeployment(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "delete_deployment",
-                "DeleteWorkflowDeployment",
-                _workflow_native.delete_workflow_deployment_request_from_proto(request),
+                "delete_definition",
+                "DeleteWorkflowDefinition",
+                _workflow_native.delete_workflow_definition_request_from_proto(request),
                 request,
                 context,
             )
             return _empty_response(result)
 
-        @_grpc_handler("workflow set deployment paused")
-        def SetWorkflowDeploymentPaused(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow set definition paused")
+        def SetWorkflowDefinitionPaused(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "set_deployment_paused",
-                "SetWorkflowDeploymentPaused",
-                _workflow_native.set_workflow_deployment_paused_request_from_proto(
+                "set_definition_paused",
+                "SetWorkflowDefinitionPaused",
+                _workflow_native.set_workflow_definition_paused_request_from_proto(
                     request
                 ),
                 request,
                 context,
             )
-            return _workflow_native.workflow_deployment_to_proto(result)
+            return _workflow_native.workflow_definition_to_proto(result)
 
         @_grpc_handler("workflow set activation paused")
         def SetWorkflowActivationPaused(self, request: Any, context: Any) -> Any:
@@ -1176,7 +1163,7 @@ def _workflow_provider_servicer(provider: PluginProvider) -> Any:
                 request,
                 context,
             )
-            return _workflow_native.workflow_deployment_to_proto(result)
+            return _workflow_native.workflow_definition_to_proto(result)
 
         @_grpc_handler("workflow start run")
         def StartWorkflowRun(self, request: Any, context: Any) -> Any:

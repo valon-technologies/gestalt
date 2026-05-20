@@ -19,7 +19,7 @@ func TestWorkflowTargetProtoRoundTripsStepsOnly(t *testing.T) {
 			ID: "diagnose",
 			Inputs: map[string]coreworkflow.Value{
 				"text":  {SignalPayload: "event.text"},
-				"event": {RunInput: "data.alert"},
+				"event": {SignalPayload: "data.alert"},
 			},
 			Agent: &coreworkflow.AgentTurn{
 				ProviderName: "openai",
@@ -66,12 +66,12 @@ func TestWorkflowTargetProtoRoundTripsStepsOnly(t *testing.T) {
 	}
 }
 
-func TestWorkflowDeploymentProtoRoundTrips(t *testing.T) {
+func TestWorkflowDefinitionProtoRoundTrips(t *testing.T) {
 	t.Parallel()
 
 	createdAt := time.Date(2026, time.May, 18, 10, 0, 0, 0, time.UTC)
-	deployment := &coreworkflow.Deployment{
-		Spec: coreworkflow.DeploymentSpec{
+	deployment := &coreworkflow.Definition{
+		Spec: coreworkflow.DefinitionSpec{
 			ID:         "deploy-1",
 			Generation: 3,
 			Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
@@ -94,7 +94,7 @@ func TestWorkflowDeploymentProtoRoundTrips(t *testing.T) {
 			Permissions: []core.AccessPermission{{Plugin: "slack", Operations: []string{"reply"}}},
 			Labels:      map[string]string{"team": "ops"},
 		},
-		Status:             coreworkflow.DeploymentStatusActive,
+		Status:             coreworkflow.DefinitionStatusActive,
 		CreatedAt:          &createdAt,
 		UpdatedAt:          &createdAt,
 		AppliedGeneration:  3,
@@ -103,19 +103,19 @@ func TestWorkflowDeploymentProtoRoundTrips(t *testing.T) {
 		ActionTableDigest:  "sha256:actions",
 		ProviderPlanID:     "plan-1",
 		ProviderPlanDigest: "sha256:plan",
-		Binding: &coreworkflow.DeploymentBinding{
+		Binding: &coreworkflow.DefinitionBinding{
 			ID:                   "binding-1",
 			ExecutionRef:         "exec-1",
-			DeploymentID:         "deploy-1",
-			DeploymentGeneration: 3,
+			DefinitionID:         "deploy-1",
+			DefinitionGeneration: 3,
 			ActionTableDigest:    "sha256:actions",
 			RequestID:            "request-1",
 		},
 	}
 
-	pb, err := workflowDeploymentToProto(deployment)
+	pb, err := workflowDefinitionToProto(deployment)
 	if err != nil {
-		t.Fatalf("workflowDeploymentToProto: %v", err)
+		t.Fatalf("workflowDefinitionToProto: %v", err)
 	}
 	if got := pb.GetSpec().GetActivations()[0].GetManual(); got == nil {
 		t.Fatal("manual activation is nil")
@@ -124,11 +124,11 @@ func TestWorkflowDeploymentProtoRoundTrips(t *testing.T) {
 		t.Fatalf("binding action table digest = %q", got)
 	}
 
-	roundTrip, err := workflowDeploymentFromProto(pb)
+	roundTrip, err := workflowDefinitionFromProto(pb)
 	if err != nil {
-		t.Fatalf("workflowDeploymentFromProto: %v", err)
+		t.Fatalf("workflowDefinitionFromProto: %v", err)
 	}
-	if roundTrip.Spec.ID != "deploy-1" || roundTrip.Status != coreworkflow.DeploymentStatusActive {
+	if roundTrip.Spec.ID != "deploy-1" || roundTrip.Status != coreworkflow.DefinitionStatusActive {
 		t.Fatalf("round trip deployment = %#v", roundTrip)
 	}
 	if len(roundTrip.Spec.Activations) != 1 || !roundTrip.Spec.Activations[0].Manual {
@@ -139,14 +139,14 @@ func TestWorkflowDeploymentProtoRoundTrips(t *testing.T) {
 	}
 }
 
-func TestWorkflowRunProtoRoundTripsDeploymentFields(t *testing.T) {
+func TestWorkflowRunProtoRoundTripsDefinitionFields(t *testing.T) {
 	t.Parallel()
 
 	updatedAt := time.Date(2026, time.May, 18, 15, 0, 0, 0, time.UTC)
 	run := &coreworkflow.Run{
 		ID:                     "run-1",
-		DeploymentID:           "deploy-1",
-		DeploymentGeneration:   4,
+		DefinitionID:           "deploy-1",
+		DefinitionGeneration:   4,
 		Status:                 coreworkflow.RunStatusRunning,
 		WorkflowKey:            "datadog-root",
 		ExecutionRef:           "workflow_run:ref",
@@ -157,8 +157,8 @@ func TestWorkflowRunProtoRoundTripsDeploymentFields(t *testing.T) {
 		PlanDigest:             "sha256:plan",
 		Input:                  map[string]any{"message": "hello"},
 		Trigger: coreworkflow.RunTrigger{
-			DeploymentID:         "deploy-1",
-			DeploymentGeneration: 4,
+			DefinitionID:         "deploy-1",
+			DefinitionGeneration: 4,
 			ActivationID:         "manual",
 			Manual:               true,
 		},
@@ -185,7 +185,7 @@ func TestWorkflowRunProtoRoundTripsDeploymentFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workflowRunToProto: %v", err)
 	}
-	if pb.GetDeploymentId() != "deploy-1" || pb.GetExecutionRefGeneration() != 9 {
+	if pb.GetDefinitionId() != "deploy-1" || pb.GetExecutionRefGeneration() != 9 {
 		t.Fatalf("run deployment/execution fields = %#v", pb)
 	}
 	if got := pb.GetInput().AsMap()["message"]; got != "hello" {
@@ -196,7 +196,7 @@ func TestWorkflowRunProtoRoundTripsDeploymentFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workflowRunFromProto: %v", err)
 	}
-	if roundTrip.DeploymentID != "deploy-1" || roundTrip.ActionTableDigest != "sha256:actions" {
+	if roundTrip.DefinitionID != "deploy-1" || roundTrip.ActionTableDigest != "sha256:actions" {
 		t.Fatalf("round trip digests = %#v", roundTrip)
 	}
 	if len(roundTrip.Steps) != 1 || roundTrip.Steps[0].OutputSummary == nil || roundTrip.Steps[0].OutputSummary.SHA256 != "sha256:output" {
@@ -204,7 +204,7 @@ func TestWorkflowRunProtoRoundTripsDeploymentFields(t *testing.T) {
 	}
 }
 
-func TestWorkflowActionRequestFromProtoIncludesDeploymentSelector(t *testing.T) {
+func TestWorkflowActionRequestFromProtoIncludesDefinitionSelector(t *testing.T) {
 	t.Parallel()
 
 	input, err := structpb.NewStruct(map[string]any{"text": "hello"})
@@ -213,8 +213,9 @@ func TestWorkflowActionRequestFromProtoIncludesDeploymentSelector(t *testing.T) 
 	}
 	req, err := workflowActionRequestFromProto(&proto.InvokeWorkflowActionRequest{
 		Selector: &proto.WorkflowHostActionSelector{
-			ExecutionRef:      "exec-1",
-			ActionTableDigest: "sha256:actions",
+			ExecutionRef:         "exec-1",
+			DefinitionId:         "deploy-1",
+			DefinitionGeneration: 5,
 		},
 		Action: &proto.InvokeWorkflowActionRequest_Plugin{
 			Plugin: &proto.WorkflowPluginActionPayload{Input: input},
@@ -223,7 +224,7 @@ func TestWorkflowActionRequestFromProtoIncludesDeploymentSelector(t *testing.T) 
 	if err != nil {
 		t.Fatalf("workflowActionRequestFromProto: %v", err)
 	}
-	if req.Selector.ExecutionRef != "exec-1" || req.Selector.ActionTableDigest != "sha256:actions" {
+	if req.Selector.DefinitionID != "deploy-1" || req.Selector.DefinitionGeneration != 5 {
 		t.Fatalf("selector = %#v", req.Selector)
 	}
 	if req.Plugin == nil || req.Plugin.Input["text"] != "hello" {

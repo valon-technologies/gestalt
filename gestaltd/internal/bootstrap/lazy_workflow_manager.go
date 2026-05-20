@@ -25,87 +25,47 @@ func (l *lazyWorkflowManager) SetTarget(target workflowmanager.Service) {
 	l.target = target
 }
 
-func (l *lazyWorkflowManager) CreateDefinition(ctx context.Context, p *principal.Principal, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (l *lazyWorkflowManager) ApplyDefinition(ctx context.Context, p *principal.Principal, req workflowmanager.DefinitionApply) (*workflowmanager.ManagedDefinition, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.CreateDefinition(ctx, p, req)
+	return target.ApplyDefinition(ctx, p, req)
 }
 
-func (l *lazyWorkflowManager) GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*workflowmanager.ManagedDefinition, error) {
+func (l *lazyWorkflowManager) GetDefinition(ctx context.Context, p *principal.Principal, deploymentID string) (*workflowmanager.ManagedDefinition, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.GetDefinition(ctx, p, definitionID)
+	return target.GetDefinition(ctx, p, deploymentID)
 }
 
-func (l *lazyWorkflowManager) UpdateDefinition(ctx context.Context, p *principal.Principal, definitionID string, req workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (l *lazyWorkflowManager) ListDefinitions(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedDefinition, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.UpdateDefinition(ctx, p, definitionID, req)
+	return target.ListDefinitions(ctx, p)
 }
 
-func (l *lazyWorkflowManager) DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) error {
+func (l *lazyWorkflowManager) DeleteDefinition(ctx context.Context, p *principal.Principal, deploymentID string) error {
 	target, err := l.current()
 	if err != nil {
 		return err
 	}
-	return target.DeleteDefinition(ctx, p, definitionID)
+	return target.DeleteDefinition(ctx, p, deploymentID)
 }
 
-func (l *lazyWorkflowManager) PlanDeployment(ctx context.Context, p *principal.Principal, req workflowmanager.DeploymentPlan) (*coreworkflow.CompileTargetResponse, error) {
+func (l *lazyWorkflowManager) SetDefinitionPaused(ctx context.Context, p *principal.Principal, deploymentID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err
 	}
-	return target.PlanDeployment(ctx, p, req)
+	return target.SetDefinitionPaused(ctx, p, deploymentID, paused)
 }
 
-func (l *lazyWorkflowManager) ApplyDeployment(ctx context.Context, p *principal.Principal, req workflowmanager.DeploymentApply) (*workflowmanager.ManagedDeployment, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.ApplyDeployment(ctx, p, req)
-}
-
-func (l *lazyWorkflowManager) GetDeployment(ctx context.Context, p *principal.Principal, deploymentID string) (*workflowmanager.ManagedDeployment, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.GetDeployment(ctx, p, deploymentID)
-}
-
-func (l *lazyWorkflowManager) ListDeployments(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedDeployment, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.ListDeployments(ctx, p)
-}
-
-func (l *lazyWorkflowManager) DeleteDeployment(ctx context.Context, p *principal.Principal, deploymentID string) error {
-	target, err := l.current()
-	if err != nil {
-		return err
-	}
-	return target.DeleteDeployment(ctx, p, deploymentID)
-}
-
-func (l *lazyWorkflowManager) SetDeploymentPaused(ctx context.Context, p *principal.Principal, deploymentID string, paused bool) (*workflowmanager.ManagedDeployment, error) {
-	target, err := l.current()
-	if err != nil {
-		return nil, err
-	}
-	return target.SetDeploymentPaused(ctx, p, deploymentID, paused)
-}
-
-func (l *lazyWorkflowManager) SetActivationPaused(ctx context.Context, p *principal.Principal, deploymentID, activationID string, paused bool) (*workflowmanager.ManagedDeployment, error) {
+func (l *lazyWorkflowManager) SetActivationPaused(ctx context.Context, p *principal.Principal, deploymentID, activationID string, paused bool) (*workflowmanager.ManagedDefinition, error) {
 	target, err := l.current()
 	if err != nil {
 		return nil, err

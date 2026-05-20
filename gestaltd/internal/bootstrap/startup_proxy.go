@@ -464,88 +464,76 @@ func (p *startupWorkflowProviderProxy) SignalOrStartRun(ctx context.Context, req
 	return provider.SignalOrStartRun(ctx, req)
 }
 
-func (p *startupWorkflowProviderProxy) PlanWorkflow(ctx context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
+func (p *startupWorkflowProviderProxy) ApplyWorkflowDefinition(ctx context.Context, req coreworkflow.ApplyDefinitionRequest) (*coreworkflow.Definition, error) {
 	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetPluginName(req.Spec.Target))
 	if err != nil {
 		return nil, err
 	}
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
+	definitions, ok := provider.(coreworkflow.DefinitionProvider)
 	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support deployments", p.providerName)
+		return nil, fmt.Errorf("workflow provider %q does not support definitions", p.providerName)
 	}
-	return deployments.PlanWorkflow(ctx, req)
+	return definitions.ApplyWorkflowDefinition(ctx, req)
 }
 
-func (p *startupWorkflowProviderProxy) ApplyWorkflowDeployment(ctx context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
-	provider, err := p.awaitForPlugin(ctx, startupWorkflowTargetPluginName(req.Spec.Target))
-	if err != nil {
-		return nil, err
-	}
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
-	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support deployments", p.providerName)
-	}
-	return deployments.ApplyWorkflowDeployment(ctx, req)
-}
-
-func (p *startupWorkflowProviderProxy) GetWorkflowDeployment(ctx context.Context, req coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
+func (p *startupWorkflowProviderProxy) GetWorkflowDefinition(ctx context.Context, req coreworkflow.GetDefinitionRequest) (*coreworkflow.Definition, error) {
 	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
+	definitions, ok := provider.(coreworkflow.DefinitionProvider)
 	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support deployments", p.providerName)
+		return nil, fmt.Errorf("workflow provider %q does not support definitions", p.providerName)
 	}
-	return deployments.GetWorkflowDeployment(ctx, req)
+	return definitions.GetWorkflowDefinition(ctx, req)
 }
 
-func (p *startupWorkflowProviderProxy) ListWorkflowDeployments(ctx context.Context, req coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
+func (p *startupWorkflowProviderProxy) ListWorkflowDefinitions(ctx context.Context, req coreworkflow.ListDefinitionsRequest) (*coreworkflow.ListDefinitionsResponse, error) {
 	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
+	definitions, ok := provider.(coreworkflow.DefinitionProvider)
 	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support deployments", p.providerName)
+		return nil, fmt.Errorf("workflow provider %q does not support definitions", p.providerName)
 	}
-	return deployments.ListWorkflowDeployments(ctx, req)
+	return definitions.ListWorkflowDefinitions(ctx, req)
 }
 
-func (p *startupWorkflowProviderProxy) DeleteWorkflowDeployment(ctx context.Context, req coreworkflow.DeleteDeploymentRequest) error {
+func (p *startupWorkflowProviderProxy) DeleteWorkflowDefinition(ctx context.Context, req coreworkflow.DeleteDefinitionRequest) error {
 	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return err
 	}
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
+	definitions, ok := provider.(coreworkflow.DefinitionProvider)
 	if !ok {
-		return fmt.Errorf("workflow provider %q does not support deployments", p.providerName)
+		return fmt.Errorf("workflow provider %q does not support definitions", p.providerName)
 	}
-	return deployments.DeleteWorkflowDeployment(ctx, req)
+	return definitions.DeleteWorkflowDefinition(ctx, req)
 }
 
-func (p *startupWorkflowProviderProxy) SetWorkflowDeploymentPaused(ctx context.Context, req coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
+func (p *startupWorkflowProviderProxy) SetWorkflowDefinitionPaused(ctx context.Context, req coreworkflow.SetDefinitionPausedRequest) (*coreworkflow.Definition, error) {
 	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
+	definitions, ok := provider.(coreworkflow.DefinitionProvider)
 	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support deployments", p.providerName)
+		return nil, fmt.Errorf("workflow provider %q does not support definitions", p.providerName)
 	}
-	return deployments.SetWorkflowDeploymentPaused(ctx, req)
+	return definitions.SetWorkflowDefinitionPaused(ctx, req)
 }
 
-func (p *startupWorkflowProviderProxy) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
+func (p *startupWorkflowProviderProxy) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (*coreworkflow.Definition, error) {
 	provider, err := p.awaitForContextPlugin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
+	definitions, ok := provider.(coreworkflow.DefinitionProvider)
 	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support deployments", p.providerName)
+		return nil, fmt.Errorf("workflow provider %q does not support definitions", p.providerName)
 	}
-	return deployments.SetWorkflowActivationPaused(ctx, req)
+	return definitions.SetWorkflowActivationPaused(ctx, req)
 }
 
 func (p *startupWorkflowProviderProxy) DeliverWorkflowEvent(ctx context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
@@ -553,11 +541,11 @@ func (p *startupWorkflowProviderProxy) DeliverWorkflowEvent(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
+	definitions, ok := provider.(coreworkflow.DefinitionProvider)
 	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support deployments", p.providerName)
+		return nil, fmt.Errorf("workflow provider %q does not support definitions", p.providerName)
 	}
-	return deployments.DeliverWorkflowEvent(ctx, req)
+	return definitions.DeliverWorkflowEvent(ctx, req)
 }
 
 func (p *startupWorkflowProviderProxy) GetWorkflowRunEvents(ctx context.Context, req coreworkflow.GetRunEventsRequest) (*coreworkflow.ListRunEventsResponse, error) {
@@ -565,11 +553,11 @@ func (p *startupWorkflowProviderProxy) GetWorkflowRunEvents(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
+	definitions, ok := provider.(coreworkflow.DefinitionProvider)
 	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support deployments", p.providerName)
+		return nil, fmt.Errorf("workflow provider %q does not support definitions", p.providerName)
 	}
-	return deployments.GetWorkflowRunEvents(ctx, req)
+	return definitions.GetWorkflowRunEvents(ctx, req)
 }
 
 func (p *startupWorkflowProviderProxy) GetWorkflowRunOutput(ctx context.Context, req coreworkflow.GetRunOutputRequest) (*coreworkflow.RunOutput, error) {
@@ -577,11 +565,11 @@ func (p *startupWorkflowProviderProxy) GetWorkflowRunOutput(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
+	definitions, ok := provider.(coreworkflow.DefinitionProvider)
 	if !ok {
-		return nil, fmt.Errorf("workflow provider %q does not support deployments", p.providerName)
+		return nil, fmt.Errorf("workflow provider %q does not support definitions", p.providerName)
 	}
-	return deployments.GetWorkflowRunOutput(ctx, req)
+	return definitions.GetWorkflowRunOutput(ctx, req)
 }
 
 func (p *startupWorkflowProviderProxy) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
@@ -605,7 +593,7 @@ func (p *startupWorkflowProviderProxy) PutExecutionReference(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	store, ok := provider.(coreworkflow.ExecutionReferenceMutableStore)
 	if !ok {
 		return nil, fmt.Errorf("workflow provider %q does not support execution references", p.providerName)
 	}

@@ -18,11 +18,11 @@ from gestalt import (
     BoundWorkflowTarget,
     Request,
     WorkflowActivation,
-    WorkflowDeploymentSpec,
+    WorkflowDefinitionSpec,
     WorkflowEvent,
     WorkflowHost,
     WorkflowManager,
-    WorkflowManagerApplyDeploymentRequest,
+    WorkflowManagerApplyDefinitionRequest,
     WorkflowManagerDeliverEventRequest,
     WorkflowStep,
     WorkflowStepPluginCall,
@@ -56,22 +56,22 @@ class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
 
 
 class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
-    def ApplyDeployment(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def ApplyDefinition(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         _manager_requests.append(
             {
-                "method": "apply_deployment",
+                "method": "apply_definition",
                 "invocation_token": request.invocation_token,
                 "idempotency_key": request.idempotency_key,
                 "provider_name": request.provider_name,
-                "deployment_id": request.spec.id,
+                "definition_id": request.spec.id,
             }
         )
-        return workflow_pb2.ManagedWorkflowDeployment(
+        return workflow_pb2.ManagedWorkflowDefinition(
             provider_name=request.provider_name or "basic",
-            deployment=workflow_pb2.WorkflowDeployment(
+            definition=workflow_pb2.WorkflowDefinition(
                 spec=request.spec,
-                status=workflow_pb2.WORKFLOW_DEPLOYMENT_STATUS_ACTIVE,
+                status=workflow_pb2.WORKFLOW_DEFINITION_STATUS_ACTIVE,
             ),
         )
 
@@ -83,7 +83,7 @@ class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
                 "invocation_token": request.invocation_token,
                 "idempotency_key": request.idempotency_key,
                 "provider_name": request.provider_name,
-                "deployment_id": request.deployment_id,
+                "definition_id": request.definition_id,
                 "workflow_key": request.workflow_key,
             }
         )
@@ -91,7 +91,7 @@ class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
             provider_name=request.provider_name or "basic",
             run=workflow_pb2.WorkflowRun(
                 id="run-1",
-                deployment_id=request.deployment_id,
+                definition_id=request.definition_id,
                 workflow_key=request.workflow_key,
                 status=workflow_pb2.WORKFLOW_RUN_STATUS_RUNNING,
             ),
@@ -116,7 +116,7 @@ class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
         return workflow_pb2.WorkflowManagerDeliverEventResponse(
             results=[
                 workflow_pb2.WorkflowEventDeliveryResult(
-                    deployment_id="deployment-1",
+                    definition_id="deployment-1",
                     activation_id="event",
                     started_run=True,
                     run=workflow_pb2.WorkflowRun(id="run-from-event"),
@@ -239,10 +239,10 @@ class WorkflowTransportTests(unittest.TestCase):
         )
 
         with request.workflow_manager() as manager:
-            deployment = manager.apply_deployment(
-                WorkflowManagerApplyDeploymentRequest(
+            deployment = manager.apply_definition(
+                WorkflowManagerApplyDefinitionRequest(
                     provider_name="managed",
-                    spec=WorkflowDeploymentSpec(
+                    spec=WorkflowDefinitionSpec(
                         id="deployment-1",
                         target=BoundWorkflowTarget(
                             steps=[
@@ -261,7 +261,7 @@ class WorkflowTransportTests(unittest.TestCase):
             )
             run = manager.start_run(
                 provider_name="managed",
-                deployment_id="deployment-1",
+                definition_id="deployment-1",
                 workflow_key="sync",
             )
             delivered = manager.deliver_event(
@@ -275,9 +275,11 @@ class WorkflowTransportTests(unittest.TestCase):
                 )
             )
 
-        assert deployment.deployment is not None
+        assert deployment.definition is not None
         assert run.run is not None
-        self.assertEqual(deployment.deployment.spec.id, "deployment-1")
+        assert delivered.results is not None
+        assert delivered.results[0].run is not None
+        self.assertEqual(deployment.definition.spec.id, "deployment-1")
         self.assertEqual(run.run.id, "run-1")
         results = delivered.results
         assert results is not None
@@ -290,18 +292,18 @@ class WorkflowTransportTests(unittest.TestCase):
             _manager_requests,
             [
                 {
-                    "method": "apply_deployment",
+                    "method": "apply_definition",
                     "invocation_token": "token-embedded",
                     "idempotency_key": "workflow-request-key-py",
                     "provider_name": "managed",
-                    "deployment_id": "deployment-1",
+                    "definition_id": "deployment-1",
                 },
                 {
                     "method": "start_run",
                     "invocation_token": "token-embedded",
                     "idempotency_key": "workflow-request-key-py",
                     "provider_name": "managed",
-                    "deployment_id": "deployment-1",
+                    "definition_id": "deployment-1",
                     "workflow_key": "sync",
                 },
                 {

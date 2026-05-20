@@ -759,15 +759,15 @@ type relayTestWorkflowManagerHostServer struct {
 	calls *atomic.Int64
 }
 
-func (s relayTestWorkflowManagerHostServer) GetDeployment(_ context.Context, req *proto.WorkflowManagerGetDeploymentRequest) (*proto.ManagedWorkflowDeployment, error) {
+func (s relayTestWorkflowManagerHostServer) GetDefinition(_ context.Context, req *proto.WorkflowManagerGetDefinitionRequest) (*proto.ManagedWorkflowDefinition, error) {
 	if s.calls != nil {
 		s.calls.Add(1)
 	}
-	return &proto.ManagedWorkflowDeployment{
+	return &proto.ManagedWorkflowDefinition{
 		ProviderName: "registered",
-		Deployment: &proto.WorkflowDeployment{
-			Spec: &proto.WorkflowDeploymentSpec{
-				Id: req.GetDeploymentId(),
+		Definition: &proto.WorkflowDefinition{
+			Spec: &proto.WorkflowDefinitionSpec{
+				Id: req.GetDefinitionId(),
 			},
 		},
 	}, nil
@@ -1238,12 +1238,12 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			},
 			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
 				t.Helper()
-				resp, err := proto.NewWorkflowManagerHostClient(conn).GetDeployment(ctx, &proto.WorkflowManagerGetDeploymentRequest{DeploymentId: "deployment-1"})
+				resp, err := proto.NewWorkflowManagerHostClient(conn).GetDefinition(ctx, &proto.WorkflowManagerGetDefinitionRequest{DefinitionId: "deployment-1"})
 				if err != nil {
-					t.Fatalf("WorkflowManager.GetDeployment via relay: %v", err)
+					t.Fatalf("WorkflowManager.GetDefinition via relay: %v", err)
 				}
-				if resp.GetProviderName() != "registered" || resp.GetDeployment().GetSpec().GetId() != "deployment-1" {
-					t.Fatalf("WorkflowManager.GetDeployment response = %+v, want registered deployment-1", resp)
+				if resp.GetProviderName() != "registered" || resp.GetDefinition().GetSpec().GetId() != "deployment-1" {
+					t.Fatalf("WorkflowManager.GetDefinition response = %+v, want registered deployment-1", resp)
 				}
 			},
 		},
@@ -1352,7 +1352,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
 			switch tc.service {
 			case "workflow_manager":
-				_, err = proto.NewWorkflowManagerHostClient(conn).GetDeployment(staleCtx, &proto.WorkflowManagerGetDeploymentRequest{DeploymentId: "deployment-1"})
+				_, err = proto.NewWorkflowManagerHostClient(conn).GetDefinition(staleCtx, &proto.WorkflowManagerGetDefinitionRequest{DefinitionId: "deployment-1"})
 			case "agent_manager":
 				_, err = proto.NewAgentManagerHostClient(conn).GetSession(staleCtx, &proto.AgentManagerGetSessionRequest{SessionId: "agent-session-1"})
 			case "runtime_log_host":

@@ -177,6 +177,7 @@ message WorkflowExecutionReference {
   BoundWorkflowTarget target = 3;
   string caller_plugin_name = 4;
   string source_definition_id = 5;
+  int64 source_definition_generation = 6;
 
   string subject_id = 10;
   string subject_kind = 11;
@@ -190,15 +191,10 @@ message WorkflowExecutionReference {
   google.protobuf.Timestamp revoked_at = 22;
 
   string target_digest = 30;
-  string provider_plan_digest = 31;
+  string action_table_digest = 31;
   string permissions_digest = 32;
   string semantics_version = 33;
   int64 generation = 34;
-  string seal = 35;
-}
-
-message PutWorkflowExecutionReferenceRequest {
-  WorkflowExecutionReference execution_ref = 1;
 }
 
 message GetWorkflowExecutionReferenceRequest {
@@ -213,7 +209,7 @@ message ListWorkflowExecutionReferencesResponse {
   repeated WorkflowExecutionReference execution_refs = 1;
 }
 
-message WorkflowDeploymentSpec {
+message WorkflowDefinitionSpec {
   string id = 1;
   int64 generation = 2;
   BoundWorkflowTarget target = 3;
@@ -245,57 +241,32 @@ message WorkflowActionTable {
   string digest = 2;
 }
 
-message WorkflowUnsupportedFeature {
-  string feature = 1;
-  string reason = 2;
-}
-
-message PlanWorkflowRequest {
-  WorkflowDeploymentSpec spec = 1;
-  string spec_digest = 2;
-  string target_digest = 3;
-  string action_table_digest = 4;
-  string target_canonicalization_version = 5;
-  string workflow_semantics_version = 6;
-}
-
-message PlanWorkflowResponse {
-  string accepted_spec_digest = 1;
-  string provider_plan_id = 2;
-  string provider_plan_digest = 3;
-  string provider_plan_format_version = 4;
-  repeated WorkflowUnsupportedFeature unsupported = 5;
-  repeated string supported_feature_flags = 6;
-}
-
-message WorkflowDeploymentBinding {
+message WorkflowDefinitionBinding {
   string id = 1;
   string execution_ref = 2;
   int64 execution_ref_generation = 3;
-  string execution_ref_seal = 4;
-  string deployment_id = 5;
-  int64 deployment_generation = 6;
-  string spec_digest = 7;
-  string target_digest = 8;
-  string action_table_digest = 9;
-  string provider_plan_id = 10;
-  string provider_plan_digest = 11;
-  string workflow_semantics_version = 12;
-  string request_id = 13;
+  string definition_id = 4;
+  int64 definition_generation = 5;
+  string spec_digest = 6;
+  string target_digest = 7;
+  string action_table_digest = 8;
+  string permissions_digest = 9;
+  string workflow_semantics_version = 10;
+  string request_id = 11;
 }
 
-enum WorkflowDeploymentStatus {
-  WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED = 0;
-  WORKFLOW_DEPLOYMENT_STATUS_PENDING = 1;
-  WORKFLOW_DEPLOYMENT_STATUS_ACTIVE = 2;
-  WORKFLOW_DEPLOYMENT_STATUS_PAUSED = 3;
-  WORKFLOW_DEPLOYMENT_STATUS_DELETED = 4;
-  WORKFLOW_DEPLOYMENT_STATUS_FAILED = 5;
+enum WorkflowDefinitionStatus {
+  WORKFLOW_DEFINITION_STATUS_UNSPECIFIED = 0;
+  WORKFLOW_DEFINITION_STATUS_PENDING = 1;
+  WORKFLOW_DEFINITION_STATUS_ACTIVE = 2;
+  WORKFLOW_DEFINITION_STATUS_PAUSED = 3;
+  WORKFLOW_DEFINITION_STATUS_DELETED = 4;
+  WORKFLOW_DEFINITION_STATUS_FAILED = 5;
 }
 
-message WorkflowDeployment {
-  WorkflowDeploymentSpec spec = 1;
-  WorkflowDeploymentStatus status = 2;
+message WorkflowDefinition {
+  WorkflowDefinitionSpec spec = 1;
+  WorkflowDefinitionStatus status = 2;
   google.protobuf.Timestamp created_at = 3;
   google.protobuf.Timestamp updated_at = 4;
   int64 applied_generation = 5;
@@ -304,47 +275,46 @@ message WorkflowDeployment {
   string action_table_digest = 8;
   string provider_plan_id = 9;
   string provider_plan_digest = 10;
-  WorkflowDeploymentBinding binding = 11;
+  WorkflowDefinitionBinding binding = 11;
   WorkflowRunError error = 12;
 }
 
-message ApplyWorkflowDeploymentRequest {
-  WorkflowDeploymentSpec spec = 1;
-  PlanWorkflowResponse plan = 2;
-  WorkflowDeploymentBinding binding = 3;
+message ApplyWorkflowDefinitionRequest {
+  WorkflowDefinitionSpec spec = 1;
+  WorkflowDefinitionBinding binding = 2;
+  WorkflowExecutionReference execution_ref = 3;
   string request_id = 4;
-  bool validate_only = 5;
 }
 
-message GetWorkflowDeploymentRequest {
-  string deployment_id = 1;
+message GetWorkflowDefinitionRequest {
+  string definition_id = 1;
 }
 
-message ListWorkflowDeploymentsRequest {
+message ListWorkflowDefinitionsRequest {
   int32 page_size = 1;
   string page_token = 2;
   map<string, string> labels = 3;
 }
 
-message ListWorkflowDeploymentsResponse {
-  repeated WorkflowDeployment deployments = 1;
+message ListWorkflowDefinitionsResponse {
+  repeated WorkflowDefinition definitions = 1;
   string next_page_token = 2;
 }
 
-message DeleteWorkflowDeploymentRequest {
-  string deployment_id = 1;
+message DeleteWorkflowDefinitionRequest {
+  string definition_id = 1;
   int64 generation = 2;
   string request_id = 3;
 }
 
-message SetWorkflowDeploymentPausedRequest {
-  string deployment_id = 1;
+message SetWorkflowDefinitionPausedRequest {
+  string definition_id = 1;
   bool paused = 2;
   string request_id = 3;
 }
 
 message SetWorkflowActivationPausedRequest {
-  string deployment_id = 1;
+  string definition_id = 1;
   string activation_id = 2;
   bool paused = 3;
   string request_id = 4;
@@ -382,8 +352,8 @@ message WorkflowEventTrigger {
 }
 
 message WorkflowRunTrigger {
-  string deployment_id = 1;
-  int64 deployment_generation = 2;
+  string definition_id = 1;
+  int64 definition_generation = 2;
   string activation_id = 3;
 
   oneof kind {
@@ -435,8 +405,8 @@ message WorkflowStepState {
 
 message WorkflowRun {
   string id = 1;
-  string deployment_id = 2;
-  int64 deployment_generation = 3;
+  string definition_id = 2;
+  int64 definition_generation = 3;
   string workflow_key = 4;
   WorkflowRunStatus status = 5;
   WorkflowRunTrigger trigger = 6;
@@ -451,14 +421,13 @@ message WorkflowRun {
   string target_digest = 15;
   string spec_digest = 16;
   string action_table_digest = 17;
-  string provider_plan_digest = 18;
   repeated WorkflowStepState steps = 19;
   WorkflowRunError error = 20;
 }
 
 message StartWorkflowRunRequest {
-  string deployment_id = 1;
-  int64 deployment_generation = 2;
+  string definition_id = 1;
+  int64 definition_generation = 2;
   string activation_id = 3;
   string workflow_key = 4;
   google.protobuf.Struct input = 5;
@@ -472,8 +441,8 @@ message SignalWorkflowRunRequest {
 }
 
 message SignalOrStartWorkflowRunRequest {
-  string deployment_id = 1;
-  int64 deployment_generation = 2;
+  string definition_id = 1;
+  int64 definition_generation = 2;
   string activation_id = 3;
   string workflow_key = 4;
   google.protobuf.Struct input = 5;
@@ -492,7 +461,7 @@ message GetWorkflowRunRequest {
 }
 
 message ListWorkflowRunsRequest {
-  string deployment_id = 1;
+  string definition_id = 1;
   int32 page_size = 2;
   string page_token = 3;
   WorkflowRunStatus status = 4;
@@ -518,7 +487,7 @@ message DeliverWorkflowEventRequest {
 }
 
 message WorkflowEventDeliveryResult {
-  string deployment_id = 1;
+  string definition_id = 1;
   string activation_id = 2;
   WorkflowRun run = 3;
   WorkflowSignal signal = 4;
@@ -586,15 +555,13 @@ message WorkflowRunOutput {
 message WorkflowHostActionSelector {
   string execution_ref = 1;
   int64 execution_ref_generation = 2;
-  string execution_ref_seal = 3;
-  string run_id = 4;
-  string step_id = 7;
-  string action_id = 8;
-  int32 attempt_number = 9;
-  string idempotency_key = 10;
-  string target_digest = 11;
-  string action_table_digest = 12;
-  string provider_plan_digest = 13;
+  string run_id = 3;
+  string definition_id = 4;
+  int64 definition_generation = 5;
+  string step_id = 6;
+  string action_id = 7;
+  int32 attempt_number = 8;
+  string idempotency_key = 9;
 }
 
 message WorkflowPluginActionPayload {
@@ -627,9 +594,9 @@ message WorkflowActionResult {
   WorkflowRunError error = 6;
 }
 
-message ManagedWorkflowDeployment {
+message ManagedWorkflowDefinition {
   string provider_name = 1;
-  WorkflowDeployment deployment = 2;
+  WorkflowDefinition definition = 2;
 }
 
 message ManagedWorkflowRun {
@@ -645,48 +612,41 @@ message ManagedWorkflowRunSignal {
   string workflow_key = 5;
 }
 
-message WorkflowManagerPlanDeploymentRequest {
+message WorkflowManagerApplyDefinitionRequest {
   string provider_name = 1;
-  WorkflowDeploymentSpec spec = 2;
+  WorkflowDefinitionSpec spec = 2;
   string invocation_token = 3;
   string idempotency_key = 4;
 }
 
-message WorkflowManagerApplyDeploymentRequest {
-  string provider_name = 1;
-  WorkflowDeploymentSpec spec = 2;
-  string invocation_token = 3;
-  string idempotency_key = 4;
-}
-
-message WorkflowManagerGetDeploymentRequest {
-  string deployment_id = 1;
+message WorkflowManagerGetDefinitionRequest {
+  string definition_id = 1;
   string invocation_token = 2;
 }
 
-message WorkflowManagerListDeploymentsRequest {
+message WorkflowManagerListDefinitionsRequest {
   string provider_name = 1;
   string invocation_token = 2;
 }
 
-message WorkflowManagerListDeploymentsResponse {
-  repeated ManagedWorkflowDeployment deployments = 1;
+message WorkflowManagerListDefinitionsResponse {
+  repeated ManagedWorkflowDefinition definitions = 1;
 }
 
-message WorkflowManagerDeleteDeploymentRequest {
-  string deployment_id = 1;
+message WorkflowManagerDeleteDefinitionRequest {
+  string definition_id = 1;
   int64 generation = 2;
   string invocation_token = 3;
 }
 
-message WorkflowManagerSetDeploymentPausedRequest {
-  string deployment_id = 1;
+message WorkflowManagerSetDefinitionPausedRequest {
+  string definition_id = 1;
   bool paused = 2;
   string invocation_token = 3;
 }
 
 message WorkflowManagerSetActivationPausedRequest {
-  string deployment_id = 1;
+  string definition_id = 1;
   string activation_id = 2;
   bool paused = 3;
   string invocation_token = 4;
@@ -694,8 +654,8 @@ message WorkflowManagerSetActivationPausedRequest {
 
 message WorkflowManagerStartRunRequest {
   string provider_name = 1;
-  string deployment_id = 2;
-  int64 deployment_generation = 3;
+  string definition_id = 2;
+  int64 definition_generation = 3;
   string activation_id = 4;
   string workflow_key = 5;
   google.protobuf.Struct input = 6;
@@ -711,8 +671,8 @@ message WorkflowManagerSignalRunRequest {
 
 message WorkflowManagerSignalOrStartRunRequest {
   string provider_name = 1;
-  string deployment_id = 2;
-  int64 deployment_generation = 3;
+  string definition_id = 2;
+  int64 definition_generation = 3;
   string activation_id = 4;
   string workflow_key = 5;
   google.protobuf.Struct input = 6;
@@ -739,14 +699,12 @@ message WorkflowManagerDeliverEventResponse {
 }
 
 service WorkflowProvider {
-  rpc PlanWorkflow(PlanWorkflowRequest) returns (PlanWorkflowResponse);
-
-  rpc ApplyWorkflowDeployment(ApplyWorkflowDeploymentRequest) returns (WorkflowDeployment);
-  rpc GetWorkflowDeployment(GetWorkflowDeploymentRequest) returns (WorkflowDeployment);
-  rpc ListWorkflowDeployments(ListWorkflowDeploymentsRequest) returns (ListWorkflowDeploymentsResponse);
-  rpc DeleteWorkflowDeployment(DeleteWorkflowDeploymentRequest) returns (google.protobuf.Empty);
-  rpc SetWorkflowDeploymentPaused(SetWorkflowDeploymentPausedRequest) returns (WorkflowDeployment);
-  rpc SetWorkflowActivationPaused(SetWorkflowActivationPausedRequest) returns (WorkflowDeployment);
+  rpc ApplyWorkflowDefinition(ApplyWorkflowDefinitionRequest) returns (WorkflowDefinition);
+  rpc GetWorkflowDefinition(GetWorkflowDefinitionRequest) returns (WorkflowDefinition);
+  rpc ListWorkflowDefinitions(ListWorkflowDefinitionsRequest) returns (ListWorkflowDefinitionsResponse);
+  rpc DeleteWorkflowDefinition(DeleteWorkflowDefinitionRequest) returns (google.protobuf.Empty);
+  rpc SetWorkflowDefinitionPaused(SetWorkflowDefinitionPausedRequest) returns (WorkflowDefinition);
+  rpc SetWorkflowActivationPaused(SetWorkflowActivationPausedRequest) returns (WorkflowDefinition);
 
   rpc StartWorkflowRun(StartWorkflowRunRequest) returns (WorkflowRun);
   rpc SignalWorkflowRun(SignalWorkflowRunRequest) returns (WorkflowRunSignal);
@@ -760,7 +718,6 @@ service WorkflowProvider {
   rpc GetWorkflowRunEvents(GetWorkflowRunEventsRequest) returns (ListWorkflowRunEventsResponse);
   rpc GetWorkflowRunOutput(GetWorkflowRunOutputRequest) returns (WorkflowRunOutput);
 
-  rpc PutExecutionReference(PutWorkflowExecutionReferenceRequest) returns (WorkflowExecutionReference);
   rpc GetExecutionReference(GetWorkflowExecutionReferenceRequest) returns (WorkflowExecutionReference);
   rpc ListExecutionReferences(ListWorkflowExecutionReferencesRequest) returns (ListWorkflowExecutionReferencesResponse);
 }
@@ -770,13 +727,12 @@ service WorkflowHost {
 }
 
 service WorkflowManagerHost {
-  rpc PlanDeployment(WorkflowManagerPlanDeploymentRequest) returns (PlanWorkflowResponse);
-  rpc ApplyDeployment(WorkflowManagerApplyDeploymentRequest) returns (ManagedWorkflowDeployment);
-  rpc GetDeployment(WorkflowManagerGetDeploymentRequest) returns (ManagedWorkflowDeployment);
-  rpc ListDeployments(WorkflowManagerListDeploymentsRequest) returns (WorkflowManagerListDeploymentsResponse);
-  rpc DeleteDeployment(WorkflowManagerDeleteDeploymentRequest) returns (google.protobuf.Empty);
-  rpc SetDeploymentPaused(WorkflowManagerSetDeploymentPausedRequest) returns (ManagedWorkflowDeployment);
-  rpc SetActivationPaused(WorkflowManagerSetActivationPausedRequest) returns (ManagedWorkflowDeployment);
+  rpc ApplyDefinition(WorkflowManagerApplyDefinitionRequest) returns (ManagedWorkflowDefinition);
+  rpc GetDefinition(WorkflowManagerGetDefinitionRequest) returns (ManagedWorkflowDefinition);
+  rpc ListDefinitions(WorkflowManagerListDefinitionsRequest) returns (WorkflowManagerListDefinitionsResponse);
+  rpc DeleteDefinition(WorkflowManagerDeleteDefinitionRequest) returns (google.protobuf.Empty);
+  rpc SetDefinitionPaused(WorkflowManagerSetDefinitionPausedRequest) returns (ManagedWorkflowDefinition);
+  rpc SetActivationPaused(WorkflowManagerSetActivationPausedRequest) returns (ManagedWorkflowDefinition);
 
   rpc StartRun(WorkflowManagerStartRunRequest) returns (ManagedWorkflowRun);
   rpc SignalRun(WorkflowManagerSignalRunRequest) returns (ManagedWorkflowRunSignal);

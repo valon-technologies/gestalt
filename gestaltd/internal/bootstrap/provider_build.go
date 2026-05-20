@@ -2416,7 +2416,7 @@ func (unavailablePluginInvoker) InvokeGraphQL(context.Context, *principal.Princi
 
 type unavailableWorkflowManager struct{}
 
-func (unavailableWorkflowManager) CreateDefinition(context.Context, *principal.Principal, workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (unavailableWorkflowManager) ApplyDefinition(context.Context, *principal.Principal, workflowmanager.DefinitionApply) (*workflowmanager.ManagedDefinition, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
@@ -2424,7 +2424,7 @@ func (unavailableWorkflowManager) GetDefinition(context.Context, *principal.Prin
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
-func (unavailableWorkflowManager) UpdateDefinition(context.Context, *principal.Principal, string, workflowmanager.DefinitionUpsert) (*workflowmanager.ManagedDefinition, error) {
+func (unavailableWorkflowManager) ListDefinitions(context.Context, *principal.Principal) ([]*workflowmanager.ManagedDefinition, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
@@ -2432,31 +2432,11 @@ func (unavailableWorkflowManager) DeleteDefinition(context.Context, *principal.P
 	return fmt.Errorf("workflow manager is not available")
 }
 
-func (unavailableWorkflowManager) PlanDeployment(context.Context, *principal.Principal, workflowmanager.DeploymentPlan) (*coreworkflow.CompileTargetResponse, error) {
+func (unavailableWorkflowManager) SetDefinitionPaused(context.Context, *principal.Principal, string, bool) (*workflowmanager.ManagedDefinition, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 
-func (unavailableWorkflowManager) ApplyDeployment(context.Context, *principal.Principal, workflowmanager.DeploymentApply) (*workflowmanager.ManagedDeployment, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) GetDeployment(context.Context, *principal.Principal, string) (*workflowmanager.ManagedDeployment, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) ListDeployments(context.Context, *principal.Principal) ([]*workflowmanager.ManagedDeployment, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) DeleteDeployment(context.Context, *principal.Principal, string) error {
-	return fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) SetDeploymentPaused(context.Context, *principal.Principal, string, bool) (*workflowmanager.ManagedDeployment, error) {
-	return nil, fmt.Errorf("workflow manager is not available")
-}
-
-func (unavailableWorkflowManager) SetActivationPaused(context.Context, *principal.Principal, string, string, bool) (*workflowmanager.ManagedDeployment, error) {
+func (unavailableWorkflowManager) SetActivationPaused(context.Context, *principal.Principal, string, string, bool) (*workflowmanager.ManagedDefinition, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 

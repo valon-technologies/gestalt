@@ -85,7 +85,7 @@ import {
   ProviderLifecycle,
 } from "../src/internal/gen/v1/runtime_pb.ts";
 import {
-  ApplyWorkflowDeploymentRequestSchema,
+  ApplyWorkflowDefinitionRequestSchema,
   DeliverWorkflowEventRequestSchema,
   StartWorkflowRunRequestSchema,
 } from "../src/internal/gen/v1/workflow_pb.ts";
@@ -143,15 +143,15 @@ async function expectConnectCode(
 }
 
 function workflowPluginTarget(
-  name: string,
+  pluginName: string,
   operation: string,
 ) {
   return {
     steps: [{
-      id: `${name}:${operation}`,
+      id: `${pluginName}:${operation}`,
       action: {
         case: "plugin" as const,
-        value: { name, operation },
+        value: { name: pluginName, operation },
       },
     }],
   };
@@ -1831,18 +1831,12 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   expect(metadata.kind).toBe(ProtoProviderKind.WORKFLOW);
   expect(metadata.displayName).toBe("Fixture Workflow");
 
-  const deployment = await (workflow.applyWorkflowDeployment as any)(
-    create(ApplyWorkflowDeploymentRequestSchema, {
+  const deployment = await (workflow.applyWorkflowDefinition as any)(
+    create(ApplyWorkflowDefinitionRequestSchema, {
       spec: {
         id: "roadmap-sync",
         generation: 1n,
         target: workflowPluginTarget("roadmap", "sync"),
-      },
-      plan: {
-        acceptedSpecDigest: "spec-digest",
-        providerPlanId: "fixture-plan",
-        providerPlanDigest: "fixture-plan:spec-digest",
-        providerPlanFormatVersion: "workflow-plan-v1",
       },
     }),
   );
@@ -1850,8 +1844,8 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
 
   const run = await (workflow.startWorkflowRun as any)(
     create(StartWorkflowRunRequestSchema, {
-      deploymentId: "roadmap-sync",
-      deploymentGeneration: 1n,
+      definitionId: "roadmap-sync",
+      definitionGeneration: 1n,
       activationId: "manual",
       idempotencyKey: "req-1",
       createdBy: {
@@ -1862,7 +1856,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
       },
     }),
   );
-  expect(run.deploymentId).toBe("roadmap-sync");
+  expect(run.definitionId).toBe("roadmap-sync");
   expect(run.status).toBe(WorkflowRunStatus.PENDING);
   expect(run.statusMessage).toBe("idempotency:req-1");
   expect(run.createdBy?.subjectId).toBe("user:user-123");

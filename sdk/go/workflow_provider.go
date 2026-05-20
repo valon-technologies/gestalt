@@ -2,79 +2,68 @@ package gestalt
 
 import "context"
 
-// PlanWorkflowRequest asks a provider to validate and plan a deployment spec.
-type PlanWorkflowRequest struct {
-	Spec                          *WorkflowDeploymentSpec
-	SpecDigest                    string
-	TargetDigest                  string
-	ActionTableDigest             string
-	TargetCanonicalizationVersion string
-	WorkflowSemanticsVersion      string
-}
-
-// ApplyWorkflowDeploymentRequest asks a provider to create or update a
-// deployment from a previously planned spec.
-type ApplyWorkflowDeploymentRequest struct {
-	Spec         *WorkflowDeploymentSpec
-	Plan         *PlanWorkflowResponse
-	Binding      *WorkflowDeploymentBinding
+// ApplyWorkflowDefinitionRequest asks a provider to create or update a
+// workflow definition.
+type ApplyWorkflowDefinitionRequest struct {
+	Spec         *WorkflowDefinitionSpec
+	Binding      *WorkflowDefinitionBinding
+	ExecutionRef *WorkflowExecutionReference
 	RequestID    string
-	ValidateOnly bool
 }
 
-// GetWorkflowDeploymentRequest identifies one workflow deployment.
-type GetWorkflowDeploymentRequest struct {
-	DeploymentID string
+// GetWorkflowDefinitionRequest identifies one workflow definition.
+type GetWorkflowDefinitionRequest struct {
+	DefinitionID string
 }
 
-// ListWorkflowDeploymentsRequest requests workflow deployments visible to the
+// ListWorkflowDefinitionsRequest requests workflow definitions visible to the
 // caller.
-type ListWorkflowDeploymentsRequest struct {
+type ListWorkflowDefinitionsRequest struct {
 	PageSize  int
 	PageToken string
 	Labels    map[string]string
 }
 
-// ListWorkflowDeploymentsResponse contains workflow deployments.
-type ListWorkflowDeploymentsResponse struct {
-	Deployments   []WorkflowDeployment
+// ListWorkflowDefinitionsResponse contains workflow definitions.
+type ListWorkflowDefinitionsResponse struct {
+	Definitions   []WorkflowDefinition
 	NextPageToken string
 }
 
-// GetDeployments returns deployments from the response.
-func (r *ListWorkflowDeploymentsResponse) GetDeployments() []WorkflowDeployment {
+// GetDefinitions returns definitions from the response.
+func (r *ListWorkflowDefinitionsResponse) GetDefinitions() []WorkflowDefinition {
 	if r == nil {
 		return nil
 	}
-	return r.Deployments
+	return r.Definitions
 }
 
 // GetNextPageToken returns the token for the next page, if any.
-func (r *ListWorkflowDeploymentsResponse) GetNextPageToken() string {
+func (r *ListWorkflowDefinitionsResponse) GetNextPageToken() string {
 	if r == nil {
 		return ""
 	}
 	return r.NextPageToken
 }
 
-// DeleteWorkflowDeploymentRequest identifies a deployment to delete.
-type DeleteWorkflowDeploymentRequest struct {
-	DeploymentID string
+// DeleteWorkflowDefinitionRequest identifies a workflow definition to delete.
+type DeleteWorkflowDefinitionRequest struct {
+	DefinitionID string
 	Generation   int64
 	RequestID    string
 }
 
-// SetWorkflowDeploymentPausedRequest pauses or resumes a deployment.
-type SetWorkflowDeploymentPausedRequest struct {
-	DeploymentID string
+// SetWorkflowDefinitionPausedRequest pauses or resumes a workflow definition.
+type SetWorkflowDefinitionPausedRequest struct {
+	DefinitionID string
 	Paused       bool
 	RequestID    string
 }
 
-// SetWorkflowActivationPausedRequest pauses or resumes one deployment
+// SetWorkflowActivationPausedRequest pauses or resumes one workflow definition
 // activation.
 type SetWorkflowActivationPausedRequest struct {
-	DeploymentID string
+	DefinitionID string
 	ActivationID string
 	Paused       bool
 	RequestID    string
@@ -82,8 +71,8 @@ type SetWorkflowActivationPausedRequest struct {
 
 // StartWorkflowRunRequest requests a new or idempotent workflow run.
 type StartWorkflowRunRequest struct {
-	DeploymentID         string
-	DeploymentGeneration int64
+	DefinitionID         string
+	DefinitionGeneration int64
 	ActivationID         string
 	WorkflowKey          string
 	Input                any
@@ -100,8 +89,8 @@ type SignalWorkflowRunRequest struct {
 // SignalOrStartWorkflowRunRequest requests signaling an existing workflow run
 // or starting one when needed.
 type SignalOrStartWorkflowRunRequest struct {
-	DeploymentID         string
-	DeploymentGeneration int64
+	DefinitionID         string
+	DefinitionGeneration int64
 	ActivationID         string
 	WorkflowKey          string
 	Input                any
@@ -123,7 +112,7 @@ type GetWorkflowRunRequest struct {
 
 // ListWorkflowRunsRequest requests workflow runs visible to the caller.
 type ListWorkflowRunsRequest struct {
-	DeploymentID string
+	DefinitionID string
 	PageSize     int
 	PageToken    string
 	Status       WorkflowRunStatus
@@ -209,12 +198,6 @@ type GetWorkflowRunOutputRequest struct {
 	StepID    string
 }
 
-// PutWorkflowExecutionReferenceRequest stores provider-owned host-callback
-// authority.
-type PutWorkflowExecutionReferenceRequest struct {
-	ExecutionRef *WorkflowExecutionReference
-}
-
 // GetWorkflowExecutionReferenceRequest identifies one execution reference.
 type GetWorkflowExecutionReferenceRequest struct {
 	ID string
@@ -244,13 +227,12 @@ func (r *ListWorkflowExecutionReferencesResponse) GetExecutionRefs() []WorkflowE
 // typed interface instead of generated service bindings.
 type WorkflowProvider interface {
 	Provider
-	PlanWorkflow(ctx context.Context, req *PlanWorkflowRequest) (*PlanWorkflowResponse, error)
-	ApplyWorkflowDeployment(ctx context.Context, req *ApplyWorkflowDeploymentRequest) (*WorkflowDeployment, error)
-	GetWorkflowDeployment(ctx context.Context, req *GetWorkflowDeploymentRequest) (*WorkflowDeployment, error)
-	ListWorkflowDeployments(ctx context.Context, req *ListWorkflowDeploymentsRequest) (*ListWorkflowDeploymentsResponse, error)
-	DeleteWorkflowDeployment(ctx context.Context, req *DeleteWorkflowDeploymentRequest) error
-	SetWorkflowDeploymentPaused(ctx context.Context, req *SetWorkflowDeploymentPausedRequest) (*WorkflowDeployment, error)
-	SetWorkflowActivationPaused(ctx context.Context, req *SetWorkflowActivationPausedRequest) (*WorkflowDeployment, error)
+	ApplyWorkflowDefinition(ctx context.Context, req *ApplyWorkflowDefinitionRequest) (*WorkflowDefinition, error)
+	GetWorkflowDefinition(ctx context.Context, req *GetWorkflowDefinitionRequest) (*WorkflowDefinition, error)
+	ListWorkflowDefinitions(ctx context.Context, req *ListWorkflowDefinitionsRequest) (*ListWorkflowDefinitionsResponse, error)
+	DeleteWorkflowDefinition(ctx context.Context, req *DeleteWorkflowDefinitionRequest) error
+	SetWorkflowDefinitionPaused(ctx context.Context, req *SetWorkflowDefinitionPausedRequest) (*WorkflowDefinition, error)
+	SetWorkflowActivationPaused(ctx context.Context, req *SetWorkflowActivationPausedRequest) (*WorkflowDefinition, error)
 	StartWorkflowRun(ctx context.Context, req *StartWorkflowRunRequest) (*WorkflowRun, error)
 	SignalWorkflowRun(ctx context.Context, req *SignalWorkflowRunRequest) (*WorkflowRunSignal, error)
 	SignalOrStartWorkflowRun(ctx context.Context, req *SignalOrStartWorkflowRunRequest) (*WorkflowRunSignal, error)
@@ -260,7 +242,6 @@ type WorkflowProvider interface {
 	ListWorkflowRuns(ctx context.Context, req *ListWorkflowRunsRequest) (*ListWorkflowRunsResponse, error)
 	GetWorkflowRunEvents(ctx context.Context, req *GetWorkflowRunEventsRequest) (*ListWorkflowRunEventsResponse, error)
 	GetWorkflowRunOutput(ctx context.Context, req *GetWorkflowRunOutputRequest) (*WorkflowRunOutput, error)
-	PutExecutionReference(ctx context.Context, req *PutWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
 	GetExecutionReference(ctx context.Context, req *GetWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
 	ListExecutionReferences(ctx context.Context, req *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error)
 }
@@ -274,31 +255,27 @@ func (UnimplementedWorkflowProvider) Configure(context.Context, string, map[stri
 	return nil
 }
 
-func (UnimplementedWorkflowProvider) PlanWorkflow(context.Context, *PlanWorkflowRequest) (*PlanWorkflowResponse, error) {
-	return nil, Unimplemented("workflow plan is not implemented")
+func (UnimplementedWorkflowProvider) ApplyWorkflowDefinition(context.Context, *ApplyWorkflowDefinitionRequest) (*WorkflowDefinition, error) {
+	return nil, Unimplemented("workflow apply definition is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) ApplyWorkflowDeployment(context.Context, *ApplyWorkflowDeploymentRequest) (*WorkflowDeployment, error) {
-	return nil, Unimplemented("workflow apply deployment is not implemented")
+func (UnimplementedWorkflowProvider) GetWorkflowDefinition(context.Context, *GetWorkflowDefinitionRequest) (*WorkflowDefinition, error) {
+	return nil, Unimplemented("workflow get definition is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) GetWorkflowDeployment(context.Context, *GetWorkflowDeploymentRequest) (*WorkflowDeployment, error) {
-	return nil, Unimplemented("workflow get deployment is not implemented")
+func (UnimplementedWorkflowProvider) ListWorkflowDefinitions(context.Context, *ListWorkflowDefinitionsRequest) (*ListWorkflowDefinitionsResponse, error) {
+	return nil, Unimplemented("workflow list definitions is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) ListWorkflowDeployments(context.Context, *ListWorkflowDeploymentsRequest) (*ListWorkflowDeploymentsResponse, error) {
-	return nil, Unimplemented("workflow list deployments is not implemented")
+func (UnimplementedWorkflowProvider) DeleteWorkflowDefinition(context.Context, *DeleteWorkflowDefinitionRequest) error {
+	return Unimplemented("workflow delete definition is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) DeleteWorkflowDeployment(context.Context, *DeleteWorkflowDeploymentRequest) error {
-	return Unimplemented("workflow delete deployment is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) SetWorkflowDeploymentPaused(context.Context, *SetWorkflowDeploymentPausedRequest) (*WorkflowDeployment, error) {
+func (UnimplementedWorkflowProvider) SetWorkflowDefinitionPaused(context.Context, *SetWorkflowDefinitionPausedRequest) (*WorkflowDefinition, error) {
 	return nil, Unimplemented("workflow set deployment paused is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) SetWorkflowActivationPaused(context.Context, *SetWorkflowActivationPausedRequest) (*WorkflowDeployment, error) {
+func (UnimplementedWorkflowProvider) SetWorkflowActivationPaused(context.Context, *SetWorkflowActivationPausedRequest) (*WorkflowDefinition, error) {
 	return nil, Unimplemented("workflow set activation paused is not implemented")
 }
 
@@ -336,10 +313,6 @@ func (UnimplementedWorkflowProvider) GetWorkflowRunEvents(context.Context, *GetW
 
 func (UnimplementedWorkflowProvider) GetWorkflowRunOutput(context.Context, *GetWorkflowRunOutputRequest) (*WorkflowRunOutput, error) {
 	return nil, Unimplemented("workflow get run output is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) PutExecutionReference(context.Context, *PutWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error) {
-	return nil, Unimplemented("workflow put execution reference is not implemented")
 }
 
 func (UnimplementedWorkflowProvider) GetExecutionReference(context.Context, *GetWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error) {

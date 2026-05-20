@@ -164,32 +164,36 @@ func CloneStepDelivery(delivery *StepDelivery) *StepDelivery {
 }
 
 type ExecutionReference struct {
-	ID                  string
-	ProviderName        string
-	Target              Target
-	CallerPluginName    string
-	SourceDefinitionID  string
-	SubjectID           string
-	SubjectKind         string
-	DisplayName         string
-	AuthSource          string
-	CredentialSubjectID string
-	RunAs               *core.RunAsSubject
-	Permissions         []core.AccessPermission
-	CreatedAt           *time.Time
-	RevokedAt           *time.Time
-	TargetDigest        string
-	ProviderPlanDigest  string
-	PermissionsDigest   string
-	SemanticsVersion    string
-	Generation          int64
-	Seal                string
+	ID                         string
+	ProviderName               string
+	Target                     Target
+	CallerPluginName           string
+	SourceDefinitionID         string
+	SourceDefinitionGeneration int64
+	SubjectID                  string
+	SubjectKind                string
+	DisplayName                string
+	AuthSource                 string
+	CredentialSubjectID        string
+	RunAs                      *core.RunAsSubject
+	Permissions                []core.AccessPermission
+	CreatedAt                  *time.Time
+	RevokedAt                  *time.Time
+	TargetDigest               string
+	ActionTableDigest          string
+	PermissionsDigest          string
+	SemanticsVersion           string
+	Generation                 int64
 }
 
 type ExecutionReferenceStore interface {
-	PutExecutionReference(ctx context.Context, ref *ExecutionReference) (*ExecutionReference, error)
 	GetExecutionReference(ctx context.Context, id string) (*ExecutionReference, error)
 	ListExecutionReferences(ctx context.Context, subjectID string) ([]*ExecutionReference, error)
+}
+
+type ExecutionReferenceMutableStore interface {
+	ExecutionReferenceStore
+	PutExecutionReference(ctx context.Context, ref *ExecutionReference) (*ExecutionReference, error)
 }
 
 type Event struct {
@@ -223,8 +227,8 @@ type EventTriggerInvocation struct {
 }
 
 type RunTrigger struct {
-	DeploymentID         string
-	DeploymentGeneration int64
+	DefinitionID         string
+	DefinitionGeneration int64
 	ActivationID         string
 	Manual               bool
 	Schedule             *ScheduleTrigger
@@ -233,8 +237,8 @@ type RunTrigger struct {
 
 type Run struct {
 	ID                     string
-	DeploymentID           string
-	DeploymentGeneration   int64
+	DefinitionID           string
+	DefinitionGeneration   int64
 	Status                 RunStatus
 	WorkflowKey            string
 	Target                 Target
@@ -321,8 +325,8 @@ type EventTrigger struct {
 }
 
 type StartRunRequest struct {
-	DeploymentID         string
-	DeploymentGeneration int64
+	DefinitionID         string
+	DefinitionGeneration int64
 	ActivationID         string
 	Target               Target
 	Input                map[string]any
@@ -330,7 +334,7 @@ type StartRunRequest struct {
 	WorkflowKey          string
 	CreatedBy            Actor
 	ExecutionRef         string
-	PlanBinding          *PlanBinding
+	DefinitionBinding    *DefinitionBinding
 }
 
 type GetRunRequest struct {
@@ -338,7 +342,7 @@ type GetRunRequest struct {
 }
 
 type ListRunsRequest struct {
-	DeploymentID string
+	DefinitionID string
 	PageSize     int
 	PageToken    string
 	TargetPlugin string
@@ -372,8 +376,8 @@ type SignalRunRequest struct {
 }
 
 type SignalOrStartRunRequest struct {
-	DeploymentID         string
-	DeploymentGeneration int64
+	DefinitionID         string
+	DefinitionGeneration int64
 	ActivationID         string
 	WorkflowKey          string
 	Target               Target
@@ -382,7 +386,7 @@ type SignalOrStartRunRequest struct {
 	CreatedBy            Actor
 	ExecutionRef         string
 	Signal               Signal
-	PlanBinding          *PlanBinding
+	DefinitionBinding    *DefinitionBinding
 }
 
 type SignalRunResponse struct {
@@ -393,14 +397,14 @@ type SignalRunResponse struct {
 }
 
 type UpsertScheduleRequest struct {
-	ScheduleID   string
-	Cron         string
-	Timezone     string
-	Target       Target
-	Paused       bool
-	RequestedBy  Actor
-	ExecutionRef string
-	PlanBinding  *PlanBinding
+	ScheduleID        string
+	Cron              string
+	Timezone          string
+	Target            Target
+	Paused            bool
+	RequestedBy       Actor
+	ExecutionRef      string
+	DefinitionBinding *DefinitionBinding
 }
 
 type ListSchedulesRequest struct{}
@@ -422,13 +426,13 @@ type ResumeScheduleRequest struct {
 }
 
 type UpsertEventTriggerRequest struct {
-	TriggerID    string
-	Match        EventMatch
-	Target       Target
-	Paused       bool
-	RequestedBy  Actor
-	ExecutionRef string
-	PlanBinding  *PlanBinding
+	TriggerID         string
+	Match             EventMatch
+	Target            Target
+	Paused            bool
+	RequestedBy       Actor
+	ExecutionRef      string
+	DefinitionBinding *DefinitionBinding
 }
 
 type ListEventTriggersRequest struct{}
@@ -486,7 +490,7 @@ type EventActivation struct {
 	Match EventMatch
 }
 
-type DeploymentSpec struct {
+type DefinitionSpec struct {
 	ID                       string
 	Generation               int64
 	Target                   Target
@@ -498,7 +502,7 @@ type DeploymentSpec struct {
 	WorkflowSemanticsVersion string
 }
 
-func DeploymentSpecDigest(spec DeploymentSpec) (string, error) {
+func DefinitionSpecDigest(spec DefinitionSpec) (string, error) {
 	data, err := json.Marshal(spec)
 	if err != nil {
 		return "", err
@@ -507,62 +511,33 @@ func DeploymentSpecDigest(spec DeploymentSpec) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-type PlanWorkflowRequest struct {
-	Spec                          DeploymentSpec
-	SpecDigest                    string
-	TargetDigest                  string
-	ActionTableDigest             string
-	TargetCanonicalizationVersion string
-	WorkflowSemanticsVersion      string
+type DefinitionBinding struct {
+	ID                       string
+	ExecutionRef             string
+	ExecutionRefGeneration   int64
+	DefinitionID             string
+	DefinitionGeneration     int64
+	SpecDigest               string
+	TargetDigest             string
+	ActionTableDigest        string
+	PermissionsDigest        string
+	WorkflowSemanticsVersion string
+	RequestID                string
 }
 
-type CompileTargetResponse struct {
-	AcceptedSpecDigest        string
-	ProviderPlanID            string
-	ProviderPlanDigest        string
-	ProviderPlanFormatVersion string
-	Unsupported               []UnsupportedFeature
-	SupportedFeatureFlags     []string
-}
-
-type UnsupportedFeature struct {
-	Feature string
-	Reason  string
-}
-
-type PlanBinding struct {
-	ID                     string
-	ExecutionRef           string
-	ExecutionRefGeneration int64
-	ExecutionRefSeal       string
-	DeploymentID           string
-	DeploymentGeneration   int64
-	SpecDigest             string
-	TargetDigest           string
-	ActionTableDigest      string
-	ProviderPlanID         string
-	ProviderPlanDigest     string
-	SemanticsVersion       string
-	RequestID              string
-	IdempotencyKey         string
-	PrepareOnly            bool
-}
-
-type DeploymentBinding = PlanBinding
-
-type DeploymentStatus string
+type DefinitionStatus string
 
 const (
-	DeploymentStatusPending DeploymentStatus = "pending"
-	DeploymentStatusActive  DeploymentStatus = "active"
-	DeploymentStatusPaused  DeploymentStatus = "paused"
-	DeploymentStatusDeleted DeploymentStatus = "deleted"
-	DeploymentStatusFailed  DeploymentStatus = "failed"
+	DefinitionStatusPending DefinitionStatus = "pending"
+	DefinitionStatusActive  DefinitionStatus = "active"
+	DefinitionStatusPaused  DefinitionStatus = "paused"
+	DefinitionStatusDeleted DefinitionStatus = "deleted"
+	DefinitionStatusFailed  DefinitionStatus = "failed"
 )
 
-type Deployment struct {
-	Spec               DeploymentSpec
-	Status             DeploymentStatus
+type Definition struct {
+	Spec               DefinitionSpec
+	Status             DefinitionStatus
 	CreatedAt          *time.Time
 	UpdatedAt          *time.Time
 	AppliedGeneration  int64
@@ -571,54 +546,53 @@ type Deployment struct {
 	ActionTableDigest  string
 	ProviderPlanID     string
 	ProviderPlanDigest string
-	Binding            *DeploymentBinding
+	Binding            *DefinitionBinding
 	Error              *RunError
 }
 
-type ApplyDeploymentRequest struct {
-	Spec         DeploymentSpec
-	Plan         *CompileTargetResponse
-	Binding      *DeploymentBinding
+type ApplyDefinitionRequest struct {
+	Spec         DefinitionSpec
+	Binding      *DefinitionBinding
+	ExecutionRef *ExecutionReference
 	RequestID    string
-	ValidateOnly bool
 }
 
-type GetDeploymentRequest struct {
-	DeploymentID string
+type GetDefinitionRequest struct {
+	DefinitionID string
 }
 
-type ListDeploymentsRequest struct {
+type ListDefinitionsRequest struct {
 	PageSize  int
 	PageToken string
 	Labels    map[string]string
 }
 
-type ListDeploymentsResponse struct {
-	Deployments   []*Deployment
+type ListDefinitionsResponse struct {
+	Definitions   []*Definition
 	NextPageToken string
 }
 
-type DeleteDeploymentRequest struct {
-	DeploymentID string
+type DeleteDefinitionRequest struct {
+	DefinitionID string
 	Generation   int64
 	RequestID    string
 }
 
-type SetDeploymentPausedRequest struct {
-	DeploymentID string
+type SetDefinitionPausedRequest struct {
+	DefinitionID string
 	Paused       bool
 	RequestID    string
 }
 
 type SetActivationPausedRequest struct {
-	DeploymentID string
+	DefinitionID string
 	ActivationID string
 	Paused       bool
 	RequestID    string
 }
 
 type EventDeliveryResult struct {
-	DeploymentID string
+	DefinitionID string
 	ActivationID string
 	Run          *Run
 	Signal       Signal
@@ -684,14 +658,13 @@ type RunOutput struct {
 	Body      any
 }
 
-type DeploymentProvider interface {
-	PlanWorkflow(ctx context.Context, req PlanWorkflowRequest) (*CompileTargetResponse, error)
-	ApplyWorkflowDeployment(ctx context.Context, req ApplyDeploymentRequest) (*Deployment, error)
-	GetWorkflowDeployment(ctx context.Context, req GetDeploymentRequest) (*Deployment, error)
-	ListWorkflowDeployments(ctx context.Context, req ListDeploymentsRequest) (*ListDeploymentsResponse, error)
-	DeleteWorkflowDeployment(ctx context.Context, req DeleteDeploymentRequest) error
-	SetWorkflowDeploymentPaused(ctx context.Context, req SetDeploymentPausedRequest) (*Deployment, error)
-	SetWorkflowActivationPaused(ctx context.Context, req SetActivationPausedRequest) (*Deployment, error)
+type DefinitionProvider interface {
+	ApplyWorkflowDefinition(ctx context.Context, req ApplyDefinitionRequest) (*Definition, error)
+	GetWorkflowDefinition(ctx context.Context, req GetDefinitionRequest) (*Definition, error)
+	ListWorkflowDefinitions(ctx context.Context, req ListDefinitionsRequest) (*ListDefinitionsResponse, error)
+	DeleteWorkflowDefinition(ctx context.Context, req DeleteDefinitionRequest) error
+	SetWorkflowDefinitionPaused(ctx context.Context, req SetDefinitionPausedRequest) (*Definition, error)
+	SetWorkflowActivationPaused(ctx context.Context, req SetActivationPausedRequest) (*Definition, error)
 	DeliverWorkflowEvent(ctx context.Context, req PublishEventRequest) (*DeliverEventResponse, error)
 	GetWorkflowRunEvents(ctx context.Context, req GetRunEventsRequest) (*ListRunEventsResponse, error)
 	GetWorkflowRunOutput(ctx context.Context, req GetRunOutputRequest) (*RunOutput, error)
@@ -717,15 +690,13 @@ type InvokeOperationResponse struct {
 type HostActionSelector struct {
 	ExecutionRef           string
 	ExecutionRefGeneration int64
-	ExecutionRefSeal       string
 	RunID                  string
+	DefinitionID           string
+	DefinitionGeneration   int64
 	StepID                 string
 	ActionID               string
 	AttemptNumber          int
 	IdempotencyKey         string
-	TargetDigest           string
-	ActionTableDigest      string
-	ProviderPlanDigest     string
 }
 
 type PluginActionPayload struct {
@@ -763,7 +734,7 @@ type HostActionResponse struct {
 }
 
 type Provider interface {
-	DeploymentProvider
+	DefinitionProvider
 	StartRun(ctx context.Context, req StartRunRequest) (*Run, error)
 	GetRun(ctx context.Context, req GetRunRequest) (*Run, error)
 	ListRuns(ctx context.Context, req ListRunsRequest) (*ListRunsResponse, error)

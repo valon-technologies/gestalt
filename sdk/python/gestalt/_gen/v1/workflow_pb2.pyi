@@ -28,14 +28,14 @@ class WorkflowActionKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     WORKFLOW_ACTION_KIND_AGENT_TURN: _ClassVar[WorkflowActionKind]
     WORKFLOW_ACTION_KIND_DELIVERY: _ClassVar[WorkflowActionKind]
 
-class WorkflowDeploymentStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+class WorkflowDefinitionStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
-    WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED: _ClassVar[WorkflowDeploymentStatus]
-    WORKFLOW_DEPLOYMENT_STATUS_PENDING: _ClassVar[WorkflowDeploymentStatus]
-    WORKFLOW_DEPLOYMENT_STATUS_ACTIVE: _ClassVar[WorkflowDeploymentStatus]
-    WORKFLOW_DEPLOYMENT_STATUS_PAUSED: _ClassVar[WorkflowDeploymentStatus]
-    WORKFLOW_DEPLOYMENT_STATUS_DELETED: _ClassVar[WorkflowDeploymentStatus]
-    WORKFLOW_DEPLOYMENT_STATUS_FAILED: _ClassVar[WorkflowDeploymentStatus]
+    WORKFLOW_DEFINITION_STATUS_UNSPECIFIED: _ClassVar[WorkflowDefinitionStatus]
+    WORKFLOW_DEFINITION_STATUS_PENDING: _ClassVar[WorkflowDefinitionStatus]
+    WORKFLOW_DEFINITION_STATUS_ACTIVE: _ClassVar[WorkflowDefinitionStatus]
+    WORKFLOW_DEFINITION_STATUS_PAUSED: _ClassVar[WorkflowDefinitionStatus]
+    WORKFLOW_DEFINITION_STATUS_DELETED: _ClassVar[WorkflowDefinitionStatus]
+    WORKFLOW_DEFINITION_STATUS_FAILED: _ClassVar[WorkflowDefinitionStatus]
 
 class WorkflowRunStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -79,12 +79,12 @@ WORKFLOW_ACTION_KIND_UNSPECIFIED: WorkflowActionKind
 WORKFLOW_ACTION_KIND_PLUGIN: WorkflowActionKind
 WORKFLOW_ACTION_KIND_AGENT_TURN: WorkflowActionKind
 WORKFLOW_ACTION_KIND_DELIVERY: WorkflowActionKind
-WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED: WorkflowDeploymentStatus
-WORKFLOW_DEPLOYMENT_STATUS_PENDING: WorkflowDeploymentStatus
-WORKFLOW_DEPLOYMENT_STATUS_ACTIVE: WorkflowDeploymentStatus
-WORKFLOW_DEPLOYMENT_STATUS_PAUSED: WorkflowDeploymentStatus
-WORKFLOW_DEPLOYMENT_STATUS_DELETED: WorkflowDeploymentStatus
-WORKFLOW_DEPLOYMENT_STATUS_FAILED: WorkflowDeploymentStatus
+WORKFLOW_DEFINITION_STATUS_UNSPECIFIED: WorkflowDefinitionStatus
+WORKFLOW_DEFINITION_STATUS_PENDING: WorkflowDefinitionStatus
+WORKFLOW_DEFINITION_STATUS_ACTIVE: WorkflowDefinitionStatus
+WORKFLOW_DEFINITION_STATUS_PAUSED: WorkflowDefinitionStatus
+WORKFLOW_DEFINITION_STATUS_DELETED: WorkflowDefinitionStatus
+WORKFLOW_DEFINITION_STATUS_FAILED: WorkflowDefinitionStatus
 WORKFLOW_RUN_STATUS_UNSPECIFIED: WorkflowRunStatus
 WORKFLOW_RUN_STATUS_PENDING: WorkflowRunStatus
 WORKFLOW_RUN_STATUS_RUNNING: WorkflowRunStatus
@@ -384,6 +384,7 @@ class WorkflowExecutionReference(_message.Message):
     TARGET_FIELD_NUMBER: _ClassVar[int]
     CALLER_PLUGIN_NAME_FIELD_NUMBER: _ClassVar[int]
     SOURCE_DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    SOURCE_DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_ID_FIELD_NUMBER: _ClassVar[int]
     SUBJECT_KIND_FIELD_NUMBER: _ClassVar[int]
     DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -394,16 +395,16 @@ class WorkflowExecutionReference(_message.Message):
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     REVOKED_AT_FIELD_NUMBER: _ClassVar[int]
     TARGET_DIGEST_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_PLAN_DIGEST_FIELD_NUMBER: _ClassVar[int]
+    ACTION_TABLE_DIGEST_FIELD_NUMBER: _ClassVar[int]
     PERMISSIONS_DIGEST_FIELD_NUMBER: _ClassVar[int]
     SEMANTICS_VERSION_FIELD_NUMBER: _ClassVar[int]
     GENERATION_FIELD_NUMBER: _ClassVar[int]
-    SEAL_FIELD_NUMBER: _ClassVar[int]
     id: str
     provider_name: str
     target: BoundWorkflowTarget
     caller_plugin_name: str
     source_definition_id: str
+    source_definition_generation: int
     subject_id: str
     subject_kind: str
     display_name: str
@@ -414,18 +415,11 @@ class WorkflowExecutionReference(_message.Message):
     created_at: _timestamp_pb2.Timestamp
     revoked_at: _timestamp_pb2.Timestamp
     target_digest: str
-    provider_plan_digest: str
+    action_table_digest: str
     permissions_digest: str
     semantics_version: str
     generation: int
-    seal: str
-    def __init__(self, id: _Optional[str] = ..., provider_name: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., caller_plugin_name: _Optional[str] = ..., source_definition_id: _Optional[str] = ..., subject_id: _Optional[str] = ..., subject_kind: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., run_as: _Optional[_Union[WorkflowRunAsSubject, _Mapping]] = ..., permissions: _Optional[_Iterable[_Union[WorkflowAccessPermission, _Mapping]]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., target_digest: _Optional[str] = ..., provider_plan_digest: _Optional[str] = ..., permissions_digest: _Optional[str] = ..., semantics_version: _Optional[str] = ..., generation: _Optional[int] = ..., seal: _Optional[str] = ...) -> None: ...
-
-class PutWorkflowExecutionReferenceRequest(_message.Message):
-    __slots__ = ()
-    EXECUTION_REF_FIELD_NUMBER: _ClassVar[int]
-    execution_ref: WorkflowExecutionReference
-    def __init__(self, execution_ref: _Optional[_Union[WorkflowExecutionReference, _Mapping]] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., provider_name: _Optional[str] = ..., target: _Optional[_Union[BoundWorkflowTarget, _Mapping]] = ..., caller_plugin_name: _Optional[str] = ..., source_definition_id: _Optional[str] = ..., source_definition_generation: _Optional[int] = ..., subject_id: _Optional[str] = ..., subject_kind: _Optional[str] = ..., display_name: _Optional[str] = ..., auth_source: _Optional[str] = ..., credential_subject_id: _Optional[str] = ..., run_as: _Optional[_Union[WorkflowRunAsSubject, _Mapping]] = ..., permissions: _Optional[_Iterable[_Union[WorkflowAccessPermission, _Mapping]]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., revoked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., target_digest: _Optional[str] = ..., action_table_digest: _Optional[str] = ..., permissions_digest: _Optional[str] = ..., semantics_version: _Optional[str] = ..., generation: _Optional[int] = ...) -> None: ...
 
 class GetWorkflowExecutionReferenceRequest(_message.Message):
     __slots__ = ()
@@ -445,7 +439,7 @@ class ListWorkflowExecutionReferencesResponse(_message.Message):
     execution_refs: _containers.RepeatedCompositeFieldContainer[WorkflowExecutionReference]
     def __init__(self, execution_refs: _Optional[_Iterable[_Union[WorkflowExecutionReference, _Mapping]]] = ...) -> None: ...
 
-class WorkflowDeploymentSpec(_message.Message):
+class WorkflowDefinitionSpec(_message.Message):
     __slots__ = ()
     class LabelsEntry(_message.Message):
         __slots__ = ()
@@ -496,77 +490,33 @@ class WorkflowActionTable(_message.Message):
     digest: str
     def __init__(self, actions: _Optional[_Iterable[_Union[WorkflowActionDescriptor, _Mapping]]] = ..., digest: _Optional[str] = ...) -> None: ...
 
-class WorkflowUnsupportedFeature(_message.Message):
-    __slots__ = ()
-    FEATURE_FIELD_NUMBER: _ClassVar[int]
-    REASON_FIELD_NUMBER: _ClassVar[int]
-    feature: str
-    reason: str
-    def __init__(self, feature: _Optional[str] = ..., reason: _Optional[str] = ...) -> None: ...
-
-class PlanWorkflowRequest(_message.Message):
-    __slots__ = ()
-    SPEC_FIELD_NUMBER: _ClassVar[int]
-    SPEC_DIGEST_FIELD_NUMBER: _ClassVar[int]
-    TARGET_DIGEST_FIELD_NUMBER: _ClassVar[int]
-    ACTION_TABLE_DIGEST_FIELD_NUMBER: _ClassVar[int]
-    TARGET_CANONICALIZATION_VERSION_FIELD_NUMBER: _ClassVar[int]
-    WORKFLOW_SEMANTICS_VERSION_FIELD_NUMBER: _ClassVar[int]
-    spec: WorkflowDeploymentSpec
-    spec_digest: str
-    target_digest: str
-    action_table_digest: str
-    target_canonicalization_version: str
-    workflow_semantics_version: str
-    def __init__(self, spec: _Optional[_Union[WorkflowDeploymentSpec, _Mapping]] = ..., spec_digest: _Optional[str] = ..., target_digest: _Optional[str] = ..., action_table_digest: _Optional[str] = ..., target_canonicalization_version: _Optional[str] = ..., workflow_semantics_version: _Optional[str] = ...) -> None: ...
-
-class PlanWorkflowResponse(_message.Message):
-    __slots__ = ()
-    ACCEPTED_SPEC_DIGEST_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_PLAN_ID_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_PLAN_DIGEST_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_PLAN_FORMAT_VERSION_FIELD_NUMBER: _ClassVar[int]
-    UNSUPPORTED_FIELD_NUMBER: _ClassVar[int]
-    SUPPORTED_FEATURE_FLAGS_FIELD_NUMBER: _ClassVar[int]
-    accepted_spec_digest: str
-    provider_plan_id: str
-    provider_plan_digest: str
-    provider_plan_format_version: str
-    unsupported: _containers.RepeatedCompositeFieldContainer[WorkflowUnsupportedFeature]
-    supported_feature_flags: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, accepted_spec_digest: _Optional[str] = ..., provider_plan_id: _Optional[str] = ..., provider_plan_digest: _Optional[str] = ..., provider_plan_format_version: _Optional[str] = ..., unsupported: _Optional[_Iterable[_Union[WorkflowUnsupportedFeature, _Mapping]]] = ..., supported_feature_flags: _Optional[_Iterable[str]] = ...) -> None: ...
-
-class WorkflowDeploymentBinding(_message.Message):
+class WorkflowDefinitionBinding(_message.Message):
     __slots__ = ()
     ID_FIELD_NUMBER: _ClassVar[int]
     EXECUTION_REF_FIELD_NUMBER: _ClassVar[int]
     EXECUTION_REF_GENERATION_FIELD_NUMBER: _ClassVar[int]
-    EXECUTION_REF_SEAL_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     SPEC_DIGEST_FIELD_NUMBER: _ClassVar[int]
     TARGET_DIGEST_FIELD_NUMBER: _ClassVar[int]
     ACTION_TABLE_DIGEST_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_PLAN_ID_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_PLAN_DIGEST_FIELD_NUMBER: _ClassVar[int]
+    PERMISSIONS_DIGEST_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_SEMANTICS_VERSION_FIELD_NUMBER: _ClassVar[int]
     REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
     id: str
     execution_ref: str
     execution_ref_generation: int
-    execution_ref_seal: str
-    deployment_id: str
-    deployment_generation: int
+    definition_id: str
+    definition_generation: int
     spec_digest: str
     target_digest: str
     action_table_digest: str
-    provider_plan_id: str
-    provider_plan_digest: str
+    permissions_digest: str
     workflow_semantics_version: str
     request_id: str
-    def __init__(self, id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., execution_ref_generation: _Optional[int] = ..., execution_ref_seal: _Optional[str] = ..., deployment_id: _Optional[str] = ..., deployment_generation: _Optional[int] = ..., spec_digest: _Optional[str] = ..., target_digest: _Optional[str] = ..., action_table_digest: _Optional[str] = ..., provider_plan_id: _Optional[str] = ..., provider_plan_digest: _Optional[str] = ..., workflow_semantics_version: _Optional[str] = ..., request_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., execution_ref: _Optional[str] = ..., execution_ref_generation: _Optional[int] = ..., definition_id: _Optional[str] = ..., definition_generation: _Optional[int] = ..., spec_digest: _Optional[str] = ..., target_digest: _Optional[str] = ..., action_table_digest: _Optional[str] = ..., permissions_digest: _Optional[str] = ..., workflow_semantics_version: _Optional[str] = ..., request_id: _Optional[str] = ...) -> None: ...
 
-class WorkflowDeployment(_message.Message):
+class WorkflowDefinition(_message.Message):
     __slots__ = ()
     SPEC_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
@@ -580,8 +530,8 @@ class WorkflowDeployment(_message.Message):
     PROVIDER_PLAN_DIGEST_FIELD_NUMBER: _ClassVar[int]
     BINDING_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
-    spec: WorkflowDeploymentSpec
-    status: WorkflowDeploymentStatus
+    spec: WorkflowDefinitionSpec
+    status: WorkflowDefinitionStatus
     created_at: _timestamp_pb2.Timestamp
     updated_at: _timestamp_pb2.Timestamp
     applied_generation: int
@@ -590,31 +540,29 @@ class WorkflowDeployment(_message.Message):
     action_table_digest: str
     provider_plan_id: str
     provider_plan_digest: str
-    binding: WorkflowDeploymentBinding
+    binding: WorkflowDefinitionBinding
     error: WorkflowRunError
-    def __init__(self, spec: _Optional[_Union[WorkflowDeploymentSpec, _Mapping]] = ..., status: _Optional[_Union[WorkflowDeploymentStatus, str]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., applied_generation: _Optional[int] = ..., spec_digest: _Optional[str] = ..., target_digest: _Optional[str] = ..., action_table_digest: _Optional[str] = ..., provider_plan_id: _Optional[str] = ..., provider_plan_digest: _Optional[str] = ..., binding: _Optional[_Union[WorkflowDeploymentBinding, _Mapping]] = ..., error: _Optional[_Union[WorkflowRunError, _Mapping]] = ...) -> None: ...
+    def __init__(self, spec: _Optional[_Union[WorkflowDefinitionSpec, _Mapping]] = ..., status: _Optional[_Union[WorkflowDefinitionStatus, str]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., updated_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., applied_generation: _Optional[int] = ..., spec_digest: _Optional[str] = ..., target_digest: _Optional[str] = ..., action_table_digest: _Optional[str] = ..., provider_plan_id: _Optional[str] = ..., provider_plan_digest: _Optional[str] = ..., binding: _Optional[_Union[WorkflowDefinitionBinding, _Mapping]] = ..., error: _Optional[_Union[WorkflowRunError, _Mapping]] = ...) -> None: ...
 
-class ApplyWorkflowDeploymentRequest(_message.Message):
+class ApplyWorkflowDefinitionRequest(_message.Message):
     __slots__ = ()
     SPEC_FIELD_NUMBER: _ClassVar[int]
-    PLAN_FIELD_NUMBER: _ClassVar[int]
     BINDING_FIELD_NUMBER: _ClassVar[int]
+    EXECUTION_REF_FIELD_NUMBER: _ClassVar[int]
     REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
-    VALIDATE_ONLY_FIELD_NUMBER: _ClassVar[int]
-    spec: WorkflowDeploymentSpec
-    plan: PlanWorkflowResponse
-    binding: WorkflowDeploymentBinding
+    spec: WorkflowDefinitionSpec
+    binding: WorkflowDefinitionBinding
+    execution_ref: WorkflowExecutionReference
     request_id: str
-    validate_only: bool
-    def __init__(self, spec: _Optional[_Union[WorkflowDeploymentSpec, _Mapping]] = ..., plan: _Optional[_Union[PlanWorkflowResponse, _Mapping]] = ..., binding: _Optional[_Union[WorkflowDeploymentBinding, _Mapping]] = ..., request_id: _Optional[str] = ..., validate_only: _Optional[bool] = ...) -> None: ...
+    def __init__(self, spec: _Optional[_Union[WorkflowDefinitionSpec, _Mapping]] = ..., binding: _Optional[_Union[WorkflowDefinitionBinding, _Mapping]] = ..., execution_ref: _Optional[_Union[WorkflowExecutionReference, _Mapping]] = ..., request_id: _Optional[str] = ...) -> None: ...
 
-class GetWorkflowDeploymentRequest(_message.Message):
+class GetWorkflowDefinitionRequest(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
-    def __init__(self, deployment_id: _Optional[str] = ...) -> None: ...
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    definition_id: str
+    def __init__(self, definition_id: _Optional[str] = ...) -> None: ...
 
-class ListWorkflowDeploymentsRequest(_message.Message):
+class ListWorkflowDefinitionsRequest(_message.Message):
     __slots__ = ()
     class LabelsEntry(_message.Message):
         __slots__ = ()
@@ -631,45 +579,45 @@ class ListWorkflowDeploymentsRequest(_message.Message):
     labels: _containers.ScalarMap[str, str]
     def __init__(self, page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., labels: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
-class ListWorkflowDeploymentsResponse(_message.Message):
+class ListWorkflowDefinitionsResponse(_message.Message):
     __slots__ = ()
-    DEPLOYMENTS_FIELD_NUMBER: _ClassVar[int]
+    DEFINITIONS_FIELD_NUMBER: _ClassVar[int]
     NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    deployments: _containers.RepeatedCompositeFieldContainer[WorkflowDeployment]
+    definitions: _containers.RepeatedCompositeFieldContainer[WorkflowDefinition]
     next_page_token: str
-    def __init__(self, deployments: _Optional[_Iterable[_Union[WorkflowDeployment, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
+    def __init__(self, definitions: _Optional[_Iterable[_Union[WorkflowDefinition, _Mapping]]] = ..., next_page_token: _Optional[str] = ...) -> None: ...
 
-class DeleteWorkflowDeploymentRequest(_message.Message):
+class DeleteWorkflowDefinitionRequest(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     GENERATION_FIELD_NUMBER: _ClassVar[int]
     REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
+    definition_id: str
     generation: int
     request_id: str
-    def __init__(self, deployment_id: _Optional[str] = ..., generation: _Optional[int] = ..., request_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., generation: _Optional[int] = ..., request_id: _Optional[str] = ...) -> None: ...
 
-class SetWorkflowDeploymentPausedRequest(_message.Message):
+class SetWorkflowDefinitionPausedRequest(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     PAUSED_FIELD_NUMBER: _ClassVar[int]
     REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
+    definition_id: str
     paused: bool
     request_id: str
-    def __init__(self, deployment_id: _Optional[str] = ..., paused: _Optional[bool] = ..., request_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., paused: _Optional[bool] = ..., request_id: _Optional[str] = ...) -> None: ...
 
 class SetWorkflowActivationPausedRequest(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     PAUSED_FIELD_NUMBER: _ClassVar[int]
     REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
+    definition_id: str
     activation_id: str
     paused: bool
     request_id: str
-    def __init__(self, deployment_id: _Optional[str] = ..., activation_id: _Optional[str] = ..., paused: _Optional[bool] = ..., request_id: _Optional[str] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., activation_id: _Optional[str] = ..., paused: _Optional[bool] = ..., request_id: _Optional[str] = ...) -> None: ...
 
 class WorkflowManualTrigger(_message.Message):
     __slots__ = ()
@@ -693,19 +641,19 @@ class WorkflowEventTrigger(_message.Message):
 
 class WorkflowRunTrigger(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     MANUAL_FIELD_NUMBER: _ClassVar[int]
     SCHEDULE_FIELD_NUMBER: _ClassVar[int]
     EVENT_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
-    deployment_generation: int
+    definition_id: str
+    definition_generation: int
     activation_id: str
     manual: WorkflowManualTrigger
     schedule: WorkflowScheduleTrigger
     event: WorkflowEventTrigger
-    def __init__(self, deployment_id: _Optional[str] = ..., deployment_generation: _Optional[int] = ..., activation_id: _Optional[str] = ..., manual: _Optional[_Union[WorkflowManualTrigger, _Mapping]] = ..., schedule: _Optional[_Union[WorkflowScheduleTrigger, _Mapping]] = ..., event: _Optional[_Union[WorkflowEventTrigger, _Mapping]] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., definition_generation: _Optional[int] = ..., activation_id: _Optional[str] = ..., manual: _Optional[_Union[WorkflowManualTrigger, _Mapping]] = ..., schedule: _Optional[_Union[WorkflowScheduleTrigger, _Mapping]] = ..., event: _Optional[_Union[WorkflowEventTrigger, _Mapping]] = ...) -> None: ...
 
 class WorkflowSignal(_message.Message):
     __slots__ = ()
@@ -782,8 +730,8 @@ class WorkflowStepState(_message.Message):
 class WorkflowRun(_message.Message):
     __slots__ = ()
     ID_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
     TRIGGER_FIELD_NUMBER: _ClassVar[int]
@@ -798,12 +746,11 @@ class WorkflowRun(_message.Message):
     TARGET_DIGEST_FIELD_NUMBER: _ClassVar[int]
     SPEC_DIGEST_FIELD_NUMBER: _ClassVar[int]
     ACTION_TABLE_DIGEST_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_PLAN_DIGEST_FIELD_NUMBER: _ClassVar[int]
     STEPS_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     id: str
-    deployment_id: str
-    deployment_generation: int
+    definition_id: str
+    definition_generation: int
     workflow_key: str
     status: WorkflowRunStatus
     trigger: WorkflowRunTrigger
@@ -818,28 +765,27 @@ class WorkflowRun(_message.Message):
     target_digest: str
     spec_digest: str
     action_table_digest: str
-    provider_plan_digest: str
     steps: _containers.RepeatedCompositeFieldContainer[WorkflowStepState]
     error: WorkflowRunError
-    def __init__(self, id: _Optional[str] = ..., deployment_id: _Optional[str] = ..., deployment_generation: _Optional[int] = ..., workflow_key: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ..., trigger: _Optional[_Union[WorkflowRunTrigger, _Mapping]] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by: _Optional[_Union[WorkflowActor, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., completed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., status_message: _Optional[str] = ..., execution_ref: _Optional[str] = ..., execution_ref_generation: _Optional[int] = ..., target_digest: _Optional[str] = ..., spec_digest: _Optional[str] = ..., action_table_digest: _Optional[str] = ..., provider_plan_digest: _Optional[str] = ..., steps: _Optional[_Iterable[_Union[WorkflowStepState, _Mapping]]] = ..., error: _Optional[_Union[WorkflowRunError, _Mapping]] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., definition_id: _Optional[str] = ..., definition_generation: _Optional[int] = ..., workflow_key: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ..., trigger: _Optional[_Union[WorkflowRunTrigger, _Mapping]] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., created_by: _Optional[_Union[WorkflowActor, _Mapping]] = ..., created_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., started_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., completed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., status_message: _Optional[str] = ..., execution_ref: _Optional[str] = ..., execution_ref_generation: _Optional[int] = ..., target_digest: _Optional[str] = ..., spec_digest: _Optional[str] = ..., action_table_digest: _Optional[str] = ..., steps: _Optional[_Iterable[_Union[WorkflowStepState, _Mapping]]] = ..., error: _Optional[_Union[WorkflowRunError, _Mapping]] = ...) -> None: ...
 
 class StartWorkflowRunRequest(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     CREATED_BY_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
-    deployment_generation: int
+    definition_id: str
+    definition_generation: int
     activation_id: str
     workflow_key: str
     input: _struct_pb2.Struct
     idempotency_key: str
     created_by: WorkflowActor
-    def __init__(self, deployment_id: _Optional[str] = ..., deployment_generation: _Optional[int] = ..., activation_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., created_by: _Optional[_Union[WorkflowActor, _Mapping]] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., definition_generation: _Optional[int] = ..., activation_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., created_by: _Optional[_Union[WorkflowActor, _Mapping]] = ...) -> None: ...
 
 class SignalWorkflowRunRequest(_message.Message):
     __slots__ = ()
@@ -851,23 +797,23 @@ class SignalWorkflowRunRequest(_message.Message):
 
 class SignalOrStartWorkflowRunRequest(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     SIGNAL_FIELD_NUMBER: _ClassVar[int]
     CREATED_BY_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
-    deployment_generation: int
+    definition_id: str
+    definition_generation: int
     activation_id: str
     workflow_key: str
     input: _struct_pb2.Struct
     idempotency_key: str
     signal: WorkflowSignal
     created_by: WorkflowActor
-    def __init__(self, deployment_id: _Optional[str] = ..., deployment_generation: _Optional[int] = ..., activation_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., created_by: _Optional[_Union[WorkflowActor, _Mapping]] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., definition_generation: _Optional[int] = ..., activation_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., created_by: _Optional[_Union[WorkflowActor, _Mapping]] = ...) -> None: ...
 
 class CancelWorkflowRunRequest(_message.Message):
     __slots__ = ()
@@ -885,15 +831,15 @@ class GetWorkflowRunRequest(_message.Message):
 
 class ListWorkflowRunsRequest(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
+    definition_id: str
     page_size: int
     page_token: str
     status: WorkflowRunStatus
-    def __init__(self, deployment_id: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., status: _Optional[_Union[WorkflowRunStatus, str]] = ...) -> None: ...
 
 class ListWorkflowRunsResponse(_message.Message):
     __slots__ = ()
@@ -929,17 +875,17 @@ class DeliverWorkflowEventRequest(_message.Message):
 
 class WorkflowEventDeliveryResult(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     RUN_FIELD_NUMBER: _ClassVar[int]
     SIGNAL_FIELD_NUMBER: _ClassVar[int]
     STARTED_RUN_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
+    definition_id: str
     activation_id: str
     run: WorkflowRun
     signal: WorkflowSignal
     started_run: bool
-    def __init__(self, deployment_id: _Optional[str] = ..., activation_id: _Optional[str] = ..., run: _Optional[_Union[WorkflowRun, _Mapping]] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., started_run: _Optional[bool] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., activation_id: _Optional[str] = ..., run: _Optional[_Union[WorkflowRun, _Mapping]] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., started_run: _Optional[bool] = ...) -> None: ...
 
 class DeliverWorkflowEventResponse(_message.Message):
     __slots__ = ()
@@ -1017,27 +963,23 @@ class WorkflowHostActionSelector(_message.Message):
     __slots__ = ()
     EXECUTION_REF_FIELD_NUMBER: _ClassVar[int]
     EXECUTION_REF_GENERATION_FIELD_NUMBER: _ClassVar[int]
-    EXECUTION_REF_SEAL_FIELD_NUMBER: _ClassVar[int]
     RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     STEP_ID_FIELD_NUMBER: _ClassVar[int]
     ACTION_ID_FIELD_NUMBER: _ClassVar[int]
     ATTEMPT_NUMBER_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
-    TARGET_DIGEST_FIELD_NUMBER: _ClassVar[int]
-    ACTION_TABLE_DIGEST_FIELD_NUMBER: _ClassVar[int]
-    PROVIDER_PLAN_DIGEST_FIELD_NUMBER: _ClassVar[int]
     execution_ref: str
     execution_ref_generation: int
-    execution_ref_seal: str
     run_id: str
+    definition_id: str
+    definition_generation: int
     step_id: str
     action_id: str
     attempt_number: int
     idempotency_key: str
-    target_digest: str
-    action_table_digest: str
-    provider_plan_digest: str
-    def __init__(self, execution_ref: _Optional[str] = ..., execution_ref_generation: _Optional[int] = ..., execution_ref_seal: _Optional[str] = ..., run_id: _Optional[str] = ..., step_id: _Optional[str] = ..., action_id: _Optional[str] = ..., attempt_number: _Optional[int] = ..., idempotency_key: _Optional[str] = ..., target_digest: _Optional[str] = ..., action_table_digest: _Optional[str] = ..., provider_plan_digest: _Optional[str] = ...) -> None: ...
+    def __init__(self, execution_ref: _Optional[str] = ..., execution_ref_generation: _Optional[int] = ..., run_id: _Optional[str] = ..., definition_id: _Optional[str] = ..., definition_generation: _Optional[int] = ..., step_id: _Optional[str] = ..., action_id: _Optional[str] = ..., attempt_number: _Optional[int] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
 class WorkflowPluginActionPayload(_message.Message):
     __slots__ = ()
@@ -1085,13 +1027,13 @@ class WorkflowActionResult(_message.Message):
     error: WorkflowRunError
     def __init__(self, action_event_id: _Optional[str] = ..., status: _Optional[int] = ..., body: _Optional[str] = ..., output_summary: _Optional[_Union[WorkflowOutputSummary, _Mapping]] = ..., output_ref: _Optional[str] = ..., error: _Optional[_Union[WorkflowRunError, _Mapping]] = ...) -> None: ...
 
-class ManagedWorkflowDeployment(_message.Message):
+class ManagedWorkflowDefinition(_message.Message):
     __slots__ = ()
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_FIELD_NUMBER: _ClassVar[int]
     provider_name: str
-    deployment: WorkflowDeployment
-    def __init__(self, provider_name: _Optional[str] = ..., deployment: _Optional[_Union[WorkflowDeployment, _Mapping]] = ...) -> None: ...
+    definition: WorkflowDefinition
+    def __init__(self, provider_name: _Optional[str] = ..., definition: _Optional[_Union[WorkflowDefinition, _Mapping]] = ...) -> None: ...
 
 class ManagedWorkflowRun(_message.Message):
     __slots__ = ()
@@ -1115,39 +1057,27 @@ class ManagedWorkflowRunSignal(_message.Message):
     workflow_key: str
     def __init__(self, provider_name: _Optional[str] = ..., run: _Optional[_Union[WorkflowRun, _Mapping]] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., started_run: _Optional[bool] = ..., workflow_key: _Optional[str] = ...) -> None: ...
 
-class WorkflowManagerPlanDeploymentRequest(_message.Message):
+class WorkflowManagerApplyDefinitionRequest(_message.Message):
     __slots__ = ()
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
     SPEC_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     provider_name: str
-    spec: WorkflowDeploymentSpec
+    spec: WorkflowDefinitionSpec
     invocation_token: str
     idempotency_key: str
-    def __init__(self, provider_name: _Optional[str] = ..., spec: _Optional[_Union[WorkflowDeploymentSpec, _Mapping]] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+    def __init__(self, provider_name: _Optional[str] = ..., spec: _Optional[_Union[WorkflowDefinitionSpec, _Mapping]] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
-class WorkflowManagerApplyDeploymentRequest(_message.Message):
+class WorkflowManagerGetDefinitionRequest(_message.Message):
     __slots__ = ()
-    PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    SPEC_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
-    provider_name: str
-    spec: WorkflowDeploymentSpec
+    definition_id: str
     invocation_token: str
-    idempotency_key: str
-    def __init__(self, provider_name: _Optional[str] = ..., spec: _Optional[_Union[WorkflowDeploymentSpec, _Mapping]] = ..., invocation_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
 
-class WorkflowManagerGetDeploymentRequest(_message.Message):
-    __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
-    invocation_token: str
-    def __init__(self, deployment_id: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
-
-class WorkflowManagerListDeploymentsRequest(_message.Message):
+class WorkflowManagerListDefinitionsRequest(_message.Message):
     __slots__ = ()
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
@@ -1155,63 +1085,63 @@ class WorkflowManagerListDeploymentsRequest(_message.Message):
     invocation_token: str
     def __init__(self, provider_name: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
 
-class WorkflowManagerListDeploymentsResponse(_message.Message):
+class WorkflowManagerListDefinitionsResponse(_message.Message):
     __slots__ = ()
-    DEPLOYMENTS_FIELD_NUMBER: _ClassVar[int]
-    deployments: _containers.RepeatedCompositeFieldContainer[ManagedWorkflowDeployment]
-    def __init__(self, deployments: _Optional[_Iterable[_Union[ManagedWorkflowDeployment, _Mapping]]] = ...) -> None: ...
+    DEFINITIONS_FIELD_NUMBER: _ClassVar[int]
+    definitions: _containers.RepeatedCompositeFieldContainer[ManagedWorkflowDefinition]
+    def __init__(self, definitions: _Optional[_Iterable[_Union[ManagedWorkflowDefinition, _Mapping]]] = ...) -> None: ...
 
-class WorkflowManagerDeleteDeploymentRequest(_message.Message):
+class WorkflowManagerDeleteDefinitionRequest(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     GENERATION_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
+    definition_id: str
     generation: int
     invocation_token: str
-    def __init__(self, deployment_id: _Optional[str] = ..., generation: _Optional[int] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., generation: _Optional[int] = ..., invocation_token: _Optional[str] = ...) -> None: ...
 
-class WorkflowManagerSetDeploymentPausedRequest(_message.Message):
+class WorkflowManagerSetDefinitionPausedRequest(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     PAUSED_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
+    definition_id: str
     paused: bool
     invocation_token: str
-    def __init__(self, deployment_id: _Optional[str] = ..., paused: _Optional[bool] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., paused: _Optional[bool] = ..., invocation_token: _Optional[str] = ...) -> None: ...
 
 class WorkflowManagerSetActivationPausedRequest(_message.Message):
     __slots__ = ()
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     PAUSED_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
-    deployment_id: str
+    definition_id: str
     activation_id: str
     paused: bool
     invocation_token: str
-    def __init__(self, deployment_id: _Optional[str] = ..., activation_id: _Optional[str] = ..., paused: _Optional[bool] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+    def __init__(self, definition_id: _Optional[str] = ..., activation_id: _Optional[str] = ..., paused: _Optional[bool] = ..., invocation_token: _Optional[str] = ...) -> None: ...
 
 class WorkflowManagerStartRunRequest(_message.Message):
     __slots__ = ()
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
     IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     provider_name: str
-    deployment_id: str
-    deployment_generation: int
+    definition_id: str
+    definition_generation: int
     activation_id: str
     workflow_key: str
     input: _struct_pb2.Struct
     idempotency_key: str
     invocation_token: str
-    def __init__(self, provider_name: _Optional[str] = ..., deployment_id: _Optional[str] = ..., deployment_generation: _Optional[int] = ..., activation_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+    def __init__(self, provider_name: _Optional[str] = ..., definition_id: _Optional[str] = ..., definition_generation: _Optional[int] = ..., activation_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., invocation_token: _Optional[str] = ...) -> None: ...
 
 class WorkflowManagerSignalRunRequest(_message.Message):
     __slots__ = ()
@@ -1226,8 +1156,8 @@ class WorkflowManagerSignalRunRequest(_message.Message):
 class WorkflowManagerSignalOrStartRunRequest(_message.Message):
     __slots__ = ()
     PROVIDER_NAME_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_ID_FIELD_NUMBER: _ClassVar[int]
-    DEPLOYMENT_GENERATION_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
+    DEFINITION_GENERATION_FIELD_NUMBER: _ClassVar[int]
     ACTIVATION_ID_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_KEY_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
@@ -1235,15 +1165,15 @@ class WorkflowManagerSignalOrStartRunRequest(_message.Message):
     SIGNAL_FIELD_NUMBER: _ClassVar[int]
     INVOCATION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     provider_name: str
-    deployment_id: str
-    deployment_generation: int
+    definition_id: str
+    definition_generation: int
     activation_id: str
     workflow_key: str
     input: _struct_pb2.Struct
     idempotency_key: str
     signal: WorkflowSignal
     invocation_token: str
-    def __init__(self, provider_name: _Optional[str] = ..., deployment_id: _Optional[str] = ..., deployment_generation: _Optional[int] = ..., activation_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., invocation_token: _Optional[str] = ...) -> None: ...
+    def __init__(self, provider_name: _Optional[str] = ..., definition_id: _Optional[str] = ..., definition_generation: _Optional[int] = ..., activation_id: _Optional[str] = ..., workflow_key: _Optional[str] = ..., input: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., idempotency_key: _Optional[str] = ..., signal: _Optional[_Union[WorkflowSignal, _Mapping]] = ..., invocation_token: _Optional[str] = ...) -> None: ...
 
 class WorkflowManagerCancelRunRequest(_message.Message):
     __slots__ = ()

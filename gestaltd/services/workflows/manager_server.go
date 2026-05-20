@@ -40,7 +40,7 @@ func NewManagerServer(pluginName string, manager ManagerService, tokens *Invocat
 	}
 }
 
-func (s *ManagerServer) PlanDeployment(ctx context.Context, req *proto.WorkflowManagerPlanDeploymentRequest) (*proto.PlanWorkflowResponse, error) {
+func (s *ManagerServer) ApplyDefinition(ctx context.Context, req *proto.WorkflowManagerApplyDefinitionRequest) (*proto.ManagedWorkflowDefinition, error) {
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
@@ -48,23 +48,22 @@ func (s *ManagerServer) PlanDeployment(ctx context.Context, req *proto.WorkflowM
 	if s == nil || s.manager == nil {
 		return nil, status.Error(codes.FailedPrecondition, "workflow manager is not configured")
 	}
-	spec := workflowDeploymentSpecFromProto(req.GetSpec())
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDeploymentsCreate); err != nil {
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsCreate); err != nil {
 		return nil, err
 	}
-	plan, err := s.manager.PlanDeployment(ctx, tokenCtx.Principal(), workflowmanager.DeploymentPlan{
+	managed, err := s.manager.ApplyDefinition(ctx, tokenCtx.Principal(), workflowmanager.DefinitionApply{
 		ProviderName:     strings.TrimSpace(req.GetProviderName()),
-		Spec:             spec,
+		Spec:             workflowDefinitionSpecFromProto(req.GetSpec()),
 		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
 		CallerPluginName: strings.TrimSpace(s.pluginName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
-	return workflowPlanResponseToProto(plan), nil
+	return managedWorkflowDefinitionToProto(managed.ProviderName, managed.Definition)
 }
 
-func (s *ManagerServer) ApplyDeployment(ctx context.Context, req *proto.WorkflowManagerApplyDeploymentRequest) (*proto.ManagedWorkflowDeployment, error) {
+func (s *ManagerServer) GetDefinition(ctx context.Context, req *proto.WorkflowManagerGetDefinitionRequest) (*proto.ManagedWorkflowDefinition, error) {
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
@@ -72,22 +71,17 @@ func (s *ManagerServer) ApplyDeployment(ctx context.Context, req *proto.Workflow
 	if s == nil || s.manager == nil {
 		return nil, status.Error(codes.FailedPrecondition, "workflow manager is not configured")
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDeploymentsCreate); err != nil {
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsGet); err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.ApplyDeployment(ctx, tokenCtx.Principal(), workflowmanager.DeploymentApply{
-		ProviderName:     strings.TrimSpace(req.GetProviderName()),
-		Spec:             workflowDeploymentSpecFromProto(req.GetSpec()),
-		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
-		CallerPluginName: strings.TrimSpace(s.pluginName),
-	})
+	managed, err := s.manager.GetDefinition(ctx, tokenCtx.Principal(), strings.TrimSpace(req.GetDefinitionId()))
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
-	return managedWorkflowDeploymentToProto(managed.ProviderName, managed.Deployment)
+	return managedWorkflowDefinitionToProto(managed.ProviderName, managed.Definition)
 }
 
-func (s *ManagerServer) GetDeployment(ctx context.Context, req *proto.WorkflowManagerGetDeploymentRequest) (*proto.ManagedWorkflowDeployment, error) {
+func (s *ManagerServer) ListDefinitions(ctx context.Context, req *proto.WorkflowManagerListDefinitionsRequest) (*proto.WorkflowManagerListDefinitionsResponse, error) {
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
@@ -95,45 +89,27 @@ func (s *ManagerServer) GetDeployment(ctx context.Context, req *proto.WorkflowMa
 	if s == nil || s.manager == nil {
 		return nil, status.Error(codes.FailedPrecondition, "workflow manager is not configured")
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDeploymentsGet); err != nil {
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsGet); err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.GetDeployment(ctx, tokenCtx.Principal(), strings.TrimSpace(req.GetDeploymentId()))
+	values, err := s.manager.ListDefinitions(ctx, tokenCtx.Principal())
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
-	return managedWorkflowDeploymentToProto(managed.ProviderName, managed.Deployment)
-}
-
-func (s *ManagerServer) ListDeployments(ctx context.Context, req *proto.WorkflowManagerListDeploymentsRequest) (*proto.WorkflowManagerListDeploymentsResponse, error) {
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
-	if err != nil {
-		return nil, err
-	}
-	if s == nil || s.manager == nil {
-		return nil, status.Error(codes.FailedPrecondition, "workflow manager is not configured")
-	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDeploymentsGet); err != nil {
-		return nil, err
-	}
-	values, err := s.manager.ListDeployments(ctx, tokenCtx.Principal())
-	if err != nil {
-		return nil, workflowManagerStatusError(err)
-	}
-	out := &proto.WorkflowManagerListDeploymentsResponse{}
+	out := &proto.WorkflowManagerListDefinitionsResponse{}
 	for _, value := range values {
-		managed, err := managedWorkflowDeploymentToProto(value.ProviderName, value.Deployment)
+		managed, err := managedWorkflowDefinitionToProto(value.ProviderName, value.Definition)
 		if err != nil {
 			return nil, err
 		}
 		if providerName := strings.TrimSpace(req.GetProviderName()); providerName == "" || strings.TrimSpace(managed.GetProviderName()) == providerName {
-			out.Deployments = append(out.Deployments, managed)
+			out.Definitions = append(out.Definitions, managed)
 		}
 	}
 	return out, nil
 }
 
-func (s *ManagerServer) DeleteDeployment(ctx context.Context, req *proto.WorkflowManagerDeleteDeploymentRequest) (*emptypb.Empty, error) {
+func (s *ManagerServer) DeleteDefinition(ctx context.Context, req *proto.WorkflowManagerDeleteDefinitionRequest) (*emptypb.Empty, error) {
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
@@ -141,16 +117,16 @@ func (s *ManagerServer) DeleteDeployment(ctx context.Context, req *proto.Workflo
 	if s == nil || s.manager == nil {
 		return nil, status.Error(codes.FailedPrecondition, "workflow manager is not configured")
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDeploymentsDelete); err != nil {
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsDelete); err != nil {
 		return nil, err
 	}
-	if err := s.manager.DeleteDeployment(ctx, tokenCtx.Principal(), strings.TrimSpace(req.GetDeploymentId())); err != nil {
+	if err := s.manager.DeleteDefinition(ctx, tokenCtx.Principal(), strings.TrimSpace(req.GetDefinitionId())); err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
-func (s *ManagerServer) SetDeploymentPaused(ctx context.Context, req *proto.WorkflowManagerSetDeploymentPausedRequest) (*proto.ManagedWorkflowDeployment, error) {
+func (s *ManagerServer) SetDefinitionPaused(ctx context.Context, req *proto.WorkflowManagerSetDefinitionPausedRequest) (*proto.ManagedWorkflowDefinition, error) {
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
@@ -158,21 +134,17 @@ func (s *ManagerServer) SetDeploymentPaused(ctx context.Context, req *proto.Work
 	if s == nil || s.manager == nil {
 		return nil, status.Error(codes.FailedPrecondition, "workflow manager is not configured")
 	}
-	operation := workflowgrants.OperationDeploymentsResume
-	if req.GetPaused() {
-		operation = workflowgrants.OperationDeploymentsPause
-	}
-	if err := s.requireWorkflowGrant(tokenCtx, operation); err != nil {
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsUpdate); err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.SetDeploymentPaused(ctx, tokenCtx.Principal(), strings.TrimSpace(req.GetDeploymentId()), req.GetPaused())
+	managed, err := s.manager.SetDefinitionPaused(ctx, tokenCtx.Principal(), strings.TrimSpace(req.GetDefinitionId()), req.GetPaused())
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
-	return managedWorkflowDeploymentToProto(managed.ProviderName, managed.Deployment)
+	return managedWorkflowDefinitionToProto(managed.ProviderName, managed.Definition)
 }
 
-func (s *ManagerServer) SetActivationPaused(ctx context.Context, req *proto.WorkflowManagerSetActivationPausedRequest) (*proto.ManagedWorkflowDeployment, error) {
+func (s *ManagerServer) SetActivationPaused(ctx context.Context, req *proto.WorkflowManagerSetActivationPausedRequest) (*proto.ManagedWorkflowDefinition, error) {
 	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
 	if err != nil {
 		return nil, err
@@ -180,22 +152,18 @@ func (s *ManagerServer) SetActivationPaused(ctx context.Context, req *proto.Work
 	if s == nil || s.manager == nil {
 		return nil, status.Error(codes.FailedPrecondition, "workflow manager is not configured")
 	}
-	operation := workflowgrants.OperationDeploymentsResume
-	if req.GetPaused() {
-		operation = workflowgrants.OperationDeploymentsPause
-	}
-	if err := s.requireWorkflowGrant(tokenCtx, operation); err != nil {
+	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationDefinitionsUpdate); err != nil {
 		return nil, err
 	}
-	managed, err := s.manager.SetActivationPaused(ctx, tokenCtx.Principal(), strings.TrimSpace(req.GetDeploymentId()), strings.TrimSpace(req.GetActivationId()), req.GetPaused())
+	managed, err := s.manager.SetActivationPaused(ctx, tokenCtx.Principal(), strings.TrimSpace(req.GetDefinitionId()), strings.TrimSpace(req.GetActivationId()), req.GetPaused())
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
-	return managedWorkflowDeploymentToProto(managed.ProviderName, managed.Deployment)
+	return managedWorkflowDefinitionToProto(managed.ProviderName, managed.Definition)
 }
 
 func (s *ManagerServer) StartRun(ctx context.Context, req *proto.WorkflowManagerStartRunRequest) (*proto.ManagedWorkflowRun, error) {
-	tokenCtx, spec, providerName, err := s.deploymentRunContext(ctx, req.GetInvocationToken(), req.GetProviderName(), req.GetDeploymentId())
+	tokenCtx, spec, providerName, err := s.definitionRunContext(ctx, req.GetInvocationToken(), req.GetProviderName(), req.GetDefinitionId())
 	if err != nil {
 		return nil, err
 	}
@@ -204,8 +172,8 @@ func (s *ManagerServer) StartRun(ctx context.Context, req *proto.WorkflowManager
 	}
 	managed, err := s.manager.StartRun(ctx, tokenCtx.Principal(), workflowmanager.RunStart{
 		ProviderName:         providerName,
-		DeploymentID:         strings.TrimSpace(req.GetDeploymentId()),
-		DeploymentGeneration: req.GetDeploymentGeneration(),
+		DefinitionID:         strings.TrimSpace(req.GetDefinitionId()),
+		DefinitionGeneration: req.GetDefinitionGeneration(),
 		ActivationID:         strings.TrimSpace(req.GetActivationId()),
 		Target:               spec.Target,
 		Input:                structMap(req.GetInput()),
@@ -237,7 +205,7 @@ func (s *ManagerServer) SignalRun(ctx context.Context, req *proto.WorkflowManage
 }
 
 func (s *ManagerServer) SignalOrStartRun(ctx context.Context, req *proto.WorkflowManagerSignalOrStartRunRequest) (*proto.ManagedWorkflowRunSignal, error) {
-	tokenCtx, spec, providerName, err := s.deploymentRunContext(ctx, req.GetInvocationToken(), req.GetProviderName(), req.GetDeploymentId())
+	tokenCtx, spec, providerName, err := s.definitionRunContext(ctx, req.GetInvocationToken(), req.GetProviderName(), req.GetDefinitionId())
 	if err != nil {
 		return nil, err
 	}
@@ -247,8 +215,8 @@ func (s *ManagerServer) SignalOrStartRun(ctx context.Context, req *proto.Workflo
 	signal := workflowSignalFromProto(req.GetSignal())
 	managed, err := s.manager.SignalOrStartRun(ctx, tokenCtx.Principal(), workflowmanager.RunSignalOrStart{
 		ProviderName:         providerName,
-		DeploymentID:         strings.TrimSpace(req.GetDeploymentId()),
-		DeploymentGeneration: req.GetDeploymentGeneration(),
+		DefinitionID:         strings.TrimSpace(req.GetDefinitionId()),
+		DefinitionGeneration: req.GetDefinitionGeneration(),
 		ActivationID:         strings.TrimSpace(req.GetActivationId()),
 		WorkflowKey:          strings.TrimSpace(req.GetWorkflowKey()),
 		Target:               spec.Target,
@@ -313,23 +281,23 @@ func (s *ManagerServer) DeliverEvent(ctx context.Context, req *proto.WorkflowMan
 	return &proto.WorkflowManagerDeliverEventResponse{Results: results}, nil
 }
 
-func (s *ManagerServer) deploymentRunContext(ctx context.Context, invocationToken, requestedProviderName, deploymentID string) (plugininvokerservice.TokenContext, coreworkflow.DeploymentSpec, string, error) {
+func (s *ManagerServer) definitionRunContext(ctx context.Context, invocationToken, requestedProviderName, definitionID string) (plugininvokerservice.TokenContext, coreworkflow.DefinitionSpec, string, error) {
 	tokenCtx, err := s.tokenContext(invocationToken)
 	if err != nil {
-		return plugininvokerservice.TokenContext{}, coreworkflow.DeploymentSpec{}, "", err
+		return plugininvokerservice.TokenContext{}, coreworkflow.DefinitionSpec{}, "", err
 	}
 	if s == nil || s.manager == nil {
-		return plugininvokerservice.TokenContext{}, coreworkflow.DeploymentSpec{}, "", status.Error(codes.FailedPrecondition, "workflow manager is not configured")
+		return plugininvokerservice.TokenContext{}, coreworkflow.DefinitionSpec{}, "", status.Error(codes.FailedPrecondition, "workflow manager is not configured")
 	}
-	deploymentID = strings.TrimSpace(deploymentID)
-	managed, err := s.manager.GetDeployment(ctx, tokenCtx.Principal(), deploymentID)
+	definitionID = strings.TrimSpace(definitionID)
+	managed, err := s.manager.GetDefinition(ctx, tokenCtx.Principal(), definitionID)
 	if err != nil {
-		return plugininvokerservice.TokenContext{}, coreworkflow.DeploymentSpec{}, "", workflowManagerStatusError(err)
+		return plugininvokerservice.TokenContext{}, coreworkflow.DefinitionSpec{}, "", workflowManagerStatusError(err)
 	}
-	spec := managed.Deployment.Spec
+	spec := managed.Definition.Spec
 	providerName := strings.TrimSpace(managed.ProviderName)
 	if requested := strings.TrimSpace(requestedProviderName); requested != "" && requested != providerName {
-		return plugininvokerservice.TokenContext{}, coreworkflow.DeploymentSpec{}, "", status.Errorf(codes.InvalidArgument, "workflow deployment belongs to provider %q, not %q", providerName, requested)
+		return plugininvokerservice.TokenContext{}, coreworkflow.DefinitionSpec{}, "", status.Errorf(codes.InvalidArgument, "workflow definition belongs to provider %q, not %q", providerName, requested)
 	}
 	return tokenCtx, spec, providerName, nil
 }

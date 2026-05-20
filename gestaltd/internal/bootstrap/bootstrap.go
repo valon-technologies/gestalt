@@ -475,6 +475,12 @@ type workflowProviderWithExecutionReferencesAndCleanup struct {
 	cleanup func()
 }
 
+type workflowProviderWithMutableExecutionReferencesAndCleanup struct {
+	coreworkflow.Provider
+	coreworkflow.ExecutionReferenceMutableStore
+	cleanup func()
+}
+
 func (p *workflowProviderWithCleanup) Close() error {
 	var errs []error
 	if p != nil && p.Provider != nil {
@@ -1951,7 +1957,13 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		provider = wrapWorkflowProviderWithRuntimeWorkers(provider, workerPool)
 	}
 	if cleanup != nil {
-		if executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore); ok {
+		if executionRefs, ok := provider.(coreworkflow.ExecutionReferenceMutableStore); ok {
+			provider = &workflowProviderWithMutableExecutionReferencesAndCleanup{
+				Provider:                       provider,
+				ExecutionReferenceMutableStore: executionRefs,
+				cleanup:                        cleanup,
+			}
+		} else if executionRefs, ok := provider.(coreworkflow.ExecutionReferenceStore); ok {
 			provider = &workflowProviderWithExecutionReferencesAndCleanup{
 				Provider:                provider,
 				ExecutionReferenceStore: executionRefs,

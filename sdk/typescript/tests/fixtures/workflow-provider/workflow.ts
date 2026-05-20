@@ -1,18 +1,17 @@
 import {
-  WorkflowDeploymentStatus,
+  WorkflowDefinitionStatus,
   WorkflowRunStatus,
   defineWorkflowProvider,
   deliverWorkflowEventResponse,
-  planWorkflowResponse,
-  workflowDeployment,
+  workflowDefinition,
   workflowRun,
   workflowRunOutput,
   workflowRunSignal,
-  type WorkflowDeployment,
+  type WorkflowDefinition,
   type WorkflowRun,
 } from "../../../src/index.ts";
 
-const deployments = new Map<string, WorkflowDeployment>();
+const definitions = new Map<string, WorkflowDefinition>();
 const runs = new Map<string, WorkflowRun>();
 let deliveredEventCount = 0;
 
@@ -20,83 +19,76 @@ export const provider = defineWorkflowProvider({
   displayName: "Fixture Workflow",
   description: "Workflow provider fixture used by SDK tests",
   configure() {
-    deployments.clear();
+    definitions.clear();
     runs.clear();
     deliveredEventCount = 0;
   },
-  async planWorkflow(request) {
-    return planWorkflowResponse({
-      acceptedSpecDigest: request.specDigest,
-      providerPlanId: "fixture-plan",
-      providerPlanDigest: `fixture-plan:${request.specDigest}`,
-      providerPlanFormatVersion: "workflow-plan-v1",
-    });
-  },
-  async applyDeployment(request) {
-    const deployment = workflowDeployment({
-      spec: request.spec,
+  async applyDefinition(request) {
+    const deployment = workflowDefinition({
+      ...(request.spec !== undefined ? { spec: request.spec } : {}),
       status: request.spec?.paused
-        ? WorkflowDeploymentStatus.PAUSED
-        : WorkflowDeploymentStatus.ACTIVE,
+        ? WorkflowDefinitionStatus.PAUSED
+        : WorkflowDefinitionStatus.ACTIVE,
       appliedGeneration: request.spec?.generation ?? 0n,
-      providerPlanId: request.plan?.providerPlanId ?? "",
-      providerPlanDigest: request.plan?.providerPlanDigest ?? "",
-      binding: request.binding,
+      providerPlanId: "fixture-plan",
+      providerPlanDigest: `fixture-plan:${request.spec?.id ?? ""}`,
+      ...(request.binding !== undefined ? { binding: request.binding } : {}),
     });
-    deployments.set(deploymentID(deployment), deployment);
+    definitions.set(deploymentID(deployment), deployment);
     return deployment;
   },
-  async getDeployment(request) {
-    return requireDeployment(request.deploymentId);
+  async getDefinition(request) {
+    return requireDeployment(request.definitionId);
   },
-  async listDeployments() {
-    return [...deployments.values()];
+  async listDefinitions() {
+    return [...definitions.values()];
   },
-  async deleteDeployment(request) {
-    deployments.delete(request.deploymentId);
+  async deleteDefinition(request) {
+    definitions.delete(request.definitionId);
   },
-  async setDeploymentPaused(request) {
-    const deployment = requireDeployment(request.deploymentId);
-    const updated = workflowDeployment({
+  async setDefinitionPaused(request) {
+    const deployment = requireDeployment(request.definitionId);
+    const updated = workflowDefinition({
       ...deployment,
       status: request.paused
-        ? WorkflowDeploymentStatus.PAUSED
-        : WorkflowDeploymentStatus.ACTIVE,
+        ? WorkflowDefinitionStatus.PAUSED
+        : WorkflowDefinitionStatus.ACTIVE,
     });
-    deployments.set(request.deploymentId, updated);
+    definitions.set(request.definitionId, updated);
     return updated;
   },
   async setActivationPaused(request) {
-    const deployment = requireDeployment(request.deploymentId);
-    const spec = deployment.spec === undefined
-      ? undefined
-      : {
-        ...deployment.spec,
-        activations: deployment.spec.activations.map((activation) =>
-          activation.id === request.activationId
-            ? { ...activation, paused: request.paused }
-            : activation
-        ),
-      };
-    const updated = workflowDeployment({ ...deployment, spec });
-    deployments.set(request.deploymentId, updated);
+    const deployment = requireDeployment(request.definitionId);
+    if (deployment.spec === undefined) {
+      return deployment;
+    }
+    const spec = {
+      ...deployment.spec,
+      activations: deployment.spec.activations.map((activation) =>
+        activation.id === request.activationId
+          ? { ...activation, paused: request.paused }
+          : activation
+      ),
+    };
+    const updated = workflowDefinition({ ...deployment, spec });
+    definitions.set(request.definitionId, updated);
     return updated;
   },
   async startRun(request) {
     const run = workflowRun({
-      id: `${request.deploymentId}:${runs.size + 1}`,
-      deploymentId: request.deploymentId,
-      deploymentGeneration: request.deploymentGeneration,
+      id: `${request.definitionId}:${runs.size + 1}`,
+      definitionId: request.definitionId,
+      definitionGeneration: request.definitionGeneration,
       workflowKey: request.workflowKey,
       trigger: {
-        deploymentId: request.deploymentId,
-        deploymentGeneration: request.deploymentGeneration,
+        definitionId: request.definitionId,
+        definitionGeneration: request.definitionGeneration,
         activationId: request.activationId,
         kind: { case: "manual", value: {} },
       },
-      input: request.input,
+      ...(request.input !== undefined ? { input: request.input } : {}),
       status: WorkflowRunStatus.PENDING,
-      createdBy: request.createdBy,
+      ...(request.createdBy !== undefined ? { createdBy: request.createdBy } : {}),
       statusMessage: request.idempotencyKey
         ? `idempotency:${request.idempotencyKey}`
         : "",
@@ -108,7 +100,7 @@ export const provider = defineWorkflowProvider({
     const run = requireRun(request.runId);
     return workflowRunSignal({
       run,
-      signal: request.signal,
+      ...(request.signal !== undefined ? { signal: request.signal } : {}),
       startedRun: false,
       workflowKey: run.workflowKey,
     });
@@ -116,23 +108,23 @@ export const provider = defineWorkflowProvider({
   async signalOrStartRun(request) {
     const run = workflowRun({
       id: `${request.workflowKey || "workflow"}:${runs.size + 1}`,
-      deploymentId: request.deploymentId,
-      deploymentGeneration: request.deploymentGeneration,
+      definitionId: request.definitionId,
+      definitionGeneration: request.definitionGeneration,
       workflowKey: request.workflowKey,
       trigger: {
-        deploymentId: request.deploymentId,
-        deploymentGeneration: request.deploymentGeneration,
+        definitionId: request.definitionId,
+        definitionGeneration: request.definitionGeneration,
         activationId: request.activationId,
         kind: { case: "manual", value: {} },
       },
-      input: request.input,
+      ...(request.input !== undefined ? { input: request.input } : {}),
       status: WorkflowRunStatus.PENDING,
-      createdBy: request.createdBy,
+      ...(request.createdBy !== undefined ? { createdBy: request.createdBy } : {}),
     });
     runs.set(run.id, run);
     return workflowRunSignal({
       run,
-      signal: request.signal,
+      ...(request.signal !== undefined ? { signal: request.signal } : {}),
       startedRun: true,
       workflowKey: request.workflowKey,
     });
@@ -151,26 +143,26 @@ export const provider = defineWorkflowProvider({
     deliveredEventCount += 1;
     const run = workflowRun({
       id: `${request.deliveryId || "event"}:${runs.size + 1}`,
-      deploymentId: "event-deployment",
+      definitionId: "event-deployment",
       workflowKey: request.event?.subject ?? "",
       trigger: {
-        deploymentId: "event-deployment",
+        definitionId: "event-deployment",
         activationId: "event",
         kind: {
           case: "event",
           value: {
             activationId: "event",
-            event: request.event,
+            ...(request.event !== undefined ? { event: request.event } : {}),
           },
         },
       },
       status: WorkflowRunStatus.PENDING,
-      createdBy: request.publishedBy,
+      ...(request.publishedBy !== undefined ? { createdBy: request.publishedBy } : {}),
     });
     runs.set(run.id, run);
     return deliverWorkflowEventResponse({
       results: [{
-        deploymentId: run.deploymentId,
+        definitionId: run.definitionId,
         activationId: "event",
         run,
         startedRun: true,
@@ -196,14 +188,14 @@ export const provider = defineWorkflowProvider({
   },
 });
 
-function deploymentID(deployment: WorkflowDeployment): string {
-  return deployment.spec?.id || deployment.binding?.deploymentId || "deployment";
+function deploymentID(deployment: WorkflowDefinition): string {
+  return deployment.spec?.id || deployment.binding?.definitionId || "deployment";
 }
 
-function requireDeployment(deploymentId: string): WorkflowDeployment {
-  const deployment = deployments.get(deploymentId);
+function requireDeployment(definitionId: string): WorkflowDefinition {
+  const deployment = definitions.get(definitionId);
   if (!deployment) {
-    throw new Error(`unknown deployment ${deploymentId}`);
+    throw new Error(`unknown deployment ${definitionId}`);
   }
   return deployment;
 }

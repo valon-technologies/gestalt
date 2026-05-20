@@ -129,25 +129,48 @@ non-aliased message copies.
    :nosignatures:
 
    BoundWorkflowTarget
-   WorkflowDeployment
+   WorkflowStep
+   WorkflowStepPluginCall
+   WorkflowStepAgentTurn
+   WorkflowStepWhen
+   WorkflowStepDelivery
+   WorkflowValue
+   WorkflowDefinitionSpec
+   WorkflowDefinition
    WorkflowRun
    WorkflowRunSignal
    bound_workflow_target
    workflow_step
    workflow_step_plugin_call
    workflow_step_agent_turn
+   workflow_step_when
    workflow_step_delivery
    workflow_value
    workflow_event
    workflow_signal
    workflow_run_trigger
-   workflow_deployment
+   workflow_definition_spec
+   workflow_definition
    workflow_run
    workflow_run_signal
 
 .. autoclass:: BoundWorkflowTarget
 
-.. autoclass:: WorkflowDeployment
+.. autoclass:: WorkflowStep
+
+.. autoclass:: WorkflowStepPluginCall
+
+.. autoclass:: WorkflowStepAgentTurn
+
+.. autoclass:: WorkflowStepWhen
+
+.. autoclass:: WorkflowStepDelivery
+
+.. autoclass:: WorkflowValue
+
+.. autoclass:: WorkflowDefinitionSpec
+
+.. autoclass:: WorkflowDefinition
 
 .. autoclass:: WorkflowRun
 
@@ -161,6 +184,8 @@ non-aliased message copies.
 
 .. autofunction:: workflow_step_agent_turn
 
+.. autofunction:: workflow_step_when
+
 .. autofunction:: workflow_step_delivery
 
 .. autofunction:: workflow_value
@@ -170,6 +195,14 @@ non-aliased message copies.
 .. autofunction:: workflow_signal
 
 .. autofunction:: workflow_run_trigger
+
+.. autofunction:: workflow_definition_spec
+
+.. autofunction:: workflow_definition
+
+.. autofunction:: workflow_run
+
+.. autofunction:: workflow_run_signal
 
 .. _python-agent-provider-models:
 

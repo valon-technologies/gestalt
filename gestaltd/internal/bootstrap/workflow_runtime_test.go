@@ -144,50 +144,71 @@ func cloneRuntimeExecutionRef(ref *coreworkflow.ExecutionReference) *coreworkflo
 func cloneRuntimeTarget(target coreworkflow.Target) coreworkflow.Target {
 	clone := coreworkflow.Target{Steps: slices.Clone(target.Steps)}
 	for i := range clone.Steps {
-		step := &clone.Steps[i]
-		step.Inputs = cloneWorkflowValues(step.Inputs)
-		if step.Plugin != nil {
-			plugin := *step.Plugin
-			plugin.Input = coreworkflow.CloneValue(step.Plugin.Input)
-			step.Plugin = &plugin
+		clone.Steps[i].Inputs = cloneWorkflowRuntimeValueMap(target.Steps[i].Inputs)
+		clone.Steps[i].Metadata = cloneMapAny(target.Steps[i].Metadata)
+		if target.Steps[i].Plugin != nil {
+			plugin := *target.Steps[i].Plugin
+			plugin.Input = cloneWorkflowRuntimeValue(target.Steps[i].Plugin.Input)
+			clone.Steps[i].Plugin = &plugin
 		}
-		if step.Agent != nil {
-			agent := *step.Agent
-			agent.Prompt = cloneWorkflowText(agent.Prompt)
-			agent.Messages = slices.Clone(agent.Messages)
+		if target.Steps[i].Agent != nil {
+			agent := *target.Steps[i].Agent
+			agent.Messages = slices.Clone(target.Steps[i].Agent.Messages)
 			for j := range agent.Messages {
-				agent.Messages[j].Text = cloneWorkflowText(agent.Messages[j].Text)
-				agent.Messages[j].Metadata = cloneMapAny(agent.Messages[j].Metadata)
+				agent.Messages[j].Metadata = cloneMapAny(target.Steps[i].Agent.Messages[j].Metadata)
 			}
-			agent.ToolRefs = slices.Clone(agent.ToolRefs)
-			agent.ResponseSchema = cloneMapAny(agent.ResponseSchema)
-			agent.ModelOptions = cloneMapAny(agent.ModelOptions)
-			step.Agent = &agent
+			agent.ToolRefs = slices.Clone(target.Steps[i].Agent.ToolRefs)
+			agent.ResponseSchema = cloneMapAny(target.Steps[i].Agent.ResponseSchema)
+			agent.ModelOptions = cloneMapAny(target.Steps[i].Agent.ModelOptions)
+			clone.Steps[i].Agent = &agent
 		}
-		if step.When != nil {
-			when := *step.When
-			when.Value = coreworkflow.CloneValue(step.When.Value)
-			step.When = &when
+		if target.Steps[i].When != nil {
+			when := *target.Steps[i].When
+			when.Value = cloneWorkflowRuntimeValue(target.Steps[i].When.Value)
+			clone.Steps[i].When = &when
 		}
-		step.OutputDelivery = coreworkflow.CloneStepDelivery(step.OutputDelivery)
-		step.Metadata = cloneMapAny(step.Metadata)
+		if target.Steps[i].OutputDelivery != nil {
+			delivery := *target.Steps[i].OutputDelivery
+			if target.Steps[i].OutputDelivery.Plugin != nil {
+				plugin := *target.Steps[i].OutputDelivery.Plugin
+				plugin.Input = cloneWorkflowRuntimeValue(target.Steps[i].OutputDelivery.Plugin.Input)
+				delivery.Plugin = &plugin
+			}
+			clone.Steps[i].OutputDelivery = &delivery
+		}
 	}
 	return clone
 }
 
-func cloneWorkflowValues(values map[string]coreworkflow.Value) map[string]coreworkflow.Value {
+func cloneWorkflowRuntimeValueMap(values map[string]coreworkflow.Value) map[string]coreworkflow.Value {
 	if values == nil {
 		return nil
 	}
 	out := make(map[string]coreworkflow.Value, len(values))
-	for key, value := range values {
-		out[key] = coreworkflow.CloneValue(value)
+	for key := range values {
+		out[key] = cloneWorkflowRuntimeValue(values[key])
 	}
 	return out
 }
 
-func cloneWorkflowText(value coreworkflow.Text) coreworkflow.Text {
-	return coreworkflow.Text{Template: value.Template}
+func cloneWorkflowRuntimeValue(value coreworkflow.Value) coreworkflow.Value {
+	out := value
+	out.Object = cloneWorkflowRuntimeValueMap(value.Object)
+	if value.Array != nil {
+		out.Array = make([]coreworkflow.Value, len(value.Array))
+		for i := range value.Array {
+			out.Array[i] = cloneWorkflowRuntimeValue(value.Array[i])
+		}
+	}
+	if value.Template != nil {
+		template := *value.Template
+		out.Template = &template
+	}
+	if value.StepOutput != nil {
+		stepOutput := *value.StepOutput
+		out.StepOutput = &stepOutput
+	}
+	return out
 }
 
 func cloneMapAny(value map[string]any) map[string]any {
@@ -199,6 +220,28 @@ func cloneMapAny(value map[string]any) map[string]any {
 		out[key] = item
 	}
 	return out
+}
+
+func TestCloneRuntimeTargetClonesStepAgentMessages(t *testing.T) {
+	t.Parallel()
+
+	target := coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID: "diagnose",
+		Agent: &coreworkflow.AgentTurn{
+			ProviderName: "managed",
+			Messages: []coreworkflow.AgentMessage{{
+				Role: "system",
+				Text: coreworkflow.Text{Template: "Use concise replies."},
+			}},
+		},
+	}}}
+
+	clone := cloneRuntimeTarget(target)
+	target.Steps[0].Agent.Messages[0].Role = "user"
+
+	if got := clone.Steps[0].Agent.Messages[0].Role; got != "system" {
+		t.Fatalf("cloned step agent message role = %q, want system", got)
+	}
 }
 
 func workflowSignalsFromTestContext(value any) []map[string]any {
@@ -996,7 +1039,7 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 						"format":     {Literal: "plain", LiteralSet: true},
 						"text":       {StepOutput: &coreworkflow.StepOutputSource{StepID: "agent", Path: "agent.text"}},
 						"reply_ref":  {SignalPayload: "reply_ref"},
-						"event_type": {SignalPayload: "type"},
+						"event_type": {SignalPayload: "event_type"},
 						"source":     {Literal: "workflow", LiteralSet: true},
 					}},
 				},
@@ -1006,12 +1049,14 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 			{
 				ID:             "signal-1",
 				IdempotencyKey: "evt-1",
-				Payload:        map[string]any{"reply_ref": "older-ref", "type": "message"},
+				Payload:        map[string]any{"reply_ref": "older-ref", "event_type": "message"},
+				Metadata:       map[string]any{"event": map[string]any{"type": "message"}},
 			},
 			{
 				ID:             "signal-2",
 				IdempotencyKey: "evt-2",
-				Payload:        map[string]any{"reply_ref": "newer-ref", "type": "app_mention"},
+				Payload:        map[string]any{"reply_ref": "newer-ref", "event_type": "app_mention"},
+				Metadata:       map[string]any{"event": map[string]any{"type": "app_mention"}},
 			},
 		},
 	}
@@ -1598,6 +1643,521 @@ func TestWorkflowRuntimeInvokeExecutionRefUsesStoredHumanPrincipalAndSelectors(t
 	}
 }
 
+func TestWorkflowRuntimeInvokeWorkflowActionDerivesActionFromExecutionRef(t *testing.T) {
+	t.Parallel()
+
+	target := coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID: "diagnose",
+		Plugin: &coreworkflow.PluginCall{
+			Name:           "github",
+			Operation:      "issues.triage",
+			Connection:     "analytics",
+			Instance:       "tenant-a",
+			CredentialMode: core.ConnectionModeNone,
+		},
+	}}}
+	targetDigest, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("TargetFingerprint: %v", err)
+	}
+	actionTableDigest, err := coreworkflow.TargetActionTableDigest(target)
+	if err != nil {
+		t.Fatalf("TargetActionTableDigest: %v", err)
+	}
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "exec-ref-steps",
+		ProviderName:        "temporal",
+		Target:              target,
+		SubjectID:           principal.UserSubjectID("ada"),
+		SubjectKind:         string(principal.KindUser),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions: []core.AccessPermission{
+			{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/diagnose/plugin"}},
+			{Plugin: "github", Operations: []string{"issues.triage"}},
+		},
+		TargetDigest:      targetDigest,
+		ActionTableDigest: actionTableDigest,
+		Generation:        1,
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	var gotProvider, gotInstance, gotOperation, gotConnection string
+	var gotIdempotencyKey string
+	var gotParams map[string]any
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+			gotProvider = providerName
+			gotInstance = instance
+			gotOperation = operation
+			gotConnection = invocation.ConnectionFromContext(ctx)
+			gotIdempotencyKey = invocation.IdempotencyKeyFromContext(ctx)
+			gotParams = maps.Clone(params)
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	resp, err := runtime.InvokeWorkflowAction(context.Background(), coreworkflow.InvokeActionRequest{
+		ProviderName: "temporal",
+		Selector: coreworkflow.HostActionSelector{
+			ExecutionRef:           "exec-ref-steps",
+			ExecutionRefGeneration: 1,
+			RunID:                  "run-1",
+			StepID:                 "diagnose",
+			ActionID:               "step/diagnose/plugin",
+			AttemptNumber:          1,
+			IdempotencyKey:         "run-1:diagnose:plugin:1",
+		},
+		Plugin: &coreworkflow.PluginActionPayload{Input: map[string]any{"title": "bug"}},
+	})
+	if err != nil {
+		t.Fatalf("InvokeWorkflowAction: %v", err)
+	}
+	if resp == nil || resp.Status != http.StatusOK || resp.Body != `{"ok":true}` {
+		t.Fatalf("response = %#v", resp)
+	}
+	if gotProvider != "github" || gotOperation != "issues.triage" || gotInstance != "tenant-a" || gotConnection != "analytics" {
+		t.Fatalf("invoked (%q, %q, %q, %q), want stored step action", gotProvider, gotOperation, gotInstance, gotConnection)
+	}
+	if gotParams["title"] != "bug" {
+		t.Fatalf("params = %#v, want provider-evaluated input", gotParams)
+	}
+	if gotIdempotencyKey != "run-1:diagnose:plugin:1" {
+		t.Fatalf("idempotency key = %q, want selector idempotency key", gotIdempotencyKey)
+	}
+}
+
+func TestWorkflowRuntimeInvokeWorkflowActionRejectsInvalidExecutionRefTargetDigest(t *testing.T) {
+	t.Parallel()
+
+	target := coreworkflow.Target{
+		Steps: []coreworkflow.Step{{
+			ID: "diagnose",
+			Plugin: &coreworkflow.PluginCall{
+				Name:      "github",
+				Operation: "issues.triage",
+			},
+		}},
+	}
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "exec-ref-invalid-target",
+		ProviderName:        "temporal",
+		Target:              target,
+		SubjectID:           principal.UserSubjectID("ada"),
+		SubjectKind:         string(principal.KindUser),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions: []core.AccessPermission{
+			{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/diagnose/plugin"}},
+			{Plugin: "github", Operations: []string{"issues.triage"}},
+		},
+		TargetDigest: "wrong-target-digest",
+		Generation:   1,
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+			t.Fatal("invoker should not be called with an invalid execution ref target digest")
+			return nil, nil
+		},
+	})
+
+	_, err := runtime.InvokeWorkflowAction(context.Background(), coreworkflow.InvokeActionRequest{
+		ProviderName: "temporal",
+		Selector: coreworkflow.HostActionSelector{
+			ExecutionRef:           "exec-ref-invalid-target",
+			ExecutionRefGeneration: 1,
+			RunID:                  "run-1",
+			StepID:                 "diagnose",
+			ActionID:               "step/diagnose/plugin",
+			AttemptNumber:          1,
+			IdempotencyKey:         "run-1:diagnose:plugin:1",
+		},
+		Plugin: &coreworkflow.PluginActionPayload{Input: map[string]any{"title": "bug"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "target digest mismatch") {
+		t.Fatalf("error = %v, want invalid target digest rejection", err)
+	}
+}
+
+func TestWorkflowRuntimeInvokeWorkflowActionValidatesDefinitionSelector(t *testing.T) {
+	t.Parallel()
+
+	target := coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID: "diagnose",
+		Plugin: &coreworkflow.PluginCall{
+			Name:      "github",
+			Operation: "issues.triage",
+		},
+	}}}
+	targetDigest, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("TargetFingerprint: %v", err)
+	}
+	actionTableDigest, err := coreworkflow.TargetActionTableDigest(target)
+	if err != nil {
+		t.Fatalf("TargetActionTableDigest: %v", err)
+	}
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "workflow_definition:triage:3",
+		ProviderName:        "temporal",
+		Target:              target,
+		SubjectID:           principal.UserSubjectID("ada"),
+		SubjectKind:         string(principal.KindUser),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions: []core.AccessPermission{
+			{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/diagnose/plugin"}},
+			{Plugin: "github", Operations: []string{"issues.triage"}},
+		},
+		TargetDigest:      targetDigest,
+		ActionTableDigest: actionTableDigest,
+		Generation:        1,
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+			t.Fatal("invoker should not be called with mismatched deployment selector")
+			return nil, nil
+		},
+	})
+
+	baseSelector := coreworkflow.HostActionSelector{
+		ExecutionRef:           "workflow_definition:triage:3",
+		ExecutionRefGeneration: 1,
+		RunID:                  "run-1",
+		StepID:                 "diagnose",
+		ActionID:               "step/diagnose/plugin",
+		AttemptNumber:          1,
+		IdempotencyKey:         "run-1:diagnose:plugin:1",
+	}
+
+	for _, tc := range []struct {
+		name     string
+		mutate   func(*coreworkflow.HostActionSelector)
+		wantText string
+	}{
+		{
+			name: "deployment id",
+			mutate: func(selector *coreworkflow.HostActionSelector) {
+				selector.DefinitionID = "other"
+			},
+			wantText: "definition_id mismatch",
+		},
+		{
+			name: "deployment generation",
+			mutate: func(selector *coreworkflow.HostActionSelector) {
+				selector.DefinitionID = "triage"
+				selector.DefinitionGeneration = 4
+			},
+			wantText: "definition_generation mismatch",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			selector := baseSelector
+			tc.mutate(&selector)
+			_, err := runtime.InvokeWorkflowAction(context.Background(), coreworkflow.InvokeActionRequest{
+				ProviderName: "temporal",
+				Selector:     selector,
+				Plugin:       &coreworkflow.PluginActionPayload{Input: map[string]any{"title": "bug"}},
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.wantText) {
+				t.Fatalf("error = %v, want %s", err, tc.wantText)
+			}
+		})
+	}
+}
+
+func TestWorkflowRuntimeInvokeWorkflowActionUsesSourceDefinitionGeneration(t *testing.T) {
+	t.Parallel()
+
+	target := coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID: "diagnose",
+		Plugin: &coreworkflow.PluginCall{
+			Name:      "github",
+			Operation: "issues.triage",
+		},
+	}}}
+	targetDigest, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("TargetFingerprint: %v", err)
+	}
+	actionTableDigest, err := coreworkflow.TargetActionTableDigest(target)
+	if err != nil {
+		t.Fatalf("TargetActionTableDigest: %v", err)
+	}
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                         "workflow_schedule:schedule-1:ref-1",
+		ProviderName:               "temporal",
+		Target:                     target,
+		SourceDefinitionID:         "schedule-1",
+		SourceDefinitionGeneration: 1,
+		SubjectID:                  principal.UserSubjectID("ada"),
+		SubjectKind:                string(principal.KindUser),
+		CredentialSubjectID:        principal.UserSubjectID("ada"),
+		Permissions: []core.AccessPermission{
+			{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/diagnose/plugin"}},
+			{Plugin: "github", Operations: []string{"issues.triage"}},
+		},
+		TargetDigest:      targetDigest,
+		ActionTableDigest: actionTableDigest,
+		Generation:        1,
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	invoked := false
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+			invoked = true
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	_, err = runtime.InvokeWorkflowAction(context.Background(), coreworkflow.InvokeActionRequest{
+		ProviderName: "temporal",
+		Selector: coreworkflow.HostActionSelector{
+			ExecutionRef:           "workflow_schedule:schedule-1:ref-1",
+			ExecutionRefGeneration: 1,
+			RunID:                  "run-1",
+			DefinitionID:           "schedule-1",
+			DefinitionGeneration:   1,
+			StepID:                 "diagnose",
+			ActionID:               "step/diagnose/plugin",
+			AttemptNumber:          1,
+			IdempotencyKey:         "run-1:diagnose:plugin:1",
+		},
+		Plugin: &coreworkflow.PluginActionPayload{Input: map[string]any{"title": "bug"}},
+	})
+	if err != nil {
+		t.Fatalf("InvokeWorkflowAction: %v", err)
+	}
+	if !invoked {
+		t.Fatal("invoker was not called")
+	}
+}
+
+func TestWorkflowRuntimeInvokeWorkflowActionRoutesDeliveryAction(t *testing.T) {
+	t.Parallel()
+
+	target := coreworkflow.Target{Steps: []coreworkflow.Step{
+		{
+			ID: "plugin_step",
+			Plugin: &coreworkflow.PluginCall{
+				Name:      "github",
+				Operation: "issues.triage",
+			},
+			OutputDelivery: &coreworkflow.StepDelivery{Plugin: &coreworkflow.PluginCall{
+				Name:           "slack",
+				Operation:      "chat.postMessage",
+				Connection:     "alerts",
+				Instance:       "engineering",
+				CredentialMode: core.ConnectionModeNone,
+			}},
+		},
+		{
+			ID: "agent_step",
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "managed",
+				Model:        "fast",
+			},
+			OutputDelivery: &coreworkflow.StepDelivery{Plugin: &coreworkflow.PluginCall{
+				Name:      "notification",
+				Operation: "reply",
+			}},
+		},
+	}}
+	targetDigest, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("TargetFingerprint: %v", err)
+	}
+	actionTableDigest, err := coreworkflow.TargetActionTableDigest(target)
+	if err != nil {
+		t.Fatalf("TargetActionTableDigest: %v", err)
+	}
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "exec-ref-delivery",
+		ProviderName:        "temporal",
+		Target:              target,
+		SubjectID:           principal.UserSubjectID("ada"),
+		SubjectKind:         string(principal.KindUser),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions: []core.AccessPermission{
+			{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/plugin_step/delivery", "step/agent_step/delivery"}},
+			{Plugin: "slack", Operations: []string{"chat.postMessage"}},
+			{Plugin: "notification", Operations: []string{"reply"}},
+		},
+		TargetDigest:      targetDigest,
+		ActionTableDigest: actionTableDigest,
+		Generation:        1,
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	type pluginCall struct {
+		provider       string
+		instance       string
+		operation      string
+		connection     string
+		credentialMode core.ConnectionMode
+		idempotencyKey string
+		params         map[string]any
+	}
+	var calls []pluginCall
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+			calls = append(calls, pluginCall{
+				provider:       providerName,
+				instance:       instance,
+				operation:      operation,
+				connection:     invocation.ConnectionFromContext(ctx),
+				credentialMode: invocation.CredentialModeOverrideFromContext(ctx),
+				idempotencyKey: invocation.IdempotencyKeyFromContext(ctx),
+				params:         maps.Clone(params),
+			})
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	for _, tc := range []struct {
+		stepID         string
+		idempotencyKey string
+		input          map[string]any
+	}{
+		{stepID: "plugin_step", idempotencyKey: "run-1:plugin-step:delivery:1", input: map[string]any{"text": "plugin done"}},
+		{stepID: "agent_step", idempotencyKey: "run-1:agent-step:delivery:1", input: map[string]any{"text": "agent done"}},
+	} {
+		_, err := runtime.InvokeWorkflowAction(context.Background(), coreworkflow.InvokeActionRequest{
+			ProviderName: "temporal",
+			Selector: coreworkflow.HostActionSelector{
+				ExecutionRef:           "exec-ref-delivery",
+				ExecutionRefGeneration: 1,
+				RunID:                  "run-1",
+				StepID:                 tc.stepID,
+				ActionID:               "step/" + tc.stepID + "/delivery",
+				AttemptNumber:          1,
+				IdempotencyKey:         tc.idempotencyKey,
+			},
+			Plugin: &coreworkflow.PluginActionPayload{Input: tc.input},
+		})
+		if err != nil {
+			t.Fatalf("InvokeWorkflowAction delivery %s: %v", tc.stepID, err)
+		}
+	}
+
+	if len(calls) != 2 {
+		t.Fatalf("delivery calls = %#v, want 2 calls", calls)
+	}
+	if calls[0].provider != "slack" || calls[0].operation != "chat.postMessage" || calls[0].instance != "engineering" || calls[0].connection != "alerts" {
+		t.Fatalf("plugin-step delivery target = %#v, want slack.chat.postMessage on engineering/alerts", calls[0])
+	}
+	if calls[0].credentialMode != core.ConnectionModeNone {
+		t.Fatalf("plugin-step delivery credential mode = %q, want none", calls[0].credentialMode)
+	}
+	if calls[0].idempotencyKey != "run-1:plugin-step:delivery:1" {
+		t.Fatalf("plugin-step delivery idempotency key = %q", calls[0].idempotencyKey)
+	}
+	if calls[0].params["text"] != "plugin done" {
+		t.Fatalf("plugin-step delivery params = %#v, want provider evaluated input", calls[0].params)
+	}
+	if calls[1].provider != "notification" || calls[1].operation != "reply" {
+		t.Fatalf("agent-step delivery target = %#v, want notification.reply", calls[1])
+	}
+	if calls[1].idempotencyKey != "run-1:agent-step:delivery:1" {
+		t.Fatalf("agent-step delivery idempotency key = %q", calls[1].idempotencyKey)
+	}
+	if calls[1].params["text"] != "agent done" {
+		t.Fatalf("agent-step delivery params = %#v, want provider evaluated input", calls[1].params)
+	}
+}
+
+func TestWorkflowRuntimeInvokeWorkflowActionRejectsAgentTurnAction(t *testing.T) {
+	t.Parallel()
+
+	target := coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID: "diagnose",
+		Agent: &coreworkflow.AgentTurn{
+			ProviderName: "managed",
+			Model:        "fast",
+		},
+	}}}
+	targetDigest, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("TargetFingerprint: %v", err)
+	}
+	actionTableDigest, err := coreworkflow.TargetActionTableDigest(target)
+	if err != nil {
+		t.Fatalf("TargetActionTableDigest: %v", err)
+	}
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:                  "exec-ref-agent-action",
+		ProviderName:        "temporal",
+		Target:              target,
+		SubjectID:           principal.UserSubjectID("ada"),
+		SubjectKind:         string(principal.KindUser),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions: []core.AccessPermission{
+			{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/diagnose/agent-turn"}},
+		},
+		TargetDigest:      targetDigest,
+		ActionTableDigest: actionTableDigest,
+		Generation:        1,
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+			t.Fatal("invoker should not be called for agent-turn action through plugin callback")
+			return nil, nil
+		},
+	})
+
+	_, err = runtime.InvokeWorkflowAction(context.Background(), coreworkflow.InvokeActionRequest{
+		ProviderName: "temporal",
+		Selector: coreworkflow.HostActionSelector{
+			ExecutionRef:           "exec-ref-agent-action",
+			ExecutionRefGeneration: 1,
+			RunID:                  "run-1",
+			StepID:                 "diagnose",
+			ActionID:               "step/diagnose/agent-turn",
+			AttemptNumber:          1,
+			IdempotencyKey:         "run-1:diagnose:agent-turn:1",
+		},
+		Plugin: &coreworkflow.PluginActionPayload{},
+	})
+	if err == nil || !strings.Contains(err.Error(), "not a plugin callback action") {
+		t.Fatalf("error = %v, want plugin callback action rejection", err)
+	}
+}
+
 func TestWorkflowRuntimeInvokeExecutionRefUsesStoredSubjectPrincipal(t *testing.T) {
 	t.Parallel()
 
@@ -1783,14 +2343,14 @@ func TestWorkflowRuntimeInvokeWorkflowActionRejectsMissingStepActionPermissions(
 
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           "exec-ref-no-step-actions",
-		ProviderName: "temporal",
-		Target:       target,
-		SubjectID:    "user:ada",
-		SubjectKind:  string(principal.KindUser),
-		Generation:   1,
-		Seal:         "seal",
-		TargetDigest: targetDigest,
+		ID:                "exec-ref-no-step-actions",
+		ProviderName:      "temporal",
+		Target:            target,
+		SubjectID:         "user:ada",
+		SubjectKind:       string(principal.KindUser),
+		Generation:        1,
+		TargetDigest:      targetDigest,
+		ActionTableDigest: actionTableDigest,
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -1811,14 +2371,11 @@ func TestWorkflowRuntimeInvokeWorkflowActionRejectsMissingStepActionPermissions(
 		Selector: coreworkflow.HostActionSelector{
 			ExecutionRef:           "exec-ref-no-step-actions",
 			ExecutionRefGeneration: 1,
-			ExecutionRefSeal:       "seal",
 			RunID:                  "run-1",
 			StepID:                 target.Steps[0].ID,
 			ActionID:               actionID,
 			AttemptNumber:          1,
 			IdempotencyKey:         "action-1",
-			TargetDigest:           targetDigest,
-			ActionTableDigest:      actionTableDigest,
 		},
 		Plugin: &coreworkflow.PluginActionPayload{Input: map[string]any{}},
 	})

@@ -29,15 +29,13 @@ var sharedWorkflowHostTransport sharedManagerTransport[proto.WorkflowHostClient]
 type WorkflowHostActionSelector struct {
 	ExecutionRef           string
 	ExecutionRefGeneration int64
-	ExecutionRefSeal       string
 	RunID                  string
+	DefinitionID           string
+	DefinitionGeneration   int64
 	StepID                 string
 	ActionID               string
 	AttemptNumber          int32
 	IdempotencyKey         string
-	TargetDigest           string
-	ActionTableDigest      string
-	ProviderPlanDigest     string
 }
 
 // WorkflowPluginActionPayload carries provider-evaluated input for a selected
@@ -157,14 +155,12 @@ func workflowHostActionSelectorToProto(input *WorkflowHostActionSelector) *proto
 	return &proto.WorkflowHostActionSelector{
 		ExecutionRef:           input.ExecutionRef,
 		ExecutionRefGeneration: input.ExecutionRefGeneration,
-		ExecutionRefSeal:       input.ExecutionRefSeal,
 		RunId:                  input.RunID,
+		DefinitionId:           input.DefinitionID,
+		DefinitionGeneration:   input.DefinitionGeneration,
 		StepId:                 input.StepID,
 		ActionId:               input.ActionID,
 		AttemptNumber:          input.AttemptNumber,
 		IdempotencyKey:         input.IdempotencyKey,
-		TargetDigest:           input.TargetDigest,
-		ActionTableDigest:      input.ActionTableDigest,
-		ProviderPlanDigest:     input.ProviderPlanDigest,
 	}
 }

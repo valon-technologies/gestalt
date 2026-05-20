@@ -96,62 +96,49 @@ func NewRemote(ctx context.Context, cfg RemoteConfig) (coreworkflow.Provider, er
 	return &remoteWorkflow{client: cfg.Client, runtime: cfg.Runtime, closer: cfg.Closer, name: cfg.Name}, nil
 }
 
-func (r *remoteWorkflow) PlanWorkflow(ctx context.Context, req coreworkflow.PlanWorkflowRequest) (out *coreworkflow.CompileTargetResponse, err error) {
-	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationPlanWorkflow, workflowDims{targetKind: workflowTargetKind(req.Spec.Target)})
+func (r *remoteWorkflow) ApplyWorkflowDefinition(ctx context.Context, req coreworkflow.ApplyDefinitionRequest) (deployment *coreworkflow.Definition, err error) {
+	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationApplyWorkflowDefinition, workflowDims{targetKind: workflowTargetKind(req.Spec.Target)})
 	defer func() { end(err) }()
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	pbReq, err := workflowPlanRequestToProto(req)
+	spec, err := workflowDefinitionSpecToProto(req.Spec)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := r.client.PlanWorkflow(ctx, pbReq)
+	ref, err := workflowExecutionReferenceToProto(req.ExecutionRef)
 	if err != nil {
 		return nil, err
 	}
-	return workflowPlanResponseFromProto(resp), nil
-}
-
-func (r *remoteWorkflow) ApplyWorkflowDeployment(ctx context.Context, req coreworkflow.ApplyDeploymentRequest) (deployment *coreworkflow.Deployment, err error) {
-	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationApplyWorkflowDeployment, workflowDims{targetKind: workflowTargetKind(req.Spec.Target)})
-	defer func() { end(err) }()
-	ctx, cancel := runtimehost.ProviderCallContext(ctx)
-	defer cancel()
-	spec, err := workflowDeploymentSpecToProto(req.Spec)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := r.client.ApplyWorkflowDeployment(ctx, &proto.ApplyWorkflowDeploymentRequest{
+	resp, err := r.client.ApplyWorkflowDefinition(ctx, &proto.ApplyWorkflowDefinitionRequest{
 		Spec:         spec,
-		Plan:         workflowPlanResponseToProto(req.Plan),
-		Binding:      workflowDeploymentBindingToProto(req.Binding),
+		Binding:      workflowDefinitionBindingToProto(req.Binding),
+		ExecutionRef: ref,
 		RequestId:    req.RequestID,
-		ValidateOnly: req.ValidateOnly,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return workflowDeploymentFromProto(resp)
+	return workflowDefinitionFromProto(resp)
 }
 
-func (r *remoteWorkflow) GetWorkflowDeployment(ctx context.Context, req coreworkflow.GetDeploymentRequest) (deployment *coreworkflow.Deployment, err error) {
-	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationGetWorkflowDeployment, workflowDims{})
+func (r *remoteWorkflow) GetWorkflowDefinition(ctx context.Context, req coreworkflow.GetDefinitionRequest) (deployment *coreworkflow.Definition, err error) {
+	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationGetWorkflowDefinition, workflowDims{})
 	defer func() { end(err) }()
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.GetWorkflowDeployment(ctx, &proto.GetWorkflowDeploymentRequest{DeploymentId: req.DeploymentID})
+	resp, err := r.client.GetWorkflowDefinition(ctx, &proto.GetWorkflowDefinitionRequest{DefinitionId: req.DefinitionID})
 	if err != nil {
 		return nil, err
 	}
-	return workflowDeploymentFromProto(resp)
+	return workflowDefinitionFromProto(resp)
 }
 
-func (r *remoteWorkflow) ListWorkflowDeployments(ctx context.Context, req coreworkflow.ListDeploymentsRequest) (out *coreworkflow.ListDeploymentsResponse, err error) {
-	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationListWorkflowDeployments, workflowDims{})
+func (r *remoteWorkflow) ListWorkflowDefinitions(ctx context.Context, req coreworkflow.ListDefinitionsRequest) (out *coreworkflow.ListDefinitionsResponse, err error) {
+	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationListWorkflowDefinitions, workflowDims{})
 	defer func() { end(err) }()
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.ListWorkflowDeployments(ctx, &proto.ListWorkflowDeploymentsRequest{
+	resp, err := r.client.ListWorkflowDefinitions(ctx, &proto.ListWorkflowDefinitionsRequest{
 		PageSize:  int32(req.PageSize),
 		PageToken: strings.TrimSpace(req.PageToken),
 		Labels:    req.Labels,
@@ -159,56 +146,56 @@ func (r *remoteWorkflow) ListWorkflowDeployments(ctx context.Context, req corewo
 	if err != nil {
 		return nil, err
 	}
-	deployments := make([]*coreworkflow.Deployment, 0, len(resp.GetDeployments()))
-	for _, deployment := range resp.GetDeployments() {
-		value, err := workflowDeploymentFromProto(deployment)
+	definitions := make([]*coreworkflow.Definition, 0, len(resp.GetDefinitions()))
+	for _, deployment := range resp.GetDefinitions() {
+		value, err := workflowDefinitionFromProto(deployment)
 		if err != nil {
 			return nil, err
 		}
-		deployments = append(deployments, value)
+		definitions = append(definitions, value)
 	}
-	return &coreworkflow.ListDeploymentsResponse{
-		Deployments:   deployments,
+	return &coreworkflow.ListDefinitionsResponse{
+		Definitions:   definitions,
 		NextPageToken: strings.TrimSpace(resp.GetNextPageToken()),
 	}, nil
 }
 
-func (r *remoteWorkflow) DeleteWorkflowDeployment(ctx context.Context, req coreworkflow.DeleteDeploymentRequest) (err error) {
-	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationDeleteWorkflowDeployment, workflowDims{})
+func (r *remoteWorkflow) DeleteWorkflowDefinition(ctx context.Context, req coreworkflow.DeleteDefinitionRequest) (err error) {
+	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationDeleteWorkflowDefinition, workflowDims{})
 	defer func() { end(err) }()
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	_, err = r.client.DeleteWorkflowDeployment(ctx, &proto.DeleteWorkflowDeploymentRequest{
-		DeploymentId: req.DeploymentID,
+	_, err = r.client.DeleteWorkflowDefinition(ctx, &proto.DeleteWorkflowDefinitionRequest{
+		DefinitionId: req.DefinitionID,
 		Generation:   req.Generation,
 		RequestId:    req.RequestID,
 	})
 	return err
 }
 
-func (r *remoteWorkflow) SetWorkflowDeploymentPaused(ctx context.Context, req coreworkflow.SetDeploymentPausedRequest) (deployment *coreworkflow.Deployment, err error) {
-	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationSetWorkflowDeploymentPaused, workflowDims{})
+func (r *remoteWorkflow) SetWorkflowDefinitionPaused(ctx context.Context, req coreworkflow.SetDefinitionPausedRequest) (deployment *coreworkflow.Definition, err error) {
+	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationSetWorkflowDefinitionPaused, workflowDims{})
 	defer func() { end(err) }()
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
-	resp, err := r.client.SetWorkflowDeploymentPaused(ctx, &proto.SetWorkflowDeploymentPausedRequest{
-		DeploymentId: req.DeploymentID,
+	resp, err := r.client.SetWorkflowDefinitionPaused(ctx, &proto.SetWorkflowDefinitionPausedRequest{
+		DefinitionId: req.DefinitionID,
 		Paused:       req.Paused,
 		RequestId:    req.RequestID,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return workflowDeploymentFromProto(resp)
+	return workflowDefinitionFromProto(resp)
 }
 
-func (r *remoteWorkflow) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (deployment *coreworkflow.Deployment, err error) {
+func (r *remoteWorkflow) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (deployment *coreworkflow.Definition, err error) {
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationSetWorkflowActivationPaused, workflowDims{})
 	defer func() { end(err) }()
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.SetWorkflowActivationPaused(ctx, &proto.SetWorkflowActivationPausedRequest{
-		DeploymentId: req.DeploymentID,
+		DefinitionId: req.DefinitionID,
 		ActivationId: req.ActivationID,
 		Paused:       req.Paused,
 		RequestId:    req.RequestID,
@@ -216,7 +203,7 @@ func (r *remoteWorkflow) SetWorkflowActivationPaused(ctx context.Context, req co
 	if err != nil {
 		return nil, err
 	}
-	return workflowDeploymentFromProto(resp)
+	return workflowDefinitionFromProto(resp)
 }
 
 func (r *remoteWorkflow) StartRun(ctx context.Context, req coreworkflow.StartRunRequest) (run *coreworkflow.Run, err error) {
@@ -232,8 +219,8 @@ func (r *remoteWorkflow) StartRun(ctx context.Context, req coreworkflow.StartRun
 		return nil, err
 	}
 	resp, err := r.client.StartWorkflowRun(ctx, &proto.StartWorkflowRunRequest{
-		DeploymentId:         req.DeploymentID,
-		DeploymentGeneration: req.DeploymentGeneration,
+		DefinitionId:         req.DefinitionID,
+		DefinitionGeneration: req.DefinitionGeneration,
 		ActivationId:         req.ActivationID,
 		WorkflowKey:          req.WorkflowKey,
 		Input:                input,
@@ -272,7 +259,7 @@ func (r *remoteWorkflow) ListRuns(ctx context.Context, req coreworkflow.ListRuns
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListWorkflowRuns(ctx, &proto.ListWorkflowRunsRequest{
-		DeploymentId: strings.TrimSpace(req.DeploymentID),
+		DefinitionId: strings.TrimSpace(req.DefinitionID),
 		PageSize:     int32(req.PageSize),
 		PageToken:    strings.TrimSpace(req.PageToken),
 		Status:       workflowRunStatusToProto(req.Status),
@@ -345,8 +332,8 @@ func (r *remoteWorkflow) SignalOrStartRun(ctx context.Context, req coreworkflow.
 		return nil, err
 	}
 	resp, err := r.client.SignalOrStartWorkflowRun(ctx, &proto.SignalOrStartWorkflowRunRequest{
-		DeploymentId:         req.DeploymentID,
-		DeploymentGeneration: req.DeploymentGeneration,
+		DefinitionId:         req.DefinitionID,
+		DefinitionGeneration: req.DefinitionGeneration,
 		ActivationId:         req.ActivationID,
 		WorkflowKey:          req.WorkflowKey,
 		Input:                input,
@@ -574,24 +561,8 @@ func workflowRunStatusFromCore(run *coreworkflow.Run) string {
 }
 
 var _ coreworkflow.Provider = (*remoteWorkflow)(nil)
-var _ coreworkflow.DeploymentProvider = (*remoteWorkflow)(nil)
+var _ coreworkflow.DefinitionProvider = (*remoteWorkflow)(nil)
 var _ coreworkflow.ExecutionReferenceStore = (*remoteWorkflow)(nil)
-
-func (r *remoteWorkflow) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (out *coreworkflow.ExecutionReference, err error) {
-	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationPutExecutionReference, workflowDims{})
-	defer func() { end(err) }()
-	reqRef, err := workflowExecutionReferenceToProto(ref)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := r.client.PutExecutionReference(ctx, &proto.PutWorkflowExecutionReferenceRequest{
-		ExecutionRef: reqRef,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return workflowExecutionReferenceFromProto(resp), nil
-}
 
 func (r *remoteWorkflow) GetExecutionReference(ctx context.Context, id string) (out *coreworkflow.ExecutionReference, err error) {
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationGetExecutionReference, workflowDims{})

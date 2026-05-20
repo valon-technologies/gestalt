@@ -419,7 +419,7 @@ and create schedules or triggers from the current provider request. The SDK
 attaches the request invocation token to each manager call, so the host keeps
 the same subject and permission ceiling.
 
-Deployments can make this host-service access explicit with plugin workflow
+Definitions can make this host-service access explicit with plugin workflow
 capabilities. When `capabilities.workflow` is omitted, plugins keep the legacy
 behavior and workflow-manager calls are allowed subject to the current principal
 and target authorization. When it is present, `operations` is an allowlist for
@@ -580,7 +580,7 @@ definition do not silently change existing automation.
 
 The same client also exposes start-run, signal-run, signal-or-start-run, and
 schedule or trigger management methods in each SDK. Use `providerName` /
-`provider_name` / `ProviderName` only when the deployment has more than one
+`provider_name` / `ProviderName` only when the definition has more than one
 workflow provider or the caller needs to target a specific backend.
 
 ```yaml
@@ -764,19 +764,23 @@ The full protocol includes:
 
 | Method | Purpose |
 | --- | --- |
-| `PlanWorkflow` | Validate a deployment spec and return provider-local plan identity |
-| `ApplyWorkflowDeployment` / `GetWorkflowDeployment` / `ListWorkflowDeployments` / `DeleteWorkflowDeployment` | Manage workflow deployments |
-| `SetWorkflowDeploymentPaused` / `SetWorkflowActivationPaused` | Pause or resume a whole deployment or one activation |
+| `ApplyWorkflowDefinition` / `GetWorkflowDefinition` / `ListWorkflowDefinitions` / `DeleteWorkflowDefinition` | Manage workflow definitions |
+| `SetWorkflowDefinitionPaused` / `SetWorkflowActivationPaused` | Pause or resume a whole definition or one activation |
 | `StartWorkflowRun` / `GetWorkflowRun` / `ListWorkflowRuns` / `CancelWorkflowRun` | Manage workflow runs |
 | `SignalWorkflowRun` / `SignalOrStartWorkflowRun` | Attach signals to an existing run or create a keyed run before signaling it |
-| `DeliverWorkflowEvent` | Deliver an event into matching deployment activations |
+| `DeliverWorkflowEvent` | Deliver an event into matching definition activations |
 | `GetWorkflowRunEvents` / `GetWorkflowRunOutput` | Read provider-owned run event and output state |
-| `PutExecutionReference` / `GetExecutionReference` / `ListExecutionReferences` | Store and read authority snapshots used by delayed host callbacks |
+| `GetExecutionReference` / `ListExecutionReferences` | Read authority snapshots used by delayed host callbacks; definition apply stores the matching execution reference atomically |
 
 Go, Python, Rust, and TypeScript expose the workflow provider service through
 SDK-owned request and response types. The SDK runtime owns transport conversion;
-provider code should focus on durable deployment, activation, run, signal, event,
+provider code should focus on durable definition, activation, run, signal, event,
 and output state.
+
+Providers may set `providerPlanId` and `providerPlanDigest` on returned
+definitions for diagnostics, but planning is not a separate RPC. Gestalt derives
+the authoritative action table and execution reference from the stored
+definition and passes that authority to providers in the definition binding.
 
 The examples below show the authored shape with representative methods. A
 production provider should implement every method in the protocol table.
@@ -802,18 +806,19 @@ production provider should implement every method in the protocol table.
         return nil
     }
 
-    func (p *Provider) PlanWorkflow(context.Context, *gestalt.PlanWorkflowRequest) (*gestalt.PlanWorkflowResponse, error) {
-        return &gestalt.PlanWorkflowResponse{ProviderPlanID: "plan-1", ProviderPlanDigest: "plan-digest"}, nil
-    }
-
-    func (p *Provider) ApplyWorkflowDeployment(_ context.Context, req *gestalt.ApplyWorkflowDeploymentRequest) (*gestalt.WorkflowDeployment, error) {
-        return &gestalt.WorkflowDeployment{Spec: req.Spec, Status: gestalt.WorkflowDeploymentStatusValueActive}, nil
+    func (p *Provider) ApplyWorkflowDefinition(_ context.Context, req *gestalt.ApplyWorkflowDefinitionRequest) (*gestalt.WorkflowDefinition, error) {
+        return &gestalt.WorkflowDefinition{
+            Spec: req.Spec,
+            Status: gestalt.WorkflowDefinitionStatusValueActive,
+            ProviderPlanID: "local-plan-1",
+            ProviderPlanDigest: "sha256:provider-local",
+        }, nil
     }
 
     func (p *Provider) StartWorkflowRun(_ context.Context, req *gestalt.StartWorkflowRunRequest) (*gestalt.WorkflowRun, error) {
         return &gestalt.WorkflowRun{
             ID:           "workflow:run-1",
-            DeploymentID: req.DeploymentID,
+            DefinitionID: req.DefinitionID,
             WorkflowKey:  req.WorkflowKey,
             Status:       gestalt.WorkflowRunStatusValuePending,
         }, nil
@@ -827,14 +832,12 @@ production provider should implement every method in the protocol table.
   <Tabs.Tab>
     ```python
     from gestalt import (
-        ApplyWorkflowDeploymentRequest,
+        ApplyWorkflowDefinitionRequest,
         DeliverWorkflowEventResponse,
-        PlanWorkflowRequest,
-        PlanWorkflowResponse,
         StartWorkflowRunRequest,
-        WorkflowDeployment,
+        WorkflowDefinition,
         WorkflowRun,
-        WORKFLOW_DEPLOYMENT_STATUS_ACTIVE,
+        WORKFLOW_DEFINITION_STATUS_ACTIVE,
         WORKFLOW_RUN_STATUS_PENDING,
         WorkflowProvider,
     )
@@ -843,24 +846,20 @@ production provider should implement every method in the protocol table.
         def configure(self, name: str, config: dict) -> None:
             pass
 
-        def plan_workflow(self, request: PlanWorkflowRequest) -> PlanWorkflowResponse:
-            return PlanWorkflowResponse(
-                provider_plan_id="plan-1",
-                provider_plan_digest="plan-digest",
-            )
-
-        def apply_deployment(
-            self, request: ApplyWorkflowDeploymentRequest
-        ) -> WorkflowDeployment:
-            return WorkflowDeployment(
+        def apply_definition(
+            self, request: ApplyWorkflowDefinitionRequest
+        ) -> WorkflowDefinition:
+            return WorkflowDefinition(
                 spec=request.spec,
-                status=WORKFLOW_DEPLOYMENT_STATUS_ACTIVE,
+                status=WORKFLOW_DEFINITION_STATUS_ACTIVE,
+                provider_plan_id="local-plan-1",
+                provider_plan_digest="sha256:provider-local",
             )
 
         def start_run(self, request: StartWorkflowRunRequest) -> WorkflowRun:
             return WorkflowRun(
                 id="workflow:run-1",
-                deployment_id=request.deployment_id,
+                definition_id=request.definition_id,
                 workflow_key=request.workflow_key,
                 status=WORKFLOW_RUN_STATUS_PENDING,
             )
@@ -876,24 +875,15 @@ production provider should implement every method in the protocol table.
 
     #[gestalt::async_trait]
     impl gestalt::WorkflowProvider for ExampleWorkflow {
-        async fn plan_workflow(
+        async fn apply_workflow_definition(
             &self,
-            _req: gestalt::PlanWorkflowRequest,
-        ) -> gestalt::Result<gestalt::PlanWorkflowResponse> {
-            Ok(gestalt::PlanWorkflowResponse {
-                provider_plan_id: "plan-1".into(),
-                provider_plan_digest: "plan-digest".into(),
-                ..Default::default()
-            })
-        }
-
-        async fn apply_workflow_deployment(
-            &self,
-            req: gestalt::ApplyWorkflowDeploymentRequest,
-        ) -> gestalt::Result<gestalt::WorkflowDeployment> {
-            Ok(gestalt::WorkflowDeployment {
+            req: gestalt::ApplyWorkflowDefinitionRequest,
+        ) -> gestalt::Result<gestalt::WorkflowDefinition> {
+            Ok(gestalt::WorkflowDefinition {
                 spec: req.spec,
-                status: gestalt::WorkflowDeploymentStatus::Active,
+                status: gestalt::WorkflowDefinitionStatus::Active,
+                provider_plan_id: "local-plan-1".into(),
+                provider_plan_digest: "sha256:provider-local".into(),
                 ..Default::default()
             })
         }
@@ -904,7 +894,7 @@ production provider should implement every method in the protocol table.
         ) -> gestalt::Result<gestalt::WorkflowRun> {
             Ok(gestalt::WorkflowRun {
                 id: "workflow:run-1".into(),
-                deployment_id: req.deployment_id,
+                definition_id: req.definition_id,
                 workflow_key: req.workflow_key,
                 status: gestalt::WorkflowRunStatus::Pending,
                 ..Default::default()
@@ -925,7 +915,7 @@ production provider should implement every method in the protocol table.
   <Tabs.Tab>
     ```ts
     import {
-      WorkflowDeploymentStatus,
+      WorkflowDefinitionStatus,
       WorkflowRunStatus,
       defineWorkflowProvider,
     } from "@valon-technologies/gestalt";
@@ -933,21 +923,19 @@ production provider should implement every method in the protocol table.
     export const provider = defineWorkflowProvider({
       async configure(_name, _config) {},
 
-      async planWorkflow(_request) {
-        return { providerPlanId: "plan-1", providerPlanDigest: "plan-digest" };
-      },
-
-      async applyDeployment(request) {
+      async applyDefinition(request) {
         return {
           spec: request.spec,
-          status: WorkflowDeploymentStatus.ACTIVE,
+          status: WorkflowDefinitionStatus.ACTIVE,
+          providerPlanId: "local-plan-1",
+          providerPlanDigest: "sha256:provider-local",
         };
       },
 
       async startRun(request) {
         return {
           id: "workflow:run-1",
-          deploymentId: request.deploymentId,
+          definitionId: request.definitionId,
           workflowKey: request.workflowKey,
           status: WorkflowRunStatus.PENDING,
           statusMessage: "",
@@ -986,36 +974,121 @@ fires a run after the creating request has ended.
 ### Workflow host
 
 Workflow providers call back into Gestalt through the workflow host SDK helper
-when delayed work is ready to execute a `target.steps` plan.
+when delayed work is ready to invoke a target plugin operation or agent turn.
 The host owns authorization, credential resolution, and target dispatch; the
 provider owns durable workflow state and run status transitions.
 
-```go
-host, err := gestalt.WorkflowHost()
-if err != nil {
-    return nil, err
-}
-defer host.Close()
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    host, err := gestalt.WorkflowHost()
+    if err != nil {
+        return nil, err
+    }
+    defer host.Close()
 
-resp, err := host.InvokeWorkflowAction(ctx, gestalt.InvokeWorkflowActionInput{
-    Selector: &gestalt.WorkflowHostActionSelector{
-        ExecutionRef:           "workflow_schedule:nightly",
-        ExecutionRefGeneration: 1,
-        ExecutionRefSeal:       "host-seal",
-        RunID:                  "run-1",
-        StepID:                 "sync_items",
-        ActionID:               "step/sync_items/plugin",
-        AttemptNumber:          1,
-        IdempotencyKey:         "run-1:sync_items:plugin:1",
-        TargetDigest:           "sha256:target",
-        ActionTableDigest:      "sha256:actions",
-        ProviderPlanDigest:     "sha256:plan",
-    },
-    Plugin: &gestalt.WorkflowPluginActionPayload{
-        Input: map[string]any{"cursor": "latest"},
-    },
-})
-```
+    resp, err := host.InvokeWorkflowAction(ctx, gestalt.InvokeWorkflowActionInput{
+        Selector: &gestalt.WorkflowHostActionSelector{
+            ExecutionRef: "workflow:ref-1",
+            ExecutionRefGeneration: 1,
+            RunID: "run-1",
+            DefinitionID: "roadmap-sync",
+            DefinitionGeneration: 1,
+            StepID: "sync",
+            ActionID: "step/sync/plugin",
+            AttemptNumber: 1,
+            IdempotencyKey: "run-1:sync:plugin:1",
+        },
+        Plugin: &gestalt.WorkflowPluginActionPayload{
+            Input: map[string]any{"changed_since": "2026-05-19T00:00:00Z"},
+        },
+    })
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    from gestalt import (
+        InvokeWorkflowActionRequest,
+        WorkflowHostActionSelector,
+        WorkflowPluginActionPayload,
+        WorkflowHost,
+        WorkflowStep,
+        WorkflowStepPluginCall,
+    )
+
+    with WorkflowHost() as host:
+        resp = host.invoke_action(
+            InvokeWorkflowActionRequest(
+                selector=WorkflowHostActionSelector(
+                    execution_ref="workflow:ref-1",
+                    execution_ref_generation=1,
+                    run_id="run-1",
+                    definition_id="roadmap-sync",
+                    definition_generation=1,
+                    step_id="sync",
+                    action_id="step/sync/plugin",
+                    attempt_number=1,
+                    idempotency_key="run-1:sync:plugin:1",
+                ),
+                plugin=WorkflowPluginActionPayload(
+                    input={"changed_since": "2026-05-19T00:00:00Z"},
+                ),
+            )
+        )
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    let mut host = gestalt::WorkflowHost::connect().await?;
+    let resp = host
+        .invoke_action(gestalt::InvokeWorkflowActionRequest {
+            selector: Some(gestalt::WorkflowHostActionSelector {
+                execution_ref: "workflow:ref-1".into(),
+                execution_ref_generation: 1,
+                run_id: "run-1".into(),
+                definition_id: "roadmap-sync".into(),
+                definition_generation: 1,
+                step_id: "sync".into(),
+                action_id: "step/sync/plugin".into(),
+                attempt_number: 1,
+                idempotency_key: "run-1:sync:plugin:1".into(),
+            }),
+            action: Some(gestalt::invoke_workflow_action_request::Action::Plugin(
+                gestalt::WorkflowPluginActionPayload::default()
+                    .with_input(serde_json::json!({
+                        "changed_since": "2026-05-19T00:00:00Z"
+                    }))?,
+            )),
+            ..Default::default()
+        })
+        .await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { WorkflowHost } from "@valon-technologies/gestalt";
+
+    const host = new WorkflowHost();
+    const resp = await host.invokeWorkflowAction({
+      selector: {
+        executionRef: "workflow:ref-1",
+        executionRefGeneration: 1n,
+        runId: "run-1",
+        definitionId: "roadmap-sync",
+        definitionGeneration: 1n,
+        stepId: "sync",
+        actionId: "step/sync/plugin",
+        attemptNumber: 1,
+        idempotencyKey: "run-1:sync:plugin:1",
+      },
+      action: {
+        case: "plugin",
+        value: { input: { changed_since: "2026-05-19T00:00:00Z" } },
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 ### Deploying the provider
 

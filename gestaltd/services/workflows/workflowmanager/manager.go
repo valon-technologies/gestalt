@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"maps"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,7 +46,6 @@ var (
 const workflowScheduleExecutionRefBasePrefix = "workflow_schedule:"
 const workflowEventTriggerExecutionRefBasePrefix = "workflow_event_trigger:"
 const workflowRunExecutionRefBasePrefix = "workflow_run:"
-const workflowDeploymentExecutionRefBasePrefix = "workflow_deployment:"
 const workflowDefinitionExecutionRefBasePrefix = "workflow_definition:"
 const (
 	workflowNoProviderPermissionsPlugin = "__gestalt.workflow.no_provider_permissions__"
@@ -74,17 +74,12 @@ type AgentControl interface {
 }
 
 type Service interface {
-	CreateDefinition(ctx context.Context, p *principal.Principal, req DefinitionUpsert) (*ManagedDefinition, error)
+	ApplyDefinition(ctx context.Context, p *principal.Principal, req DefinitionApply) (*ManagedDefinition, error)
 	GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*ManagedDefinition, error)
-	UpdateDefinition(ctx context.Context, p *principal.Principal, definitionID string, req DefinitionUpsert) (*ManagedDefinition, error)
+	ListDefinitions(ctx context.Context, p *principal.Principal) ([]*ManagedDefinition, error)
 	DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) error
-	PlanDeployment(ctx context.Context, p *principal.Principal, req DeploymentPlan) (*coreworkflow.CompileTargetResponse, error)
-	ApplyDeployment(ctx context.Context, p *principal.Principal, req DeploymentApply) (*ManagedDeployment, error)
-	GetDeployment(ctx context.Context, p *principal.Principal, deploymentID string) (*ManagedDeployment, error)
-	ListDeployments(ctx context.Context, p *principal.Principal) ([]*ManagedDeployment, error)
-	DeleteDeployment(ctx context.Context, p *principal.Principal, deploymentID string) error
-	SetDeploymentPaused(ctx context.Context, p *principal.Principal, deploymentID string, paused bool) (*ManagedDeployment, error)
-	SetActivationPaused(ctx context.Context, p *principal.Principal, deploymentID, activationID string, paused bool) (*ManagedDeployment, error)
+	SetDefinitionPaused(ctx context.Context, p *principal.Principal, definitionID string, paused bool) (*ManagedDefinition, error)
+	SetActivationPaused(ctx context.Context, p *principal.Principal, definitionID, activationID string, paused bool) (*ManagedDefinition, error)
 	ListSchedules(ctx context.Context, p *principal.Principal) ([]*ManagedSchedule, error)
 	CreateSchedule(ctx context.Context, p *principal.Principal, req ScheduleUpsert) (*ManagedSchedule, error)
 	GetSchedule(ctx context.Context, p *principal.Principal, scheduleID string) (*ManagedSchedule, error)
@@ -155,24 +150,9 @@ type ScheduleUpsert struct {
 	Permissions        []core.AccessPermission
 }
 
-type DefinitionUpsert struct {
+type DefinitionApply struct {
 	ProviderName     string
-	Target           coreworkflow.Target
-	IdempotencyKey   string
-	CallerPluginName string
-	Permissions      []core.AccessPermission
-}
-
-type DeploymentPlan struct {
-	ProviderName     string
-	Spec             coreworkflow.DeploymentSpec
-	IdempotencyKey   string
-	CallerPluginName string
-}
-
-type DeploymentApply struct {
-	ProviderName     string
-	Spec             coreworkflow.DeploymentSpec
+	Spec             coreworkflow.DefinitionSpec
 	IdempotencyKey   string
 	CallerPluginName string
 }
@@ -190,12 +170,11 @@ type EventTriggerUpsert struct {
 
 type RunStart struct {
 	ProviderName         string
-	DeploymentID         string
-	DeploymentGeneration int64
+	DefinitionID         string
+	DefinitionGeneration int64
 	ActivationID         string
 	Target               coreworkflow.Target
 	Input                map[string]any
-	DefinitionID         string
 	IdempotencyKey       string
 	WorkflowKey          string
 	CallerPluginName     string
@@ -209,13 +188,12 @@ type RunSignal struct {
 
 type RunSignalOrStart struct {
 	ProviderName         string
-	DeploymentID         string
-	DeploymentGeneration int64
+	DefinitionID         string
+	DefinitionGeneration int64
 	ActivationID         string
 	WorkflowKey          string
 	Target               coreworkflow.Target
 	Input                map[string]any
-	DefinitionID         string
 	IdempotencyKey       string
 	Signal               coreworkflow.Signal
 	CallerPluginName     string
@@ -233,13 +211,7 @@ type EventPublish struct {
 
 type ManagedDefinition struct {
 	ProviderName string
-	Definition   *coreworkflow.ExecutionReference
-	provider     coreworkflow.Provider
-}
-
-type ManagedDeployment struct {
-	ProviderName string
-	Deployment   *coreworkflow.Deployment
+	Definition   *coreworkflow.Definition
 	ExecutionRef *coreworkflow.ExecutionReference
 	provider     coreworkflow.Provider
 }
@@ -276,12 +248,11 @@ type ManagedRunSignal struct {
 }
 
 type workflowTargetPlan struct {
-	SpecDigest         string
-	TargetDigest       string
-	ActionTableDigest  string
-	ProviderPlanID     string
-	ProviderPlanDigest string
-	SemanticsVersion   string
+	SpecDigest        string
+	TargetDigest      string
+	ActionTableDigest string
+	PermissionsDigest string
+	SemanticsVersion  string
 }
 
 const (
@@ -451,317 +422,140 @@ func workflowRunID(run *coreworkflow.Run) string {
 	return strings.TrimSpace(run.ID)
 }
 
-func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, req DefinitionUpsert) (out *ManagedDefinition, err error) {
+func (m *Manager) ApplyDefinition(ctx context.Context, p *principal.Principal, req DefinitionApply) (*ManagedDefinition, error) {
 	p = principal.Canonicalized(p)
-	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionCreate)
-	audit.setCallerPlugin(req.CallerPluginName)
-	defer func() {
-		if out != nil && out.Definition != nil {
-			audit.setProvider(out.ProviderName)
-			audit.setObjectTarget(workflowAuditTargetDefinition, out.Definition.ID, "")
-			audit.setWorkflowTarget(out.Definition.Target)
-		}
-		audit.finish(ctx, err)
-	}()
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
+	}
+	if m == nil || m.workflow == nil {
+		return nil, ErrWorkflowNotConfigured
 	}
 	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	spec := workflowDefinitionSpecForApply(req.Spec, workflowCreateIdempotencyScope(p, req.CallerPluginName, req.IdempotencyKey))
+	target, err := m.resolveTarget(ctx, p, spec.Target, req.CallerPluginName)
 	if err != nil {
 		return nil, err
 	}
-	audit.setProvider(providerName)
-	audit.setWorkflowTarget(target)
-
-	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
-	definitionID := newDefinitionID("")
-	if idempotencyKey != "" {
-		definitionID = newDefinitionID(workflowCreateIdempotencyScope(p, req.CallerPluginName, idempotencyKey))
-		existing, err := m.requireOwnedDefinition(ctx, definitionID, p)
-		if err == nil {
-			if !managedDefinitionMatchesUpsert(existing, providerName, target) {
-				return nil, fmt.Errorf("%w: workflow definition idempotency key reused with different request", invocation.ErrInvalidInvocation)
-			}
-			audit.setObjectTarget(workflowAuditTargetDefinition, existing.Definition.ID, "")
-			return existing, nil
-		}
-		if !errors.Is(err, core.ErrNotFound) {
-			return nil, err
-		}
-	}
-	plan, err := m.compileWorkflowTargetPlan(ctx, provider, target)
+	spec.Target = target
+	plan, err := m.compileWorkflowDefinitionPlan(ctx, provider, spec)
 	if err != nil {
 		return nil, err
 	}
-	audit.setObjectTarget(workflowAuditTargetDefinition, definitionID, "")
-	ref, err := m.putExecutionRefWithPermissionsAndPlan(ctx, definitionID, providerName, provider, target, p, req.CallerPluginName, "", req.Permissions, plan)
+	executionRefID := newDefinitionExecutionRefID(spec.ID, spec.Generation)
+	ref, err := m.buildExecutionRefWithPermissionsAndPlan(executionRefID, providerName, target, p, req.CallerPluginName, "", spec.Permissions, plan)
 	if err != nil {
 		return nil, err
 	}
-	return &ManagedDefinition{
-		ProviderName: providerName,
-		Definition:   ref,
-		provider:     provider,
-	}, nil
+	ref.SourceDefinitionID = spec.ID
+	ref.SourceDefinitionGeneration = spec.Generation
+	ref.Generation = spec.Generation
+	binding := workflowDefinitionBindingForDefinition(ref, plan, strings.TrimSpace(req.IdempotencyKey), spec.ID, spec.Generation)
+	deployment, err := provider.ApplyWorkflowDefinition(ctx, coreworkflow.ApplyDefinitionRequest{
+		Spec:         spec,
+		Binding:      binding,
+		ExecutionRef: ref,
+		RequestID:    strings.TrimSpace(req.IdempotencyKey),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !definitionMatchesExecutionRef(providerName, deployment, ref) {
+		return nil, core.ErrNotFound
+	}
+	return &ManagedDefinition{ProviderName: providerName, Definition: deployment, ExecutionRef: ref, provider: provider}, nil
 }
 
 func (m *Manager) GetDefinition(ctx context.Context, p *principal.Principal, definitionID string) (*ManagedDefinition, error) {
-	return m.requireOwnedDefinition(ctx, definitionID, p)
-}
-
-func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, definitionID string, req DefinitionUpsert) (out *ManagedDefinition, err error) {
-	p = principal.Canonicalized(p)
-	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionUpdate)
-	audit.setCallerPlugin(req.CallerPluginName)
-	audit.setObjectTarget(workflowAuditTargetDefinition, definitionID, "")
-	defer func() {
-		if out != nil && out.Definition != nil {
-			audit.setProvider(out.ProviderName)
-			audit.setObjectTarget(workflowAuditTargetDefinition, out.Definition.ID, "")
-			audit.setWorkflowTarget(out.Definition.Target)
-		}
-		audit.finish(ctx, err)
-	}()
-	if strings.TrimSpace(principalSubjectID(p)) == "" {
-		return nil, ErrWorkflowSubjectRequired
-	}
-	existing, err := m.requireOwnedDefinition(ctx, definitionID, p)
+	ref, providerName, provider, err := m.requireOwnedDefinitionExecutionRef(ctx, definitionID, p)
 	if err != nil {
 		return nil, err
 	}
-	audit.setProvider(existing.ProviderName)
-	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
+	deployment, err := provider.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: strings.TrimSpace(definitionID)})
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
-	if err != nil {
-		return nil, err
-	}
-	audit.setProvider(providerName)
-	audit.setWorkflowTarget(target)
-	plan, err := m.compileWorkflowTargetPlan(ctx, provider, target)
-	if err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(existing.ProviderName) != providerName {
-		if _, err := m.revokeExecutionRefWithError(ctx, existing.Definition); err != nil {
-			return nil, err
-		}
-		ref, err := m.putExecutionRefWithPermissionsAndPlan(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName, "", req.Permissions, plan)
-		if err != nil {
-			m.restoreExecutionRef(ctx, existing.Definition)
-			return nil, err
-		}
-		return &ManagedDefinition{
-			ProviderName: providerName,
-			Definition:   ref,
-			provider:     provider,
-		}, nil
-	}
-	ref, err := m.putExecutionRefWithPermissionsAndPlan(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName, "", req.Permissions, plan)
-	if err != nil {
-		return nil, err
-	}
-	return &ManagedDefinition{
-		ProviderName: providerName,
-		Definition:   ref,
-		provider:     provider,
-	}, nil
-}
-
-func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) (err error) {
-	p = principal.Canonicalized(p)
-	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionDelete)
-	audit.setObjectTarget(workflowAuditTargetDefinition, definitionID, "")
-	defer func() {
-		audit.finish(ctx, err)
-	}()
-	existing, err := m.requireOwnedDefinition(ctx, definitionID, p)
-	if err != nil {
-		return err
-	}
-	audit.setProvider(existing.ProviderName)
-	if existing.Definition != nil {
-		audit.setWorkflowTarget(existing.Definition.Target)
-	}
-	m.revokeExecutionRef(ctx, existing.Definition)
-	return nil
-}
-
-func (m *Manager) PlanDeployment(ctx context.Context, p *principal.Principal, req DeploymentPlan) (*coreworkflow.CompileTargetResponse, error) {
-	p = principal.Canonicalized(p)
-	if strings.TrimSpace(principalSubjectID(p)) == "" {
-		return nil, ErrWorkflowSubjectRequired
-	}
-	if m == nil || m.workflow == nil {
-		return nil, ErrWorkflowNotConfigured
-	}
-	_, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	spec := req.Spec
-	target, err := m.resolveTarget(ctx, p, spec.Target, req.CallerPluginName)
-	if err != nil {
-		return nil, err
-	}
-	spec.Target = target
-	plan, err := m.compileWorkflowDeploymentPlan(ctx, provider, spec)
-	if err != nil {
-		return nil, err
-	}
-	return workflowTargetPlanResponse(plan), nil
-}
-
-func (m *Manager) ApplyDeployment(ctx context.Context, p *principal.Principal, req DeploymentApply) (*ManagedDeployment, error) {
-	p = principal.Canonicalized(p)
-	if strings.TrimSpace(principalSubjectID(p)) == "" {
-		return nil, ErrWorkflowSubjectRequired
-	}
-	if m == nil || m.workflow == nil {
-		return nil, ErrWorkflowNotConfigured
-	}
-	providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(req.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	spec := workflowDeploymentSpecForApply(req.Spec, workflowCreateIdempotencyScope(p, req.CallerPluginName, req.IdempotencyKey))
-	target, err := m.resolveTarget(ctx, p, spec.Target, req.CallerPluginName)
-	if err != nil {
-		return nil, err
-	}
-	spec.Target = target
-	plan, err := m.compileWorkflowDeploymentPlan(ctx, provider, spec)
-	if err != nil {
-		return nil, err
-	}
-	executionRefID := newDeploymentExecutionRefID(spec.ID, workflowCreateIdempotencyScope(p, req.CallerPluginName, req.IdempotencyKey))
-	ref, err := m.putExecutionRefWithPermissionsAndPlan(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, "", spec.Permissions, plan)
-	if err != nil {
-		return nil, err
-	}
-	binding := workflowDeploymentPlanBinding(ref, plan, strings.TrimSpace(req.IdempotencyKey), spec.ID, spec.Generation)
-	deployment, err := provider.ApplyWorkflowDeployment(ctx, coreworkflow.ApplyDeploymentRequest{
-		Spec:      spec,
-		Plan:      workflowTargetPlanResponse(plan),
-		Binding:   binding,
-		RequestID: strings.TrimSpace(req.IdempotencyKey),
-	})
-	if err != nil {
-		m.revokeExecutionRef(ctx, ref)
-		return nil, err
-	}
-	if !deploymentMatchesExecutionRef(providerName, deployment, ref) {
-		m.revokeExecutionRef(ctx, ref)
+	if !definitionMatchesExecutionRef(providerName, deployment, ref) {
 		return nil, core.ErrNotFound
 	}
-	return &ManagedDeployment{ProviderName: providerName, Deployment: deployment, ExecutionRef: ref, provider: provider}, nil
+	return &ManagedDefinition{ProviderName: providerName, Definition: deployment, ExecutionRef: ref, provider: provider}, nil
 }
 
-func (m *Manager) GetDeployment(ctx context.Context, p *principal.Principal, deploymentID string) (*ManagedDeployment, error) {
-	ref, providerName, provider, err := m.requireOwnedDeploymentExecutionRef(ctx, deploymentID, p)
-	if err != nil {
-		return nil, err
-	}
-	deployment, err := provider.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: strings.TrimSpace(deploymentID)})
-	if err != nil {
-		return nil, err
-	}
-	if !deploymentMatchesExecutionRef(providerName, deployment, ref) {
-		return nil, core.ErrNotFound
-	}
-	return &ManagedDeployment{ProviderName: providerName, Deployment: deployment, ExecutionRef: ref, provider: provider}, nil
-}
-
-func (m *Manager) ListDeployments(ctx context.Context, p *principal.Principal) ([]*ManagedDeployment, error) {
+func (m *Manager) ListDefinitions(ctx context.Context, p *principal.Principal) ([]*ManagedDefinition, error) {
 	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
 	if err != nil {
 		return nil, err
 	}
-	out := []*ManagedDeployment{}
+	out := []*ManagedDefinition{}
 	for _, ref := range refs {
-		deploymentID := deploymentIDFromExecutionRefID(ref.ID)
-		if deploymentID == "" || !m.allowTarget(ctx, p, ref.Target) {
+		definitionID := definitionIDFromExecutionRefID(ref.ID)
+		if definitionID == "" || !m.allowTarget(ctx, p, ref.Target) {
 			continue
 		}
 		provider, err := m.resolveProviderByName(strings.TrimSpace(ref.ProviderName))
 		if err != nil {
 			return nil, err
 		}
-		deployment, err := provider.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: deploymentID})
+		deployment, err := provider.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: definitionID})
 		if err != nil {
 			if isWorkflowProviderNotFound(err) {
 				continue
 			}
 			return nil, err
 		}
-		if !deploymentMatchesExecutionRef(ref.ProviderName, deployment, ref) {
+		if !definitionMatchesExecutionRef(ref.ProviderName, deployment, ref) {
 			continue
 		}
-		out = append(out, &ManagedDeployment{ProviderName: strings.TrimSpace(ref.ProviderName), Deployment: deployment, ExecutionRef: ref, provider: provider})
+		out = append(out, &ManagedDefinition{ProviderName: strings.TrimSpace(ref.ProviderName), Definition: deployment, ExecutionRef: ref, provider: provider})
 	}
 	return out, nil
 }
 
-func (m *Manager) DeleteDeployment(ctx context.Context, p *principal.Principal, deploymentID string) error {
-	ref, _, provider, err := m.requireOwnedDeploymentExecutionRef(ctx, deploymentID, p)
+func (m *Manager) DeleteDefinition(ctx context.Context, p *principal.Principal, definitionID string) error {
+	_, _, provider, err := m.requireOwnedDefinitionExecutionRef(ctx, definitionID, p)
 	if err != nil {
 		return err
 	}
-	if err := provider.DeleteWorkflowDeployment(ctx, coreworkflow.DeleteDeploymentRequest{DeploymentID: strings.TrimSpace(deploymentID)}); err != nil {
+	if err := provider.DeleteWorkflowDefinition(ctx, coreworkflow.DeleteDefinitionRequest{DefinitionID: strings.TrimSpace(definitionID)}); err != nil {
 		return err
 	}
-	m.revokeExecutionRef(ctx, ref)
 	return nil
 }
 
-func (m *Manager) SetDeploymentPaused(ctx context.Context, p *principal.Principal, deploymentID string, paused bool) (*ManagedDeployment, error) {
-	ref, providerName, provider, err := m.requireOwnedDeploymentExecutionRef(ctx, deploymentID, p)
+func (m *Manager) SetDefinitionPaused(ctx context.Context, p *principal.Principal, definitionID string, paused bool) (*ManagedDefinition, error) {
+	ref, providerName, provider, err := m.requireOwnedDefinitionExecutionRef(ctx, definitionID, p)
 	if err != nil {
 		return nil, err
 	}
-	deployment, err := provider.SetWorkflowDeploymentPaused(ctx, coreworkflow.SetDeploymentPausedRequest{DeploymentID: strings.TrimSpace(deploymentID), Paused: paused})
+	deployment, err := provider.SetWorkflowDefinitionPaused(ctx, coreworkflow.SetDefinitionPausedRequest{DefinitionID: strings.TrimSpace(definitionID), Paused: paused})
 	if err != nil {
 		return nil, err
 	}
-	if !deploymentMatchesExecutionRef(providerName, deployment, ref) {
+	if !definitionMatchesExecutionRef(providerName, deployment, ref) {
 		return nil, core.ErrNotFound
 	}
-	return &ManagedDeployment{ProviderName: providerName, Deployment: deployment, ExecutionRef: ref, provider: provider}, nil
+	return &ManagedDefinition{ProviderName: providerName, Definition: deployment, ExecutionRef: ref, provider: provider}, nil
 }
 
-func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principal, deploymentID, activationID string, paused bool) (*ManagedDeployment, error) {
-	ref, providerName, provider, err := m.requireOwnedDeploymentExecutionRef(ctx, deploymentID, p)
+func (m *Manager) SetActivationPaused(ctx context.Context, p *principal.Principal, definitionID, activationID string, paused bool) (*ManagedDefinition, error) {
+	ref, providerName, provider, err := m.requireOwnedDefinitionExecutionRef(ctx, definitionID, p)
 	if err != nil {
 		return nil, err
 	}
 	deployment, err := provider.SetWorkflowActivationPaused(ctx, coreworkflow.SetActivationPausedRequest{
-		DeploymentID: strings.TrimSpace(deploymentID),
+		DefinitionID: strings.TrimSpace(definitionID),
 		ActivationID: strings.TrimSpace(activationID),
 		Paused:       paused,
 	})
 	if err != nil {
 		return nil, err
 	}
-	if !deploymentMatchesExecutionRef(providerName, deployment, ref) {
+	if !definitionMatchesExecutionRef(providerName, deployment, ref) {
 		return nil, core.ErrNotFound
 	}
-	return &ManagedDeployment{ProviderName: providerName, Deployment: deployment, ExecutionRef: ref, provider: provider}, nil
-}
-
-func managedDefinitionMatchesUpsert(existing *ManagedDefinition, providerName string, target coreworkflow.Target) bool {
-	if existing == nil || existing.Definition == nil {
-		return false
-	}
-	if strings.TrimSpace(existing.ProviderName) != strings.TrimSpace(providerName) {
-		return false
-	}
-	return coreworkflow.TargetsEqual(existing.Definition.Target, target)
+	return &ManagedDefinition{ProviderName: providerName, Definition: deployment, ExecutionRef: ref, provider: provider}, nil
 }
 
 func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req coreworkflow.ListRunsRequest) (*ListRunsResponse, error) {
@@ -1282,77 +1076,36 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	if strings.TrimSpace(req.DeploymentID) != "" {
-		return m.startDeploymentRun(ctx, p, req)
+	if strings.TrimSpace(req.DefinitionID) != "" {
+		return m.startDefinitionRun(ctx, p, req)
 	}
-	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
-	if err != nil {
-		return nil, err
-	}
-	audit.setProvider(providerName)
-	audit.setWorkflowTarget(target)
-	plan, err := m.compileWorkflowTargetPlan(ctx, provider, target)
-	if err != nil {
-		return nil, err
-	}
-
-	executionRefID := newRunExecutionRefID(workflowCreateIdempotencyScope(p, req.CallerPluginName, req.IdempotencyKey), req.WorkflowKey)
-	ref, createdRef, err := m.putRunExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID, req.Permissions, plan)
-	if err != nil {
-		return nil, err
-	}
-	binding := workflowPlanBinding(ref, plan, req.IdempotencyKey, false)
-	run, err := provider.StartRun(ctx, coreworkflow.StartRunRequest{
-		Target:         target,
-		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		WorkflowKey:    strings.TrimSpace(req.WorkflowKey),
-		CreatedBy:      workflowActorFromPrincipal(p),
-		ExecutionRef:   executionRefID,
-		PlanBinding:    binding,
-	})
-	if err != nil {
-		if createdRef {
-			m.revokeExecutionRef(ctx, ref)
-		}
-		return nil, err
-	}
-	if !runMatchesExecutionRef(providerName, run, ref) || strings.TrimSpace(ref.ID) != strings.TrimSpace(run.ExecutionRef) {
-		if createdRef {
-			m.revokeExecutionRef(ctx, ref)
-		}
-		return nil, core.ErrNotFound
-	}
-	return &ManagedRun{
-		ProviderName: providerName,
-		Run:          run,
-		ExecutionRef: ref,
-		provider:     provider,
-	}, nil
+	return nil, fmt.Errorf("%w: workflow runs must reference a workflow definition", invocation.ErrInvalidInvocation)
 }
 
-func (m *Manager) startDeploymentRun(ctx context.Context, p *principal.Principal, req RunStart) (*ManagedRun, error) {
-	ref, providerName, provider, err := m.requireOwnedDeploymentExecutionRef(ctx, req.DeploymentID, p)
+func (m *Manager) startDefinitionRun(ctx context.Context, p *principal.Principal, req RunStart) (*ManagedRun, error) {
+	ref, providerName, provider, err := m.requireOwnedDefinitionExecutionRef(ctx, req.DefinitionID, p)
 	if err != nil {
 		return nil, err
 	}
 	if requestedProvider := strings.TrimSpace(req.ProviderName); requestedProvider != "" && requestedProvider != providerName {
-		return nil, core.ErrNotFound
+		return nil, invocation.ErrInvalidInvocation
 	}
-	deployment, err := provider.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: strings.TrimSpace(req.DeploymentID)})
+	deployment, err := provider.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: strings.TrimSpace(req.DefinitionID)})
 	if err != nil {
 		return nil, err
 	}
-	if !deploymentMatchesExecutionRef(providerName, deployment, ref) {
+	if !definitionMatchesExecutionRef(providerName, deployment, ref) {
 		return nil, core.ErrNotFound
 	}
-	generation := req.DeploymentGeneration
+	generation := req.DefinitionGeneration
 	if generation == 0 {
 		generation = deployment.Spec.Generation
 	}
-	binding := workflowDeploymentPlanBinding(ref, workflowTargetPlanFromDeployment(deployment, ref), req.IdempotencyKey, deployment.Spec.ID, generation)
+	plan := workflowTargetPlanFromDefinition(deployment, ref)
+	binding := workflowDefinitionBindingForDefinition(ref, plan, req.IdempotencyKey, deployment.Spec.ID, generation)
 	run, err := provider.StartRun(ctx, coreworkflow.StartRunRequest{
-		DeploymentID:         strings.TrimSpace(deployment.Spec.ID),
-		DeploymentGeneration: generation,
+		DefinitionID:         strings.TrimSpace(deployment.Spec.ID),
+		DefinitionGeneration: generation,
 		ActivationID:         strings.TrimSpace(req.ActivationID),
 		Target:               ref.Target,
 		Input:                maps.Clone(req.Input),
@@ -1360,7 +1113,7 @@ func (m *Manager) startDeploymentRun(ctx context.Context, p *principal.Principal
 		WorkflowKey:          strings.TrimSpace(req.WorkflowKey),
 		CreatedBy:            workflowActorFromPrincipal(p),
 		ExecutionRef:         strings.TrimSpace(ref.ID),
-		PlanBinding:          binding,
+		DefinitionBinding:    binding,
 	})
 	if err != nil {
 		return nil, err
@@ -1489,10 +1242,6 @@ func (m *Manager) SignalRun(ctx context.Context, p *principal.Principal, req Run
 
 func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart) (out *ManagedRunSignal, err error) {
 	phase := "validate_subject"
-	providerName := ""
-	var target coreworkflow.Target
-	executionRefID := ""
-	var targetAuthFailure *targetAuthorizationFailure
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationRunSignalOrStart)
 	audit.setCallerPlugin(req.CallerPluginName)
@@ -1507,12 +1256,9 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 				audit.setWorkflowTarget(out.ExecutionRef.Target)
 			}
 		}
-		if targetAuthFailure != nil {
-			audit.setWorkflowTargetAuthorizationFailure(target, *targetAuthFailure)
-		}
 		audit.finish(ctx, err)
 		if err != nil {
-			logWorkflowSignalOrStartFailure(ctx, req, phase, targetAuthFailure, err)
+			logWorkflowSignalOrStartFailure(ctx, req, phase, nil, err)
 		}
 	}()
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
@@ -1523,90 +1269,41 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	if workflowKey == "" {
 		return nil, ErrWorkflowKeyRequired
 	}
-	if strings.TrimSpace(req.DeploymentID) != "" {
+	if strings.TrimSpace(req.DefinitionID) != "" {
 		phase = "normalize_signal"
 		signal, err := m.normalizeSignal(req.Signal, p)
 		if err != nil {
 			return nil, err
 		}
-		return m.signalOrStartDeploymentRun(ctx, p, req, signal)
+		return m.signalOrStartDefinitionRun(ctx, p, req, signal)
 	}
-	phase = "resolve_provider_target"
-	var provider coreworkflow.Provider
-	providerName, provider, target, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
-	if err != nil {
-		return nil, err
-	}
-	audit.setProvider(providerName)
-	audit.setWorkflowTarget(target)
-	phase = "normalize_signal"
-	signal, err := m.normalizeSignal(req.Signal, p)
-	if err != nil {
-		return nil, err
-	}
-	phase = "authorize_target"
-	executionRefPermissions := m.executionRefPermissionsWithOverride(p, target, req.CallerPluginName, req.Permissions)
-	targetAuth := m.checkTargetAuthorization(ctx, executionRefPrincipal(p, executionRefPermissions), target)
-	if !targetAuth.allowed {
-		targetAuthFailure = &targetAuth.failure
-		return nil, core.ErrNotFound
-	}
-	phase = "derive_execution_ref"
-	executionRefID, err = signalOrStartExecutionRefID(providerName, workflowKey, target, p, req.CallerPluginName, executionRefPermissions)
-	if err != nil {
-		return nil, err
-	}
-	phase = "compile_target"
-	plan, err := m.compileWorkflowTargetPlan(ctx, provider, target)
-	if err != nil {
-		return nil, err
-	}
-	phase = "put_execution_ref"
-	ref, err := m.putSignalOrStartExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID, executionRefPermissions, plan)
-	if err != nil {
-		return nil, err
-	}
-	binding := workflowPlanBinding(ref, plan, req.IdempotencyKey, false)
-	phase = "provider_signal_or_start"
-	resp, err := provider.SignalOrStartRun(ctx, coreworkflow.SignalOrStartRunRequest{
-		WorkflowKey:    workflowKey,
-		Target:         target,
-		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
-		CreatedBy:      workflowActorFromPrincipal(p),
-		ExecutionRef:   executionRefID,
-		Signal:         signal,
-		PlanBinding:    binding,
-	})
-	if err != nil {
-		return nil, err
-	}
-	phase = "bind_response"
-	return m.managedSignalResponse(ctx, p, providerName, provider, resp, ref, signalTargetPrincipalExecutionRef)
+	phase = "validate_definition"
+	return nil, fmt.Errorf("%w: signal-or-start must reference a workflow definition", invocation.ErrInvalidInvocation)
 }
 
-func (m *Manager) signalOrStartDeploymentRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart, signal coreworkflow.Signal) (*ManagedRunSignal, error) {
-	ref, providerName, provider, err := m.requireOwnedDeploymentExecutionRef(ctx, req.DeploymentID, p)
+func (m *Manager) signalOrStartDefinitionRun(ctx context.Context, p *principal.Principal, req RunSignalOrStart, signal coreworkflow.Signal) (*ManagedRunSignal, error) {
+	ref, providerName, provider, err := m.requireOwnedDefinitionExecutionRef(ctx, req.DefinitionID, p)
 	if err != nil {
 		return nil, err
 	}
 	if requestedProvider := strings.TrimSpace(req.ProviderName); requestedProvider != "" && requestedProvider != providerName {
 		return nil, core.ErrNotFound
 	}
-	deployment, err := provider.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: strings.TrimSpace(req.DeploymentID)})
+	deployment, err := provider.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: strings.TrimSpace(req.DefinitionID)})
 	if err != nil {
 		return nil, err
 	}
-	if !deploymentMatchesExecutionRef(providerName, deployment, ref) {
+	if !definitionMatchesExecutionRef(providerName, deployment, ref) {
 		return nil, core.ErrNotFound
 	}
-	generation := req.DeploymentGeneration
+	generation := req.DefinitionGeneration
 	if generation == 0 {
 		generation = deployment.Spec.Generation
 	}
-	binding := workflowDeploymentPlanBinding(ref, workflowTargetPlanFromDeployment(deployment, ref), req.IdempotencyKey, deployment.Spec.ID, generation)
+	binding := workflowDefinitionBindingForDefinition(ref, workflowTargetPlanFromDefinition(deployment, ref), req.IdempotencyKey, deployment.Spec.ID, generation)
 	resp, err := provider.SignalOrStartRun(ctx, coreworkflow.SignalOrStartRunRequest{
-		DeploymentID:         strings.TrimSpace(deployment.Spec.ID),
-		DeploymentGeneration: generation,
+		DefinitionID:         strings.TrimSpace(deployment.Spec.ID),
+		DefinitionGeneration: generation,
 		ActivationID:         strings.TrimSpace(req.ActivationID),
 		WorkflowKey:          strings.TrimSpace(req.WorkflowKey),
 		Target:               ref.Target,
@@ -1615,7 +1312,7 @@ func (m *Manager) signalOrStartDeploymentRun(ctx context.Context, p *principal.P
 		CreatedBy:            workflowActorFromPrincipal(p),
 		ExecutionRef:         strings.TrimSpace(ref.ID),
 		Signal:               signal,
-		PlanBinding:          binding,
+		DefinitionBinding:    binding,
 	})
 	if err != nil {
 		return nil, err
@@ -1684,7 +1381,7 @@ func workflowManagerErrorType(err error) string {
 	case errors.Is(err, ErrWorkflowNotConfigured):
 		return "workflow_not_configured"
 	case errors.Is(err, ErrExecutionRefsNotConfigured):
-		return "workflow_execution_refs_not_configured"
+		return "workflow_execution_ref_store_not_configured"
 	case errors.Is(err, ErrWorkflowSubjectRequired):
 		return "workflow_subject_required"
 	case errors.Is(err, ErrDuplicateExecutionRefs):
@@ -1830,14 +1527,14 @@ func (m *Manager) ListSchedules(ctx context.Context, p *principal.Principal) ([]
 		if err != nil {
 			return nil, err
 		}
-		deployment, err := provider.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: scheduleID})
+		deployment, err := provider.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: scheduleID})
 		if err != nil {
 			if isWorkflowProviderNotFound(err) {
 				continue
 			}
 			return nil, err
 		}
-		schedule := workflowScheduleFromDeployment(deployment, ref)
+		schedule := workflowScheduleFromDefinition(deployment, ref)
 		if !scheduleMatchesExecutionRef(ref.ProviderName, schedule, ref) {
 			continue
 		}
@@ -1902,7 +1599,7 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 				if err := m.validateExistingProviderSelection(req.ProviderName, existing.ProviderName); err != nil {
 					return nil, err
 				}
-				if !managedScheduleMatchesDefinitionUpsert(existing, req) {
+				if !managedScheduleMatchesDefinitionBackedSchedule(existing, req) {
 					return nil, fmt.Errorf("%w: workflow schedule idempotency key reused with different request", invocation.ErrInvalidInvocation)
 				}
 				return existing, nil
@@ -1929,24 +1626,23 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 		return nil, err
 	}
 	executionRefID := newScheduleExecutionRefID(scheduleID, idempotencyScope)
-	ref, err := m.putExecutionRefWithPermissionsAndPlan(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, scheduleUpsertSourceDefinitionID(req), req.Permissions, plan)
+	ref, err := m.buildExecutionRefWithPermissionsAndPlan(executionRefID, providerName, target, p, req.CallerPluginName, scheduleUpsertSourceDefinitionID(req), req.Permissions, plan)
 	if err != nil {
 		return nil, err
 	}
-	binding := workflowPlanBinding(ref, plan, req.IdempotencyKey, false)
-	deployment, err := provider.ApplyWorkflowDeployment(ctx, coreworkflow.ApplyDeploymentRequest{
-		Spec:      workflowScheduleDeploymentSpec(scheduleID, target, req),
-		Plan:      workflowTargetPlanResponse(plan),
-		Binding:   binding,
-		RequestID: strings.TrimSpace(req.IdempotencyKey),
+	binding := workflowDefinitionBinding(ref, plan, req.IdempotencyKey, false)
+	deployment, err := provider.ApplyWorkflowDefinition(ctx, coreworkflow.ApplyDefinitionRequest{
+		Spec:         workflowScheduleDefinitionSpec(scheduleID, target, req),
+		Binding:      binding,
+		ExecutionRef: ref,
+		RequestID:    strings.TrimSpace(req.IdempotencyKey),
 	})
 	if err != nil {
-		m.revokeExecutionRef(ctx, ref)
 		return nil, err
 	}
 	return &ManagedSchedule{
 		ProviderName: providerName,
-		Schedule:     workflowScheduleFromDeployment(deployment, ref),
+		Schedule:     workflowScheduleFromDefinition(deployment, ref),
 		ExecutionRef: ref,
 		provider:     provider,
 	}, nil
@@ -1971,7 +1667,7 @@ func managedScheduleMatchesUpsert(existing *ManagedSchedule, providerName string
 	return coreworkflow.TargetsEqual(existing.Schedule.Target, target)
 }
 
-func managedScheduleMatchesDefinitionUpsert(existing *ManagedSchedule, req ScheduleUpsert) bool {
+func managedScheduleMatchesDefinitionBackedSchedule(existing *ManagedSchedule, req ScheduleUpsert) bool {
 	if existing == nil || existing.Schedule == nil || existing.ExecutionRef == nil {
 		return false
 	}
@@ -2033,40 +1729,35 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 	}
 
 	executionRefID := scheduleExecutionRefID(strings.TrimSpace(existing.Schedule.ID))
-	nextRef, err := m.putExecutionRefWithPermissionsAndPlan(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName, scheduleUpsertSourceDefinitionID(req), req.Permissions, plan)
+	nextRef, err := m.buildExecutionRefWithPermissionsAndPlan(executionRefID, nextProviderName, target, p, req.CallerPluginName, scheduleUpsertSourceDefinitionID(req), req.Permissions, plan)
 	if err != nil {
 		return nil, err
 	}
-	binding := workflowPlanBinding(nextRef, plan, req.IdempotencyKey, false)
-	deployment, err := nextProvider.ApplyWorkflowDeployment(ctx, coreworkflow.ApplyDeploymentRequest{
-		Spec:      workflowScheduleDeploymentSpec(strings.TrimSpace(existing.Schedule.ID), target, req),
-		Plan:      workflowTargetPlanResponse(plan),
-		Binding:   binding,
-		RequestID: strings.TrimSpace(req.IdempotencyKey),
+	binding := workflowDefinitionBinding(nextRef, plan, req.IdempotencyKey, false)
+	deployment, err := nextProvider.ApplyWorkflowDefinition(ctx, coreworkflow.ApplyDefinitionRequest{
+		Spec:         workflowScheduleDefinitionSpec(strings.TrimSpace(existing.Schedule.ID), target, req),
+		Binding:      binding,
+		ExecutionRef: nextRef,
+		RequestID:    strings.TrimSpace(req.IdempotencyKey),
 	})
 	if err != nil {
-		m.revokeExecutionRef(ctx, nextRef)
 		return nil, err
 	}
 	if strings.TrimSpace(existing.ProviderName) != nextProviderName {
-		if err := existingProvider(existing).DeleteWorkflowDeployment(ctx, coreworkflow.DeleteDeploymentRequest{
-			DeploymentID: strings.TrimSpace(existing.Schedule.ID),
+		if err := existingProvider(existing).DeleteWorkflowDefinition(ctx, coreworkflow.DeleteDefinitionRequest{
+			DefinitionID: strings.TrimSpace(existing.Schedule.ID),
 			RequestID:    strings.TrimSpace(req.IdempotencyKey),
 		}); err != nil {
-			_ = nextProvider.DeleteWorkflowDeployment(ctx, coreworkflow.DeleteDeploymentRequest{
-				DeploymentID: strings.TrimSpace(existing.Schedule.ID),
+			_ = nextProvider.DeleteWorkflowDefinition(ctx, coreworkflow.DeleteDefinitionRequest{
+				DefinitionID: strings.TrimSpace(existing.Schedule.ID),
 				RequestID:    strings.TrimSpace(req.IdempotencyKey),
 			})
-			m.revokeExecutionRef(ctx, nextRef)
 			return nil, err
 		}
 	}
-	if existing.ExecutionRef != nil && existing.ExecutionRef.ID != "" && existing.ExecutionRef.ID != executionRefID {
-		m.revokeExecutionRef(ctx, existing.ExecutionRef)
-	}
 	return &ManagedSchedule{
 		ProviderName: nextProviderName,
-		Schedule:     workflowScheduleFromDeployment(deployment, nextRef),
+		Schedule:     workflowScheduleFromDefinition(deployment, nextRef),
 		ExecutionRef: nextRef,
 		provider:     nextProvider,
 	}, nil
@@ -2087,12 +1778,11 @@ func (m *Manager) DeleteSchedule(ctx context.Context, p *principal.Principal, sc
 	if value.ExecutionRef != nil {
 		audit.setWorkflowTarget(value.ExecutionRef.Target)
 	}
-	if err := existingProvider(value).DeleteWorkflowDeployment(ctx, coreworkflow.DeleteDeploymentRequest{
-		DeploymentID: strings.TrimSpace(value.Schedule.ID),
+	if err := existingProvider(value).DeleteWorkflowDefinition(ctx, coreworkflow.DeleteDefinitionRequest{
+		DefinitionID: strings.TrimSpace(value.Schedule.ID),
 	}); err != nil {
 		return err
 	}
-	m.revokeExecutionRef(ctx, value.ExecutionRef)
 	return nil
 }
 
@@ -2118,14 +1808,14 @@ func (m *Manager) PauseSchedule(ctx context.Context, p *principal.Principal, sch
 	if value.ExecutionRef != nil {
 		audit.setWorkflowTarget(value.ExecutionRef.Target)
 	}
-	deployment, err := existingProvider(value).SetWorkflowDeploymentPaused(ctx, coreworkflow.SetDeploymentPausedRequest{
-		DeploymentID: strings.TrimSpace(value.Schedule.ID),
+	deployment, err := existingProvider(value).SetWorkflowDefinitionPaused(ctx, coreworkflow.SetDefinitionPausedRequest{
+		DefinitionID: strings.TrimSpace(value.Schedule.ID),
 		Paused:       true,
 	})
 	if err != nil {
 		return nil, err
 	}
-	value.Schedule = workflowScheduleFromDeployment(deployment, value.ExecutionRef)
+	value.Schedule = workflowScheduleFromDefinition(deployment, value.ExecutionRef)
 	return value, nil
 }
 
@@ -2151,14 +1841,14 @@ func (m *Manager) ResumeSchedule(ctx context.Context, p *principal.Principal, sc
 	if value.ExecutionRef != nil {
 		audit.setWorkflowTarget(value.ExecutionRef.Target)
 	}
-	deployment, err := existingProvider(value).SetWorkflowDeploymentPaused(ctx, coreworkflow.SetDeploymentPausedRequest{
-		DeploymentID: strings.TrimSpace(value.Schedule.ID),
+	deployment, err := existingProvider(value).SetWorkflowDefinitionPaused(ctx, coreworkflow.SetDefinitionPausedRequest{
+		DefinitionID: strings.TrimSpace(value.Schedule.ID),
 		Paused:       false,
 	})
 	if err != nil {
 		return nil, err
 	}
-	value.Schedule = workflowScheduleFromDeployment(deployment, value.ExecutionRef)
+	value.Schedule = workflowScheduleFromDefinition(deployment, value.ExecutionRef)
 	return value, nil
 }
 
@@ -2180,14 +1870,14 @@ func (m *Manager) ListEventTriggers(ctx context.Context, p *principal.Principal)
 		if err != nil {
 			return nil, err
 		}
-		deployment, err := provider.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: triggerID})
+		deployment, err := provider.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: triggerID})
 		if err != nil {
 			if isWorkflowProviderNotFound(err) {
 				continue
 			}
 			return nil, err
 		}
-		trigger := workflowEventTriggerFromDeployment(deployment, ref)
+		trigger := workflowEventTriggerFromDefinition(deployment, ref)
 		if !eventTriggerMatchesExecutionRef(ref.ProviderName, trigger, ref) {
 			continue
 		}
@@ -2256,7 +1946,7 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 				if err := m.validateExistingProviderSelection(req.ProviderName, existing.ProviderName); err != nil {
 					return nil, err
 				}
-				if !managedEventTriggerMatchesDefinitionUpsert(existing, match, req) {
+				if !managedEventTriggerMatchesDefinitionBackedTrigger(existing, match, req) {
 					return nil, fmt.Errorf("%w: workflow trigger idempotency key reused with different request", invocation.ErrInvalidInvocation)
 				}
 				return existing, nil
@@ -2283,24 +1973,23 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 		return nil, err
 	}
 	executionRefID := newEventTriggerExecutionRefID(triggerID, idempotencyScope)
-	ref, err := m.putExecutionRefWithPermissionsAndPlan(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID, req.Permissions, plan)
+	ref, err := m.buildExecutionRefWithPermissionsAndPlan(executionRefID, providerName, target, p, req.CallerPluginName, req.DefinitionID, req.Permissions, plan)
 	if err != nil {
 		return nil, err
 	}
-	binding := workflowPlanBinding(ref, plan, req.IdempotencyKey, false)
-	deployment, err := provider.ApplyWorkflowDeployment(ctx, coreworkflow.ApplyDeploymentRequest{
-		Spec:      workflowEventTriggerDeploymentSpec(triggerID, target, match, req),
-		Plan:      workflowTargetPlanResponse(plan),
-		Binding:   binding,
-		RequestID: strings.TrimSpace(req.IdempotencyKey),
+	binding := workflowDefinitionBinding(ref, plan, req.IdempotencyKey, false)
+	deployment, err := provider.ApplyWorkflowDefinition(ctx, coreworkflow.ApplyDefinitionRequest{
+		Spec:         workflowEventTriggerDefinitionSpec(triggerID, target, match, req),
+		Binding:      binding,
+		ExecutionRef: ref,
+		RequestID:    strings.TrimSpace(req.IdempotencyKey),
 	})
 	if err != nil {
-		m.revokeExecutionRef(ctx, ref)
 		return nil, err
 	}
 	return &ManagedEventTrigger{
 		ProviderName: providerName,
-		Trigger:      workflowEventTriggerFromDeployment(deployment, ref),
+		Trigger:      workflowEventTriggerFromDefinition(deployment, ref),
 		ExecutionRef: ref,
 		provider:     provider,
 	}, nil
@@ -2322,7 +2011,7 @@ func managedEventTriggerMatchesUpsert(existing *ManagedEventTrigger, providerNam
 	return coreworkflow.TargetsEqual(existing.Trigger.Target, target)
 }
 
-func managedEventTriggerMatchesDefinitionUpsert(existing *ManagedEventTrigger, match coreworkflow.EventMatch, req EventTriggerUpsert) bool {
+func managedEventTriggerMatchesDefinitionBackedTrigger(existing *ManagedEventTrigger, match coreworkflow.EventMatch, req EventTriggerUpsert) bool {
 	if existing == nil || existing.Trigger == nil || existing.ExecutionRef == nil {
 		return false
 	}
@@ -2378,40 +2067,35 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 	}
 
 	executionRefID := eventTriggerExecutionRefID(strings.TrimSpace(existing.Trigger.ID))
-	nextRef, err := m.putExecutionRefWithPermissionsAndPlan(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName, req.DefinitionID, req.Permissions, plan)
+	nextRef, err := m.buildExecutionRefWithPermissionsAndPlan(executionRefID, nextProviderName, target, p, req.CallerPluginName, req.DefinitionID, req.Permissions, plan)
 	if err != nil {
 		return nil, err
 	}
-	binding := workflowPlanBinding(nextRef, plan, req.IdempotencyKey, false)
-	deployment, err := nextProvider.ApplyWorkflowDeployment(ctx, coreworkflow.ApplyDeploymentRequest{
-		Spec:      workflowEventTriggerDeploymentSpec(strings.TrimSpace(existing.Trigger.ID), target, match, req),
-		Plan:      workflowTargetPlanResponse(plan),
-		Binding:   binding,
-		RequestID: strings.TrimSpace(req.IdempotencyKey),
+	binding := workflowDefinitionBinding(nextRef, plan, req.IdempotencyKey, false)
+	deployment, err := nextProvider.ApplyWorkflowDefinition(ctx, coreworkflow.ApplyDefinitionRequest{
+		Spec:         workflowEventTriggerDefinitionSpec(strings.TrimSpace(existing.Trigger.ID), target, match, req),
+		Binding:      binding,
+		ExecutionRef: nextRef,
+		RequestID:    strings.TrimSpace(req.IdempotencyKey),
 	})
 	if err != nil {
-		m.revokeExecutionRef(ctx, nextRef)
 		return nil, err
 	}
 	if strings.TrimSpace(existing.ProviderName) != nextProviderName {
-		if err := existingEventTriggerProvider(existing).DeleteWorkflowDeployment(ctx, coreworkflow.DeleteDeploymentRequest{
-			DeploymentID: strings.TrimSpace(existing.Trigger.ID),
+		if err := existingEventTriggerProvider(existing).DeleteWorkflowDefinition(ctx, coreworkflow.DeleteDefinitionRequest{
+			DefinitionID: strings.TrimSpace(existing.Trigger.ID),
 			RequestID:    strings.TrimSpace(req.IdempotencyKey),
 		}); err != nil {
-			_ = nextProvider.DeleteWorkflowDeployment(ctx, coreworkflow.DeleteDeploymentRequest{
-				DeploymentID: strings.TrimSpace(existing.Trigger.ID),
+			_ = nextProvider.DeleteWorkflowDefinition(ctx, coreworkflow.DeleteDefinitionRequest{
+				DefinitionID: strings.TrimSpace(existing.Trigger.ID),
 				RequestID:    strings.TrimSpace(req.IdempotencyKey),
 			})
-			m.revokeExecutionRef(ctx, nextRef)
 			return nil, err
 		}
 	}
-	if existing.ExecutionRef != nil && existing.ExecutionRef.ID != "" && existing.ExecutionRef.ID != executionRefID {
-		m.revokeExecutionRef(ctx, existing.ExecutionRef)
-	}
 	return &ManagedEventTrigger{
 		ProviderName: nextProviderName,
-		Trigger:      workflowEventTriggerFromDeployment(deployment, nextRef),
+		Trigger:      workflowEventTriggerFromDefinition(deployment, nextRef),
 		ExecutionRef: nextRef,
 		provider:     nextProvider,
 	}, nil
@@ -2432,12 +2116,11 @@ func (m *Manager) DeleteEventTrigger(ctx context.Context, p *principal.Principal
 	if value.ExecutionRef != nil {
 		audit.setWorkflowTarget(value.ExecutionRef.Target)
 	}
-	if err := existingEventTriggerProvider(value).DeleteWorkflowDeployment(ctx, coreworkflow.DeleteDeploymentRequest{
-		DeploymentID: strings.TrimSpace(value.Trigger.ID),
+	if err := existingEventTriggerProvider(value).DeleteWorkflowDefinition(ctx, coreworkflow.DeleteDefinitionRequest{
+		DefinitionID: strings.TrimSpace(value.Trigger.ID),
 	}); err != nil {
 		return err
 	}
-	m.revokeExecutionRef(ctx, value.ExecutionRef)
 	return nil
 }
 
@@ -2463,14 +2146,14 @@ func (m *Manager) PauseEventTrigger(ctx context.Context, p *principal.Principal,
 	if value.ExecutionRef != nil {
 		audit.setWorkflowTarget(value.ExecutionRef.Target)
 	}
-	deployment, err := existingEventTriggerProvider(value).SetWorkflowDeploymentPaused(ctx, coreworkflow.SetDeploymentPausedRequest{
-		DeploymentID: strings.TrimSpace(value.Trigger.ID),
+	deployment, err := existingEventTriggerProvider(value).SetWorkflowDefinitionPaused(ctx, coreworkflow.SetDefinitionPausedRequest{
+		DefinitionID: strings.TrimSpace(value.Trigger.ID),
 		Paused:       true,
 	})
 	if err != nil {
 		return nil, err
 	}
-	value.Trigger = workflowEventTriggerFromDeployment(deployment, value.ExecutionRef)
+	value.Trigger = workflowEventTriggerFromDefinition(deployment, value.ExecutionRef)
 	return value, nil
 }
 
@@ -2496,14 +2179,14 @@ func (m *Manager) ResumeEventTrigger(ctx context.Context, p *principal.Principal
 	if value.ExecutionRef != nil {
 		audit.setWorkflowTarget(value.ExecutionRef.Target)
 	}
-	deployment, err := existingEventTriggerProvider(value).SetWorkflowDeploymentPaused(ctx, coreworkflow.SetDeploymentPausedRequest{
-		DeploymentID: strings.TrimSpace(value.Trigger.ID),
+	deployment, err := existingEventTriggerProvider(value).SetWorkflowDefinitionPaused(ctx, coreworkflow.SetDefinitionPausedRequest{
+		DefinitionID: strings.TrimSpace(value.Trigger.ID),
 		Paused:       false,
 	})
 	if err != nil {
 		return nil, err
 	}
-	value.Trigger = workflowEventTriggerFromDeployment(deployment, value.ExecutionRef)
+	value.Trigger = workflowEventTriggerFromDefinition(deployment, value.ExecutionRef)
 	return value, nil
 }
 
@@ -2537,7 +2220,7 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 	if workflowTargetIsSet(target) {
 		return "", nil, coreworkflow.Target{}, fmt.Errorf("%w: workflow request must set either target or definition_id, not both", invocation.ErrInvalidInvocation)
 	}
-	definition, err := m.requireOwnedDefinition(ctx, definitionID, p)
+	definition, err := m.GetDefinition(ctx, p, definitionID)
 	if err != nil {
 		return "", nil, coreworkflow.Target{}, err
 	}
@@ -2550,7 +2233,7 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 			return "", nil, coreworkflow.Target{}, fmt.Errorf("%w: workflow definition %s belongs to provider %q, not %q", invocation.ErrInvalidInvocation, definitionID, definition.ProviderName, selectedProviderName)
 		}
 	}
-	resolvedTarget, err := m.resolveTarget(ctx, p, definition.Definition.Target, callerPluginName)
+	resolvedTarget, err := m.resolveTarget(ctx, p, definition.Definition.Spec.Target, callerPluginName)
 	if err != nil {
 		return "", nil, coreworkflow.Target{}, err
 	}
@@ -2643,7 +2326,7 @@ func (m *Manager) resolveStepsTarget(ctx context.Context, p *principal.Principal
 			step.Plugin = plugin
 		}
 		if step.Agent != nil {
-			agent, err := m.resolveWorkflowStepAgent(ctx, p, *step.Agent, fmt.Sprintf("target.steps[%d].agent", i))
+			agent, err := m.resolveWorkflowStepAgent(ctx, p, *step.Agent, callerPluginName, fmt.Sprintf("target.steps[%d].agent", i))
 			if err != nil {
 				return coreworkflow.Target{}, err
 			}
@@ -2763,7 +2446,7 @@ func (m *Manager) resolveWorkflowStepPlugin(ctx context.Context, p *principal.Pr
 	return &out, nil
 }
 
-func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Principal, agent coreworkflow.AgentTurn, fieldName string) (*coreworkflow.AgentTurn, error) {
+func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Principal, agent coreworkflow.AgentTurn, callerPluginName, fieldName string) (*coreworkflow.AgentTurn, error) {
 	if m == nil || m.agent == nil || m.agentManager == nil {
 		return nil, fmt.Errorf("%w: agent workflows are not configured", invocation.ErrInternal)
 	}
@@ -2793,6 +2476,20 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	agent.ModelOptions = maps.Clone(agent.ModelOptions)
 	if err := validateWorkflowStepAgentToolRefs(agent.ToolRefs, fieldName+".tools"); err != nil {
 		return nil, err
+	}
+	for i := range agent.ToolRefs {
+		tool := agent.ToolRefs[i]
+		if strings.TrimSpace(tool.System) != "" {
+			continue
+		}
+		pluginName := strings.TrimSpace(tool.Plugin)
+		operation := strings.TrimSpace(tool.Operation)
+		if !m.allowProvider(ctx, p, pluginName) || !m.allowOperation(ctx, p, pluginName, operation) {
+			return nil, invocation.ErrAuthorizationDenied
+		}
+		if !principal.AllowsOperationPermission(p, pluginName, operation) && !m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+			return nil, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, pluginName, operation)
+		}
 	}
 	return &agent, nil
 }
@@ -2856,11 +2553,11 @@ func (m *Manager) requireOwnedSchedule(ctx context.Context, scheduleID string, p
 	if err != nil {
 		return nil, err
 	}
-	deployment, err := provider.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: scheduleID})
+	deployment, err := provider.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: scheduleID})
 	if err != nil {
 		return nil, err
 	}
-	schedule := workflowScheduleFromDeployment(deployment, ref)
+	schedule := workflowScheduleFromDefinition(deployment, ref)
 	if !scheduleMatchesExecutionRef(ref.ProviderName, schedule, ref) {
 		return nil, core.ErrNotFound
 	}
@@ -2888,11 +2585,11 @@ func (m *Manager) requireOwnedEventTrigger(ctx context.Context, triggerID string
 	if err != nil {
 		return nil, err
 	}
-	deployment, err := provider.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: triggerID})
+	deployment, err := provider.GetWorkflowDefinition(ctx, coreworkflow.GetDefinitionRequest{DefinitionID: triggerID})
 	if err != nil {
 		return nil, err
 	}
-	trigger := workflowEventTriggerFromDeployment(deployment, ref)
+	trigger := workflowEventTriggerFromDefinition(deployment, ref)
 	if !eventTriggerMatchesExecutionRef(ref.ProviderName, trigger, ref) {
 		return nil, core.ErrNotFound
 	}
@@ -2904,25 +2601,31 @@ func (m *Manager) requireOwnedEventTrigger(ctx context.Context, triggerID string
 	}, nil
 }
 
-func (m *Manager) requireOwnedDeploymentExecutionRef(ctx context.Context, deploymentID string, p *principal.Principal) (*coreworkflow.ExecutionReference, string, coreworkflow.Provider, error) {
-	deploymentID = strings.TrimSpace(deploymentID)
-	if deploymentID == "" {
+func (m *Manager) requireOwnedDefinitionExecutionRef(ctx context.Context, definitionID string, p *principal.Principal) (*coreworkflow.ExecutionReference, string, coreworkflow.Provider, error) {
+	definitionID = strings.TrimSpace(definitionID)
+	if definitionID == "" {
 		return nil, "", nil, core.ErrNotFound
 	}
 	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	prefix := deploymentExecutionRefPrefix(deploymentID)
+	prefix := definitionExecutionRefPrefix(definitionID)
 	var match *coreworkflow.ExecutionReference
+	var matchGeneration int64
 	for _, ref := range refs {
 		if !strings.HasPrefix(strings.TrimSpace(ref.ID), prefix) {
 			continue
 		}
-		if match != nil {
-			return nil, "", nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, deploymentID)
+		generation := definitionGenerationFromExecutionRefID(ref.ID)
+		if match != nil && generation == matchGeneration {
+			return nil, "", nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, definitionID)
+		}
+		if match != nil && generation < matchGeneration {
+			continue
 		}
 		match = ref
+		matchGeneration = generation
 	}
 	if match == nil || !m.allowTarget(ctx, p, match.Target) {
 		return nil, "", nil, core.ErrNotFound
@@ -2966,39 +2669,6 @@ func (m *Manager) listOwnedExecutionRefs(ctx context.Context, p *principal.Princ
 		}
 	}
 	return out, nil
-}
-
-func (m *Manager) requireOwnedDefinition(ctx context.Context, definitionID string, p *principal.Principal) (*ManagedDefinition, error) {
-	definitionID = strings.TrimSpace(definitionID)
-	if definitionID == "" || !strings.HasPrefix(definitionID, workflowDefinitionExecutionRefBasePrefix) {
-		return nil, core.ErrNotFound
-	}
-	refs, err := m.listOwnedExecutionRefs(ctx, p, true)
-	if err != nil {
-		return nil, err
-	}
-	var match *coreworkflow.ExecutionReference
-	for _, ref := range refs {
-		if ref == nil || strings.TrimSpace(ref.ID) != definitionID {
-			continue
-		}
-		if match != nil {
-			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, definitionID)
-		}
-		match = ref
-	}
-	if match == nil || !m.allowTarget(ctx, p, match.Target) {
-		return nil, core.ErrNotFound
-	}
-	provider, err := m.resolveProviderByName(strings.TrimSpace(match.ProviderName))
-	if err != nil {
-		return nil, err
-	}
-	return &ManagedDefinition{
-		ProviderName: strings.TrimSpace(match.ProviderName),
-		Definition:   match,
-		provider:     provider,
-	}, nil
 }
 
 func (m *Manager) findOwnedExecutionRef(ctx context.Context, scheduleID string, p *principal.Principal) (*coreworkflow.ExecutionReference, error) {
@@ -3046,14 +2716,19 @@ func (m *Manager) findOwnedEventTriggerExecutionRef(ctx context.Context, trigger
 }
 
 func (m *Manager) compileWorkflowTargetPlan(ctx context.Context, provider coreworkflow.Provider, target coreworkflow.Target) (*workflowTargetPlan, error) {
-	return m.compileWorkflowDeploymentPlan(ctx, provider, coreworkflow.DeploymentSpec{
+	return m.compileWorkflowDefinitionPlan(ctx, provider, coreworkflow.DefinitionSpec{
 		Target:                   target,
 		WorkflowSemanticsVersion: workflowStepsSemanticsVersion,
 	})
 }
 
-func (m *Manager) compileWorkflowDeploymentPlan(ctx context.Context, provider coreworkflow.Provider, spec coreworkflow.DeploymentSpec) (*workflowTargetPlan, error) {
+func (m *Manager) compileWorkflowDefinitionPlan(ctx context.Context, provider coreworkflow.Provider, spec coreworkflow.DefinitionSpec) (*workflowTargetPlan, error) {
+	_ = ctx
+	_ = provider
 	target := spec.Target
+	if len(target.Steps) > 0 && strings.TrimSpace(spec.WorkflowSemanticsVersion) == "" {
+		spec.WorkflowSemanticsVersion = workflowStepsSemanticsVersion
+	}
 	targetDigest, err := coreworkflow.TargetFingerprint(target)
 	if err != nil {
 		return nil, fmt.Errorf("workflow target digest: %w", err)
@@ -3061,9 +2736,9 @@ func (m *Manager) compileWorkflowDeploymentPlan(ctx context.Context, provider co
 	if len(target.Steps) > 0 && strings.TrimSpace(spec.WorkflowSemanticsVersion) == "" {
 		spec.WorkflowSemanticsVersion = workflowStepsSemanticsVersion
 	}
-	specDigest, err := coreworkflow.DeploymentSpecDigest(spec)
+	specDigest, err := coreworkflow.DefinitionSpecDigest(spec)
 	if err != nil {
-		return nil, fmt.Errorf("workflow deployment spec digest: %w", err)
+		return nil, fmt.Errorf("workflow definition spec digest: %w", err)
 	}
 	plan := &workflowTargetPlan{
 		SpecDigest:   specDigest,
@@ -3074,58 +2749,16 @@ func (m *Manager) compileWorkflowDeploymentPlan(ctx context.Context, provider co
 	} else {
 		plan.ActionTableDigest = actionTableDigest
 	}
-	if len(target.Steps) == 0 {
-		return plan, nil
-	}
-	plan.SemanticsVersion = workflowStepsSemanticsVersion
-	deployments, ok := provider.(coreworkflow.DeploymentProvider)
-	if !ok {
-		return nil, fmt.Errorf("%w: workflow provider does not support target.steps", invocation.ErrInvalidInvocation)
-	}
-	resp, err := deployments.PlanWorkflow(ctx, coreworkflow.PlanWorkflowRequest{
-		Spec:                          spec,
-		SpecDigest:                    specDigest,
-		TargetDigest:                  targetDigest,
-		ActionTableDigest:             plan.ActionTableDigest,
-		TargetCanonicalizationVersion: workflowTargetCanonicalizationV1,
-		WorkflowSemanticsVersion:      workflowStepsSemanticsVersion,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if resp == nil {
-		return nil, fmt.Errorf("%w: workflow provider compile returned no plan", invocation.ErrInternal)
-	}
-	if len(resp.Unsupported) > 0 {
-		return nil, fmt.Errorf("%w: workflow provider does not support %s: %s", invocation.ErrInvalidInvocation, strings.TrimSpace(resp.Unsupported[0].Feature), strings.TrimSpace(resp.Unsupported[0].Reason))
-	}
-	if acceptedSpecDigest := strings.TrimSpace(resp.AcceptedSpecDigest); acceptedSpecDigest != "" && acceptedSpecDigest != specDigest {
-		return nil, fmt.Errorf("%w: workflow provider accepted spec digest %q does not match %q", invocation.ErrInternal, acceptedSpecDigest, specDigest)
-	}
-	plan.ProviderPlanID = strings.TrimSpace(resp.ProviderPlanID)
-	plan.ProviderPlanDigest = strings.TrimSpace(resp.ProviderPlanDigest)
-	if plan.ProviderPlanDigest == "" {
-		return nil, fmt.Errorf("%w: workflow provider compile returned empty provider_plan_digest", invocation.ErrInternal)
+	if len(target.Steps) > 0 {
+		plan.SemanticsVersion = workflowStepsSemanticsVersion
 	}
 	return plan, nil
 }
 
-func workflowTargetPlanResponse(plan *workflowTargetPlan) *coreworkflow.CompileTargetResponse {
-	if plan == nil {
-		return nil
-	}
-	return &coreworkflow.CompileTargetResponse{
-		AcceptedSpecDigest:    strings.TrimSpace(plan.SpecDigest),
-		ProviderPlanID:        strings.TrimSpace(plan.ProviderPlanID),
-		ProviderPlanDigest:    strings.TrimSpace(plan.ProviderPlanDigest),
-		SupportedFeatureFlags: nil,
-	}
-}
-
-func workflowDeploymentSpecForApply(spec coreworkflow.DeploymentSpec, idempotencyScope string) coreworkflow.DeploymentSpec {
+func workflowDefinitionSpecForApply(spec coreworkflow.DefinitionSpec, idempotencyScope string) coreworkflow.DefinitionSpec {
 	spec.ID = strings.TrimSpace(spec.ID)
 	if spec.ID == "" {
-		spec.ID = newDeploymentID(idempotencyScope)
+		spec.ID = newDefinitionID(idempotencyScope)
 	}
 	if spec.Generation == 0 {
 		spec.Generation = 1
@@ -3148,66 +2781,59 @@ func workflowDeploymentSpecForApply(spec coreworkflow.DeploymentSpec, idempotenc
 	return spec
 }
 
-func workflowPlanBinding(ref *coreworkflow.ExecutionReference, plan *workflowTargetPlan, idempotencyKey string, prepareOnly bool) *coreworkflow.PlanBinding {
+func workflowDefinitionBinding(ref *coreworkflow.ExecutionReference, plan *workflowTargetPlan, idempotencyKey string, prepareOnly bool) *coreworkflow.DefinitionBinding {
+	_ = prepareOnly
 	if ref == nil {
 		return nil
 	}
 	if plan == nil {
 		plan = &workflowTargetPlan{}
 	}
-	return &coreworkflow.PlanBinding{
-		ID:                     newWorkflowPlanBindingID(ref.ID, plan.ProviderPlanDigest, idempotencyKey),
-		ExecutionRef:           strings.TrimSpace(ref.ID),
-		ExecutionRefGeneration: ref.Generation,
-		ExecutionRefSeal:       strings.TrimSpace(ref.Seal),
-		SpecDigest:             strings.TrimSpace(plan.SpecDigest),
-		TargetDigest:           strings.TrimSpace(plan.TargetDigest),
-		ActionTableDigest:      strings.TrimSpace(plan.ActionTableDigest),
-		ProviderPlanID:         strings.TrimSpace(plan.ProviderPlanID),
-		ProviderPlanDigest:     strings.TrimSpace(plan.ProviderPlanDigest),
-		SemanticsVersion:       strings.TrimSpace(plan.SemanticsVersion),
-		IdempotencyKey:         strings.TrimSpace(idempotencyKey),
-		PrepareOnly:            prepareOnly,
+	return &coreworkflow.DefinitionBinding{
+		ID:                       newWorkflowDefinitionBindingID(ref.ID, idempotencyKey),
+		ExecutionRef:             strings.TrimSpace(ref.ID),
+		ExecutionRefGeneration:   ref.Generation,
+		SpecDigest:               strings.TrimSpace(plan.SpecDigest),
+		TargetDigest:             strings.TrimSpace(plan.TargetDigest),
+		ActionTableDigest:        strings.TrimSpace(plan.ActionTableDigest),
+		PermissionsDigest:        strings.TrimSpace(ref.PermissionsDigest),
+		WorkflowSemanticsVersion: strings.TrimSpace(plan.SemanticsVersion),
+		RequestID:                strings.TrimSpace(idempotencyKey),
 	}
 }
 
-func workflowDeploymentPlanBinding(ref *coreworkflow.ExecutionReference, plan *workflowTargetPlan, idempotencyKey, deploymentID string, deploymentGeneration int64) *coreworkflow.PlanBinding {
-	binding := workflowPlanBinding(ref, plan, idempotencyKey, false)
+func workflowDefinitionBindingForDefinition(ref *coreworkflow.ExecutionReference, plan *workflowTargetPlan, idempotencyKey, definitionID string, definitionGeneration int64) *coreworkflow.DefinitionBinding {
+	binding := workflowDefinitionBinding(ref, plan, idempotencyKey, false)
 	if binding == nil {
 		return nil
 	}
-	binding.DeploymentID = strings.TrimSpace(deploymentID)
-	binding.DeploymentGeneration = deploymentGeneration
+	binding.DefinitionID = strings.TrimSpace(definitionID)
+	binding.DefinitionGeneration = definitionGeneration
 	binding.RequestID = strings.TrimSpace(idempotencyKey)
 	return binding
 }
 
-func workflowTargetPlanFromDeployment(deployment *coreworkflow.Deployment, ref *coreworkflow.ExecutionReference) *workflowTargetPlan {
+func workflowTargetPlanFromDefinition(deployment *coreworkflow.Definition, ref *coreworkflow.ExecutionReference) *workflowTargetPlan {
 	plan := &workflowTargetPlan{}
 	if deployment != nil {
 		plan.SpecDigest = strings.TrimSpace(deployment.SpecDigest)
 		plan.TargetDigest = strings.TrimSpace(deployment.TargetDigest)
 		plan.ActionTableDigest = strings.TrimSpace(deployment.ActionTableDigest)
-		plan.ProviderPlanID = strings.TrimSpace(deployment.ProviderPlanID)
-		plan.ProviderPlanDigest = strings.TrimSpace(deployment.ProviderPlanDigest)
 	}
 	if ref != nil {
 		if plan.TargetDigest == "" {
 			plan.TargetDigest = strings.TrimSpace(ref.TargetDigest)
 		}
-		if plan.ProviderPlanDigest == "" {
-			plan.ProviderPlanDigest = strings.TrimSpace(ref.ProviderPlanDigest)
+		if plan.ActionTableDigest == "" {
+			plan.ActionTableDigest = strings.TrimSpace(ref.ActionTableDigest)
 		}
+		plan.PermissionsDigest = strings.TrimSpace(ref.PermissionsDigest)
 		plan.SemanticsVersion = strings.TrimSpace(ref.SemanticsVersion)
 	}
 	return plan
 }
 
-func (m *Manager) putExecutionRefWithPermissionsAndPlan(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission, plan *workflowTargetPlan) (*coreworkflow.ExecutionReference, error) {
-	store, err := workflowExecutionReferenceStore(providerName, provider)
-	if err != nil {
-		return nil, err
-	}
+func (m *Manager) buildExecutionRefWithPermissionsAndPlan(executionRefID, providerName string, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission, plan *workflowTargetPlan) (*coreworkflow.ExecutionReference, error) {
 	p = principal.Canonicalized(p)
 	subjectID := strings.TrimSpace(principalSubjectID(p))
 	if subjectID == "" {
@@ -3229,52 +2855,7 @@ func (m *Manager) putExecutionRefWithPermissionsAndPlan(ctx context.Context, exe
 		Permissions:         refPermissions,
 	}
 	applyWorkflowExecutionRefPlan(ref, plan, refPermissions)
-	return store.PutExecutionReference(ctx, ref)
-}
-
-func (m *Manager) putRunExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission, plan *workflowTargetPlan) (*coreworkflow.ExecutionReference, bool, error) {
-	store, err := workflowExecutionReferenceStore(providerName, provider)
-	if err != nil {
-		return nil, false, err
-	}
-	expectedPermissions := m.executionRefPermissionsWithOverride(p, target, callerPluginName, permissions)
-	existing, err := store.GetExecutionReference(ctx, executionRefID)
-	if err == nil {
-		existing = workflowExecutionRefForProvider(existing, providerName)
-		if !runExecutionRefMatches(existing, executionRefID, providerName, target, p, callerPluginName, sourceDefinitionID, expectedPermissions) {
-			return nil, false, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, executionRefID)
-		}
-		if executionRefActive(existing) {
-			return existing, false, nil
-		}
-	} else if !isWorkflowProviderNotFound(err) {
-		return nil, false, err
-	}
-	p = principal.Canonicalized(p)
-	subjectID := strings.TrimSpace(principalSubjectID(p))
-	if subjectID == "" {
-		return nil, false, ErrWorkflowSubjectRequired
-	}
-	actor := workflowActorFromPrincipal(p)
-	newRef := &coreworkflow.ExecutionReference{
-		ID:                  executionRefID,
-		ProviderName:        strings.TrimSpace(providerName),
-		Target:              target,
-		CallerPluginName:    strings.TrimSpace(callerPluginName),
-		SourceDefinitionID:  strings.TrimSpace(sourceDefinitionID),
-		SubjectID:           subjectID,
-		SubjectKind:         actor.SubjectKind,
-		DisplayName:         actor.DisplayName,
-		AuthSource:          actor.AuthSource,
-		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		Permissions:         expectedPermissions,
-	}
-	applyWorkflowExecutionRefPlan(newRef, plan, expectedPermissions)
-	ref, err := store.PutExecutionReference(ctx, newRef)
-	if err != nil {
-		return nil, false, err
-	}
-	return ref, true, nil
+	return ref, nil
 }
 
 func applyWorkflowExecutionRefPlan(ref *coreworkflow.ExecutionReference, plan *workflowTargetPlan, permissions []core.AccessPermission) {
@@ -3283,7 +2864,7 @@ func applyWorkflowExecutionRefPlan(ref *coreworkflow.ExecutionReference, plan *w
 	}
 	if plan != nil {
 		ref.TargetDigest = strings.TrimSpace(plan.TargetDigest)
-		ref.ProviderPlanDigest = strings.TrimSpace(plan.ProviderPlanDigest)
+		ref.ActionTableDigest = strings.TrimSpace(plan.ActionTableDigest)
 		ref.SemanticsVersion = strings.TrimSpace(plan.SemanticsVersion)
 	}
 	if strings.TrimSpace(ref.TargetDigest) == "" {
@@ -3292,31 +2873,17 @@ func applyWorkflowExecutionRefPlan(ref *coreworkflow.ExecutionReference, plan *w
 		}
 	}
 	ref.PermissionsDigest = workflowManagerSHA256(executionRefPermissionsScope(permissions))
+	if strings.TrimSpace(ref.ActionTableDigest) == "" {
+		if digest, err := coreworkflow.TargetActionTableDigest(ref.Target); err == nil {
+			ref.ActionTableDigest = digest
+		}
+	}
 	if strings.TrimSpace(ref.SemanticsVersion) == "" && len(ref.Target.Steps) > 0 {
 		ref.SemanticsVersion = workflowStepsSemanticsVersion
 	}
 	if ref.Generation == 0 {
 		ref.Generation = 1
 	}
-	ref.Seal = workflowExecutionRefSeal(ref)
-}
-
-func workflowExecutionRefSeal(ref *coreworkflow.ExecutionReference) string {
-	if ref == nil {
-		return ""
-	}
-	return workflowManagerSHA256(strings.Join([]string{
-		strings.TrimSpace(ref.ID),
-		strings.TrimSpace(ref.ProviderName),
-		strings.TrimSpace(ref.SubjectID),
-		strings.TrimSpace(ref.CredentialSubjectID),
-		strings.TrimSpace(ref.CallerPluginName),
-		strings.TrimSpace(ref.TargetDigest),
-		strings.TrimSpace(ref.ProviderPlanDigest),
-		strings.TrimSpace(ref.PermissionsDigest),
-		strings.TrimSpace(ref.SemanticsVersion),
-		fmt.Sprintf("%d", ref.Generation),
-	}, "\x00"))
 }
 
 func (m *Manager) executionRefPermissionsWithOverride(p *principal.Principal, target coreworkflow.Target, callerPluginName string, override []core.AccessPermission) []core.AccessPermission {
@@ -3332,31 +2899,6 @@ func (m *Manager) executionRefPermissionsWithOverride(p *principal.Principal, ta
 		return []core.AccessPermission{{Plugin: workflowNoProviderPermissionsPlugin}}
 	}
 	return out
-}
-
-func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission, plan *workflowTargetPlan) (*coreworkflow.ExecutionReference, error) {
-	store, err := workflowExecutionReferenceStore(providerName, provider)
-	if err != nil {
-		return nil, err
-	}
-	existing, err := store.GetExecutionReference(ctx, executionRefID)
-	if err == nil {
-		existing = workflowExecutionRefForProvider(existing, providerName)
-		if !signalOrStartExecutionRefMatches(existing, executionRefID, providerName, target, p, callerPluginName, permissions) {
-			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, executionRefID)
-		}
-		if executionRefActive(existing) {
-			return existing, nil
-		}
-	} else if !isWorkflowProviderNotFound(err) {
-		return nil, err
-	}
-
-	ref, err := m.putExecutionRefWithPermissionsAndPlan(ctx, executionRefID, providerName, provider, target, p, callerPluginName, sourceDefinitionID, permissions, plan)
-	if err != nil {
-		return nil, err
-	}
-	return ref, nil
 }
 
 func (m *Manager) executionRefPermissions(p *principal.Principal, target coreworkflow.Target, callerPluginName string) []core.AccessPermission {
@@ -3591,46 +3133,6 @@ func sortedWorkflowPermissionNames(values map[string]struct{}) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func (m *Manager) revokeExecutionRef(ctx context.Context, ref *coreworkflow.ExecutionReference) {
-	_, _ = m.revokeExecutionRefWithError(ctx, ref)
-}
-
-func (m *Manager) revokeExecutionRefWithError(ctx context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
-	if m == nil || ref == nil || strings.TrimSpace(ref.ID) == "" {
-		return nil, nil
-	}
-	providerName := strings.TrimSpace(ref.ProviderName)
-	provider, err := m.resolveProviderByName(providerName)
-	if err != nil {
-		return nil, err
-	}
-	store, err := workflowExecutionReferenceStore(providerName, provider)
-	if err != nil {
-		return nil, err
-	}
-	cloned := *ref
-	now := m.now().UTC().Truncate(time.Second)
-	cloned.RevokedAt = &now
-	return store.PutExecutionReference(ctx, &cloned)
-}
-
-func (m *Manager) restoreExecutionRef(ctx context.Context, ref *coreworkflow.ExecutionReference) {
-	if m == nil || ref == nil || strings.TrimSpace(ref.ID) == "" {
-		return
-	}
-	providerName := strings.TrimSpace(ref.ProviderName)
-	provider, err := m.resolveProviderByName(providerName)
-	if err != nil {
-		return
-	}
-	store, err := workflowExecutionReferenceStore(providerName, provider)
-	if err != nil {
-		return
-	}
-	cloned := *ref
-	_, _ = store.PutExecutionReference(ctx, &cloned)
 }
 
 func workflowExecutionReferenceStore(providerName string, provider coreworkflow.Provider) (coreworkflow.ExecutionReferenceStore, error) {
@@ -4048,14 +3550,14 @@ func eventTriggerMatchesExecutionRef(providerName string, trigger *coreworkflow.
 	return targetMatchesExecutionRef(trigger.Target, ref)
 }
 
-func deploymentMatchesExecutionRef(providerName string, deployment *coreworkflow.Deployment, ref *coreworkflow.ExecutionReference) bool {
+func definitionMatchesExecutionRef(providerName string, deployment *coreworkflow.Definition, ref *coreworkflow.ExecutionReference) bool {
 	if deployment == nil || ref == nil {
 		return false
 	}
 	if providerName = strings.TrimSpace(providerName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
 		return false
 	}
-	if deploymentID := strings.TrimSpace(deployment.Spec.ID); deploymentID != "" && deploymentIDFromExecutionRefID(ref.ID) != deploymentID {
+	if definitionID := strings.TrimSpace(deployment.Spec.ID); definitionID != "" && definitionIDFromExecutionRefID(ref.ID) != definitionID {
 		return false
 	}
 	return targetMatchesExecutionRef(deployment.Spec.Target, ref)
@@ -4068,7 +3570,24 @@ func runMatchesExecutionRef(providerName string, run *coreworkflow.Run, ref *cor
 	if providerName = strings.TrimSpace(providerName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
 		return false
 	}
-	return targetMatchesExecutionRef(run.Target, ref)
+	if executionRef := strings.TrimSpace(run.ExecutionRef); executionRef != "" && executionRef != strings.TrimSpace(ref.ID) {
+		return false
+	}
+	if workflowTargetIsSet(run.Target) {
+		return targetMatchesExecutionRef(run.Target, ref)
+	}
+	if targetDigest := strings.TrimSpace(run.TargetDigest); targetDigest != "" {
+		refTargetDigest := strings.TrimSpace(ref.TargetDigest)
+		if refTargetDigest == "" {
+			digest, err := coreworkflow.TargetFingerprint(ref.Target)
+			if err != nil {
+				return false
+			}
+			refTargetDigest = digest
+		}
+		return targetDigest == refTargetDigest
+	}
+	return false
 }
 
 func targetMatchesExecutionRef(target coreworkflow.Target, ref *coreworkflow.ExecutionReference) bool {
@@ -4146,14 +3665,6 @@ func principalSubjectID(p *principal.Principal) string {
 		return ""
 	}
 	return p.SubjectID
-}
-
-func newDefinitionID(idempotencyScope string) string {
-	idempotencyScope = strings.TrimSpace(idempotencyScope)
-	if idempotencyScope == "" {
-		return workflowDefinitionExecutionRefBasePrefix + uuid.NewString()
-	}
-	return workflowDefinitionExecutionRefBasePrefix + uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt.workflow.definition:"+idempotencyScope)).String()
 }
 
 func scheduleExecutionRefID(scheduleID string) string {
@@ -4238,37 +3749,53 @@ func eventTriggerIDFromExecutionRefID(executionRefID string) string {
 	return rest[:lastColon]
 }
 
-func newDeploymentID(idempotencyScope string) string {
+func newDefinitionID(idempotencyScope string) string {
 	idempotencyScope = strings.TrimSpace(idempotencyScope)
 	if idempotencyScope == "" {
 		return uuid.NewString()
 	}
-	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt.workflow.deployment:"+idempotencyScope)).String()
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt.workflow.definition:"+idempotencyScope)).String()
 }
 
-func newDeploymentExecutionRefID(deploymentID, idempotencyScope string) string {
-	idempotencyScope = strings.TrimSpace(idempotencyScope)
-	if idempotencyScope == "" {
-		return deploymentExecutionRefPrefix(deploymentID) + uuid.NewString()
+func newDefinitionExecutionRefID(definitionID string, generation int64) string {
+	if generation <= 0 {
+		generation = 1
 	}
-	return deploymentExecutionRefPrefix(deploymentID) + uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt.workflow.deployment.ref:"+strings.TrimSpace(deploymentID)+":"+idempotencyScope)).String()
+	return definitionExecutionRefPrefix(definitionID) + strconv.FormatInt(generation, 10)
 }
 
-func deploymentExecutionRefPrefix(deploymentID string) string {
-	return workflowDeploymentExecutionRefBasePrefix + strings.TrimSpace(deploymentID) + ":"
+func definitionExecutionRefPrefix(definitionID string) string {
+	return workflowDefinitionExecutionRefBasePrefix + strings.TrimSpace(definitionID) + ":"
 }
 
-func deploymentIDFromExecutionRefID(executionRefID string) string {
+func definitionIDFromExecutionRefID(executionRefID string) string {
 	trimmed := strings.TrimSpace(executionRefID)
-	if !strings.HasPrefix(trimmed, workflowDeploymentExecutionRefBasePrefix) {
+	if !strings.HasPrefix(trimmed, workflowDefinitionExecutionRefBasePrefix) {
 		return ""
 	}
-	rest := strings.TrimPrefix(trimmed, workflowDeploymentExecutionRefBasePrefix)
+	rest := strings.TrimPrefix(trimmed, workflowDefinitionExecutionRefBasePrefix)
 	lastColon := strings.LastIndex(rest, ":")
 	if lastColon <= 0 {
 		return ""
 	}
 	return rest[:lastColon]
+}
+
+func definitionGenerationFromExecutionRefID(executionRefID string) int64 {
+	trimmed := strings.TrimSpace(executionRefID)
+	if !strings.HasPrefix(trimmed, workflowDefinitionExecutionRefBasePrefix) {
+		return 0
+	}
+	rest := strings.TrimPrefix(trimmed, workflowDefinitionExecutionRefBasePrefix)
+	lastColon := strings.LastIndex(rest, ":")
+	if lastColon <= 0 || lastColon == len(rest)-1 {
+		return 0
+	}
+	generation, err := strconv.ParseInt(rest[lastColon+1:], 10, 64)
+	if err != nil || generation < 0 {
+		return 0
+	}
+	return generation
 }
 
 func runExecutionRefID(value string) string {
@@ -4288,14 +3815,13 @@ func newRunExecutionRefID(idempotencyScope, workflowKey string) string {
 	return runExecutionRefID(uuid.NewSHA1(uuid.NameSpaceURL, []byte(scope)).String())
 }
 
-func newWorkflowPlanBindingID(executionRefID, providerPlanDigest, idempotencyKey string) string {
+func newWorkflowDefinitionBindingID(executionRefID, requestID string) string {
 	scope := strings.Join([]string{
-		"gestalt.workflow.plan_binding.v1",
+		"gestalt.workflow.definition_binding.v1",
 		strings.TrimSpace(executionRefID),
-		strings.TrimSpace(providerPlanDigest),
-		strings.TrimSpace(idempotencyKey),
+		strings.TrimSpace(requestID),
 	}, "\x00")
-	return "wpb_" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(scope)).String()
+	return "wdb_" + uuid.NewSHA1(uuid.NameSpaceURL, []byte(scope)).String()
 }
 
 func signalOrStartExecutionRefID(providerName, workflowKey string, target coreworkflow.Target, p *principal.Principal, callerPluginName string, permissions []core.AccessPermission) (string, error) {
@@ -4426,8 +3952,8 @@ func existingEventTriggerProvider(value *ManagedEventTrigger) coreworkflow.Provi
 	return value.provider
 }
 
-func workflowScheduleDeploymentSpec(scheduleID string, target coreworkflow.Target, req ScheduleUpsert) coreworkflow.DeploymentSpec {
-	return coreworkflow.DeploymentSpec{
+func workflowScheduleDefinitionSpec(scheduleID string, target coreworkflow.Target, req ScheduleUpsert) coreworkflow.DefinitionSpec {
+	return coreworkflow.DefinitionSpec{
 		ID:                       strings.TrimSpace(scheduleID),
 		Generation:               1,
 		Target:                   target,
@@ -4446,8 +3972,8 @@ func workflowScheduleDeploymentSpec(scheduleID string, target coreworkflow.Targe
 	}
 }
 
-func workflowEventTriggerDeploymentSpec(triggerID string, target coreworkflow.Target, match coreworkflow.EventMatch, req EventTriggerUpsert) coreworkflow.DeploymentSpec {
-	return coreworkflow.DeploymentSpec{
+func workflowEventTriggerDefinitionSpec(triggerID string, target coreworkflow.Target, match coreworkflow.EventMatch, req EventTriggerUpsert) coreworkflow.DefinitionSpec {
+	return coreworkflow.DefinitionSpec{
 		ID:                       strings.TrimSpace(triggerID),
 		Generation:               1,
 		Target:                   target,
@@ -4465,7 +3991,7 @@ func workflowEventTriggerDeploymentSpec(triggerID string, target coreworkflow.Ta
 	}
 }
 
-func workflowScheduleFromDeployment(deployment *coreworkflow.Deployment, ref *coreworkflow.ExecutionReference) *coreworkflow.Schedule {
+func workflowScheduleFromDefinition(deployment *coreworkflow.Definition, ref *coreworkflow.ExecutionReference) *coreworkflow.Schedule {
 	if deployment == nil {
 		return nil
 	}
@@ -4485,7 +4011,7 @@ func workflowScheduleFromDeployment(deployment *coreworkflow.Deployment, ref *co
 		Cron:         strings.TrimSpace(activation.Schedule.Cron),
 		Timezone:     strings.TrimSpace(activation.Schedule.Timezone),
 		Target:       spec.Target,
-		Paused:       spec.Paused || activation.Paused || deployment.Status == coreworkflow.DeploymentStatusPaused,
+		Paused:       spec.Paused || activation.Paused || deployment.Status == coreworkflow.DefinitionStatusPaused,
 		CreatedAt:    deployment.CreatedAt,
 		UpdatedAt:    deployment.UpdatedAt,
 		CreatedBy:    workflowActorFromExecutionReference(ref),
@@ -4493,7 +4019,7 @@ func workflowScheduleFromDeployment(deployment *coreworkflow.Deployment, ref *co
 	}
 }
 
-func workflowEventTriggerFromDeployment(deployment *coreworkflow.Deployment, ref *coreworkflow.ExecutionReference) *coreworkflow.EventTrigger {
+func workflowEventTriggerFromDefinition(deployment *coreworkflow.Definition, ref *coreworkflow.ExecutionReference) *coreworkflow.EventTrigger {
 	if deployment == nil {
 		return nil
 	}
@@ -4512,7 +4038,7 @@ func workflowEventTriggerFromDeployment(deployment *coreworkflow.Deployment, ref
 		ID:           strings.TrimSpace(spec.ID),
 		Match:        activation.Event.Match,
 		Target:       spec.Target,
-		Paused:       spec.Paused || activation.Paused || deployment.Status == coreworkflow.DeploymentStatusPaused,
+		Paused:       spec.Paused || activation.Paused || deployment.Status == coreworkflow.DefinitionStatusPaused,
 		CreatedAt:    deployment.CreatedAt,
 		UpdatedAt:    deployment.UpdatedAt,
 		CreatedBy:    workflowActorFromExecutionReference(ref),
@@ -4520,7 +4046,7 @@ func workflowEventTriggerFromDeployment(deployment *coreworkflow.Deployment, ref
 	}
 }
 
-func workflowExecutionRefID(ref *coreworkflow.ExecutionReference, deployment *coreworkflow.Deployment) string {
+func workflowExecutionRefID(ref *coreworkflow.ExecutionReference, deployment *coreworkflow.Definition) string {
 	if ref != nil && strings.TrimSpace(ref.ID) != "" {
 		return strings.TrimSpace(ref.ID)
 	}

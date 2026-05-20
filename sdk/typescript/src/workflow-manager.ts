@@ -12,31 +12,31 @@ import type { Request } from "./api.ts";
 import { optionalStruct } from "./protocol-internal.ts";
 import type { JsonObjectInput } from "./protocol.ts";
 import {
-  managedWorkflowDeploymentFromProto,
+  managedWorkflowDefinitionFromProto,
   managedWorkflowRunFromProto,
   managedWorkflowRunSignalFromProto,
-  planWorkflowResponseFromProto,
-  workflowDeploymentSpecToProto,
+  workflowDefinitionSpecToProto,
   workflowEventToProto,
   workflowManagerDeliverEventResponseFromProto,
   workflowSignalToProto,
   type DeliverWorkflowEventResponse,
-  type ManagedWorkflowDeployment,
+  type ManagedWorkflowDefinition,
   type ManagedWorkflowRun,
   type ManagedWorkflowRunSignal,
-  type PlanWorkflowResponse,
-  type WorkflowDeploymentSpec,
+  type WorkflowDefinitionSpec,
   type WorkflowEvent,
   type WorkflowSignal,
 } from "./workflow.ts";
 
 /**
  * Environment variable containing the workflow-manager host-service target.
+ *
  * @internal
  */
 export const ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_MANAGER_SOCKET";
 /**
  * Environment variable containing the optional workflow-manager relay token.
+ *
  * @internal
  */
 export const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN =
@@ -44,46 +44,40 @@ export const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN =
 const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER =
   "x-gestalt-host-service-relay-token";
 
-export interface WorkflowManagerPlanDeployment {
+export interface WorkflowManagerApplyDefinition {
   providerName: string;
-  spec?: WorkflowDeploymentSpec | undefined;
+  spec?: WorkflowDefinitionSpec | undefined;
   idempotencyKey?: string | undefined;
 }
 
-export interface WorkflowManagerApplyDeployment {
-  providerName: string;
-  spec?: WorkflowDeploymentSpec | undefined;
-  idempotencyKey?: string | undefined;
+export interface WorkflowManagerGetDefinition {
+  definitionId: string;
 }
 
-export interface WorkflowManagerGetDeployment {
-  deploymentId: string;
-}
-
-export interface WorkflowManagerListDeployments {
+export interface WorkflowManagerListDefinitions {
   providerName: string;
 }
 
-export interface WorkflowManagerDeleteDeployment {
-  deploymentId: string;
+export interface WorkflowManagerDeleteDefinition {
+  definitionId: string;
   generation?: bigint | number | undefined;
 }
 
-export interface WorkflowManagerSetDeploymentPaused {
-  deploymentId: string;
+export interface WorkflowManagerSetDefinitionPaused {
+  definitionId: string;
   paused: boolean;
 }
 
 export interface WorkflowManagerSetActivationPaused {
-  deploymentId: string;
+  definitionId: string;
   activationId: string;
   paused: boolean;
 }
 
 export interface WorkflowManagerStartRun {
   providerName: string;
-  deploymentId: string;
-  deploymentGeneration?: bigint | number | undefined;
+  definitionId: string;
+  definitionGeneration?: bigint | number | undefined;
   activationId?: string | undefined;
   workflowKey?: string | undefined;
   input?: JsonObjectInput | undefined;
@@ -97,8 +91,8 @@ export interface WorkflowManagerSignalRun {
 
 export interface WorkflowManagerSignalOrStartRun {
   providerName: string;
-  deploymentId: string;
-  deploymentGeneration?: bigint | number | undefined;
+  definitionId: string;
+  definitionGeneration?: bigint | number | undefined;
   activationId?: string | undefined;
   workflowKey?: string | undefined;
   input?: JsonObjectInput | undefined;
@@ -118,7 +112,7 @@ export interface WorkflowManagerDeliverEvent {
 }
 
 /**
- * Client for deploying and controlling durable workflows.
+ * Client for defining and controlling durable workflows.
  *
  * The constructor accepts either a Gestalt request or an invocation token. Each
  * manager call forwards that token to the host service. When constructed from a
@@ -154,69 +148,56 @@ export class WorkflowManager {
     this.client = createClient(WorkflowManagerHostService, transport);
   }
 
-  async planDeployment(
-    request: WorkflowManagerPlanDeployment,
-  ): Promise<PlanWorkflowResponse> {
-    return planWorkflowResponseFromProto(
-      await this.client.planDeployment({
+  async applyDefinition(
+    request: WorkflowManagerApplyDefinition,
+  ): Promise<ManagedWorkflowDefinition> {
+    return managedWorkflowDefinitionFromProto(
+      await this.client.applyDefinition({
         providerName: request.providerName,
-        spec: workflowDeploymentSpecToProto(request.spec),
+        spec: workflowDefinitionSpecToProto(request.spec),
         invocationToken: this.invocationToken,
         idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
       }),
     );
   }
 
-  async applyDeployment(
-    request: WorkflowManagerApplyDeployment,
-  ): Promise<ManagedWorkflowDeployment> {
-    return managedWorkflowDeploymentFromProto(
-      await this.client.applyDeployment({
-        providerName: request.providerName,
-        spec: workflowDeploymentSpecToProto(request.spec),
-        invocationToken: this.invocationToken,
-        idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
-      }),
-    );
-  }
-
-  async getDeployment(
-    request: WorkflowManagerGetDeployment,
-  ): Promise<ManagedWorkflowDeployment> {
-    return managedWorkflowDeploymentFromProto(
-      await this.client.getDeployment({
-        deploymentId: request.deploymentId,
+  async getDefinition(
+    request: WorkflowManagerGetDefinition,
+  ): Promise<ManagedWorkflowDefinition> {
+    return managedWorkflowDefinitionFromProto(
+      await this.client.getDefinition({
+        definitionId: request.definitionId,
         invocationToken: this.invocationToken,
       }),
     );
   }
 
-  async listDeployments(
-    request: WorkflowManagerListDeployments,
-  ): Promise<readonly ManagedWorkflowDeployment[]> {
-    const response = await this.client.listDeployments({
+  async listDefinitions(
+    request: WorkflowManagerListDefinitions,
+  ): Promise<readonly ManagedWorkflowDefinition[]> {
+    const response = await this.client.listDefinitions({
       providerName: request.providerName,
       invocationToken: this.invocationToken,
     });
-    return response.deployments.map(managedWorkflowDeploymentFromProto);
+    return response.definitions.map(managedWorkflowDefinitionFromProto);
   }
 
-  async deleteDeployment(
-    request: WorkflowManagerDeleteDeployment,
+  async deleteDefinition(
+    request: WorkflowManagerDeleteDefinition,
   ): Promise<void> {
-    await this.client.deleteDeployment({
-      deploymentId: request.deploymentId,
+    await this.client.deleteDefinition({
+      definitionId: request.definitionId,
       generation: BigInt(request.generation ?? 0),
       invocationToken: this.invocationToken,
     });
   }
 
-  async setDeploymentPaused(
-    request: WorkflowManagerSetDeploymentPaused,
-  ): Promise<ManagedWorkflowDeployment> {
-    return managedWorkflowDeploymentFromProto(
-      await this.client.setDeploymentPaused({
-        deploymentId: request.deploymentId,
+  async setDefinitionPaused(
+    request: WorkflowManagerSetDefinitionPaused,
+  ): Promise<ManagedWorkflowDefinition> {
+    return managedWorkflowDefinitionFromProto(
+      await this.client.setDefinitionPaused({
+        definitionId: request.definitionId,
         paused: request.paused,
         invocationToken: this.invocationToken,
       }),
@@ -225,10 +206,10 @@ export class WorkflowManager {
 
   async setActivationPaused(
     request: WorkflowManagerSetActivationPaused,
-  ): Promise<ManagedWorkflowDeployment> {
-    return managedWorkflowDeploymentFromProto(
+  ): Promise<ManagedWorkflowDefinition> {
+    return managedWorkflowDefinitionFromProto(
       await this.client.setActivationPaused({
-        deploymentId: request.deploymentId,
+        definitionId: request.definitionId,
         activationId: request.activationId,
         paused: request.paused,
         invocationToken: this.invocationToken,
@@ -239,14 +220,15 @@ export class WorkflowManager {
   async startRun(
     request: WorkflowManagerStartRun,
   ): Promise<ManagedWorkflowRun> {
+    const input = optionalStruct(request.input);
     return managedWorkflowRunFromProto(
       await this.client.startRun({
         providerName: request.providerName,
-        deploymentId: request.deploymentId,
-        deploymentGeneration: BigInt(request.deploymentGeneration ?? 0),
+        definitionId: request.definitionId,
+        definitionGeneration: BigInt(request.definitionGeneration ?? 0),
         activationId: request.activationId ?? "",
         workflowKey: request.workflowKey ?? "",
-        input: optionalStruct(request.input),
+        ...(input !== undefined ? { input } : {}),
         idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
         invocationToken: this.invocationToken,
       }),
@@ -268,14 +250,15 @@ export class WorkflowManager {
   async signalOrStartRun(
     request: WorkflowManagerSignalOrStartRun,
   ): Promise<ManagedWorkflowRunSignal> {
+    const input = optionalStruct(request.input);
     return managedWorkflowRunSignalFromProto(
       await this.client.signalOrStartRun({
         providerName: request.providerName,
-        deploymentId: request.deploymentId,
-        deploymentGeneration: BigInt(request.deploymentGeneration ?? 0),
+        definitionId: request.definitionId,
+        definitionGeneration: BigInt(request.definitionGeneration ?? 0),
         activationId: request.activationId ?? "",
         workflowKey: request.workflowKey ?? "",
-        input: optionalStruct(request.input),
+        ...(input !== undefined ? { input } : {}),
         idempotencyKey: request.idempotencyKey?.trim() || this.idempotencyKey,
         signal: workflowSignalToProto(request.signal),
         invocationToken: this.invocationToken,

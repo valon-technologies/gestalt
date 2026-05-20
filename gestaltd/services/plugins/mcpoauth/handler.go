@@ -16,7 +16,7 @@ const discoveryCacheTTL = 24 * time.Hour
 
 type HandlerConfig struct {
 	MCPURL      string
-	Store       RegistrationStore // nil for non-SQL deployments
+	Store       RegistrationStore // nil for non-SQL definitions
 	RedirectURL string
 
 	// Static overrides: if set, skip DCR and use these directly.

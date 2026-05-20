@@ -35,40 +35,35 @@ class WorkflowProviderStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.PlanWorkflow = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/PlanWorkflow',
-                request_serializer=v1_dot_workflow__pb2.PlanWorkflowRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.PlanWorkflowResponse.FromString,
+        self.ApplyWorkflowDefinition = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/ApplyWorkflowDefinition',
+                request_serializer=v1_dot_workflow__pb2.ApplyWorkflowDefinitionRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.WorkflowDefinition.FromString,
                 _registered_method=True)
-        self.ApplyWorkflowDeployment = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/ApplyWorkflowDeployment',
-                request_serializer=v1_dot_workflow__pb2.ApplyWorkflowDeploymentRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.WorkflowDeployment.FromString,
+        self.GetWorkflowDefinition = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/GetWorkflowDefinition',
+                request_serializer=v1_dot_workflow__pb2.GetWorkflowDefinitionRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.WorkflowDefinition.FromString,
                 _registered_method=True)
-        self.GetWorkflowDeployment = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/GetWorkflowDeployment',
-                request_serializer=v1_dot_workflow__pb2.GetWorkflowDeploymentRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.WorkflowDeployment.FromString,
+        self.ListWorkflowDefinitions = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/ListWorkflowDefinitions',
+                request_serializer=v1_dot_workflow__pb2.ListWorkflowDefinitionsRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.ListWorkflowDefinitionsResponse.FromString,
                 _registered_method=True)
-        self.ListWorkflowDeployments = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/ListWorkflowDeployments',
-                request_serializer=v1_dot_workflow__pb2.ListWorkflowDeploymentsRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ListWorkflowDeploymentsResponse.FromString,
-                _registered_method=True)
-        self.DeleteWorkflowDeployment = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/DeleteWorkflowDeployment',
-                request_serializer=v1_dot_workflow__pb2.DeleteWorkflowDeploymentRequest.SerializeToString,
+        self.DeleteWorkflowDefinition = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/DeleteWorkflowDefinition',
+                request_serializer=v1_dot_workflow__pb2.DeleteWorkflowDefinitionRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
-        self.SetWorkflowDeploymentPaused = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/SetWorkflowDeploymentPaused',
-                request_serializer=v1_dot_workflow__pb2.SetWorkflowDeploymentPausedRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.WorkflowDeployment.FromString,
+        self.SetWorkflowDefinitionPaused = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/SetWorkflowDefinitionPaused',
+                request_serializer=v1_dot_workflow__pb2.SetWorkflowDefinitionPausedRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.WorkflowDefinition.FromString,
                 _registered_method=True)
         self.SetWorkflowActivationPaused = channel.unary_unary(
                 '/gestalt.provider.v1.WorkflowProvider/SetWorkflowActivationPaused',
                 request_serializer=v1_dot_workflow__pb2.SetWorkflowActivationPausedRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.WorkflowDeployment.FromString,
+                response_deserializer=v1_dot_workflow__pb2.WorkflowDefinition.FromString,
                 _registered_method=True)
         self.StartWorkflowRun = channel.unary_unary(
                 '/gestalt.provider.v1.WorkflowProvider/StartWorkflowRun',
@@ -115,11 +110,6 @@ class WorkflowProviderStub(object):
                 request_serializer=v1_dot_workflow__pb2.GetWorkflowRunOutputRequest.SerializeToString,
                 response_deserializer=v1_dot_workflow__pb2.WorkflowRunOutput.FromString,
                 _registered_method=True)
-        self.PutExecutionReference = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowProvider/PutExecutionReference',
-                request_serializer=v1_dot_workflow__pb2.PutWorkflowExecutionReferenceRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.WorkflowExecutionReference.FromString,
-                _registered_method=True)
         self.GetExecutionReference = channel.unary_unary(
                 '/gestalt.provider.v1.WorkflowProvider/GetExecutionReference',
                 request_serializer=v1_dot_workflow__pb2.GetWorkflowExecutionReferenceRequest.SerializeToString,
@@ -135,37 +125,31 @@ class WorkflowProviderStub(object):
 class WorkflowProviderServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def PlanWorkflow(self, request, context):
+    def ApplyWorkflowDefinition(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ApplyWorkflowDeployment(self, request, context):
+    def GetWorkflowDefinition(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetWorkflowDeployment(self, request, context):
+    def ListWorkflowDefinitions(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ListWorkflowDeployments(self, request, context):
+    def DeleteWorkflowDefinition(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def DeleteWorkflowDeployment(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SetWorkflowDeploymentPaused(self, request, context):
+    def SetWorkflowDefinitionPaused(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -231,12 +215,6 @@ class WorkflowProviderServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def PutExecutionReference(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
     def GetExecutionReference(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -252,40 +230,35 @@ class WorkflowProviderServicer(object):
 
 def add_WorkflowProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'PlanWorkflow': grpc.unary_unary_rpc_method_handler(
-                    servicer.PlanWorkflow,
-                    request_deserializer=v1_dot_workflow__pb2.PlanWorkflowRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.PlanWorkflowResponse.SerializeToString,
+            'ApplyWorkflowDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.ApplyWorkflowDefinition,
+                    request_deserializer=v1_dot_workflow__pb2.ApplyWorkflowDefinitionRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.WorkflowDefinition.SerializeToString,
             ),
-            'ApplyWorkflowDeployment': grpc.unary_unary_rpc_method_handler(
-                    servicer.ApplyWorkflowDeployment,
-                    request_deserializer=v1_dot_workflow__pb2.ApplyWorkflowDeploymentRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.WorkflowDeployment.SerializeToString,
+            'GetWorkflowDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetWorkflowDefinition,
+                    request_deserializer=v1_dot_workflow__pb2.GetWorkflowDefinitionRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.WorkflowDefinition.SerializeToString,
             ),
-            'GetWorkflowDeployment': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetWorkflowDeployment,
-                    request_deserializer=v1_dot_workflow__pb2.GetWorkflowDeploymentRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.WorkflowDeployment.SerializeToString,
+            'ListWorkflowDefinitions': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListWorkflowDefinitions,
+                    request_deserializer=v1_dot_workflow__pb2.ListWorkflowDefinitionsRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.ListWorkflowDefinitionsResponse.SerializeToString,
             ),
-            'ListWorkflowDeployments': grpc.unary_unary_rpc_method_handler(
-                    servicer.ListWorkflowDeployments,
-                    request_deserializer=v1_dot_workflow__pb2.ListWorkflowDeploymentsRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ListWorkflowDeploymentsResponse.SerializeToString,
-            ),
-            'DeleteWorkflowDeployment': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteWorkflowDeployment,
-                    request_deserializer=v1_dot_workflow__pb2.DeleteWorkflowDeploymentRequest.FromString,
+            'DeleteWorkflowDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteWorkflowDefinition,
+                    request_deserializer=v1_dot_workflow__pb2.DeleteWorkflowDefinitionRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
-            'SetWorkflowDeploymentPaused': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetWorkflowDeploymentPaused,
-                    request_deserializer=v1_dot_workflow__pb2.SetWorkflowDeploymentPausedRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.WorkflowDeployment.SerializeToString,
+            'SetWorkflowDefinitionPaused': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetWorkflowDefinitionPaused,
+                    request_deserializer=v1_dot_workflow__pb2.SetWorkflowDefinitionPausedRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.WorkflowDefinition.SerializeToString,
             ),
             'SetWorkflowActivationPaused': grpc.unary_unary_rpc_method_handler(
                     servicer.SetWorkflowActivationPaused,
                     request_deserializer=v1_dot_workflow__pb2.SetWorkflowActivationPausedRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.WorkflowDeployment.SerializeToString,
+                    response_serializer=v1_dot_workflow__pb2.WorkflowDefinition.SerializeToString,
             ),
             'StartWorkflowRun': grpc.unary_unary_rpc_method_handler(
                     servicer.StartWorkflowRun,
@@ -332,11 +305,6 @@ def add_WorkflowProviderServicer_to_server(servicer, server):
                     request_deserializer=v1_dot_workflow__pb2.GetWorkflowRunOutputRequest.FromString,
                     response_serializer=v1_dot_workflow__pb2.WorkflowRunOutput.SerializeToString,
             ),
-            'PutExecutionReference': grpc.unary_unary_rpc_method_handler(
-                    servicer.PutExecutionReference,
-                    request_deserializer=v1_dot_workflow__pb2.PutWorkflowExecutionReferenceRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.WorkflowExecutionReference.SerializeToString,
-            ),
             'GetExecutionReference': grpc.unary_unary_rpc_method_handler(
                     servicer.GetExecutionReference,
                     request_deserializer=v1_dot_workflow__pb2.GetWorkflowExecutionReferenceRequest.FromString,
@@ -359,7 +327,7 @@ class WorkflowProvider(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def PlanWorkflow(request,
+    def ApplyWorkflowDefinition(request,
             target,
             options=(),
             channel_credentials=None,
@@ -372,9 +340,9 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/PlanWorkflow',
-            v1_dot_workflow__pb2.PlanWorkflowRequest.SerializeToString,
-            v1_dot_workflow__pb2.PlanWorkflowResponse.FromString,
+            '/gestalt.provider.v1.WorkflowProvider/ApplyWorkflowDefinition',
+            v1_dot_workflow__pb2.ApplyWorkflowDefinitionRequest.SerializeToString,
+            v1_dot_workflow__pb2.WorkflowDefinition.FromString,
             options,
             channel_credentials,
             insecure,
@@ -386,7 +354,7 @@ class WorkflowProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def ApplyWorkflowDeployment(request,
+    def GetWorkflowDefinition(request,
             target,
             options=(),
             channel_credentials=None,
@@ -399,9 +367,9 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/ApplyWorkflowDeployment',
-            v1_dot_workflow__pb2.ApplyWorkflowDeploymentRequest.SerializeToString,
-            v1_dot_workflow__pb2.WorkflowDeployment.FromString,
+            '/gestalt.provider.v1.WorkflowProvider/GetWorkflowDefinition',
+            v1_dot_workflow__pb2.GetWorkflowDefinitionRequest.SerializeToString,
+            v1_dot_workflow__pb2.WorkflowDefinition.FromString,
             options,
             channel_credentials,
             insecure,
@@ -413,7 +381,7 @@ class WorkflowProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def GetWorkflowDeployment(request,
+    def ListWorkflowDefinitions(request,
             target,
             options=(),
             channel_credentials=None,
@@ -426,9 +394,9 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/GetWorkflowDeployment',
-            v1_dot_workflow__pb2.GetWorkflowDeploymentRequest.SerializeToString,
-            v1_dot_workflow__pb2.WorkflowDeployment.FromString,
+            '/gestalt.provider.v1.WorkflowProvider/ListWorkflowDefinitions',
+            v1_dot_workflow__pb2.ListWorkflowDefinitionsRequest.SerializeToString,
+            v1_dot_workflow__pb2.ListWorkflowDefinitionsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -440,7 +408,7 @@ class WorkflowProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def ListWorkflowDeployments(request,
+    def DeleteWorkflowDefinition(request,
             target,
             options=(),
             channel_credentials=None,
@@ -453,35 +421,8 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/ListWorkflowDeployments',
-            v1_dot_workflow__pb2.ListWorkflowDeploymentsRequest.SerializeToString,
-            v1_dot_workflow__pb2.ListWorkflowDeploymentsResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def DeleteWorkflowDeployment(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowProvider/DeleteWorkflowDeployment',
-            v1_dot_workflow__pb2.DeleteWorkflowDeploymentRequest.SerializeToString,
+            '/gestalt.provider.v1.WorkflowProvider/DeleteWorkflowDefinition',
+            v1_dot_workflow__pb2.DeleteWorkflowDefinitionRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
@@ -494,7 +435,7 @@ class WorkflowProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def SetWorkflowDeploymentPaused(request,
+    def SetWorkflowDefinitionPaused(request,
             target,
             options=(),
             channel_credentials=None,
@@ -507,9 +448,9 @@ class WorkflowProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowProvider/SetWorkflowDeploymentPaused',
-            v1_dot_workflow__pb2.SetWorkflowDeploymentPausedRequest.SerializeToString,
-            v1_dot_workflow__pb2.WorkflowDeployment.FromString,
+            '/gestalt.provider.v1.WorkflowProvider/SetWorkflowDefinitionPaused',
+            v1_dot_workflow__pb2.SetWorkflowDefinitionPausedRequest.SerializeToString,
+            v1_dot_workflow__pb2.WorkflowDefinition.FromString,
             options,
             channel_credentials,
             insecure,
@@ -536,7 +477,7 @@ class WorkflowProvider(object):
             target,
             '/gestalt.provider.v1.WorkflowProvider/SetWorkflowActivationPaused',
             v1_dot_workflow__pb2.SetWorkflowActivationPausedRequest.SerializeToString,
-            v1_dot_workflow__pb2.WorkflowDeployment.FromString,
+            v1_dot_workflow__pb2.WorkflowDefinition.FromString,
             options,
             channel_credentials,
             insecure,
@@ -791,33 +732,6 @@ class WorkflowProvider(object):
             _registered_method=True)
 
     @staticmethod
-    def PutExecutionReference(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowProvider/PutExecutionReference',
-            v1_dot_workflow__pb2.PutWorkflowExecutionReferenceRequest.SerializeToString,
-            v1_dot_workflow__pb2.WorkflowExecutionReference.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
     def GetExecutionReference(request,
             target,
             options=(),
@@ -953,40 +867,35 @@ class WorkflowManagerHostStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.PlanDeployment = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/PlanDeployment',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerPlanDeploymentRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.PlanWorkflowResponse.FromString,
+        self.ApplyDefinition = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowManagerHost/ApplyDefinition',
+                request_serializer=v1_dot_workflow__pb2.WorkflowManagerApplyDefinitionRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
                 _registered_method=True)
-        self.ApplyDeployment = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/ApplyDeployment',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerApplyDeploymentRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDeployment.FromString,
+        self.GetDefinition = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowManagerHost/GetDefinition',
+                request_serializer=v1_dot_workflow__pb2.WorkflowManagerGetDefinitionRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
                 _registered_method=True)
-        self.GetDeployment = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/GetDeployment',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerGetDeploymentRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDeployment.FromString,
+        self.ListDefinitions = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowManagerHost/ListDefinitions',
+                request_serializer=v1_dot_workflow__pb2.WorkflowManagerListDefinitionsRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.WorkflowManagerListDefinitionsResponse.FromString,
                 _registered_method=True)
-        self.ListDeployments = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/ListDeployments',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerListDeploymentsRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.WorkflowManagerListDeploymentsResponse.FromString,
-                _registered_method=True)
-        self.DeleteDeployment = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/DeleteDeployment',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerDeleteDeploymentRequest.SerializeToString,
+        self.DeleteDefinition = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowManagerHost/DeleteDefinition',
+                request_serializer=v1_dot_workflow__pb2.WorkflowManagerDeleteDefinitionRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
-        self.SetDeploymentPaused = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/SetDeploymentPaused',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerSetDeploymentPausedRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDeployment.FromString,
+        self.SetDefinitionPaused = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowManagerHost/SetDefinitionPaused',
+                request_serializer=v1_dot_workflow__pb2.WorkflowManagerSetDefinitionPausedRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
                 _registered_method=True)
         self.SetActivationPaused = channel.unary_unary(
                 '/gestalt.provider.v1.WorkflowManagerHost/SetActivationPaused',
                 request_serializer=v1_dot_workflow__pb2.WorkflowManagerSetActivationPausedRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDeployment.FromString,
+                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
                 _registered_method=True)
         self.StartRun = channel.unary_unary(
                 '/gestalt.provider.v1.WorkflowManagerHost/StartRun',
@@ -1018,37 +927,31 @@ class WorkflowManagerHostStub(object):
 class WorkflowManagerHostServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def PlanDeployment(self, request, context):
+    def ApplyDefinition(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ApplyDeployment(self, request, context):
+    def GetDefinition(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetDeployment(self, request, context):
+    def ListDefinitions(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ListDeployments(self, request, context):
+    def DeleteDefinition(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def DeleteDeployment(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SetDeploymentPaused(self, request, context):
+    def SetDefinitionPaused(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -1093,40 +996,35 @@ class WorkflowManagerHostServicer(object):
 
 def add_WorkflowManagerHostServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'PlanDeployment': grpc.unary_unary_rpc_method_handler(
-                    servicer.PlanDeployment,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerPlanDeploymentRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.PlanWorkflowResponse.SerializeToString,
+            'ApplyDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.ApplyDefinition,
+                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerApplyDefinitionRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.SerializeToString,
             ),
-            'ApplyDeployment': grpc.unary_unary_rpc_method_handler(
-                    servicer.ApplyDeployment,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerApplyDeploymentRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDeployment.SerializeToString,
+            'GetDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDefinition,
+                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerGetDefinitionRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.SerializeToString,
             ),
-            'GetDeployment': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetDeployment,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerGetDeploymentRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDeployment.SerializeToString,
+            'ListDefinitions': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListDefinitions,
+                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerListDefinitionsRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.WorkflowManagerListDefinitionsResponse.SerializeToString,
             ),
-            'ListDeployments': grpc.unary_unary_rpc_method_handler(
-                    servicer.ListDeployments,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerListDeploymentsRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.WorkflowManagerListDeploymentsResponse.SerializeToString,
-            ),
-            'DeleteDeployment': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteDeployment,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerDeleteDeploymentRequest.FromString,
+            'DeleteDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteDefinition,
+                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerDeleteDefinitionRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
-            'SetDeploymentPaused': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetDeploymentPaused,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerSetDeploymentPausedRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDeployment.SerializeToString,
+            'SetDefinitionPaused': grpc.unary_unary_rpc_method_handler(
+                    servicer.SetDefinitionPaused,
+                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerSetDefinitionPausedRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.SerializeToString,
             ),
             'SetActivationPaused': grpc.unary_unary_rpc_method_handler(
                     servicer.SetActivationPaused,
                     request_deserializer=v1_dot_workflow__pb2.WorkflowManagerSetActivationPausedRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDeployment.SerializeToString,
+                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.SerializeToString,
             ),
             'StartRun': grpc.unary_unary_rpc_method_handler(
                     servicer.StartRun,
@@ -1165,7 +1063,7 @@ class WorkflowManagerHost(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def PlanDeployment(request,
+    def ApplyDefinition(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1178,9 +1076,9 @@ class WorkflowManagerHost(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowManagerHost/PlanDeployment',
-            v1_dot_workflow__pb2.WorkflowManagerPlanDeploymentRequest.SerializeToString,
-            v1_dot_workflow__pb2.PlanWorkflowResponse.FromString,
+            '/gestalt.provider.v1.WorkflowManagerHost/ApplyDefinition',
+            v1_dot_workflow__pb2.WorkflowManagerApplyDefinitionRequest.SerializeToString,
+            v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1192,7 +1090,7 @@ class WorkflowManagerHost(object):
             _registered_method=True)
 
     @staticmethod
-    def ApplyDeployment(request,
+    def GetDefinition(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1205,9 +1103,9 @@ class WorkflowManagerHost(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowManagerHost/ApplyDeployment',
-            v1_dot_workflow__pb2.WorkflowManagerApplyDeploymentRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowDeployment.FromString,
+            '/gestalt.provider.v1.WorkflowManagerHost/GetDefinition',
+            v1_dot_workflow__pb2.WorkflowManagerGetDefinitionRequest.SerializeToString,
+            v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1219,7 +1117,7 @@ class WorkflowManagerHost(object):
             _registered_method=True)
 
     @staticmethod
-    def GetDeployment(request,
+    def ListDefinitions(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1232,9 +1130,9 @@ class WorkflowManagerHost(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowManagerHost/GetDeployment',
-            v1_dot_workflow__pb2.WorkflowManagerGetDeploymentRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowDeployment.FromString,
+            '/gestalt.provider.v1.WorkflowManagerHost/ListDefinitions',
+            v1_dot_workflow__pb2.WorkflowManagerListDefinitionsRequest.SerializeToString,
+            v1_dot_workflow__pb2.WorkflowManagerListDefinitionsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1246,7 +1144,7 @@ class WorkflowManagerHost(object):
             _registered_method=True)
 
     @staticmethod
-    def ListDeployments(request,
+    def DeleteDefinition(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1259,35 +1157,8 @@ class WorkflowManagerHost(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowManagerHost/ListDeployments',
-            v1_dot_workflow__pb2.WorkflowManagerListDeploymentsRequest.SerializeToString,
-            v1_dot_workflow__pb2.WorkflowManagerListDeploymentsResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def DeleteDeployment(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/DeleteDeployment',
-            v1_dot_workflow__pb2.WorkflowManagerDeleteDeploymentRequest.SerializeToString,
+            '/gestalt.provider.v1.WorkflowManagerHost/DeleteDefinition',
+            v1_dot_workflow__pb2.WorkflowManagerDeleteDefinitionRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
@@ -1300,7 +1171,7 @@ class WorkflowManagerHost(object):
             _registered_method=True)
 
     @staticmethod
-    def SetDeploymentPaused(request,
+    def SetDefinitionPaused(request,
             target,
             options=(),
             channel_credentials=None,
@@ -1313,9 +1184,9 @@ class WorkflowManagerHost(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.provider.v1.WorkflowManagerHost/SetDeploymentPaused',
-            v1_dot_workflow__pb2.WorkflowManagerSetDeploymentPausedRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowDeployment.FromString,
+            '/gestalt.provider.v1.WorkflowManagerHost/SetDefinitionPaused',
+            v1_dot_workflow__pb2.WorkflowManagerSetDefinitionPausedRequest.SerializeToString,
+            v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1342,7 +1213,7 @@ class WorkflowManagerHost(object):
             target,
             '/gestalt.provider.v1.WorkflowManagerHost/SetActivationPaused',
             v1_dot_workflow__pb2.WorkflowManagerSetActivationPausedRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowDeployment.FromString,
+            v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
             options,
             channel_credentials,
             insecure,

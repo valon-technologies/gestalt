@@ -29,16 +29,16 @@ const (
 	WorkflowActionKindValueDelivery    WorkflowActionKind = 3
 )
 
-// WorkflowDeploymentStatus identifies the lifecycle state of a deployment.
-type WorkflowDeploymentStatus int32
+// WorkflowDefinitionStatus identifies the lifecycle state of a definition.
+type WorkflowDefinitionStatus int32
 
 const (
-	WorkflowDeploymentStatusValueUnspecified WorkflowDeploymentStatus = 0
-	WorkflowDeploymentStatusValuePending     WorkflowDeploymentStatus = 1
-	WorkflowDeploymentStatusValueActive      WorkflowDeploymentStatus = 2
-	WorkflowDeploymentStatusValuePaused      WorkflowDeploymentStatus = 3
-	WorkflowDeploymentStatusValueDeleted     WorkflowDeploymentStatus = 4
-	WorkflowDeploymentStatusValueFailed      WorkflowDeploymentStatus = 5
+	WorkflowDefinitionStatusValueUnspecified WorkflowDefinitionStatus = 0
+	WorkflowDefinitionStatusValuePending     WorkflowDefinitionStatus = 1
+	WorkflowDefinitionStatusValueActive      WorkflowDefinitionStatus = 2
+	WorkflowDefinitionStatusValuePaused      WorkflowDefinitionStatus = 3
+	WorkflowDefinitionStatusValueDeleted     WorkflowDefinitionStatus = 4
+	WorkflowDefinitionStatusValueFailed      WorkflowDefinitionStatus = 5
 )
 
 // WorkflowRunStatus identifies the lifecycle state of a workflow run.
@@ -157,11 +157,11 @@ type WorkflowStepWhen struct {
 // WorkflowValue contains one workflow value expression. LiteralSet
 // distinguishes an explicit literal null from an unset value.
 type WorkflowValue struct {
-	Literal         any
-	LiteralSet      bool
-	Object          map[string]WorkflowValue
-	Array           []WorkflowValue
-	Template        *WorkflowText
+	Literal       any
+	LiteralSet    bool
+	Object        map[string]WorkflowValue
+	Array         []WorkflowValue
+	Template      *WorkflowText
 	RunInput      string
 	SignalPayload string
 	StepOutput    *WorkflowStepOutputSource
@@ -221,7 +221,7 @@ type WorkflowEventActivation struct {
 	Match *WorkflowEventMatch
 }
 
-// WorkflowActivation contains one deployment activation.
+// WorkflowActivation contains one definition activation.
 // Exactly one of Manual, Schedule, or Event should be set.
 type WorkflowActivation struct {
 	ID             string
@@ -245,30 +245,30 @@ type WorkflowAccessPermission struct {
 // WorkflowExecutionReference is provider-owned authority data used by workflow
 // host callbacks.
 type WorkflowExecutionReference struct {
-	ID                  string
-	ProviderName        string
-	Target              *BoundWorkflowTarget
-	CallerPluginName    string
-	SourceDefinitionID  string
-	SubjectID           string
-	SubjectKind         string
-	DisplayName         string
-	AuthSource          string
-	CredentialSubjectID string
-	RunAs               *WorkflowRunAsSubject
-	Permissions         []WorkflowAccessPermission
-	CreatedAt           *time.Time
-	RevokedAt           *time.Time
-	TargetDigest        string
-	ProviderPlanDigest  string
-	PermissionsDigest   string
-	SemanticsVersion    string
-	Generation          int64
-	Seal                string
+	ID                         string
+	ProviderName               string
+	Target                     *BoundWorkflowTarget
+	CallerPluginName           string
+	SourceDefinitionID         string
+	SourceDefinitionGeneration int64
+	SubjectID                  string
+	SubjectKind                string
+	DisplayName                string
+	AuthSource                 string
+	CredentialSubjectID        string
+	RunAs                      *WorkflowRunAsSubject
+	Permissions                []WorkflowAccessPermission
+	CreatedAt                  *time.Time
+	RevokedAt                  *time.Time
+	TargetDigest               string
+	ActionTableDigest          string
+	PermissionsDigest          string
+	SemanticsVersion           string
+	Generation                 int64
 }
 
-// WorkflowDeploymentSpec contains a workflow deployment declaration.
-type WorkflowDeploymentSpec struct {
+// WorkflowDefinitionSpec contains a workflow definition declaration.
+type WorkflowDefinitionSpec struct {
 	ID                       string
 	Generation               int64
 	Target                   *BoundWorkflowTarget
@@ -295,43 +295,25 @@ type WorkflowActionTable struct {
 	Digest  string
 }
 
-// WorkflowUnsupportedFeature reports a plan-time provider capability gap.
-type WorkflowUnsupportedFeature struct {
-	Feature string
-	Reason  string
-}
-
-// PlanWorkflowResponse returns provider-local plan identity for a deployment.
-type PlanWorkflowResponse struct {
-	AcceptedSpecDigest        string
-	ProviderPlanID            string
-	ProviderPlanDigest        string
-	ProviderPlanFormatVersion string
-	Unsupported               []WorkflowUnsupportedFeature
-	SupportedFeatureFlags     []string
-}
-
-// WorkflowDeploymentBinding binds host deployment identity to a provider plan.
-type WorkflowDeploymentBinding struct {
+// WorkflowDefinitionBinding binds host definition identity to provider state.
+type WorkflowDefinitionBinding struct {
 	ID                       string
 	ExecutionRef             string
 	ExecutionRefGeneration   int64
-	ExecutionRefSeal         string
-	DeploymentID             string
-	DeploymentGeneration     int64
+	DefinitionID             string
+	DefinitionGeneration     int64
 	SpecDigest               string
 	TargetDigest             string
 	ActionTableDigest        string
-	ProviderPlanID           string
-	ProviderPlanDigest       string
+	PermissionsDigest        string
 	WorkflowSemanticsVersion string
 	RequestID                string
 }
 
-// WorkflowDeployment contains provider deployment state.
-type WorkflowDeployment struct {
-	Spec               *WorkflowDeploymentSpec
-	Status             WorkflowDeploymentStatus
+// WorkflowDefinition contains provider definition state.
+type WorkflowDefinition struct {
+	Spec               *WorkflowDefinitionSpec
+	Status             WorkflowDefinitionStatus
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	AppliedGeneration  int64
@@ -340,7 +322,7 @@ type WorkflowDeployment struct {
 	ActionTableDigest  string
 	ProviderPlanID     string
 	ProviderPlanDigest string
-	Binding            *WorkflowDeploymentBinding
+	Binding            *WorkflowDefinitionBinding
 	Error              *WorkflowRunError
 }
 
@@ -361,8 +343,8 @@ type WorkflowEventTrigger struct {
 // WorkflowRunTrigger contains fields for constructing a workflow run trigger.
 // Exactly one trigger kind should be set.
 type WorkflowRunTrigger struct {
-	DeploymentID         string
-	DeploymentGeneration int64
+	DefinitionID         string
+	DefinitionGeneration int64
 	ActivationID         string
 	Manual               bool
 	Schedule             *WorkflowScheduleTrigger
@@ -416,8 +398,8 @@ type WorkflowStepState struct {
 // WorkflowRun contains provider run state.
 type WorkflowRun struct {
 	ID                     string
-	DeploymentID           string
-	DeploymentGeneration   int64
+	DefinitionID           string
+	DefinitionGeneration   int64
 	WorkflowKey            string
 	Status                 WorkflowRunStatus
 	Trigger                *WorkflowRunTrigger
@@ -432,7 +414,6 @@ type WorkflowRun struct {
 	TargetDigest           string
 	SpecDigest             string
 	ActionTableDigest      string
-	ProviderPlanDigest     string
 	Steps                  []WorkflowStepState
 	Error                  *WorkflowRunError
 }
@@ -447,7 +428,7 @@ type WorkflowRunSignal struct {
 
 // WorkflowEventDeliveryResult contains one event delivery result.
 type WorkflowEventDeliveryResult struct {
-	DeploymentID string
+	DefinitionID string
 	ActivationID string
 	Run          *WorkflowRun
 	Signal       *WorkflowSignal
@@ -1255,26 +1236,26 @@ func workflowExecutionReferenceToProto(input *WorkflowExecutionReference) (*prot
 		return nil, err
 	}
 	return &proto.WorkflowExecutionReference{
-		Id:                  input.ID,
-		ProviderName:        input.ProviderName,
-		Target:              target,
-		CallerPluginName:    input.CallerPluginName,
-		SourceDefinitionId:  input.SourceDefinitionID,
-		SubjectId:           input.SubjectID,
-		SubjectKind:         input.SubjectKind,
-		DisplayName:         input.DisplayName,
-		AuthSource:          input.AuthSource,
-		CredentialSubjectId: input.CredentialSubjectID,
-		RunAs:               workflowRunAsSubjectFromInput(input.RunAs),
-		Permissions:         workflowAccessPermissionsFromInputs(input.Permissions),
-		CreatedAt:           timestampFromOptionalTime(input.CreatedAt),
-		RevokedAt:           timestampFromOptionalTime(input.RevokedAt),
-		TargetDigest:        input.TargetDigest,
-		ProviderPlanDigest:  input.ProviderPlanDigest,
-		PermissionsDigest:   input.PermissionsDigest,
-		SemanticsVersion:    input.SemanticsVersion,
-		Generation:          input.Generation,
-		Seal:                input.Seal,
+		Id:                         input.ID,
+		ProviderName:               input.ProviderName,
+		Target:                     target,
+		CallerPluginName:           input.CallerPluginName,
+		SourceDefinitionId:         input.SourceDefinitionID,
+		SourceDefinitionGeneration: input.SourceDefinitionGeneration,
+		SubjectId:                  input.SubjectID,
+		SubjectKind:                input.SubjectKind,
+		DisplayName:                input.DisplayName,
+		AuthSource:                 input.AuthSource,
+		CredentialSubjectId:        input.CredentialSubjectID,
+		RunAs:                      workflowRunAsSubjectFromInput(input.RunAs),
+		Permissions:                workflowAccessPermissionsFromInputs(input.Permissions),
+		CreatedAt:                  timestampFromOptionalTime(input.CreatedAt),
+		RevokedAt:                  timestampFromOptionalTime(input.RevokedAt),
+		TargetDigest:               input.TargetDigest,
+		ActionTableDigest:          input.ActionTableDigest,
+		PermissionsDigest:          input.PermissionsDigest,
+		SemanticsVersion:           input.SemanticsVersion,
+		Generation:                 input.Generation,
 	}, nil
 }
 
@@ -1291,26 +1272,26 @@ func workflowExecutionReferenceFromProto(value *proto.WorkflowExecutionReference
 		return nil, err
 	}
 	return &WorkflowExecutionReference{
-		ID:                  value.GetId(),
-		ProviderName:        value.GetProviderName(),
-		Target:              workflowTargetInputPtrFromTarget(value.GetTarget()),
-		CallerPluginName:    value.GetCallerPluginName(),
-		SourceDefinitionID:  value.GetSourceDefinitionId(),
-		SubjectID:           value.GetSubjectId(),
-		SubjectKind:         value.GetSubjectKind(),
-		DisplayName:         value.GetDisplayName(),
-		AuthSource:          value.GetAuthSource(),
-		CredentialSubjectID: value.GetCredentialSubjectId(),
-		RunAs:               workflowRunAsSubjectInputPtrFromSubject(value.GetRunAs()),
-		Permissions:         workflowAccessPermissionInputsFromPermissions(value.GetPermissions()),
-		CreatedAt:           createdAt,
-		RevokedAt:           revokedAt,
-		TargetDigest:        value.GetTargetDigest(),
-		ProviderPlanDigest:  value.GetProviderPlanDigest(),
-		PermissionsDigest:   value.GetPermissionsDigest(),
-		SemanticsVersion:    value.GetSemanticsVersion(),
-		Generation:          value.GetGeneration(),
-		Seal:                value.GetSeal(),
+		ID:                         value.GetId(),
+		ProviderName:               value.GetProviderName(),
+		Target:                     workflowTargetInputPtrFromTarget(value.GetTarget()),
+		CallerPluginName:           value.GetCallerPluginName(),
+		SourceDefinitionID:         value.GetSourceDefinitionId(),
+		SourceDefinitionGeneration: value.GetSourceDefinitionGeneration(),
+		SubjectID:                  value.GetSubjectId(),
+		SubjectKind:                value.GetSubjectKind(),
+		DisplayName:                value.GetDisplayName(),
+		AuthSource:                 value.GetAuthSource(),
+		CredentialSubjectID:        value.GetCredentialSubjectId(),
+		RunAs:                      workflowRunAsSubjectInputPtrFromSubject(value.GetRunAs()),
+		Permissions:                workflowAccessPermissionInputsFromPermissions(value.GetPermissions()),
+		CreatedAt:                  createdAt,
+		RevokedAt:                  revokedAt,
+		TargetDigest:               value.GetTargetDigest(),
+		ActionTableDigest:          value.GetActionTableDigest(),
+		PermissionsDigest:          value.GetPermissionsDigest(),
+		SemanticsVersion:           value.GetSemanticsVersion(),
+		Generation:                 value.GetGeneration(),
 	}, nil
 }
 
@@ -1346,7 +1327,7 @@ func workflowExecutionReferencesFromProto(values []*proto.WorkflowExecutionRefer
 	return out, nil
 }
 
-func workflowDeploymentSpecToProto(input WorkflowDeploymentSpec) (*proto.WorkflowDeploymentSpec, error) {
+func workflowDefinitionSpecToProto(input WorkflowDefinitionSpec) (*proto.WorkflowDefinitionSpec, error) {
 	target, err := newOptionalBoundWorkflowTarget(input.Target)
 	if err != nil {
 		return nil, err
@@ -1355,7 +1336,7 @@ func workflowDeploymentSpecToProto(input WorkflowDeploymentSpec) (*proto.Workflo
 	if err != nil {
 		return nil, err
 	}
-	return &proto.WorkflowDeploymentSpec{
+	return &proto.WorkflowDefinitionSpec{
 		Id:                       input.ID,
 		Generation:               input.Generation,
 		Target:                   target,
@@ -1368,11 +1349,11 @@ func workflowDeploymentSpecToProto(input WorkflowDeploymentSpec) (*proto.Workflo
 	}, nil
 }
 
-func workflowDeploymentSpecFromProto(value *proto.WorkflowDeploymentSpec) WorkflowDeploymentSpec {
+func workflowDefinitionSpecFromProto(value *proto.WorkflowDefinitionSpec) WorkflowDefinitionSpec {
 	if value == nil {
-		return WorkflowDeploymentSpec{}
+		return WorkflowDefinitionSpec{}
 	}
-	return WorkflowDeploymentSpec{
+	return WorkflowDefinitionSpec{
 		ID:                       value.GetId(),
 		Generation:               value.GetGeneration(),
 		Target:                   workflowTargetInputPtrFromTarget(value.GetTarget()),
@@ -1385,134 +1366,77 @@ func workflowDeploymentSpecFromProto(value *proto.WorkflowDeploymentSpec) Workfl
 	}
 }
 
-func newOptionalWorkflowDeploymentSpec(input *WorkflowDeploymentSpec) (*proto.WorkflowDeploymentSpec, error) {
+func newOptionalWorkflowDefinitionSpec(input *WorkflowDefinitionSpec) (*proto.WorkflowDefinitionSpec, error) {
 	if input == nil {
 		return nil, nil
 	}
-	return workflowDeploymentSpecToProto(*input)
+	return workflowDefinitionSpecToProto(*input)
 }
 
-func workflowDeploymentSpecInputPtrFromSpec(value *proto.WorkflowDeploymentSpec) *WorkflowDeploymentSpec {
+func workflowDefinitionSpecInputPtrFromSpec(value *proto.WorkflowDefinitionSpec) *WorkflowDefinitionSpec {
 	if value == nil {
 		return nil
 	}
-	input := workflowDeploymentSpecFromProto(value)
+	input := workflowDefinitionSpecFromProto(value)
 	return &input
 }
 
-func cloneWorkflowDeploymentSpecProto(value *proto.WorkflowDeploymentSpec) (*proto.WorkflowDeploymentSpec, error) {
+func cloneWorkflowDefinitionSpecProto(value *proto.WorkflowDefinitionSpec) (*proto.WorkflowDefinitionSpec, error) {
 	if value == nil {
 		return nil, nil
 	}
-	return workflowDeploymentSpecToProto(workflowDeploymentSpecFromProto(value))
+	return workflowDefinitionSpecToProto(workflowDefinitionSpecFromProto(value))
 }
 
-func workflowUnsupportedFeaturesToProto(values []WorkflowUnsupportedFeature) []*proto.WorkflowUnsupportedFeature {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]*proto.WorkflowUnsupportedFeature, 0, len(values))
-	for _, value := range values {
-		out = append(out, &proto.WorkflowUnsupportedFeature{Feature: value.Feature, Reason: value.Reason})
-	}
-	return out
-}
-
-func workflowUnsupportedFeaturesFromProto(values []*proto.WorkflowUnsupportedFeature) []WorkflowUnsupportedFeature {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]WorkflowUnsupportedFeature, 0, len(values))
-	for _, value := range values {
-		if value == nil {
-			continue
-		}
-		out = append(out, WorkflowUnsupportedFeature{Feature: value.GetFeature(), Reason: value.GetReason()})
-	}
-	return out
-}
-
-func planWorkflowResponseToProto(resp *PlanWorkflowResponse) *proto.PlanWorkflowResponse {
-	if resp == nil {
-		return nil
-	}
-	return &proto.PlanWorkflowResponse{
-		AcceptedSpecDigest:        resp.AcceptedSpecDigest,
-		ProviderPlanId:            resp.ProviderPlanID,
-		ProviderPlanDigest:        resp.ProviderPlanDigest,
-		ProviderPlanFormatVersion: resp.ProviderPlanFormatVersion,
-		Unsupported:               workflowUnsupportedFeaturesToProto(resp.Unsupported),
-		SupportedFeatureFlags:     append([]string(nil), resp.SupportedFeatureFlags...),
-	}
-}
-
-func planWorkflowResponseFromProto(value *proto.PlanWorkflowResponse) *PlanWorkflowResponse {
+func workflowDefinitionBindingToProto(value *WorkflowDefinitionBinding) *proto.WorkflowDefinitionBinding {
 	if value == nil {
 		return nil
 	}
-	return &PlanWorkflowResponse{
-		AcceptedSpecDigest:        value.GetAcceptedSpecDigest(),
-		ProviderPlanID:            value.GetProviderPlanId(),
-		ProviderPlanDigest:        value.GetProviderPlanDigest(),
-		ProviderPlanFormatVersion: value.GetProviderPlanFormatVersion(),
-		Unsupported:               workflowUnsupportedFeaturesFromProto(value.GetUnsupported()),
-		SupportedFeatureFlags:     append([]string(nil), value.GetSupportedFeatureFlags()...),
-	}
-}
-
-func workflowDeploymentBindingToProto(value *WorkflowDeploymentBinding) *proto.WorkflowDeploymentBinding {
-	if value == nil {
-		return nil
-	}
-	return &proto.WorkflowDeploymentBinding{
+	return &proto.WorkflowDefinitionBinding{
 		Id:                       value.ID,
 		ExecutionRef:             value.ExecutionRef,
 		ExecutionRefGeneration:   value.ExecutionRefGeneration,
-		ExecutionRefSeal:         value.ExecutionRefSeal,
-		DeploymentId:             value.DeploymentID,
-		DeploymentGeneration:     value.DeploymentGeneration,
+		DefinitionId:             value.DefinitionID,
+		DefinitionGeneration:     value.DefinitionGeneration,
 		SpecDigest:               value.SpecDigest,
 		TargetDigest:             value.TargetDigest,
 		ActionTableDigest:        value.ActionTableDigest,
-		ProviderPlanId:           value.ProviderPlanID,
-		ProviderPlanDigest:       value.ProviderPlanDigest,
+		PermissionsDigest:        value.PermissionsDigest,
 		WorkflowSemanticsVersion: value.WorkflowSemanticsVersion,
 		RequestId:                value.RequestID,
 	}
 }
 
-func workflowDeploymentBindingFromProto(value *proto.WorkflowDeploymentBinding) *WorkflowDeploymentBinding {
+func workflowDefinitionBindingFromProto(value *proto.WorkflowDefinitionBinding) *WorkflowDefinitionBinding {
 	if value == nil {
 		return nil
 	}
-	return &WorkflowDeploymentBinding{
+	return &WorkflowDefinitionBinding{
 		ID:                       value.GetId(),
 		ExecutionRef:             value.GetExecutionRef(),
 		ExecutionRefGeneration:   value.GetExecutionRefGeneration(),
-		ExecutionRefSeal:         value.GetExecutionRefSeal(),
-		DeploymentID:             value.GetDeploymentId(),
-		DeploymentGeneration:     value.GetDeploymentGeneration(),
+		DefinitionID:             value.GetDefinitionId(),
+		DefinitionGeneration:     value.GetDefinitionGeneration(),
 		SpecDigest:               value.GetSpecDigest(),
 		TargetDigest:             value.GetTargetDigest(),
 		ActionTableDigest:        value.GetActionTableDigest(),
-		ProviderPlanID:           value.GetProviderPlanId(),
-		ProviderPlanDigest:       value.GetProviderPlanDigest(),
+		PermissionsDigest:        value.GetPermissionsDigest(),
 		WorkflowSemanticsVersion: value.GetWorkflowSemanticsVersion(),
 		RequestID:                value.GetRequestId(),
 	}
 }
 
-func workflowDeploymentToProto(input *WorkflowDeployment) (*proto.WorkflowDeployment, error) {
+func workflowDefinitionToProto(input *WorkflowDefinition) (*proto.WorkflowDefinition, error) {
 	if input == nil {
 		return nil, nil
 	}
-	spec, err := newOptionalWorkflowDeploymentSpec(input.Spec)
+	spec, err := newOptionalWorkflowDefinitionSpec(input.Spec)
 	if err != nil {
 		return nil, err
 	}
-	return &proto.WorkflowDeployment{
+	return &proto.WorkflowDefinition{
 		Spec:               spec,
-		Status:             proto.WorkflowDeploymentStatus(input.Status),
+		Status:             proto.WorkflowDefinitionStatus(input.Status),
 		CreatedAt:          timestampFromNonZeroTime(input.CreatedAt),
 		UpdatedAt:          timestampFromNonZeroTime(input.UpdatedAt),
 		AppliedGeneration:  input.AppliedGeneration,
@@ -1521,18 +1445,18 @@ func workflowDeploymentToProto(input *WorkflowDeployment) (*proto.WorkflowDeploy
 		ActionTableDigest:  input.ActionTableDigest,
 		ProviderPlanId:     input.ProviderPlanID,
 		ProviderPlanDigest: input.ProviderPlanDigest,
-		Binding:            workflowDeploymentBindingToProto(input.Binding),
+		Binding:            workflowDefinitionBindingToProto(input.Binding),
 		Error:              workflowRunErrorToProto(input.Error),
 	}, nil
 }
 
-func workflowDeploymentFromProto(value *proto.WorkflowDeployment) (*WorkflowDeployment, error) {
+func workflowDefinitionFromProto(value *proto.WorkflowDefinition) (*WorkflowDefinition, error) {
 	if value == nil {
 		return nil, nil
 	}
-	return &WorkflowDeployment{
-		Spec:               workflowDeploymentSpecInputPtrFromSpec(value.GetSpec()),
-		Status:             WorkflowDeploymentStatus(value.GetStatus()),
+	return &WorkflowDefinition{
+		Spec:               workflowDefinitionSpecInputPtrFromSpec(value.GetSpec()),
+		Status:             WorkflowDefinitionStatus(value.GetStatus()),
 		CreatedAt:          timeFromTimestamp(value.GetCreatedAt()),
 		UpdatedAt:          timeFromTimestamp(value.GetUpdatedAt()),
 		AppliedGeneration:  value.GetAppliedGeneration(),
@@ -1541,35 +1465,35 @@ func workflowDeploymentFromProto(value *proto.WorkflowDeployment) (*WorkflowDepl
 		ActionTableDigest:  value.GetActionTableDigest(),
 		ProviderPlanID:     value.GetProviderPlanId(),
 		ProviderPlanDigest: value.GetProviderPlanDigest(),
-		Binding:            workflowDeploymentBindingFromProto(value.GetBinding()),
+		Binding:            workflowDefinitionBindingFromProto(value.GetBinding()),
 		Error:              workflowRunErrorFromProto(value.GetError()),
 	}, nil
 }
 
-func workflowDeploymentsToProto(values []WorkflowDeployment) ([]*proto.WorkflowDeployment, error) {
+func workflowDefinitionsToProto(values []WorkflowDefinition) ([]*proto.WorkflowDefinition, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
-	out := make([]*proto.WorkflowDeployment, 0, len(values))
+	out := make([]*proto.WorkflowDefinition, 0, len(values))
 	for i := range values {
-		value, err := workflowDeploymentToProto(&values[i])
+		value, err := workflowDefinitionToProto(&values[i])
 		if err != nil {
-			return nil, fmt.Errorf("deployments[%d]: %w", i, err)
+			return nil, fmt.Errorf("definitions[%d]: %w", i, err)
 		}
 		out = append(out, value)
 	}
 	return out, nil
 }
 
-func workflowDeploymentsFromProto(values []*proto.WorkflowDeployment) ([]WorkflowDeployment, error) {
+func workflowDefinitionsFromProto(values []*proto.WorkflowDefinition) ([]WorkflowDefinition, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
-	out := make([]WorkflowDeployment, 0, len(values))
+	out := make([]WorkflowDefinition, 0, len(values))
 	for i, value := range values {
-		converted, err := workflowDeploymentFromProto(value)
+		converted, err := workflowDefinitionFromProto(value)
 		if err != nil {
-			return nil, fmt.Errorf("deployments[%d]: %w", i, err)
+			return nil, fmt.Errorf("definitions[%d]: %w", i, err)
 		}
 		if converted != nil {
 			out = append(out, *converted)
@@ -1580,8 +1504,8 @@ func workflowDeploymentsFromProto(values []*proto.WorkflowDeployment) ([]Workflo
 
 func workflowRunTriggerToProto(input WorkflowRunTrigger) (*proto.WorkflowRunTrigger, error) {
 	out := &proto.WorkflowRunTrigger{
-		DeploymentId:         input.DeploymentID,
-		DeploymentGeneration: input.DeploymentGeneration,
+		DefinitionId:         input.DefinitionID,
+		DefinitionGeneration: input.DefinitionGeneration,
 		ActivationId:         input.ActivationID,
 	}
 	selected := 0
@@ -1635,8 +1559,8 @@ func workflowRunTriggerFromProto(value *proto.WorkflowRunTrigger) (WorkflowRunTr
 		return WorkflowRunTrigger{}, nil
 	}
 	out := WorkflowRunTrigger{
-		DeploymentID:         value.GetDeploymentId(),
-		DeploymentGeneration: value.GetDeploymentGeneration(),
+		DefinitionID:         value.GetDefinitionId(),
+		DefinitionGeneration: value.GetDefinitionGeneration(),
 		ActivationID:         value.GetActivationId(),
 	}
 	switch kind := value.GetKind().(type) {
@@ -1868,8 +1792,8 @@ func workflowRunToProto(input *WorkflowRun) (*proto.WorkflowRun, error) {
 	}
 	return &proto.WorkflowRun{
 		Id:                     input.ID,
-		DeploymentId:           input.DeploymentID,
-		DeploymentGeneration:   input.DeploymentGeneration,
+		DefinitionId:           input.DefinitionID,
+		DefinitionGeneration:   input.DefinitionGeneration,
 		WorkflowKey:            input.WorkflowKey,
 		Status:                 proto.WorkflowRunStatus(input.Status),
 		Trigger:                trigger,
@@ -1884,7 +1808,6 @@ func workflowRunToProto(input *WorkflowRun) (*proto.WorkflowRun, error) {
 		TargetDigest:           input.TargetDigest,
 		SpecDigest:             input.SpecDigest,
 		ActionTableDigest:      input.ActionTableDigest,
-		ProviderPlanDigest:     input.ProviderPlanDigest,
 		Steps:                  workflowStepStatesToProto(input.Steps),
 		Error:                  workflowRunErrorToProto(input.Error),
 	}, nil
@@ -1912,8 +1835,8 @@ func workflowRunFromProto(value *proto.WorkflowRun) (*WorkflowRun, error) {
 	}
 	return &WorkflowRun{
 		ID:                     value.GetId(),
-		DeploymentID:           value.GetDeploymentId(),
-		DeploymentGeneration:   value.GetDeploymentGeneration(),
+		DefinitionID:           value.GetDefinitionId(),
+		DefinitionGeneration:   value.GetDefinitionGeneration(),
 		WorkflowKey:            value.GetWorkflowKey(),
 		Status:                 WorkflowRunStatus(value.GetStatus()),
 		Trigger:                trigger,
@@ -1928,7 +1851,6 @@ func workflowRunFromProto(value *proto.WorkflowRun) (*WorkflowRun, error) {
 		TargetDigest:           value.GetTargetDigest(),
 		SpecDigest:             value.GetSpecDigest(),
 		ActionTableDigest:      value.GetActionTableDigest(),
-		ProviderPlanDigest:     value.GetProviderPlanDigest(),
 		Steps:                  workflowStepStatesFromProto(value.GetSteps()),
 		Error:                  workflowRunErrorFromProto(value.GetError()),
 	}, nil
@@ -2030,7 +1952,7 @@ func workflowEventDeliveryResultsToProto(values []WorkflowEventDeliveryResult) (
 			return nil, fmt.Errorf("results[%d].signal: %w", i, err)
 		}
 		out = append(out, &proto.WorkflowEventDeliveryResult{
-			DeploymentId: values[i].DeploymentID,
+			DefinitionId: values[i].DefinitionID,
 			ActivationId: values[i].ActivationID,
 			Run:          run,
 			Signal:       signal,
@@ -2059,7 +1981,7 @@ func workflowEventDeliveryResultsFromProto(values []*proto.WorkflowEventDelivery
 			signal = &input
 		}
 		out = append(out, WorkflowEventDeliveryResult{
-			DeploymentID: value.GetDeploymentId(),
+			DefinitionID: value.GetDefinitionId(),
 			ActivationID: value.GetActivationId(),
 			Run:          run,
 			Signal:       signal,

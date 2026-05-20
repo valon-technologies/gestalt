@@ -402,12 +402,8 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *Provider) PlanWorkflow(context.Context, *gestalt.PlanWorkflowRequest) (*gestalt.PlanWorkflowResponse, error) {
-	return &gestalt.PlanWorkflowResponse{ProviderPlanID: "generated-plan", ProviderPlanDigest: "generated-plan-digest"}, nil
-}
-
-func (p *Provider) ApplyWorkflowDeployment(_ context.Context, req *gestalt.ApplyWorkflowDeploymentRequest) (*gestalt.WorkflowDeployment, error) {
-	var spec *gestalt.WorkflowDeploymentSpec
+func (p *Provider) ApplyWorkflowDefinition(_ context.Context, req *gestalt.ApplyWorkflowDefinitionRequest) (*gestalt.WorkflowDefinition, error) {
+	var spec *gestalt.WorkflowDefinitionSpec
 	if req != nil {
 		spec = req.Spec
 	}
@@ -415,35 +411,35 @@ func (p *Provider) ApplyWorkflowDeployment(_ context.Context, req *gestalt.Apply
 	if spec != nil {
 		generation = spec.Generation
 	}
-	return &gestalt.WorkflowDeployment{Spec: spec, Status: gestalt.WorkflowDeploymentStatusValueActive, AppliedGeneration: generation}, nil
+	return &gestalt.WorkflowDefinition{Spec: spec, Status: gestalt.WorkflowDefinitionStatusValueActive, AppliedGeneration: generation}, nil
 }
 
-func (p *Provider) GetWorkflowDeployment(context.Context, *gestalt.GetWorkflowDeploymentRequest) (*gestalt.WorkflowDeployment, error) {
-	return &gestalt.WorkflowDeployment{Spec: &gestalt.WorkflowDeploymentSpec{ID: "generated-deployment"}, Status: gestalt.WorkflowDeploymentStatusValueActive}, nil
+func (p *Provider) GetWorkflowDefinition(context.Context, *gestalt.GetWorkflowDefinitionRequest) (*gestalt.WorkflowDefinition, error) {
+	return &gestalt.WorkflowDefinition{Spec: &gestalt.WorkflowDefinitionSpec{ID: "generated-deployment"}, Status: gestalt.WorkflowDefinitionStatusValueActive}, nil
 }
 
-func (p *Provider) ListWorkflowDeployments(context.Context, *gestalt.ListWorkflowDeploymentsRequest) (*gestalt.ListWorkflowDeploymentsResponse, error) {
-	return &gestalt.ListWorkflowDeploymentsResponse{}, nil
+func (p *Provider) ListWorkflowDefinitions(context.Context, *gestalt.ListWorkflowDefinitionsRequest) (*gestalt.ListWorkflowDefinitionsResponse, error) {
+	return &gestalt.ListWorkflowDefinitionsResponse{}, nil
 }
 
-func (p *Provider) DeleteWorkflowDeployment(context.Context, *gestalt.DeleteWorkflowDeploymentRequest) error {
+func (p *Provider) DeleteWorkflowDefinition(context.Context, *gestalt.DeleteWorkflowDefinitionRequest) error {
 	return nil
 }
 
-func (p *Provider) SetWorkflowDeploymentPaused(_ context.Context, req *gestalt.SetWorkflowDeploymentPausedRequest) (*gestalt.WorkflowDeployment, error) {
-	status := gestalt.WorkflowDeploymentStatusValueActive
+func (p *Provider) SetWorkflowDefinitionPaused(_ context.Context, req *gestalt.SetWorkflowDefinitionPausedRequest) (*gestalt.WorkflowDefinition, error) {
+	status := gestalt.WorkflowDefinitionStatusValueActive
 	if req.Paused {
-		status = gestalt.WorkflowDeploymentStatusValuePaused
+		status = gestalt.WorkflowDefinitionStatusValuePaused
 	}
-	return &gestalt.WorkflowDeployment{Spec: &gestalt.WorkflowDeploymentSpec{ID: req.DeploymentID, Paused: req.Paused}, Status: status}, nil
+	return &gestalt.WorkflowDefinition{Spec: &gestalt.WorkflowDefinitionSpec{ID: req.DefinitionID, Paused: req.Paused}, Status: status}, nil
 }
 
-func (p *Provider) SetWorkflowActivationPaused(_ context.Context, req *gestalt.SetWorkflowActivationPausedRequest) (*gestalt.WorkflowDeployment, error) {
-	status := gestalt.WorkflowDeploymentStatusValueActive
+func (p *Provider) SetWorkflowActivationPaused(_ context.Context, req *gestalt.SetWorkflowActivationPausedRequest) (*gestalt.WorkflowDefinition, error) {
+	status := gestalt.WorkflowDefinitionStatusValueActive
 	if req.Paused {
-		status = gestalt.WorkflowDeploymentStatusValuePaused
+		status = gestalt.WorkflowDefinitionStatusValuePaused
 	}
-	return &gestalt.WorkflowDeployment{Spec: &gestalt.WorkflowDeploymentSpec{ID: req.DeploymentID, Paused: req.Paused}, Status: status}, nil
+	return &gestalt.WorkflowDefinition{Spec: &gestalt.WorkflowDefinitionSpec{ID: req.DefinitionID, Paused: req.Paused}, Status: status}, nil
 }
 
 func (p *Provider) StartWorkflowRun(context.Context, *gestalt.StartWorkflowRunRequest) (*gestalt.WorkflowRun, error) {

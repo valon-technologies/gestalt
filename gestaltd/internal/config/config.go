@@ -933,11 +933,11 @@ func (c *WorkflowStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type WorkflowValueConfig struct {
-	Literal         any
-	LiteralSet      bool
-	Object          map[string]WorkflowValueConfig
-	Array           []WorkflowValueConfig
-	Template        *WorkflowTextConfig
+	Literal       any
+	LiteralSet    bool
+	Object        map[string]WorkflowValueConfig
+	Array         []WorkflowValueConfig
+	Template      *WorkflowTextConfig
 	RunInput      string
 	SignalPayload string
 	StepOutput    *WorkflowStepOutputSourceConfig

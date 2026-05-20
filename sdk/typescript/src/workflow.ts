@@ -14,23 +14,22 @@ import {
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
-  ApplyWorkflowDeploymentRequestSchema,
+  ApplyWorkflowDefinitionRequestSchema,
   BoundWorkflowTargetSchema,
   CancelWorkflowRunRequestSchema,
-  DeleteWorkflowDeploymentRequestSchema,
+  DeleteWorkflowDefinitionRequestSchema,
   DeliverWorkflowEventRequestSchema,
   DeliverWorkflowEventResponseSchema,
-  GetWorkflowDeploymentRequestSchema,
+  GetWorkflowDefinitionRequestSchema,
   GetWorkflowRunEventsRequestSchema,
   GetWorkflowRunOutputRequestSchema,
   GetWorkflowRunRequestSchema,
   InvokeWorkflowActionRequestSchema,
-  ListWorkflowDeploymentsResponseSchema,
+  ListWorkflowDefinitionsResponseSchema,
   ListWorkflowRunEventsResponseSchema,
   ListWorkflowRunsResponseSchema,
-  PlanWorkflowResponseSchema,
   SetWorkflowActivationPausedRequestSchema,
-  SetWorkflowDeploymentPausedRequestSchema,
+  SetWorkflowDefinitionPausedRequestSchema,
   SignalOrStartWorkflowRunRequestSchema,
   SignalWorkflowRunRequestSchema,
   StartWorkflowRunRequestSchema,
@@ -45,10 +44,10 @@ import {
   WorkflowAgentMessageSchema,
   WorkflowAgentTurnPayloadSchema,
   WorkflowArraySchema,
-  WorkflowDeploymentBindingSchema,
-  WorkflowDeploymentSchema,
-  WorkflowDeploymentSpecSchema,
-  WorkflowDeploymentStatus as ProtoWorkflowDeploymentStatus,
+  WorkflowDefinitionBindingSchema,
+  WorkflowDefinitionSchema,
+  WorkflowDefinitionSpecSchema,
+  WorkflowDefinitionStatus as ProtoWorkflowDefinitionStatus,
   WorkflowEventActivationSchema,
   WorkflowEventDeliveryResultSchema,
   WorkflowEventMatchSchema,
@@ -84,31 +83,28 @@ import {
   WorkflowStepStatus as ProtoWorkflowStepStatus,
   WorkflowStepWhenSchema,
   WorkflowTextSchema,
-  WorkflowUnsupportedFeatureSchema,
   WorkflowValueSchema,
-  type ApplyWorkflowDeploymentRequest as ProtoApplyWorkflowDeploymentRequest,
+  type ApplyWorkflowDefinitionRequest as ProtoApplyWorkflowDefinitionRequest,
   type BoundWorkflowTarget as ProtoBoundWorkflowTarget,
   type CancelWorkflowRunRequest as ProtoCancelWorkflowRunRequest,
-  type DeleteWorkflowDeploymentRequest as ProtoDeleteWorkflowDeploymentRequest,
+  type DeleteWorkflowDefinitionRequest as ProtoDeleteWorkflowDefinitionRequest,
   type DeliverWorkflowEventRequest as ProtoDeliverWorkflowEventRequest,
   type DeliverWorkflowEventResponse as ProtoDeliverWorkflowEventResponse,
-  type GetWorkflowDeploymentRequest as ProtoGetWorkflowDeploymentRequest,
+  type GetWorkflowDefinitionRequest as ProtoGetWorkflowDefinitionRequest,
   type GetWorkflowRunEventsRequest as ProtoGetWorkflowRunEventsRequest,
   type GetWorkflowRunOutputRequest as ProtoGetWorkflowRunOutputRequest,
   type GetWorkflowRunRequest as ProtoGetWorkflowRunRequest,
   type InvokeWorkflowActionRequest as ProtoInvokeWorkflowActionRequest,
-  type ListWorkflowDeploymentsRequest as ProtoListWorkflowDeploymentsRequest,
-  type ListWorkflowDeploymentsResponse as ProtoListWorkflowDeploymentsResponse,
+  type ListWorkflowDefinitionsRequest as ProtoListWorkflowDefinitionsRequest,
+  type ListWorkflowDefinitionsResponse as ProtoListWorkflowDefinitionsResponse,
   type ListWorkflowRunEventsResponse as ProtoListWorkflowRunEventsResponse,
   type ListWorkflowRunsRequest as ProtoListWorkflowRunsRequest,
   type ListWorkflowRunsResponse as ProtoListWorkflowRunsResponse,
-  type ManagedWorkflowDeployment as ProtoManagedWorkflowDeployment,
+  type ManagedWorkflowDefinition as ProtoManagedWorkflowDefinition,
   type ManagedWorkflowRun as ProtoManagedWorkflowRun,
   type ManagedWorkflowRunSignal as ProtoManagedWorkflowRunSignal,
-  type PlanWorkflowRequest as ProtoPlanWorkflowRequest,
-  type PlanWorkflowResponse as ProtoPlanWorkflowResponse,
   type SetWorkflowActivationPausedRequest as ProtoSetWorkflowActivationPausedRequest,
-  type SetWorkflowDeploymentPausedRequest as ProtoSetWorkflowDeploymentPausedRequest,
+  type SetWorkflowDefinitionPausedRequest as ProtoSetWorkflowDefinitionPausedRequest,
   type SignalOrStartWorkflowRunRequest as ProtoSignalOrStartWorkflowRunRequest,
   type SignalWorkflowRunRequest as ProtoSignalWorkflowRunRequest,
   type StartWorkflowRunRequest as ProtoStartWorkflowRunRequest,
@@ -121,9 +117,9 @@ import {
   type WorkflowAgentMessage as ProtoWorkflowAgentMessage,
   type WorkflowAgentTurnPayload as ProtoWorkflowAgentTurnPayload,
   type WorkflowArray as ProtoWorkflowArray,
-  type WorkflowDeployment as ProtoWorkflowDeployment,
-  type WorkflowDeploymentBinding as ProtoWorkflowDeploymentBinding,
-  type WorkflowDeploymentSpec as ProtoWorkflowDeploymentSpec,
+  type WorkflowDefinition as ProtoWorkflowDefinition,
+  type WorkflowDefinitionBinding as ProtoWorkflowDefinitionBinding,
+  type WorkflowDefinitionSpec as ProtoWorkflowDefinitionSpec,
   type WorkflowEvent as ProtoWorkflowEvent,
   type WorkflowEventActivation as ProtoWorkflowEventActivation,
   type WorkflowEventDeliveryResult as ProtoWorkflowEventDeliveryResult,
@@ -155,7 +151,6 @@ import {
   type WorkflowStepState as ProtoWorkflowStepState,
   type WorkflowStepWhen as ProtoWorkflowStepWhen,
   type WorkflowText as ProtoWorkflowText,
-  type WorkflowUnsupportedFeature as ProtoWorkflowUnsupportedFeature,
   type WorkflowValue as ProtoWorkflowValue,
 } from "./internal/gen/v1/workflow_pb.ts";
 import { errorMessage, type MaybePromise } from "./api.ts";
@@ -171,11 +166,13 @@ type WorkflowProviderServiceImpl = Partial<
 
 /**
  * Environment variable containing the workflow-host service target.
+ *
  * @internal
  */
 export const ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET";
 /**
  * Environment variable containing the optional workflow-host relay token.
+ *
  * @internal
  */
 export const ENV_WORKFLOW_HOST_SOCKET_TOKEN = `${ENV_WORKFLOW_HOST_SOCKET}_TOKEN`;
@@ -201,17 +198,17 @@ export const WorkflowActionKind = {
 export type WorkflowActionKind =
   (typeof WorkflowActionKind)[keyof typeof WorkflowActionKind];
 
-/** Workflow deployment status constants. */
-export const WorkflowDeploymentStatus = {
-  UNSPECIFIED: ProtoWorkflowDeploymentStatus.UNSPECIFIED,
-  PENDING: ProtoWorkflowDeploymentStatus.PENDING,
-  ACTIVE: ProtoWorkflowDeploymentStatus.ACTIVE,
-  PAUSED: ProtoWorkflowDeploymentStatus.PAUSED,
-  DELETED: ProtoWorkflowDeploymentStatus.DELETED,
-  FAILED: ProtoWorkflowDeploymentStatus.FAILED,
+/** Workflow definition status constants. */
+export const WorkflowDefinitionStatus = {
+  UNSPECIFIED: ProtoWorkflowDefinitionStatus.UNSPECIFIED,
+  PENDING: ProtoWorkflowDefinitionStatus.PENDING,
+  ACTIVE: ProtoWorkflowDefinitionStatus.ACTIVE,
+  PAUSED: ProtoWorkflowDefinitionStatus.PAUSED,
+  DELETED: ProtoWorkflowDefinitionStatus.DELETED,
+  FAILED: ProtoWorkflowDefinitionStatus.FAILED,
 } as const;
-export type WorkflowDeploymentStatus =
-  (typeof WorkflowDeploymentStatus)[keyof typeof WorkflowDeploymentStatus];
+export type WorkflowDefinitionStatus =
+  (typeof WorkflowDefinitionStatus)[keyof typeof WorkflowDefinitionStatus];
 
 /** Workflow run status constants. */
 export const WorkflowRunStatus = {
@@ -279,21 +276,18 @@ export type WorkflowScheduleActivation = ProtoWorkflowScheduleActivation;
 export type WorkflowEventActivation = ProtoWorkflowEventActivation;
 export type WorkflowActivation = ProtoWorkflowActivation;
 export type WorkflowAccessPermission = ProtoWorkflowAccessPermission;
-export type WorkflowDeploymentSpec = ProtoWorkflowDeploymentSpec;
+export type WorkflowDefinitionSpec = ProtoWorkflowDefinitionSpec;
 export type WorkflowActionDescriptor = ProtoWorkflowActionDescriptor;
 export type WorkflowActionTable = ProtoWorkflowActionTable;
-export type WorkflowUnsupportedFeature = ProtoWorkflowUnsupportedFeature;
-export type PlanWorkflowRequest = ProtoPlanWorkflowRequest;
-export type PlanWorkflowResponse = ProtoPlanWorkflowResponse;
-export type WorkflowDeploymentBinding = ProtoWorkflowDeploymentBinding;
-export type WorkflowDeployment = ProtoWorkflowDeployment;
-export type ApplyWorkflowDeploymentRequest = ProtoApplyWorkflowDeploymentRequest;
-export type GetWorkflowDeploymentRequest = ProtoGetWorkflowDeploymentRequest;
-export type ListWorkflowDeploymentsRequest = ProtoListWorkflowDeploymentsRequest;
-export type ListWorkflowDeploymentsResponse = ProtoListWorkflowDeploymentsResponse;
-export type DeleteWorkflowDeploymentRequest = ProtoDeleteWorkflowDeploymentRequest;
-export type SetWorkflowDeploymentPausedRequest =
-  ProtoSetWorkflowDeploymentPausedRequest;
+export type WorkflowDefinitionBinding = ProtoWorkflowDefinitionBinding;
+export type WorkflowDefinition = ProtoWorkflowDefinition;
+export type ApplyWorkflowDefinitionRequest = ProtoApplyWorkflowDefinitionRequest;
+export type GetWorkflowDefinitionRequest = ProtoGetWorkflowDefinitionRequest;
+export type ListWorkflowDefinitionsRequest = ProtoListWorkflowDefinitionsRequest;
+export type ListWorkflowDefinitionsResponse = ProtoListWorkflowDefinitionsResponse;
+export type DeleteWorkflowDefinitionRequest = ProtoDeleteWorkflowDefinitionRequest;
+export type SetWorkflowDefinitionPausedRequest =
+  ProtoSetWorkflowDefinitionPausedRequest;
 export type SetWorkflowActivationPausedRequest =
   ProtoSetWorkflowActivationPausedRequest;
 export type WorkflowManualTrigger = ProtoWorkflowManualTrigger;
@@ -328,7 +322,7 @@ export type WorkflowPluginActionPayload = ProtoWorkflowPluginActionPayload;
 export type WorkflowAgentTurnPayload = ProtoWorkflowAgentTurnPayload;
 export type InvokeWorkflowActionRequest = ProtoInvokeWorkflowActionRequest;
 export type WorkflowActionResult = ProtoWorkflowActionResult;
-export type ManagedWorkflowDeployment = ProtoManagedWorkflowDeployment;
+export type ManagedWorkflowDefinition = ProtoManagedWorkflowDefinition;
 export type ManagedWorkflowRun = ProtoManagedWorkflowRun;
 export type ManagedWorkflowRunSignal = ProtoManagedWorkflowRunSignal;
 
@@ -510,10 +504,10 @@ export function workflowAccessPermission(
   return create(WorkflowAccessPermissionSchema, input);
 }
 
-export function workflowDeploymentSpec(
-  input: MessageInitShape<typeof WorkflowDeploymentSpecSchema> = {},
-): WorkflowDeploymentSpec {
-  return create(WorkflowDeploymentSpecSchema, input);
+export function workflowDefinitionSpec(
+  input: MessageInitShape<typeof WorkflowDefinitionSpecSchema> = {},
+): WorkflowDefinitionSpec {
+  return create(WorkflowDefinitionSpecSchema, input);
 }
 
 export function workflowActionDescriptor(
@@ -528,28 +522,16 @@ export function workflowActionTable(
   return create(WorkflowActionTableSchema, input);
 }
 
-export function workflowUnsupportedFeature(
-  input: MessageInitShape<typeof WorkflowUnsupportedFeatureSchema> = {},
-): WorkflowUnsupportedFeature {
-  return create(WorkflowUnsupportedFeatureSchema, input);
+export function workflowDefinitionBinding(
+  input: MessageInitShape<typeof WorkflowDefinitionBindingSchema> = {},
+): WorkflowDefinitionBinding {
+  return create(WorkflowDefinitionBindingSchema, input);
 }
 
-export function planWorkflowResponse(
-  input: MessageInitShape<typeof PlanWorkflowResponseSchema> = {},
-): PlanWorkflowResponse {
-  return create(PlanWorkflowResponseSchema, input);
-}
-
-export function workflowDeploymentBinding(
-  input: MessageInitShape<typeof WorkflowDeploymentBindingSchema> = {},
-): WorkflowDeploymentBinding {
-  return create(WorkflowDeploymentBindingSchema, input);
-}
-
-export function workflowDeployment(
-  input: MessageInitShape<typeof WorkflowDeploymentSchema> = {},
-): WorkflowDeployment {
-  return create(WorkflowDeploymentSchema, input);
+export function workflowDefinition(
+  input: MessageInitShape<typeof WorkflowDefinitionSchema> = {},
+): WorkflowDefinition {
+  return create(WorkflowDefinitionSchema, input);
 }
 
 export function workflowManualTrigger(
@@ -668,22 +650,16 @@ export function workflowActionResult(
 
 export const boundWorkflowTargetToProto = boundWorkflowTarget;
 export const boundWorkflowTargetFromProto = boundWorkflowTarget;
-export const workflowDeploymentSpecToProto = workflowDeploymentSpec;
-export const workflowDeploymentSpecFromProto = workflowDeploymentSpec;
+export const workflowDefinitionSpecToProto = workflowDefinitionSpec;
+export const workflowDefinitionSpecFromProto = workflowDefinitionSpec;
 export const workflowSignalToProto = workflowSignal;
 export const workflowSignalFromProto = workflowSignal;
 export const workflowEventToProto = workflowEvent;
 export const workflowEventFromProto = workflowEvent;
 
-export function planWorkflowResponseFromProto(
-  input: MessageInitShape<typeof PlanWorkflowResponseSchema>,
-): PlanWorkflowResponse {
-  return create(PlanWorkflowResponseSchema, input);
-}
-
-export function managedWorkflowDeploymentFromProto(
-  input: ProtoManagedWorkflowDeployment,
-): ManagedWorkflowDeployment {
+export function managedWorkflowDefinitionFromProto(
+  input: ProtoManagedWorkflowDefinition,
+): ManagedWorkflowDefinition {
   return input;
 }
 
@@ -709,23 +685,22 @@ export function workflowManagerDeliverEventResponseFromProto(
 
 /** Handlers and runtime metadata for a workflow provider. */
 export interface WorkflowProviderOptions extends ProviderBaseOptions {
-  planWorkflow: (request: PlanWorkflowRequest) => MaybePromise<PlanWorkflowResponse>;
-  applyDeployment: (
-    request: ApplyWorkflowDeploymentRequest,
-  ) => MaybePromise<WorkflowDeployment>;
-  getDeployment: (
-    request: GetWorkflowDeploymentRequest,
-  ) => MaybePromise<WorkflowDeployment>;
-  listDeployments: (
-    request: ListWorkflowDeploymentsRequest,
-  ) => MaybePromise<readonly WorkflowDeployment[] | ListWorkflowDeploymentsResponse>;
-  deleteDeployment: (request: DeleteWorkflowDeploymentRequest) => MaybePromise<void>;
-  setDeploymentPaused: (
-    request: SetWorkflowDeploymentPausedRequest,
-  ) => MaybePromise<WorkflowDeployment>;
+  applyDefinition: (
+    request: ApplyWorkflowDefinitionRequest,
+  ) => MaybePromise<WorkflowDefinition>;
+  getDefinition: (
+    request: GetWorkflowDefinitionRequest,
+  ) => MaybePromise<WorkflowDefinition>;
+  listDefinitions: (
+    request: ListWorkflowDefinitionsRequest,
+  ) => MaybePromise<readonly WorkflowDefinition[] | ListWorkflowDefinitionsResponse>;
+  deleteDefinition: (request: DeleteWorkflowDefinitionRequest) => MaybePromise<void>;
+  setDefinitionPaused: (
+    request: SetWorkflowDefinitionPausedRequest,
+  ) => MaybePromise<WorkflowDefinition>;
   setActivationPaused: (
     request: SetWorkflowActivationPausedRequest,
-  ) => MaybePromise<WorkflowDeployment>;
+  ) => MaybePromise<WorkflowDefinition>;
   startRun: (request: StartWorkflowRunRequest) => MaybePromise<WorkflowRun>;
   signalRun: (request: SignalWorkflowRunRequest) => MaybePromise<WorkflowRunSignal>;
   signalOrStartRun: (
@@ -753,41 +728,37 @@ export class WorkflowProvider extends ProviderBase {
     super(options);
   }
 
-  async planWorkflow(request: PlanWorkflowRequest): Promise<PlanWorkflowResponse> {
-    return await this.options.planWorkflow(request);
+  async applyDefinition(
+    request: ApplyWorkflowDefinitionRequest,
+  ): Promise<WorkflowDefinition> {
+    return await this.options.applyDefinition(request);
   }
 
-  async applyDeployment(
-    request: ApplyWorkflowDeploymentRequest,
-  ): Promise<WorkflowDeployment> {
-    return await this.options.applyDeployment(request);
+  async getDefinition(
+    request: GetWorkflowDefinitionRequest,
+  ): Promise<WorkflowDefinition> {
+    return await this.options.getDefinition(request);
   }
 
-  async getDeployment(
-    request: GetWorkflowDeploymentRequest,
-  ): Promise<WorkflowDeployment> {
-    return await this.options.getDeployment(request);
+  async listDefinitions(
+    request: ListWorkflowDefinitionsRequest,
+  ): Promise<readonly WorkflowDefinition[] | ListWorkflowDefinitionsResponse> {
+    return await this.options.listDefinitions(request);
   }
 
-  async listDeployments(
-    request: ListWorkflowDeploymentsRequest,
-  ): Promise<readonly WorkflowDeployment[] | ListWorkflowDeploymentsResponse> {
-    return await this.options.listDeployments(request);
+  async deleteDefinition(request: DeleteWorkflowDefinitionRequest): Promise<void> {
+    await this.options.deleteDefinition(request);
   }
 
-  async deleteDeployment(request: DeleteWorkflowDeploymentRequest): Promise<void> {
-    await this.options.deleteDeployment(request);
-  }
-
-  async setDeploymentPaused(
-    request: SetWorkflowDeploymentPausedRequest,
-  ): Promise<WorkflowDeployment> {
-    return await this.options.setDeploymentPaused(request);
+  async setDefinitionPaused(
+    request: SetWorkflowDefinitionPausedRequest,
+  ): Promise<WorkflowDefinition> {
+    return await this.options.setDefinitionPaused(request);
   }
 
   async setActivationPaused(
     request: SetWorkflowActivationPausedRequest,
-  ): Promise<WorkflowDeployment> {
+  ): Promise<WorkflowDefinition> {
     return await this.options.setActivationPaused(request);
   }
 
@@ -853,12 +824,11 @@ export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
       value !== null &&
       "kind" in value &&
       (value as { kind?: unknown }).kind === "workflow" &&
-      "planWorkflow" in value &&
-      "applyDeployment" in value &&
-      "getDeployment" in value &&
-      "listDeployments" in value &&
-      "deleteDeployment" in value &&
-      "setDeploymentPaused" in value &&
+      "applyDefinition" in value &&
+      "getDefinition" in value &&
+      "listDefinitions" in value &&
+      "deleteDefinition" in value &&
+      "setDefinitionPaused" in value &&
       "setActivationPaused" in value &&
       "startRun" in value &&
       "signalRun" in value &&
@@ -906,57 +876,49 @@ export function createWorkflowProviderService(
   provider: WorkflowProvider,
 ): WorkflowProviderServiceImpl {
   return {
-    async planWorkflow(request) {
+    async applyWorkflowDefinition(request) {
       return create(
-        PlanWorkflowResponseSchema,
-        await invokeWorkflowProvider("plan workflow", () =>
-          provider.planWorkflow(request),
+        WorkflowDefinitionSchema,
+        await invokeWorkflowProvider("apply definition", () =>
+          provider.applyDefinition(create(ApplyWorkflowDefinitionRequestSchema, request)),
         ),
       );
     },
-    async applyWorkflowDeployment(request) {
+    async getWorkflowDefinition(request) {
       return create(
-        WorkflowDeploymentSchema,
-        await invokeWorkflowProvider("apply deployment", () =>
-          provider.applyDeployment(create(ApplyWorkflowDeploymentRequestSchema, request)),
+        WorkflowDefinitionSchema,
+        await invokeWorkflowProvider("get definition", () =>
+          provider.getDefinition(create(GetWorkflowDefinitionRequestSchema, request)),
         ),
       );
     },
-    async getWorkflowDeployment(request) {
-      return create(
-        WorkflowDeploymentSchema,
-        await invokeWorkflowProvider("get deployment", () =>
-          provider.getDeployment(create(GetWorkflowDeploymentRequestSchema, request)),
-        ),
+    async listWorkflowDefinitions(request) {
+      const response = await invokeWorkflowProvider("list definitions", () =>
+        provider.listDefinitions(request),
       );
-    },
-    async listWorkflowDeployments(request) {
-      const response = await invokeWorkflowProvider("list deployments", () =>
-        provider.listDeployments(request),
-      );
-      const result = listDeploymentsResult(response);
-      return create(ListWorkflowDeploymentsResponseSchema, {
-        deployments: [...result.deployments],
+      const result = listDefinitionsResult(response);
+      return create(ListWorkflowDefinitionsResponseSchema, {
+        definitions: [...result.definitions],
         nextPageToken: result.nextPageToken,
       });
     },
-    async deleteWorkflowDeployment(request) {
-      await invokeWorkflowProvider("delete deployment", () =>
-        provider.deleteDeployment(create(DeleteWorkflowDeploymentRequestSchema, request)),
+    async deleteWorkflowDefinition(request) {
+      await invokeWorkflowProvider("delete definition", () =>
+        provider.deleteDefinition(create(DeleteWorkflowDefinitionRequestSchema, request)),
       );
       return create(EmptySchema, {});
     },
-    async setWorkflowDeploymentPaused(request) {
+    async setWorkflowDefinitionPaused(request) {
       return create(
-        WorkflowDeploymentSchema,
-        await invokeWorkflowProvider("set deployment paused", () =>
-          provider.setDeploymentPaused(create(SetWorkflowDeploymentPausedRequestSchema, request)),
+        WorkflowDefinitionSchema,
+        await invokeWorkflowProvider("set definition paused", () =>
+          provider.setDefinitionPaused(create(SetWorkflowDefinitionPausedRequestSchema, request)),
         ),
       );
     },
     async setWorkflowActivationPaused(request) {
       return create(
-        WorkflowDeploymentSchema,
+        WorkflowDefinitionSchema,
         await invokeWorkflowProvider("set activation paused", () =>
           provider.setActivationPaused(create(SetWorkflowActivationPausedRequestSchema, request)),
         ),
@@ -1104,12 +1066,12 @@ function workflowHostRelayTokenInterceptor(token: string): Interceptor {
   };
 }
 
-function listDeploymentsResult(
-  value: readonly WorkflowDeployment[] | ListWorkflowDeploymentsResponse,
-): ListWorkflowDeploymentsResponse {
-  return "deployments" in value
+function listDefinitionsResult(
+  value: readonly WorkflowDefinition[] | ListWorkflowDefinitionsResponse,
+): ListWorkflowDefinitionsResponse {
+  return "definitions" in value
     ? value
-    : create(ListWorkflowDeploymentsResponseSchema, { deployments: [...value] });
+    : create(ListWorkflowDefinitionsResponseSchema, { definitions: [...value] });
 }
 
 function listRunsResult(

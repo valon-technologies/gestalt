@@ -332,9 +332,9 @@ func (t *workflowSystemTools) executeCreateDefinition(ctx context.Context, req a
 	if err != nil {
 		return nil, err
 	}
-	definition, err := t.manager.CreateDefinition(ctx, scopedPrincipal, workflowmanager.DefinitionUpsert{
+	definition, err := t.manager.ApplyDefinition(ctx, scopedPrincipal, workflowmanager.DefinitionApply{
 		ProviderName:     workflowSystemToolStringArg(args, "provider"),
-		Target:           target,
+		Spec:             workflowSystemToolDefinitionSpec(target, permissions),
 		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
 		CallerPluginName: workflowSystemToolCallerScope(req),
 	})
@@ -382,15 +382,33 @@ func (t *workflowSystemTools) executeUpdateDefinition(ctx context.Context, req a
 	if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 		return nil, err
 	}
+	existing, err := t.manager.GetDefinition(ctx, workflowSystemToolManagementPrincipal(req), definitionID)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil || existing.Definition == nil {
+		return nil, core.ErrNotFound
+	}
 	permissions, err := workflowSystemToolScopedPermissions(req, target)
 	if err != nil {
 		return nil, err
 	}
-	definition, err := t.manager.UpdateDefinition(ctx, workflowSystemToolManagementPrincipal(req), definitionID, workflowmanager.DefinitionUpsert{
-		ProviderName:     workflowSystemToolStringArg(args, "provider"),
-		Target:           target,
+	spec := existing.Definition.Spec
+	spec.ID = definitionID
+	spec.Generation++
+	if spec.Generation <= 1 {
+		spec.Generation = 2
+	}
+	spec.Target = target
+	spec.Permissions = permissions
+	providerName := workflowSystemToolStringArg(args, "provider")
+	if providerName == "" {
+		providerName = existing.ProviderName
+	}
+	definition, err := t.manager.ApplyDefinition(ctx, workflowSystemToolManagementPrincipal(req), workflowmanager.DefinitionApply{
+		ProviderName:     providerName,
+		Spec:             spec,
 		CallerPluginName: workflowSystemToolCallerScope(req),
-		Permissions:      permissions,
 	})
 	if err != nil {
 		return nil, err
@@ -446,11 +464,11 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 		if definition == nil || definition.Definition == nil {
 			return nil, core.ErrNotFound
 		}
-		target = definition.Definition.Target
+		target = workflowSystemToolDefinitionTarget(definition)
 		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 			return nil, err
 		}
-		permissions := definition.Definition.Permissions
+		permissions := workflowSystemToolDefinitionPermissions(definition)
 		if permissions == nil {
 			permissions = workflowSystemToolPermissionsForTarget(target, req.ProviderName)
 		}
@@ -517,9 +535,9 @@ func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSyst
 	}
 
 	var target coreworkflow.Target
-	startTarget := coreworkflow.Target{}
 	var scopedPrincipal *principal.Principal
 	var permissions []core.AccessPermission
+	providerName := workflowSystemToolStringArg(args, "provider")
 	if definitionID != "" {
 		definitionPrincipal := workflowSystemToolPrincipalWithTrustedProvider(req.Principal, strings.TrimSpace(req.ProviderName))
 		definition, err := t.manager.GetDefinition(ctx, definitionPrincipal, definitionID)
@@ -529,11 +547,11 @@ func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSyst
 		if definition == nil || definition.Definition == nil {
 			return nil, core.ErrNotFound
 		}
-		target = definition.Definition.Target
+		target = workflowSystemToolDefinitionTarget(definition)
 		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 			return nil, err
 		}
-		permissions = definition.Definition.Permissions
+		permissions = workflowSystemToolDefinitionPermissions(definition)
 		if permissions == nil {
 			permissions = workflowSystemToolPermissionsForTarget(target, req.ProviderName)
 		}
@@ -561,11 +579,22 @@ func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSyst
 		if err != nil {
 			return nil, err
 		}
-		startTarget = target
+		definition, err := t.manager.ApplyDefinition(ctx, scopedPrincipal, workflowmanager.DefinitionApply{
+			ProviderName:     providerName,
+			CallerPluginName: workflowSystemToolCallerScope(req),
+			IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
+			Spec:             workflowSystemToolDefinitionSpec(target, permissions),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if definition == nil || definition.Definition == nil {
+			return nil, core.ErrNotFound
+		}
+		definitionID = strings.TrimSpace(definition.Definition.Spec.ID)
 	}
 	run, err := t.manager.StartRun(ctx, scopedPrincipal, workflowmanager.RunStart{
-		ProviderName:     workflowSystemToolStringArg(args, "provider"),
-		Target:           startTarget,
+		ProviderName:     providerName,
 		DefinitionID:     definitionID,
 		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
 		WorkflowKey:      workflowSystemToolStringArg(args, "workflowKey"),
@@ -638,11 +667,11 @@ func (t *workflowSystemTools) executeUpdateSchedule(ctx context.Context, req age
 		if definition == nil || definition.Definition == nil {
 			return nil, core.ErrNotFound
 		}
-		target = definition.Definition.Target
+		target = workflowSystemToolDefinitionTarget(definition)
 		if err := workflowSystemToolValidateCreateScope(req, target); err != nil {
 			return nil, err
 		}
-		permissions = definition.Definition.Permissions
+		permissions = workflowSystemToolDefinitionPermissions(definition)
 		if permissions == nil {
 			permissions, err = workflowSystemToolScopedPermissions(req, target)
 			if err != nil {
@@ -756,10 +785,12 @@ func workflowSystemToolDefinitionLogAttrs(req agentSystemToolExecutionRequest, d
 	attrs = append(attrs, "workflow_provider", strings.TrimSpace(definition.ProviderName))
 	if definition.Definition != nil {
 		attrs = append(attrs,
-			"workflow_definition_id", strings.TrimSpace(definition.Definition.ID),
-			"workflow_target", workflowTargetContext(definition.Definition.Target),
-			"workflow_caller_plugin", strings.TrimSpace(definition.Definition.CallerPluginName),
+			"workflow_definition_id", strings.TrimSpace(definition.Definition.Spec.ID),
+			"workflow_target", workflowTargetContext(definition.Definition.Spec.Target),
 		)
+		if definition.ExecutionRef != nil {
+			attrs = append(attrs, "workflow_caller_plugin", strings.TrimSpace(definition.ExecutionRef.CallerPluginName))
+		}
 	}
 	return attrs
 }
@@ -1877,11 +1908,41 @@ func workflowSystemToolDefinitionInfo(definition *workflowmanager.ManagedDefinit
 	}
 	if definition.Definition != nil {
 		coreDefinition := definition.Definition
-		value["id"] = coreDefinition.ID
-		value["target"] = workflowSystemToolTargetInfo(coreDefinition.Target)
+		value["id"] = coreDefinition.Spec.ID
+		value["generation"] = coreDefinition.Spec.Generation
+		value["target"] = workflowSystemToolTargetInfo(coreDefinition.Spec.Target)
 		workflowSystemToolPutTime(value, "createdAt", coreDefinition.CreatedAt)
 	}
+	if definition.ExecutionRef != nil {
+		value["executionRef"] = strings.TrimSpace(definition.ExecutionRef.ID)
+	}
 	return value
+}
+
+func workflowSystemToolDefinitionSpec(target coreworkflow.Target, permissions []core.AccessPermission) coreworkflow.DefinitionSpec {
+	return coreworkflow.DefinitionSpec{
+		Target:      target,
+		Permissions: workflowSystemToolClonePermissions(permissions),
+		Activations: []coreworkflow.Activation{{
+			ID:     "manual",
+			Mode:   coreworkflow.ActivationModeStart,
+			Manual: true,
+		}},
+	}
+}
+
+func workflowSystemToolDefinitionTarget(definition *workflowmanager.ManagedDefinition) coreworkflow.Target {
+	if definition == nil || definition.Definition == nil {
+		return coreworkflow.Target{}
+	}
+	return definition.Definition.Spec.Target
+}
+
+func workflowSystemToolDefinitionPermissions(definition *workflowmanager.ManagedDefinition) []core.AccessPermission {
+	if definition == nil || definition.ExecutionRef == nil {
+		return nil
+	}
+	return workflowSystemToolClonePermissions(definition.ExecutionRef.Permissions)
 }
 
 func workflowSystemToolScheduleInfo(schedule *workflowmanager.ManagedSchedule) map[string]any {
