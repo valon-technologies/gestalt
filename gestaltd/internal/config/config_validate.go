@@ -62,6 +62,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateAuthorizationPolicies(cfg); err != nil {
 		return err
 	}
+	if err := validateAuthorizationModelConfig(cfg); err != nil {
+		return err
+	}
 	if err := validateServerListeners(cfg.Server); err != nil {
 		return err
 	}
@@ -1591,6 +1594,333 @@ func validateAuthorizationPolicies(cfg *Config) error {
 			}
 			seenSubjectIDs[subjectID] = i
 		}
+	}
+	return nil
+}
+
+func validateAuthorizationModelConfig(cfg *Config) error {
+	definedResourceTypes := make(map[string]string)
+	resourceTypeRelations := make(map[string]map[string]AuthorizationRelationDef)
+	for modelName, model := range cfg.Authorization.Models {
+		if err := validateAuthorizationMapKey("authorization.models", modelName); err != nil {
+			return err
+		}
+		if err := validateAuthorizationSourceMetadata("authorization.models."+modelName+".source", model.Source); err != nil {
+			return err
+		}
+		for resourceTypeName, resourceType := range model.ResourceTypes {
+			resourcePath := fmt.Sprintf("authorization.models.%s.resourceTypes.%s", modelName, resourceTypeName)
+			if err := validateAuthorizationResourceTypeDef(resourcePath, resourceTypeName, resourceType); err != nil {
+				return err
+			}
+			if prev, exists := definedResourceTypes[resourceTypeName]; exists {
+				return fmt.Errorf("config validation: %s duplicates resource type already defined at %s", resourcePath, prev)
+			}
+			definedResourceTypes[resourceTypeName] = resourcePath
+			resourceTypeRelations[resourceTypeName] = resourceType.Relations
+		}
+	}
+	for modelName, model := range cfg.Authorization.Models {
+		for resourceTypeName, resourceType := range model.ResourceTypes {
+			resourcePath := fmt.Sprintf("authorization.models.%s.resourceTypes.%s", modelName, resourceTypeName)
+			if err := validateAuthorizationResourceTypeReferences(resourcePath, resourceType, definedResourceTypes); err != nil {
+				return err
+			}
+		}
+	}
+	for resourceTypeName, policy := range cfg.Authorization.ResourceTypes {
+		if err := validateAuthorizationMapKey("authorization.resourceTypes", resourceTypeName); err != nil {
+			return err
+		}
+		if policy.Dynamic.AllowStaticRelationshipOverrides {
+			return fmt.Errorf("config validation: authorization.resourceTypes.%s.dynamic.allowStaticRelationshipOverrides is not supported", resourceTypeName)
+		}
+	}
+	for i, relationship := range cfg.Authorization.Relationships {
+		path := fmt.Sprintf("authorization.relationships[%d]", i)
+		if err := validateAuthorizationRelationshipDef(path, relationship, resourceTypeRelations); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAuthorizationResourceTypeReferences(path string, def AuthorizationResourceTypeDef, resourceTypes map[string]string) error {
+	for relationName, relation := range def.Relations {
+		relationPath := path + ".relations." + relationName
+		for i := range relation.AllowedTargets {
+			target := &relation.AllowedTargets[i]
+			targetPath := fmt.Sprintf("%s.allowedTargets[%d]", relationPath, i)
+			if resourceType := strings.TrimSpace(target.ResourceType); resourceType != "" {
+				if _, ok := resourceTypes[resourceType]; !ok {
+					return fmt.Errorf("config validation: %s.resourceType references unknown resource type %q", targetPath, resourceType)
+				}
+			}
+			if target.SubjectSet != nil {
+				resourceType := strings.TrimSpace(target.SubjectSet.ResourceType)
+				if _, ok := resourceTypes[resourceType]; !ok {
+					return fmt.Errorf("config validation: %s.subjectSet.resourceType references unknown resource type %q", targetPath, resourceType)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func validateAuthorizationResourceTypeDef(path, name string, def AuthorizationResourceTypeDef) error {
+	if err := validateAuthorizationMapKey(path, name); err != nil {
+		return err
+	}
+	if len(def.Relations) == 0 {
+		return fmt.Errorf("config validation: %s.relations must define at least one relation", path)
+	}
+	if err := validateAuthorizationSourceMetadata(path+".source", def.Source); err != nil {
+		return err
+	}
+	if def.Dynamic.AllowStaticRelationshipOverrides {
+		return fmt.Errorf("config validation: %s.dynamic.allowStaticRelationshipOverrides is not supported", path)
+	}
+	for relationName, relation := range def.Relations {
+		relationPath := path + ".relations." + relationName
+		if err := validateAuthorizationMapKey(relationPath, relationName); err != nil {
+			return err
+		}
+		if err := validateStringList(relationPath+".subjectTypes", relation.SubjectTypes); err != nil {
+			return err
+		}
+		if len(relation.SubjectTypes) == 0 && len(relation.AllowedTargets) == 0 {
+			return fmt.Errorf("config validation: %s must set subjectTypes or allowedTargets", relationPath)
+		}
+		for i, target := range relation.AllowedTargets {
+			if err := validateAuthorizationAllowedTargetDef(fmt.Sprintf("%s.allowedTargets[%d]", relationPath, i), target); err != nil {
+				return err
+			}
+		}
+		if err := validateAuthorizationRewriteDef(relationPath+".rewrite", relation.Rewrite, def.Relations); err != nil {
+			return err
+		}
+		if err := validateAuthorizationSourceMetadata(relationPath+".source", relation.Source); err != nil {
+			return err
+		}
+	}
+	for actionName, action := range def.Actions {
+		actionPath := path + ".actions." + actionName
+		if err := validateAuthorizationMapKey(actionPath, actionName); err != nil {
+			return err
+		}
+		if err := validateStringList(actionPath+".relations", action.Relations); err != nil {
+			return err
+		}
+		if len(action.Relations) == 0 && action.Rewrite == nil {
+			return fmt.Errorf("config validation: %s must set relations or rewrite", actionPath)
+		}
+		for _, relation := range action.Relations {
+			if _, ok := def.Relations[relation]; !ok {
+				return fmt.Errorf("config validation: %s.relations references unknown relation %q", actionPath, relation)
+			}
+		}
+		if err := validateAuthorizationRewriteDef(actionPath+".rewrite", action.Rewrite, def.Relations); err != nil {
+			return err
+		}
+		if err := validateAuthorizationSourceMetadata(actionPath+".source", action.Source); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAuthorizationAllowedTargetDef(path string, target AuthorizationAllowedTargetDef) error {
+	set := 0
+	if strings.TrimSpace(target.SubjectType) != "" {
+		set++
+	}
+	if strings.TrimSpace(target.ResourceType) != "" {
+		set++
+	}
+	if target.SubjectSet != nil {
+		set++
+		if strings.TrimSpace(target.SubjectSet.ResourceType) == "" {
+			return fmt.Errorf("config validation: %s.subjectSet.resourceType is required", path)
+		}
+		if strings.TrimSpace(target.SubjectSet.Relation) == "" {
+			return fmt.Errorf("config validation: %s.subjectSet.relation is required", path)
+		}
+	}
+	if set != 1 {
+		return fmt.Errorf("config validation: %s must set exactly one of subjectType, resourceType, or subjectSet", path)
+	}
+	return nil
+}
+
+func validateAuthorizationRewriteDef(path string, rewrite *AuthorizationRewriteDef, relations map[string]AuthorizationRelationDef) error {
+	if rewrite == nil {
+		return nil
+	}
+	set := 0
+	if rewrite.This != nil {
+		set++
+	}
+	if rewrite.ComputedUserset != nil {
+		set++
+		relation := strings.TrimSpace(rewrite.ComputedUserset.Relation)
+		if relation == "" {
+			return fmt.Errorf("config validation: %s.computedUserset.relation is required", path)
+		}
+		if _, ok := relations[relation]; !ok {
+			return fmt.Errorf("config validation: %s.computedUserset.relation references unknown relation %q", path, relation)
+		}
+	}
+	if rewrite.TupleToUserset != nil {
+		set++
+		tupleset := strings.TrimSpace(rewrite.TupleToUserset.TuplesetRelation)
+		computed := strings.TrimSpace(rewrite.TupleToUserset.ComputedRelation)
+		if tupleset == "" {
+			return fmt.Errorf("config validation: %s.tupleToUserset.tuplesetRelation is required", path)
+		}
+		if computed == "" {
+			return fmt.Errorf("config validation: %s.tupleToUserset.computedRelation is required", path)
+		}
+		if _, ok := relations[tupleset]; !ok {
+			return fmt.Errorf("config validation: %s.tupleToUserset.tuplesetRelation references unknown relation %q", path, tupleset)
+		}
+	}
+	if len(rewrite.Union) > 0 {
+		set++
+		for i := range rewrite.Union {
+			if err := validateAuthorizationRewriteDef(fmt.Sprintf("%s.union[%d]", path, i), &rewrite.Union[i], relations); err != nil {
+				return err
+			}
+		}
+	}
+	if set != 1 {
+		return fmt.Errorf("config validation: %s must set exactly one of this, computedUserset, tupleToUserset, or union", path)
+	}
+	return nil
+}
+
+func validateAuthorizationRelationshipDef(path string, relationship AuthorizationRelationshipDef, resourceTypes map[string]map[string]AuthorizationRelationDef) error {
+	if err := validateAuthorizationSubjectDef(path+".subject", relationship.Subject); err != nil {
+		return err
+	}
+	if strings.TrimSpace(relationship.Relation) == "" {
+		return fmt.Errorf("config validation: %s.relation is required", path)
+	}
+	if err := validateAuthorizationResourceDef(path+".resource", relationship.Resource); err != nil {
+		return err
+	}
+	resourceType := strings.TrimSpace(relationship.Resource.Type)
+	relations, ok := resourceTypes[resourceType]
+	if !ok {
+		return fmt.Errorf("config validation: %s.resource.type references unknown resource type %q", path, resourceType)
+	}
+	if _, ok := relations[strings.TrimSpace(relationship.Relation)]; !ok {
+		return fmt.Errorf("config validation: %s.relation references unknown relation %q for resource type %q", path, relationship.Relation, resourceType)
+	}
+	if err := validateAuthorizationRelationshipTargetDef(path+".target", relationship.Target, resourceTypes); err != nil {
+		return err
+	}
+	if err := validateAuthorizationSourceMetadata(path+".source", relationship.Source); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateAuthorizationMapKey(path, key string) error {
+	if strings.TrimSpace(key) == "" {
+		return fmt.Errorf("config validation: %s keys must be non-empty", path)
+	}
+	if key != strings.TrimSpace(key) {
+		return fmt.Errorf("config validation: %s key %q must not have surrounding whitespace", path, key)
+	}
+	return nil
+}
+
+func validateAuthorizationSubjectDef(path string, subject AuthorizationSubjectDef) error {
+	if strings.TrimSpace(subject.Type) == "" {
+		return fmt.Errorf("config validation: %s.type is required", path)
+	}
+	if strings.TrimSpace(subject.ID) == "" {
+		return fmt.Errorf("config validation: %s.id is required", path)
+	}
+	return nil
+}
+
+func validateAuthorizationResourceDef(path string, resource AuthorizationResourceDef) error {
+	if strings.TrimSpace(resource.Type) == "" {
+		return fmt.Errorf("config validation: %s.type is required", path)
+	}
+	if strings.TrimSpace(resource.ID) == "" {
+		return fmt.Errorf("config validation: %s.id is required", path)
+	}
+	return nil
+}
+
+func validateAuthorizationRelationshipTargetDef(path string, target AuthorizationRelationshipTargetDef, resourceTypes map[string]map[string]AuthorizationRelationDef) error {
+	set := 0
+	if target.Subject != nil {
+		set++
+		if err := validateAuthorizationSubjectDef(path+".subject", *target.Subject); err != nil {
+			return err
+		}
+	}
+	if target.Resource != nil {
+		set++
+		if err := validateAuthorizationResourceDef(path+".resource", *target.Resource); err != nil {
+			return err
+		}
+		if len(resourceTypes) > 0 {
+			if _, ok := resourceTypes[strings.TrimSpace(target.Resource.Type)]; !ok {
+				return fmt.Errorf("config validation: %s.resource.type references unknown resource type %q", path, target.Resource.Type)
+			}
+		}
+	}
+	if target.SubjectSet != nil {
+		set++
+		if err := validateAuthorizationResourceDef(path+".subjectSet.resource", target.SubjectSet.Resource); err != nil {
+			return err
+		}
+		if len(resourceTypes) > 0 {
+			relations, ok := resourceTypes[strings.TrimSpace(target.SubjectSet.Resource.Type)]
+			if !ok {
+				return fmt.Errorf("config validation: %s.subjectSet.resource.type references unknown resource type %q", path, target.SubjectSet.Resource.Type)
+			}
+			if _, ok := relations[strings.TrimSpace(target.SubjectSet.Relation)]; !ok {
+				return fmt.Errorf("config validation: %s.subjectSet.relation references unknown relation %q for resource type %q", path, target.SubjectSet.Relation, target.SubjectSet.Resource.Type)
+			}
+		}
+		if strings.TrimSpace(target.SubjectSet.Relation) == "" {
+			return fmt.Errorf("config validation: %s.subjectSet.relation is required", path)
+		}
+	}
+	if set > 1 {
+		return fmt.Errorf("config validation: %s must set at most one of subject, resource, or subjectSet", path)
+	}
+	return nil
+}
+
+func validateAuthorizationSourceMetadata(path string, source AuthorizationSourceMetadataDef) error {
+	ownerKind := strings.TrimSpace(source.OwnerKind)
+	ownerID := strings.TrimSpace(source.OwnerID)
+	if ownerKind == "" && ownerID != "" {
+		return fmt.Errorf("config validation: %s.ownerKind is required when ownerId is set", path)
+	}
+	if ownerKind != "" && ownerID == "" {
+		return fmt.Errorf("config validation: %s.ownerId is required when ownerKind is set", path)
+	}
+	return nil
+}
+
+func validateStringList(path string, values []string) error {
+	seen := make(map[string]int, len(values))
+	for i, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return fmt.Errorf("config validation: %s[%d] is required", path, i)
+		}
+		if prev, exists := seen[trimmed]; exists {
+			return fmt.Errorf("config validation: %s[%d] duplicates [%d]", path, i, prev)
+		}
+		seen[trimmed] = i
 	}
 	return nil
 }

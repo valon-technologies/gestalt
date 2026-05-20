@@ -208,6 +208,67 @@ authorization:
 
 `authorization.policies` configures shared subject access policies. Each policy resolves a caller to exactly one role by matching canonical `subjectID` values such as `user:<id>` or `service_account:<id>`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
 
+`authorization.models` defines deployment-owned authorization model fragments as generic resource types, relations, actions, rewrites, and allowed targets. `authorization.relationships` defines static relationship tuples against those resource types. These fields are parsed and validated alongside existing `authorization.policies`; provider reconciliation continues to consume the compatibility policy inputs until the authorization composer is enabled.
+
+```yaml
+authorization:
+  models:
+    default:
+      resourceTypes:
+        team:
+          relations:
+            member:
+              subjectTypes: [subject]
+              rewrite:
+                this: {}
+            admin:
+              subjectTypes: [subject]
+          actions:
+            view:
+              relations: [member, admin]
+            manage:
+              relations: [admin]
+          dynamic:
+            allowAdditionalRelationships: true
+        managed_subject:
+          relations:
+            viewer:
+              subjectTypes: [subject]
+            editor:
+              subjectTypes: [subject]
+            admin:
+              subjectTypes: [subject]
+          actions:
+            view:
+              relations: [viewer, editor, admin]
+            manage:
+              relations: [admin]
+        plugin/github/repository:
+          relations:
+            reader:
+              allowedTargets:
+                - subjectType: subject
+            maintainer:
+              allowedTargets:
+                - subjectType: subject
+          actions:
+            read:
+              relations: [reader, maintainer]
+            administer:
+              relations: [maintainer]
+  relationships:
+    - subject:
+        type: subject
+        id: user:alice
+      relation: admin
+      resource:
+        type: team
+        id: servicing
+      source:
+        layer: static_config
+        id: authorization.relationships[0]
+```
+
 Dynamic grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, built-in Gestalt admins can manage additional dynamic members from the admin UI at `/admin/?tab=members`, and callers with role `admin` on a specific plugin can manage dynamic members for that plugin through `/admin/api/v1/authorization/plugins/{plugin}/members` or `gestalt authorization plugins members ...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for subjects that already have static authorization on that plugin. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `service_account:<id>`, or another deployment-defined subject kind.
 
 Non-human callers are modeled as [service account subjects](/service-accounts), typically `service_account:<id>`. Grant plugin access with `authorization.policies` or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
@@ -234,6 +295,9 @@ Plugins without `authorizationPolicy` are open to any authenticated subject. Bin
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `admin.ui` | | Optional named `providers.ui` bundle whose `admin/` assets should back `/admin`. When omitted, Gestalt auto-discovers `admin/` assets from the root UI bundle before using the built-in fallback. |
 | `authorization.policies` | | Shared subject access policies resolved by canonical `subjectID`. |
+| `authorization.models` | | Static authorization model fragments keyed by model name. Each fragment defines `resourceTypes`, relation `subjectTypes` or `allowedTargets`, actions, and optional rewrites. |
+| `authorization.relationships` | | Static relationship tuples with `subject`, `relation`, and `resource` fields. |
+| `authorization.resourceTypes.<type>.dynamic.allowAdditionalRelationships` | `false` | Allows later dynamic source state to add relationship tuples for a static resource type. Dynamic override/removal of static relationships is not supported. |
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener can also serve token-authenticated hosted-runtime host-service relay and egress proxy callbacks when `server.runtime.relayBaseUrl` points at that origin.
 
