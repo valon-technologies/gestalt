@@ -21,184 +21,204 @@ type workflowProviderServer struct {
 	provider WorkflowProvider
 }
 
-func (s workflowProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
-	run, err := s.provider.StartRun(ctx, startWorkflowProviderRunRequestFromProto(req))
+func (s workflowProviderServer) PlanWorkflow(ctx context.Context, req *proto.PlanWorkflowRequest) (*proto.PlanWorkflowResponse, error) {
+	resp, err := s.provider.PlanWorkflow(ctx, planWorkflowRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("workflow plan", err)
+	}
+	return planWorkflowResponseToProto(resp), nil
+}
+
+func (s workflowProviderServer) ApplyWorkflowDeployment(ctx context.Context, req *proto.ApplyWorkflowDeploymentRequest) (*proto.WorkflowDeployment, error) {
+	deployment, err := s.provider.ApplyWorkflowDeployment(ctx, applyWorkflowDeploymentRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("workflow apply deployment", err)
+	}
+	out, err := workflowDeploymentToProto(deployment)
+	return out, providerRPCError("workflow apply deployment", err)
+}
+
+func (s workflowProviderServer) GetWorkflowDeployment(ctx context.Context, req *proto.GetWorkflowDeploymentRequest) (*proto.WorkflowDeployment, error) {
+	deployment, err := s.provider.GetWorkflowDeployment(ctx, &GetWorkflowDeploymentRequest{DeploymentID: req.GetDeploymentId()})
+	if err != nil {
+		return nil, providerRPCError("workflow get deployment", err)
+	}
+	out, err := workflowDeploymentToProto(deployment)
+	return out, providerRPCError("workflow get deployment", err)
+}
+
+func (s workflowProviderServer) ListWorkflowDeployments(ctx context.Context, req *proto.ListWorkflowDeploymentsRequest) (*proto.ListWorkflowDeploymentsResponse, error) {
+	resp, err := s.provider.ListWorkflowDeployments(ctx, &ListWorkflowDeploymentsRequest{
+		PageSize:  int(req.GetPageSize()),
+		PageToken: req.GetPageToken(),
+		Labels:    cloneStringMap(req.GetLabels()),
+	})
+	if err != nil {
+		return nil, providerRPCError("workflow list deployments", err)
+	}
+	deployments, err := workflowDeploymentsToProto(resp.GetDeployments())
+	if err != nil {
+		return nil, providerRPCError("workflow list deployments", err)
+	}
+	return &proto.ListWorkflowDeploymentsResponse{
+		Deployments:   deployments,
+		NextPageToken: resp.GetNextPageToken(),
+	}, nil
+}
+
+func (s workflowProviderServer) DeleteWorkflowDeployment(ctx context.Context, req *proto.DeleteWorkflowDeploymentRequest) (*emptypb.Empty, error) {
+	err := s.provider.DeleteWorkflowDeployment(ctx, &DeleteWorkflowDeploymentRequest{
+		DeploymentID: req.GetDeploymentId(),
+		Generation:   req.GetGeneration(),
+		RequestID:    req.GetRequestId(),
+	})
+	return &emptypb.Empty{}, providerRPCError("workflow delete deployment", err)
+}
+
+func (s workflowProviderServer) SetWorkflowDeploymentPaused(ctx context.Context, req *proto.SetWorkflowDeploymentPausedRequest) (*proto.WorkflowDeployment, error) {
+	deployment, err := s.provider.SetWorkflowDeploymentPaused(ctx, &SetWorkflowDeploymentPausedRequest{
+		DeploymentID: req.GetDeploymentId(),
+		Paused:       req.GetPaused(),
+		RequestID:    req.GetRequestId(),
+	})
+	if err != nil {
+		return nil, providerRPCError("workflow set deployment paused", err)
+	}
+	out, err := workflowDeploymentToProto(deployment)
+	return out, providerRPCError("workflow set deployment paused", err)
+}
+
+func (s workflowProviderServer) SetWorkflowActivationPaused(ctx context.Context, req *proto.SetWorkflowActivationPausedRequest) (*proto.WorkflowDeployment, error) {
+	deployment, err := s.provider.SetWorkflowActivationPaused(ctx, &SetWorkflowActivationPausedRequest{
+		DeploymentID: req.GetDeploymentId(),
+		ActivationID: req.GetActivationId(),
+		Paused:       req.GetPaused(),
+		RequestID:    req.GetRequestId(),
+	})
+	if err != nil {
+		return nil, providerRPCError("workflow set activation paused", err)
+	}
+	out, err := workflowDeploymentToProto(deployment)
+	return out, providerRPCError("workflow set activation paused", err)
+}
+
+func (s workflowProviderServer) StartWorkflowRun(ctx context.Context, req *proto.StartWorkflowRunRequest) (*proto.WorkflowRun, error) {
+	run, err := s.provider.StartWorkflowRun(ctx, startWorkflowRunRequestFromProto(req))
 	if err != nil {
 		return nil, providerRPCError("workflow start run", err)
 	}
-	out, err := workflowRunInputToProto(run)
+	out, err := workflowRunToProto(run)
 	return out, providerRPCError("workflow start run", err)
 }
 
-func (s workflowProviderServer) GetRun(ctx context.Context, req *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
-	run, err := s.provider.GetRun(ctx, &GetWorkflowProviderRunRequest{RunID: req.GetRunId()})
+func (s workflowProviderServer) SignalWorkflowRun(ctx context.Context, req *proto.SignalWorkflowRunRequest) (*proto.WorkflowRunSignal, error) {
+	resp, err := s.provider.SignalWorkflowRun(ctx, signalWorkflowRunRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("workflow signal run", err)
+	}
+	out, err := workflowRunSignalToProto(resp)
+	return out, providerRPCError("workflow signal run", err)
+}
+
+func (s workflowProviderServer) SignalOrStartWorkflowRun(ctx context.Context, req *proto.SignalOrStartWorkflowRunRequest) (*proto.WorkflowRunSignal, error) {
+	resp, err := s.provider.SignalOrStartWorkflowRun(ctx, signalOrStartWorkflowRunRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("workflow signal or start run", err)
+	}
+	out, err := workflowRunSignalToProto(resp)
+	return out, providerRPCError("workflow signal or start run", err)
+}
+
+func (s workflowProviderServer) CancelWorkflowRun(ctx context.Context, req *proto.CancelWorkflowRunRequest) (*proto.WorkflowRun, error) {
+	run, err := s.provider.CancelWorkflowRun(ctx, &CancelWorkflowRunRequest{RunID: req.GetRunId(), Reason: req.GetReason()})
+	if err != nil {
+		return nil, providerRPCError("workflow cancel run", err)
+	}
+	out, err := workflowRunToProto(run)
+	return out, providerRPCError("workflow cancel run", err)
+}
+
+func (s workflowProviderServer) DeliverWorkflowEvent(ctx context.Context, req *proto.DeliverWorkflowEventRequest) (*proto.DeliverWorkflowEventResponse, error) {
+	resp, err := s.provider.DeliverWorkflowEvent(ctx, deliverWorkflowEventRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("workflow deliver event", err)
+	}
+	results, err := workflowEventDeliveryResultsToProto(resp.GetResults())
+	if err != nil {
+		return nil, providerRPCError("workflow deliver event", err)
+	}
+	return &proto.DeliverWorkflowEventResponse{Results: results}, nil
+}
+
+func (s workflowProviderServer) GetWorkflowRun(ctx context.Context, req *proto.GetWorkflowRunRequest) (*proto.WorkflowRun, error) {
+	run, err := s.provider.GetWorkflowRun(ctx, &GetWorkflowRunRequest{RunID: req.GetRunId()})
 	if err != nil {
 		return nil, providerRPCError("workflow get run", err)
 	}
-	out, err := workflowRunInputToProto(run)
+	out, err := workflowRunToProto(run)
 	return out, providerRPCError("workflow get run", err)
 }
 
-func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
-	resp, err := s.provider.ListRuns(ctx, &ListWorkflowProviderRunsRequest{
-		PageSize:  int(req.GetPageSize()),
-		PageToken: req.GetPageToken(),
-		Status:    WorkflowRunStatus(req.GetStatus()),
+func (s workflowProviderServer) ListWorkflowRuns(ctx context.Context, req *proto.ListWorkflowRunsRequest) (*proto.ListWorkflowRunsResponse, error) {
+	resp, err := s.provider.ListWorkflowRuns(ctx, &ListWorkflowRunsRequest{
+		DeploymentID: req.GetDeploymentId(),
+		PageSize:     int(req.GetPageSize()),
+		PageToken:    req.GetPageToken(),
+		Status:       WorkflowRunStatus(req.GetStatus()),
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
 	}
-	runs, err := workflowRunInputsToProto(resp.GetRuns())
+	runs, err := workflowRunsToProto(resp.GetRuns())
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
 	}
-	return &proto.ListWorkflowProviderRunsResponse{
+	return &proto.ListWorkflowRunsResponse{
 		Runs:          runs,
 		NextPageToken: resp.GetNextPageToken(),
 	}, nil
 }
 
-func (s workflowProviderServer) CancelRun(ctx context.Context, req *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
-	run, err := s.provider.CancelRun(ctx, &CancelWorkflowProviderRunRequest{RunID: req.GetRunId(), Reason: req.GetReason()})
+func (s workflowProviderServer) GetWorkflowRunEvents(ctx context.Context, req *proto.GetWorkflowRunEventsRequest) (*proto.ListWorkflowRunEventsResponse, error) {
+	resp, err := s.provider.GetWorkflowRunEvents(ctx, &GetWorkflowRunEventsRequest{
+		RunID:     req.GetRunId(),
+		PageSize:  int(req.GetPageSize()),
+		PageToken: req.GetPageToken(),
+	})
 	if err != nil {
-		return nil, providerRPCError("workflow cancel run", err)
+		return nil, providerRPCError("workflow get run events", err)
 	}
-	out, err := workflowRunInputToProto(run)
-	return out, providerRPCError("workflow cancel run", err)
+	return &proto.ListWorkflowRunEventsResponse{
+		Events:        workflowRunEventsToProto(resp.GetEvents()),
+		NextPageToken: resp.GetNextPageToken(),
+	}, nil
 }
 
-func (s workflowProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
-	resp, err := s.provider.SignalRun(ctx, signalWorkflowProviderRunRequestFromProto(req))
+func (s workflowProviderServer) GetWorkflowRunOutput(ctx context.Context, req *proto.GetWorkflowRunOutputRequest) (*proto.WorkflowRunOutput, error) {
+	output, err := s.provider.GetWorkflowRunOutput(ctx, &GetWorkflowRunOutputRequest{
+		RunID:     req.GetRunId(),
+		OutputRef: req.GetOutputRef(),
+		StepID:    req.GetStepId(),
+	})
 	if err != nil {
-		return nil, providerRPCError("workflow signal run", err)
+		return nil, providerRPCError("workflow get run output", err)
 	}
-	out, err := signalWorkflowRunResponseToProto(resp)
-	return out, providerRPCError("workflow signal run", err)
-}
-
-func (s workflowProviderServer) SignalOrStartRun(ctx context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
-	resp, err := s.provider.SignalOrStartRun(ctx, signalOrStartWorkflowProviderRunRequestFromProto(req))
-	if err != nil {
-		return nil, providerRPCError("workflow signal or start run", err)
-	}
-	out, err := signalWorkflowRunResponseToProto(resp)
-	return out, providerRPCError("workflow signal or start run", err)
-}
-
-func (s workflowProviderServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	schedule, err := s.provider.UpsertSchedule(ctx, upsertWorkflowProviderScheduleRequestFromProto(req))
-	if err != nil {
-		return nil, providerRPCError("workflow upsert schedule", err)
-	}
-	out, err := workflowScheduleInputToProto(schedule)
-	return out, providerRPCError("workflow upsert schedule", err)
-}
-
-func (s workflowProviderServer) GetSchedule(ctx context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	schedule, err := s.provider.GetSchedule(ctx, &GetWorkflowProviderScheduleRequest{ScheduleID: req.GetScheduleId()})
-	if err != nil {
-		return nil, providerRPCError("workflow get schedule", err)
-	}
-	out, err := workflowScheduleInputToProto(schedule)
-	return out, providerRPCError("workflow get schedule", err)
-}
-
-func (s workflowProviderServer) ListSchedules(ctx context.Context, req *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
-	resp, err := s.provider.ListSchedules(ctx, &ListWorkflowProviderSchedulesRequest{})
-	if err != nil {
-		return nil, providerRPCError("workflow list schedules", err)
-	}
-	schedules, err := workflowScheduleInputsToProto(resp.GetSchedules())
-	if err != nil {
-		return nil, providerRPCError("workflow list schedules", err)
-	}
-	return &proto.ListWorkflowProviderSchedulesResponse{Schedules: schedules}, nil
-}
-
-func (s workflowProviderServer) DeleteSchedule(ctx context.Context, req *proto.DeleteWorkflowProviderScheduleRequest) (*emptypb.Empty, error) {
-	return &emptypb.Empty{}, providerRPCError("workflow delete schedule", s.provider.DeleteSchedule(ctx, &DeleteWorkflowProviderScheduleRequest{ScheduleID: req.GetScheduleId()}))
-}
-
-func (s workflowProviderServer) PauseSchedule(ctx context.Context, req *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	schedule, err := s.provider.PauseSchedule(ctx, &PauseWorkflowProviderScheduleRequest{ScheduleID: req.GetScheduleId()})
-	if err != nil {
-		return nil, providerRPCError("workflow pause schedule", err)
-	}
-	out, err := workflowScheduleInputToProto(schedule)
-	return out, providerRPCError("workflow pause schedule", err)
-}
-
-func (s workflowProviderServer) ResumeSchedule(ctx context.Context, req *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
-	schedule, err := s.provider.ResumeSchedule(ctx, &ResumeWorkflowProviderScheduleRequest{ScheduleID: req.GetScheduleId()})
-	if err != nil {
-		return nil, providerRPCError("workflow resume schedule", err)
-	}
-	out, err := workflowScheduleInputToProto(schedule)
-	return out, providerRPCError("workflow resume schedule", err)
-}
-
-func (s workflowProviderServer) UpsertEventTrigger(ctx context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	trigger, err := s.provider.UpsertEventTrigger(ctx, upsertWorkflowProviderEventTriggerRequestFromProto(req))
-	if err != nil {
-		return nil, providerRPCError("workflow upsert event trigger", err)
-	}
-	out, err := workflowEventTriggerInputToProto(trigger)
-	return out, providerRPCError("workflow upsert event trigger", err)
-}
-
-func (s workflowProviderServer) GetEventTrigger(ctx context.Context, req *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	trigger, err := s.provider.GetEventTrigger(ctx, &GetWorkflowProviderEventTriggerRequest{TriggerID: req.GetTriggerId()})
-	if err != nil {
-		return nil, providerRPCError("workflow get event trigger", err)
-	}
-	out, err := workflowEventTriggerInputToProto(trigger)
-	return out, providerRPCError("workflow get event trigger", err)
-}
-
-func (s workflowProviderServer) ListEventTriggers(ctx context.Context, req *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error) {
-	resp, err := s.provider.ListEventTriggers(ctx, &ListWorkflowProviderEventTriggersRequest{})
-	if err != nil {
-		return nil, providerRPCError("workflow list event triggers", err)
-	}
-	triggers, err := workflowEventTriggerInputsToProto(resp.GetTriggers())
-	if err != nil {
-		return nil, providerRPCError("workflow list event triggers", err)
-	}
-	return &proto.ListWorkflowProviderEventTriggersResponse{Triggers: triggers}, nil
-}
-
-func (s workflowProviderServer) DeleteEventTrigger(ctx context.Context, req *proto.DeleteWorkflowProviderEventTriggerRequest) (*emptypb.Empty, error) {
-	return &emptypb.Empty{}, providerRPCError("workflow delete event trigger", s.provider.DeleteEventTrigger(ctx, &DeleteWorkflowProviderEventTriggerRequest{TriggerID: req.GetTriggerId()}))
-}
-
-func (s workflowProviderServer) PauseEventTrigger(ctx context.Context, req *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	trigger, err := s.provider.PauseEventTrigger(ctx, &PauseWorkflowProviderEventTriggerRequest{TriggerID: req.GetTriggerId()})
-	if err != nil {
-		return nil, providerRPCError("workflow pause event trigger", err)
-	}
-	out, err := workflowEventTriggerInputToProto(trigger)
-	return out, providerRPCError("workflow pause event trigger", err)
-}
-
-func (s workflowProviderServer) ResumeEventTrigger(ctx context.Context, req *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
-	trigger, err := s.provider.ResumeEventTrigger(ctx, &ResumeWorkflowProviderEventTriggerRequest{TriggerID: req.GetTriggerId()})
-	if err != nil {
-		return nil, providerRPCError("workflow resume event trigger", err)
-	}
-	out, err := workflowEventTriggerInputToProto(trigger)
-	return out, providerRPCError("workflow resume event trigger", err)
+	out, err := workflowRunOutputToProto(output)
+	return out, providerRPCError("workflow get run output", err)
 }
 
 func (s workflowProviderServer) PutExecutionReference(ctx context.Context, req *proto.PutWorkflowExecutionReferenceRequest) (*proto.WorkflowExecutionReference, error) {
-	input, err := workflowExecutionReferenceInputPtrFromReference(req.GetReference())
+	ref, err := workflowExecutionReferenceFromProto(req.GetExecutionRef())
 	if err != nil {
 		return nil, providerRPCError("workflow put execution reference", err)
 	}
-	ref, err := s.provider.PutExecutionReference(ctx, &PutWorkflowExecutionReferenceRequest{Reference: input})
+	stored, err := s.provider.PutExecutionReference(ctx, &PutWorkflowExecutionReferenceRequest{
+		ExecutionRef: ref,
+	})
 	if err != nil {
 		return nil, providerRPCError("workflow put execution reference", err)
 	}
-	out, err := workflowExecutionReferenceInputToProto(ref)
+	out, err := workflowExecutionReferenceToProto(stored)
 	return out, providerRPCError("workflow put execution reference", err)
 }
 
@@ -207,7 +227,7 @@ func (s workflowProviderServer) GetExecutionReference(ctx context.Context, req *
 	if err != nil {
 		return nil, providerRPCError("workflow get execution reference", err)
 	}
-	out, err := workflowExecutionReferenceInputToProto(ref)
+	out, err := workflowExecutionReferenceToProto(ref)
 	return out, providerRPCError("workflow get execution reference", err)
 }
 
@@ -216,231 +236,99 @@ func (s workflowProviderServer) ListExecutionReferences(ctx context.Context, req
 	if err != nil {
 		return nil, providerRPCError("workflow list execution references", err)
 	}
-	refs, err := workflowExecutionReferenceInputsToProto(resp.GetReferences())
+	refs, err := workflowExecutionReferencesToProto(resp.GetExecutionRefs())
 	if err != nil {
 		return nil, providerRPCError("workflow list execution references", err)
 	}
-	return &proto.ListWorkflowExecutionReferencesResponse{References: refs}, nil
+	return &proto.ListWorkflowExecutionReferencesResponse{ExecutionRefs: refs}, nil
 }
 
-func (s workflowProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWorkflowProviderEventRequest) (*emptypb.Empty, error) {
-	return &emptypb.Empty{}, providerRPCError("workflow publish event", s.provider.PublishEvent(ctx, publishWorkflowProviderEventRequestFromProto(req)))
-}
-
-func startWorkflowProviderRunRequestFromProto(req *proto.StartWorkflowProviderRunRequest) *StartWorkflowProviderRunRequest {
+func planWorkflowRequestFromProto(req *proto.PlanWorkflowRequest) *PlanWorkflowRequest {
 	if req == nil {
-		return &StartWorkflowProviderRunRequest{}
+		return &PlanWorkflowRequest{}
 	}
-	return &StartWorkflowProviderRunRequest{
-		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
-		IdempotencyKey: req.GetIdempotencyKey(),
-		CreatedBy:      workflowActorInputPtrFromActor(req.GetCreatedBy()),
-		ExecutionRef:   req.GetExecutionRef(),
-		WorkflowKey:    req.GetWorkflowKey(),
+	return &PlanWorkflowRequest{
+		Spec:                          workflowDeploymentSpecInputPtrFromSpec(req.GetSpec()),
+		SpecDigest:                    req.GetSpecDigest(),
+		TargetDigest:                  req.GetTargetDigest(),
+		ActionTableDigest:             req.GetActionTableDigest(),
+		TargetCanonicalizationVersion: req.GetTargetCanonicalizationVersion(),
+		WorkflowSemanticsVersion:      req.GetWorkflowSemanticsVersion(),
 	}
 }
 
-func signalWorkflowProviderRunRequestFromProto(req *proto.SignalWorkflowProviderRunRequest) *SignalWorkflowProviderRunRequest {
+func applyWorkflowDeploymentRequestFromProto(req *proto.ApplyWorkflowDeploymentRequest) *ApplyWorkflowDeploymentRequest {
 	if req == nil {
-		return &SignalWorkflowProviderRunRequest{}
+		return &ApplyWorkflowDeploymentRequest{}
+	}
+	return &ApplyWorkflowDeploymentRequest{
+		Spec:         workflowDeploymentSpecInputPtrFromSpec(req.GetSpec()),
+		Plan:         planWorkflowResponseFromProto(req.GetPlan()),
+		Binding:      workflowDeploymentBindingFromProto(req.GetBinding()),
+		RequestID:    req.GetRequestId(),
+		ValidateOnly: req.GetValidateOnly(),
+	}
+}
+
+func startWorkflowRunRequestFromProto(req *proto.StartWorkflowRunRequest) *StartWorkflowRunRequest {
+	if req == nil {
+		return &StartWorkflowRunRequest{}
+	}
+	return &StartWorkflowRunRequest{
+		DeploymentID:         req.GetDeploymentId(),
+		DeploymentGeneration: req.GetDeploymentGeneration(),
+		ActivationID:         req.GetActivationId(),
+		WorkflowKey:          req.GetWorkflowKey(),
+		Input:                mapFromStruct(req.GetInput()),
+		IdempotencyKey:       req.GetIdempotencyKey(),
+		CreatedBy:            workflowActorInputPtrFromActor(req.GetCreatedBy()),
+	}
+}
+
+func signalWorkflowRunRequestFromProto(req *proto.SignalWorkflowRunRequest) *SignalWorkflowRunRequest {
+	if req == nil {
+		return &SignalWorkflowRunRequest{}
 	}
 	var signal *WorkflowSignal
 	if req.GetSignal() != nil {
 		input := workflowSignalFromProto(req.GetSignal())
 		signal = &input
 	}
-	return &SignalWorkflowProviderRunRequest{
+	return &SignalWorkflowRunRequest{
 		RunID:  req.GetRunId(),
 		Signal: signal,
 	}
 }
 
-func signalOrStartWorkflowProviderRunRequestFromProto(req *proto.SignalOrStartWorkflowProviderRunRequest) *SignalOrStartWorkflowProviderRunRequest {
+func signalOrStartWorkflowRunRequestFromProto(req *proto.SignalOrStartWorkflowRunRequest) *SignalOrStartWorkflowRunRequest {
 	if req == nil {
-		return &SignalOrStartWorkflowProviderRunRequest{}
+		return &SignalOrStartWorkflowRunRequest{}
 	}
 	var signal *WorkflowSignal
 	if req.GetSignal() != nil {
 		input := workflowSignalFromProto(req.GetSignal())
 		signal = &input
 	}
-	return &SignalOrStartWorkflowProviderRunRequest{
-		WorkflowKey:    req.GetWorkflowKey(),
-		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
+	return &SignalOrStartWorkflowRunRequest{
+		DeploymentID:         req.GetDeploymentId(),
+		DeploymentGeneration: req.GetDeploymentGeneration(),
+		ActivationID:         req.GetActivationId(),
+		WorkflowKey:          req.GetWorkflowKey(),
+		Input:                mapFromStruct(req.GetInput()),
+		IdempotencyKey:       req.GetIdempotencyKey(),
+		Signal:               signal,
+		CreatedBy:            workflowActorInputPtrFromActor(req.GetCreatedBy()),
+	}
+}
+
+func deliverWorkflowEventRequestFromProto(req *proto.DeliverWorkflowEventRequest) *DeliverWorkflowEventRequest {
+	if req == nil {
+		return &DeliverWorkflowEventRequest{}
+	}
+	return &DeliverWorkflowEventRequest{
+		DeliveryID:     req.GetDeliveryId(),
+		Event:          workflowEventInputPtrFromEvent(req.GetEvent()),
+		PublishedBy:    workflowActorInputPtrFromActor(req.GetPublishedBy()),
 		IdempotencyKey: req.GetIdempotencyKey(),
-		CreatedBy:      workflowActorInputPtrFromActor(req.GetCreatedBy()),
-		ExecutionRef:   req.GetExecutionRef(),
-		Signal:         signal,
 	}
-}
-
-func upsertWorkflowProviderScheduleRequestFromProto(req *proto.UpsertWorkflowProviderScheduleRequest) *UpsertWorkflowProviderScheduleRequest {
-	if req == nil {
-		return &UpsertWorkflowProviderScheduleRequest{}
-	}
-	return &UpsertWorkflowProviderScheduleRequest{
-		ScheduleID:   req.GetScheduleId(),
-		Cron:         req.GetCron(),
-		Timezone:     req.GetTimezone(),
-		Target:       workflowTargetInputPtrFromTarget(req.GetTarget()),
-		Paused:       req.GetPaused(),
-		RequestedBy:  workflowActorInputPtrFromActor(req.GetRequestedBy()),
-		ExecutionRef: req.GetExecutionRef(),
-	}
-}
-
-func upsertWorkflowProviderEventTriggerRequestFromProto(req *proto.UpsertWorkflowProviderEventTriggerRequest) *UpsertWorkflowProviderEventTriggerRequest {
-	if req == nil {
-		return &UpsertWorkflowProviderEventTriggerRequest{}
-	}
-	return &UpsertWorkflowProviderEventTriggerRequest{
-		TriggerID:    req.GetTriggerId(),
-		Match:        workflowEventMatchInputPtrFromMatch(req.GetMatch()),
-		Target:       workflowTargetInputPtrFromTarget(req.GetTarget()),
-		Paused:       req.GetPaused(),
-		RequestedBy:  workflowActorInputPtrFromActor(req.GetRequestedBy()),
-		ExecutionRef: req.GetExecutionRef(),
-	}
-}
-
-func publishWorkflowProviderEventRequestFromProto(req *proto.PublishWorkflowProviderEventRequest) *PublishWorkflowProviderEventRequest {
-	if req == nil {
-		return &PublishWorkflowProviderEventRequest{}
-	}
-	var event *WorkflowEvent
-	if req.GetEvent() != nil {
-		input := workflowEventFromProto(req.GetEvent())
-		event = &input
-	}
-	return &PublishWorkflowProviderEventRequest{
-		PluginName:  req.GetPluginName(),
-		Event:       event,
-		PublishedBy: workflowActorInputPtrFromActor(req.GetPublishedBy()),
-	}
-}
-
-func workflowRunInputToProto(input *BoundWorkflowRun) (*proto.BoundWorkflowRun, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return boundWorkflowRunToProto(*input)
-}
-
-func workflowRunInputsToProto(values []BoundWorkflowRun) ([]*proto.BoundWorkflowRun, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.BoundWorkflowRun, 0, len(values))
-	for _, value := range values {
-		run, err := boundWorkflowRunToProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, run)
-	}
-	return out, nil
-}
-
-func workflowScheduleInputToProto(input *BoundWorkflowSchedule) (*proto.BoundWorkflowSchedule, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return boundWorkflowScheduleToProto(*input)
-}
-
-func workflowScheduleInputsToProto(values []BoundWorkflowSchedule) ([]*proto.BoundWorkflowSchedule, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.BoundWorkflowSchedule, 0, len(values))
-	for _, value := range values {
-		schedule, err := boundWorkflowScheduleToProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, schedule)
-	}
-	return out, nil
-}
-
-func workflowEventTriggerInputToProto(input *BoundWorkflowEventTrigger) (*proto.BoundWorkflowEventTrigger, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return boundWorkflowEventTriggerToProto(*input)
-}
-
-func workflowEventTriggerInputsToProto(values []BoundWorkflowEventTrigger) ([]*proto.BoundWorkflowEventTrigger, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.BoundWorkflowEventTrigger, 0, len(values))
-	for _, value := range values {
-		trigger, err := boundWorkflowEventTriggerToProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, trigger)
-	}
-	return out, nil
-}
-
-func workflowExecutionReferenceInputPtrFromReference(value *proto.WorkflowExecutionReference) (*WorkflowExecutionReference, error) {
-	if value == nil {
-		return nil, nil
-	}
-	input, err := workflowExecutionReferenceFromProto(value)
-	if err != nil {
-		return nil, err
-	}
-	return &input, nil
-}
-
-func workflowExecutionReferenceInputToProto(input *WorkflowExecutionReference) (*proto.WorkflowExecutionReference, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return workflowExecutionReferenceToProto(*input)
-}
-
-func workflowExecutionReferenceInputsToProto(values []WorkflowExecutionReference) ([]*proto.WorkflowExecutionReference, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-	out := make([]*proto.WorkflowExecutionReference, 0, len(values))
-	for _, value := range values {
-		ref, err := workflowExecutionReferenceToProto(value)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, ref)
-	}
-	return out, nil
-}
-
-func workflowSignalInputToProto(input *WorkflowSignal) (*proto.WorkflowSignal, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return workflowSignalToProto(*input)
-}
-
-func signalWorkflowRunResponseToProto(resp *SignalWorkflowRunResponse) (*proto.SignalWorkflowRunResponse, error) {
-	if resp == nil {
-		return nil, nil
-	}
-	run, err := workflowRunInputToProto(resp.Run)
-	if err != nil {
-		return nil, err
-	}
-	signal, err := workflowSignalInputToProto(resp.Signal)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.SignalWorkflowRunResponse{
-		Run:         run,
-		Signal:      signal,
-		StartedRun:  resp.StartedRun,
-		WorkflowKey: resp.WorkflowKey,
-	}, nil
 }

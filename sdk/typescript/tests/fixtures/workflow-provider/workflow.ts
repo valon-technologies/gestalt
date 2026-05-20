@@ -1,302 +1,217 @@
 import {
+  WorkflowDeploymentStatus,
   WorkflowRunStatus,
-  boundWorkflowEventTrigger,
-  boundWorkflowRun,
-  boundWorkflowSchedule,
-  boundWorkflowTarget,
   defineWorkflowProvider,
-  type BoundWorkflowTarget,
-  type DeleteWorkflowProviderEventTriggerRequest,
-  type DeleteWorkflowProviderScheduleRequest,
-  type GetWorkflowProviderEventTriggerRequest,
-  type GetWorkflowProviderRunRequest,
-  type GetWorkflowProviderScheduleRequest,
-  type PauseWorkflowProviderEventTriggerRequest,
-  type PauseWorkflowProviderScheduleRequest,
-  type ResumeWorkflowProviderEventTriggerRequest,
-  type ResumeWorkflowProviderScheduleRequest,
-  type StartWorkflowProviderRunRequest,
-  type UpsertWorkflowProviderEventTriggerRequest,
-  type UpsertWorkflowProviderScheduleRequest,
-  type PublishWorkflowProviderEventRequest,
+  deliverWorkflowEventResponse,
+  planWorkflowResponse,
+  workflowDeployment,
+  workflowRun,
+  workflowRunOutput,
+  workflowRunSignal,
+  type WorkflowDeployment,
+  type WorkflowRun,
 } from "../../../src/index.ts";
 
-const runs = new Map<string, ReturnType<typeof createRun>>();
-const schedules = new Map<string, ReturnType<typeof createSchedule>>();
-const triggers = new Map<string, ReturnType<typeof createTrigger>>();
-let publishCount = 0;
-
-function pluginTarget(pluginName: string, operation: string): BoundWorkflowTarget {
-  return boundWorkflowTarget({
-    steps: [{ id: operation, plugin: { name: pluginName, operation } }],
-  });
-}
+const deployments = new Map<string, WorkflowDeployment>();
+const runs = new Map<string, WorkflowRun>();
+let deliveredEventCount = 0;
 
 export const provider = defineWorkflowProvider({
   displayName: "Fixture Workflow",
   description: "Workflow provider fixture used by SDK tests",
   configure() {
+    deployments.clear();
     runs.clear();
-    schedules.clear();
-    triggers.clear();
-    publishCount = 0;
+    deliveredEventCount = 0;
+  },
+  async planWorkflow(request) {
+    return planWorkflowResponse({
+      acceptedSpecDigest: request.specDigest,
+      providerPlanId: "fixture-plan",
+      providerPlanDigest: `fixture-plan:${request.specDigest}`,
+      providerPlanFormatVersion: "workflow-plan-v1",
+    });
+  },
+  async applyDeployment(request) {
+    const deployment = workflowDeployment({
+      spec: request.spec,
+      status: request.spec?.paused
+        ? WorkflowDeploymentStatus.PAUSED
+        : WorkflowDeploymentStatus.ACTIVE,
+      appliedGeneration: request.spec?.generation ?? 0n,
+      providerPlanId: request.plan?.providerPlanId ?? "",
+      providerPlanDigest: request.plan?.providerPlanDigest ?? "",
+      binding: request.binding,
+    });
+    deployments.set(deploymentID(deployment), deployment);
+    return deployment;
+  },
+  async getDeployment(request) {
+    return requireDeployment(request.deploymentId);
+  },
+  async listDeployments() {
+    return [...deployments.values()];
+  },
+  async deleteDeployment(request) {
+    deployments.delete(request.deploymentId);
+  },
+  async setDeploymentPaused(request) {
+    const deployment = requireDeployment(request.deploymentId);
+    const updated = workflowDeployment({
+      ...deployment,
+      status: request.paused
+        ? WorkflowDeploymentStatus.PAUSED
+        : WorkflowDeploymentStatus.ACTIVE,
+    });
+    deployments.set(request.deploymentId, updated);
+    return updated;
+  },
+  async setActivationPaused(request) {
+    const deployment = requireDeployment(request.deploymentId);
+    const spec = deployment.spec === undefined
+      ? undefined
+      : {
+        ...deployment.spec,
+        activations: deployment.spec.activations.map((activation) =>
+          activation.id === request.activationId
+            ? { ...activation, paused: request.paused }
+            : activation
+        ),
+      };
+    const updated = workflowDeployment({ ...deployment, spec });
+    deployments.set(request.deploymentId, updated);
+    return updated;
   },
   async startRun(request) {
-    const plugin = request.target?.steps?.[0]?.plugin;
-    const run = createRun(
-      `${plugin?.name ?? "plugin"}:${plugin?.operation ?? "operation"}:${runs.size + 1}`,
-      request,
-      WorkflowRunStatus.PENDING,
-      request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",
-    );
-    runs.set(run.id ?? "", run);
+    const run = workflowRun({
+      id: `${request.deploymentId}:${runs.size + 1}`,
+      deploymentId: request.deploymentId,
+      deploymentGeneration: request.deploymentGeneration,
+      workflowKey: request.workflowKey,
+      trigger: {
+        deploymentId: request.deploymentId,
+        deploymentGeneration: request.deploymentGeneration,
+        activationId: request.activationId,
+        kind: { case: "manual", value: {} },
+      },
+      input: request.input,
+      status: WorkflowRunStatus.PENDING,
+      createdBy: request.createdBy,
+      statusMessage: request.idempotencyKey
+        ? `idempotency:${request.idempotencyKey}`
+        : "",
+    });
+    runs.set(run.id, run);
     return run;
   },
+  async signalRun(request) {
+    const run = requireRun(request.runId);
+    return workflowRunSignal({
+      run,
+      signal: request.signal,
+      startedRun: false,
+      workflowKey: run.workflowKey,
+    });
+  },
+  async signalOrStartRun(request) {
+    const run = workflowRun({
+      id: `${request.workflowKey || "workflow"}:${runs.size + 1}`,
+      deploymentId: request.deploymentId,
+      deploymentGeneration: request.deploymentGeneration,
+      workflowKey: request.workflowKey,
+      trigger: {
+        deploymentId: request.deploymentId,
+        deploymentGeneration: request.deploymentGeneration,
+        activationId: request.activationId,
+        kind: { case: "manual", value: {} },
+      },
+      input: request.input,
+      status: WorkflowRunStatus.PENDING,
+      createdBy: request.createdBy,
+    });
+    runs.set(run.id, run);
+    return workflowRunSignal({
+      run,
+      signal: request.signal,
+      startedRun: true,
+      workflowKey: request.workflowKey,
+    });
+  },
+  async cancelRun(request) {
+    const run = requireRun(request.runId);
+    const updated = workflowRun({
+      ...run,
+      status: WorkflowRunStatus.CANCELED,
+      statusMessage: request.reason,
+    });
+    runs.set(updated.id, updated);
+    return updated;
+  },
+  async deliverEvent(request) {
+    deliveredEventCount += 1;
+    const run = workflowRun({
+      id: `${request.deliveryId || "event"}:${runs.size + 1}`,
+      deploymentId: "event-deployment",
+      workflowKey: request.event?.subject ?? "",
+      trigger: {
+        deploymentId: "event-deployment",
+        activationId: "event",
+        kind: {
+          case: "event",
+          value: {
+            activationId: "event",
+            event: request.event,
+          },
+        },
+      },
+      status: WorkflowRunStatus.PENDING,
+      createdBy: request.publishedBy,
+    });
+    runs.set(run.id, run);
+    return deliverWorkflowEventResponse({
+      results: [{
+        deploymentId: run.deploymentId,
+        activationId: "event",
+        run,
+        startedRun: true,
+      }],
+    });
+  },
   async getRun(request) {
-    return requireRun(request);
+    return requireRun(request.runId);
   },
   async listRuns() {
     return [...runs.values()];
   },
-  async cancelRun(request) {
-    const run = requireRunByID(request.runId);
-    const updated = boundWorkflowRun({
-      id: run.id,
-      status: WorkflowRunStatus.CANCELED,
-      statusMessage: request.reason,
-      ...(run.target ? { target: run.target } : {}),
-      ...(run.trigger ? { trigger: run.trigger } : {}),
-      ...(run.createdAt ? { createdAt: run.createdAt } : {}),
-      ...(run.startedAt ? { startedAt: run.startedAt } : {}),
-      ...(run.completedAt ? { completedAt: run.completedAt } : {}),
-      ...(run.resultBody ? { resultBody: run.resultBody } : {}),
-    });
-    runs.set(updated.id ?? "", updated);
-    return updated;
+  async getRunEvents() {
+    return [];
   },
-  async signalRun(request) {
-    const run = requireRunByID(request.runId);
-    return {
-      run,
-      signal: request.signal,
-      startedRun: false,
-      workflowKey: run.workflowKey ?? "",
-    };
-  },
-  async signalOrStartRun(request) {
-    const run = boundWorkflowRun({
-      id: `${request.workflowKey || "workflow"}:${runs.size + 1}`,
-      status: WorkflowRunStatus.PENDING,
-      target: request.target,
-      createdBy: request.createdBy,
-      executionRef: request.executionRef,
-      workflowKey: request.workflowKey,
-    });
-    runs.set(run.id ?? "", run);
-    return {
-      run,
-      signal: request.signal,
-      startedRun: true,
-      workflowKey: request.workflowKey ?? "",
-    };
-  },
-  async upsertSchedule(request) {
-    const existing = schedules.get(scheduleKey(request));
-    const schedule = createSchedule(request, existing);
-    schedules.set(scheduleKey(request), schedule);
-    return schedule;
-  },
-  async getSchedule(request) {
-    return requireSchedule(request);
-  },
-  async listSchedules() {
-    return [...schedules.values()];
-  },
-  async deleteSchedule(request) {
-    if (!schedules.delete(request.scheduleId)) {
-      throw new Error(`unknown schedule ${request.scheduleId}`);
-    }
-  },
-  async pauseSchedule(request) {
-    return updateSchedule(request, true);
-  },
-  async resumeSchedule(request) {
-    return updateSchedule(request, false);
-  },
-  async upsertEventTrigger(request) {
-    const existing = triggers.get(triggerKey(request));
-    const trigger = createTrigger(request, existing);
-    triggers.set(triggerKey(request), trigger);
-    return trigger;
-  },
-  async getEventTrigger(request) {
-    return requireTrigger(request);
-  },
-  async listEventTriggers() {
-    return [...triggers.values()];
-  },
-  async deleteEventTrigger(request) {
-    if (!triggers.delete(request.triggerId)) {
-      throw new Error(`unknown trigger ${request.triggerId}`);
-    }
-  },
-  async pauseEventTrigger(request) {
-    return updateTrigger(request, true);
-  },
-  async resumeEventTrigger(request) {
-    return updateTrigger(request, false);
-  },
-  async publishEvent(request: PublishWorkflowProviderEventRequest) {
-    publishCount += 1;
-    const triggerId = publishedTriggerID(request.pluginName);
-    const existing = triggers.get(triggerId);
-    const trigger = boundWorkflowEventTrigger({
-      id: triggerId,
-      ...(existing?.match ? { match: existing.match } : {}),
-      target: existing?.target ?? pluginTarget(request.pluginName, "published"),
-      paused: false,
-    });
-    triggers.set(triggerId, trigger);
+  async getRunOutput(request) {
+    return workflowRunOutput({ outputRef: request.outputRef });
   },
   warnings() {
-    return publishCount > 0 ? [`published-events:${publishCount}`] : [];
+    return deliveredEventCount > 0
+      ? [`delivered-events:${deliveredEventCount}`]
+      : [];
   },
 });
 
-function scheduleKey(request: UpsertWorkflowProviderScheduleRequest): string {
-  return request.scheduleId;
+function deploymentID(deployment: WorkflowDeployment): string {
+  return deployment.spec?.id || deployment.binding?.deploymentId || "deployment";
 }
 
-function requireRun(request: GetWorkflowProviderRunRequest) {
-  return requireRunByID(request.runId);
-}
-
-function requireSchedule(request: GetWorkflowProviderScheduleRequest) {
-  const schedule = schedules.get(request.scheduleId);
-  if (!schedule) {
-    throw new Error(`unknown schedule ${request.scheduleId}`);
+function requireDeployment(deploymentId: string): WorkflowDeployment {
+  const deployment = deployments.get(deploymentId);
+  if (!deployment) {
+    throw new Error(`unknown deployment ${deploymentId}`);
   }
-  return schedule;
+  return deployment;
 }
 
-function requireTrigger(request: GetWorkflowProviderEventTriggerRequest) {
-  const trigger = triggers.get(request.triggerId);
-  if (!trigger) {
-    throw new Error(`unknown trigger ${request.triggerId}`);
-  }
-  return trigger;
-}
-
-function updateSchedule(
-  request:
-    | PauseWorkflowProviderScheduleRequest
-    | ResumeWorkflowProviderScheduleRequest,
-  paused: boolean,
-) {
-  const schedule = schedules.get(request.scheduleId);
-  if (!schedule) {
-    throw new Error(`unknown schedule ${request.scheduleId}`);
-  }
-  const updated = boundWorkflowSchedule({
-    id: schedule.id,
-    cron: schedule.cron,
-    timezone: schedule.timezone,
-    paused,
-    ...(schedule.createdBy ? { createdBy: schedule.createdBy } : {}),
-    ...(schedule.target ? { target: schedule.target } : {}),
-    ...(schedule.createdAt ? { createdAt: schedule.createdAt } : {}),
-    ...(schedule.updatedAt ? { updatedAt: schedule.updatedAt } : {}),
-    ...(schedule.nextRunAt ? { nextRunAt: schedule.nextRunAt } : {}),
-  });
-  schedules.set(request.scheduleId, updated);
-  return updated;
-}
-
-function updateTrigger(
-  request:
-    | PauseWorkflowProviderEventTriggerRequest
-    | ResumeWorkflowProviderEventTriggerRequest,
-  paused: boolean,
-) {
-  const trigger = triggers.get(request.triggerId);
-  if (!trigger) {
-    throw new Error(`unknown trigger ${request.triggerId}`);
-  }
-  const updated = boundWorkflowEventTrigger({
-    id: trigger.id,
-    paused,
-    ...(trigger.createdBy ? { createdBy: trigger.createdBy } : {}),
-    ...(trigger.match ? { match: trigger.match } : {}),
-    ...(trigger.target ? { target: trigger.target } : {}),
-    ...(trigger.createdAt ? { createdAt: trigger.createdAt } : {}),
-    ...(trigger.updatedAt ? { updatedAt: trigger.updatedAt } : {}),
-  });
-  triggers.set(request.triggerId, updated);
-  return updated;
-}
-
-function triggerKey(request: UpsertWorkflowProviderEventTriggerRequest): string {
-  return request.triggerId;
-}
-
-function publishedTriggerID(pluginName: string): string {
-  return `published:${pluginName}`;
-}
-
-function requireRunByID(runId: string) {
+function requireRun(runId: string): WorkflowRun {
   const run = runs.get(runId);
   if (!run) {
     throw new Error(`unknown run ${runId}`);
   }
   return run;
-}
-
-function createRun(
-  id: string,
-  request: StartWorkflowProviderRunRequest,
-  status: WorkflowRunStatus,
-  statusMessage: string,
-) {
-  return boundWorkflowRun({
-    id,
-    status,
-    statusMessage,
-    ...(request.createdBy ? { createdBy: request.createdBy } : {}),
-    ...(request.target ? { target: request.target } : {}),
-  });
-}
-
-function createSchedule(
-  request: UpsertWorkflowProviderScheduleRequest,
-  existing?: { createdBy?: UpsertWorkflowProviderScheduleRequest["requestedBy"] },
-) {
-  return boundWorkflowSchedule({
-    id: request.scheduleId,
-    cron: request.cron,
-    timezone: request.timezone,
-    paused: request.paused,
-    ...(existing?.createdBy
-      ? { createdBy: existing.createdBy }
-      : request.requestedBy
-        ? { createdBy: request.requestedBy }
-        : {}),
-    ...(request.target ? { target: request.target } : {}),
-  });
-}
-
-function createTrigger(
-  request: UpsertWorkflowProviderEventTriggerRequest,
-  existing?: { createdBy?: UpsertWorkflowProviderEventTriggerRequest["requestedBy"] },
-) {
-  return boundWorkflowEventTrigger({
-    id: request.triggerId,
-    paused: request.paused,
-    ...(existing?.createdBy
-      ? { createdBy: existing.createdBy }
-      : request.requestedBy
-        ? { createdBy: request.requestedBy }
-        : {}),
-    ...(request.match ? { match: request.match } : {}),
-    ...(request.target ? { target: request.target } : {}),
-  });
 }

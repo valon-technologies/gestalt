@@ -1,44 +1,32 @@
-#[path = "../src/generated.rs"]
-mod generated;
-
-mod support_protocol;
-
 #[allow(dead_code)]
 mod helpers;
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use generated::v1::workflow_manager_host_server::{
+use gestalt::proto::v1::workflow_manager_host_server::{
     WorkflowManagerHost as ProtoWorkflowManagerHost, WorkflowManagerHostServer,
 };
-use generated::v1::{
-    BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowRun, BoundWorkflowSchedule,
-    ManagedWorkflowDefinition, ManagedWorkflowEventTrigger, ManagedWorkflowRun,
-    ManagedWorkflowRunSignal, ManagedWorkflowSchedule, WorkflowEvent as ProtoWorkflowEvent,
-    WorkflowManagerCreateDefinitionRequest, WorkflowManagerCreateEventTriggerRequest,
-    WorkflowManagerCreateScheduleRequest, WorkflowManagerDeleteDefinitionRequest,
-    WorkflowManagerDeleteEventTriggerRequest, WorkflowManagerDeleteScheduleRequest,
-    WorkflowManagerGetDefinitionRequest, WorkflowManagerGetEventTriggerRequest,
-    WorkflowManagerGetScheduleRequest, WorkflowManagerPauseEventTriggerRequest,
-    WorkflowManagerPauseScheduleRequest, WorkflowManagerPublishEventRequest,
-    WorkflowManagerResumeEventTriggerRequest, WorkflowManagerResumeScheduleRequest,
+use gestalt::proto::v1::{
+    BoundWorkflowTarget, ManagedWorkflowDeployment, ManagedWorkflowRun, ManagedWorkflowRunSignal,
+    PlanWorkflowResponse, WorkflowDeployment, WorkflowDeploymentSpec, WorkflowDeploymentStatus,
+    WorkflowEventDeliveryResult, WorkflowManagerApplyDeploymentRequest,
+    WorkflowManagerCancelRunRequest, WorkflowManagerDeleteDeploymentRequest,
+    WorkflowManagerDeliverEventRequest, WorkflowManagerDeliverEventResponse,
+    WorkflowManagerGetDeploymentRequest, WorkflowManagerListDeploymentsRequest,
+    WorkflowManagerListDeploymentsResponse, WorkflowManagerPlanDeploymentRequest,
+    WorkflowManagerSetActivationPausedRequest, WorkflowManagerSetDeploymentPausedRequest,
     WorkflowManagerSignalOrStartRunRequest, WorkflowManagerSignalRunRequest,
-    WorkflowManagerStartRunRequest, WorkflowManagerUpdateDefinitionRequest,
-    WorkflowManagerUpdateEventTriggerRequest, WorkflowManagerUpdateScheduleRequest, workflow_step,
+    WorkflowManagerStartRunRequest, WorkflowRun, WorkflowRunStatus, WorkflowStep,
+    WorkflowStepPluginCall, workflow_step,
 };
 use gestalt::{
-    BoundWorkflowTarget, ENV_WORKFLOW_MANAGER_SOCKET, Request, WorkflowAgentMessage, WorkflowEvent,
-    WorkflowEventMatch, WorkflowManager, WorkflowManagerCreateDefinition,
-    WorkflowManagerCreateEventTrigger, WorkflowManagerCreateSchedule,
-    WorkflowManagerDeleteDefinition, WorkflowManagerDeleteEventTrigger,
-    WorkflowManagerDeleteSchedule, WorkflowManagerGetDefinition, WorkflowManagerGetEventTrigger,
-    WorkflowManagerGetSchedule, WorkflowManagerPauseEventTrigger, WorkflowManagerPauseSchedule,
-    WorkflowManagerPublishEvent, WorkflowManagerResumeEventTrigger, WorkflowManagerResumeSchedule,
+    Request, WorkflowManager, WorkflowManagerApplyDeployment, WorkflowManagerCancelRun,
+    WorkflowManagerDeleteDeployment, WorkflowManagerDeliverEvent, WorkflowManagerGetDeployment,
+    WorkflowManagerListDeployments, WorkflowManagerPlanDeployment,
+    WorkflowManagerSetActivationPaused, WorkflowManagerSetDeploymentPaused,
     WorkflowManagerSignalOrStartRun, WorkflowManagerSignalRun, WorkflowManagerStartRun,
-    WorkflowManagerUpdateDefinition, WorkflowManagerUpdateEventTrigger,
-    WorkflowManagerUpdateSchedule, WorkflowSignal, WorkflowStep, WorkflowStepAction,
-    WorkflowStepAgentTurn, WorkflowStepPluginCall, WorkflowText,
+    WorkflowSignal,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -52,61 +40,174 @@ const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_MANAGER_SOCKET
 struct SeenRequest {
     method: String,
     invocation_token: String,
-    schedule_id: String,
-    trigger_id: String,
-    event_type: String,
+    idempotency_key: String,
 }
 
 #[derive(Clone, Default)]
 struct TestWorkflowManagerServer {
     seen: Arc<Mutex<Vec<SeenRequest>>>,
     relay_tokens: Arc<Mutex<Vec<String>>>,
-    idempotency_keys: Arc<Mutex<Vec<String>>>,
     signal_or_start_requests: Arc<Mutex<Vec<WorkflowManagerSignalOrStartRunRequest>>>,
 }
 
-fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
-    BoundWorkflowTarget {
-        steps: vec![WorkflowStep {
-            id: operation.to_string(),
-            action: WorkflowStepAction::Plugin(WorkflowStepPluginCall {
-                name: plugin_name.to_string(),
-                operation: operation.to_string(),
-                ..Default::default()
-            }),
+fn target() -> BoundWorkflowTarget {
+    BoundWorkflowTarget::from_steps([WorkflowStep {
+        id: "sync".to_string(),
+        action: Some(workflow_step::Action::Plugin(WorkflowStepPluginCall {
+            name: "roadmap".to_string(),
+            operation: "sync".to_string(),
             ..Default::default()
-        }],
+        })),
+        ..Default::default()
+    }])
+}
+
+fn deployment(
+    provider_name: String,
+    spec: Option<WorkflowDeploymentSpec>,
+) -> ManagedWorkflowDeployment {
+    ManagedWorkflowDeployment {
+        provider_name,
+        deployment: Some(WorkflowDeployment {
+            spec,
+            status: WorkflowDeploymentStatus::Active as i32,
+            ..Default::default()
+        }),
     }
 }
 
 #[async_trait]
 impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
+    async fn plan_deployment(
+        &self,
+        request: GrpcRequest<WorkflowManagerPlanDeploymentRequest>,
+    ) -> std::result::Result<GrpcResponse<PlanWorkflowResponse>, Status> {
+        if let Some(token) = request.metadata().get("x-gestalt-host-service-relay-token") {
+            self.relay_tokens
+                .lock()
+                .expect("lock relay tokens")
+                .push(token.to_str().expect("relay token ascii").to_string());
+        }
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "plan".to_string(),
+            invocation_token: request.invocation_token,
+            idempotency_key: request.idempotency_key,
+        });
+        Ok(GrpcResponse::new(PlanWorkflowResponse {
+            accepted_spec_digest: "sha256:spec".to_string(),
+            provider_plan_id: "plan-1".to_string(),
+            provider_plan_digest: "sha256:plan".to_string(),
+            ..Default::default()
+        }))
+    }
+
+    async fn apply_deployment(
+        &self,
+        request: GrpcRequest<WorkflowManagerApplyDeploymentRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDeployment>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "apply".to_string(),
+            invocation_token: request.invocation_token,
+            idempotency_key: request.idempotency_key,
+        });
+        Ok(GrpcResponse::new(deployment(
+            request.provider_name,
+            request.spec,
+        )))
+    }
+
+    async fn get_deployment(
+        &self,
+        request: GrpcRequest<WorkflowManagerGetDeploymentRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDeployment>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "get".to_string(),
+            invocation_token: request.invocation_token,
+            idempotency_key: String::new(),
+        });
+        Ok(GrpcResponse::new(deployment(
+            "basic".to_string(),
+            Some(WorkflowDeploymentSpec {
+                id: request.deployment_id,
+                ..Default::default()
+            }),
+        )))
+    }
+
+    async fn list_deployments(
+        &self,
+        request: GrpcRequest<WorkflowManagerListDeploymentsRequest>,
+    ) -> std::result::Result<GrpcResponse<WorkflowManagerListDeploymentsResponse>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "list".to_string(),
+            invocation_token: request.invocation_token,
+            idempotency_key: String::new(),
+        });
+        Ok(GrpcResponse::new(WorkflowManagerListDeploymentsResponse {
+            deployments: vec![deployment(request.provider_name, None)],
+        }))
+    }
+
+    async fn delete_deployment(
+        &self,
+        request: GrpcRequest<WorkflowManagerDeleteDeploymentRequest>,
+    ) -> std::result::Result<GrpcResponse<()>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "delete".to_string(),
+            invocation_token: request.invocation_token,
+            idempotency_key: String::new(),
+        });
+        Ok(GrpcResponse::new(()))
+    }
+
+    async fn set_deployment_paused(
+        &self,
+        request: GrpcRequest<WorkflowManagerSetDeploymentPausedRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDeployment>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "set-deployment-paused".to_string(),
+            invocation_token: request.invocation_token,
+            idempotency_key: String::new(),
+        });
+        Ok(GrpcResponse::new(deployment("basic".to_string(), None)))
+    }
+
+    async fn set_activation_paused(
+        &self,
+        request: GrpcRequest<WorkflowManagerSetActivationPausedRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDeployment>, Status> {
+        let request = request.into_inner();
+        self.seen.lock().expect("lock seen").push(SeenRequest {
+            method: "set-activation-paused".to_string(),
+            invocation_token: request.invocation_token,
+            idempotency_key: String::new(),
+        });
+        Ok(GrpcResponse::new(deployment("basic".to_string(), None)))
+    }
+
     async fn start_run(
         &self,
         request: GrpcRequest<WorkflowManagerStartRunRequest>,
     ) -> std::result::Result<GrpcResponse<ManagedWorkflowRun>, Status> {
         let request = request.into_inner();
-        self.idempotency_keys
-            .lock()
-            .expect("lock idempotency keys")
-            .push(request.idempotency_key.clone());
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "start-run".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: String::new(),
-            event_type: String::new(),
+            invocation_token: request.invocation_token,
+            idempotency_key: request.idempotency_key,
         });
         Ok(GrpcResponse::new(ManagedWorkflowRun {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
-            run: Some(BoundWorkflowRun {
+            provider_name: request.provider_name,
+            run: Some(WorkflowRun {
                 id: "run-1".to_string(),
-                target: request.target,
+                deployment_id: request.deployment_id,
                 workflow_key: request.workflow_key,
+                status: WorkflowRunStatus::Pending as i32,
                 ..Default::default()
             }),
         }))
@@ -119,24 +220,17 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "signal-run".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: String::new(),
-            event_type: request
-                .signal
-                .as_ref()
-                .map(|signal| signal.name.clone())
-                .unwrap_or_default(),
+            invocation_token: request.invocation_token,
+            idempotency_key: String::new(),
         });
         Ok(GrpcResponse::new(ManagedWorkflowRunSignal {
             provider_name: "basic".to_string(),
-            run: Some(BoundWorkflowRun {
+            run: Some(WorkflowRun {
                 id: request.run_id,
                 ..Default::default()
             }),
             signal: request.signal,
-            started_run: false,
-            workflow_key: String::new(),
+            ..Default::default()
         }))
     }
 
@@ -145,34 +239,19 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         request: GrpcRequest<WorkflowManagerSignalOrStartRunRequest>,
     ) -> std::result::Result<GrpcResponse<ManagedWorkflowRunSignal>, Status> {
         let request = request.into_inner();
-        self.idempotency_keys
-            .lock()
-            .expect("lock idempotency keys")
-            .push(request.idempotency_key.clone());
         self.signal_or_start_requests
             .lock()
-            .expect("lock signal or start requests")
+            .expect("lock signal-or-start requests")
             .push(request.clone());
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "signal-or-start-run".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: String::new(),
-            event_type: request
-                .signal
-                .as_ref()
-                .map(|signal| signal.name.clone())
-                .unwrap_or_default(),
+            invocation_token: request.invocation_token,
+            idempotency_key: request.idempotency_key,
         });
         Ok(GrpcResponse::new(ManagedWorkflowRunSignal {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
-            run: Some(BoundWorkflowRun {
+            provider_name: request.provider_name,
+            run: Some(WorkflowRun {
                 id: "run-1".to_string(),
-                target: request.target,
                 workflow_key: request.workflow_key.clone(),
                 ..Default::default()
             }),
@@ -182,407 +261,44 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         }))
     }
 
-    async fn create_definition(
+    async fn cancel_run(
         &self,
-        request: GrpcRequest<WorkflowManagerCreateDefinitionRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDefinition>, Status> {
-        let request = request.into_inner();
-        self.idempotency_keys
-            .lock()
-            .expect("lock idempotency keys")
-            .push(request.idempotency_key.clone());
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "create-definition".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowDefinition {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
-            definition: Some(BoundWorkflowDefinition {
-                id: "definition-1".to_string(),
-                target: request.target,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn get_definition(
-        &self,
-        request: GrpcRequest<WorkflowManagerGetDefinitionRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDefinition>, Status> {
+        request: GrpcRequest<WorkflowManagerCancelRunRequest>,
+    ) -> std::result::Result<GrpcResponse<ManagedWorkflowRun>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "get-definition".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: request.definition_id.clone(),
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowDefinition {
-            provider_name: "basic".to_string(),
-            definition: Some(BoundWorkflowDefinition {
-                id: request.definition_id,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn update_definition(
-        &self,
-        request: GrpcRequest<WorkflowManagerUpdateDefinitionRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDefinition>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "update-definition".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: request.definition_id.clone(),
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowDefinition {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
-            definition: Some(BoundWorkflowDefinition {
-                id: request.definition_id,
-                target: request.target,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn delete_definition(
-        &self,
-        request: GrpcRequest<WorkflowManagerDeleteDefinitionRequest>,
-    ) -> std::result::Result<GrpcResponse<()>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "delete-definition".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: request.definition_id,
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(()))
-    }
-
-    async fn create_schedule(
-        &self,
-        request: GrpcRequest<WorkflowManagerCreateScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
-        if let Some(token) = request.metadata().get("x-gestalt-host-service-relay-token") {
-            self.relay_tokens
-                .lock()
-                .expect("lock relay tokens")
-                .push(token.to_str().expect("relay token ascii").to_string());
-        }
-        let request = request.into_inner();
-        self.idempotency_keys
-            .lock()
-            .expect("lock idempotency keys")
-            .push(request.idempotency_key.clone());
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "create".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowSchedule {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
-            schedule: Some(BoundWorkflowSchedule {
-                id: "sched-1".to_string(),
-                cron: request.cron,
-                timezone: request.timezone,
-                target: request.target,
-                paused: request.paused,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn get_schedule(
-        &self,
-        request: GrpcRequest<WorkflowManagerGetScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "get".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: request.schedule_id.clone(),
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowSchedule {
-            provider_name: "basic".to_string(),
-            schedule: Some(BoundWorkflowSchedule {
-                id: request.schedule_id,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn update_schedule(
-        &self,
-        request: GrpcRequest<WorkflowManagerUpdateScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "update".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: request.schedule_id.clone(),
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowSchedule {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
-            schedule: Some(BoundWorkflowSchedule {
-                id: request.schedule_id,
-                cron: request.cron,
-                timezone: request.timezone,
-                target: request.target,
-                paused: request.paused,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn delete_schedule(
-        &self,
-        request: GrpcRequest<WorkflowManagerDeleteScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<()>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "delete".to_string(),
+            method: "cancel-run".to_string(),
             invocation_token: request.invocation_token,
-            schedule_id: request.schedule_id,
-            trigger_id: String::new(),
-            event_type: String::new(),
+            idempotency_key: String::new(),
         });
-        Ok(GrpcResponse::new(()))
-    }
-
-    async fn pause_schedule(
-        &self,
-        request: GrpcRequest<WorkflowManagerPauseScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "pause".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: request.schedule_id.clone(),
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowSchedule {
+        Ok(GrpcResponse::new(ManagedWorkflowRun {
             provider_name: "basic".to_string(),
-            schedule: Some(BoundWorkflowSchedule {
-                id: request.schedule_id,
-                paused: true,
+            run: Some(WorkflowRun {
+                id: request.run_id,
+                status: WorkflowRunStatus::Canceled as i32,
                 ..Default::default()
             }),
         }))
     }
 
-    async fn resume_schedule(
+    async fn deliver_event(
         &self,
-        request: GrpcRequest<WorkflowManagerResumeScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
+        request: GrpcRequest<WorkflowManagerDeliverEventRequest>,
+    ) -> std::result::Result<GrpcResponse<WorkflowManagerDeliverEventResponse>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "resume".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: request.schedule_id.clone(),
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowSchedule {
-            provider_name: "basic".to_string(),
-            schedule: Some(BoundWorkflowSchedule {
-                id: request.schedule_id,
-                paused: false,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn create_event_trigger(
-        &self,
-        request: GrpcRequest<WorkflowManagerCreateEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
-        let request = request.into_inner();
-        self.idempotency_keys
-            .lock()
-            .expect("lock idempotency keys")
-            .push(request.idempotency_key.clone());
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "create-trigger".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
-            trigger: Some(BoundWorkflowEventTrigger {
-                id: "trg-1".to_string(),
-                r#match: request.r#match,
-                target: request.target,
-                paused: request.paused,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn get_event_trigger(
-        &self,
-        request: GrpcRequest<WorkflowManagerGetEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "get-trigger".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: request.trigger_id.clone(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
-            provider_name: "basic".to_string(),
-            trigger: Some(BoundWorkflowEventTrigger {
-                id: request.trigger_id,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn update_event_trigger(
-        &self,
-        request: GrpcRequest<WorkflowManagerUpdateEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "update-trigger".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: request.trigger_id.clone(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
-            trigger: Some(BoundWorkflowEventTrigger {
-                id: request.trigger_id,
-                r#match: request.r#match,
-                target: request.target,
-                paused: request.paused,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn delete_event_trigger(
-        &self,
-        request: GrpcRequest<WorkflowManagerDeleteEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<()>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "delete-trigger".to_string(),
+            method: "deliver-event".to_string(),
             invocation_token: request.invocation_token,
-            schedule_id: String::new(),
-            trigger_id: request.trigger_id,
-            event_type: String::new(),
+            idempotency_key: request.idempotency_key,
         });
-        Ok(GrpcResponse::new(()))
-    }
-
-    async fn pause_event_trigger(
-        &self,
-        request: GrpcRequest<WorkflowManagerPauseEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "pause-trigger".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: request.trigger_id.clone(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
-            provider_name: "basic".to_string(),
-            trigger: Some(BoundWorkflowEventTrigger {
-                id: request.trigger_id,
-                paused: true,
+        Ok(GrpcResponse::new(WorkflowManagerDeliverEventResponse {
+            results: vec![WorkflowEventDeliveryResult {
+                deployment_id: "deployment-1".to_string(),
+                activation_id: "evt".to_string(),
+                started_run: true,
                 ..Default::default()
-            }),
+            }],
         }))
-    }
-
-    async fn resume_event_trigger(
-        &self,
-        request: GrpcRequest<WorkflowManagerResumeEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "resume-trigger".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: request.trigger_id.clone(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
-            provider_name: "basic".to_string(),
-            trigger: Some(BoundWorkflowEventTrigger {
-                id: request.trigger_id,
-                paused: false,
-                ..Default::default()
-            }),
-        }))
-    }
-
-    async fn publish_event(
-        &self,
-        request: GrpcRequest<WorkflowManagerPublishEventRequest>,
-    ) -> std::result::Result<GrpcResponse<ProtoWorkflowEvent>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "publish-event".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: String::new(),
-            event_type: request
-                .event
-                .as_ref()
-                .map(|event| event.r#type.clone())
-                .unwrap_or_default(),
-        });
-        let mut event = request.event.unwrap_or_default();
-        if event.id.is_empty() {
-            event.id = "evt-1".to_string();
-        }
-        Ok(GrpcResponse::new(event))
     }
 }
 
@@ -594,8 +310,10 @@ async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
         .await
         .expect("bind tcp listener");
     let address = listener.local_addr().expect("local addr");
-    let _socket_guard =
-        helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, format!("tcp://{address}"));
+    let _socket_guard = helpers::EnvGuard::set(
+        gestalt::ENV_WORKFLOW_MANAGER_SOCKET,
+        format!("tcp://{address}"),
+    );
     let _token_guard =
         helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, "relay-token-rust");
 
@@ -611,24 +329,28 @@ async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
         WorkflowManager::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
             .await
             .expect("connect workflow manager");
-    let created = manager
-        .create_schedule(WorkflowManagerCreateSchedule {
+    let planned = manager
+        .plan_deployment(WorkflowManagerPlanDeployment {
             provider_name: "managed".to_string(),
-            cron: "*/5 * * * *".to_string(),
+            spec: Some(WorkflowDeploymentSpec {
+                id: "deployment-1".to_string(),
+                target: Some(target()),
+                ..Default::default()
+            }),
             ..Default::default()
         })
         .await
-        .expect("create schedule");
+        .expect("plan deployment");
 
-    assert_eq!(created.provider_name, "managed");
-    assert_eq!(created.schedule.expect("created schedule").id, "sched-1");
-
-    let relay_tokens = server
-        .relay_tokens
-        .lock()
-        .expect("lock relay tokens")
-        .clone();
-    assert_eq!(relay_tokens, vec!["relay-token-rust".to_string()]);
+    assert_eq!(planned.provider_plan_id, "plan-1");
+    assert_eq!(
+        server
+            .relay_tokens
+            .lock()
+            .expect("lock relay tokens")
+            .clone(),
+        vec!["relay-token-rust".to_string()]
+    );
 
     serve_task.abort();
     let _ = serve_task.await;
@@ -638,7 +360,8 @@ async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
 async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-wm.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
 
     let server = TestWorkflowManagerServer::default();
     let serve_server = server.clone();
@@ -655,13 +378,74 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         WorkflowManager::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
             .await
             .expect("connect workflow manager");
-    let started_run = manager
-        .start_run(WorkflowManagerStartRun {
+    let _planned = manager
+        .plan_deployment(WorkflowManagerPlanDeployment {
             provider_name: "basic".to_string(),
-            workflow_key: "workflow-key-1".to_string(),
-            target: Some(plugin_target("roadmap", "sync")),
+            spec: Some(WorkflowDeploymentSpec {
+                id: "deployment-1".to_string(),
+                target: Some(target()),
+                ..Default::default()
+            }),
             ..Default::default()
         })
+        .await
+        .expect("plan deployment");
+    let applied = manager
+        .apply_deployment(WorkflowManagerApplyDeployment {
+            provider_name: "basic".to_string(),
+            spec: Some(WorkflowDeploymentSpec {
+                id: "deployment-1".to_string(),
+                target: Some(target()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .expect("apply deployment");
+    let fetched = manager
+        .get_deployment(WorkflowManagerGetDeployment {
+            deployment_id: "deployment-1".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("get deployment");
+    let listed = manager
+        .list_deployments(WorkflowManagerListDeployments {
+            provider_name: "basic".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("list deployments");
+    manager
+        .set_deployment_paused(WorkflowManagerSetDeploymentPaused {
+            deployment_id: "deployment-1".to_string(),
+            paused: true,
+            ..Default::default()
+        })
+        .await
+        .expect("set deployment paused");
+    manager
+        .set_activation_paused(WorkflowManagerSetActivationPaused {
+            deployment_id: "deployment-1".to_string(),
+            activation_id: "manual".to_string(),
+            paused: true,
+            ..Default::default()
+        })
+        .await
+        .expect("set activation paused");
+    let started_run = manager
+        .start_run(
+            WorkflowManagerStartRun {
+                provider_name: "basic".to_string(),
+                deployment_id: "deployment-1".to_string(),
+                deployment_generation: 7,
+                activation_id: "manual".to_string(),
+                workflow_key: "workflow-key-1".to_string(),
+                ..Default::default()
+            }
+            .with_input(serde_json::json!({ "customer_id": "cust_123" }))
+            .expect("start input"),
+        )
         .await
         .expect("start run");
     let signaled_run = manager
@@ -671,14 +455,17 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
                 name: "slack.event".to_string(),
                 ..Default::default()
             }),
+            ..Default::default()
         })
         .await
         .expect("signal run");
     let signaled_or_started_run = manager
         .signal_or_start_run(WorkflowManagerSignalOrStartRun {
             provider_name: "basic".to_string(),
+            deployment_id: "deployment-1".to_string(),
+            deployment_generation: 7,
+            activation_id: "evt".to_string(),
             workflow_key: "workflow-key-1".to_string(),
-            target: Some(plugin_target("roadmap", "sync")),
             signal: Some(WorkflowSignal {
                 name: "slack.event".to_string(),
                 ..Default::default()
@@ -687,462 +474,101 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
         })
         .await
         .expect("signal or start run");
-    let created_definition = manager
-        .create_definition(WorkflowManagerCreateDefinition {
+    let canceled = manager
+        .cancel_run(WorkflowManagerCancelRun {
+            run_id: "run-1".to_string(),
+            reason: "test".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("cancel run");
+    let delivered = manager
+        .deliver_event(WorkflowManagerDeliverEvent {
             provider_name: "basic".to_string(),
-            target: Some(plugin_target("roadmap", "sync")),
-            ..Default::default()
-        })
-        .await
-        .expect("create definition");
-    let fetched_definition = manager
-        .get_definition(WorkflowManagerGetDefinition {
-            definition_id: "definition-1".to_string(),
-        })
-        .await
-        .expect("get definition");
-    let updated_definition = manager
-        .update_definition(WorkflowManagerUpdateDefinition {
-            definition_id: "definition-1".to_string(),
-            provider_name: "secondary".to_string(),
-            target: Some(plugin_target("roadmap", "status")),
-        })
-        .await
-        .expect("update definition");
-    manager
-        .delete_definition(WorkflowManagerDeleteDefinition {
-            definition_id: "definition-1".to_string(),
-        })
-        .await
-        .expect("delete definition");
-    let created = manager
-        .create_schedule(WorkflowManagerCreateSchedule {
-            provider_name: "basic".to_string(),
-            cron: "*/5 * * * *".to_string(),
-            timezone: "UTC".to_string(),
-            target: Some(plugin_target("roadmap", "sync")),
-            paused: false,
-            ..Default::default()
-        })
-        .await
-        .expect("create schedule");
-    let fetched = manager
-        .get_schedule(WorkflowManagerGetSchedule {
-            schedule_id: "sched-1".to_string(),
-        })
-        .await
-        .expect("get schedule");
-    let updated = manager
-        .update_schedule(WorkflowManagerUpdateSchedule {
-            schedule_id: "sched-1".to_string(),
-            provider_name: "secondary".to_string(),
-            cron: "0 * * * *".to_string(),
-            timezone: "America/New_York".to_string(),
-            target: Some(plugin_target("roadmap", "status")),
-            paused: true,
-            ..Default::default()
-        })
-        .await
-        .expect("update schedule");
-    let paused = manager
-        .pause_schedule(WorkflowManagerPauseSchedule {
-            schedule_id: "sched-1".to_string(),
-        })
-        .await
-        .expect("pause schedule");
-    let resumed = manager
-        .resume_schedule(WorkflowManagerResumeSchedule {
-            schedule_id: "sched-1".to_string(),
-        })
-        .await
-        .expect("resume schedule");
-    manager
-        .delete_schedule(WorkflowManagerDeleteSchedule {
-            schedule_id: "sched-1".to_string(),
-        })
-        .await
-        .expect("delete schedule");
-    let created_trigger = manager
-        .create_trigger(WorkflowManagerCreateEventTrigger {
-            provider_name: "basic".to_string(),
-            event_match: Some(WorkflowEventMatch {
-                event_type: "roadmap.item.updated".to_string(),
-                source: "roadmap".to_string(),
-                ..Default::default()
-            }),
-            target: Some(plugin_target("slack", "chat.postMessage")),
-            paused: false,
-            ..Default::default()
-        })
-        .await
-        .expect("create trigger");
-    let fetched_trigger = manager
-        .get_trigger(WorkflowManagerGetEventTrigger {
-            trigger_id: "trg-1".to_string(),
-        })
-        .await
-        .expect("get trigger");
-    let updated_trigger = manager
-        .update_trigger(WorkflowManagerUpdateEventTrigger {
-            trigger_id: "trg-1".to_string(),
-            provider_name: "secondary".to_string(),
-            event_match: Some(WorkflowEventMatch {
-                event_type: "roadmap.item.synced".to_string(),
-                ..Default::default()
-            }),
-            target: Some(plugin_target("slack", "chat.postMessage")),
-            paused: true,
-            ..Default::default()
-        })
-        .await
-        .expect("update trigger");
-    let paused_trigger = manager
-        .pause_trigger(WorkflowManagerPauseEventTrigger {
-            trigger_id: "trg-1".to_string(),
-        })
-        .await
-        .expect("pause trigger");
-    let resumed_trigger = manager
-        .resume_trigger(WorkflowManagerResumeEventTrigger {
-            trigger_id: "trg-1".to_string(),
-        })
-        .await
-        .expect("resume trigger");
-    manager
-        .delete_trigger(WorkflowManagerDeleteEventTrigger {
-            trigger_id: "trg-1".to_string(),
-        })
-        .await
-        .expect("delete trigger");
-    let published_event = manager
-        .publish_event(WorkflowManagerPublishEvent {
-            event: Some(WorkflowEvent {
-                event_type: "roadmap.item.updated".to_string(),
+            event: Some(gestalt::WorkflowEvent {
+                r#type: "roadmap.item.updated".to_string(),
                 source: "roadmap".to_string(),
                 ..Default::default()
             }),
             ..Default::default()
         })
         .await
-        .expect("publish event");
+        .expect("deliver event");
+    manager
+        .delete_deployment(WorkflowManagerDeleteDeployment {
+            deployment_id: "deployment-1".to_string(),
+            generation: 7,
+            ..Default::default()
+        })
+        .await
+        .expect("delete deployment");
 
-    let started = started_run.run.expect("started run");
-    assert_eq!(started.id, "run-1");
-    assert_eq!(started.workflow_key, "workflow-key-1");
-    let signaled = signaled_run.signal.expect("signaled signal");
-    assert_eq!(signaled.name, "slack.event");
+    assert_eq!(applied.provider_name, "basic");
+    assert_eq!(
+        fetched
+            .deployment
+            .expect("fetched deployment")
+            .spec
+            .expect("spec")
+            .id,
+        "deployment-1"
+    );
+    assert_eq!(listed.deployments.len(), 1);
+    assert_eq!(started_run.run.expect("started run").id, "run-1");
+    assert_eq!(signaled_run.signal.expect("signal").name, "slack.event");
     assert!(signaled_or_started_run.started_run);
-    assert_eq!(signaled_or_started_run.workflow_key, "workflow-key-1");
     assert_eq!(
-        created_definition
-            .definition
-            .expect("created definition")
-            .id,
-        "definition-1"
+        WorkflowRunStatus::try_from(canceled.run.expect("canceled run").status)
+            .expect("run status")
+            .as_str_name(),
+        "WORKFLOW_RUN_STATUS_CANCELED"
     );
-    assert_eq!(
-        fetched_definition
-            .definition
-            .expect("fetched definition")
-            .id,
-        "definition-1"
-    );
-    assert_eq!(updated_definition.provider_name, "secondary");
-    assert_eq!(created.provider_name, "basic");
-    assert_eq!(created.schedule.expect("created schedule").id, "sched-1");
-    assert_eq!(fetched.schedule.expect("fetched schedule").id, "sched-1");
-    assert_eq!(updated.provider_name, "secondary");
-    assert!(updated.schedule.expect("updated schedule").paused);
-    assert!(paused.schedule.expect("paused schedule").paused);
-    assert!(!resumed.schedule.expect("resumed schedule").paused);
-    assert_eq!(created_trigger.provider_name, "basic");
-    let created_trigger = created_trigger.trigger.expect("created trigger");
-    assert_eq!(created_trigger.id, "trg-1");
-    assert_eq!(
-        created_trigger
-            .event_match
-            .as_ref()
-            .expect("created trigger match")
-            .event_type,
-        "roadmap.item.updated"
-    );
-    assert_eq!(
-        fetched_trigger.trigger.expect("fetched trigger").id,
-        "trg-1"
-    );
-    assert_eq!(updated_trigger.provider_name, "secondary");
-    let updated_trigger = updated_trigger.trigger.expect("updated trigger");
-    assert!(updated_trigger.paused);
-    assert_eq!(
-        updated_trigger
-            .event_match
-            .as_ref()
-            .expect("updated trigger match")
-            .event_type,
-        "roadmap.item.synced"
-    );
-    assert!(paused_trigger.trigger.expect("paused trigger").paused);
-    assert!(!resumed_trigger.trigger.expect("resumed trigger").paused);
-    assert_eq!(published_event.event_type, "roadmap.item.updated");
+    assert_eq!(delivered.results[0].deployment_id, "deployment-1");
 
     let seen = server.seen.lock().expect("lock seen").clone();
-    let idempotency_keys = server
-        .idempotency_keys
-        .lock()
-        .expect("lock idempotency keys")
-        .clone();
     assert_eq!(
-        idempotency_keys,
+        seen.iter()
+            .map(|entry| entry.method.as_str())
+            .collect::<Vec<_>>(),
         vec![
-            "workflow-request-key-rust".to_string(),
-            "workflow-request-key-rust".to_string(),
-            "workflow-request-key-rust".to_string(),
-            "workflow-request-key-rust".to_string(),
-            "workflow-request-key-rust".to_string(),
+            "plan",
+            "apply",
+            "get",
+            "list",
+            "set-deployment-paused",
+            "set-activation-paused",
+            "start-run",
+            "signal-run",
+            "signal-or-start-run",
+            "cancel-run",
+            "deliver-event",
+            "delete",
         ]
     );
+    assert!(
+        seen.iter()
+            .all(|entry| entry.invocation_token == "token-123")
+    );
     assert_eq!(
-        seen,
+        seen.iter()
+            .filter(|entry| !entry.idempotency_key.is_empty())
+            .map(|entry| entry.idempotency_key.as_str())
+            .collect::<Vec<_>>(),
         vec![
-            SeenRequest {
-                method: "start-run".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "signal-run".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: String::new(),
-                event_type: "slack.event".to_string(),
-            },
-            SeenRequest {
-                method: "signal-or-start-run".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: String::new(),
-                event_type: "slack.event".to_string(),
-            },
-            SeenRequest {
-                method: "create-definition".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "get-definition".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: "definition-1".to_string(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "update-definition".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: "definition-1".to_string(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "delete-definition".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: "definition-1".to_string(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "create".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "get".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: "sched-1".to_string(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "update".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: "sched-1".to_string(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "pause".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: "sched-1".to_string(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "resume".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: "sched-1".to_string(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "delete".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: "sched-1".to_string(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "create-trigger".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: String::new(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "get-trigger".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: "trg-1".to_string(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "update-trigger".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: "trg-1".to_string(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "pause-trigger".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: "trg-1".to_string(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "resume-trigger".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: "trg-1".to_string(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "delete-trigger".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: "trg-1".to_string(),
-                event_type: String::new(),
-            },
-            SeenRequest {
-                method: "publish-event".to_string(),
-                invocation_token: "token-123".to_string(),
-                schedule_id: String::new(),
-                trigger_id: String::new(),
-                event_type: "roadmap.item.updated".to_string(),
-            },
+            "workflow-request-key-rust",
+            "workflow-request-key-rust",
+            "workflow-request-key-rust",
+            "workflow-request-key-rust",
+            "workflow-request-key-rust",
         ]
     );
-
-    serve_task.abort();
-    let _ = serve_task.await;
-}
-
-#[tokio::test]
-async fn workflow_manager_signal_or_start_accepts_native_values() {
-    let _env_lock = helpers::env_lock().lock().await;
-    let socket = helpers::temp_socket("g-rust-wm-native.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
-
-    let server = TestWorkflowManagerServer::default();
-    let serve_server = server.clone();
-    let serve_socket = socket.clone();
-    let serve_task = tokio::spawn(async move {
-        serve_workflow_manager(serve_server, &serve_socket)
-            .await
-            .expect("serve workflow manager");
-    });
-
-    helpers::wait_for_socket(&socket).await;
-
-    let mut manager =
-        WorkflowManager::connect_with_idempotency_key("token-123", "workflow-request-key-rust")
-            .await
-            .expect("connect workflow manager");
-    let signaled = manager
-        .signal_or_start_run(WorkflowManagerSignalOrStartRun {
-            provider_name: "basic".to_string(),
-            workflow_key: "workflow-key-1".to_string(),
-            idempotency_key: "signal-request-key".to_string(),
-            target: Some(BoundWorkflowTarget {
-                steps: vec![WorkflowStep {
-                    id: "reply".to_string(),
-                    action: WorkflowStepAction::Agent(WorkflowStepAgentTurn {
-                        provider: "openai".to_string(),
-                        model: "gpt-5.1".to_string(),
-                        messages: vec![WorkflowAgentMessage {
-                            role: "user".to_string(),
-                            text: Some(WorkflowText {
-                                template: "Respond in thread.".to_string(),
-                            }),
-                            ..Default::default()
-                        }],
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                }],
-            }),
-            signal: Some(WorkflowSignal {
-                name: "slack.event".to_string(),
-                payload: Some(serde_json::json!({ "channel": "C123" })),
-                ..Default::default()
-            }),
-            ..Default::default()
-        })
-        .await
-        .expect("signal or start run");
-
-    assert!(signaled.started_run);
 
     let requests = server
         .signal_or_start_requests
         .lock()
-        .expect("lock signal or start requests")
+        .expect("lock signal-or-start requests")
         .clone();
-    assert_eq!(requests.len(), 1);
-    let request = &requests[0];
-    assert_eq!(request.invocation_token, "token-123");
-    assert_eq!(request.provider_name, "basic");
-    assert_eq!(request.workflow_key, "workflow-key-1");
-    assert_eq!(request.idempotency_key, "signal-request-key");
-    let signal = request.signal.as_ref().expect("signal");
-    assert_eq!(signal.name, "slack.event");
-    assert_eq!(
-        support_protocol::json_from_struct(signal.payload.as_ref().unwrap()),
-        serde_json::json!({ "channel": "C123" })
-    );
-
-    let target = request.target.as_ref().expect("target");
-    let step = target.steps.first().expect("workflow step");
-    let agent = match step.action.as_ref().expect("step action") {
-        workflow_step::Action::Agent(agent) => agent,
-        _ => panic!("expected agent target"),
-    };
-    assert_eq!(agent.provider, "openai");
-    assert_eq!(agent.model, "gpt-5.1");
-    assert_eq!(agent.messages.len(), 1);
-    assert_eq!(agent.messages[0].role, "user");
-    assert_eq!(
-        agent.messages[0]
-            .text
-            .as_ref()
-            .expect("message text")
-            .template,
-        "Respond in thread."
-    );
+    assert_eq!(requests[0].workflow_key, "workflow-key-1");
 
     serve_task.abort();
     let _ = serve_task.await;
@@ -1152,7 +578,8 @@ async fn workflow_manager_signal_or_start_accepts_native_values() {
 async fn request_workflow_manager_uses_embedded_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-req-wm.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
 
     let server = TestWorkflowManagerServer::default();
     let serve_server = server.clone();
@@ -1174,13 +601,22 @@ async fn request_workflow_manager_uses_embedded_invocation_token() {
         .await
         .expect("request workflow manager");
     let response = manager
-        .get_schedule(WorkflowManagerGetSchedule {
-            schedule_id: "sched-1".to_string(),
+        .get_deployment(WorkflowManagerGetDeployment {
+            deployment_id: "deployment-1".to_string(),
+            ..Default::default()
         })
         .await
-        .expect("get schedule");
+        .expect("get deployment");
 
-    assert_eq!(response.schedule.expect("schedule").id, "sched-1");
+    assert_eq!(
+        response
+            .deployment
+            .expect("deployment")
+            .spec
+            .expect("spec")
+            .id,
+        "deployment-1"
+    );
 
     let seen = server.seen.lock().expect("lock seen").clone();
     assert_eq!(seen.len(), 1);

@@ -131,6 +131,134 @@ func (p *memoryWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.
 	return nil, errors.New("not implemented")
 }
 
+func (p *memoryWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
+	return &coreworkflow.CompileTargetResponse{
+		AcceptedSpecDigest: req.SpecDigest,
+		ProviderPlanDigest: "plan-digest",
+	}, nil
+}
+
+func (p *memoryWorkflowProvider) ApplyWorkflowDeployment(ctx context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
+	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Schedule != nil {
+		activation := req.Spec.Activations[0]
+		executionRef := ""
+		if req.Binding != nil {
+			executionRef = req.Binding.ExecutionRef
+		}
+		if _, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{
+			ScheduleID:   req.Spec.ID,
+			Cron:         activation.Schedule.Cron,
+			Timezone:     activation.Schedule.Timezone,
+			Target:       req.Spec.Target,
+			Paused:       req.Spec.Paused || activation.Paused,
+			ExecutionRef: executionRef,
+			PlanBinding:  req.Binding,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Event != nil {
+		activation := req.Spec.Activations[0]
+		executionRef := ""
+		if req.Binding != nil {
+			executionRef = req.Binding.ExecutionRef
+		}
+		if _, err := p.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{
+			TriggerID:    req.Spec.ID,
+			Match:        activation.Event.Match,
+			Target:       req.Spec.Target,
+			Paused:       req.Spec.Paused || activation.Paused,
+			ExecutionRef: executionRef,
+			PlanBinding:  req.Binding,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	status := coreworkflow.DeploymentStatusActive
+	if req.Spec.Paused {
+		status = coreworkflow.DeploymentStatusPaused
+	}
+	return &coreworkflow.Deployment{Spec: req.Spec, Status: status, Binding: req.Binding}, nil
+}
+
+func (p *memoryWorkflowProvider) GetWorkflowDeployment(_ context.Context, req coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
+	if schedule := p.schedules[req.DeploymentID]; schedule != nil {
+		return workflowDeploymentFromSchedule(schedule), nil
+	}
+	if trigger := p.triggers[req.DeploymentID]; trigger != nil {
+		return workflowDeploymentFromEventTrigger(trigger), nil
+	}
+	return nil, core.ErrNotFound
+}
+
+func (p *memoryWorkflowProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
+	out := &coreworkflow.ListDeploymentsResponse{}
+	for _, schedule := range p.schedules {
+		out.Deployments = append(out.Deployments, workflowDeploymentFromSchedule(schedule))
+	}
+	for _, trigger := range p.triggers {
+		out.Deployments = append(out.Deployments, workflowDeploymentFromEventTrigger(trigger))
+	}
+	return out, nil
+}
+
+func (p *memoryWorkflowProvider) DeleteWorkflowDeployment(ctx context.Context, req coreworkflow.DeleteDeploymentRequest) error {
+	if _, ok := p.schedules[req.DeploymentID]; ok {
+		return p.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: req.DeploymentID})
+	}
+	if _, ok := p.triggers[req.DeploymentID]; ok {
+		return p.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: req.DeploymentID})
+	}
+	return core.ErrNotFound
+}
+
+func (p *memoryWorkflowProvider) SetWorkflowDeploymentPaused(ctx context.Context, req coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
+	if _, ok := p.schedules[req.DeploymentID]; ok {
+		var err error
+		if req.Paused {
+			_, err = p.PauseSchedule(ctx, coreworkflow.PauseScheduleRequest{ScheduleID: req.DeploymentID})
+		} else {
+			_, err = p.ResumeSchedule(ctx, coreworkflow.ResumeScheduleRequest{ScheduleID: req.DeploymentID})
+		}
+		if err != nil {
+			return nil, err
+		}
+		return p.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: req.DeploymentID})
+	}
+	if _, ok := p.triggers[req.DeploymentID]; ok {
+		var err error
+		if req.Paused {
+			_, err = p.PauseEventTrigger(ctx, coreworkflow.PauseEventTriggerRequest{TriggerID: req.DeploymentID})
+		} else {
+			_, err = p.ResumeEventTrigger(ctx, coreworkflow.ResumeEventTriggerRequest{TriggerID: req.DeploymentID})
+		}
+		if err != nil {
+			return nil, err
+		}
+		return p.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: req.DeploymentID})
+	}
+	return nil, core.ErrNotFound
+}
+
+func (p *memoryWorkflowProvider) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
+	return p.SetWorkflowDeploymentPaused(ctx, coreworkflow.SetDeploymentPausedRequest{DeploymentID: req.DeploymentID, Paused: req.Paused})
+}
+
+func (p *memoryWorkflowProvider) DeliverWorkflowEvent(ctx context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
+	if err := p.PublishEvent(ctx, req); err != nil {
+		return nil, err
+	}
+	return &coreworkflow.DeliverEventResponse{}, nil
+}
+
+func (p *memoryWorkflowProvider) GetWorkflowRunEvents(context.Context, coreworkflow.GetRunEventsRequest) (*coreworkflow.ListRunEventsResponse, error) {
+	return &coreworkflow.ListRunEventsResponse{}, nil
+}
+
+func (p *memoryWorkflowProvider) GetWorkflowRunOutput(context.Context, coreworkflow.GetRunOutputRequest) (*coreworkflow.RunOutput, error) {
+	return nil, core.ErrNotFound
+}
+
 func (p *memoryWorkflowProvider) GetRun(_ context.Context, req coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
 	if p.getRunErr != nil {
 		return nil, p.getRunErr
@@ -388,6 +516,65 @@ func (p *memoryWorkflowProvider) ListExecutionReferences(_ context.Context, subj
 
 func (p *memoryWorkflowProvider) Ping(context.Context) error { return nil }
 func (p *memoryWorkflowProvider) Close() error               { return nil }
+
+func workflowDeploymentFromSchedule(schedule *coreworkflow.Schedule) *coreworkflow.Deployment {
+	if schedule == nil {
+		return nil
+	}
+	status := coreworkflow.DeploymentStatusActive
+	if schedule.Paused {
+		status = coreworkflow.DeploymentStatusPaused
+	}
+	return &coreworkflow.Deployment{
+		Spec: coreworkflow.DeploymentSpec{
+			ID:     schedule.ID,
+			Target: schedule.Target,
+			Paused: schedule.Paused,
+			Activations: []coreworkflow.Activation{{
+				ID:     "schedule",
+				Paused: schedule.Paused,
+				Mode:   coreworkflow.ActivationModeStart,
+				Schedule: &coreworkflow.ScheduleActivation{
+					Cron:     schedule.Cron,
+					Timezone: schedule.Timezone,
+				},
+			}},
+		},
+		Status:    status,
+		CreatedAt: schedule.CreatedAt,
+		UpdatedAt: schedule.UpdatedAt,
+		Binding:   &coreworkflow.DeploymentBinding{ExecutionRef: schedule.ExecutionRef},
+	}
+}
+
+func workflowDeploymentFromEventTrigger(trigger *coreworkflow.EventTrigger) *coreworkflow.Deployment {
+	if trigger == nil {
+		return nil
+	}
+	status := coreworkflow.DeploymentStatusActive
+	if trigger.Paused {
+		status = coreworkflow.DeploymentStatusPaused
+	}
+	return &coreworkflow.Deployment{
+		Spec: coreworkflow.DeploymentSpec{
+			ID:     trigger.ID,
+			Target: trigger.Target,
+			Paused: trigger.Paused,
+			Activations: []coreworkflow.Activation{{
+				ID:     "event",
+				Paused: trigger.Paused,
+				Mode:   coreworkflow.ActivationModeSignalOrStart,
+				Event: &coreworkflow.EventActivation{
+					Match: trigger.Match,
+				},
+			}},
+		},
+		Status:    status,
+		CreatedAt: trigger.CreatedAt,
+		UpdatedAt: trigger.UpdatedAt,
+		Binding:   &coreworkflow.DeploymentBinding{ExecutionRef: trigger.ExecutionRef},
+	}
+}
 
 func cloneWorkflowExecutionReference(ref *coreworkflow.ExecutionReference) *coreworkflow.ExecutionReference {
 	if ref == nil {

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -535,10 +536,8 @@ func workflowStepWhenMatches(when *coreworkflow.StepWhen, req coreworkflow.Invok
 	if when == nil {
 		return true, "", nil
 	}
-	if source := when.Value.StepOutput; source != nil {
-		if _, ok := skipped[strings.TrimSpace(source.StepID)]; ok {
-			return false, "missing_dependency", nil
-		}
+	if workflowValueReferencesSkippedStepOutput(when.Value, skipped) {
+		return false, "missing_dependency", nil
 	}
 	value, ok, err := workflowEvaluateValue(when.Value, req, outputs, nil, false)
 	if err != nil {
@@ -554,6 +553,27 @@ func workflowStepWhenMatches(when *coreworkflow.StepWhen, req coreworkflow.Invok
 		return true, "", nil
 	}
 	return false, "when_false", nil
+}
+
+func workflowValueReferencesSkippedStepOutput(value coreworkflow.Value, skipped map[string]struct{}) bool {
+	if len(skipped) == 0 {
+		return false
+	}
+	if source := value.StepOutput; source != nil {
+		_, ok := skipped[strings.TrimSpace(source.StepID)]
+		return ok
+	}
+	for key := range value.Object {
+		if workflowValueReferencesSkippedStepOutput(value.Object[key], skipped) {
+			return true
+		}
+	}
+	for i := range value.Array {
+		if workflowValueReferencesSkippedStepOutput(value.Array[i], skipped) {
+			return true
+		}
+	}
+	return false
 }
 
 func workflowEvaluateStepInputs(values map[string]coreworkflow.Value, req coreworkflow.InvokeOperationRequest, outputs map[string]any) (map[string]any, error) {
@@ -771,6 +791,423 @@ func workflowStepIdempotencyKey(req coreworkflow.InvokeOperationRequest, invocat
 	}
 	parts = append(parts, "step", strings.TrimSpace(stepID), strings.TrimSpace(suffix))
 	return strings.Join(parts, ":")
+}
+
+func (r *workflowRuntime) InvokeWorkflowAction(ctx context.Context, req coreworkflow.InvokeActionRequest) (*coreworkflow.HostActionResponse, error) {
+	switch {
+	case req.Plugin != nil && req.AgentTurn != nil:
+		return nil, fmt.Errorf("%w: workflow action must set exactly one payload", invocation.ErrInvalidInvocation)
+	case req.Plugin != nil:
+		return r.invokeWorkflowPluginAction(ctx, req)
+	case req.AgentTurn != nil:
+		return r.invokeWorkflowAgentTurn(ctx, req)
+	default:
+		return nil, fmt.Errorf("%w: workflow action payload is required", invocation.ErrInvalidInvocation)
+	}
+}
+
+func (r *workflowRuntime) invokeWorkflowPluginAction(ctx context.Context, req coreworkflow.InvokeActionRequest) (*coreworkflow.HostActionResponse, error) {
+	if r == nil {
+		return nil, fmt.Errorf("workflow runtime is not configured")
+	}
+	r.mu.RLock()
+	invoker := r.invoker
+	r.mu.RUnlock()
+	if invoker == nil {
+		return nil, fmt.Errorf("workflow runtime invoker is not configured")
+	}
+	resolved, err := r.resolveWorkflowHostAction(ctx, req.ProviderName, req.Selector, "")
+	if err != nil {
+		return nil, err
+	}
+	plugin, err := workflowHostPluginActionCall(resolved.step, strings.TrimSpace(req.Selector.ActionID))
+	if err != nil {
+		return nil, err
+	}
+	principalValue := workflowprincipal.RuntimePrincipalFromExecutionReference(resolved.ref)
+	ctx = workflowExecutionRefWithRunAsAudit(ctx, resolved.ref)
+	if workflowExecutionRefAllowsInternalConnectionAccess(resolved.ref) {
+		ctx = invocation.WithInternalConnectionAccess(ctx)
+	}
+	if contextValue := workflowInvocationContext(coreworkflow.InvokeOperationRequest{
+		ProviderName: req.ProviderName,
+		RunID:        req.Selector.RunID,
+		Trigger:      req.Trigger,
+		Target:       resolved.ref.Target,
+		Input:        req.Plugin.Input,
+		Metadata:     req.Metadata,
+		ExecutionRef: req.Selector.ExecutionRef,
+		Signals:      req.Signals,
+	}); len(contextValue) > 0 {
+		ctx = invocation.WithWorkflowContext(ctx, contextValue)
+	}
+	if connection := strings.TrimSpace(plugin.Connection); connection != "" {
+		ctx = invocation.WithConnection(ctx, connection)
+	}
+	credentialMode := core.NormalizeOptionalConnectionMode(plugin.CredentialMode)
+	switch credentialMode {
+	case "":
+	case core.ConnectionModeNone, core.ConnectionModeUser:
+		ctx = invocation.WithCredentialModeOverride(ctx, credentialMode)
+	default:
+		return nil, fmt.Errorf("%w: workflow step credential_mode %q is not supported", invocation.ErrInvalidInvocation, credentialMode)
+	}
+	ctx = invocation.WithIdempotencyKey(ctx, strings.TrimSpace(req.Selector.IdempotencyKey))
+	result, err := invoker.Invoke(ctx, principalValue, plugin.Name, strings.TrimSpace(plugin.Instance), plugin.Operation, maps.Clone(req.Plugin.Input))
+	if err != nil {
+		return nil, err
+	}
+	statusCode := 0
+	body := ""
+	if result != nil {
+		statusCode = result.Status
+		body = result.Body
+	}
+	return &coreworkflow.HostActionResponse{
+		ActionEventID: workflowHostActionEventID(req.Selector),
+		Status:        statusCode,
+		Body:          body,
+		OutputSummary: workflowHostOutputSummary("workflow.output.plugin.v1", "plugin", "application/json", body),
+	}, nil
+}
+
+func workflowHostPluginActionCall(step *coreworkflow.Step, actionID string) (*coreworkflow.PluginCall, error) {
+	if step == nil {
+		return nil, fmt.Errorf("%w: workflow step is required", invocation.ErrInvalidInvocation)
+	}
+	if pluginActionID, ok := coreworkflow.StepPluginActionID(step.ID); ok && actionID == pluginActionID {
+		if step.Plugin == nil {
+			return nil, fmt.Errorf("%w: workflow step %q has no plugin action", invocation.ErrInvalidInvocation, step.ID)
+		}
+		return step.Plugin, nil
+	}
+	if deliveryActionID, ok := coreworkflow.StepDeliveryActionID(step.ID); ok && actionID == deliveryActionID {
+		if step.OutputDelivery == nil || step.OutputDelivery.Plugin == nil {
+			return nil, fmt.Errorf("%w: workflow step %q has no delivery action", invocation.ErrInvalidInvocation, step.ID)
+		}
+		return step.OutputDelivery.Plugin, nil
+	}
+	return nil, fmt.Errorf("%w: workflow host action_id %q is not a plugin callback action for step %q", invocation.ErrInvalidInvocation, actionID, step.ID)
+}
+
+func (r *workflowRuntime) invokeWorkflowAgentTurn(ctx context.Context, req coreworkflow.InvokeActionRequest) (*coreworkflow.HostActionResponse, error) {
+	if r == nil {
+		return nil, fmt.Errorf("workflow runtime is not configured")
+	}
+	r.mu.RLock()
+	agentManager := r.agentManager
+	r.mu.RUnlock()
+	if agentManager == nil {
+		return nil, fmt.Errorf("workflow runtime agent manager is not configured")
+	}
+	resolved, err := r.resolveWorkflowHostAction(ctx, req.ProviderName, req.Selector, coreworkflow.WorkflowStepAgentActionSuffix)
+	if err != nil {
+		return nil, err
+	}
+	if resolved.step.Agent == nil {
+		return nil, fmt.Errorf("%w: workflow step %q has no agent action", invocation.ErrInvalidInvocation, req.Selector.StepID)
+	}
+	agent := resolved.step.Agent
+	principalValue := workflowprincipal.RuntimePrincipalFromExecutionReference(resolved.ref)
+	ctx = workflowExecutionRefWithRunAsAudit(ctx, resolved.ref)
+	if workflowExecutionRefAllowsInternalConnectionAccess(resolved.ref) {
+		ctx = invocation.WithInternalConnectionAccess(ctx)
+	}
+	stepCtx := ctx
+	cancel := func() {}
+	if resolved.step.TimeoutSeconds > 0 {
+		stepCtx, cancel = context.WithTimeout(ctx, workflowAgentTimeout(resolved.step.TimeoutSeconds))
+	}
+	defer cancel()
+	sessionKey := strings.TrimSpace(agent.SessionKey)
+	if sessionKey == "" {
+		sessionKey = strings.TrimSpace(resolved.step.ID)
+	}
+	metadata := workflowHostActionMetadata(req.Metadata, resolved.ref, req.Selector, resolved.step.Metadata)
+	session, err := agentManager.CreateSession(stepCtx, principalValue, coreagent.ManagerCreateSessionRequest{
+		ProviderName:   agent.ProviderName,
+		Model:          agent.Model,
+		ClientRef:      workflowHostAgentSessionClientRef(req.Selector, sessionKey),
+		Metadata:       metadata,
+		IdempotencyKey: workflowHostAgentSessionIdempotencyKey(req.Selector, sessionKey),
+	})
+	if err != nil {
+		return nil, err
+	}
+	messages := workflowHostAgentMessages(req.AgentTurn.Prompt, req.AgentTurn.Messages)
+	turn, err := agentManager.CreateTurn(stepCtx, principalValue, coreagent.ManagerCreateTurnRequest{
+		CallerPluginName:  strings.TrimSpace(resolved.ref.CallerPluginName),
+		SessionID:         session.ID,
+		Model:             agent.Model,
+		Messages:          messages,
+		ToolRefs:          append([]coreagent.ToolRef(nil), agent.ToolRefs...),
+		ToolRefsSet:       true,
+		ResponseSchema:    maps.Clone(agent.ResponseSchema),
+		ResponseSchemaSet: len(agent.ResponseSchema) > 0,
+		Metadata:          metadata,
+		ModelOptions:      maps.Clone(agent.ModelOptions),
+		TimeoutSeconds:    resolved.step.TimeoutSeconds,
+		IdempotencyKey:    strings.TrimSpace(req.Selector.IdempotencyKey),
+	})
+	if err != nil {
+		return nil, err
+	}
+	turn, err = waitForWorkflowAgentTurn(stepCtx, agentManager, principalValue, turn)
+	if err != nil {
+		if turn != nil && strings.TrimSpace(turn.ID) != "" {
+			_, _ = agentManager.CancelTurn(context.WithoutCancel(ctx), principalValue, turn.ID, err.Error())
+		}
+		return nil, err
+	}
+	if turn.Status != coreagent.ExecutionStatusSucceeded {
+		return nil, fmt.Errorf("workflow agent turn %q finished with status %q: %s", turn.ID, turn.Status, strings.TrimSpace(turn.StatusMessage))
+	}
+	payload := map[string]any{
+		"sessionId":        strings.TrimSpace(session.ID),
+		"turnId":           strings.TrimSpace(turn.ID),
+		"text":             turn.OutputText,
+		"structuredOutput": maps.Clone(turn.StructuredOutput),
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	body := string(bodyBytes)
+	return &coreworkflow.HostActionResponse{
+		ActionEventID: workflowHostActionEventID(req.Selector),
+		Status:        http.StatusOK,
+		Body:          body,
+		OutputSummary: workflowHostOutputSummary("workflow.output.agent.v1", "agent", "application/json", body),
+		OutputRef:     strings.TrimSpace(turn.ID),
+	}, nil
+}
+
+func (r *workflowRuntime) CancelWorkflowHostAction(ctx context.Context, req coreworkflow.CancelHostActionRequest) (*coreworkflow.HostActionResponse, error) {
+	if r == nil {
+		return nil, fmt.Errorf("workflow runtime is not configured")
+	}
+	if _, err := r.resolveWorkflowHostAction(ctx, req.ProviderName, req.Selector, ""); err != nil {
+		return nil, err
+	}
+	return &coreworkflow.HostActionResponse{
+		ActionEventID: workflowHostActionEventID(req.Selector),
+		Status:        http.StatusAccepted,
+		Body:          strings.TrimSpace(req.Reason),
+	}, nil
+}
+
+type workflowHostActionResolution struct {
+	ref  *coreworkflow.ExecutionReference
+	step *coreworkflow.Step
+}
+
+func (r *workflowRuntime) resolveWorkflowHostAction(ctx context.Context, providerName string, selector coreworkflow.HostActionSelector, requiredSuffix string) (*workflowHostActionResolution, error) {
+	providerName = strings.TrimSpace(providerName)
+	if providerName == "" {
+		return nil, fmt.Errorf("%w: workflow provider is required", invocation.ErrInternal)
+	}
+	if strings.TrimSpace(selector.ExecutionRef) == "" {
+		return nil, fmt.Errorf("%w: workflow host action execution_ref is required", invocation.ErrInvalidInvocation)
+	}
+	if strings.TrimSpace(selector.RunID) == "" {
+		return nil, fmt.Errorf("%w: workflow host action run_id is required", invocation.ErrInvalidInvocation)
+	}
+	if strings.TrimSpace(selector.StepID) == "" {
+		return nil, fmt.Errorf("%w: workflow host action step_id is required", invocation.ErrInvalidInvocation)
+	}
+	if strings.TrimSpace(selector.ActionID) == "" {
+		return nil, fmt.Errorf("%w: workflow host action action_id is required", invocation.ErrInvalidInvocation)
+	}
+	if selector.AttemptNumber <= 0 {
+		return nil, fmt.Errorf("%w: workflow host action attempt_number is required", invocation.ErrInvalidInvocation)
+	}
+	if strings.TrimSpace(selector.IdempotencyKey) == "" {
+		return nil, fmt.Errorf("%w: workflow host action idempotency_key is required", invocation.ErrInvalidInvocation)
+	}
+	provider, err := r.ResolveProvider(providerName)
+	if err != nil {
+		return nil, fmt.Errorf("%w: workflow provider %q is not available: %v", invocation.ErrInternal, providerName, err)
+	}
+	store, ok := provider.(coreworkflow.ExecutionReferenceStore)
+	if !ok {
+		return nil, fmt.Errorf("%w: workflow provider %q does not support execution refs", invocation.ErrInternal, providerName)
+	}
+	ref, err := store.GetExecutionReference(ctx, selector.ExecutionRef)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound {
+			return nil, fmt.Errorf("%w: workflow execution ref %q was not found", invocation.ErrAuthorizationDenied, selector.ExecutionRef)
+		}
+		return nil, fmt.Errorf("%w: workflow execution ref %q lookup failed: %v", invocation.ErrInternal, selector.ExecutionRef, err)
+	}
+	if ref == nil || ref.RevokedAt != nil && !ref.RevokedAt.IsZero() {
+		return nil, fmt.Errorf("%w: workflow execution ref %q is not active", invocation.ErrAuthorizationDenied, selector.ExecutionRef)
+	}
+	if strings.TrimSpace(ref.ProviderName) != providerName {
+		return nil, fmt.Errorf("%w: workflow execution ref %q is not valid for provider %q", invocation.ErrAuthorizationDenied, selector.ExecutionRef, providerName)
+	}
+	if ref.Generation == 0 || selector.ExecutionRefGeneration != ref.Generation {
+		return nil, fmt.Errorf("%w: workflow host action execution ref generation mismatch", invocation.ErrAuthorizationDenied)
+	}
+	if strings.TrimSpace(ref.Seal) == "" || strings.TrimSpace(selector.ExecutionRefSeal) != strings.TrimSpace(ref.Seal) {
+		return nil, fmt.Errorf("%w: workflow host action execution ref seal mismatch", invocation.ErrAuthorizationDenied)
+	}
+	targetDigest := strings.TrimSpace(ref.TargetDigest)
+	if targetDigest == "" {
+		var fingerprintErr error
+		targetDigest, fingerprintErr = coreworkflow.TargetFingerprint(ref.Target)
+		if fingerprintErr != nil {
+			return nil, fmt.Errorf("%w: workflow execution ref %q target digest is invalid: %v", invocation.ErrAuthorizationDenied, selector.ExecutionRef, fingerprintErr)
+		}
+	}
+	if strings.TrimSpace(selector.TargetDigest) != targetDigest {
+		return nil, fmt.Errorf("%w: workflow host action target digest mismatch", invocation.ErrAuthorizationDenied)
+	}
+	actionTableDigest, err := coreworkflow.TargetActionTableDigest(ref.Target)
+	if err != nil {
+		return nil, fmt.Errorf("%w: workflow execution ref %q action table digest is invalid: %v", invocation.ErrAuthorizationDenied, selector.ExecutionRef, err)
+	}
+	if strings.TrimSpace(selector.ActionTableDigest) != actionTableDigest {
+		return nil, fmt.Errorf("%w: workflow host action action table digest mismatch", invocation.ErrAuthorizationDenied)
+	}
+	if strings.TrimSpace(selector.ProviderPlanDigest) != strings.TrimSpace(ref.ProviderPlanDigest) {
+		return nil, fmt.Errorf("%w: workflow host action provider plan digest mismatch", invocation.ErrAuthorizationDenied)
+	}
+	if !workflowExecutionRefAllowsStepAction(ref, selector.ActionID) {
+		return nil, fmt.Errorf("%w: workflow host action %q is not allowed", invocation.ErrAuthorizationDenied, selector.ActionID)
+	}
+	var step *coreworkflow.Step
+	for i := range ref.Target.Steps {
+		if strings.TrimSpace(ref.Target.Steps[i].ID) == strings.TrimSpace(selector.StepID) {
+			step = &ref.Target.Steps[i]
+			break
+		}
+	}
+	if step == nil {
+		return nil, fmt.Errorf("%w: workflow step %q not found", invocation.ErrInvalidInvocation, selector.StepID)
+	}
+	if requiredSuffix != "" {
+		actionID, ok := coreworkflow.StepActionID(step.ID, requiredSuffix)
+		if !ok || actionID != strings.TrimSpace(selector.ActionID) {
+			return nil, fmt.Errorf("%w: workflow host action_id %q does not match step %q", invocation.ErrInvalidInvocation, selector.ActionID, selector.StepID)
+		}
+	}
+	return &workflowHostActionResolution{ref: ref, step: step}, nil
+}
+
+func workflowExecutionRefAllowsStepAction(ref *coreworkflow.ExecutionReference, actionID string) bool {
+	if ref == nil {
+		return false
+	}
+	if ref.Permissions == nil {
+		return false
+	}
+	actionID = strings.TrimSpace(actionID)
+	for i := range ref.Permissions {
+		permission := ref.Permissions[i]
+		if strings.TrimSpace(permission.Plugin) != coreworkflow.StepActionPermissionPlugin {
+			continue
+		}
+		for _, action := range permission.Actions {
+			if strings.TrimSpace(action) == actionID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func workflowHostActionEventID(selector coreworkflow.HostActionSelector) string {
+	scope := strings.Join([]string{
+		strings.TrimSpace(selector.ExecutionRef),
+		strings.TrimSpace(selector.RunID),
+		strings.TrimSpace(selector.StepID),
+		strings.TrimSpace(selector.ActionID),
+		fmt.Sprintf("%d", selector.AttemptNumber),
+		strings.TrimSpace(selector.IdempotencyKey),
+	}, "\x00")
+	sum := sha256.Sum256([]byte(scope))
+	return fmt.Sprintf("wha_%x", sum[:])
+}
+
+func workflowHostOutputSummary(envelopeVersion, kind, mediaType, body string) *coreworkflow.OutputSummary {
+	sum := sha256.Sum256([]byte(body))
+	return &coreworkflow.OutputSummary{
+		EnvelopeVersion: strings.TrimSpace(envelopeVersion),
+		Kind:            strings.TrimSpace(kind),
+		SizeBytes:       int64(len([]byte(body))),
+		SHA256:          fmt.Sprintf("%x", sum[:]),
+		MediaType:       strings.TrimSpace(mediaType),
+	}
+}
+
+func workflowHostActionMetadata(input map[string]any, ref *coreworkflow.ExecutionReference, selector coreworkflow.HostActionSelector, stepMetadata map[string]any) map[string]any {
+	metadata := maps.Clone(input)
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+	metadata["workflow"] = map[string]any{
+		"executionRef":       strings.TrimSpace(selector.ExecutionRef),
+		"runId":              strings.TrimSpace(selector.RunID),
+		"stepId":             strings.TrimSpace(selector.StepID),
+		"actionId":           strings.TrimSpace(selector.ActionID),
+		"attemptNumber":      selector.AttemptNumber,
+		"targetDigest":       strings.TrimSpace(selector.TargetDigest),
+		"providerPlanDigest": strings.TrimSpace(selector.ProviderPlanDigest),
+	}
+	if ref != nil {
+		metadata["workflowExecutionRef"] = map[string]any{
+			"provider": strings.TrimSpace(ref.ProviderName),
+			"subject":  strings.TrimSpace(ref.SubjectID),
+		}
+	}
+	if len(stepMetadata) > 0 {
+		metadata["workflowStep"] = maps.Clone(stepMetadata)
+	}
+	return metadata
+}
+
+func workflowHostAgentMessages(prompt coreworkflow.Text, messages []coreworkflow.AgentMessage) []coreagent.Message {
+	out := make([]coreagent.Message, 0, len(messages)+1)
+	for i := range messages {
+		message := messages[i]
+		if strings.TrimSpace(message.Role) == "" && strings.TrimSpace(message.Text.Template) == "" {
+			continue
+		}
+		out = append(out, coreagent.Message{
+			Role:     strings.TrimSpace(message.Role),
+			Text:     message.Text.Template,
+			Metadata: maps.Clone(message.Metadata),
+		})
+	}
+	if text := strings.TrimSpace(prompt.Template); text != "" {
+		out = append(out, coreagent.Message{Role: "user", Text: text})
+	}
+	return out
+}
+
+func workflowAgentTimeout(seconds int) time.Duration {
+	if seconds <= 0 {
+		return 5 * time.Minute
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func workflowHostAgentSessionIdempotencyKey(selector coreworkflow.HostActionSelector, sessionKey string) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		"workflow-agent-session",
+		strings.TrimSpace(selector.ExecutionRef),
+		strings.TrimSpace(selector.RunID),
+		strings.TrimSpace(sessionKey),
+	}, "\x00")))
+	return fmt.Sprintf("workflow-agent-session-%x", sum[:])
+}
+
+func workflowHostAgentSessionClientRef(selector coreworkflow.HostActionSelector, sessionKey string) string {
+	return strings.Join([]string{
+		"workflow",
+		strings.TrimSpace(selector.RunID),
+		strings.TrimSpace(sessionKey),
+	}, ":")
 }
 
 func (r *workflowRuntime) resolveWorkflowExecutionRef(ctx context.Context, req coreworkflow.InvokeOperationRequest) (*coreworkflow.ExecutionReference, error) {

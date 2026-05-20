@@ -16,46 +16,52 @@ const EnvWorkflowHostSocket = "GESTALT_WORKFLOW_HOST_SOCKET"
 // EnvWorkflowHostSocketToken names the optional workflow-host relay-token variable.
 const EnvWorkflowHostSocketToken = EnvWorkflowHostSocket + "_TOKEN"
 
-// WorkflowHostClient invokes operations from workflow provider code.
+// WorkflowHostClient invokes workflow actions from provider code.
 type WorkflowHostClient struct {
 	client proto.WorkflowHostClient
 }
 
 var sharedWorkflowHostTransport sharedManagerTransport[proto.WorkflowHostClient]
 
-// InvokeWorkflowOperationInput requests invoking a workflow operation through
-// the host service.
-type InvokeWorkflowOperationInput struct {
-	Target       *BoundWorkflowTarget
-	RunID        string
-	Trigger      *WorkflowRunTrigger
-	Input        any
-	Metadata     any
-	CreatedBy    *WorkflowActor
-	ExecutionRef string
-	Signals      []WorkflowSignal
+// WorkflowHostActionSelector selects one canonical action in a host-owned
+// execution reference. Providers must reuse the same selector and idempotency
+// key until the host returns a terminal result.
+type WorkflowHostActionSelector struct {
+	ExecutionRef           string
+	ExecutionRefGeneration int64
+	ExecutionRefSeal       string
+	RunID                  string
+	StepID                 string
+	ActionID               string
+	AttemptNumber          int32
+	IdempotencyKey         string
+	TargetDigest           string
+	ActionTableDigest      string
+	ProviderPlanDigest     string
 }
 
-// InvokeWorkflowOperationResponse is returned by WorkflowHostClient.InvokeOperation.
-type InvokeWorkflowOperationResponse struct {
-	Status int32
-	Body   string
+// WorkflowPluginActionPayload carries provider-evaluated input for a selected
+// plugin or delivery action.
+type WorkflowPluginActionPayload struct {
+	Input any
 }
 
-// GetStatus returns the HTTP-style operation status code.
-func (r *InvokeWorkflowOperationResponse) GetStatus() int32 {
-	if r == nil {
-		return 0
-	}
-	return r.Status
+// WorkflowAgentTurnPayload carries provider-evaluated prompt/messages for a
+// selected agent-turn action.
+type WorkflowAgentTurnPayload struct {
+	Prompt   WorkflowText
+	Messages []WorkflowAgentMessage
 }
 
-// GetBody returns the operation response body.
-func (r *InvokeWorkflowOperationResponse) GetBody() string {
-	if r == nil {
-		return ""
-	}
-	return r.Body
+// InvokeWorkflowActionInput invokes the action selected by
+// WorkflowHostActionSelector. Exactly one payload must be set.
+type InvokeWorkflowActionInput struct {
+	Selector  *WorkflowHostActionSelector
+	Plugin    *WorkflowPluginActionPayload
+	AgentTurn *WorkflowAgentTurnPayload
+	Metadata  any
+	Trigger   *WorkflowRunTrigger
+	Signals   []WorkflowSignal
 }
 
 // WorkflowHost returns a shared client for the workflow host service.
@@ -73,9 +79,7 @@ func WorkflowHost() (*WorkflowHostClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &WorkflowHostClient{
-		client: client,
-	}, nil
+	return &WorkflowHostClient{client: client}, nil
 }
 
 // Close is a no-op compatibility method because this client uses shared transport.
@@ -83,70 +87,84 @@ func (c *WorkflowHostClient) Close() error {
 	return nil
 }
 
-// InvokeOperation invokes an operation through the workflow host service.
-func (c *WorkflowHostClient) InvokeOperation(ctx context.Context, input InvokeWorkflowOperationInput) (*InvokeWorkflowOperationResponse, error) {
-	req, err := invokeWorkflowOperationInputToProto(input)
+// InvokeWorkflowAction invokes a canonical workflow step action.
+func (c *WorkflowHostClient) InvokeWorkflowAction(ctx context.Context, input InvokeWorkflowActionInput) (*WorkflowActionResult, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("workflow host: client is not initialized")
+	}
+	req, err := invokeWorkflowActionInputToProto(input)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.client.InvokeOperation(ctx, req)
+	resp, err := c.client.InvokeWorkflowAction(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return invokeWorkflowOperationResponseFromProto(resp), nil
+	return workflowActionResultFromProto(resp), nil
 }
 
-func invokeWorkflowOperationInputToProto(input InvokeWorkflowOperationInput) (*proto.InvokeWorkflowOperationRequest, error) {
-	var target *proto.BoundWorkflowTarget
-	if input.Target != nil {
-		value, err := boundWorkflowTargetToProto(*input.Target)
-		if err != nil {
-			return nil, err
-		}
-		target = value
-	}
-	var trigger *proto.WorkflowRunTrigger
-	if input.Trigger != nil {
-		value, err := workflowRunTriggerToProto(*input.Trigger)
-		if err != nil {
-			return nil, err
-		}
-		trigger = value
-	}
-	body, err := structFromAny(input.Input)
-	if err != nil {
-		return nil, err
-	}
+func invokeWorkflowActionInputToProto(input InvokeWorkflowActionInput) (*proto.InvokeWorkflowActionRequest, error) {
 	metadata, err := structFromAny(input.Metadata)
 	if err != nil {
 		return nil, err
 	}
-	signals := make([]*proto.WorkflowSignal, 0, len(input.Signals))
-	for _, signalInput := range input.Signals {
-		signal, err := workflowSignalToProto(signalInput)
+	trigger, err := newOptionalWorkflowRunTrigger(input.Trigger)
+	if err != nil {
+		return nil, err
+	}
+	signals, err := workflowSignalsToProto(input.Signals)
+	if err != nil {
+		return nil, err
+	}
+	req := &proto.InvokeWorkflowActionRequest{
+		Selector: workflowHostActionSelectorToProto(input.Selector),
+		Metadata: metadata,
+		Trigger:  trigger,
+		Signals:  signals,
+	}
+	switch {
+	case input.Plugin != nil && input.AgentTurn != nil:
+		return nil, fmt.Errorf("workflow action: exactly one payload must be set")
+	case input.Plugin != nil:
+		body, err := structFromAny(input.Plugin.Input)
 		if err != nil {
 			return nil, err
 		}
-		signals = append(signals, signal)
+		req.Action = &proto.InvokeWorkflowActionRequest_Plugin{
+			Plugin: &proto.WorkflowPluginActionPayload{Input: body},
+		}
+	case input.AgentTurn != nil:
+		messages, err := workflowAgentMessagesToProto(input.AgentTurn.Messages)
+		if err != nil {
+			return nil, err
+		}
+		req.Action = &proto.InvokeWorkflowActionRequest_AgentTurn{
+			AgentTurn: &proto.WorkflowAgentTurnPayload{
+				Prompt:   workflowTextToProto(input.AgentTurn.Prompt),
+				Messages: messages,
+			},
+		}
+	default:
+		return nil, fmt.Errorf("workflow action: exactly one payload must be set")
 	}
-	return &proto.InvokeWorkflowOperationRequest{
-		Target:       target,
-		RunId:        input.RunID,
-		Trigger:      trigger,
-		Input:        body,
-		Metadata:     metadata,
-		CreatedBy:    workflowActorFromInput(input.CreatedBy),
-		ExecutionRef: input.ExecutionRef,
-		Signals:      signals,
-	}, nil
+	return req, nil
 }
 
-func invokeWorkflowOperationResponseFromProto(resp *proto.InvokeWorkflowOperationResponse) *InvokeWorkflowOperationResponse {
-	if resp == nil {
+func workflowHostActionSelectorToProto(input *WorkflowHostActionSelector) *proto.WorkflowHostActionSelector {
+	if input == nil {
 		return nil
 	}
-	return &InvokeWorkflowOperationResponse{
-		Status: resp.GetStatus(),
-		Body:   resp.GetBody(),
+	return &proto.WorkflowHostActionSelector{
+		ExecutionRef:           input.ExecutionRef,
+		ExecutionRefGeneration: input.ExecutionRefGeneration,
+		ExecutionRefSeal:       input.ExecutionRefSeal,
+		RunId:                  input.RunID,
+		StepId:                 input.StepID,
+		ActionId:               input.ActionID,
+		AttemptNumber:          input.AttemptNumber,
+		IdempotencyKey:         input.IdempotencyKey,
+		TargetDigest:           input.TargetDigest,
+		ActionTableDigest:      input.ActionTableDigest,
+		ProviderPlanDigest:     input.ProviderPlanDigest,
 	}
 }

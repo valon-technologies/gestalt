@@ -1366,30 +1366,39 @@ func workflowSystemToolApplyInheritedOutputDelivery(req agentSystemToolExecution
 	if lastStep.When != nil {
 		return fmt.Errorf("%w: deliverResultToCaller requires an unconditional final step; configure explicit outputDelivery for conditional final steps", invocation.ErrInvalidInvocation)
 	}
-	delivery := coreworkflow.CloneStepDelivery(req.InheritedOutputDelivery)
-	workflowSystemToolRewriteFinalStepOutputRefs(delivery, lastStep.ID)
-	lastStep.OutputDelivery = delivery
+	lastStep.OutputDelivery = workflowSystemToolInheritedOutputDeliveryForStep(req.InheritedOutputDelivery, lastStep.ID)
 	return nil
 }
 
-func workflowSystemToolRewriteFinalStepOutputRefs(delivery *coreworkflow.StepDelivery, stepID string) {
-	if delivery == nil || delivery.Plugin == nil {
-		return
+func workflowSystemToolInheritedOutputDeliveryForStep(delivery *coreworkflow.StepDelivery, stepID string) *coreworkflow.StepDelivery {
+	out := coreworkflow.CloneStepDelivery(delivery)
+	if out == nil || out.Plugin == nil {
+		return out
 	}
-	delivery.Plugin.Input = workflowSystemToolRewriteFinalStepOutputValue(delivery.Plugin.Input, stepID)
+	out.Plugin.Input = workflowSystemToolRewriteFinalStepOutput(out.Plugin.Input, stepID)
+	return out
 }
 
-func workflowSystemToolRewriteFinalStepOutputValue(value coreworkflow.Value, stepID string) coreworkflow.Value {
-	if value.StepOutput != nil && strings.TrimSpace(value.StepOutput.StepID) == "final" {
-		value.StepOutput.StepID = strings.TrimSpace(stepID)
+func workflowSystemToolRewriteFinalStepOutput(value coreworkflow.Value, stepID string) coreworkflow.Value {
+	out := value
+	if out.StepOutput != nil && strings.TrimSpace(out.StepOutput.StepID) == "final" {
+		source := *out.StepOutput
+		source.StepID = strings.TrimSpace(stepID)
+		out.StepOutput = &source
 	}
-	for key := range value.Object {
-		value.Object[key] = workflowSystemToolRewriteFinalStepOutputValue(value.Object[key], stepID)
+	if out.Object != nil {
+		out.Object = make(map[string]coreworkflow.Value, len(value.Object))
+		for key := range value.Object {
+			out.Object[key] = workflowSystemToolRewriteFinalStepOutput(value.Object[key], stepID)
+		}
 	}
-	for i := range value.Array {
-		value.Array[i] = workflowSystemToolRewriteFinalStepOutputValue(value.Array[i], stepID)
+	if out.Array != nil {
+		out.Array = make([]coreworkflow.Value, len(value.Array))
+		for i := range value.Array {
+			out.Array[i] = workflowSystemToolRewriteFinalStepOutput(value.Array[i], stepID)
+		}
 	}
-	return value
+	return out
 }
 
 func workflowSystemToolInheritedAgentToolRefs(req agentSystemToolExecutionRequest) []coreagent.ToolRef {

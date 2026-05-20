@@ -1,17 +1,55 @@
 package gestalt
 
 import (
-	"time"
+	"fmt"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
 
-type WorkflowManagerStartRun struct {
+type WorkflowManagerPlanDeployment struct {
 	ProviderName   string
-	Target         *BoundWorkflowTarget
+	Spec           *WorkflowDeploymentSpec
 	IdempotencyKey string
-	WorkflowKey    string
-	DefinitionID   string
+}
+
+type WorkflowManagerApplyDeployment struct {
+	ProviderName   string
+	Spec           *WorkflowDeploymentSpec
+	IdempotencyKey string
+}
+
+type WorkflowManagerGetDeployment struct {
+	DeploymentID string
+}
+
+type WorkflowManagerListDeployments struct {
+	ProviderName string
+}
+
+type WorkflowManagerDeleteDeployment struct {
+	DeploymentID string
+	Generation   int64
+}
+
+type WorkflowManagerSetDeploymentPaused struct {
+	DeploymentID string
+	Paused       bool
+}
+
+type WorkflowManagerSetActivationPaused struct {
+	DeploymentID string
+	ActivationID string
+	Paused       bool
+}
+
+type WorkflowManagerStartRun struct {
+	ProviderName         string
+	DeploymentID         string
+	DeploymentGeneration int64
+	ActivationID         string
+	WorkflowKey          string
+	Input                any
+	IdempotencyKey       string
 }
 
 type WorkflowManagerSignalRun struct {
@@ -20,196 +58,134 @@ type WorkflowManagerSignalRun struct {
 }
 
 type WorkflowManagerSignalOrStartRun struct {
+	ProviderName         string
+	DeploymentID         string
+	DeploymentGeneration int64
+	ActivationID         string
+	WorkflowKey          string
+	Input                any
+	IdempotencyKey       string
+	Signal               *WorkflowSignal
+}
+
+type WorkflowManagerCancelRun struct {
+	RunID  string
+	Reason string
+}
+
+type WorkflowManagerDeliverEvent struct {
 	ProviderName   string
-	WorkflowKey    string
-	Target         *BoundWorkflowTarget
-	IdempotencyKey string
-	Signal         *WorkflowSignal
-	DefinitionID   string
-}
-
-type WorkflowManagerCreateDefinition struct {
-	ProviderName   string
-	Target         *BoundWorkflowTarget
+	Event          *WorkflowEvent
 	IdempotencyKey string
 }
 
-type WorkflowManagerGetDefinition struct {
-	DefinitionID string
-}
-
-type WorkflowManagerUpdateDefinition struct {
-	DefinitionID string
+type WorkflowManagerDeployment struct {
 	ProviderName string
-	Target       *BoundWorkflowTarget
+	Deployment   *WorkflowDeployment
 }
 
-type WorkflowManagerDeleteDefinition struct {
-	DefinitionID string
+type WorkflowManagerListDeploymentsResponse struct {
+	Deployments []WorkflowManagerDeployment
 }
 
-type WorkflowManagerCreateSchedule struct {
-	ProviderName   string
-	Cron           string
-	Timezone       string
-	Target         *BoundWorkflowTarget
-	Paused         bool
-	IdempotencyKey string
-	DefinitionID   string
-}
-
-type WorkflowManagerGetSchedule struct {
-	ScheduleID string
-}
-
-type WorkflowManagerUpdateSchedule struct {
-	ScheduleID   string
-	ProviderName string
-	Cron         string
-	Timezone     string
-	Target       *BoundWorkflowTarget
-	Paused       bool
-	DefinitionID string
-}
-
-type WorkflowManagerDeleteSchedule struct {
-	ScheduleID string
-}
-
-type WorkflowManagerPauseSchedule struct {
-	ScheduleID string
-}
-
-type WorkflowManagerResumeSchedule struct {
-	ScheduleID string
-}
-
-type WorkflowManagerCreateEventTrigger struct {
-	ProviderName   string
-	Match          *WorkflowEventMatch
-	Target         *BoundWorkflowTarget
-	Paused         bool
-	IdempotencyKey string
-	DefinitionID   string
-}
-
-type WorkflowManagerGetEventTrigger struct {
-	TriggerID string
-}
-
-type WorkflowManagerUpdateEventTrigger struct {
-	TriggerID    string
-	ProviderName string
-	Match        *WorkflowEventMatch
-	Target       *BoundWorkflowTarget
-	Paused       bool
-	DefinitionID string
-}
-
-type WorkflowManagerDeleteEventTrigger struct {
-	TriggerID string
-}
-
-type WorkflowManagerPauseEventTrigger struct {
-	TriggerID string
-}
-
-type WorkflowManagerResumeEventTrigger struct {
-	TriggerID string
-}
-
-type WorkflowManagerPublishEvent struct {
-	ProviderName string
-	Event        *WorkflowEvent
-}
-
-type WorkflowManagerBoundRun struct {
-	ID            string
-	Status        WorkflowRunStatus
-	Target        *BoundWorkflowTarget
-	Trigger       *WorkflowRunTrigger
-	CreatedAt     time.Time
-	StartedAt     *time.Time
-	CompletedAt   *time.Time
-	StatusMessage string
-	ResultBody    string
-	CreatedBy     *WorkflowActor
-	ExecutionRef  string
-	WorkflowKey   string
-}
-
-type WorkflowManagerBoundDefinition struct {
-	ID        string
-	Target    *BoundWorkflowTarget
-	CreatedBy *WorkflowActor
-	CreatedAt time.Time
-}
-
-type WorkflowManagerBoundSchedule struct {
-	ID           string
-	Cron         string
-	Timezone     string
-	Target       *BoundWorkflowTarget
-	Paused       bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	NextRunAt    *time.Time
-	CreatedBy    *WorkflowActor
-	ExecutionRef string
-}
-
-type WorkflowManagerBoundEventTrigger struct {
-	ID           string
-	Match        *WorkflowEventMatch
-	Target       *BoundWorkflowTarget
-	Paused       bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	CreatedBy    *WorkflowActor
-	ExecutionRef string
+func (r *WorkflowManagerListDeploymentsResponse) GetDeployments() []WorkflowManagerDeployment {
+	if r == nil {
+		return nil
+	}
+	return r.Deployments
 }
 
 type WorkflowManagerRun struct {
 	ProviderName string
-	Run          *WorkflowManagerBoundRun
+	Run          *WorkflowRun
 }
 
 type WorkflowManagerRunSignal struct {
 	ProviderName string
-	Run          *WorkflowManagerBoundRun
+	Run          *WorkflowRun
 	Signal       *WorkflowSignal
 	StartedRun   bool
 	WorkflowKey  string
 }
 
-type WorkflowManagerDefinition struct {
-	ProviderName string
-	Definition   *WorkflowManagerBoundDefinition
+type WorkflowManagerDeliverEventResponse struct {
+	Results []WorkflowEventDeliveryResult
 }
 
-type WorkflowManagerSchedule struct {
-	ProviderName string
-	Schedule     *WorkflowManagerBoundSchedule
+func (r *WorkflowManagerDeliverEventResponse) GetResults() []WorkflowEventDeliveryResult {
+	if r == nil {
+		return nil
+	}
+	return r.Results
 }
 
-type WorkflowManagerEventTrigger struct {
-	ProviderName string
-	Trigger      *WorkflowManagerBoundEventTrigger
+func newWorkflowManagerPlanDeploymentRequest(input WorkflowManagerPlanDeployment) (*proto.WorkflowManagerPlanDeploymentRequest, error) {
+	spec, err := newOptionalWorkflowDeploymentSpec(input.Spec)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.WorkflowManagerPlanDeploymentRequest{
+		ProviderName:   input.ProviderName,
+		Spec:           spec,
+		IdempotencyKey: input.IdempotencyKey,
+	}, nil
 }
 
-type WorkflowManagerPublishedEvent = WorkflowEvent
+func newWorkflowManagerApplyDeploymentRequest(input WorkflowManagerApplyDeployment) (*proto.WorkflowManagerApplyDeploymentRequest, error) {
+	spec, err := newOptionalWorkflowDeploymentSpec(input.Spec)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.WorkflowManagerApplyDeploymentRequest{
+		ProviderName:   input.ProviderName,
+		Spec:           spec,
+		IdempotencyKey: input.IdempotencyKey,
+	}, nil
+}
+
+func newWorkflowManagerGetDeploymentRequest(input WorkflowManagerGetDeployment) *proto.WorkflowManagerGetDeploymentRequest {
+	return &proto.WorkflowManagerGetDeploymentRequest{DeploymentId: input.DeploymentID}
+}
+
+func newWorkflowManagerListDeploymentsRequest(input WorkflowManagerListDeployments) *proto.WorkflowManagerListDeploymentsRequest {
+	return &proto.WorkflowManagerListDeploymentsRequest{ProviderName: input.ProviderName}
+}
+
+func newWorkflowManagerDeleteDeploymentRequest(input WorkflowManagerDeleteDeployment) *proto.WorkflowManagerDeleteDeploymentRequest {
+	return &proto.WorkflowManagerDeleteDeploymentRequest{
+		DeploymentId: input.DeploymentID,
+		Generation:   input.Generation,
+	}
+}
+
+func newWorkflowManagerSetDeploymentPausedRequest(input WorkflowManagerSetDeploymentPaused) *proto.WorkflowManagerSetDeploymentPausedRequest {
+	return &proto.WorkflowManagerSetDeploymentPausedRequest{
+		DeploymentId: input.DeploymentID,
+		Paused:       input.Paused,
+	}
+}
+
+func newWorkflowManagerSetActivationPausedRequest(input WorkflowManagerSetActivationPaused) *proto.WorkflowManagerSetActivationPausedRequest {
+	return &proto.WorkflowManagerSetActivationPausedRequest{
+		DeploymentId: input.DeploymentID,
+		ActivationId: input.ActivationID,
+		Paused:       input.Paused,
+	}
+}
 
 func newWorkflowManagerStartRunRequest(input WorkflowManagerStartRun) (*proto.WorkflowManagerStartRunRequest, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
+	body, err := structFromAny(input.Input)
 	if err != nil {
 		return nil, err
 	}
 	return &proto.WorkflowManagerStartRunRequest{
-		ProviderName:   input.ProviderName,
-		Target:         target,
-		IdempotencyKey: input.IdempotencyKey,
-		WorkflowKey:    input.WorkflowKey,
-		DefinitionId:   input.DefinitionID,
+		ProviderName:         input.ProviderName,
+		DeploymentId:         input.DeploymentID,
+		DeploymentGeneration: input.DeploymentGeneration,
+		ActivationId:         input.ActivationID,
+		WorkflowKey:          input.WorkflowKey,
+		Input:                body,
+		IdempotencyKey:       input.IdempotencyKey,
 	}, nil
 }
 
@@ -225,7 +201,7 @@ func newWorkflowManagerSignalRunRequest(input WorkflowManagerSignalRun) (*proto.
 }
 
 func newWorkflowManagerSignalOrStartRunRequest(input WorkflowManagerSignalOrStartRun) (*proto.WorkflowManagerSignalOrStartRunRequest, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
+	body, err := structFromAny(input.Input)
 	if err != nil {
 		return nil, err
 	}
@@ -234,257 +210,69 @@ func newWorkflowManagerSignalOrStartRunRequest(input WorkflowManagerSignalOrStar
 		return nil, err
 	}
 	return &proto.WorkflowManagerSignalOrStartRunRequest{
-		ProviderName:   input.ProviderName,
-		WorkflowKey:    input.WorkflowKey,
-		Target:         target,
-		IdempotencyKey: input.IdempotencyKey,
-		Signal:         signal,
-		DefinitionId:   input.DefinitionID,
+		ProviderName:         input.ProviderName,
+		DeploymentId:         input.DeploymentID,
+		DeploymentGeneration: input.DeploymentGeneration,
+		ActivationId:         input.ActivationID,
+		WorkflowKey:          input.WorkflowKey,
+		Input:                body,
+		IdempotencyKey:       input.IdempotencyKey,
+		Signal:               signal,
 	}, nil
 }
 
-func newWorkflowManagerCreateDefinitionRequest(input WorkflowManagerCreateDefinition) (*proto.WorkflowManagerCreateDefinitionRequest, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
-	if err != nil {
-		return nil, err
+func newWorkflowManagerCancelRunRequest(input WorkflowManagerCancelRun) *proto.WorkflowManagerCancelRunRequest {
+	return &proto.WorkflowManagerCancelRunRequest{
+		RunId:  input.RunID,
+		Reason: input.Reason,
 	}
-	return &proto.WorkflowManagerCreateDefinitionRequest{
-		ProviderName:   input.ProviderName,
-		Target:         target,
-		IdempotencyKey: input.IdempotencyKey,
-	}, nil
 }
 
-func newWorkflowManagerGetDefinitionRequest(input WorkflowManagerGetDefinition) *proto.WorkflowManagerGetDefinitionRequest {
-	return &proto.WorkflowManagerGetDefinitionRequest{DefinitionId: input.DefinitionID}
-}
-
-func newWorkflowManagerUpdateDefinitionRequest(input WorkflowManagerUpdateDefinition) (*proto.WorkflowManagerUpdateDefinitionRequest, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowManagerUpdateDefinitionRequest{
-		DefinitionId: input.DefinitionID,
-		ProviderName: input.ProviderName,
-		Target:       target,
-	}, nil
-}
-
-func newWorkflowManagerDeleteDefinitionRequest(input WorkflowManagerDeleteDefinition) *proto.WorkflowManagerDeleteDefinitionRequest {
-	return &proto.WorkflowManagerDeleteDefinitionRequest{DefinitionId: input.DefinitionID}
-}
-
-func newWorkflowManagerCreateScheduleRequest(input WorkflowManagerCreateSchedule) (*proto.WorkflowManagerCreateScheduleRequest, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowManagerCreateScheduleRequest{
-		ProviderName:   input.ProviderName,
-		Cron:           input.Cron,
-		Timezone:       input.Timezone,
-		Target:         target,
-		Paused:         input.Paused,
-		IdempotencyKey: input.IdempotencyKey,
-		DefinitionId:   input.DefinitionID,
-	}, nil
-}
-
-func newWorkflowManagerGetScheduleRequest(input WorkflowManagerGetSchedule) *proto.WorkflowManagerGetScheduleRequest {
-	return &proto.WorkflowManagerGetScheduleRequest{ScheduleId: input.ScheduleID}
-}
-
-func newWorkflowManagerUpdateScheduleRequest(input WorkflowManagerUpdateSchedule) (*proto.WorkflowManagerUpdateScheduleRequest, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowManagerUpdateScheduleRequest{
-		ScheduleId:   input.ScheduleID,
-		ProviderName: input.ProviderName,
-		Cron:         input.Cron,
-		Timezone:     input.Timezone,
-		Target:       target,
-		Paused:       input.Paused,
-		DefinitionId: input.DefinitionID,
-	}, nil
-}
-
-func newWorkflowManagerDeleteScheduleRequest(input WorkflowManagerDeleteSchedule) *proto.WorkflowManagerDeleteScheduleRequest {
-	return &proto.WorkflowManagerDeleteScheduleRequest{ScheduleId: input.ScheduleID}
-}
-
-func newWorkflowManagerPauseScheduleRequest(input WorkflowManagerPauseSchedule) *proto.WorkflowManagerPauseScheduleRequest {
-	return &proto.WorkflowManagerPauseScheduleRequest{ScheduleId: input.ScheduleID}
-}
-
-func newWorkflowManagerResumeScheduleRequest(input WorkflowManagerResumeSchedule) *proto.WorkflowManagerResumeScheduleRequest {
-	return &proto.WorkflowManagerResumeScheduleRequest{ScheduleId: input.ScheduleID}
-}
-
-func newWorkflowManagerCreateEventTriggerRequest(input WorkflowManagerCreateEventTrigger) (*proto.WorkflowManagerCreateEventTriggerRequest, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowManagerCreateEventTriggerRequest{
-		ProviderName:   input.ProviderName,
-		Match:          workflowEventMatchFromInput(input.Match),
-		Target:         target,
-		Paused:         input.Paused,
-		IdempotencyKey: input.IdempotencyKey,
-		DefinitionId:   input.DefinitionID,
-	}, nil
-}
-
-func newWorkflowManagerGetEventTriggerRequest(input WorkflowManagerGetEventTrigger) *proto.WorkflowManagerGetEventTriggerRequest {
-	return &proto.WorkflowManagerGetEventTriggerRequest{TriggerId: input.TriggerID}
-}
-
-func newWorkflowManagerUpdateEventTriggerRequest(input WorkflowManagerUpdateEventTrigger) (*proto.WorkflowManagerUpdateEventTriggerRequest, error) {
-	target, err := newOptionalBoundWorkflowTarget(input.Target)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowManagerUpdateEventTriggerRequest{
-		TriggerId:    input.TriggerID,
-		ProviderName: input.ProviderName,
-		Match:        workflowEventMatchFromInput(input.Match),
-		Target:       target,
-		Paused:       input.Paused,
-		DefinitionId: input.DefinitionID,
-	}, nil
-}
-
-func newWorkflowManagerDeleteEventTriggerRequest(input WorkflowManagerDeleteEventTrigger) *proto.WorkflowManagerDeleteEventTriggerRequest {
-	return &proto.WorkflowManagerDeleteEventTriggerRequest{TriggerId: input.TriggerID}
-}
-
-func newWorkflowManagerPauseEventTriggerRequest(input WorkflowManagerPauseEventTrigger) *proto.WorkflowManagerPauseEventTriggerRequest {
-	return &proto.WorkflowManagerPauseEventTriggerRequest{TriggerId: input.TriggerID}
-}
-
-func newWorkflowManagerResumeEventTriggerRequest(input WorkflowManagerResumeEventTrigger) *proto.WorkflowManagerResumeEventTriggerRequest {
-	return &proto.WorkflowManagerResumeEventTriggerRequest{TriggerId: input.TriggerID}
-}
-
-func newWorkflowManagerPublishEventRequest(input WorkflowManagerPublishEvent) (*proto.WorkflowManagerPublishEventRequest, error) {
+func newWorkflowManagerDeliverEventRequest(input WorkflowManagerDeliverEvent) (*proto.WorkflowManagerDeliverEventRequest, error) {
 	event, err := newOptionalWorkflowEvent(input.Event)
 	if err != nil {
 		return nil, err
 	}
-	return &proto.WorkflowManagerPublishEventRequest{
-		Event:        event,
-		ProviderName: input.ProviderName,
+	return &proto.WorkflowManagerDeliverEventRequest{
+		ProviderName:   input.ProviderName,
+		Event:          event,
+		IdempotencyKey: input.IdempotencyKey,
 	}, nil
 }
 
-func newOptionalWorkflowSignal(input *WorkflowSignal) (*proto.WorkflowSignal, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return workflowSignalToProto(*input)
-}
-
-func newOptionalWorkflowEvent(input *WorkflowEvent) (*proto.WorkflowEvent, error) {
-	if input == nil {
-		return nil, nil
-	}
-	return workflowEventToProto(*input)
-}
-
-func workflowManagerBoundRunFromProto(value *proto.BoundWorkflowRun) (*WorkflowManagerBoundRun, error) {
+func workflowManagerDeploymentFromProto(value *proto.ManagedWorkflowDeployment) (*WorkflowManagerDeployment, error) {
 	if value == nil {
 		return nil, nil
 	}
-	startedAt, err := timePtrFromTimestamp(value.GetStartedAt())
+	deployment, err := workflowDeploymentFromProto(value.GetDeployment())
 	if err != nil {
 		return nil, err
 	}
-	completedAt, err := timePtrFromTimestamp(value.GetCompletedAt())
-	if err != nil {
-		return nil, err
+	return &WorkflowManagerDeployment{ProviderName: value.GetProviderName(), Deployment: deployment}, nil
+}
+
+func workflowManagerDeploymentsFromProto(values []*proto.ManagedWorkflowDeployment) ([]WorkflowManagerDeployment, error) {
+	if len(values) == 0 {
+		return nil, nil
 	}
-	var trigger *WorkflowRunTrigger
-	if value.GetTrigger() != nil {
-		input, err := workflowRunTriggerFromProto(value.GetTrigger())
+	out := make([]WorkflowManagerDeployment, 0, len(values))
+	for i, value := range values {
+		deployment, err := workflowManagerDeploymentFromProto(value)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("deployments[%d]: %w", i, err)
 		}
-		trigger = &input
+		if deployment != nil {
+			out = append(out, *deployment)
+		}
 	}
-	return &WorkflowManagerBoundRun{
-		ID:            value.GetId(),
-		Status:        WorkflowRunStatus(value.GetStatus()),
-		Target:        workflowTargetInputPtrFromTarget(value.GetTarget()),
-		Trigger:       trigger,
-		CreatedAt:     timeFromTimestamp(value.GetCreatedAt()),
-		StartedAt:     startedAt,
-		CompletedAt:   completedAt,
-		StatusMessage: value.GetStatusMessage(),
-		ResultBody:    value.GetResultBody(),
-		CreatedBy:     workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		ExecutionRef:  value.GetExecutionRef(),
-		WorkflowKey:   value.GetWorkflowKey(),
-	}, nil
-}
-
-func workflowManagerBoundDefinitionFromProto(value *proto.BoundWorkflowDefinition) *WorkflowManagerBoundDefinition {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowManagerBoundDefinition{
-		ID:        value.GetId(),
-		Target:    workflowTargetInputPtrFromTarget(value.GetTarget()),
-		CreatedBy: workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		CreatedAt: timeFromTimestamp(value.GetCreatedAt()),
-	}
-}
-
-func workflowManagerBoundScheduleFromProto(value *proto.BoundWorkflowSchedule) (*WorkflowManagerBoundSchedule, error) {
-	if value == nil {
-		return nil, nil
-	}
-	nextRunAt, err := timePtrFromTimestamp(value.GetNextRunAt())
-	if err != nil {
-		return nil, err
-	}
-	return &WorkflowManagerBoundSchedule{
-		ID:           value.GetId(),
-		Cron:         value.GetCron(),
-		Timezone:     value.GetTimezone(),
-		Target:       workflowTargetInputPtrFromTarget(value.GetTarget()),
-		Paused:       value.GetPaused(),
-		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
-		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
-		NextRunAt:    nextRunAt,
-		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		ExecutionRef: value.GetExecutionRef(),
-	}, nil
-}
-
-func workflowManagerBoundEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger) *WorkflowManagerBoundEventTrigger {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowManagerBoundEventTrigger{
-		ID:           value.GetId(),
-		Match:        workflowEventMatchInputPtrFromMatch(value.GetMatch()),
-		Target:       workflowTargetInputPtrFromTarget(value.GetTarget()),
-		Paused:       value.GetPaused(),
-		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
-		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
-		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
-		ExecutionRef: value.GetExecutionRef(),
-	}
+	return out, nil
 }
 
 func workflowManagerRunFromProto(value *proto.ManagedWorkflowRun) (*WorkflowManagerRun, error) {
 	if value == nil {
 		return nil, nil
 	}
-	run, err := workflowManagerBoundRunFromProto(value.GetRun())
+	run, err := workflowRunFromProto(value.GetRun())
 	if err != nil {
 		return nil, err
 	}
@@ -495,7 +283,7 @@ func workflowManagerRunSignalFromProto(value *proto.ManagedWorkflowRunSignal) (*
 	if value == nil {
 		return nil, nil
 	}
-	run, err := workflowManagerBoundRunFromProto(value.GetRun())
+	run, err := workflowRunFromProto(value.GetRun())
 	if err != nil {
 		return nil, err
 	}
@@ -513,33 +301,13 @@ func workflowManagerRunSignalFromProto(value *proto.ManagedWorkflowRunSignal) (*
 	}, nil
 }
 
-func workflowManagerDefinitionFromProto(value *proto.ManagedWorkflowDefinition) *WorkflowManagerDefinition {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowManagerDefinition{
-		ProviderName: value.GetProviderName(),
-		Definition:   workflowManagerBoundDefinitionFromProto(value.GetDefinition()),
-	}
-}
-
-func workflowManagerScheduleFromProto(value *proto.ManagedWorkflowSchedule) (*WorkflowManagerSchedule, error) {
+func workflowManagerDeliverEventResponseFromProto(value *proto.WorkflowManagerDeliverEventResponse) (*WorkflowManagerDeliverEventResponse, error) {
 	if value == nil {
 		return nil, nil
 	}
-	schedule, err := workflowManagerBoundScheduleFromProto(value.GetSchedule())
+	results, err := workflowEventDeliveryResultsFromProto(value.GetResults())
 	if err != nil {
 		return nil, err
 	}
-	return &WorkflowManagerSchedule{ProviderName: value.GetProviderName(), Schedule: schedule}, nil
-}
-
-func workflowManagerEventTriggerFromProto(value *proto.ManagedWorkflowEventTrigger) *WorkflowManagerEventTrigger {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowManagerEventTrigger{
-		ProviderName: value.GetProviderName(),
-		Trigger:      workflowManagerBoundEventTriggerFromProto(value.GetTrigger()),
-	}
+	return &WorkflowManagerDeliverEventResponse{Results: results}, nil
 }

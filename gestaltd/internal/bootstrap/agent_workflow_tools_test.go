@@ -130,9 +130,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetExecutionReference: %v", err)
 	}
-	if len(ref.Permissions) != 1 || ref.Permissions[0].Plugin != "roadmap" || len(ref.Permissions[0].Operations) != 1 || ref.Permissions[0].Operations[0] != "sync" {
-		t.Fatalf("execution ref permissions = %#v", ref.Permissions)
-	}
+	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{{Plugin: "roadmap", Operations: []string{"sync"}}})
 	if ref.CallerPluginName != "agent:managed" {
 		t.Fatalf("execution ref caller = %q, want agent:managed", ref.CallerPluginName)
 	}
@@ -2166,6 +2164,118 @@ func (p *workflowSystemToolRecordingProvider) SignalRun(context.Context, corewor
 func (p *workflowSystemToolRecordingProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
 	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
 }
+
+func (p *workflowSystemToolRecordingProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
+	return &coreworkflow.CompileTargetResponse{
+		AcceptedSpecDigest: req.SpecDigest,
+		ProviderPlanID:     "plan-test",
+		ProviderPlanDigest: "plan-test-" + req.TargetDigest,
+	}, nil
+}
+
+func (p *workflowSystemToolRecordingProvider) ApplyWorkflowDeployment(ctx context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
+	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Schedule != nil {
+		activation := req.Spec.Activations[0]
+		executionRef := ""
+		if req.Binding != nil {
+			executionRef = req.Binding.ExecutionRef
+		}
+		if _, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{
+			ScheduleID:   req.Spec.ID,
+			Cron:         activation.Schedule.Cron,
+			Timezone:     activation.Schedule.Timezone,
+			Target:       req.Spec.Target,
+			Paused:       req.Spec.Paused || activation.Paused,
+			ExecutionRef: executionRef,
+			PlanBinding:  req.Binding,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	status := coreworkflow.DeploymentStatusActive
+	if req.Spec.Paused {
+		status = coreworkflow.DeploymentStatusPaused
+	}
+	return &coreworkflow.Deployment{Spec: req.Spec, Status: status, Binding: req.Binding}, nil
+}
+
+func (p *workflowSystemToolRecordingProvider) GetWorkflowDeployment(_ context.Context, req coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
+	if schedule := p.schedules[req.DeploymentID]; schedule != nil {
+		return &coreworkflow.Deployment{
+			Spec: coreworkflow.DeploymentSpec{
+				ID:     schedule.ID,
+				Target: schedule.Target,
+				Paused: schedule.Paused,
+				Activations: []coreworkflow.Activation{{
+					ID:     "schedule",
+					Paused: schedule.Paused,
+					Mode:   coreworkflow.ActivationModeStart,
+					Schedule: &coreworkflow.ScheduleActivation{
+						Cron:     schedule.Cron,
+						Timezone: schedule.Timezone,
+					},
+				}},
+			},
+			Status:  coreworkflow.DeploymentStatusActive,
+			Binding: &coreworkflow.DeploymentBinding{ExecutionRef: schedule.ExecutionRef},
+		}, nil
+	}
+	return nil, core.ErrNotFound
+}
+
+func (p *workflowSystemToolRecordingProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
+	out := &coreworkflow.ListDeploymentsResponse{}
+	for _, schedule := range p.schedules {
+		out.Deployments = append(out.Deployments, &coreworkflow.Deployment{
+			Spec: coreworkflow.DeploymentSpec{
+				ID:     schedule.ID,
+				Target: schedule.Target,
+				Paused: schedule.Paused,
+				Activations: []coreworkflow.Activation{{
+					ID:     "schedule",
+					Paused: schedule.Paused,
+					Mode:   coreworkflow.ActivationModeStart,
+					Schedule: &coreworkflow.ScheduleActivation{
+						Cron:     schedule.Cron,
+						Timezone: schedule.Timezone,
+					},
+				}},
+			},
+			Status:  coreworkflow.DeploymentStatusActive,
+			Binding: &coreworkflow.DeploymentBinding{ExecutionRef: schedule.ExecutionRef},
+		})
+	}
+	return out, nil
+}
+
+func (p *workflowSystemToolRecordingProvider) DeleteWorkflowDeployment(_ context.Context, req coreworkflow.DeleteDeploymentRequest) error {
+	delete(p.schedules, req.DeploymentID)
+	return nil
+}
+
+func (p *workflowSystemToolRecordingProvider) SetWorkflowDeploymentPaused(ctx context.Context, req coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
+	if schedule := p.schedules[req.DeploymentID]; schedule != nil {
+		schedule.Paused = req.Paused
+	}
+	return p.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: req.DeploymentID})
+}
+
+func (p *workflowSystemToolRecordingProvider) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
+	return p.SetWorkflowDeploymentPaused(ctx, coreworkflow.SetDeploymentPausedRequest{DeploymentID: req.DeploymentID, Paused: req.Paused})
+}
+
+func (p *workflowSystemToolRecordingProvider) DeliverWorkflowEvent(context.Context, coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
+	return &coreworkflow.DeliverEventResponse{}, nil
+}
+
+func (p *workflowSystemToolRecordingProvider) GetWorkflowRunEvents(context.Context, coreworkflow.GetRunEventsRequest) (*coreworkflow.ListRunEventsResponse, error) {
+	return &coreworkflow.ListRunEventsResponse{}, nil
+}
+
+func (p *workflowSystemToolRecordingProvider) GetWorkflowRunOutput(context.Context, coreworkflow.GetRunOutputRequest) (*coreworkflow.RunOutput, error) {
+	return &coreworkflow.RunOutput{}, nil
+}
+
 func (p *workflowSystemToolRecordingProvider) UpsertSchedule(_ context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
 	p.upsertedSchedules = append(p.upsertedSchedules, req)
 	schedule := &coreworkflow.Schedule{
@@ -2341,7 +2451,30 @@ func mustWorkflowSystemTool(t *testing.T, runtime *agentRuntime, operation strin
 func assertWorkflowSystemPermissions(t *testing.T, got, want []core.AccessPermission) {
 	t.Helper()
 
+	if !workflowSystemPermissionsIncludeStepActions(want) {
+		got = workflowSystemPermissionsWithoutStepActions(got)
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("permissions = %#v, want %#v", got, want)
 	}
+}
+
+func workflowSystemPermissionsIncludeStepActions(values []core.AccessPermission) bool {
+	for i := range values {
+		if values[i].Plugin == coreworkflow.StepActionPermissionPlugin {
+			return true
+		}
+	}
+	return false
+}
+
+func workflowSystemPermissionsWithoutStepActions(values []core.AccessPermission) []core.AccessPermission {
+	out := make([]core.AccessPermission, 0, len(values))
+	for i := range values {
+		if values[i].Plugin == coreworkflow.StepActionPermissionPlugin {
+			continue
+		}
+		out = append(out, values[i])
+	}
+	return out
 }

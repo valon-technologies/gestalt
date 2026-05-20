@@ -2,35 +2,141 @@ package gestalt
 
 import "context"
 
-// StartWorkflowProviderRunRequest requests a new or idempotent workflow run.
-type StartWorkflowProviderRunRequest struct {
-	Target         *BoundWorkflowTarget
-	IdempotencyKey string
-	CreatedBy      *WorkflowActor
-	ExecutionRef   string
-	WorkflowKey    string
+// PlanWorkflowRequest asks a provider to validate and plan a deployment spec.
+type PlanWorkflowRequest struct {
+	Spec                          *WorkflowDeploymentSpec
+	SpecDigest                    string
+	TargetDigest                  string
+	ActionTableDigest             string
+	TargetCanonicalizationVersion string
+	WorkflowSemanticsVersion      string
 }
 
-// GetWorkflowProviderRunRequest identifies one workflow run.
-type GetWorkflowProviderRunRequest struct {
+// ApplyWorkflowDeploymentRequest asks a provider to create or update a
+// deployment from a previously planned spec.
+type ApplyWorkflowDeploymentRequest struct {
+	Spec         *WorkflowDeploymentSpec
+	Plan         *PlanWorkflowResponse
+	Binding      *WorkflowDeploymentBinding
+	RequestID    string
+	ValidateOnly bool
+}
+
+// GetWorkflowDeploymentRequest identifies one workflow deployment.
+type GetWorkflowDeploymentRequest struct {
+	DeploymentID string
+}
+
+// ListWorkflowDeploymentsRequest requests workflow deployments visible to the
+// caller.
+type ListWorkflowDeploymentsRequest struct {
+	PageSize  int
+	PageToken string
+	Labels    map[string]string
+}
+
+// ListWorkflowDeploymentsResponse contains workflow deployments.
+type ListWorkflowDeploymentsResponse struct {
+	Deployments   []WorkflowDeployment
+	NextPageToken string
+}
+
+// GetDeployments returns deployments from the response.
+func (r *ListWorkflowDeploymentsResponse) GetDeployments() []WorkflowDeployment {
+	if r == nil {
+		return nil
+	}
+	return r.Deployments
+}
+
+// GetNextPageToken returns the token for the next page, if any.
+func (r *ListWorkflowDeploymentsResponse) GetNextPageToken() string {
+	if r == nil {
+		return ""
+	}
+	return r.NextPageToken
+}
+
+// DeleteWorkflowDeploymentRequest identifies a deployment to delete.
+type DeleteWorkflowDeploymentRequest struct {
+	DeploymentID string
+	Generation   int64
+	RequestID    string
+}
+
+// SetWorkflowDeploymentPausedRequest pauses or resumes a deployment.
+type SetWorkflowDeploymentPausedRequest struct {
+	DeploymentID string
+	Paused       bool
+	RequestID    string
+}
+
+// SetWorkflowActivationPausedRequest pauses or resumes one deployment
+// activation.
+type SetWorkflowActivationPausedRequest struct {
+	DeploymentID string
+	ActivationID string
+	Paused       bool
+	RequestID    string
+}
+
+// StartWorkflowRunRequest requests a new or idempotent workflow run.
+type StartWorkflowRunRequest struct {
+	DeploymentID         string
+	DeploymentGeneration int64
+	ActivationID         string
+	WorkflowKey          string
+	Input                any
+	IdempotencyKey       string
+	CreatedBy            *WorkflowActor
+}
+
+// SignalWorkflowRunRequest requests signaling a run.
+type SignalWorkflowRunRequest struct {
+	RunID  string
+	Signal *WorkflowSignal
+}
+
+// SignalOrStartWorkflowRunRequest requests signaling an existing workflow run
+// or starting one when needed.
+type SignalOrStartWorkflowRunRequest struct {
+	DeploymentID         string
+	DeploymentGeneration int64
+	ActivationID         string
+	WorkflowKey          string
+	Input                any
+	IdempotencyKey       string
+	Signal               *WorkflowSignal
+	CreatedBy            *WorkflowActor
+}
+
+// CancelWorkflowRunRequest requests cancellation of one workflow run.
+type CancelWorkflowRunRequest struct {
+	RunID  string
+	Reason string
+}
+
+// GetWorkflowRunRequest identifies one workflow run.
+type GetWorkflowRunRequest struct {
 	RunID string
 }
 
-// ListWorkflowProviderRunsRequest requests workflow runs visible to the caller.
-type ListWorkflowProviderRunsRequest struct {
-	PageSize  int
-	PageToken string
-	Status    WorkflowRunStatus
+// ListWorkflowRunsRequest requests workflow runs visible to the caller.
+type ListWorkflowRunsRequest struct {
+	DeploymentID string
+	PageSize     int
+	PageToken    string
+	Status       WorkflowRunStatus
 }
 
-// ListWorkflowProviderRunsResponse contains workflow runs.
-type ListWorkflowProviderRunsResponse struct {
-	Runs          []BoundWorkflowRun
+// ListWorkflowRunsResponse contains workflow runs.
+type ListWorkflowRunsResponse struct {
+	Runs          []WorkflowRun
 	NextPageToken string
 }
 
 // GetRuns returns workflow runs from the response.
-func (r *ListWorkflowProviderRunsResponse) GetRuns() []BoundWorkflowRun {
+func (r *ListWorkflowRunsResponse) GetRuns() []WorkflowRun {
 	if r == nil {
 		return nil
 	}
@@ -38,154 +144,75 @@ func (r *ListWorkflowProviderRunsResponse) GetRuns() []BoundWorkflowRun {
 }
 
 // GetNextPageToken returns the token for the next page, if any.
-func (r *ListWorkflowProviderRunsResponse) GetNextPageToken() string {
+func (r *ListWorkflowRunsResponse) GetNextPageToken() string {
 	if r == nil {
 		return ""
 	}
 	return r.NextPageToken
 }
 
-// CancelWorkflowProviderRunRequest requests cancellation of one workflow run.
-type CancelWorkflowProviderRunRequest struct {
-	RunID  string
-	Reason string
-}
-
-// SignalWorkflowProviderRunRequest requests signaling a run.
-type SignalWorkflowProviderRunRequest struct {
-	RunID  string
-	Signal *WorkflowSignal
-}
-
-// SignalOrStartWorkflowProviderRunRequest requests signaling an existing
-// workflow run or starting one when needed.
-type SignalOrStartWorkflowProviderRunRequest struct {
-	WorkflowKey    string
-	Target         *BoundWorkflowTarget
+// DeliverWorkflowEventRequest requests delivering an event to matching
+// workflow activations.
+type DeliverWorkflowEventRequest struct {
+	DeliveryID     string
+	Event          *WorkflowEvent
+	PublishedBy    *WorkflowActor
 	IdempotencyKey string
-	CreatedBy      *WorkflowActor
-	ExecutionRef   string
-	Signal         *WorkflowSignal
 }
 
-// SignalWorkflowRunResponse contains the run and signal affected by a signal
-// operation.
-type SignalWorkflowRunResponse struct {
-	Run         *BoundWorkflowRun
-	Signal      *WorkflowSignal
-	StartedRun  bool
-	WorkflowKey string
+// DeliverWorkflowEventResponse contains event delivery results.
+type DeliverWorkflowEventResponse struct {
+	Results []WorkflowEventDeliveryResult
 }
 
-// GetStatus-compatible helpers are intentionally not provided here; provider
-// code should read native fields directly.
-
-// UpsertWorkflowProviderScheduleRequest requests creating or updating a
-// workflow schedule.
-type UpsertWorkflowProviderScheduleRequest struct {
-	ScheduleID   string
-	Cron         string
-	Timezone     string
-	Target       *BoundWorkflowTarget
-	Paused       bool
-	RequestedBy  *WorkflowActor
-	ExecutionRef string
-}
-
-// GetWorkflowProviderScheduleRequest identifies one workflow schedule.
-type GetWorkflowProviderScheduleRequest struct {
-	ScheduleID string
-}
-
-// ListWorkflowProviderSchedulesRequest requests workflow schedules visible to
-// the caller.
-type ListWorkflowProviderSchedulesRequest struct{}
-
-// ListWorkflowProviderSchedulesResponse contains workflow schedules.
-type ListWorkflowProviderSchedulesResponse struct {
-	Schedules []BoundWorkflowSchedule
-}
-
-// GetSchedules returns workflow schedules from the response.
-func (r *ListWorkflowProviderSchedulesResponse) GetSchedules() []BoundWorkflowSchedule {
+// GetResults returns event delivery results.
+func (r *DeliverWorkflowEventResponse) GetResults() []WorkflowEventDeliveryResult {
 	if r == nil {
 		return nil
 	}
-	return r.Schedules
+	return r.Results
 }
 
-// DeleteWorkflowProviderScheduleRequest identifies a workflow schedule to
-// delete.
-type DeleteWorkflowProviderScheduleRequest struct {
-	ScheduleID string
+// GetWorkflowRunEventsRequest requests events for one run.
+type GetWorkflowRunEventsRequest struct {
+	RunID     string
+	PageSize  int
+	PageToken string
 }
 
-// PauseWorkflowProviderScheduleRequest identifies a workflow schedule to pause.
-type PauseWorkflowProviderScheduleRequest struct {
-	ScheduleID string
+// ListWorkflowRunEventsResponse contains workflow run events.
+type ListWorkflowRunEventsResponse struct {
+	Events        []WorkflowRunEvent
+	NextPageToken string
 }
 
-// ResumeWorkflowProviderScheduleRequest identifies a workflow schedule to
-// resume.
-type ResumeWorkflowProviderScheduleRequest struct {
-	ScheduleID string
-}
-
-// UpsertWorkflowProviderEventTriggerRequest requests creating or updating a
-// workflow event trigger.
-type UpsertWorkflowProviderEventTriggerRequest struct {
-	TriggerID    string
-	Match        *WorkflowEventMatch
-	Target       *BoundWorkflowTarget
-	Paused       bool
-	RequestedBy  *WorkflowActor
-	ExecutionRef string
-}
-
-// GetWorkflowProviderEventTriggerRequest identifies one event trigger.
-type GetWorkflowProviderEventTriggerRequest struct {
-	TriggerID string
-}
-
-// ListWorkflowProviderEventTriggersRequest requests event triggers visible to
-// the caller.
-type ListWorkflowProviderEventTriggersRequest struct{}
-
-// ListWorkflowProviderEventTriggersResponse contains workflow event triggers.
-type ListWorkflowProviderEventTriggersResponse struct {
-	Triggers []BoundWorkflowEventTrigger
-}
-
-// GetTriggers returns workflow event triggers from the response.
-func (r *ListWorkflowProviderEventTriggersResponse) GetTriggers() []BoundWorkflowEventTrigger {
+// GetEvents returns run events from the response.
+func (r *ListWorkflowRunEventsResponse) GetEvents() []WorkflowRunEvent {
 	if r == nil {
 		return nil
 	}
-	return r.Triggers
+	return r.Events
 }
 
-// DeleteWorkflowProviderEventTriggerRequest identifies an event trigger to
-// delete.
-type DeleteWorkflowProviderEventTriggerRequest struct {
-	TriggerID string
+// GetNextPageToken returns the token for the next page, if any.
+func (r *ListWorkflowRunEventsResponse) GetNextPageToken() string {
+	if r == nil {
+		return ""
+	}
+	return r.NextPageToken
 }
 
-// PauseWorkflowProviderEventTriggerRequest identifies an event trigger to
-// pause.
-type PauseWorkflowProviderEventTriggerRequest struct {
-	TriggerID string
+// GetWorkflowRunOutputRequest identifies a run or step output.
+type GetWorkflowRunOutputRequest struct {
+	RunID     string
+	OutputRef string
+	StepID    string
 }
 
-// ResumeWorkflowProviderEventTriggerRequest identifies an event trigger to
-// resume.
-type ResumeWorkflowProviderEventTriggerRequest struct {
-	TriggerID string
-}
-
-// PutWorkflowExecutionReferenceRequest contains a native execution reference to
-// store.
+// PutWorkflowExecutionReferenceRequest stores provider-owned host-callback
+// authority.
 type PutWorkflowExecutionReferenceRequest struct {
-	Reference *WorkflowExecutionReference
+	ExecutionRef *WorkflowExecutionReference
 }
 
 // GetWorkflowExecutionReferenceRequest identifies one execution reference.
@@ -193,30 +220,23 @@ type GetWorkflowExecutionReferenceRequest struct {
 	ID string
 }
 
-// ListWorkflowExecutionReferencesRequest requests execution references for a
+// ListWorkflowExecutionReferencesRequest requests execution references for one
 // subject.
 type ListWorkflowExecutionReferencesRequest struct {
 	SubjectID string
 }
 
-// ListWorkflowExecutionReferencesResponse contains workflow execution references.
+// ListWorkflowExecutionReferencesResponse contains execution references.
 type ListWorkflowExecutionReferencesResponse struct {
-	References []WorkflowExecutionReference
+	ExecutionRefs []WorkflowExecutionReference
 }
 
-// GetReferences returns workflow execution references from the response.
-func (r *ListWorkflowExecutionReferencesResponse) GetReferences() []WorkflowExecutionReference {
+// GetExecutionRefs returns execution references from the response.
+func (r *ListWorkflowExecutionReferencesResponse) GetExecutionRefs() []WorkflowExecutionReference {
 	if r == nil {
 		return nil
 	}
-	return r.References
-}
-
-// PublishWorkflowProviderEventRequest requests publishing a workflow event.
-type PublishWorkflowProviderEventRequest struct {
-	PluginName  string
-	Event       *WorkflowEvent
-	PublishedBy *WorkflowActor
+	return r.ExecutionRefs
 }
 
 // WorkflowProvider is implemented by providers that serve the workflow base
@@ -224,50 +244,25 @@ type PublishWorkflowProviderEventRequest struct {
 // typed interface instead of generated service bindings.
 type WorkflowProvider interface {
 	Provider
-	// StartRun starts or idempotently returns a workflow run.
-	StartRun(ctx context.Context, req *StartWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
-	// GetRun returns one workflow run by ID.
-	GetRun(ctx context.Context, req *GetWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
-	// ListRuns returns workflow runs visible to the request subject.
-	ListRuns(ctx context.Context, req *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error)
-	// CancelRun requests cancellation of a pending or running workflow run.
-	CancelRun(ctx context.Context, req *CancelWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
-	// SignalRun delivers a signal to an existing workflow run.
-	SignalRun(ctx context.Context, req *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error)
-	// SignalOrStartRun delivers a signal or starts a run when no target run exists.
-	SignalOrStartRun(ctx context.Context, req *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error)
-	// UpsertSchedule creates or updates a workflow schedule.
-	UpsertSchedule(ctx context.Context, req *UpsertWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error)
-	// GetSchedule returns one workflow schedule by ID.
-	GetSchedule(ctx context.Context, req *GetWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error)
-	// ListSchedules returns workflow schedules visible to the request subject.
-	ListSchedules(ctx context.Context, req *ListWorkflowProviderSchedulesRequest) (*ListWorkflowProviderSchedulesResponse, error)
-	// DeleteSchedule deletes a workflow schedule.
-	DeleteSchedule(ctx context.Context, req *DeleteWorkflowProviderScheduleRequest) error
-	// PauseSchedule pauses a workflow schedule without deleting it.
-	PauseSchedule(ctx context.Context, req *PauseWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error)
-	// ResumeSchedule resumes a paused workflow schedule.
-	ResumeSchedule(ctx context.Context, req *ResumeWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error)
-	// UpsertEventTrigger creates or updates a workflow event trigger.
-	UpsertEventTrigger(ctx context.Context, req *UpsertWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
-	// GetEventTrigger returns one workflow event trigger by ID.
-	GetEventTrigger(ctx context.Context, req *GetWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
-	// ListEventTriggers returns workflow event triggers visible to the request subject.
-	ListEventTriggers(ctx context.Context, req *ListWorkflowProviderEventTriggersRequest) (*ListWorkflowProviderEventTriggersResponse, error)
-	// DeleteEventTrigger deletes a workflow event trigger.
-	DeleteEventTrigger(ctx context.Context, req *DeleteWorkflowProviderEventTriggerRequest) error
-	// PauseEventTrigger pauses a workflow event trigger without deleting it.
-	PauseEventTrigger(ctx context.Context, req *PauseWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
-	// ResumeEventTrigger resumes a paused workflow event trigger.
-	ResumeEventTrigger(ctx context.Context, req *ResumeWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error)
-	// PutExecutionReference stores or updates a workflow execution reference.
+	PlanWorkflow(ctx context.Context, req *PlanWorkflowRequest) (*PlanWorkflowResponse, error)
+	ApplyWorkflowDeployment(ctx context.Context, req *ApplyWorkflowDeploymentRequest) (*WorkflowDeployment, error)
+	GetWorkflowDeployment(ctx context.Context, req *GetWorkflowDeploymentRequest) (*WorkflowDeployment, error)
+	ListWorkflowDeployments(ctx context.Context, req *ListWorkflowDeploymentsRequest) (*ListWorkflowDeploymentsResponse, error)
+	DeleteWorkflowDeployment(ctx context.Context, req *DeleteWorkflowDeploymentRequest) error
+	SetWorkflowDeploymentPaused(ctx context.Context, req *SetWorkflowDeploymentPausedRequest) (*WorkflowDeployment, error)
+	SetWorkflowActivationPaused(ctx context.Context, req *SetWorkflowActivationPausedRequest) (*WorkflowDeployment, error)
+	StartWorkflowRun(ctx context.Context, req *StartWorkflowRunRequest) (*WorkflowRun, error)
+	SignalWorkflowRun(ctx context.Context, req *SignalWorkflowRunRequest) (*WorkflowRunSignal, error)
+	SignalOrStartWorkflowRun(ctx context.Context, req *SignalOrStartWorkflowRunRequest) (*WorkflowRunSignal, error)
+	CancelWorkflowRun(ctx context.Context, req *CancelWorkflowRunRequest) (*WorkflowRun, error)
+	DeliverWorkflowEvent(ctx context.Context, req *DeliverWorkflowEventRequest) (*DeliverWorkflowEventResponse, error)
+	GetWorkflowRun(ctx context.Context, req *GetWorkflowRunRequest) (*WorkflowRun, error)
+	ListWorkflowRuns(ctx context.Context, req *ListWorkflowRunsRequest) (*ListWorkflowRunsResponse, error)
+	GetWorkflowRunEvents(ctx context.Context, req *GetWorkflowRunEventsRequest) (*ListWorkflowRunEventsResponse, error)
+	GetWorkflowRunOutput(ctx context.Context, req *GetWorkflowRunOutputRequest) (*WorkflowRunOutput, error)
 	PutExecutionReference(ctx context.Context, req *PutWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
-	// GetExecutionReference returns one workflow execution reference.
 	GetExecutionReference(ctx context.Context, req *GetWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
-	// ListExecutionReferences returns workflow execution references for a scope.
 	ListExecutionReferences(ctx context.Context, req *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error)
-	// PublishEvent publishes a workflow event for trigger matching.
-	PublishEvent(ctx context.Context, req *PublishWorkflowProviderEventRequest) error
 }
 
 // UnimplementedWorkflowProvider provides no-op lifecycle behavior and
@@ -279,76 +274,68 @@ func (UnimplementedWorkflowProvider) Configure(context.Context, string, map[stri
 	return nil
 }
 
-func (UnimplementedWorkflowProvider) StartRun(context.Context, *StartWorkflowProviderRunRequest) (*BoundWorkflowRun, error) {
+func (UnimplementedWorkflowProvider) PlanWorkflow(context.Context, *PlanWorkflowRequest) (*PlanWorkflowResponse, error) {
+	return nil, Unimplemented("workflow plan is not implemented")
+}
+
+func (UnimplementedWorkflowProvider) ApplyWorkflowDeployment(context.Context, *ApplyWorkflowDeploymentRequest) (*WorkflowDeployment, error) {
+	return nil, Unimplemented("workflow apply deployment is not implemented")
+}
+
+func (UnimplementedWorkflowProvider) GetWorkflowDeployment(context.Context, *GetWorkflowDeploymentRequest) (*WorkflowDeployment, error) {
+	return nil, Unimplemented("workflow get deployment is not implemented")
+}
+
+func (UnimplementedWorkflowProvider) ListWorkflowDeployments(context.Context, *ListWorkflowDeploymentsRequest) (*ListWorkflowDeploymentsResponse, error) {
+	return nil, Unimplemented("workflow list deployments is not implemented")
+}
+
+func (UnimplementedWorkflowProvider) DeleteWorkflowDeployment(context.Context, *DeleteWorkflowDeploymentRequest) error {
+	return Unimplemented("workflow delete deployment is not implemented")
+}
+
+func (UnimplementedWorkflowProvider) SetWorkflowDeploymentPaused(context.Context, *SetWorkflowDeploymentPausedRequest) (*WorkflowDeployment, error) {
+	return nil, Unimplemented("workflow set deployment paused is not implemented")
+}
+
+func (UnimplementedWorkflowProvider) SetWorkflowActivationPaused(context.Context, *SetWorkflowActivationPausedRequest) (*WorkflowDeployment, error) {
+	return nil, Unimplemented("workflow set activation paused is not implemented")
+}
+
+func (UnimplementedWorkflowProvider) StartWorkflowRun(context.Context, *StartWorkflowRunRequest) (*WorkflowRun, error) {
 	return nil, Unimplemented("workflow start run is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) GetRun(context.Context, *GetWorkflowProviderRunRequest) (*BoundWorkflowRun, error) {
-	return nil, Unimplemented("workflow get run is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) ListRuns(context.Context, *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error) {
-	return nil, Unimplemented("workflow list runs is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) CancelRun(context.Context, *CancelWorkflowProviderRunRequest) (*BoundWorkflowRun, error) {
-	return nil, Unimplemented("workflow cancel run is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) SignalRun(context.Context, *SignalWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
+func (UnimplementedWorkflowProvider) SignalWorkflowRun(context.Context, *SignalWorkflowRunRequest) (*WorkflowRunSignal, error) {
 	return nil, Unimplemented("workflow signal run is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) SignalOrStartRun(context.Context, *SignalOrStartWorkflowProviderRunRequest) (*SignalWorkflowRunResponse, error) {
+func (UnimplementedWorkflowProvider) SignalOrStartWorkflowRun(context.Context, *SignalOrStartWorkflowRunRequest) (*WorkflowRunSignal, error) {
 	return nil, Unimplemented("workflow signal or start run is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) UpsertSchedule(context.Context, *UpsertWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error) {
-	return nil, Unimplemented("workflow upsert schedule is not implemented")
+func (UnimplementedWorkflowProvider) CancelWorkflowRun(context.Context, *CancelWorkflowRunRequest) (*WorkflowRun, error) {
+	return nil, Unimplemented("workflow cancel run is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) GetSchedule(context.Context, *GetWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error) {
-	return nil, Unimplemented("workflow get schedule is not implemented")
+func (UnimplementedWorkflowProvider) DeliverWorkflowEvent(context.Context, *DeliverWorkflowEventRequest) (*DeliverWorkflowEventResponse, error) {
+	return nil, Unimplemented("workflow deliver event is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) ListSchedules(context.Context, *ListWorkflowProviderSchedulesRequest) (*ListWorkflowProviderSchedulesResponse, error) {
-	return nil, Unimplemented("workflow list schedules is not implemented")
+func (UnimplementedWorkflowProvider) GetWorkflowRun(context.Context, *GetWorkflowRunRequest) (*WorkflowRun, error) {
+	return nil, Unimplemented("workflow get run is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) DeleteSchedule(context.Context, *DeleteWorkflowProviderScheduleRequest) error {
-	return Unimplemented("workflow delete schedule is not implemented")
+func (UnimplementedWorkflowProvider) ListWorkflowRuns(context.Context, *ListWorkflowRunsRequest) (*ListWorkflowRunsResponse, error) {
+	return nil, Unimplemented("workflow list runs is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) PauseSchedule(context.Context, *PauseWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error) {
-	return nil, Unimplemented("workflow pause schedule is not implemented")
+func (UnimplementedWorkflowProvider) GetWorkflowRunEvents(context.Context, *GetWorkflowRunEventsRequest) (*ListWorkflowRunEventsResponse, error) {
+	return nil, Unimplemented("workflow get run events is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) ResumeSchedule(context.Context, *ResumeWorkflowProviderScheduleRequest) (*BoundWorkflowSchedule, error) {
-	return nil, Unimplemented("workflow resume schedule is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) UpsertEventTrigger(context.Context, *UpsertWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error) {
-	return nil, Unimplemented("workflow upsert event trigger is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) GetEventTrigger(context.Context, *GetWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error) {
-	return nil, Unimplemented("workflow get event trigger is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) ListEventTriggers(context.Context, *ListWorkflowProviderEventTriggersRequest) (*ListWorkflowProviderEventTriggersResponse, error) {
-	return nil, Unimplemented("workflow list event triggers is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) DeleteEventTrigger(context.Context, *DeleteWorkflowProviderEventTriggerRequest) error {
-	return Unimplemented("workflow delete event trigger is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) PauseEventTrigger(context.Context, *PauseWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error) {
-	return nil, Unimplemented("workflow pause event trigger is not implemented")
-}
-
-func (UnimplementedWorkflowProvider) ResumeEventTrigger(context.Context, *ResumeWorkflowProviderEventTriggerRequest) (*BoundWorkflowEventTrigger, error) {
-	return nil, Unimplemented("workflow resume event trigger is not implemented")
+func (UnimplementedWorkflowProvider) GetWorkflowRunOutput(context.Context, *GetWorkflowRunOutputRequest) (*WorkflowRunOutput, error) {
+	return nil, Unimplemented("workflow get run output is not implemented")
 }
 
 func (UnimplementedWorkflowProvider) PutExecutionReference(context.Context, *PutWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error) {
@@ -362,21 +349,3 @@ func (UnimplementedWorkflowProvider) GetExecutionReference(context.Context, *Get
 func (UnimplementedWorkflowProvider) ListExecutionReferences(context.Context, *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error) {
 	return nil, Unimplemented("workflow list execution references is not implemented")
 }
-
-func (UnimplementedWorkflowProvider) PublishEvent(context.Context, *PublishWorkflowProviderEventRequest) error {
-	return Unimplemented("workflow publish event is not implemented")
-}
-
-// WorkflowRunStatus identifies the lifecycle state of a workflow run.
-type WorkflowRunStatus int32
-
-// Workflow run status value constants provide stable SDK names for common
-// generated enum values without colliding with workflow telemetry dimensions.
-const (
-	WorkflowRunStatusValueUnspecified WorkflowRunStatus = iota
-	WorkflowRunStatusValuePending
-	WorkflowRunStatusValueRunning
-	WorkflowRunStatusValueSucceeded
-	WorkflowRunStatusValueFailed
-	WorkflowRunStatusValueCanceled
-)

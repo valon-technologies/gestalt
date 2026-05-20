@@ -18,14 +18,20 @@ class WorkflowHelperTests(unittest.TestCase):
         target = gestalt.bound_workflow_target(
             steps=[
                 gestalt.WorkflowStep(
-                    id="run",
+                    id="sync",
                     plugin=gestalt.WorkflowStepPluginCall(
                         name="plugin",
                         operation="run",
-                        input=gestalt.WorkflowValue(literal=Payload(ok=False, count=0)),
+                        input=Payload(ok=False, count=0),
                     ),
                 )
             ]
+        )
+        activation = gestalt.workflow_activation(
+            id="manual",
+            mode=gestalt.WORKFLOW_ACTIVATION_MODE_START,
+            input=gestalt.WorkflowValue(literal={"source": "test"}),
+            manual=True,
         )
         signal = gestalt.workflow_signal(
             name="ready",
@@ -33,166 +39,194 @@ class WorkflowHelperTests(unittest.TestCase):
             created_at=created_at,
             sequence=0,
         )
-        run = gestalt.bound_workflow_run(
+        run = gestalt.workflow_run(
             id="run-1",
+            deployment_id="deployment-1",
             status=gestalt.WORKFLOW_RUN_STATUS_PENDING,
-            target=target,
             created_at=created_at,
-            trigger=gestalt.WorkflowRunTrigger(manual=True),
+            trigger=gestalt.WorkflowRunTrigger(
+                deployment_id="deployment-1",
+                activation_id="manual",
+                manual=True,
+            ),
         )
 
-        step = target.steps[0]
-        self.assertEqual(step.plugin.name, "plugin")
-        self.assertEqual(step.plugin.input.literal.struct_value.fields["count"].number_value, 0)
-        self.assertFalse(step.plugin.input.literal.struct_value.fields["ok"].bool_value)
+        self.assertEqual(target.steps[0].plugin.name, "plugin")
+        self.assertEqual(target.steps[0].plugin.input.literal.struct_value.fields["count"].number_value, 0)
+        self.assertFalse(target.steps[0].plugin.input.literal.struct_value.fields["ok"].bool_value)
+        self.assertEqual(activation.id, "manual")
+        self.assertEqual(activation.WhichOneof("kind"), "manual")
         self.assertEqual(signal.payload.fields["ok"].bool_value, True)
         self.assertEqual(signal.sequence, 0)
+        self.assertEqual(run.trigger.deployment_id, "deployment-1")
         self.assertEqual(run.created_at.ToDatetime(tzinfo=dt.timezone.utc), created_at)
 
     def test_copy_helpers_do_not_alias_nested_payloads(self) -> None:
         target = gestalt.bound_workflow_target(
             steps=[
                 gestalt.WorkflowStep(
-                    id="run",
+                    id="sync",
                     plugin=gestalt.WorkflowStepPluginCall(
                         name="plugin",
                         operation="run",
-                        input=gestalt.WorkflowValue(
-                            object={
-                                "nested": gestalt.WorkflowValue(
-                                    object={"value": gestalt.WorkflowValue(literal="original")}
-                                )
-                            }
-                        ),
+                        input={"nested": {"value": "original"}},
                     ),
                 )
             ]
         )
-        copied = gestalt.bound_workflow_target_from_target(target)
+        copied = gestalt.bound_workflow_target(target)
 
-        target.steps[0].plugin.input.object.fields["nested"].object.fields[
-            "value"
-        ].literal.string_value = "changed"
+        target.steps[0].plugin.input.literal.struct_value.fields[
+            "nested"
+        ].struct_value.fields["value"].string_value = "changed"
 
         self.assertEqual(
             copied.steps[0]
-            .plugin.input.object.fields["nested"]
-            .object.fields["value"]
-            .literal.string_value,
+            .plugin.input.literal.struct_value.fields["nested"]
+            .struct_value.fields["value"]
+            .string_value,
             "original",
         )
 
-    def test_workflow_value_round_trips_sources_and_empty_collections(self) -> None:
-        value = gestalt.workflow_value(
-            object={
-                "empty_object": gestalt.WorkflowValue(object={}),
-                "empty_array": gestalt.WorkflowValue(array=[]),
-                "null_literal": gestalt.WorkflowValue(literal=None),
-                "thread": gestalt.WorkflowValue(signal_payload="event.thread_ts"),
-                "result": gestalt.WorkflowValue(
-                    step_output=gestalt.WorkflowStepOutputSource(
-                        step_id="diagnosis",
-                        path="agent.structuredOutput.actionableForPr",
+    def test_agent_turn_step_builds_proto(self) -> None:
+        step = gestalt.workflow_step(
+            id="diagnosis",
+            agent=gestalt.WorkflowStepAgentTurn(
+                provider="claude",
+                model="claude-3-5-sonnet",
+                prompt="Diagnose the alert.",
+                messages=[
+                    gestalt.WorkflowAgentMessage(
+                        role="system",
+                        text="Use concise replies.",
                     )
-                ),
-            }
+                ],
+                tools=[
+                    gestalt.AgentToolRef(
+                        plugin="github",
+                        operation="search/code",
+                    )
+                ],
+                response_schema={"type": "object"},
+                model_options={"temperature": 0},
+            ),
+            timeout_seconds=45,
+            metadata={"kind": "diagnosis"},
         )
 
-        copied = gestalt.workflow_value_input_from_value(value)
+        self.assertEqual(step.agent.provider, "claude")
+        self.assertEqual(step.agent.messages[0].text.template, "Use concise replies.")
+        self.assertEqual(step.agent.tools[0].plugin, "github")
+        self.assertEqual(step.agent.response_schema.fields["type"].string_value, "object")
+        self.assertEqual(step.metadata.fields["kind"].string_value, "diagnosis")
 
-        self.assertEqual(copied.object["empty_object"].object, {})
-        self.assertEqual(copied.object["empty_array"].array, [])
-        self.assertIsNone(copied.object["null_literal"].literal)
-        self.assertEqual(copied.object["thread"].signal_payload, "event.thread_ts")
-        self.assertEqual(copied.object["result"].step_output.step_id, "diagnosis")
-
-    def test_steps_target_round_trip(self) -> None:
-        self.assertIsNotNone(gestalt.workflow_step)
-        self.assertIsNotNone(gestalt.workflow_step_when)
-
-        target = gestalt.bound_workflow_target(
-            steps=[
-                gestalt.WorkflowStep(
-                    id="diagnosis",
-                    inputs={
-                        "thread": gestalt.WorkflowValue(signal_payload="event.thread_ts")
-                    },
-                    agent=gestalt.WorkflowStepAgentTurn(
-                        provider="claude",
-                        model="gpt-5.5",
-                        prompt=gestalt.WorkflowText(template="Diagnose the alert."),
-                        messages=[
-                            gestalt.WorkflowAgentMessage(
-                                role="system",
-                                text="Use concise replies.",
+    def test_step_conditions_and_delivery_build_proto(self) -> None:
+        step = gestalt.workflow_step(
+            id="notify",
+            plugin=gestalt.WorkflowStepPluginCall(
+                name="slack",
+                operation="reply",
+                input=gestalt.WorkflowValue(
+                    object=gestalt.WorkflowObject(
+                        fields={
+                            "text": gestalt.WorkflowValue(
+                                step_output=gestalt.WorkflowStepOutputSource(
+                                    step_id="diagnosis",
+                                    path="text",
+                                )
                             )
-                        ],
-                        tools=[
-                            gestalt.AgentToolRef(
-                                plugin="datadog",
-                                operation="queryLogs",
-                            )
-                        ],
-                        response_schema={"type": "object"},
-                        model_options={"temperature": 0},
-                    ),
-                    timeout_seconds=45,
-                    output_delivery=gestalt.WorkflowStepDelivery(
+                        }
+                    )
+                ),
+            ),
+            when=gestalt.WorkflowStepWhen(
+                value=gestalt.WorkflowValue(
+                    step_output=gestalt.WorkflowStepOutputSource(
+                        step_id="diagnosis",
+                        path="structured_output.actionable_for_pr",
+                    )
+                ),
+                equals=True,
+            ),
+            output_delivery=gestalt.WorkflowStepDelivery(
+                plugin=gestalt.WorkflowStepPluginCall(
+                    name="audit",
+                    operation="record",
+                )
+            ),
+        )
+
+        self.assertEqual(step.when.value.step_output.step_id, "diagnosis")
+        self.assertEqual(step.when.equals.bool_value, True)
+        self.assertEqual(step.plugin.input.object.fields["text"].step_output.path, "text")
+        self.assertEqual(step.output_delivery.plugin.name, "audit")
+
+    def test_deployment_spec_carries_activations_and_run_as(self) -> None:
+        spec = gestalt.workflow_deployment_spec(
+            id="deployment-1",
+            generation=2,
+            target=gestalt.BoundWorkflowTarget(
+                steps=[
+                    gestalt.WorkflowStep(
+                        id="sync",
                         plugin=gestalt.WorkflowStepPluginCall(
-                            name="slack",
-                            operation="reply",
-                            input=gestalt.WorkflowValue(
-                                object={
-                                    "text": gestalt.WorkflowValue(
-                                        step_output=gestalt.WorkflowStepOutputSource(
-                                            step_id="diagnosis",
-                                            path="agent.text",
-                                        )
-                                    )
-                                }
-                            ),
+                            name="plugin",
+                            operation="run",
                         ),
+                    )
+                ]
+            ),
+            activations=[
+                gestalt.WorkflowActivation(
+                    id="nightly",
+                    mode=gestalt.WORKFLOW_ACTIVATION_MODE_SIGNAL_OR_START,
+                    schedule=gestalt.WorkflowScheduleActivation(
+                        cron="0 0 * * *",
+                        timezone="UTC",
                     ),
-                    metadata={"kind": "diagnosis"},
-                ),
-                gestalt.WorkflowStep(
-                    id="pr_fix",
-                    agent=gestalt.WorkflowStepAgentTurn(
-                        provider="claude",
-                        prompt="Open a PR.",
-                        tools=[
-                            gestalt.AgentToolRef(
-                                plugin="github",
-                                operation="createPullRequest",
-                            )
-                        ],
-                    ),
-                    when=gestalt.WorkflowStepWhen(
-                        value=gestalt.WorkflowValue(
-                            step_output=gestalt.WorkflowStepOutputSource(
-                                step_id="diagnosis",
-                                path="agent.structuredOutput.actionableForPr",
-                            )
-                        ),
-                        equals=True,
-                    ),
-                ),
+                )
+            ],
+            run_as=gestalt.WorkflowRunAsSubject(
+                subject_id="service_account:workflow",
+                credential_subject_id="service_account:credential",
+            ),
+            permissions=[
+                gestalt.WorkflowAccessPermission(
+                    plugin="github",
+                    operations=["search/code"],
+                    actions=["issues.read"],
+                )
+            ],
+            labels={"team": "eng"},
+        )
+
+        self.assertEqual(spec.id, "deployment-1")
+        self.assertEqual(spec.activations[0].schedule.cron, "0 0 * * *")
+        self.assertEqual(spec.run_as.credential_subject_id, "service_account:credential")
+        self.assertEqual(spec.permissions[0].operations[0], "search/code")
+        self.assertEqual(spec.labels["team"], "eng")
+
+    def test_invoke_workflow_action_request_builds_proto(self) -> None:
+        request = gestalt.invoke_workflow_action_request(
+            selector=gestalt.WorkflowHostActionSelector(
+                run_id="run-1",
+                step_id="sync",
+                action_id="sync.plugin",
+            ),
+            plugin=gestalt.WorkflowPluginActionPayload(
+                input={"operation": "sync"},
+            ),
+            signals=[
+                gestalt.WorkflowSignal(
+                    name="ready",
+                    payload={"ok": True},
+                )
             ],
         )
 
-        self.assertEqual(target.steps[0].agent.tools[0].plugin, "datadog")
-        self.assertEqual(target.steps[1].when.equals.bool_value, True)
-        copied = gestalt.bound_workflow_target_input_from_target(target)
-        self.assertIsInstance(copied.steps[0].agent.messages[0], gestalt.WorkflowAgentMessage)
-        self.assertEqual(copied.steps[0].agent.response_schema["type"], "object")
-        self.assertEqual(
-            copied.steps[0].output_delivery.plugin.name,
-            "slack",
-        )
-        self.assertEqual(
-            copied.steps[1].when.value.step_output.path,
-            "agent.structuredOutput.actionableForPr",
-        )
+        self.assertEqual(request.selector.action_id, "sync.plugin")
+        self.assertEqual(request.plugin.input.fields["operation"].string_value, "sync")
+        self.assertTrue(request.signals[0].payload.fields["ok"].bool_value)
 
     def test_old_target_exports_are_removed(self) -> None:
         self.assertFalse(hasattr(gestalt, "BoundWorkflowPluginTarget"))

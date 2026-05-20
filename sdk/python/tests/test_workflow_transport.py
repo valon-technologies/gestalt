@@ -7,7 +7,7 @@ import os
 import tempfile
 import unittest
 from concurrent import futures
-from typing import Any, TypedDict
+from typing import Any
 
 import grpc
 
@@ -17,12 +17,13 @@ from gestalt import (
     ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
     BoundWorkflowTarget,
     Request,
+    WorkflowActivation,
+    WorkflowDeploymentSpec,
     WorkflowEvent,
     WorkflowHost,
     WorkflowManager,
-    WorkflowManagerCreateDefinition,
-    WorkflowManagerCreateSchedule,
-    WorkflowManagerPublishEvent,
+    WorkflowManagerApplyDeploymentRequest,
+    WorkflowManagerDeliverEventRequest,
     WorkflowStep,
     WorkflowStepPluginCall,
 )
@@ -39,85 +40,72 @@ _manager_requests: list[dict[str, str]] = []
 _manager_relay_tokens: list[str] = []
 
 
-class _PluginTargetDict(TypedDict):
-    name: str
-    operation: str
-
-
-class _WorkflowStepDict(TypedDict):
-    id: str
-    plugin: _PluginTargetDict
-
-
-class _BoundTargetDict(TypedDict):
-    steps: list[_WorkflowStepDict]
-
-
 @dataclasses.dataclass(slots=True)
-class _InvokeOperationRequestInput:
-    run_id: str
-    target: _BoundTargetDict
+class _InvokeActionRequestInput:
+    selector: dict[str, str]
+    plugin: dict[str, dict[str, str]]
 
 
 class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
-    def InvokeOperation(self, request: Any, context: grpc.ServicerContext) -> Any:
-        target = request.target
-        plugin = target.steps[0].plugin if target is not None and target.steps else None
-        operation = plugin.operation if plugin is not None else ""
-        return workflow_pb2.InvokeWorkflowOperationResponse(
+    def InvokeWorkflowAction(self, request: Any, context: grpc.ServicerContext) -> Any:
+        operation = request.plugin.input.fields["operation"].string_value
+        return workflow_pb2.WorkflowActionResult(
             status=202,
-            body=f"{request.run_id}:{operation}",
+            body=f"{request.selector.run_id}:{operation}",
         )
 
 
 class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
-    def CreateDefinition(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def ApplyDeployment(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         _manager_requests.append(
             {
-                "method": "create_definition",
+                "method": "apply_deployment",
                 "invocation_token": request.invocation_token,
                 "idempotency_key": request.idempotency_key,
                 "provider_name": request.provider_name,
+                "deployment_id": request.spec.id,
             }
         )
-        return workflow_pb2.ManagedWorkflowDefinition(
+        return workflow_pb2.ManagedWorkflowDeployment(
             provider_name=request.provider_name or "basic",
-            definition=workflow_pb2.BoundWorkflowDefinition(
-                id="def-1",
-                target=request.target,
+            deployment=workflow_pb2.WorkflowDeployment(
+                spec=request.spec,
+                status=workflow_pb2.WORKFLOW_DEPLOYMENT_STATUS_ACTIVE,
             ),
         )
 
-    def CreateSchedule(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def StartRun(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         _manager_requests.append(
             {
-                "method": "create_schedule",
+                "method": "start_run",
                 "invocation_token": request.invocation_token,
                 "idempotency_key": request.idempotency_key,
-                "cron": request.cron,
+                "provider_name": request.provider_name,
+                "deployment_id": request.deployment_id,
+                "workflow_key": request.workflow_key,
             }
         )
-        return workflow_pb2.ManagedWorkflowSchedule(
+        return workflow_pb2.ManagedWorkflowRun(
             provider_name=request.provider_name or "basic",
-            schedule=workflow_pb2.BoundWorkflowSchedule(
-                id="sched-1",
-                cron=request.cron,
-                timezone=request.timezone,
-                target=request.target,
-                paused=request.paused,
+            run=workflow_pb2.WorkflowRun(
+                id="run-1",
+                deployment_id=request.deployment_id,
+                workflow_key=request.workflow_key,
+                status=workflow_pb2.WORKFLOW_RUN_STATUS_RUNNING,
             ),
         )
 
-    def PublishEvent(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def DeliverEvent(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         event = workflow_pb2.WorkflowEvent()
         event.CopyFrom(request.event)
         _manager_requests.append(
             {
-                "method": "publish_event",
+                "method": "deliver_event",
                 "invocation_token": request.invocation_token,
+                "idempotency_key": request.idempotency_key,
                 "event_id": event.id,
                 "event_type": event.type,
                 "event_source": event.source,
@@ -125,9 +113,16 @@ class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
                 "provider_name": request.provider_name,
             }
         )
-        if not event.id:
-            event.id = "published-event-1"
-        return event
+        return workflow_pb2.WorkflowManagerDeliverEventResponse(
+            results=[
+                workflow_pb2.WorkflowEventDeliveryResult(
+                    deployment_id="deployment-1",
+                    activation_id="event",
+                    started_run=True,
+                    run=workflow_pb2.WorkflowRun(id="run-from-event"),
+                )
+            ]
+        )
 
 
 def _record_manager_relay_tokens(context: grpc.ServicerContext) -> None:
@@ -187,22 +182,17 @@ class WorkflowTransportTests(unittest.TestCase):
         _manager_relay_tokens.clear()
 
     def test_workflow_host_roundtrip(self) -> None:
-        target: _BoundTargetDict = {
-            "steps": [
-                {
-                    "id": "sync",
-                    "plugin": {"name": "demo", "operation": "sync"},
-                }
-            ]
-        }
         with WorkflowHost() as host:
-            response = host.invoke_operation(
-                _InvokeOperationRequestInput(run_id="run-42", target=target)
+            response = host.invoke_action(
+                _InvokeActionRequestInput(
+                    selector={"run_id": "run-42"},
+                    plugin={"input": {"operation": "sync"}},
+                )
             )
         self.assertEqual(response.status, 202)
         self.assertEqual(response.body, "run-42:sync")
 
-    def test_workflow_manager_publish_event_roundtrip(self) -> None:
+    def test_workflow_manager_deliver_event_roundtrip(self) -> None:
         event = workflow_pb2.WorkflowEvent(
             id="delivery-123",
             source="github",
@@ -213,23 +203,26 @@ class WorkflowTransportTests(unittest.TestCase):
         event.data.update({"github_event": "pull_request", "github_action": "opened"})
 
         with WorkflowManager("token-123") as manager:
-            published = manager.publish_event(
-                workflow_pb2.WorkflowManagerPublishEventRequest(
+            delivered = manager.deliver_event(
+                workflow_pb2.WorkflowManagerDeliverEventRequest(
                     event=event,
                     provider_name="advanced",
+                    idempotency_key="delivery-key",
                 )
             )
 
-        assert published is not None
-        self.assertEqual(published.id, "delivery-123")
-        self.assertEqual(published.type, "github.app.webhook")
+        results = delivered.results
+        assert results is not None
+        self.assertEqual(results[0].run.id, "run-from-event")
+        self.assertTrue(results[0].started_run)
         self.assertEqual(_manager_relay_tokens, ["relay-token-py"])
         self.assertEqual(
             _manager_requests,
             [
                 {
-                    "method": "publish_event",
+                    "method": "deliver_event",
                     "invocation_token": "token-123",
+                    "idempotency_key": "delivery-key",
                     "event_id": "delivery-123",
                     "event_type": "github.app.webhook",
                     "event_source": "github",
@@ -246,31 +239,33 @@ class WorkflowTransportTests(unittest.TestCase):
         )
 
         with request.workflow_manager() as manager:
-            created_definition = manager.create_definition(
-                WorkflowManagerCreateDefinition(
+            deployment = manager.apply_deployment(
+                WorkflowManagerApplyDeploymentRequest(
                     provider_name="managed",
-                    target=BoundWorkflowTarget(
-                        steps=[
-                            WorkflowStep(
-                                id="sync",
-                                plugin=WorkflowStepPluginCall(
-                                    name="demo",
-                                    operation="sync",
-                                ),
-                            )
-                        ],
+                    spec=WorkflowDeploymentSpec(
+                        id="deployment-1",
+                        target=BoundWorkflowTarget(
+                            steps=[
+                                WorkflowStep(
+                                    id="sync",
+                                    plugin=WorkflowStepPluginCall(
+                                        name="demo",
+                                        operation="sync",
+                                    ),
+                                )
+                            ]
+                        ),
+                        activations=[WorkflowActivation(id="manual", manual=True)],
                     ),
                 )
             )
-            created = manager.create_schedule(
-                WorkflowManagerCreateSchedule(
-                    provider_name="managed",
-                    cron="*/5 * * * *",
-                    timezone="UTC",
-                )
+            run = manager.start_run(
+                provider_name="managed",
+                deployment_id="deployment-1",
+                workflow_key="sync",
             )
-            published = manager.publish_event(
-                WorkflowManagerPublishEvent(
+            delivered = manager.deliver_event(
+                WorkflowManagerDeliverEventRequest(
                     provider_name="managed",
                     event=WorkflowEvent(
                         source="github",
@@ -280,14 +275,13 @@ class WorkflowTransportTests(unittest.TestCase):
                 )
             )
 
-        definition = created_definition.definition
-        schedule = created.schedule
-        assert definition is not None
-        assert schedule is not None
-        assert published is not None
-        self.assertEqual(definition.id, "def-1")
-        self.assertEqual(schedule.id, "sched-1")
-        self.assertEqual(published.id, "published-event-1")
+        assert deployment.deployment is not None
+        assert run.run is not None
+        self.assertEqual(deployment.deployment.spec.id, "deployment-1")
+        self.assertEqual(run.run.id, "run-1")
+        results = delivered.results
+        assert results is not None
+        self.assertEqual(results[0].run.id, "run-from-event")
         self.assertEqual(
             _manager_relay_tokens,
             ["relay-token-py", "relay-token-py", "relay-token-py"],
@@ -296,20 +290,24 @@ class WorkflowTransportTests(unittest.TestCase):
             _manager_requests,
             [
                 {
-                    "method": "create_definition",
+                    "method": "apply_deployment",
                     "invocation_token": "token-embedded",
                     "idempotency_key": "workflow-request-key-py",
                     "provider_name": "managed",
+                    "deployment_id": "deployment-1",
                 },
                 {
-                    "method": "create_schedule",
+                    "method": "start_run",
                     "invocation_token": "token-embedded",
                     "idempotency_key": "workflow-request-key-py",
-                    "cron": "*/5 * * * *",
+                    "provider_name": "managed",
+                    "deployment_id": "deployment-1",
+                    "workflow_key": "sync",
                 },
                 {
-                    "method": "publish_event",
+                    "method": "deliver_event",
                     "invocation_token": "token-embedded",
+                    "idempotency_key": "workflow-request-key-py",
                     "event_id": "",
                     "event_type": "github.app.webhook",
                     "event_source": "github",

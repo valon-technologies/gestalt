@@ -1,204 +1,116 @@
 import { expect, test } from "bun:test";
+import { create } from "@bufbuild/protobuf";
 
 import {
+  WorkflowActivationMode,
   WorkflowRunStatus,
-  boundWorkflowRun,
   boundWorkflowTarget,
-  boundWorkflowTargetFromTarget,
+  workflowActivation,
+  workflowDeploymentSpec,
+  workflowLiteral,
+  workflowObject,
+  workflowRun,
+  workflowRunInput,
   workflowSignal,
-  workflowStepWhen,
-  workflowStepWhenToProto,
-  workflowValue,
-  type WorkflowValue,
+  workflowStep,
+  workflowStepOutput,
+  workflowStepPluginCall,
+  workflowTemplate,
 } from "../src/index.ts";
+import {
+  boundWorkflowTargetFromProto,
+  boundWorkflowTargetToProto,
+} from "../src/workflow.ts";
+import { BoundWorkflowTargetSchema } from "../src/internal/gen/v1/workflow_pb.ts";
 
-test("workflow builders accept native JSON objects and Dates", () => {
-  const createdAt = new Date("2026-05-08T12:00:00.000Z");
+test("step workflow targets carry plugin actions and workflow values", () => {
+  const step = workflowStep({
+    id: "notify",
+    inputs: {
+      text: workflowTemplate("Roadmap item {{ run.input.item_id }} changed"),
+      previous: workflowStepOutput("load", "body"),
+    },
+    action: {
+      case: "plugin",
+      value: workflowStepPluginCall({
+        name: "slack",
+        operation: "reply",
+        input: workflowObject({
+          channel: workflowLiteral("#ops"),
+        }),
+      }),
+    },
+  });
+
+  const target = boundWorkflowTarget({ steps: [step] });
+
+  expect(target.steps).toHaveLength(1);
+  expect(target.steps[0]?.action.case).toBe("plugin");
+  expect(target.steps[0]?.inputs["text"]?.kind.case).toBe("template");
+  expect(target.steps[0]?.inputs["previous"]?.kind.case).toBe("stepOutput");
+  expect(boundWorkflowTargetToProto(target).steps.map((candidate) => candidate.id)).toEqual(["notify"]);
+});
+
+test("deployment activations and runs use the new deployment API", () => {
   const target = boundWorkflowTarget({
     steps: [
-      {
-        id: "run",
-        plugin: {
-          name: "plugin",
-          operation: "run",
-          input: { literal: { ok: false, count: 0 } },
+      workflowStep({
+        id: "sync",
+        action: {
+          case: "plugin",
+          value: workflowStepPluginCall({
+            name: "roadmap",
+            operation: "sync",
+            input: workflowRunInput("item"),
+          }),
         },
-      },
+      }),
     ],
   });
-  const signal = workflowSignal({
-    name: "ready",
-    payload: { ok: true, count: 1 },
-    createdAt,
-    sequence: 0,
+  const activation = workflowActivation({
+    id: "manual",
+    mode: WorkflowActivationMode.START,
+    input: workflowRunInput(),
+    kind: { case: "manual", value: {} },
   });
-  const run = boundWorkflowRun({
-    id: "run-1",
-    status: WorkflowRunStatus.PENDING,
+  const spec = workflowDeploymentSpec({
+    id: "roadmap-sync",
+    generation: 7n,
     target,
-    trigger: { manual: true },
-    createdAt,
+    activations: [activation],
+    labels: { owner: "workflow-tests" },
+  });
+  const signal = workflowSignal({ name: "roadmap.changed", sequence: 0n });
+  const run = workflowRun({
+    id: "run-1",
+    deploymentId: spec.id,
+    deploymentGeneration: spec.generation,
+    workflowKey: "roadmap:item-1",
+    status: WorkflowRunStatus.PENDING,
   });
 
-  expect(target.steps?.[0]?.plugin?.name).toBe("plugin");
-  expect(target.steps?.[0]?.plugin?.input?.kind).toEqual({
-    case: "literal",
-    value: { ok: false, count: 0 },
-  });
-  expect(signal.payload).toEqual({ ok: true, count: 1 });
-  expect(signal.sequence).toBe(0n);
-  expect(run.createdAt?.toISOString()).toBe("2026-05-08T12:00:00.000Z");
+  expect(spec.target?.steps[0]?.id).toBe("sync");
+  expect(spec.activations[0]?.kind.case).toBe("manual");
+  expect(signal.name).toBe("roadmap.changed");
+  expect(run.deploymentGeneration).toBe(7n);
 });
 
-test("workflow copy helpers do not alias nested payloads", () => {
-  const target = boundWorkflowTarget({
-    steps: [
-      {
-        id: "run",
-        plugin: {
-          name: "plugin",
-          operation: "run",
-          input: {
-            object: {
-              nested: { object: { value: { literal: "original" } } },
-            },
-          },
-        },
-      },
-    ],
-  });
-  const copied = boundWorkflowTargetFromTarget(target);
-
-  const nested = target.steps?.[0]?.plugin?.input?.kind;
-  if (nested?.case !== "object") {
-    throw new Error("expected object input");
-  }
-  const inner = nested.value.nested?.kind;
-  if (inner?.case !== "object") {
-    throw new Error("expected nested object input");
-  }
-  inner.value.value = { kind: { case: "literal", value: "changed" } };
-
-  const copiedNested = copied.steps?.[0]?.plugin?.input?.kind;
-  if (copiedNested?.case !== "object") {
-    throw new Error("expected copied object input");
-  }
-  expect(copiedNested.value.nested?.kind).toEqual({
-    case: "object",
-    value: { value: { kind: { case: "literal", value: "original" } } },
-  });
-});
-
-test("workflow values preserve null literals and empty collections", () => {
-  const value = workflowValue({
-    object: {
-      emptyObject: { object: {} },
-      emptyArray: { array: [] },
-      nullLiteral: { literal: null },
-      condition: {
-        stepOutput: {
-          stepId: "diagnosis",
-          path: "agent.structuredOutput.actionableForPr",
-        },
-      },
+test("workflow targets round-trip through proto helpers", () => {
+  const step = workflowStep({
+    id: "notify",
+    action: {
+      case: "plugin",
+      value: workflowStepPluginCall({
+        name: "slack",
+        operation: "reply",
+      }),
     },
   });
 
-  const object = value.kind;
-  if (object?.case !== "object") {
-    throw new Error("expected object value");
-  }
-  expect(object.value.emptyObject?.kind).toEqual({ case: "object", value: {} });
-  expect(object.value.emptyArray?.kind).toEqual({ case: "array", value: [] });
-  expect(object.value.nullLiteral?.kind).toEqual({ case: "literal", value: null });
-  expect(object.value.condition?.kind).toEqual({
-    case: "stepOutput",
-    value: {
-      stepId: "diagnosis",
-      path: "agent.structuredOutput.actionableForPr",
-    },
-  });
-});
+  const decoded = boundWorkflowTargetFromProto(
+    create(BoundWorkflowTargetSchema, { steps: [step] }),
+  );
 
-test("workflow step when preserves omitted and explicit null equals", () => {
-  const omitted = workflowStepWhen({ value: { literal: true } });
-  expect(Object.prototype.hasOwnProperty.call(omitted, "equals")).toBe(false);
-  expect(workflowStepWhenToProto(omitted)?.equals).toBeUndefined();
-
-  const explicitNull = workflowStepWhen({
-    value: { literal: true },
-    equals: null,
-  });
-  expect(Object.prototype.hasOwnProperty.call(explicitNull, "equals")).toBe(true);
-  expect(workflowStepWhenToProto(explicitNull)?.equals?.kind.case).toBe("nullValue");
-});
-
-test("agent and plugin workflow steps round-trip through copy helpers", () => {
-  const target = boundWorkflowTarget({
-    steps: [
-      {
-        id: "diagnosis",
-        inputs: {
-          thread: { signalPayload: "event.thread_ts" },
-        },
-        agent: {
-          provider: "agent",
-          model: "claude",
-          prompt: "Diagnose the alert.",
-          messages: [{ role: "system", text: "Use concise replies." }],
-          tools: [{ plugin: "datadog", operation: "queryLogs" }],
-          responseSchema: { type: "object" },
-          modelOptions: { temperature: 0 },
-        },
-        timeoutSeconds: 45,
-        metadata: { kind: "diagnosis" },
-        outputDelivery: {
-          plugin: {
-            name: "slack",
-            operation: "reply",
-            input: {
-              object: {
-                text: { stepOutput: { stepId: "diagnosis", path: "agent.text" } },
-              },
-            },
-          },
-        },
-      },
-      {
-        id: "pr_fix",
-        agent: {
-          provider: "agent",
-          prompt: "Open a PR.",
-          tools: [{ plugin: "github", operation: "createPullRequest" }],
-        },
-        when: {
-          value: {
-            stepOutput: {
-              stepId: "diagnosis",
-              path: "agent.structuredOutput.actionableForPr",
-            },
-          },
-          equals: true,
-        },
-      },
-    ],
-  });
-
-  const steps = target.steps ?? [];
-  expect(steps).toHaveLength(2);
-  expect(steps[0]?.agent?.tools?.[0]?.plugin).toBe("datadog");
-  expect((steps[1]?.when?.value as WorkflowValue).kind?.case).toBe("stepOutput");
-  expect(steps[1]?.when?.equals).toBe(true);
-
-  const copied = boundWorkflowTargetFromTarget(target);
-  const copiedSteps = copied.steps ?? [];
-  expect(copiedSteps[0]?.agent?.responseSchema).toEqual({ type: "object" });
-  expect(copiedSteps[0]?.outputDelivery?.plugin?.name).toBe("slack");
-  expect(copiedSteps[1]?.when?.value?.kind).toEqual({
-    case: "stepOutput",
-    value: {
-      stepId: "diagnosis",
-      path: "agent.structuredOutput.actionableForPr",
-    },
-  });
+  expect(decoded.steps.map((candidate) => candidate.id)).toEqual(["notify"]);
+  expect(boundWorkflowTargetToProto(decoded).steps.map((candidate) => candidate.id)).toEqual(["notify"]);
 });

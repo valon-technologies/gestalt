@@ -39,7 +39,7 @@ import {
   ProviderLifecycle,
 } from "../src/internal/gen/v1/runtime_pb.ts";
 import {
-  StartWorkflowProviderRunRequestSchema,
+  StartWorkflowRunRequestSchema,
   WorkflowProvider as WorkflowProviderService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
 import {
@@ -92,9 +92,15 @@ async function waitForSocket(
 }
 
 function workflowPluginTarget(pluginName: string, operation: string) {
-  return boundWorkflowTargetToProto({
-    steps: [{ id: operation, plugin: { name: pluginName, operation } }],
-  });
+  return {
+    steps: [{
+      id: `${pluginName}:${operation}`,
+      action: {
+        case: "plugin" as const,
+        value: { name: pluginName, operation },
+      },
+    }],
+  };
 }
 
 test("build arg parsing validates required arguments", () => {
@@ -917,19 +923,14 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
       }),
     );
 
-    const run = await workflow.startRun(
-      create(StartWorkflowProviderRunRequestSchema, {
-        target: workflowPluginTarget("roadmap", "sync"),
+    const run = await workflow.startWorkflowRun(
+      create(StartWorkflowRunRequestSchema, {
+        deploymentId: "roadmap-sync",
+        deploymentGeneration: 1n,
       }),
     );
-    const plugin = run.target?.steps[0]?.action.case === "plugin"
-      ? run.target.steps[0].action.value
-      : undefined;
-    if (plugin === undefined) {
-      throw new Error("workflow run target is not a plugin target");
-    }
-    expect(plugin.name).toBe("roadmap");
-    expect(run.id).toBe("roadmap:sync:1");
+    expect(run.deploymentId).toBe("roadmap-sync");
+    expect(run.id).toBe("roadmap-sync:1");
   } finally {
     if (child) {
       await stopProcess(child);

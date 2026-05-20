@@ -11,289 +11,222 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func protoValueFromAnyMust(value any) *structpb.Value {
-	out, err := protoValueFromAny(value)
-	if err != nil {
-		panic(err)
-	}
-	return out
-}
-
-func TestWorkflowTargetToProtoUsesStepPluginTarget(t *testing.T) {
+func TestWorkflowTargetProtoRoundTripsStepsOnly(t *testing.T) {
 	t.Parallel()
 
-	target, err := workflowTargetToProto(coreworkflow.Target{
-		Steps: []coreworkflow.Step{{
-			ID: "refresh",
+	target := coreworkflow.Target{Steps: []coreworkflow.Step{
+		{
+			ID: "diagnose",
+			Inputs: map[string]coreworkflow.Value{
+				"text":  {SignalPayload: "event.text"},
+				"event": {RunInput: "data.alert"},
+			},
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "openai",
+				Model:        "gpt-5.5",
+				SessionKey:   "incident",
+				Prompt:       coreworkflow.Text{Template: "Diagnose ${inputs.text}"},
+				ToolRefs:     []coreagent.ToolRef{{Plugin: "datadog", Operation: "query_monitor"}},
+			},
+		},
+		{
+			ID: "notify",
 			Plugin: &coreworkflow.PluginCall{
-				Name:           "demo",
-				Operation:      "refresh",
-				Connection:     "workspace",
-				Instance:       "primary",
-				CredentialMode: core.ConnectionModeNone,
+				Name:      "slack",
+				Operation: "reply",
 				Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
-					"customer_id": {Literal: "cust_123", LiteralSet: true},
+					"text": {StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnose", Path: "agent.text"}},
 				}},
 			},
-		}},
-	})
-	if err != nil {
-		t.Fatalf("workflowTargetToProto: %v", err)
-	}
-	if len(target.GetSteps()) != 1 || target.GetSteps()[0].GetPlugin() == nil {
-		t.Fatalf("steps target = %#v, want one plugin step", target)
-	}
-	plugin := target.GetSteps()[0].GetPlugin()
-	if got := plugin.GetName(); got != "demo" {
-		t.Fatalf("plugin name = %q, want %q", got, "demo")
-	}
-	if got := plugin.GetCredentialMode(); got != string(core.ConnectionModeNone) {
-		t.Fatalf("credential_mode = %q, want %q", got, core.ConnectionModeNone)
-	}
-	if got := plugin.GetInput().GetObject().GetFields()["customer_id"].GetLiteral().AsInterface(); got != "cust_123" {
-		t.Fatalf("input customer_id = %#v, want %q", got, "cust_123")
-	}
-}
-
-func TestWorkflowTargetFromProtoAcceptsStepPluginFields(t *testing.T) {
-	t.Parallel()
-
-	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
-		Steps: []*proto.WorkflowStep{{
-			Id: " refresh ",
-			Action: &proto.WorkflowStep_Plugin{Plugin: &proto.WorkflowStepPluginCall{
-				Name:           " demo ",
-				Operation:      " refresh ",
-				Connection:     " workspace ",
-				Instance:       " primary ",
-				CredentialMode: " none ",
-				Input: &proto.WorkflowValue{Kind: &proto.WorkflowValue_Object{Object: &proto.WorkflowObject{Fields: map[string]*proto.WorkflowValue{
-					"customer_id": {Kind: &proto.WorkflowValue_Literal{Literal: protoValueFromAnyMust("cust_123")}},
-				}}}},
-			}},
-		}},
-	})
-	if len(target.Steps) != 1 || target.Steps[0].Plugin == nil {
-		t.Fatalf("target steps = %#v, want one plugin step", target.Steps)
-	}
-	plugin := target.Steps[0].Plugin
-	if got := plugin.Name; got != "demo" {
-		t.Fatalf("plugin name = %q, want %q", got, "demo")
-	}
-	if got := plugin.Operation; got != "refresh" {
-		t.Fatalf("operation = %q, want %q", got, "refresh")
-	}
-	if got := plugin.Connection; got != "workspace" {
-		t.Fatalf("connection = %q, want %q", got, "workspace")
-	}
-	if got := plugin.Instance; got != "primary" {
-		t.Fatalf("instance = %q, want %q", got, "primary")
-	}
-	if got := plugin.CredentialMode; got != core.ConnectionModeNone {
-		t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeNone)
-	}
-	if got := plugin.Input.Object["customer_id"].Literal; got != "cust_123" {
-		t.Fatalf("input customer_id = %#v, want %q", got, "cust_123")
-	}
-}
-
-func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
-	t.Parallel()
-
-	target, err := workflowTargetToProto(coreworkflow.Target{
-		Steps: []coreworkflow.Step{
-			{
-				ID: "diagnosis",
-				Inputs: map[string]coreworkflow.Value{
-					"thread_ts": {SignalPayload: "event.ts"},
-				},
-				Agent: &coreworkflow.AgentTurn{
-					ProviderName: "managed",
-					Model:        "deep",
-					Prompt:       coreworkflow.Text{Template: "Diagnose the alert."},
-					Messages:     []coreworkflow.AgentMessage{{Role: "system", Text: coreworkflow.Text{Template: "Use concise replies."}}},
-					ToolRefs:     []coreagent.ToolRef{{Plugin: "datadog", Operation: "queryLogs"}},
-					ResponseSchema: map[string]any{
-						"type":       "object",
-						"properties": map[string]any{"actionableForPr": map[string]any{"type": "boolean"}},
-					},
-					ModelOptions: map[string]any{"temperature": 0},
-				},
-				Metadata:       map[string]any{"kind": "diagnosis"},
-				TimeoutSeconds: 45,
-				OutputDelivery: &coreworkflow.StepDelivery{
-					Plugin: &coreworkflow.PluginCall{
-						Name:      "slack",
-						Operation: "reply",
-						Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
-							"text": {StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.text"}},
-						}},
-					},
-				},
+			When: &coreworkflow.StepWhen{
+				Value:     coreworkflow.Value{StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnose", Path: "agent.structuredOutput.actionable"}},
+				Equals:    true,
+				EqualsSet: true,
 			},
-			{
-				ID: "pr_fix",
-				Agent: &coreworkflow.AgentTurn{
-					ProviderName: "managed",
-					Model:        "deep",
-					Prompt:       coreworkflow.Text{Template: "Open the PR."},
-					ToolRefs:     []coreagent.ToolRef{{Plugin: "github", Operation: "createPullRequest"}},
-				},
-				When: &coreworkflow.StepWhen{
-					Value:     coreworkflow.Value{StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.structuredOutput.actionableForPr"}},
-					Equals:    true,
-					EqualsSet: true,
-				},
+			OutputDelivery: &coreworkflow.StepDelivery{
+				Plugin: &coreworkflow.PluginCall{Name: "audit", Operation: "record", Input: coreworkflow.Value{RunInput: "activation_id"}},
 			},
 		},
-	})
-	if err != nil {
-		t.Fatalf("workflowTargetToProto: %v", err)
-	}
-	if got := target.GetSteps()[0].GetAgent().GetResponseSchema().AsMap()["type"]; got != "object" {
-		t.Fatalf("step response schema = %#v, want object", got)
-	}
-	if got := target.GetSteps()[1].GetWhen().GetEquals().GetBoolValue(); got != true {
-		t.Fatalf("step when equals = %v, want true", got)
-	}
-
-	roundTrip := workflowTargetFromProto(target)
-	if len(roundTrip.Steps) != 2 {
-		t.Fatalf("round trip steps = %#v", roundTrip.Steps)
-	}
-	diagnosis := roundTrip.Steps[0]
-	if diagnosis.ID != "diagnosis" || diagnosis.Agent == nil || diagnosis.Agent.Prompt.Template != "Diagnose the alert." || diagnosis.TimeoutSeconds != 45 {
-		t.Fatalf("round trip diagnosis step = %#v", diagnosis)
-	}
-	if len(diagnosis.Agent.Messages) != 1 || diagnosis.Agent.Messages[0].Role != "system" {
-		t.Fatalf("round trip diagnosis messages = %#v", diagnosis.Agent.Messages)
-	}
-	if len(diagnosis.Agent.ToolRefs) != 1 || diagnosis.Agent.ToolRefs[0].Plugin != "datadog" || diagnosis.Agent.ToolRefs[0].Operation != "queryLogs" {
-		t.Fatalf("round trip diagnosis tool refs = %#v", diagnosis.Agent.ToolRefs)
-	}
-	if diagnosis.OutputDelivery == nil || diagnosis.OutputDelivery.Plugin.Name != "slack" {
-		t.Fatalf("round trip diagnosis output delivery = %#v", diagnosis.OutputDelivery)
-	}
-	prFix := roundTrip.Steps[1]
-	if prFix.When == nil || prFix.When.Value.StepOutput.StepID != "diagnosis" || prFix.When.Value.StepOutput.Path != "agent.structuredOutput.actionableForPr" || prFix.When.Equals != true {
-		t.Fatalf("round trip pr_fix when = %#v", prFix.When)
-	}
-}
-
-func TestWorkflowTargetFromProtoPreservesEmptyStepPlugin(t *testing.T) {
-	t.Parallel()
-
-	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
-		Steps: []*proto.WorkflowStep{{Action: &proto.WorkflowStep_Plugin{Plugin: &proto.WorkflowStepPluginCall{}}}},
-	})
-	if len(target.Steps) != 1 || target.Steps[0].Plugin == nil {
-		t.Fatalf("steps = %#v, want empty plugin step", target.Steps)
-	}
-}
-
-func TestWorkflowValueProtoRoundTripPreservesEmptyCollections(t *testing.T) {
-	t.Parallel()
-
-	value := coreworkflow.Value{Object: map[string]coreworkflow.Value{
-		"empty_object": {Object: map[string]coreworkflow.Value{}},
-		"empty_array":  {Array: []coreworkflow.Value{}},
 	}}
 
-	pb, err := workflowValueToProto(value)
+	pb, err := workflowTargetToProto(target)
 	if err != nil {
-		t.Fatalf("workflowValueToProto: %v", err)
+		t.Fatalf("workflowTargetToProto: %v", err)
 	}
-	if pb.GetObject() == nil {
-		t.Fatalf("proto value = %#v, want object", pb)
+	if got := len(pb.GetSteps()); got != 2 {
+		t.Fatalf("steps len = %d, want 2", got)
 	}
-	if pb.GetObject().GetFields()["empty_object"].GetObject() == nil {
-		t.Fatalf("empty object proto = %#v, want object kind", pb.GetObject().GetFields()["empty_object"])
-	}
-	if pb.GetObject().GetFields()["empty_array"].GetArray() == nil {
-		t.Fatalf("empty array proto = %#v, want array kind", pb.GetObject().GetFields()["empty_array"])
+	if got := pb.GetSteps()[0].GetAgent().GetSessionKey().GetTemplate(); got != "incident" {
+		t.Fatalf("session key template = %q, want incident", got)
 	}
 
-	roundTrip := workflowValueFromProto(pb)
-	if got := roundTrip.Object["empty_object"].Object; got == nil || len(got) != 0 {
-		t.Fatalf("round trip empty object = %#v, want empty object", got)
-	}
-	if got := roundTrip.Object["empty_array"].Array; got == nil || len(got) != 0 {
-		t.Fatalf("round trip empty array = %#v, want empty array", got)
+	roundTrip := workflowTargetFromProto(pb)
+	if !coreworkflow.TargetsEqual(target, roundTrip) {
+		t.Fatalf("round trip target mismatch:\n got: %#v\nwant: %#v", roundTrip, target)
 	}
 }
 
-func TestWorkflowExecutionReferenceProtoRoundTripsRunAsSubject(t *testing.T) {
+func TestWorkflowDeploymentProtoRoundTrips(t *testing.T) {
 	t.Parallel()
 
-	ref := &coreworkflow.ExecutionReference{
-		ID:                  "workflow_schedule:cfg_123:ref",
-		ProviderName:        "temporal",
-		Target:              coreworkflow.Target{Steps: []coreworkflow.Step{{ID: "sync", Plugin: &coreworkflow.PluginCall{Name: "brain", Operation: "sources.sync"}}}},
-		SourceDefinitionID:  "workflow_definition:def-123",
-		SubjectID:           "system:config",
-		SubjectKind:         "system",
-		DisplayName:         "Gestalt config",
-		AuthSource:          "config",
-		CredentialSubjectID: "system:config",
-		RunAs: &core.RunAsSubject{
-			SubjectID:   "service_account:brain-sync",
-			DisplayName: "Brain sync",
-			AuthSource:  "config",
+	createdAt := time.Date(2026, time.May, 18, 10, 0, 0, 0, time.UTC)
+	deployment := &coreworkflow.Deployment{
+		Spec: coreworkflow.DeploymentSpec{
+			ID:         "deploy-1",
+			Generation: 3,
+			Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
+				ID: "notify",
+				Plugin: &coreworkflow.PluginCall{
+					Name:      "slack",
+					Operation: "reply",
+					Input:     coreworkflow.Value{RunInput: "message"},
+				},
+			}}},
+			Activations: []coreworkflow.Activation{{
+				ID:             "manual",
+				Manual:         true,
+				Mode:           coreworkflow.ActivationModeStart,
+				Input:          coreworkflow.Value{Literal: map[string]any{"source": "test"}, LiteralSet: true},
+				RunKey:         coreworkflow.Value{Template: &coreworkflow.Text{Template: "run-${input.id}"}},
+				IdempotencyKey: coreworkflow.Value{RunInput: "request_id"},
+			}},
+			RunAs:       &core.RunAsSubject{SubjectID: "service_account:workflow"},
+			Permissions: []core.AccessPermission{{Plugin: "slack", Operations: []string{"reply"}}},
+			Labels:      map[string]string{"team": "ops"},
 		},
-		Permissions: []core.AccessPermission{{
-			Plugin:     "brain",
-			Operations: []string{"sources.sync"},
+		Status:             coreworkflow.DeploymentStatusActive,
+		CreatedAt:          &createdAt,
+		UpdatedAt:          &createdAt,
+		AppliedGeneration:  3,
+		SpecDigest:         "sha256:spec",
+		TargetDigest:       "sha256:target",
+		ActionTableDigest:  "sha256:actions",
+		ProviderPlanID:     "plan-1",
+		ProviderPlanDigest: "sha256:plan",
+		Binding: &coreworkflow.DeploymentBinding{
+			ID:                   "binding-1",
+			ExecutionRef:         "exec-1",
+			DeploymentID:         "deploy-1",
+			DeploymentGeneration: 3,
+			ActionTableDigest:    "sha256:actions",
+			RequestID:            "request-1",
+		},
+	}
+
+	pb, err := workflowDeploymentToProto(deployment)
+	if err != nil {
+		t.Fatalf("workflowDeploymentToProto: %v", err)
+	}
+	if got := pb.GetSpec().GetActivations()[0].GetManual(); got == nil {
+		t.Fatal("manual activation is nil")
+	}
+	if got := pb.GetBinding().GetActionTableDigest(); got != "sha256:actions" {
+		t.Fatalf("binding action table digest = %q", got)
+	}
+
+	roundTrip, err := workflowDeploymentFromProto(pb)
+	if err != nil {
+		t.Fatalf("workflowDeploymentFromProto: %v", err)
+	}
+	if roundTrip.Spec.ID != "deploy-1" || roundTrip.Status != coreworkflow.DeploymentStatusActive {
+		t.Fatalf("round trip deployment = %#v", roundTrip)
+	}
+	if len(roundTrip.Spec.Activations) != 1 || !roundTrip.Spec.Activations[0].Manual {
+		t.Fatalf("round trip activations = %#v", roundTrip.Spec.Activations)
+	}
+	if roundTrip.Binding == nil || roundTrip.Binding.RequestID != "request-1" {
+		t.Fatalf("round trip binding = %#v", roundTrip.Binding)
+	}
+}
+
+func TestWorkflowRunProtoRoundTripsDeploymentFields(t *testing.T) {
+	t.Parallel()
+
+	updatedAt := time.Date(2026, time.May, 18, 15, 0, 0, 0, time.UTC)
+	run := &coreworkflow.Run{
+		ID:                     "run-1",
+		DeploymentID:           "deploy-1",
+		DeploymentGeneration:   4,
+		Status:                 coreworkflow.RunStatusRunning,
+		WorkflowKey:            "datadog-root",
+		ExecutionRef:           "workflow_run:ref",
+		ExecutionRefGeneration: 9,
+		TargetDigest:           "sha256:target",
+		SpecDigest:             "sha256:spec",
+		ActionTableDigest:      "sha256:actions",
+		PlanDigest:             "sha256:plan",
+		Input:                  map[string]any{"message": "hello"},
+		Trigger: coreworkflow.RunTrigger{
+			DeploymentID:         "deploy-1",
+			DeploymentGeneration: 4,
+			ActivationID:         "manual",
+			Manual:               true,
+		},
+		Steps: []coreworkflow.StepState{{
+			StepID:        "diagnose",
+			StepIndex:     0,
+			Status:        coreworkflow.StepStatusSucceeded,
+			AttemptNumber: 1,
+			OutputSummary: &coreworkflow.OutputSummary{
+				EnvelopeVersion: "workflow.output.v1",
+				Kind:            "agent",
+				SizeBytes:       128,
+				SHA256:          "sha256:output",
+				Truncated:       true,
+				Redacted:        true,
+				MediaType:       "application/json",
+			},
+			OutputRef: "out-1",
+			UpdatedAt: &updatedAt,
 		}},
 	}
-	pb, err := workflowExecutionReferenceToProto(ref)
+
+	pb, err := workflowRunToProto(run)
 	if err != nil {
-		t.Fatalf("workflowExecutionReferenceToProto: %v", err)
+		t.Fatalf("workflowRunToProto: %v", err)
 	}
-	if pb.GetSubjectId() != "system:config" || pb.GetCredentialSubjectId() != "system:config" {
-		t.Fatalf("owner fields = (%q, %q), want config owner", pb.GetSubjectId(), pb.GetCredentialSubjectId())
+	if pb.GetDeploymentId() != "deploy-1" || pb.GetExecutionRefGeneration() != 9 {
+		t.Fatalf("run deployment/execution fields = %#v", pb)
 	}
-	if pb.GetRunAs().GetSubjectId() != "service_account:brain-sync" || pb.GetRunAs().GetSubjectKind() != "service_account" {
-		t.Fatalf("runAs proto = %#v", pb.GetRunAs())
+	if got := pb.GetInput().AsMap()["message"]; got != "hello" {
+		t.Fatalf("input message = %#v", got)
 	}
-	if pb.GetSourceDefinitionId() != "workflow_definition:def-123" {
-		t.Fatalf("source definition id = %q, want stored definition id", pb.GetSourceDefinitionId())
-	}
-	roundTrip, err := workflowExecutionReferenceFromProto(pb)
+
+	roundTrip, err := workflowRunFromProto(pb)
 	if err != nil {
-		t.Fatalf("workflowExecutionReferenceFromProto: %v", err)
+		t.Fatalf("workflowRunFromProto: %v", err)
 	}
-	if roundTrip.SubjectID != "system:config" || roundTrip.CredentialSubjectID != "system:config" {
-		t.Fatalf("round trip owner fields = (%q, %q)", roundTrip.SubjectID, roundTrip.CredentialSubjectID)
+	if roundTrip.DeploymentID != "deploy-1" || roundTrip.ActionTableDigest != "sha256:actions" {
+		t.Fatalf("round trip digests = %#v", roundTrip)
 	}
-	if roundTrip.RunAs == nil || roundTrip.RunAs.SubjectID != "service_account:brain-sync" || roundTrip.RunAs.CredentialSubjectID != "service_account:brain-sync" {
-		t.Fatalf("round trip runAs = %#v", roundTrip.RunAs)
-	}
-	if roundTrip.SourceDefinitionID != "workflow_definition:def-123" {
-		t.Fatalf("round trip source definition id = %q", roundTrip.SourceDefinitionID)
+	if len(roundTrip.Steps) != 1 || roundTrip.Steps[0].OutputSummary == nil || roundTrip.Steps[0].OutputSummary.SHA256 != "sha256:output" {
+		t.Fatalf("round trip steps = %#v", roundTrip.Steps)
 	}
 }
 
-func TestWorkflowRunTriggerToProtoPrefersScheduleOverManual(t *testing.T) {
+func TestWorkflowActionRequestFromProtoIncludesDeploymentSelector(t *testing.T) {
 	t.Parallel()
 
-	scheduledFor := time.Date(2026, time.April, 15, 12, 30, 0, 0, time.UTC)
-	trigger, err := workflowRunTriggerToProto(coreworkflow.RunTrigger{
-		Manual: true,
-		Schedule: &coreworkflow.ScheduleTrigger{
-			ScheduleID:   "sched-1",
-			ScheduledFor: &scheduledFor,
+	input, err := structpb.NewStruct(map[string]any{"text": "hello"})
+	if err != nil {
+		t.Fatalf("NewStruct: %v", err)
+	}
+	req, err := workflowActionRequestFromProto(&proto.InvokeWorkflowActionRequest{
+		Selector: &proto.WorkflowHostActionSelector{
+			ExecutionRef:      "exec-1",
+			ActionTableDigest: "sha256:actions",
+		},
+		Action: &proto.InvokeWorkflowActionRequest_Plugin{
+			Plugin: &proto.WorkflowPluginActionPayload{Input: input},
 		},
 	})
 	if err != nil {
-		t.Fatalf("workflowRunTriggerToProto: %v", err)
+		t.Fatalf("workflowActionRequestFromProto: %v", err)
 	}
-	if trigger == nil || trigger.GetSchedule() == nil {
-		t.Fatalf("trigger = %#v, want schedule trigger", trigger)
+	if req.Selector.ExecutionRef != "exec-1" || req.Selector.ActionTableDigest != "sha256:actions" {
+		t.Fatalf("selector = %#v", req.Selector)
 	}
-	if got := trigger.GetSchedule().GetScheduleId(); got != "sched-1" {
-		t.Fatalf("schedule id = %q, want %q", got, "sched-1")
-	}
-	if got := trigger.GetManual(); got != nil {
-		t.Fatalf("manual trigger = %#v, want nil", got)
+	if req.Plugin == nil || req.Plugin.Input["text"] != "hello" {
+		t.Fatalf("plugin payload = %#v", req.Plugin)
 	}
 }

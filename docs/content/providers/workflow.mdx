@@ -764,17 +764,19 @@ The full protocol includes:
 
 | Method | Purpose |
 | --- | --- |
-| `StartRun` / `GetRun` / `ListRuns` / `CancelRun` | Manage workflow runs |
-| `SignalRun` / `SignalOrStartRun` | Attach signals to an existing run or create a keyed run before signaling it |
-| `UpsertSchedule` / `GetSchedule` / `ListSchedules` / `DeleteSchedule` / `PauseSchedule` / `ResumeSchedule` | Manage schedules |
-| `UpsertEventTrigger` / `GetEventTrigger` / `ListEventTriggers` / `DeleteEventTrigger` / `PauseEventTrigger` / `ResumeEventTrigger` | Manage triggers |
-| `PutExecutionReference` / `GetExecutionReference` / `ListExecutionReferences` | Persist delayed-execution identity and permission records |
-| `PublishEvent` | Deliver an event into the provider |
+| `PlanWorkflow` | Validate a deployment spec and return provider-local plan identity |
+| `ApplyWorkflowDeployment` / `GetWorkflowDeployment` / `ListWorkflowDeployments` / `DeleteWorkflowDeployment` | Manage workflow deployments |
+| `SetWorkflowDeploymentPaused` / `SetWorkflowActivationPaused` | Pause or resume a whole deployment or one activation |
+| `StartWorkflowRun` / `GetWorkflowRun` / `ListWorkflowRuns` / `CancelWorkflowRun` | Manage workflow runs |
+| `SignalWorkflowRun` / `SignalOrStartWorkflowRun` | Attach signals to an existing run or create a keyed run before signaling it |
+| `DeliverWorkflowEvent` | Deliver an event into matching deployment activations |
+| `GetWorkflowRunEvents` / `GetWorkflowRunOutput` | Read provider-owned run event and output state |
+| `PutExecutionReference` / `GetExecutionReference` / `ListExecutionReferences` | Store and read authority snapshots used by delayed host callbacks |
 
 Go, Python, Rust, and TypeScript expose the workflow provider service through
 SDK-owned request and response types. The SDK runtime owns transport conversion;
-provider code should focus on durable run, schedule, trigger, signal, and
-execution-reference state.
+provider code should focus on durable deployment, activation, run, signal, event,
+and output state.
 
 The examples below show the authored shape with representative methods. A
 production provider should implement every method in the protocol table.
@@ -800,35 +802,39 @@ production provider should implement every method in the protocol table.
         return nil
     }
 
-    func (p *Provider) StartRun(_ context.Context, req *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-        return &gestalt.BoundWorkflowRun{
-            ID:     "workflow:run-1",
-            Status: gestalt.WorkflowRunStatusValuePending,
-            Target: req.Target,
+    func (p *Provider) PlanWorkflow(context.Context, *gestalt.PlanWorkflowRequest) (*gestalt.PlanWorkflowResponse, error) {
+        return &gestalt.PlanWorkflowResponse{ProviderPlanID: "plan-1", ProviderPlanDigest: "plan-digest"}, nil
+    }
+
+    func (p *Provider) ApplyWorkflowDeployment(_ context.Context, req *gestalt.ApplyWorkflowDeploymentRequest) (*gestalt.WorkflowDeployment, error) {
+        return &gestalt.WorkflowDeployment{Spec: req.Spec, Status: gestalt.WorkflowDeploymentStatusValueActive}, nil
+    }
+
+    func (p *Provider) StartWorkflowRun(_ context.Context, req *gestalt.StartWorkflowRunRequest) (*gestalt.WorkflowRun, error) {
+        return &gestalt.WorkflowRun{
+            ID:           "workflow:run-1",
+            DeploymentID: req.DeploymentID,
+            WorkflowKey:  req.WorkflowKey,
+            Status:       gestalt.WorkflowRunStatusValuePending,
         }, nil
     }
 
-    func (p *Provider) UpsertSchedule(_ context.Context, req *gestalt.UpsertWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-        return &gestalt.BoundWorkflowSchedule{
-            ID:     req.ScheduleID,
-            Cron:   req.Cron,
-            Target: req.Target,
-            Paused: req.Paused,
-        }, nil
-    }
-
-    func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) error {
-        return nil
+    func (p *Provider) DeliverWorkflowEvent(context.Context, *gestalt.DeliverWorkflowEventRequest) (*gestalt.DeliverWorkflowEventResponse, error) {
+        return &gestalt.DeliverWorkflowEventResponse{}, nil
     }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
     from gestalt import (
-        BoundWorkflowRun,
-        BoundWorkflowSchedule,
-        StartWorkflowProviderRunRequest,
-        UpsertWorkflowProviderScheduleRequest,
+        ApplyWorkflowDeploymentRequest,
+        DeliverWorkflowEventResponse,
+        PlanWorkflowRequest,
+        PlanWorkflowResponse,
+        StartWorkflowRunRequest,
+        WorkflowDeployment,
+        WorkflowRun,
+        WORKFLOW_DEPLOYMENT_STATUS_ACTIVE,
         WORKFLOW_RUN_STATUS_PENDING,
         WorkflowProvider,
     )
@@ -837,25 +843,30 @@ production provider should implement every method in the protocol table.
         def configure(self, name: str, config: dict) -> None:
             pass
 
-        def start_run(self, request: StartWorkflowProviderRunRequest) -> BoundWorkflowRun:
-            return BoundWorkflowRun(
+        def plan_workflow(self, request: PlanWorkflowRequest) -> PlanWorkflowResponse:
+            return PlanWorkflowResponse(
+                provider_plan_id="plan-1",
+                provider_plan_digest="plan-digest",
+            )
+
+        def apply_deployment(
+            self, request: ApplyWorkflowDeploymentRequest
+        ) -> WorkflowDeployment:
+            return WorkflowDeployment(
+                spec=request.spec,
+                status=WORKFLOW_DEPLOYMENT_STATUS_ACTIVE,
+            )
+
+        def start_run(self, request: StartWorkflowRunRequest) -> WorkflowRun:
+            return WorkflowRun(
                 id="workflow:run-1",
+                deployment_id=request.deployment_id,
+                workflow_key=request.workflow_key,
                 status=WORKFLOW_RUN_STATUS_PENDING,
-                target=request.target,
             )
 
-        def upsert_schedule(
-            self, request: UpsertWorkflowProviderScheduleRequest
-        ) -> BoundWorkflowSchedule:
-            return BoundWorkflowSchedule(
-                id=request.schedule_id,
-                cron=request.cron,
-                target=request.target,
-                paused=request.paused,
-            )
-
-        def publish_event(self, request) -> None:
-            pass
+        def deliver_event(self, request) -> DeliverWorkflowEventResponse:
+            return DeliverWorkflowEventResponse()
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -865,36 +876,46 @@ production provider should implement every method in the protocol table.
 
     #[gestalt::async_trait]
     impl gestalt::WorkflowProvider for ExampleWorkflow {
-        async fn start_run(
+        async fn plan_workflow(
             &self,
-            req: gestalt::StartWorkflowProviderRunRequest,
-        ) -> gestalt::Result<gestalt::BoundWorkflowRun> {
-            Ok(gestalt::BoundWorkflowRun {
+            _req: gestalt::PlanWorkflowRequest,
+        ) -> gestalt::Result<gestalt::PlanWorkflowResponse> {
+            Ok(gestalt::PlanWorkflowResponse {
+                provider_plan_id: "plan-1".into(),
+                provider_plan_digest: "plan-digest".into(),
+                ..Default::default()
+            })
+        }
+
+        async fn apply_workflow_deployment(
+            &self,
+            req: gestalt::ApplyWorkflowDeploymentRequest,
+        ) -> gestalt::Result<gestalt::WorkflowDeployment> {
+            Ok(gestalt::WorkflowDeployment {
+                spec: req.spec,
+                status: gestalt::WorkflowDeploymentStatus::Active,
+                ..Default::default()
+            })
+        }
+
+        async fn start_workflow_run(
+            &self,
+            req: gestalt::StartWorkflowRunRequest,
+        ) -> gestalt::Result<gestalt::WorkflowRun> {
+            Ok(gestalt::WorkflowRun {
                 id: "workflow:run-1".into(),
+                deployment_id: req.deployment_id,
+                workflow_key: req.workflow_key,
                 status: gestalt::WorkflowRunStatus::Pending,
-                target: req.target,
                 ..Default::default()
             })
         }
 
-        async fn upsert_schedule(
+        async fn deliver_workflow_event(
             &self,
-            req: gestalt::UpsertWorkflowProviderScheduleRequest,
-        ) -> gestalt::Result<gestalt::BoundWorkflowSchedule> {
-            Ok(gestalt::BoundWorkflowSchedule {
-                id: req.schedule_id,
-                cron: req.cron,
-                target: req.target,
-                paused: req.paused,
-                ..Default::default()
-            })
-        }
-
-        async fn publish_event(
-            &self,
-            _request: gestalt::PublishWorkflowProviderEventRequest,
-        ) -> gestalt::Result<()> {
-            Ok(())
+            _request: gestalt::DeliverWorkflowEventRequest,
+        ) -> gestalt::Result<gestalt::DeliverWorkflowEventResponse> {
+            Ok(gestalt::DeliverWorkflowEventResponse::default())
         }
     }
 
@@ -904,6 +925,7 @@ production provider should implement every method in the protocol table.
   <Tabs.Tab>
     ```ts
     import {
+      WorkflowDeploymentStatus,
       WorkflowRunStatus,
       defineWorkflowProvider,
     } from "@valon-technologies/gestalt";
@@ -911,32 +933,32 @@ production provider should implement every method in the protocol table.
     export const provider = defineWorkflowProvider({
       async configure(_name, _config) {},
 
+      async planWorkflow(_request) {
+        return { providerPlanId: "plan-1", providerPlanDigest: "plan-digest" };
+      },
+
+      async applyDeployment(request) {
+        return {
+          spec: request.spec,
+          status: WorkflowDeploymentStatus.ACTIVE,
+        };
+      },
+
       async startRun(request) {
         return {
           id: "workflow:run-1",
-          status: WorkflowRunStatus.PENDING,
-          target: request.target,
-          statusMessage: "",
-          resultBody: "",
-          executionRef: request.executionRef,
+          deploymentId: request.deploymentId,
           workflowKey: request.workflowKey,
+          status: WorkflowRunStatus.PENDING,
+          statusMessage: "",
         };
       },
 
-      async upsertSchedule(request) {
-        return {
-          id: request.scheduleId,
-          cron: request.cron,
-          timezone: request.timezone,
-          target: request.target,
-          paused: request.paused,
-          executionRef: request.executionRef,
-        };
+      async deliverEvent(_request) {
+        return { results: [] };
       },
 
-      async publishEvent(_request) {},
-
-      // Implement get/list/cancel/pause/resume methods with the same SDK types.
+      // Implement get/list/cancel/signal/pause/read methods with the same SDK types.
     });
     ```
   </Tabs.Tab>
@@ -968,102 +990,32 @@ when delayed work is ready to execute a `target.steps` plan.
 The host owns authorization, credential resolution, and target dispatch; the
 provider owns durable workflow state and run status transitions.
 
-<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
-  <Tabs.Tab>
-    ```go
-    host, err := gestalt.WorkflowHost()
-    if err != nil {
-        return nil, err
-    }
-    defer host.Close()
+```go
+host, err := gestalt.WorkflowHost()
+if err != nil {
+    return nil, err
+}
+defer host.Close()
 
-    resp, err := host.InvokeOperation(ctx, gestalt.InvokeWorkflowOperationInput{
-        Target: &gestalt.BoundWorkflowTarget{
-            Steps: []gestalt.WorkflowStep{{
-                ID: "sync_items",
-                Plugin: &gestalt.WorkflowStepPluginCall{
-                    Name:      "roadmap",
-                    Operation: "sync_items",
-                },
-            }},
-        },
-        RunID: "run-1",
-    })
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```python
-    from gestalt import (
-        BoundWorkflowTarget,
-        InvokeWorkflowOperationInput,
-        WorkflowHost,
-        WorkflowStep,
-        WorkflowStepPluginCall,
-    )
-
-    with WorkflowHost() as host:
-        resp = host.invoke_operation(
-            InvokeWorkflowOperationInput(
-                target=BoundWorkflowTarget(
-                    steps=[
-                        WorkflowStep(
-                            id="sync_items",
-                            plugin=WorkflowStepPluginCall(
-                                name="roadmap",
-                                operation="sync_items",
-                            ),
-                        )
-                    ],
-                ),
-                run_id="run-1",
-            )
-        )
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```rust
-    let mut host = gestalt::WorkflowHost::connect().await?;
-    let resp = host
-        .invoke_operation(gestalt::InvokeWorkflowOperationInput {
-            target: Some(gestalt::BoundWorkflowTarget {
-                steps: vec![gestalt::WorkflowStep {
-                    id: "sync_items".into(),
-                    action: gestalt::WorkflowStepAction::Plugin(
-                        gestalt::WorkflowStepPluginCall {
-                            name: "roadmap".into(),
-                            operation: "sync_items".into(),
-                            ..Default::default()
-                        },
-                    ),
-                    ..Default::default()
-                },
-            ]}),
-            run_id: "run-1".into(),
-            ..Default::default()
-        })
-        .await?;
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts
-    import { WorkflowHost } from "@valon-technologies/gestalt";
-
-    const host = new WorkflowHost();
-    const resp = await host.invokeOperation({
-      target: {
-        steps: [{
-          id: "sync_items",
-          plugin: {
-            name: "roadmap",
-            operation: "sync_items",
-          },
-        }],
-      },
-      runId: "run-1",
-    });
-    ```
-  </Tabs.Tab>
-</Tabs>
+resp, err := host.InvokeWorkflowAction(ctx, gestalt.InvokeWorkflowActionInput{
+    Selector: &gestalt.WorkflowHostActionSelector{
+        ExecutionRef:           "workflow_schedule:nightly",
+        ExecutionRefGeneration: 1,
+        ExecutionRefSeal:       "host-seal",
+        RunID:                  "run-1",
+        StepID:                 "sync_items",
+        ActionID:               "step/sync_items/plugin",
+        AttemptNumber:          1,
+        IdempotencyKey:         "run-1:sync_items:plugin:1",
+        TargetDigest:           "sha256:target",
+        ActionTableDigest:      "sha256:actions",
+        ProviderPlanDigest:     "sha256:plan",
+    },
+    Plugin: &gestalt.WorkflowPluginActionPayload{
+        Input: map[string]any{"cursor": "latest"},
+    },
+})
+```
 
 ### Deploying the provider
 

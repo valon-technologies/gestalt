@@ -23,7 +23,7 @@ provider code imports from the crate root after renaming `gestalt-sdk` to
 | Provider authoring | [`Provider`], [`Operation`], [`Router`], [`Request`], [`HTTPSubjectRequest`], [`ConnectedToken`], [`Response`], [`ok`] | Executable plugin providers, typed request handlers, hosted HTTP subject hooks, post-connect metadata hooks, and operation results. |
 | Catalog metadata | [`Catalog`], [`CatalogOperation`], [`Router::register`] | Schema-derived operation catalogs from `serde` and `schemars` types. |
 | Provider runtimes | [`AuthenticationProvider`], [`CacheProvider`], [`S3Provider`], [`SecretsProvider`], [`WorkflowProvider`], [`AgentProvider`], [`PluginRuntimeProvider`] | Host-service backends implemented as Rust providers. |
-| Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_signal`], [`new_bound_workflow_run`], [`new_workflow_execution_reference`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
+| Workflow and agent models | [`new_bound_workflow_target`], [`new_workflow_signal`], [`new_workflow_run`], [`new_agent_message`], [`new_agent_tool_ref`] | Native workflow values, agent messages, tool refs, and copy helpers. |
 | Host-service clients | [`Cache`], [`S3`], [`WorkflowHost`], [`WorkflowManager`], [`AgentHost`], [`AgentManager`], [`PluginInvoker`] | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Runtime and telemetry | [`runtime`], [`telemetry`], [`RuntimeMetadata`] | Provider process entrypoints and provider-authored GenAI spans and metrics. |
 
@@ -100,8 +100,7 @@ timestamp fields use `SystemTime`; the SDK runtime owns transport serialization 
 the transport boundary. `AgentHost` includes plain-input helpers for listing
 tools, executing tools, and resolving connections during one turn.
 Workflow builders such as `new_bound_workflow_target`,
-`new_workflow_signal`, `new_bound_workflow_run`, and
-`new_workflow_execution_reference` accept SDK-owned input structs with
+`new_workflow_signal`, and `new_workflow_run` accept SDK-owned input structs with
 `serde::Serialize` payload setters and native `SystemTime` fields. Copy helpers
 such as `new_bound_workflow_target_from_target` preserve request shape without
 asking provider code to assemble transport objects.
@@ -123,9 +122,9 @@ The crate exposes higher-level authoring APIs:
   `AgentManager`, and `PluginInvoker` call sibling host services.
 - `RuntimeMetadata` lets provider runtimes describe their display metadata and
   version.
-- Workflow builder inputs such as `BoundWorkflowTarget`, `WorkflowStep`,
-  `WorkflowSignal`, and `BoundWorkflowRun` model provider-owned workflow
-  state.
+- Workflow builder inputs such as `BoundWorkflowPluginTarget`,
+  `BoundWorkflowAgentTarget`, `WorkflowDeployment`, `WorkflowRun`, and
+  `WorkflowSignal` model provider-owned workflow state.
 
 ## Package layout
 

@@ -104,8 +104,7 @@ pub struct ProviderMetadata {
     #[prost(string, repeated, tag = "5")]
     pub auth_types: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(btree_map = "string, message", tag = "6")]
-    pub connection_params:
-        ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ConnectionParamDef>,
+    pub connection_params: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ConnectionParamDef>,
     #[prost(message, optional, tag = "7")]
     pub static_catalog: ::core::option::Option<Catalog>,
     #[prost(bool, tag = "8")]
@@ -363,10 +362,7 @@ pub struct HttpSubjectRequest {
     #[prost(string, tag = "10")]
     pub verified_subject: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "11")]
-    pub verified_claims: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub verified_claims: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// ResolveHTTPSubjectRequest asks a provider to map a verified hosted HTTP
 /// request to a concrete Gestalt subject before normal operation authorization
@@ -401,10 +397,7 @@ pub struct ExecuteRequest {
     #[prost(string, tag = "3")]
     pub token: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "4")]
-    pub connection_params: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub connection_params: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     #[prost(string, tag = "5")]
     pub invocation_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
@@ -421,10 +414,7 @@ pub struct GetSessionCatalogRequest {
     #[prost(string, tag = "1")]
     pub token: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "2")]
-    pub connection_params: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub connection_params: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     #[prost(string, tag = "3")]
     pub invocation_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "4")]
@@ -447,10 +437,7 @@ pub struct PostConnectRequest {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PostConnectResponse {
     #[prost(btree_map = "string, string", tag = "1")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub metadata: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// StartProviderRequest configures an integration provider for one runtime
 /// session.
@@ -626,7 +613,8 @@ pub struct AgentProviderCapabilities {
     pub supports_prepared_workspace: bool,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetAgentProviderCapabilitiesRequest {}
+pub struct GetAgentProviderCapabilitiesRequest {
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AgentInteraction {
     #[prost(string, tag = "1")]
@@ -714,10 +702,7 @@ pub struct AgentSessionStartHook {
     #[prost(string, tag = "5")]
     pub timeout: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "6")]
-    pub env: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub env: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub output: ::core::option::Option<AgentSessionStartHookOutput>,
 }
@@ -1062,15 +1047,9 @@ pub struct ResolvedAgentConnection {
     #[prost(string, tag = "4")]
     pub mode: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "5")]
-    pub headers: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     #[prost(btree_map = "string, string", tag = "6")]
-    pub params: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub params: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     #[prost(message, optional, tag = "7")]
     pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
 }
@@ -1447,10 +1426,7 @@ pub struct AuthenticatedUser {
     #[prost(string, tag = "5")]
     pub avatar_url: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "6")]
-    pub claims: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub claims: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// BeginLoginRequest starts an interactive login flow.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1467,10 +1443,7 @@ pub struct BeginLoginRequest {
     pub scopes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     /// options carries provider-specific login parameters.
     #[prost(btree_map = "string, string", tag = "4")]
-    pub options: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub options: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// BeginLoginResponse returns the provider-managed authorization URL and opaque
 /// provider state that must be preserved until completion.
@@ -1487,10 +1460,7 @@ pub struct CompleteLoginRequest {
     /// query contains the callback URL query parameters returned by the identity
     /// provider.
     #[prost(btree_map = "string, string", tag = "1")]
-    pub query: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub query: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     /// provider_state is the opaque state returned from BeginLoginResponse.
     #[prost(bytes = "vec", tag = "2")]
     pub provider_state: ::prost::alloc::vec::Vec<u8>,
@@ -1842,7 +1812,8 @@ pub mod authorization_model_rewrite {
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct AuthorizationModelRewriteThis {}
+pub struct AuthorizationModelRewriteThis {
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct AuthorizationModelComputedUserset {
     #[prost(string, tag = "1")]
@@ -2328,9 +2299,11 @@ pub struct BeginTransactionRequest {
     pub durability_hint: i32,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct TransactionBeginResponse {}
+pub struct TransactionBeginResponse {
+}
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct TransactionCommitRequest {}
+pub struct TransactionCommitRequest {
+}
 /// TransactionCommitResponse carries a non-OK status when commit failed after
 /// the provider accepted the commit frame and rolled the transaction back.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2356,10 +2329,7 @@ pub struct TransactionAbortResponse {
 pub struct TransactionOperation {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
-    #[prost(
-        oneof = "transaction_operation::Operation",
-        tags = "10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25"
-    )]
+    #[prost(oneof = "transaction_operation::Operation", tags = "10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25")]
     pub operation: ::core::option::Option<transaction_operation::Operation>,
 }
 /// Nested message and enum types in `TransactionOperation`.
@@ -2408,10 +2378,7 @@ pub struct TransactionOperationResponse {
     pub request_id: u64,
     #[prost(message, optional, tag = "2")]
     pub error: ::core::option::Option<super::super::super::google::rpc::Status>,
-    #[prost(
-        oneof = "transaction_operation_response::Result",
-        tags = "10, 11, 12, 13, 14, 15, 16"
-    )]
+    #[prost(oneof = "transaction_operation_response::Result", tags = "10, 11, 12, 13, 14, 15, 16")]
     pub result: ::core::option::Option<transaction_operation_response::Result>,
 }
 /// Nested message and enum types in `TransactionOperationResponse`.
@@ -2581,10 +2548,7 @@ pub struct PluginRuntimeSession {
     #[prost(string, tag = "2")]
     pub state: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "3")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub metadata: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     #[prost(message, optional, tag = "4")]
     pub lifecycle: ::core::option::Option<PluginRuntimeSessionLifecycle>,
     #[prost(string, tag = "5")]
@@ -2615,10 +2579,7 @@ pub struct StartPluginRuntimeSessionRequest {
     #[prost(string, tag = "3")]
     pub image: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "4")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub metadata: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     #[prost(message, optional, tag = "6")]
     pub image_pull_auth: ::core::option::Option<PluginRuntimeImagePullAuth>,
 }
@@ -2628,7 +2589,8 @@ pub struct GetPluginRuntimeSessionRequest {
     pub session_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListPluginRuntimeSessionsRequest {}
+pub struct ListPluginRuntimeSessionsRequest {
+}
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListPluginRuntimeSessionsResponse {
     #[prost(message, repeated, tag = "1")]
@@ -2675,10 +2637,7 @@ pub struct StartHostedPluginRequest {
     #[prost(string, repeated, tag = "4")]
     pub args: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(btree_map = "string, string", tag = "5")]
-    pub env: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub env: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     #[prost(string, repeated, tag = "7")]
     pub allowed_hosts: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
     #[prost(string, tag = "8")]
@@ -2923,10 +2882,7 @@ pub struct S3ObjectMeta {
     #[prost(message, optional, tag = "5")]
     pub last_modified: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(btree_map = "string, string", tag = "6")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub metadata: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     #[prost(string, tag = "7")]
     pub storage_class: ::prost::alloc::string::String,
 }
@@ -2999,10 +2955,7 @@ pub struct WriteObjectOpen {
     #[prost(string, tag = "6")]
     pub content_language: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "7")]
-    pub metadata: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub metadata: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
     #[prost(string, tag = "8")]
     pub if_match: ::prost::alloc::string::String,
     #[prost(string, tag = "9")]
@@ -3096,10 +3049,7 @@ pub struct PresignObjectRequest {
     #[prost(string, tag = "5")]
     pub content_disposition: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "6")]
-    pub headers: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// PresignObjectResponse returns a presigned URL plus any required headers.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -3111,10 +3061,7 @@ pub struct PresignObjectResponse {
     #[prost(message, optional, tag = "3")]
     pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(btree_map = "string, string", tag = "4")]
-    pub headers: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// CreateObjectAccessURLRequest asks the host to mint an HTTP object-access URL
 /// for a plugin-scoped S3 binding. The host authorizes and scopes the URL, then
@@ -3132,10 +3079,7 @@ pub struct CreateObjectAccessUrlRequest {
     #[prost(string, tag = "5")]
     pub content_disposition: ::prost::alloc::string::String,
     #[prost(btree_map = "string, string", tag = "6")]
-    pub headers: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// CreateObjectAccessURLResponse returns a hosted object-access URL plus any
 /// headers the caller must include when using it.
@@ -3148,10 +3092,7 @@ pub struct CreateObjectAccessUrlResponse {
     #[prost(message, optional, tag = "3")]
     pub expires_at: ::core::option::Option<::prost_types::Timestamp>,
     #[prost(btree_map = "string, string", tag = "4")]
-    pub headers: ::prost::alloc::collections::BTreeMap<
-        ::prost::alloc::string::String,
-        ::prost::alloc::string::String,
-    >,
+    pub headers: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
 }
 /// PresignMethod identifies the HTTP verb encoded into a presigned URL.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -3211,8 +3152,7 @@ pub struct WorkflowStep {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
     #[prost(btree_map = "string, message", tag = "2")]
-    pub inputs:
-        ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, WorkflowValue>,
+    pub inputs: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, WorkflowValue>,
     #[prost(message, optional, tag = "3")]
     pub when: ::core::option::Option<WorkflowStepWhen>,
     #[prost(int32, tag = "4")]
@@ -3260,8 +3200,8 @@ pub struct WorkflowStepAgentTurn {
     pub provider: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
     pub model: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub session_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub session_key: ::core::option::Option<WorkflowText>,
     #[prost(message, optional, tag = "4")]
     pub prompt: ::core::option::Option<WorkflowText>,
     #[prost(message, repeated, tag = "5")]
@@ -3322,8 +3262,7 @@ pub mod workflow_value {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowObject {
     #[prost(btree_map = "string, message", tag = "1")]
-    pub fields:
-        ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, WorkflowValue>,
+    pub fields: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, WorkflowValue>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowArray {
@@ -3363,6 +3302,8 @@ pub struct WorkflowRunAsSubject {
     pub display_name: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
     pub auth_source: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub credential_subject_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowEvent {
@@ -3383,8 +3324,7 @@ pub struct WorkflowEvent {
     #[prost(message, optional, tag = "8")]
     pub data: ::core::option::Option<::prost_types::Struct>,
     #[prost(btree_map = "string, message", tag = "9")]
-    pub extensions:
-        ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost_types::Value>,
+    pub extensions: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost_types::Value>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowEventMatch {
@@ -3396,117 +3336,48 @@ pub struct WorkflowEventMatch {
     pub subject: ::prost::alloc::string::String,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManualTrigger {}
+pub struct WorkflowManualActivation {
+}
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowScheduleTrigger {
+pub struct WorkflowScheduleActivation {
     #[prost(string, tag = "1")]
-    pub schedule_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub scheduled_for: ::core::option::Option<::prost_types::Timestamp>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowEventTriggerInvocation {
-    #[prost(string, tag = "1")]
-    pub trigger_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub event: ::core::option::Option<WorkflowEvent>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowRunTrigger {
-    #[prost(oneof = "workflow_run_trigger::Kind", tags = "1, 2, 3")]
-    pub kind: ::core::option::Option<workflow_run_trigger::Kind>,
-}
-/// Nested message and enum types in `WorkflowRunTrigger`.
-pub mod workflow_run_trigger {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "1")]
-        Manual(super::WorkflowManualTrigger),
-        #[prost(message, tag = "2")]
-        Schedule(super::WorkflowScheduleTrigger),
-        #[prost(message, tag = "3")]
-        Event(super::WorkflowEventTriggerInvocation),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BoundWorkflowRun {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(enumeration = "WorkflowRunStatus", tag = "2")]
-    pub status: i32,
-    #[prost(message, optional, tag = "3")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(message, optional, tag = "4")]
-    pub trigger: ::core::option::Option<WorkflowRunTrigger>,
-    #[prost(message, optional, tag = "5")]
-    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "6")]
-    pub started_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "7")]
-    pub completed_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "8")]
-    pub status_message: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
-    pub result_body: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "10")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
-    #[prost(string, tag = "11")]
-    pub execution_ref: ::prost::alloc::string::String,
-    #[prost(string, tag = "12")]
-    pub workflow_key: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BoundWorkflowSchedule {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
     pub cron: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    #[prost(string, tag = "2")]
     pub timezone: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(bool, tag = "5")]
-    pub paused: bool,
-    #[prost(message, optional, tag = "6")]
-    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "7")]
-    pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "8")]
-    pub next_run_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "9")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
-    #[prost(string, tag = "10")]
-    pub execution_ref: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BoundWorkflowEventTrigger {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowEventActivation {
+    #[prost(message, optional, tag = "1")]
     pub r#match: ::core::option::Option<WorkflowEventMatch>,
-    #[prost(message, optional, tag = "3")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(bool, tag = "4")]
-    pub paused: bool,
-    #[prost(message, optional, tag = "5")]
-    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "6")]
-    pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "7")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
-    #[prost(string, tag = "8")]
-    pub execution_ref: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BoundWorkflowDefinition {
+pub struct WorkflowActivation {
     #[prost(string, tag = "1")]
     pub id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(message, optional, tag = "3")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(bool, tag = "2")]
+    pub paused: bool,
+    #[prost(enumeration = "WorkflowActivationMode", tag = "3")]
+    pub mode: i32,
     #[prost(message, optional, tag = "4")]
-    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    pub input: ::core::option::Option<WorkflowValue>,
+    #[prost(message, optional, tag = "5")]
+    pub run_key: ::core::option::Option<WorkflowValue>,
+    #[prost(message, optional, tag = "6")]
+    pub idempotency_key: ::core::option::Option<WorkflowValue>,
+    #[prost(oneof = "workflow_activation::Kind", tags = "10, 11, 12")]
+    pub kind: ::core::option::Option<workflow_activation::Kind>,
+}
+/// Nested message and enum types in `WorkflowActivation`.
+pub mod workflow_activation {
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "10")]
+        Manual(super::WorkflowManualActivation),
+        #[prost(message, tag = "11")]
+        Schedule(super::WorkflowScheduleActivation),
+        #[prost(message, tag = "12")]
+        Event(super::WorkflowEventActivation),
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct WorkflowAccessPermission {
@@ -3514,6 +3385,8 @@ pub struct WorkflowAccessPermission {
     pub plugin: ::prost::alloc::string::String,
     #[prost(string, repeated, tag = "2")]
     pub operations: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(string, repeated, tag = "3")]
+    pub actions: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowExecutionReference {
@@ -3524,27 +3397,296 @@ pub struct WorkflowExecutionReference {
     #[prost(message, optional, tag = "3")]
     pub target: ::core::option::Option<BoundWorkflowTarget>,
     #[prost(string, tag = "4")]
-    pub subject_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub credential_subject_id: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "6")]
-    pub permissions: ::prost::alloc::vec::Vec<WorkflowAccessPermission>,
-    #[prost(message, optional, tag = "7")]
-    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(message, optional, tag = "8")]
-    pub revoked_at: ::core::option::Option<::prost_types::Timestamp>,
-    #[prost(string, tag = "10")]
-    pub subject_kind: ::prost::alloc::string::String,
-    #[prost(string, tag = "11")]
-    pub display_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "12")]
-    pub auth_source: ::prost::alloc::string::String,
-    #[prost(string, tag = "13")]
     pub caller_plugin_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "14")]
-    pub run_as: ::core::option::Option<WorkflowRunAsSubject>,
-    #[prost(string, tag = "15")]
+    #[prost(string, tag = "5")]
     pub source_definition_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "10")]
+    pub subject_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub subject_kind: ::prost::alloc::string::String,
+    #[prost(string, tag = "12")]
+    pub display_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "13")]
+    pub auth_source: ::prost::alloc::string::String,
+    #[prost(string, tag = "14")]
+    pub credential_subject_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "15")]
+    pub run_as: ::core::option::Option<WorkflowRunAsSubject>,
+    #[prost(message, repeated, tag = "20")]
+    pub permissions: ::prost::alloc::vec::Vec<WorkflowAccessPermission>,
+    #[prost(message, optional, tag = "21")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "22")]
+    pub revoked_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag = "30")]
+    pub target_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "31")]
+    pub provider_plan_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "32")]
+    pub permissions_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "33")]
+    pub semantics_version: ::prost::alloc::string::String,
+    #[prost(int64, tag = "34")]
+    pub generation: i64,
+    #[prost(string, tag = "35")]
+    pub seal: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PutWorkflowExecutionReferenceRequest {
+    #[prost(message, optional, tag = "1")]
+    pub execution_ref: ::core::option::Option<WorkflowExecutionReference>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetWorkflowExecutionReferenceRequest {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ListWorkflowExecutionReferencesRequest {
+    #[prost(string, tag = "1")]
+    pub subject_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListWorkflowExecutionReferencesResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub execution_refs: ::prost::alloc::vec::Vec<WorkflowExecutionReference>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowDeploymentSpec {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub generation: i64,
+    #[prost(message, optional, tag = "3")]
+    pub target: ::core::option::Option<BoundWorkflowTarget>,
+    #[prost(message, repeated, tag = "4")]
+    pub activations: ::prost::alloc::vec::Vec<WorkflowActivation>,
+    #[prost(bool, tag = "5")]
+    pub paused: bool,
+    #[prost(message, optional, tag = "6")]
+    pub run_as: ::core::option::Option<WorkflowRunAsSubject>,
+    #[prost(message, repeated, tag = "7")]
+    pub permissions: ::prost::alloc::vec::Vec<WorkflowAccessPermission>,
+    #[prost(btree_map = "string, string", tag = "8")]
+    pub labels: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+    #[prost(string, tag = "9")]
+    pub workflow_semantics_version: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowActionDescriptor {
+    #[prost(string, tag = "1")]
+    pub action_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub step_id: ::prost::alloc::string::String,
+    #[prost(enumeration = "WorkflowActionKind", tag = "3")]
+    pub kind: i32,
+    #[prost(message, optional, tag = "4")]
+    pub plugin: ::core::option::Option<WorkflowStepPluginCall>,
+    #[prost(message, optional, tag = "5")]
+    pub agent: ::core::option::Option<WorkflowStepAgentTurn>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowActionTable {
+    #[prost(message, repeated, tag = "1")]
+    pub actions: ::prost::alloc::vec::Vec<WorkflowActionDescriptor>,
+    #[prost(string, tag = "2")]
+    pub digest: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowUnsupportedFeature {
+    #[prost(string, tag = "1")]
+    pub feature: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub reason: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PlanWorkflowRequest {
+    #[prost(message, optional, tag = "1")]
+    pub spec: ::core::option::Option<WorkflowDeploymentSpec>,
+    #[prost(string, tag = "2")]
+    pub spec_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub target_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub action_table_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub target_canonicalization_version: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub workflow_semantics_version: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PlanWorkflowResponse {
+    #[prost(string, tag = "1")]
+    pub accepted_spec_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub provider_plan_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub provider_plan_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub provider_plan_format_version: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "5")]
+    pub unsupported: ::prost::alloc::vec::Vec<WorkflowUnsupportedFeature>,
+    #[prost(string, repeated, tag = "6")]
+    pub supported_feature_flags: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowDeploymentBinding {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub execution_ref: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub execution_ref_generation: i64,
+    #[prost(string, tag = "4")]
+    pub execution_ref_seal: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "6")]
+    pub deployment_generation: i64,
+    #[prost(string, tag = "7")]
+    pub spec_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub target_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub action_table_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "10")]
+    pub provider_plan_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub provider_plan_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "12")]
+    pub workflow_semantics_version: ::prost::alloc::string::String,
+    #[prost(string, tag = "13")]
+    pub request_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowDeployment {
+    #[prost(message, optional, tag = "1")]
+    pub spec: ::core::option::Option<WorkflowDeploymentSpec>,
+    #[prost(enumeration = "WorkflowDeploymentStatus", tag = "2")]
+    pub status: i32,
+    #[prost(message, optional, tag = "3")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "4")]
+    pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(int64, tag = "5")]
+    pub applied_generation: i64,
+    #[prost(string, tag = "6")]
+    pub spec_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub target_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub action_table_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "9")]
+    pub provider_plan_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "10")]
+    pub provider_plan_digest: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "11")]
+    pub binding: ::core::option::Option<WorkflowDeploymentBinding>,
+    #[prost(message, optional, tag = "12")]
+    pub error: ::core::option::Option<WorkflowRunError>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ApplyWorkflowDeploymentRequest {
+    #[prost(message, optional, tag = "1")]
+    pub spec: ::core::option::Option<WorkflowDeploymentSpec>,
+    #[prost(message, optional, tag = "2")]
+    pub plan: ::core::option::Option<PlanWorkflowResponse>,
+    #[prost(message, optional, tag = "3")]
+    pub binding: ::core::option::Option<WorkflowDeploymentBinding>,
+    #[prost(string, tag = "4")]
+    pub request_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "5")]
+    pub validate_only: bool,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetWorkflowDeploymentRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListWorkflowDeploymentsRequest {
+    #[prost(int32, tag = "1")]
+    pub page_size: i32,
+    #[prost(string, tag = "2")]
+    pub page_token: ::prost::alloc::string::String,
+    #[prost(btree_map = "string, string", tag = "3")]
+    pub labels: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, ::prost::alloc::string::String>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListWorkflowDeploymentsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub deployments: ::prost::alloc::vec::Vec<WorkflowDeployment>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct DeleteWorkflowDeploymentRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub generation: i64,
+    #[prost(string, tag = "3")]
+    pub request_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SetWorkflowDeploymentPausedRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub paused: bool,
+    #[prost(string, tag = "3")]
+    pub request_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct SetWorkflowActivationPausedRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub activation_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "3")]
+    pub paused: bool,
+    #[prost(string, tag = "4")]
+    pub request_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowManualTrigger {
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowScheduleTrigger {
+    #[prost(string, tag = "1")]
+    pub activation_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub scheduled_for: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowEventTrigger {
+    #[prost(string, tag = "1")]
+    pub activation_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub event: ::core::option::Option<WorkflowEvent>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowRunTrigger {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub deployment_generation: i64,
+    #[prost(string, tag = "3")]
+    pub activation_id: ::prost::alloc::string::String,
+    #[prost(oneof = "workflow_run_trigger::Kind", tags = "10, 11, 12")]
+    pub kind: ::core::option::Option<workflow_run_trigger::Kind>,
+}
+/// Nested message and enum types in `WorkflowRunTrigger`.
+pub mod workflow_run_trigger {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Kind {
+        #[prost(message, tag = "10")]
+        Manual(super::WorkflowManualTrigger),
+        #[prost(message, tag = "11")]
+        Schedule(super::WorkflowScheduleTrigger),
+        #[prost(message, tag = "12")]
+        Event(super::WorkflowEventTrigger),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowSignal {
@@ -3565,73 +3707,175 @@ pub struct WorkflowSignal {
     #[prost(int64, tag = "8")]
     pub sequence: i64,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StartWorkflowProviderRunRequest {
-    #[prost(message, optional, tag = "1")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowOutputSummary {
+    #[prost(string, tag = "1")]
+    pub envelope_version: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
-    #[prost(string, tag = "5")]
-    pub execution_ref: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub workflow_key: ::prost::alloc::string::String,
+    pub kind: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub size_bytes: i64,
+    #[prost(string, tag = "4")]
+    pub sha256: ::prost::alloc::string::String,
+    #[prost(bool, tag = "5")]
+    pub truncated: bool,
+    #[prost(bool, tag = "6")]
+    pub redacted: bool,
+    #[prost(string, tag = "7")]
+    pub media_type: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetWorkflowProviderRunRequest {
+pub struct WorkflowRunError {
+    #[prost(string, tag = "1")]
+    pub code: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub message: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub step_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub action_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowStepState {
+    #[prost(string, tag = "1")]
+    pub step_id: ::prost::alloc::string::String,
+    #[prost(int32, tag = "2")]
+    pub step_index: i32,
+    #[prost(enumeration = "WorkflowStepStatus", tag = "3")]
+    pub status: i32,
+    #[prost(string, tag = "4")]
+    pub skipped_reason: ::prost::alloc::string::String,
+    #[prost(int32, tag = "5")]
+    pub attempt_number: i32,
+    #[prost(message, optional, tag = "6")]
+    pub output_summary: ::core::option::Option<WorkflowOutputSummary>,
+    #[prost(string, tag = "7")]
+    pub output_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "8")]
+    pub error: ::core::option::Option<WorkflowRunError>,
+    #[prost(message, optional, tag = "9")]
+    pub updated_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowRun {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub deployment_generation: i64,
+    #[prost(string, tag = "4")]
+    pub workflow_key: ::prost::alloc::string::String,
+    #[prost(enumeration = "WorkflowRunStatus", tag = "5")]
+    pub status: i32,
+    #[prost(message, optional, tag = "6")]
+    pub trigger: ::core::option::Option<WorkflowRunTrigger>,
+    #[prost(message, optional, tag = "7")]
+    pub input: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "8")]
+    pub created_by: ::core::option::Option<WorkflowActor>,
+    #[prost(message, optional, tag = "9")]
+    pub created_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "10")]
+    pub started_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(message, optional, tag = "11")]
+    pub completed_at: ::core::option::Option<::prost_types::Timestamp>,
+    #[prost(string, tag = "12")]
+    pub status_message: ::prost::alloc::string::String,
+    #[prost(string, tag = "13")]
+    pub execution_ref: ::prost::alloc::string::String,
+    #[prost(int64, tag = "14")]
+    pub execution_ref_generation: i64,
+    #[prost(string, tag = "15")]
+    pub target_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "16")]
+    pub spec_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "17")]
+    pub action_table_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "18")]
+    pub provider_plan_digest: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "19")]
+    pub steps: ::prost::alloc::vec::Vec<WorkflowStepState>,
+    #[prost(message, optional, tag = "20")]
+    pub error: ::core::option::Option<WorkflowRunError>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StartWorkflowRunRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub deployment_generation: i64,
+    #[prost(string, tag = "3")]
+    pub activation_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub workflow_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "5")]
+    pub input: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "6")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "7")]
+    pub created_by: ::core::option::Option<WorkflowActor>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SignalWorkflowRunRequest {
+    #[prost(string, tag = "1")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub signal: ::core::option::Option<WorkflowSignal>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SignalOrStartWorkflowRunRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub deployment_generation: i64,
+    #[prost(string, tag = "3")]
+    pub activation_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub workflow_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "5")]
+    pub input: ::core::option::Option<::prost_types::Struct>,
+    #[prost(string, tag = "6")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "7")]
+    pub signal: ::core::option::Option<WorkflowSignal>,
+    #[prost(message, optional, tag = "8")]
+    pub created_by: ::core::option::Option<WorkflowActor>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct CancelWorkflowRunRequest {
+    #[prost(string, tag = "1")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub reason: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetWorkflowRunRequest {
+    #[prost(string, tag = "1")]
     pub run_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListWorkflowProviderRunsRequest {
-    #[prost(int32, tag = "1")]
+pub struct ListWorkflowRunsRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(int32, tag = "2")]
     pub page_size: i32,
-    #[prost(string, tag = "2")]
+    #[prost(string, tag = "3")]
     pub page_token: ::prost::alloc::string::String,
-    #[prost(enumeration = "WorkflowRunStatus", tag = "3")]
+    #[prost(enumeration = "WorkflowRunStatus", tag = "4")]
     pub status: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListWorkflowProviderRunsResponse {
+pub struct ListWorkflowRunsResponse {
     #[prost(message, repeated, tag = "1")]
-    pub runs: ::prost::alloc::vec::Vec<BoundWorkflowRun>,
+    pub runs: ::prost::alloc::vec::Vec<WorkflowRun>,
     #[prost(string, tag = "2")]
     pub next_page_token: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct CancelWorkflowProviderRunRequest {
-    #[prost(string, tag = "2")]
-    pub run_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub reason: ::prost::alloc::string::String,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignalWorkflowProviderRunRequest {
-    #[prost(string, tag = "1")]
-    pub run_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub signal: ::core::option::Option<WorkflowSignal>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignalOrStartWorkflowProviderRunRequest {
-    #[prost(string, tag = "1")]
-    pub workflow_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(string, tag = "3")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
-    #[prost(string, tag = "5")]
-    pub execution_ref: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
-    pub signal: ::core::option::Option<WorkflowSignal>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignalWorkflowRunResponse {
+pub struct WorkflowRunSignal {
     #[prost(message, optional, tag = "1")]
-    pub run: ::core::option::Option<BoundWorkflowRun>,
+    pub run: ::core::option::Option<WorkflowRun>,
     #[prost(message, optional, tag = "2")]
     pub signal: ::core::option::Option<WorkflowSignal>,
     #[prost(bool, tag = "3")]
@@ -3640,180 +3884,190 @@ pub struct SignalWorkflowRunResponse {
     pub workflow_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct UpsertWorkflowProviderScheduleRequest {
+pub struct DeliverWorkflowEventRequest {
     #[prost(string, tag = "1")]
-    pub schedule_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "2")]
-    pub cron: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub timezone: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(bool, tag = "5")]
-    pub paused: bool,
-    #[prost(message, optional, tag = "7")]
-    pub requested_by: ::core::option::Option<WorkflowActor>,
-    #[prost(string, tag = "8")]
-    pub execution_ref: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetWorkflowProviderScheduleRequest {
-    #[prost(string, tag = "2")]
-    pub schedule_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListWorkflowProviderSchedulesRequest {}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListWorkflowProviderSchedulesResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub schedules: ::prost::alloc::vec::Vec<BoundWorkflowSchedule>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct DeleteWorkflowProviderScheduleRequest {
-    #[prost(string, tag = "2")]
-    pub schedule_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PauseWorkflowProviderScheduleRequest {
-    #[prost(string, tag = "2")]
-    pub schedule_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ResumeWorkflowProviderScheduleRequest {
-    #[prost(string, tag = "2")]
-    pub schedule_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct UpsertWorkflowProviderEventTriggerRequest {
-    #[prost(string, tag = "1")]
-    pub trigger_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub r#match: ::core::option::Option<WorkflowEventMatch>,
-    #[prost(message, optional, tag = "3")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(bool, tag = "4")]
-    pub paused: bool,
-    #[prost(message, optional, tag = "6")]
-    pub requested_by: ::core::option::Option<WorkflowActor>,
-    #[prost(string, tag = "7")]
-    pub execution_ref: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetWorkflowProviderEventTriggerRequest {
-    #[prost(string, tag = "2")]
-    pub trigger_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListWorkflowProviderEventTriggersRequest {}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListWorkflowProviderEventTriggersResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub triggers: ::prost::alloc::vec::Vec<BoundWorkflowEventTrigger>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PutWorkflowExecutionReferenceRequest {
-    #[prost(message, optional, tag = "1")]
-    pub reference: ::core::option::Option<WorkflowExecutionReference>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct GetWorkflowExecutionReferenceRequest {
-    #[prost(string, tag = "1")]
-    pub id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ListWorkflowExecutionReferencesRequest {
-    #[prost(string, tag = "1")]
-    pub subject_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ListWorkflowExecutionReferencesResponse {
-    #[prost(message, repeated, tag = "1")]
-    pub references: ::prost::alloc::vec::Vec<WorkflowExecutionReference>,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct DeleteWorkflowProviderEventTriggerRequest {
-    #[prost(string, tag = "2")]
-    pub trigger_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct PauseWorkflowProviderEventTriggerRequest {
-    #[prost(string, tag = "2")]
-    pub trigger_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct ResumeWorkflowProviderEventTriggerRequest {
-    #[prost(string, tag = "2")]
-    pub trigger_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PublishWorkflowProviderEventRequest {
-    #[prost(string, tag = "1")]
-    pub plugin_name: ::prost::alloc::string::String,
+    pub delivery_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub event: ::core::option::Option<WorkflowEvent>,
     #[prost(message, optional, tag = "3")]
     pub published_by: ::core::option::Option<WorkflowActor>,
+    #[prost(string, tag = "4")]
+    pub idempotency_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct InvokeWorkflowOperationRequest {
-    #[prost(message, optional, tag = "1")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
+pub struct WorkflowEventDeliveryResult {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub run_id: ::prost::alloc::string::String,
+    pub activation_id: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "3")]
-    pub trigger: ::core::option::Option<WorkflowRunTrigger>,
+    pub run: ::core::option::Option<WorkflowRun>,
     #[prost(message, optional, tag = "4")]
-    pub input: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "5")]
-    pub metadata: ::core::option::Option<::prost_types::Struct>,
-    #[prost(message, optional, tag = "7")]
-    pub created_by: ::core::option::Option<WorkflowActor>,
-    #[prost(string, tag = "8")]
-    pub execution_ref: ::prost::alloc::string::String,
-    #[prost(message, repeated, tag = "9")]
-    pub signals: ::prost::alloc::vec::Vec<WorkflowSignal>,
+    pub signal: ::core::option::Option<WorkflowSignal>,
+    #[prost(bool, tag = "5")]
+    pub started_run: bool,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct DeliverWorkflowEventResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub results: ::prost::alloc::vec::Vec<WorkflowEventDeliveryResult>,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct InvokeWorkflowOperationResponse {
-    #[prost(int32, tag = "1")]
-    pub status: i32,
+pub struct WorkflowRunEvent {
+    #[prost(string, tag = "1")]
+    pub id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub sequence: i64,
+    #[prost(enumeration = "WorkflowRunEventType", tag = "4")]
+    pub r#type: i32,
+    #[prost(string, tag = "5")]
+    pub step_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub action_id: ::prost::alloc::string::String,
+    #[prost(int32, tag = "7")]
+    pub attempt_number: i32,
+    #[prost(string, tag = "8")]
+    pub message: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "9")]
+    pub output_summary: ::core::option::Option<WorkflowOutputSummary>,
+    #[prost(string, tag = "10")]
+    pub output_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "11")]
+    pub error: ::core::option::Option<WorkflowRunError>,
+    #[prost(message, optional, tag = "12")]
+    pub observed_at: ::core::option::Option<::prost_types::Timestamp>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetWorkflowRunEventsRequest {
+    #[prost(string, tag = "1")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(int32, tag = "2")]
+    pub page_size: i32,
+    #[prost(string, tag = "3")]
+    pub page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListWorkflowRunEventsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub events: ::prost::alloc::vec::Vec<WorkflowRunEvent>,
+    #[prost(string, tag = "2")]
+    pub next_page_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct GetWorkflowRunOutputRequest {
+    #[prost(string, tag = "1")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub output_ref: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub step_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowRunOutput {
+    #[prost(string, tag = "1")]
+    pub output_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub summary: ::core::option::Option<WorkflowOutputSummary>,
+    #[prost(message, optional, tag = "3")]
+    pub body: ::core::option::Option<::prost_types::Value>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowHostActionSelector {
+    #[prost(string, tag = "1")]
+    pub execution_ref: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub execution_ref_generation: i64,
+    #[prost(string, tag = "3")]
+    pub execution_ref_seal: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "7")]
+    pub step_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "8")]
+    pub action_id: ::prost::alloc::string::String,
+    #[prost(int32, tag = "9")]
+    pub attempt_number: i32,
+    #[prost(string, tag = "10")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(string, tag = "11")]
+    pub target_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "12")]
+    pub action_table_digest: ::prost::alloc::string::String,
+    #[prost(string, tag = "13")]
+    pub provider_plan_digest: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowPluginActionPayload {
+    #[prost(message, optional, tag = "1")]
+    pub input: ::core::option::Option<::prost_types::Struct>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowAgentTurnPayload {
+    #[prost(message, optional, tag = "1")]
+    pub prompt: ::core::option::Option<WorkflowText>,
+    #[prost(message, repeated, tag = "2")]
+    pub messages: ::prost::alloc::vec::Vec<WorkflowAgentMessage>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InvokeWorkflowActionRequest {
+    #[prost(message, optional, tag = "1")]
+    pub selector: ::core::option::Option<WorkflowHostActionSelector>,
+    #[prost(message, optional, tag = "2")]
+    pub metadata: ::core::option::Option<::prost_types::Struct>,
+    #[prost(message, optional, tag = "3")]
+    pub trigger: ::core::option::Option<WorkflowRunTrigger>,
+    #[prost(message, repeated, tag = "4")]
+    pub signals: ::prost::alloc::vec::Vec<WorkflowSignal>,
+    #[prost(oneof = "invoke_workflow_action_request::Action", tags = "10, 11")]
+    pub action: ::core::option::Option<invoke_workflow_action_request::Action>,
+}
+/// Nested message and enum types in `InvokeWorkflowActionRequest`.
+pub mod invoke_workflow_action_request {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Action {
+        #[prost(message, tag = "10")]
+        Plugin(super::WorkflowPluginActionPayload),
+        #[prost(message, tag = "11")]
+        AgentTurn(super::WorkflowAgentTurnPayload),
+    }
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowActionResult {
+    #[prost(string, tag = "1")]
+    pub action_event_id: ::prost::alloc::string::String,
+    #[prost(int32, tag = "2")]
+    pub status: i32,
+    #[prost(string, tag = "3")]
     pub body: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "4")]
+    pub output_summary: ::core::option::Option<WorkflowOutputSummary>,
+    #[prost(string, tag = "5")]
+    pub output_ref: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub error: ::core::option::Option<WorkflowRunError>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ManagedWorkflowSchedule {
+pub struct ManagedWorkflowDeployment {
     #[prost(string, tag = "1")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
-    pub schedule: ::core::option::Option<BoundWorkflowSchedule>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ManagedWorkflowEventTrigger {
-    #[prost(string, tag = "1")]
-    pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub trigger: ::core::option::Option<BoundWorkflowEventTrigger>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ManagedWorkflowDefinition {
-    #[prost(string, tag = "1")]
-    pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "2")]
-    pub definition: ::core::option::Option<BoundWorkflowDefinition>,
+    pub deployment: ::core::option::Option<WorkflowDeployment>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ManagedWorkflowRun {
     #[prost(string, tag = "1")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
-    pub run: ::core::option::Option<BoundWorkflowRun>,
+    pub run: ::core::option::Option<WorkflowRun>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ManagedWorkflowRunSignal {
     #[prost(string, tag = "1")]
     pub provider_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
-    pub run: ::core::option::Option<BoundWorkflowRun>,
+    pub run: ::core::option::Option<WorkflowRun>,
     #[prost(message, optional, tag = "3")]
     pub signal: ::core::option::Option<WorkflowSignal>,
     #[prost(bool, tag = "4")]
@@ -3822,218 +4076,250 @@ pub struct ManagedWorkflowRunSignal {
     pub workflow_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerCreateScheduleRequest {
-    #[prost(string, tag = "2")]
+pub struct WorkflowManagerPlanDeploymentRequest {
+    #[prost(string, tag = "1")]
     pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub spec: ::core::option::Option<WorkflowDeploymentSpec>,
     #[prost(string, tag = "3")]
-    pub cron: ::prost::alloc::string::String,
-    #[prost(string, tag = "4")]
-    pub timezone: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "5")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(bool, tag = "6")]
-    pub paused: bool,
-    #[prost(string, tag = "7")]
     pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
+    #[prost(string, tag = "4")]
     pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
-    pub definition_id: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowManagerApplyDeploymentRequest {
+    #[prost(string, tag = "1")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub spec: ::core::option::Option<WorkflowDeploymentSpec>,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub idempotency_key: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerGetScheduleRequest {
+pub struct WorkflowManagerGetDeploymentRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub schedule_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowManagerListDeploymentsRequest {
+    #[prost(string, tag = "1")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerUpdateScheduleRequest {
-    #[prost(string, tag = "2")]
-    pub schedule_id: ::prost::alloc::string::String,
+pub struct WorkflowManagerListDeploymentsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub deployments: ::prost::alloc::vec::Vec<ManagedWorkflowDeployment>,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowManagerDeleteDeploymentRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "2")]
+    pub generation: i64,
     #[prost(string, tag = "3")]
-    pub provider_name: ::prost::alloc::string::String,
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowManagerSetDeploymentPausedRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub paused: bool,
+    #[prost(string, tag = "3")]
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct WorkflowManagerSetActivationPausedRequest {
+    #[prost(string, tag = "1")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub activation_id: ::prost::alloc::string::String,
+    #[prost(bool, tag = "3")]
+    pub paused: bool,
     #[prost(string, tag = "4")]
-    pub cron: ::prost::alloc::string::String,
+    pub invocation_token: ::prost::alloc::string::String,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowManagerStartRunRequest {
+    #[prost(string, tag = "1")]
+    pub provider_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub deployment_generation: i64,
+    #[prost(string, tag = "4")]
+    pub activation_id: ::prost::alloc::string::String,
     #[prost(string, tag = "5")]
-    pub timezone: ::prost::alloc::string::String,
+    pub workflow_key: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "6")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(bool, tag = "7")]
-    pub paused: bool,
-    #[prost(string, tag = "8")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "9")]
-    pub definition_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerDeleteScheduleRequest {
-    #[prost(string, tag = "2")]
-    pub schedule_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerPauseScheduleRequest {
-    #[prost(string, tag = "2")]
-    pub schedule_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerResumeScheduleRequest {
-    #[prost(string, tag = "2")]
-    pub schedule_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerCreateEventTriggerRequest {
-    #[prost(string, tag = "2")]
-    pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub r#match: ::core::option::Option<WorkflowEventMatch>,
-    #[prost(message, optional, tag = "4")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(bool, tag = "5")]
-    pub paused: bool,
-    #[prost(string, tag = "6")]
-    pub invocation_token: ::prost::alloc::string::String,
+    pub input: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "7")]
     pub idempotency_key: ::prost::alloc::string::String,
     #[prost(string, tag = "8")]
-    pub definition_id: ::prost::alloc::string::String,
+    pub invocation_token: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerGetEventTriggerRequest {
-    #[prost(string, tag = "2")]
-    pub trigger_id: ::prost::alloc::string::String,
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WorkflowManagerSignalRunRequest {
+    #[prost(string, tag = "1")]
+    pub run_id: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub signal: ::core::option::Option<WorkflowSignal>,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerUpdateEventTriggerRequest {
-    #[prost(string, tag = "2")]
-    pub trigger_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+pub struct WorkflowManagerSignalOrStartRunRequest {
+    #[prost(string, tag = "1")]
     pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub r#match: ::core::option::Option<WorkflowEventMatch>,
-    #[prost(message, optional, tag = "5")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(bool, tag = "6")]
-    pub paused: bool,
+    #[prost(string, tag = "2")]
+    pub deployment_id: ::prost::alloc::string::String,
+    #[prost(int64, tag = "3")]
+    pub deployment_generation: i64,
+    #[prost(string, tag = "4")]
+    pub activation_id: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub workflow_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub input: ::core::option::Option<::prost_types::Struct>,
     #[prost(string, tag = "7")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
-    pub definition_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerDeleteEventTriggerRequest {
-    #[prost(string, tag = "2")]
-    pub trigger_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
+    pub idempotency_key: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "8")]
+    pub signal: ::core::option::Option<WorkflowSignal>,
+    #[prost(string, tag = "9")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerPauseEventTriggerRequest {
+pub struct WorkflowManagerCancelRunRequest {
+    #[prost(string, tag = "1")]
+    pub run_id: ::prost::alloc::string::String,
     #[prost(string, tag = "2")]
-    pub trigger_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerResumeEventTriggerRequest {
-    #[prost(string, tag = "2")]
-    pub trigger_id: ::prost::alloc::string::String,
+    pub reason: ::prost::alloc::string::String,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerPublishEventRequest {
+pub struct WorkflowManagerDeliverEventRequest {
+    #[prost(string, tag = "1")]
+    pub provider_name: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub event: ::core::option::Option<WorkflowEvent>,
     #[prost(string, tag = "3")]
     pub invocation_token: ::prost::alloc::string::String,
     #[prost(string, tag = "4")]
-    pub provider_name: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerStartRunRequest {
-    #[prost(string, tag = "2")]
-    pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(string, tag = "4")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
-    pub workflow_key: ::prost::alloc::string::String,
-    #[prost(string, tag = "6")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "7")]
-    pub definition_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerSignalRunRequest {
-    #[prost(string, tag = "2")]
-    pub run_id: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub signal: ::core::option::Option<WorkflowSignal>,
-    #[prost(string, tag = "4")]
-    pub invocation_token: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerSignalOrStartRunRequest {
-    #[prost(string, tag = "2")]
-    pub provider_name: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub workflow_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(string, tag = "5")]
-    pub idempotency_key: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "6")]
-    pub signal: ::core::option::Option<WorkflowSignal>,
-    #[prost(string, tag = "7")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "8")]
-    pub definition_id: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerCreateDefinitionRequest {
-    #[prost(string, tag = "2")]
-    pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "3")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(string, tag = "4")]
-    pub invocation_token: ::prost::alloc::string::String,
-    #[prost(string, tag = "5")]
     pub idempotency_key: ::prost::alloc::string::String,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerGetDefinitionRequest {
-    #[prost(string, tag = "2")]
-    pub definition_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
-}
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowManagerUpdateDefinitionRequest {
-    #[prost(string, tag = "2")]
-    pub definition_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub provider_name: ::prost::alloc::string::String,
-    #[prost(message, optional, tag = "4")]
-    pub target: ::core::option::Option<BoundWorkflowTarget>,
-    #[prost(string, tag = "5")]
-    pub invocation_token: ::prost::alloc::string::String,
+pub struct WorkflowManagerDeliverEventResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub results: ::prost::alloc::vec::Vec<WorkflowEventDeliveryResult>,
 }
-#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
-pub struct WorkflowManagerDeleteDefinitionRequest {
-    #[prost(string, tag = "2")]
-    pub definition_id: ::prost::alloc::string::String,
-    #[prost(string, tag = "3")]
-    pub invocation_token: ::prost::alloc::string::String,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum WorkflowActivationMode {
+    Unspecified = 0,
+    Start = 1,
+    Signal = 2,
+    SignalOrStart = 3,
+}
+impl WorkflowActivationMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "WORKFLOW_ACTIVATION_MODE_UNSPECIFIED",
+            Self::Start => "WORKFLOW_ACTIVATION_MODE_START",
+            Self::Signal => "WORKFLOW_ACTIVATION_MODE_SIGNAL",
+            Self::SignalOrStart => "WORKFLOW_ACTIVATION_MODE_SIGNAL_OR_START",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "WORKFLOW_ACTIVATION_MODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "WORKFLOW_ACTIVATION_MODE_START" => Some(Self::Start),
+            "WORKFLOW_ACTIVATION_MODE_SIGNAL" => Some(Self::Signal),
+            "WORKFLOW_ACTIVATION_MODE_SIGNAL_OR_START" => Some(Self::SignalOrStart),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum WorkflowActionKind {
+    Unspecified = 0,
+    Plugin = 1,
+    AgentTurn = 2,
+    Delivery = 3,
+}
+impl WorkflowActionKind {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "WORKFLOW_ACTION_KIND_UNSPECIFIED",
+            Self::Plugin => "WORKFLOW_ACTION_KIND_PLUGIN",
+            Self::AgentTurn => "WORKFLOW_ACTION_KIND_AGENT_TURN",
+            Self::Delivery => "WORKFLOW_ACTION_KIND_DELIVERY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "WORKFLOW_ACTION_KIND_UNSPECIFIED" => Some(Self::Unspecified),
+            "WORKFLOW_ACTION_KIND_PLUGIN" => Some(Self::Plugin),
+            "WORKFLOW_ACTION_KIND_AGENT_TURN" => Some(Self::AgentTurn),
+            "WORKFLOW_ACTION_KIND_DELIVERY" => Some(Self::Delivery),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum WorkflowDeploymentStatus {
+    Unspecified = 0,
+    Pending = 1,
+    Active = 2,
+    Paused = 3,
+    Deleted = 4,
+    Failed = 5,
+}
+impl WorkflowDeploymentStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED",
+            Self::Pending => "WORKFLOW_DEPLOYMENT_STATUS_PENDING",
+            Self::Active => "WORKFLOW_DEPLOYMENT_STATUS_ACTIVE",
+            Self::Paused => "WORKFLOW_DEPLOYMENT_STATUS_PAUSED",
+            Self::Deleted => "WORKFLOW_DEPLOYMENT_STATUS_DELETED",
+            Self::Failed => "WORKFLOW_DEPLOYMENT_STATUS_FAILED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "WORKFLOW_DEPLOYMENT_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "WORKFLOW_DEPLOYMENT_STATUS_PENDING" => Some(Self::Pending),
+            "WORKFLOW_DEPLOYMENT_STATUS_ACTIVE" => Some(Self::Active),
+            "WORKFLOW_DEPLOYMENT_STATUS_PAUSED" => Some(Self::Paused),
+            "WORKFLOW_DEPLOYMENT_STATUS_DELETED" => Some(Self::Deleted),
+            "WORKFLOW_DEPLOYMENT_STATUS_FAILED" => Some(Self::Failed),
+            _ => None,
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -4069,6 +4355,106 @@ impl WorkflowRunStatus {
             "WORKFLOW_RUN_STATUS_SUCCEEDED" => Some(Self::Succeeded),
             "WORKFLOW_RUN_STATUS_FAILED" => Some(Self::Failed),
             "WORKFLOW_RUN_STATUS_CANCELED" => Some(Self::Canceled),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum WorkflowStepStatus {
+    Unspecified = 0,
+    Pending = 1,
+    Running = 2,
+    Succeeded = 3,
+    Failed = 4,
+    Skipped = 5,
+    Canceled = 6,
+}
+impl WorkflowStepStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "WORKFLOW_STEP_STATUS_UNSPECIFIED",
+            Self::Pending => "WORKFLOW_STEP_STATUS_PENDING",
+            Self::Running => "WORKFLOW_STEP_STATUS_RUNNING",
+            Self::Succeeded => "WORKFLOW_STEP_STATUS_SUCCEEDED",
+            Self::Failed => "WORKFLOW_STEP_STATUS_FAILED",
+            Self::Skipped => "WORKFLOW_STEP_STATUS_SKIPPED",
+            Self::Canceled => "WORKFLOW_STEP_STATUS_CANCELED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "WORKFLOW_STEP_STATUS_UNSPECIFIED" => Some(Self::Unspecified),
+            "WORKFLOW_STEP_STATUS_PENDING" => Some(Self::Pending),
+            "WORKFLOW_STEP_STATUS_RUNNING" => Some(Self::Running),
+            "WORKFLOW_STEP_STATUS_SUCCEEDED" => Some(Self::Succeeded),
+            "WORKFLOW_STEP_STATUS_FAILED" => Some(Self::Failed),
+            "WORKFLOW_STEP_STATUS_SKIPPED" => Some(Self::Skipped),
+            "WORKFLOW_STEP_STATUS_CANCELED" => Some(Self::Canceled),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum WorkflowRunEventType {
+    Unspecified = 0,
+    RunStarted = 1,
+    RunCompleted = 2,
+    RunFailed = 3,
+    RunCanceled = 4,
+    SignalReceived = 5,
+    StepStarted = 6,
+    StepSucceeded = 7,
+    StepFailed = 8,
+    StepSkipped = 9,
+    ActionInvoked = 10,
+    ActionCompleted = 11,
+    ActionFailed = 12,
+}
+impl WorkflowRunEventType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "WORKFLOW_RUN_EVENT_TYPE_UNSPECIFIED",
+            Self::RunStarted => "WORKFLOW_RUN_EVENT_TYPE_RUN_STARTED",
+            Self::RunCompleted => "WORKFLOW_RUN_EVENT_TYPE_RUN_COMPLETED",
+            Self::RunFailed => "WORKFLOW_RUN_EVENT_TYPE_RUN_FAILED",
+            Self::RunCanceled => "WORKFLOW_RUN_EVENT_TYPE_RUN_CANCELED",
+            Self::SignalReceived => "WORKFLOW_RUN_EVENT_TYPE_SIGNAL_RECEIVED",
+            Self::StepStarted => "WORKFLOW_RUN_EVENT_TYPE_STEP_STARTED",
+            Self::StepSucceeded => "WORKFLOW_RUN_EVENT_TYPE_STEP_SUCCEEDED",
+            Self::StepFailed => "WORKFLOW_RUN_EVENT_TYPE_STEP_FAILED",
+            Self::StepSkipped => "WORKFLOW_RUN_EVENT_TYPE_STEP_SKIPPED",
+            Self::ActionInvoked => "WORKFLOW_RUN_EVENT_TYPE_ACTION_INVOKED",
+            Self::ActionCompleted => "WORKFLOW_RUN_EVENT_TYPE_ACTION_COMPLETED",
+            Self::ActionFailed => "WORKFLOW_RUN_EVENT_TYPE_ACTION_FAILED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "WORKFLOW_RUN_EVENT_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "WORKFLOW_RUN_EVENT_TYPE_RUN_STARTED" => Some(Self::RunStarted),
+            "WORKFLOW_RUN_EVENT_TYPE_RUN_COMPLETED" => Some(Self::RunCompleted),
+            "WORKFLOW_RUN_EVENT_TYPE_RUN_FAILED" => Some(Self::RunFailed),
+            "WORKFLOW_RUN_EVENT_TYPE_RUN_CANCELED" => Some(Self::RunCanceled),
+            "WORKFLOW_RUN_EVENT_TYPE_SIGNAL_RECEIVED" => Some(Self::SignalReceived),
+            "WORKFLOW_RUN_EVENT_TYPE_STEP_STARTED" => Some(Self::StepStarted),
+            "WORKFLOW_RUN_EVENT_TYPE_STEP_SUCCEEDED" => Some(Self::StepSucceeded),
+            "WORKFLOW_RUN_EVENT_TYPE_STEP_FAILED" => Some(Self::StepFailed),
+            "WORKFLOW_RUN_EVENT_TYPE_STEP_SKIPPED" => Some(Self::StepSkipped),
+            "WORKFLOW_RUN_EVENT_TYPE_ACTION_INVOKED" => Some(Self::ActionInvoked),
+            "WORKFLOW_RUN_EVENT_TYPE_ACTION_COMPLETED" => Some(Self::ActionCompleted),
+            "WORKFLOW_RUN_EVENT_TYPE_ACTION_FAILED" => Some(Self::ActionFailed),
             _ => None,
         }
     }

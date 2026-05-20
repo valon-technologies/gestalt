@@ -3,7 +3,6 @@ package workflows
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
@@ -15,81 +14,60 @@ import (
 )
 
 type InvokeFunc func(context.Context, coreworkflow.InvokeOperationRequest) (*coreworkflow.InvokeOperationResponse, error)
+type InvokeActionFunc func(context.Context, coreworkflow.InvokeActionRequest) (*coreworkflow.HostActionResponse, error)
+type CancelHostActionFunc func(context.Context, coreworkflow.CancelHostActionRequest) (*coreworkflow.HostActionResponse, error)
 
 type HostServer struct {
 	proto.UnimplementedWorkflowHostServer
 	providerName string
-	invoke       InvokeFunc
+	invokeAction InvokeActionFunc
 }
 
-func NewHostServer(providerName string, invoke InvokeFunc) *HostServer {
+func NewHostServer(providerName string, _ InvokeFunc) *HostServer {
+	return &HostServer{providerName: providerName}
+}
+
+func NewHostServerWithActions(providerName string, _ InvokeFunc, invokeAction InvokeActionFunc, _ CancelHostActionFunc) *HostServer {
 	return &HostServer{
 		providerName: providerName,
-		invoke:       invoke,
+		invokeAction: invokeAction,
 	}
 }
 
-func (s *HostServer) InvokeOperation(ctx context.Context, req *proto.InvokeWorkflowOperationRequest) (out *proto.InvokeWorkflowOperationResponse, err error) {
+func (s *HostServer) InvokeWorkflowAction(ctx context.Context, req *proto.InvokeWorkflowActionRequest) (out *proto.WorkflowActionResult, err error) {
 	startedAt := time.Now()
-	providerName := ""
-	if s != nil {
-		providerName = s.providerName
-	}
-	dims := observability.WorkflowMetricDims{
-		ProviderName:    providerName,
-		OperationName:   observability.WorkflowOperationInvokeOperation,
-		TriggerKind:     workflowProtoTriggerKind(req),
-		TargetKind:      workflowProtoTargetKind(req.GetTarget()),
-		TelemetrySource: observability.WorkflowTelemetrySourceCore,
-	}
-	ctx, span := observability.StartSpan(ctx, "workflow.host.operation", observability.WorkflowMetricAttributes(dims)...)
+	dims := workflowHostActionMetricDims(s, observability.WorkflowOperationInvokeWorkflowAction)
+	ctx, span := observability.StartSpan(ctx, "workflow.host.action", observability.WorkflowMetricAttributes(dims)...)
 	defer func() {
 		observability.EndSpan(span, err)
 		observability.RecordWorkflowHostOperation(ctx, startedAt, err, dims)
 	}()
-	if s == nil || s.invoke == nil {
-		return nil, status.Error(codes.FailedPrecondition, "workflow host invoker is not configured")
+	if s == nil || s.invokeAction == nil {
+		return nil, status.Error(codes.FailedPrecondition, "workflow host action invoker is not configured")
 	}
-	value, err := workflowInvokeRequestFromProto(req)
+	value, err := workflowActionRequestFromProto(req)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "workflow invoke operation: %v", err)
-	}
-	if len(value.Target.Steps) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: target.steps is required")
-	}
-	if strings.TrimSpace(value.ExecutionRef) == "" {
-		return nil, status.Error(codes.InvalidArgument, "workflow invoke operation: execution_ref is required")
+		return nil, status.Errorf(codes.InvalidArgument, "workflow action: %v", err)
 	}
 	value.ProviderName = s.providerName
-	resp, err := s.invoke(ctx, value)
+	resp, err := s.invokeAction(ctx, value)
 	if err != nil {
-		return nil, status.Errorf(workflowInvokeErrorCode(err), "workflow invoke operation: %v", err)
+		return nil, status.Errorf(workflowInvokeErrorCode(err), "workflow action: %v", err)
 	}
-	return workflowInvokeResponseToProto(resp), nil
+	return workflowHostActionResponseToProto(resp), nil
 }
 
-func workflowProtoTargetKind(target *proto.BoundWorkflowTarget) string {
-	if len(target.GetSteps()) > 0 {
-		return observability.WorkflowTargetKindSteps
+func workflowHostActionMetricDims(s *HostServer, operation string) observability.WorkflowMetricDims {
+	providerName := ""
+	if s != nil {
+		providerName = s.providerName
 	}
-	return observability.WorkflowTargetKindUnknown
-}
-
-func workflowProtoTriggerKind(req *proto.InvokeWorkflowOperationRequest) string {
-	if req == nil {
-		return observability.WorkflowTriggerKindNone
-	}
-	switch {
-	case req.GetTrigger().GetManual() != nil:
-		return observability.WorkflowTriggerKindManual
-	case req.GetTrigger().GetSchedule() != nil:
-		return observability.WorkflowTriggerKindSchedule
-	case req.GetTrigger().GetEvent() != nil:
-		return observability.WorkflowTriggerKindEvent
-	case len(req.GetSignals()) > 0:
-		return observability.WorkflowTriggerKindSignal
-	default:
-		return observability.WorkflowTriggerKindNone
+	return observability.WorkflowMetricDims{
+		ProviderName:    providerName,
+		OperationName:   operation,
+		TriggerKind:     observability.WorkflowTriggerKindUnknown,
+		TargetKind:      observability.WorkflowTargetKindSteps,
+		TelemetrySource: observability.WorkflowTelemetrySourceCore,
 	}
 }
 
@@ -109,6 +87,8 @@ func workflowInvokeErrorCode(err error) codes.Code {
 		return codes.Unauthenticated
 	case errors.Is(err, invocation.ErrAmbiguousInstance), errors.Is(err, invocation.ErrUserResolution):
 		return codes.FailedPrecondition
+	case errors.Is(err, invocation.ErrInvalidInvocation):
+		return codes.InvalidArgument
 	case errors.Is(err, invocation.ErrInternal):
 		return codes.Internal
 	default:

@@ -10,6 +10,13 @@ const (
 	OperationRunsStart         = "runs.start"
 	OperationRunsSignal        = "runs.signal"
 	OperationRunsSignalOrStart = "runs.signalOrStart"
+	OperationRunsCancel        = "runs.cancel"
+
+	OperationDeploymentsCreate = "deployments.create"
+	OperationDeploymentsGet    = "deployments.get"
+	OperationDeploymentsDelete = "deployments.delete"
+	OperationDeploymentsPause  = "deployments.pause"
+	OperationDeploymentsResume = "deployments.resume"
 
 	OperationSchedulesCreate = "schedules.create"
 	OperationSchedulesGet    = "schedules.get"
@@ -39,6 +46,13 @@ var supportedOperations = map[string]struct{}{
 	OperationRunsStart:         {},
 	OperationRunsSignal:        {},
 	OperationRunsSignalOrStart: {},
+	OperationRunsCancel:        {},
+
+	OperationDeploymentsCreate: {},
+	OperationDeploymentsGet:    {},
+	OperationDeploymentsDelete: {},
+	OperationDeploymentsPause:  {},
+	OperationDeploymentsResume: {},
 
 	OperationSchedulesCreate: {},
 	OperationSchedulesGet:    {},

@@ -85,9 +85,9 @@ import {
   ProviderLifecycle,
 } from "../src/internal/gen/v1/runtime_pb.ts";
 import {
-  PublishWorkflowProviderEventRequestSchema,
-  StartWorkflowProviderRunRequestSchema,
-  UpsertWorkflowProviderScheduleRequestSchema,
+  ApplyWorkflowDeploymentRequestSchema,
+  DeliverWorkflowEventRequestSchema,
+  StartWorkflowRunRequestSchema,
 } from "../src/internal/gen/v1/workflow_pb.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
@@ -145,11 +145,16 @@ async function expectConnectCode(
 function workflowPluginTarget(
   name: string,
   operation: string,
-  extra: Record<string, unknown> = {},
 ) {
-  return boundWorkflowTargetToProto({
-    steps: [{ id: operation, plugin: { name, operation, ...extra } }],
-  });
+  return {
+    steps: [{
+      id: `${name}:${operation}`,
+      action: {
+        case: "plugin" as const,
+        value: { name, operation },
+      },
+    }],
+  };
 }
 
 test("runtime arg parsing requires root and target", () => {
@@ -1826,8 +1831,28 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   expect(metadata.kind).toBe(ProtoProviderKind.WORKFLOW);
   expect(metadata.displayName).toBe("Fixture Workflow");
 
-  const run = await (workflow.startRun as any)(
-    create(StartWorkflowProviderRunRequestSchema, {
+  const deployment = await (workflow.applyWorkflowDeployment as any)(
+    create(ApplyWorkflowDeploymentRequestSchema, {
+      spec: {
+        id: "roadmap-sync",
+        generation: 1n,
+        target: workflowPluginTarget("roadmap", "sync"),
+      },
+      plan: {
+        acceptedSpecDigest: "spec-digest",
+        providerPlanId: "fixture-plan",
+        providerPlanDigest: "fixture-plan:spec-digest",
+        providerPlanFormatVersion: "workflow-plan-v1",
+      },
+    }),
+  );
+  expect(deployment.spec?.target?.steps[0]?.action.case).toBe("plugin");
+
+  const run = await (workflow.startWorkflowRun as any)(
+    create(StartWorkflowRunRequestSchema, {
+      deploymentId: "roadmap-sync",
+      deploymentGeneration: 1n,
+      activationId: "manual",
       idempotencyKey: "req-1",
       createdBy: {
         subjectId: "user:user-123",
@@ -1835,65 +1860,16 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
         displayName: "Ada",
         authSource: "api_token",
       },
-      target: workflowPluginTarget("roadmap", "sync", {
-        input: { object: { project: { literal: "alpha" } } },
-      }),
     }),
   );
-  const runPlugin = run.target?.steps[0]?.action.case === "plugin"
-    ? run.target.steps[0].action.value
-    : undefined;
-  if (runPlugin === undefined) {
-    throw new Error("workflow run target is not a plugin target");
-  }
-  expect(runPlugin.name).toBe("roadmap");
+  expect(run.deploymentId).toBe("roadmap-sync");
   expect(run.status).toBe(WorkflowRunStatus.PENDING);
   expect(run.statusMessage).toBe("idempotency:req-1");
   expect(run.createdBy?.subjectId).toBe("user:user-123");
 
-  const schedule = await (workflow.upsertSchedule as any)(
-    create(UpsertWorkflowProviderScheduleRequestSchema, {
-      scheduleId: "nightly",
-      cron: "*/5 * * * *",
-      timezone: "UTC",
-      requestedBy: {
-        subjectId: "service_account:planner",
-        subjectKind: "service_account",
-        displayName: "Planner",
-        authSource: "api_token",
-      },
-      target: workflowPluginTarget("roadmap", "sync"),
-    }),
-  );
-  expect(schedule.id).toBe("nightly");
-  const schedulePlugin = schedule.target?.steps[0]?.action.case === "plugin"
-    ? schedule.target.steps[0].action.value
-    : undefined;
-  if (schedulePlugin === undefined) {
-    throw new Error("workflow schedule target is not a plugin target");
-  }
-  expect(schedulePlugin.name).toBe("roadmap");
-  expect(schedule.createdBy?.subjectId).toBe("service_account:planner");
-
-  const updatedSchedule = await (workflow.upsertSchedule as any)(
-    create(UpsertWorkflowProviderScheduleRequestSchema, {
-      scheduleId: "nightly",
-      cron: "0 * * * *",
-      timezone: "UTC",
-      requestedBy: {
-        subjectId: "user:user-999",
-        subjectKind: "user",
-        displayName: "Grace",
-        authSource: "api_token",
-      },
-      target: workflowPluginTarget("roadmap", "sync"),
-    }),
-  );
-  expect(updatedSchedule.createdBy?.subjectId).toBe("service_account:planner");
-
-  await (workflow.publishEvent as any)(
-    create(PublishWorkflowProviderEventRequestSchema, {
-      pluginName: "roadmap",
+  await (workflow.deliverWorkflowEvent as any)(
+    create(DeliverWorkflowEventRequestSchema, {
+      deliveryId: "delivery-1",
       event: {
         id: "evt-1",
         source: "tests",
@@ -1906,7 +1882,7 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
   const refreshedMetadata = await (runtime.getProviderIdentity as any)(
     create(EmptySchema, {}),
   );
-  expect(refreshedMetadata.warnings).toEqual(["published-events:1"]);
+  expect(refreshedMetadata.warnings).toEqual(["delivered-events:1"]);
 });
 
 test("agent provider target resolves and serves runtime metadata plus agent operations", async () => {

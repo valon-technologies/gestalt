@@ -3,10 +3,10 @@ import {
   PluginRuntimeEgressMode,
   RuntimeLogHost,
   WorkflowRunStatus,
+  workflowEvent,
   type AuthorizationEvaluateInput,
   type AgentManagerWorkspace,
   type RuntimeLogAppendResponse,
-  type WorkflowEvent,
 } from "@valon-technologies/gestalt";
 
 // @ts-expect-error Root package must not expose protocol helper schemas.
@@ -40,7 +40,7 @@ const evaluateInput: AuthorizationEvaluateInput = {
   resource: { type: "document", id: "doc-1" },
 };
 const appendResponse: RuntimeLogAppendResponse = { lastSeq: 1n };
-const event: WorkflowEvent = { id: "event-1", type: "fixture.event" };
+const event = workflowEvent({ id: "event-1", type: "fixture.event" });
 const workspace: AgentManagerWorkspace = {
   cwd: "/workspace",
   checkouts: [{ url: "https://example.test/repo.git", ref: "main" }],

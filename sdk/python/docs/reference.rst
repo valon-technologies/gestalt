@@ -129,60 +129,31 @@ non-aliased message copies.
    :nosignatures:
 
    BoundWorkflowTarget
-   WorkflowStep
-   WorkflowStepPluginCall
-   WorkflowStepAgentTurn
-   WorkflowStepDelivery
-   WorkflowValue
-   BoundWorkflowRun
-   BoundWorkflowSchedule
-   BoundWorkflowEventTrigger
-   WorkflowExecutionReference
+   WorkflowDeployment
+   WorkflowRun
+   WorkflowRunSignal
    bound_workflow_target
-   bound_workflow_target_from_target
    workflow_step
    workflow_step_plugin_call
    workflow_step_agent_turn
    workflow_step_delivery
    workflow_value
    workflow_event
-   workflow_event_from_event
    workflow_signal
-   workflow_signal_from_signal
    workflow_run_trigger
-   workflow_run_trigger_from_trigger
-   bound_workflow_run
-   bound_workflow_run_from_run
-   bound_workflow_schedule
-   bound_workflow_schedule_from_schedule
-   bound_workflow_event_trigger
-   bound_workflow_event_trigger_from_trigger
-   workflow_execution_reference
-   workflow_execution_reference_from_reference
+   workflow_deployment
+   workflow_run
+   workflow_run_signal
 
 .. autoclass:: BoundWorkflowTarget
 
-.. autoclass:: WorkflowStep
+.. autoclass:: WorkflowDeployment
 
-.. autoclass:: WorkflowStepPluginCall
+.. autoclass:: WorkflowRun
 
-.. autoclass:: WorkflowStepAgentTurn
-
-.. autoclass:: WorkflowStepDelivery
-
-.. autoclass:: WorkflowValue
-
-.. autoclass:: BoundWorkflowRun
-
-.. autoclass:: BoundWorkflowSchedule
-
-.. autoclass:: BoundWorkflowEventTrigger
-
-.. autoclass:: WorkflowExecutionReference
+.. autoclass:: WorkflowRunSignal
 
 .. autofunction:: bound_workflow_target
-
-.. autofunction:: bound_workflow_target_from_target
 
 .. autofunction:: workflow_step
 
@@ -196,31 +167,9 @@ non-aliased message copies.
 
 .. autofunction:: workflow_event
 
-.. autofunction:: workflow_event_from_event
-
 .. autofunction:: workflow_signal
 
-.. autofunction:: workflow_signal_from_signal
-
 .. autofunction:: workflow_run_trigger
-
-.. autofunction:: workflow_run_trigger_from_trigger
-
-.. autofunction:: bound_workflow_run
-
-.. autofunction:: bound_workflow_run_from_run
-
-.. autofunction:: bound_workflow_schedule
-
-.. autofunction:: bound_workflow_schedule_from_schedule
-
-.. autofunction:: bound_workflow_event_trigger
-
-.. autofunction:: bound_workflow_event_trigger_from_trigger
-
-.. autofunction:: workflow_execution_reference
-
-.. autofunction:: workflow_execution_reference_from_reference
 
 .. _python-agent-provider-models:
 

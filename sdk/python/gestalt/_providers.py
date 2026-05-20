@@ -104,37 +104,31 @@ if TYPE_CHECKING:
         WriteOptions,
     )
     from ._workflow import (
-        BoundWorkflowEventTrigger,
-        BoundWorkflowRun,
-        BoundWorkflowSchedule,
-        CancelWorkflowProviderRunRequest,
-        DeleteWorkflowProviderEventTriggerRequest,
-        DeleteWorkflowProviderScheduleRequest,
-        GetWorkflowExecutionReferenceRequest,
-        GetWorkflowProviderEventTriggerRequest,
-        GetWorkflowProviderRunRequest,
-        GetWorkflowProviderScheduleRequest,
-        ListWorkflowExecutionReferencesRequest,
-        ListWorkflowExecutionReferencesResponse,
-        ListWorkflowProviderEventTriggersRequest,
-        ListWorkflowProviderEventTriggersResponse,
-        ListWorkflowProviderRunsRequest,
-        ListWorkflowProviderRunsResponse,
-        ListWorkflowProviderSchedulesRequest,
-        ListWorkflowProviderSchedulesResponse,
-        PauseWorkflowProviderEventTriggerRequest,
-        PauseWorkflowProviderScheduleRequest,
-        PublishWorkflowProviderEventRequest,
-        PutWorkflowExecutionReferenceRequest,
-        ResumeWorkflowProviderEventTriggerRequest,
-        ResumeWorkflowProviderScheduleRequest,
-        SignalOrStartWorkflowProviderRunRequest,
-        SignalWorkflowProviderRunRequest,
-        SignalWorkflowRunResponse,
-        StartWorkflowProviderRunRequest,
-        UpsertWorkflowProviderEventTriggerRequest,
-        UpsertWorkflowProviderScheduleRequest,
-        WorkflowExecutionReference,
+        ApplyWorkflowDeploymentRequest,
+        CancelWorkflowRunRequest,
+        DeleteWorkflowDeploymentRequest,
+        DeliverWorkflowEventRequest,
+        DeliverWorkflowEventResponse,
+        GetWorkflowDeploymentRequest,
+        GetWorkflowRunEventsRequest,
+        GetWorkflowRunOutputRequest,
+        GetWorkflowRunRequest,
+        ListWorkflowDeploymentsRequest,
+        ListWorkflowDeploymentsResponse,
+        ListWorkflowRunEventsResponse,
+        ListWorkflowRunsRequest,
+        ListWorkflowRunsResponse,
+        PlanWorkflowRequest,
+        PlanWorkflowResponse,
+        SetWorkflowActivationPausedRequest,
+        SetWorkflowDeploymentPausedRequest,
+        SignalOrStartWorkflowRunRequest,
+        SignalWorkflowRunRequest,
+        StartWorkflowRunRequest,
+        WorkflowDeployment,
+        WorkflowRun,
+        WorkflowRunOutput,
+        WorkflowRunSignal,
     )
 
 else:
@@ -643,134 +637,96 @@ class WorkflowProvider(PluginProvider):
     """Base class for workflow-provider runtimes.
 
     Subclasses implement snake_case handler methods such as
-    ``start_run(request)``, ``signal_run(request)``, and
-    ``publish_event(request)``. Execution-reference hooks are exposed as
-    ``put_execution_reference(request)``, ``get_execution_reference(request)``,
-    and ``list_execution_references(request)``.
+    ``plan_workflow(request)``, ``apply_deployment(request)``,
+    ``start_run(request)``, ``signal_run(request)``, and ``deliver_event(request)``.
     """
+
+    def plan_workflow(self, request: PlanWorkflowRequest) -> PlanWorkflowResponse:
+        self._unimplemented("plan_workflow")
+
+    def apply_deployment(
+        self,
+        request: ApplyWorkflowDeploymentRequest,
+    ) -> WorkflowDeployment:
+        self._unimplemented("apply_deployment")
+
+    def get_deployment(
+        self,
+        request: GetWorkflowDeploymentRequest,
+    ) -> WorkflowDeployment:
+        self._unimplemented("get_deployment")
+
+    def list_deployments(
+        self,
+        request: ListWorkflowDeploymentsRequest,
+    ) -> ListWorkflowDeploymentsResponse:
+        self._unimplemented("list_deployments")
+
+    def delete_deployment(self, request: DeleteWorkflowDeploymentRequest) -> None:
+        self._unimplemented("delete_deployment")
+
+    def set_deployment_paused(
+        self,
+        request: SetWorkflowDeploymentPausedRequest,
+    ) -> WorkflowDeployment:
+        self._unimplemented("set_deployment_paused")
+
+    def set_activation_paused(
+        self,
+        request: SetWorkflowActivationPausedRequest,
+    ) -> WorkflowDeployment:
+        self._unimplemented("set_activation_paused")
 
     def start_run(
         self,
-        request: StartWorkflowProviderRunRequest,
-    ) -> BoundWorkflowRun:
+        request: StartWorkflowRunRequest,
+    ) -> WorkflowRun:
         self._unimplemented("start_run")
 
-    def get_run(self, request: GetWorkflowProviderRunRequest) -> BoundWorkflowRun:
+    def get_run(self, request: GetWorkflowRunRequest) -> WorkflowRun:
         self._unimplemented("get_run")
 
     def list_runs(
         self,
-        request: ListWorkflowProviderRunsRequest,
-    ) -> ListWorkflowProviderRunsResponse:
+        request: ListWorkflowRunsRequest,
+    ) -> ListWorkflowRunsResponse:
         self._unimplemented("list_runs")
 
     def cancel_run(
         self,
-        request: CancelWorkflowProviderRunRequest,
-    ) -> BoundWorkflowRun:
+        request: CancelWorkflowRunRequest,
+    ) -> WorkflowRun:
         self._unimplemented("cancel_run")
 
     def signal_run(
         self,
-        request: SignalWorkflowProviderRunRequest,
-    ) -> SignalWorkflowRunResponse:
+        request: SignalWorkflowRunRequest,
+    ) -> WorkflowRunSignal:
         self._unimplemented("signal_run")
 
     def signal_or_start_run(
         self,
-        request: SignalOrStartWorkflowProviderRunRequest,
-    ) -> SignalWorkflowRunResponse:
+        request: SignalOrStartWorkflowRunRequest,
+    ) -> WorkflowRunSignal:
         self._unimplemented("signal_or_start_run")
 
-    def upsert_schedule(
+    def deliver_event(
         self,
-        request: UpsertWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowSchedule:
-        self._unimplemented("upsert_schedule")
+        request: DeliverWorkflowEventRequest,
+    ) -> DeliverWorkflowEventResponse:
+        self._unimplemented("deliver_event")
 
-    def get_schedule(
+    def get_run_events(
         self,
-        request: GetWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowSchedule:
-        self._unimplemented("get_schedule")
+        request: GetWorkflowRunEventsRequest,
+    ) -> ListWorkflowRunEventsResponse:
+        self._unimplemented("get_run_events")
 
-    def list_schedules(
+    def get_run_output(
         self,
-        request: ListWorkflowProviderSchedulesRequest,
-    ) -> ListWorkflowProviderSchedulesResponse:
-        self._unimplemented("list_schedules")
-
-    def delete_schedule(self, request: DeleteWorkflowProviderScheduleRequest) -> None:
-        self._unimplemented("delete_schedule")
-
-    def pause_schedule(
-        self,
-        request: PauseWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowSchedule:
-        self._unimplemented("pause_schedule")
-
-    def resume_schedule(
-        self,
-        request: ResumeWorkflowProviderScheduleRequest,
-    ) -> BoundWorkflowSchedule:
-        self._unimplemented("resume_schedule")
-
-    def upsert_event_trigger(
-        self,
-        request: UpsertWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTrigger:
-        self._unimplemented("upsert_event_trigger")
-
-    def get_event_trigger(
-        self,
-        request: GetWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTrigger:
-        self._unimplemented("get_event_trigger")
-
-    def list_event_triggers(
-        self,
-        request: ListWorkflowProviderEventTriggersRequest,
-    ) -> ListWorkflowProviderEventTriggersResponse:
-        self._unimplemented("list_event_triggers")
-
-    def delete_event_trigger(
-        self,
-        request: DeleteWorkflowProviderEventTriggerRequest,
-    ) -> None:
-        self._unimplemented("delete_event_trigger")
-
-    def pause_event_trigger(
-        self,
-        request: PauseWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTrigger:
-        self._unimplemented("pause_event_trigger")
-
-    def resume_event_trigger(
-        self,
-        request: ResumeWorkflowProviderEventTriggerRequest,
-    ) -> BoundWorkflowEventTrigger:
-        self._unimplemented("resume_event_trigger")
-
-    def put_execution_reference(
-        self,
-        request: PutWorkflowExecutionReferenceRequest,
-    ) -> WorkflowExecutionReference:
-        self._unimplemented("put_execution_reference")
-
-    def get_execution_reference(
-        self,
-        request: GetWorkflowExecutionReferenceRequest,
-    ) -> WorkflowExecutionReference:
-        self._unimplemented("get_execution_reference")
-
-    def list_execution_references(
-        self,
-        request: ListWorkflowExecutionReferencesRequest,
-    ) -> ListWorkflowExecutionReferencesResponse:
-        self._unimplemented("list_execution_references")
-
-    def publish_event(self, request: PublishWorkflowProviderEventRequest) -> None:
-        self._unimplemented("publish_event")
+        request: GetWorkflowRunOutputRequest,
+    ) -> WorkflowRunOutput:
+        self._unimplemented("get_run_output")
 
     def serve(self) -> None:
         """Start the workflow runtime."""

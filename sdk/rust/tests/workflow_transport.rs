@@ -1,30 +1,23 @@
-#[path = "../src/generated.rs"]
-mod generated;
-
 #[allow(dead_code)]
 mod helpers;
 
 use std::sync::{Arc, Mutex};
 
-use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
-use generated::v1::workflow_host_server::{
+use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
+use gestalt::proto::v1::workflow_host_server::{
     WorkflowHost as WorkflowHostRpc, WorkflowHostServer as WorkflowHostGrpcServer,
 };
-use generated::v1::workflow_provider_client::WorkflowProviderClient;
-use generated::v1::{
-    self as pb, BoundWorkflowTarget as ProtoBoundWorkflowTarget, ConfigureProviderRequest,
-    ProviderKind, PublishWorkflowProviderEventRequest as ProtoPublishWorkflowProviderEventRequest,
-    StartWorkflowProviderRunRequest as ProtoStartWorkflowProviderRunRequest,
-    WorkflowEvent as ProtoWorkflowEvent, WorkflowRunStatus as ProtoWorkflowRunStatus,
-    WorkflowStep as ProtoWorkflowStep, WorkflowStepPluginCall as ProtoWorkflowStepPluginCall,
-    workflow_step,
+use gestalt::proto::v1::workflow_provider_client::WorkflowProviderClient;
+use gestalt::proto::v1::{
+    self as pb, ApplyWorkflowDeploymentRequest, BoundWorkflowTarget, ConfigureProviderRequest,
+    DeliverWorkflowEventRequest, InvokeWorkflowActionRequest, PlanWorkflowRequest, ProviderKind,
+    StartWorkflowRunRequest, WorkflowActionResult, WorkflowActivation, WorkflowActivationMode,
+    WorkflowDeployment, WorkflowDeploymentSpec, WorkflowDeploymentStatus, WorkflowEvent,
+    WorkflowEventDeliveryResult, WorkflowHostActionSelector, WorkflowPluginActionPayload,
+    WorkflowRun, WorkflowRunStatus, WorkflowStep, WorkflowStepPluginCall,
+    invoke_workflow_action_request, workflow_step,
 };
-use gestalt::{
-    BoundWorkflowRun, BoundWorkflowTarget, InvokeWorkflowOperationInput,
-    PublishWorkflowProviderEventRequest, RuntimeMetadata, StartWorkflowProviderRunRequest,
-    WorkflowHost, WorkflowProvider, WorkflowRunStatus, WorkflowStep, WorkflowStepAction,
-    WorkflowStepPluginCall,
-};
+use gestalt::{RuntimeMetadata, WorkflowHost, WorkflowProvider, workflow_json_from_struct};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::{TcpListener, UnixListener, UnixStream};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
@@ -37,26 +30,13 @@ const ENV_WORKFLOW_HOST_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_HOST_SOCKET_TOKEN
 #[derive(Default)]
 struct TestWorkflowProvider {
     configured_name: Mutex<String>,
-    published_events: Mutex<Vec<(String, String)>>,
+    plan_requests: Mutex<Vec<PlanWorkflowRequest>>,
+    delivered_events: Mutex<Vec<String>>,
 }
 
 #[derive(Default, Clone)]
 struct TestWorkflowHostService {
     relay_tokens: Arc<Mutex<Vec<String>>>,
-}
-
-fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
-    BoundWorkflowTarget {
-        steps: vec![WorkflowStep {
-            id: operation.to_string(),
-            action: WorkflowStepAction::Plugin(WorkflowStepPluginCall {
-                name: plugin_name.to_string(),
-                operation: operation.to_string(),
-                ..Default::default()
-            }),
-            ..Default::default()
-        }],
-    }
 }
 
 #[gestalt::async_trait]
@@ -83,42 +63,85 @@ impl WorkflowProvider for TestWorkflowProvider {
         vec!["set TEMPORAL_ADDRESS".to_string()]
     }
 
-    async fn start_run(
+    async fn plan_workflow(
         &self,
-        request: StartWorkflowProviderRunRequest,
-    ) -> gestalt::Result<BoundWorkflowRun> {
-        let target = request
-            .target
-            .ok_or_else(|| gestalt::Error::bad_request("missing target"))?;
-        Ok(BoundWorkflowRun {
-            id: request.idempotency_key,
-            status: WorkflowRunStatus::Pending,
-            target: Some(target),
+        request: PlanWorkflowRequest,
+    ) -> gestalt::Result<pb::PlanWorkflowResponse> {
+        self.plan_requests
+            .lock()
+            .expect("plan_requests lock")
+            .push(request.clone());
+        Ok(pb::PlanWorkflowResponse {
+            accepted_spec_digest: request.spec_digest,
+            provider_plan_id: "plan-local-1".to_string(),
+            provider_plan_digest: "sha256:plan".to_string(),
+            provider_plan_format_version: "temporal-plan.v1".to_string(),
+            supported_feature_flags: vec!["steps".to_string()],
             ..Default::default()
         })
     }
 
-    async fn publish_event(
+    async fn apply_workflow_deployment(
         &self,
-        request: PublishWorkflowProviderEventRequest,
-    ) -> gestalt::Result<()> {
-        let event = request
+        request: ApplyWorkflowDeploymentRequest,
+    ) -> gestalt::Result<WorkflowDeployment> {
+        Ok(WorkflowDeployment {
+            spec: request.spec,
+            status: WorkflowDeploymentStatus::Active as i32,
+            provider_plan_id: request
+                .plan
+                .as_ref()
+                .map(|plan| plan.provider_plan_id.clone())
+                .unwrap_or_default(),
+            ..Default::default()
+        })
+    }
+
+    async fn start_workflow_run(
+        &self,
+        request: StartWorkflowRunRequest,
+    ) -> gestalt::Result<WorkflowRun> {
+        Ok(WorkflowRun {
+            id: request.idempotency_key,
+            deployment_id: request.deployment_id,
+            deployment_generation: request.deployment_generation,
+            workflow_key: request.workflow_key,
+            input: request.input,
+            status: WorkflowRunStatus::Pending as i32,
+            ..Default::default()
+        })
+    }
+
+    async fn deliver_workflow_event(
+        &self,
+        request: DeliverWorkflowEventRequest,
+    ) -> gestalt::Result<pb::DeliverWorkflowEventResponse> {
+        let event_type = request
             .event
-            .ok_or_else(|| gestalt::Error::bad_request("missing event"))?;
-        self.published_events
+            .as_ref()
+            .map(|event| event.r#type.clone())
+            .unwrap_or_default();
+        self.delivered_events
             .lock()
-            .expect("published_events lock")
-            .push((request.plugin_name, event.event_type));
-        Ok(())
+            .expect("delivered_events lock")
+            .push(event_type);
+        Ok(pb::DeliverWorkflowEventResponse {
+            results: vec![WorkflowEventDeliveryResult {
+                deployment_id: "deployment-1".to_string(),
+                activation_id: "evt".to_string(),
+                started_run: true,
+                ..Default::default()
+            }],
+        })
     }
 }
 
 #[tonic::async_trait]
 impl WorkflowHostRpc for TestWorkflowHostService {
-    async fn invoke_operation(
+    async fn invoke_workflow_action(
         &self,
-        request: GrpcRequest<pb::InvokeWorkflowOperationRequest>,
-    ) -> std::result::Result<GrpcResponse<pb::InvokeWorkflowOperationResponse>, Status> {
+        request: GrpcRequest<InvokeWorkflowActionRequest>,
+    ) -> std::result::Result<GrpcResponse<WorkflowActionResult>, Status> {
         if let Some(token) = request.metadata().get("x-gestalt-host-service-relay-token") {
             self.relay_tokens
                 .lock()
@@ -126,16 +149,22 @@ impl WorkflowHostRpc for TestWorkflowHostService {
                 .push(token.to_str().expect("relay token ascii").to_string());
         }
         let request = request.into_inner();
-        let target = request
-            .target
-            .ok_or_else(|| Status::invalid_argument("missing target"))?;
-        let plugin = match target.steps.first().and_then(|step| step.action.as_ref()) {
-            Some(workflow_step::Action::Plugin(plugin)) => plugin,
-            _ => return Err(Status::invalid_argument("missing target.steps[0].plugin")),
+        let selector = request
+            .selector
+            .ok_or_else(|| Status::invalid_argument("missing selector"))?;
+        let plugin = match request.action {
+            Some(invoke_workflow_action_request::Action::Plugin(plugin)) => plugin,
+            _ => return Err(Status::invalid_argument("missing plugin action")),
         };
-        Ok(GrpcResponse::new(pb::InvokeWorkflowOperationResponse {
+        let customer_id = plugin
+            .input
+            .as_ref()
+            .and_then(|input| workflow_json_from_struct(input).get("customer_id").cloned())
+            .unwrap_or_default();
+        Ok(GrpcResponse::new(WorkflowActionResult {
             status: 202,
-            body: format!("{}:{}", request.run_id, plugin.operation),
+            body: format!("{}:{customer_id}", selector.run_id),
+            ..Default::default()
         }))
     }
 }
@@ -193,61 +222,94 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
         .expect("configure provider");
 
     let mut client = WorkflowProviderClient::new(channel);
-    let started = client
-        .start_run(ProtoStartWorkflowProviderRunRequest {
-            target: Some(ProtoBoundWorkflowTarget {
-                steps: vec![ProtoWorkflowStep {
-                    id: "refresh".to_string(),
-                    action: Some(workflow_step::Action::Plugin(ProtoWorkflowStepPluginCall {
-                        name: "demo".to_string(),
-                        operation: "refresh".to_string(),
-                        ..Default::default()
-                    })),
-                    ..Default::default()
-                }],
-            }),
-            idempotency_key: "run-42".to_string(),
+    let target = BoundWorkflowTarget::from_steps([WorkflowStep {
+        id: "refresh".to_string(),
+        action: Some(workflow_step::Action::Plugin(WorkflowStepPluginCall {
+            name: "demo".to_string(),
+            operation: "refresh".to_string(),
+            ..Default::default()
+        })),
+        ..Default::default()
+    }]);
+    let spec = WorkflowDeploymentSpec {
+        id: "deployment-1".to_string(),
+        generation: 7,
+        target: Some(target.clone()),
+        activations: vec![WorkflowActivation {
+            id: "manual".to_string(),
+            mode: WorkflowActivationMode::Start as i32,
+            ..Default::default()
+        }],
+        workflow_semantics_version: "workflow.steps.v1".to_string(),
+        ..Default::default()
+    };
+    let planned = client
+        .plan_workflow(PlanWorkflowRequest {
+            spec: Some(spec.clone()),
+            spec_digest: "sha256:spec".to_string(),
+            target_digest: "sha256:target".to_string(),
+            action_table_digest: "sha256:actions".to_string(),
+            target_canonicalization_version: "target.canonical.v1".to_string(),
+            workflow_semantics_version: "workflow.steps.v1".to_string(),
+        })
+        .await
+        .expect("plan workflow")
+        .into_inner();
+    assert_eq!(planned.accepted_spec_digest, "sha256:spec");
+    assert_eq!(planned.provider_plan_id, "plan-local-1");
+
+    let applied = client
+        .apply_workflow_deployment(ApplyWorkflowDeploymentRequest {
+            spec: Some(spec),
+            plan: Some(planned),
+            request_id: "apply-1".to_string(),
             ..Default::default()
         })
         .await
-        .expect("start run")
+        .expect("apply deployment")
         .into_inner();
-    assert_eq!(started.id, "run-42");
     assert_eq!(
-        ProtoWorkflowRunStatus::try_from(started.status)
-            .expect("valid workflow run status")
+        WorkflowDeploymentStatus::try_from(applied.status)
+            .expect("deployment status")
             .as_str_name(),
-        "WORKFLOW_RUN_STATUS_PENDING"
-    );
-    assert_eq!(
-        started.target.expect("target"),
-        ProtoBoundWorkflowTarget {
-            steps: vec![ProtoWorkflowStep {
-                id: "refresh".to_string(),
-                action: Some(workflow_step::Action::Plugin(ProtoWorkflowStepPluginCall {
-                    name: "demo".to_string(),
-                    operation: "refresh".to_string(),
-                    ..Default::default()
-                })),
-                ..Default::default()
-            }],
-        }
+        "WORKFLOW_DEPLOYMENT_STATUS_ACTIVE"
     );
 
-    client
-        .publish_event(ProtoPublishWorkflowProviderEventRequest {
-            plugin_name: "demo".to_string(),
-            event: Some(ProtoWorkflowEvent {
+    let started = client
+        .start_workflow_run(
+            StartWorkflowRunRequest {
+                deployment_id: "deployment-1".to_string(),
+                deployment_generation: 7,
+                activation_id: "manual".to_string(),
+                workflow_key: "workflow-key".to_string(),
+                idempotency_key: "run-1".to_string(),
+                ..Default::default()
+            }
+            .with_input(serde_json::json!({ "customer_id": "cust_123" }))
+            .expect("input"),
+        )
+        .await
+        .expect("start run")
+        .into_inner();
+    assert_eq!(started.id, "run-1");
+    assert_eq!(started.workflow_key, "workflow-key");
+
+    let delivered = client
+        .deliver_workflow_event(DeliverWorkflowEventRequest {
+            delivery_id: "delivery-1".to_string(),
+            event: Some(WorkflowEvent {
                 id: "evt_1".to_string(),
                 source: "urn:test".to_string(),
                 spec_version: "1.0".to_string(),
                 r#type: "demo.refresh.requested".to_string(),
                 ..Default::default()
             }),
-            published_by: None,
+            ..Default::default()
         })
         .await
-        .expect("publish event");
+        .expect("deliver event")
+        .into_inner();
+    assert_eq!(delivered.results[0].deployment_id, "deployment-1");
 
     assert_eq!(
         *provider
@@ -258,11 +320,19 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
     );
     assert_eq!(
         provider
-            .published_events
+            .plan_requests
             .lock()
-            .expect("published_events lock")
+            .expect("plan_requests lock")
+            .len(),
+        1
+    );
+    assert_eq!(
+        provider
+            .delivered_events
+            .lock()
+            .expect("delivered_events lock")
             .clone(),
-        vec![("demo".to_string(), "demo.refresh.requested".to_string())]
+        vec!["demo.refresh.requested".to_string()]
     );
 
     serve_task.abort();
@@ -294,15 +364,22 @@ async fn workflow_host_client_round_trip_over_unix_socket() {
         .await
         .expect("connect workflow host");
     let invoked = host
-        .invoke_operation(InvokeWorkflowOperationInput {
-            target: Some(plugin_target("demo", "sync")),
-            run_id: "run-42".to_string(),
+        .invoke_action(InvokeWorkflowActionRequest {
+            selector: Some(WorkflowHostActionSelector {
+                run_id: "run-42".to_string(),
+                ..Default::default()
+            }),
+            action: Some(invoke_workflow_action_request::Action::Plugin(
+                WorkflowPluginActionPayload::default()
+                    .with_input(serde_json::json!({ "customer_id": "cust_123" }))
+                    .expect("plugin input"),
+            )),
             ..Default::default()
         })
         .await
-        .expect("invoke operation");
+        .expect("invoke action");
     assert_eq!(invoked.status, 202);
-    assert_eq!(invoked.body, "run-42:sync");
+    assert_eq!(invoked.body, "run-42:\"cust_123\"");
 
     host_task.abort();
     let _ = host_task.await;
@@ -335,15 +412,22 @@ async fn workflow_host_client_round_trip_over_tcp_and_sends_relay_token() {
         .await
         .expect("connect workflow host");
     let invoked = host
-        .invoke_operation(InvokeWorkflowOperationInput {
-            target: Some(plugin_target("demo", "sync")),
-            run_id: "run-42".to_string(),
+        .invoke_action(InvokeWorkflowActionRequest {
+            selector: Some(WorkflowHostActionSelector {
+                run_id: "run-42".to_string(),
+                ..Default::default()
+            }),
+            action: Some(invoke_workflow_action_request::Action::Plugin(
+                WorkflowPluginActionPayload::default()
+                    .with_input(serde_json::json!({ "customer_id": "cust_123" }))
+                    .expect("plugin input"),
+            )),
             ..Default::default()
         })
         .await
-        .expect("invoke operation");
+        .expect("invoke action");
     assert_eq!(invoked.status, 202);
-    assert_eq!(invoked.body, "run-42:sync");
+    assert_eq!(invoked.body, "run-42:\"cust_123\"");
     assert_eq!(
         host_service
             .relay_tokens

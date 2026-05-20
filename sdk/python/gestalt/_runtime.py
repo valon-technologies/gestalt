@@ -1083,343 +1083,219 @@ def _workflow_provider_servicer(provider: PluginProvider) -> Any:
         def __init__(self, inner: PluginProvider) -> None:
             self._provider = inner
 
+        @_grpc_handler("workflow plan")
+        def PlanWorkflow(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "plan_workflow",
+                "PlanWorkflow",
+                _workflow_native.plan_workflow_request_from_proto(request),
+                request,
+                context,
+            )
+            return _workflow_native.plan_workflow_response_to_proto(result)
+
+        @_grpc_handler("workflow apply deployment")
+        def ApplyWorkflowDeployment(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "apply_deployment",
+                "ApplyWorkflowDeployment",
+                _workflow_native.apply_workflow_deployment_request_from_proto(request),
+                request,
+                context,
+            )
+            return _workflow_native.workflow_deployment_to_proto(result)
+
+        @_grpc_handler("workflow get deployment")
+        def GetWorkflowDeployment(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "get_deployment",
+                "GetWorkflowDeployment",
+                _workflow_native.get_workflow_deployment_request_from_proto(request),
+                request,
+                context,
+            )
+            return _workflow_native.workflow_deployment_to_proto(result)
+
+        @_grpc_handler("workflow list deployments")
+        def ListWorkflowDeployments(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "list_deployments",
+                "ListWorkflowDeployments",
+                _workflow_native.list_workflow_deployments_request_from_proto(request),
+                request,
+                context,
+            )
+            return _workflow_native.list_workflow_deployments_response_to_proto(result)
+
+        @_grpc_handler("workflow delete deployment")
+        def DeleteWorkflowDeployment(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "delete_deployment",
+                "DeleteWorkflowDeployment",
+                _workflow_native.delete_workflow_deployment_request_from_proto(request),
+                request,
+                context,
+            )
+            return _empty_response(result)
+
+        @_grpc_handler("workflow set deployment paused")
+        def SetWorkflowDeploymentPaused(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "set_deployment_paused",
+                "SetWorkflowDeploymentPaused",
+                _workflow_native.set_workflow_deployment_paused_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.workflow_deployment_to_proto(result)
+
+        @_grpc_handler("workflow set activation paused")
+        def SetWorkflowActivationPaused(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "set_activation_paused",
+                "SetWorkflowActivationPaused",
+                _workflow_native.set_workflow_activation_paused_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.workflow_deployment_to_proto(result)
+
         @_grpc_handler("workflow start run")
-        def StartRun(self, request: Any, context: Any) -> Any:
+        def StartWorkflowRun(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
                 "start_run",
-                "StartRun",
-                _workflow_native.start_workflow_provider_run_request_from_proto(
-                    request
-                ),
+                "StartWorkflowRun",
+                _workflow_native.start_workflow_run_request_from_proto(request),
                 request,
                 context,
             )
-            return _workflow_native.bound_workflow_run(result)
-
-        @_grpc_handler("workflow get run")
-        def GetRun(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "get_run",
-                "GetRun",
-                _workflow_native.get_workflow_provider_run_request_from_proto(request),
-                request,
-                context,
-            )
-            return _workflow_native.bound_workflow_run(result)
-
-        @_grpc_handler("workflow list runs")
-        def ListRuns(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "list_runs",
-                "ListRuns",
-                _workflow_native.list_workflow_provider_runs_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.list_workflow_provider_runs_response_to_proto(
-                result
-            )
-
-        @_grpc_handler("workflow cancel run")
-        def CancelRun(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "cancel_run",
-                "CancelRun",
-                _workflow_native.cancel_workflow_provider_run_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.bound_workflow_run(result)
+            return _workflow_native.workflow_run_to_proto(result)
 
         @_grpc_handler("workflow signal run")
-        def SignalRun(self, request: Any, context: Any) -> Any:
+        def SignalWorkflowRun(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
                 "signal_run",
-                "SignalRun",
-                _workflow_native.signal_workflow_provider_run_request_from_proto(
-                    request
-                ),
+                "SignalWorkflowRun",
+                _workflow_native.signal_workflow_run_request_from_proto(request),
                 request,
                 context,
             )
-            return _workflow_native.signal_workflow_run_response_to_proto(result)
+            return _workflow_native.workflow_run_signal_to_proto(result)
 
         @_grpc_handler("workflow signal or start run")
-        def SignalOrStartRun(self, request: Any, context: Any) -> Any:
+        def SignalOrStartWorkflowRun(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
                 "signal_or_start_run",
-                "SignalOrStartRun",
-                _workflow_native.signal_or_start_workflow_provider_run_request_from_proto(
+                "SignalOrStartWorkflowRun",
+                _workflow_native.signal_or_start_workflow_run_request_from_proto(
                     request
                 ),
                 request,
                 context,
             )
-            return _workflow_native.signal_workflow_run_response_to_proto(result)
+            return _workflow_native.workflow_run_signal_to_proto(result)
 
-        @_grpc_handler("workflow upsert schedule")
-        def UpsertSchedule(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow cancel run")
+        def CancelWorkflowRun(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "upsert_schedule",
-                "UpsertSchedule",
-                _workflow_native.upsert_workflow_provider_schedule_request_from_proto(
-                    request
-                ),
+                "cancel_run",
+                "CancelWorkflowRun",
+                _workflow_native.cancel_workflow_run_request_from_proto(request),
                 request,
                 context,
             )
-            return _workflow_native.bound_workflow_schedule(result)
+            return _workflow_native.workflow_run_to_proto(result)
 
-        @_grpc_handler("workflow get schedule")
-        def GetSchedule(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow deliver event")
+        def DeliverWorkflowEvent(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "get_schedule",
-                "GetSchedule",
-                _workflow_native.get_workflow_provider_schedule_request_from_proto(
-                    request
-                ),
+                "deliver_event",
+                "DeliverWorkflowEvent",
+                _workflow_native.deliver_workflow_event_request_from_proto(request),
                 request,
                 context,
             )
-            return _workflow_native.bound_workflow_schedule(result)
+            return _workflow_native.deliver_workflow_event_response_to_proto(result)
 
-        @_grpc_handler("workflow list schedules")
-        def ListSchedules(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow get run")
+        def GetWorkflowRun(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "list_schedules",
-                "ListSchedules",
-                _workflow_native.list_workflow_provider_schedules_request_from_proto(
-                    request
-                ),
+                "get_run",
+                "GetWorkflowRun",
+                _workflow_native.get_workflow_run_request_from_proto(request),
                 request,
                 context,
             )
-            return _workflow_native.list_workflow_provider_schedules_response_to_proto(
-                result
-            )
+            return _workflow_native.workflow_run_to_proto(result)
 
-        @_grpc_handler("workflow delete schedule")
-        def DeleteSchedule(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow list runs")
+        def ListWorkflowRuns(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "delete_schedule",
-                "DeleteSchedule",
-                _workflow_native.delete_workflow_provider_schedule_request_from_proto(
-                    request
-                ),
+                "list_runs",
+                "ListWorkflowRuns",
+                _workflow_native.list_workflow_runs_request_from_proto(request),
                 request,
                 context,
             )
-            return _empty_response(result)
+            return _workflow_native.list_workflow_runs_response_to_proto(result)
 
-        @_grpc_handler("workflow pause schedule")
-        def PauseSchedule(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow get run events")
+        def GetWorkflowRunEvents(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "pause_schedule",
-                "PauseSchedule",
-                _workflow_native.pause_workflow_provider_schedule_request_from_proto(
-                    request
-                ),
+                "get_run_events",
+                "GetWorkflowRunEvents",
+                _workflow_native.get_workflow_run_events_request_from_proto(request),
                 request,
                 context,
             )
-            return _workflow_native.bound_workflow_schedule(result)
+            return _workflow_native.list_workflow_run_events_response_to_proto(result)
 
-        @_grpc_handler("workflow resume schedule")
-        def ResumeSchedule(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("workflow get run output")
+        def GetWorkflowRunOutput(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
                 self._provider,
                 WorkflowProvider,
-                "resume_schedule",
-                "ResumeSchedule",
-                _workflow_native.resume_workflow_provider_schedule_request_from_proto(
-                    request
-                ),
+                "get_run_output",
+                "GetWorkflowRunOutput",
+                _workflow_native.get_workflow_run_output_request_from_proto(request),
                 request,
                 context,
             )
-            return _workflow_native.bound_workflow_schedule(result)
-
-        @_grpc_handler("workflow upsert event trigger")
-        def UpsertEventTrigger(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "upsert_event_trigger",
-                "UpsertEventTrigger",
-                _workflow_native.upsert_workflow_provider_event_trigger_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.bound_workflow_event_trigger(result)
-
-        @_grpc_handler("workflow get event trigger")
-        def GetEventTrigger(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "get_event_trigger",
-                "GetEventTrigger",
-                _workflow_native.get_workflow_provider_event_trigger_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.bound_workflow_event_trigger(result)
-
-        @_grpc_handler("workflow list event triggers")
-        def ListEventTriggers(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "list_event_triggers",
-                "ListEventTriggers",
-                _workflow_native.list_workflow_provider_event_triggers_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.list_workflow_provider_event_triggers_response_to_proto(
-                result
-            )
-
-        @_grpc_handler("workflow delete event trigger")
-        def DeleteEventTrigger(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "delete_event_trigger",
-                "DeleteEventTrigger",
-                _workflow_native.delete_workflow_provider_event_trigger_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _empty_response(result)
-
-        @_grpc_handler("workflow pause event trigger")
-        def PauseEventTrigger(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "pause_event_trigger",
-                "PauseEventTrigger",
-                _workflow_native.pause_workflow_provider_event_trigger_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.bound_workflow_event_trigger(result)
-
-        @_grpc_handler("workflow resume event trigger")
-        def ResumeEventTrigger(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "resume_event_trigger",
-                "ResumeEventTrigger",
-                _workflow_native.resume_workflow_provider_event_trigger_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.bound_workflow_event_trigger(result)
-
-        @_grpc_handler("workflow put execution reference")
-        def PutExecutionReference(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "put_execution_reference",
-                "PutExecutionReference",
-                _workflow_native.put_workflow_execution_reference_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.workflow_execution_reference(result)
-
-        @_grpc_handler("workflow get execution reference")
-        def GetExecutionReference(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "get_execution_reference",
-                "GetExecutionReference",
-                _workflow_native.get_workflow_execution_reference_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _workflow_native.workflow_execution_reference(result)
-
-        @_grpc_handler("workflow list execution references")
-        def ListExecutionReferences(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "list_execution_references",
-                "ListExecutionReferences",
-                _workflow_native.list_workflow_execution_references_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return (
-                _workflow_native.list_workflow_execution_references_response_to_proto(
-                    result
-                )
-            )
-
-        @_grpc_handler("workflow publish event")
-        def PublishEvent(self, request: Any, context: Any) -> Any:
-            result = _call_native_provider_handler(
-                self._provider,
-                WorkflowProvider,
-                "publish_event",
-                "PublishEvent",
-                _workflow_native.publish_workflow_provider_event_request_from_proto(
-                    request
-                ),
-                request,
-                context,
-            )
-            return _empty_response(result)
+            return _workflow_native.workflow_run_output_to_proto(result)
 
     return WorkflowProviderServicer(provider)
 

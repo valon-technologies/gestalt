@@ -57,6 +57,62 @@ func (l *lazyWorkflowManager) DeleteDefinition(ctx context.Context, p *principal
 	return target.DeleteDefinition(ctx, p, definitionID)
 }
 
+func (l *lazyWorkflowManager) PlanDeployment(ctx context.Context, p *principal.Principal, req workflowmanager.DeploymentPlan) (*coreworkflow.CompileTargetResponse, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.PlanDeployment(ctx, p, req)
+}
+
+func (l *lazyWorkflowManager) ApplyDeployment(ctx context.Context, p *principal.Principal, req workflowmanager.DeploymentApply) (*workflowmanager.ManagedDeployment, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ApplyDeployment(ctx, p, req)
+}
+
+func (l *lazyWorkflowManager) GetDeployment(ctx context.Context, p *principal.Principal, deploymentID string) (*workflowmanager.ManagedDeployment, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.GetDeployment(ctx, p, deploymentID)
+}
+
+func (l *lazyWorkflowManager) ListDeployments(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedDeployment, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.ListDeployments(ctx, p)
+}
+
+func (l *lazyWorkflowManager) DeleteDeployment(ctx context.Context, p *principal.Principal, deploymentID string) error {
+	target, err := l.current()
+	if err != nil {
+		return err
+	}
+	return target.DeleteDeployment(ctx, p, deploymentID)
+}
+
+func (l *lazyWorkflowManager) SetDeploymentPaused(ctx context.Context, p *principal.Principal, deploymentID string, paused bool) (*workflowmanager.ManagedDeployment, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.SetDeploymentPaused(ctx, p, deploymentID, paused)
+}
+
+func (l *lazyWorkflowManager) SetActivationPaused(ctx context.Context, p *principal.Principal, deploymentID, activationID string, paused bool) (*workflowmanager.ManagedDeployment, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.SetActivationPaused(ctx, p, deploymentID, activationID, paused)
+}
+
 func (l *lazyWorkflowManager) ListSchedules(ctx context.Context, p *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
 	target, err := l.current()
 	if err != nil {
@@ -215,6 +271,14 @@ func (l *lazyWorkflowManager) SignalOrStartRun(ctx context.Context, p *principal
 		return nil, err
 	}
 	return target.SignalOrStartRun(ctx, p, req)
+}
+
+func (l *lazyWorkflowManager) DeliverEvent(ctx context.Context, p *principal.Principal, req workflowmanager.EventPublish) (*coreworkflow.DeliverEventResponse, error) {
+	target, err := l.current()
+	if err != nil {
+		return nil, err
+	}
+	return target.DeliverEvent(ctx, p, req)
 }
 
 func (l *lazyWorkflowManager) PublishEvent(ctx context.Context, p *principal.Principal, req workflowmanager.EventPublish) (coreworkflow.Event, error) {

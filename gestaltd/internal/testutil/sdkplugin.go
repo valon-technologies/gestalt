@@ -402,72 +402,84 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *Provider) StartRun(context.Context, *gestalt.StartWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
+func (p *Provider) PlanWorkflow(context.Context, *gestalt.PlanWorkflowRequest) (*gestalt.PlanWorkflowResponse, error) {
+	return &gestalt.PlanWorkflowResponse{ProviderPlanID: "generated-plan", ProviderPlanDigest: "generated-plan-digest"}, nil
 }
 
-func (p *Provider) GetRun(context.Context, *gestalt.GetWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
+func (p *Provider) ApplyWorkflowDeployment(_ context.Context, req *gestalt.ApplyWorkflowDeploymentRequest) (*gestalt.WorkflowDeployment, error) {
+	var spec *gestalt.WorkflowDeploymentSpec
+	if req != nil {
+		spec = req.Spec
+	}
+	var generation int64
+	if spec != nil {
+		generation = spec.Generation
+	}
+	return &gestalt.WorkflowDeployment{Spec: spec, Status: gestalt.WorkflowDeploymentStatusValueActive, AppliedGeneration: generation}, nil
 }
 
-func (p *Provider) ListRuns(context.Context, *gestalt.ListWorkflowProviderRunsRequest) (*gestalt.ListWorkflowProviderRunsResponse, error) {
-	return &gestalt.ListWorkflowProviderRunsResponse{}, nil
+func (p *Provider) GetWorkflowDeployment(context.Context, *gestalt.GetWorkflowDeploymentRequest) (*gestalt.WorkflowDeployment, error) {
+	return &gestalt.WorkflowDeployment{Spec: &gestalt.WorkflowDeploymentSpec{ID: "generated-deployment"}, Status: gestalt.WorkflowDeploymentStatusValueActive}, nil
 }
 
-func (p *Provider) CancelRun(context.Context, *gestalt.CancelWorkflowProviderRunRequest) (*gestalt.BoundWorkflowRun, error) {
-	return &gestalt.BoundWorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValueCanceled}, nil
+func (p *Provider) ListWorkflowDeployments(context.Context, *gestalt.ListWorkflowDeploymentsRequest) (*gestalt.ListWorkflowDeploymentsResponse, error) {
+	return &gestalt.ListWorkflowDeploymentsResponse{}, nil
 }
 
-func (p *Provider) UpsertSchedule(context.Context, *gestalt.UpsertWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
-}
-
-func (p *Provider) GetSchedule(context.Context, *gestalt.GetWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
-}
-
-func (p *Provider) ListSchedules(context.Context, *gestalt.ListWorkflowProviderSchedulesRequest) (*gestalt.ListWorkflowProviderSchedulesResponse, error) {
-	return &gestalt.ListWorkflowProviderSchedulesResponse{}, nil
-}
-
-func (p *Provider) DeleteSchedule(context.Context, *gestalt.DeleteWorkflowProviderScheduleRequest) error {
+func (p *Provider) DeleteWorkflowDeployment(context.Context, *gestalt.DeleteWorkflowDeploymentRequest) error {
 	return nil
 }
 
-func (p *Provider) PauseSchedule(context.Context, *gestalt.PauseWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule", Paused: true}, nil
+func (p *Provider) SetWorkflowDeploymentPaused(_ context.Context, req *gestalt.SetWorkflowDeploymentPausedRequest) (*gestalt.WorkflowDeployment, error) {
+	status := gestalt.WorkflowDeploymentStatusValueActive
+	if req.Paused {
+		status = gestalt.WorkflowDeploymentStatusValuePaused
+	}
+	return &gestalt.WorkflowDeployment{Spec: &gestalt.WorkflowDeploymentSpec{ID: req.DeploymentID, Paused: req.Paused}, Status: status}, nil
 }
 
-func (p *Provider) ResumeSchedule(context.Context, *gestalt.ResumeWorkflowProviderScheduleRequest) (*gestalt.BoundWorkflowSchedule, error) {
-	return &gestalt.BoundWorkflowSchedule{ID: "generated-schedule"}, nil
+func (p *Provider) SetWorkflowActivationPaused(_ context.Context, req *gestalt.SetWorkflowActivationPausedRequest) (*gestalt.WorkflowDeployment, error) {
+	status := gestalt.WorkflowDeploymentStatusValueActive
+	if req.Paused {
+		status = gestalt.WorkflowDeploymentStatusValuePaused
+	}
+	return &gestalt.WorkflowDeployment{Spec: &gestalt.WorkflowDeploymentSpec{ID: req.DeploymentID, Paused: req.Paused}, Status: status}, nil
 }
 
-func (p *Provider) UpsertEventTrigger(context.Context, *gestalt.UpsertWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
+func (p *Provider) StartWorkflowRun(context.Context, *gestalt.StartWorkflowRunRequest) (*gestalt.WorkflowRun, error) {
+	return &gestalt.WorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
 }
 
-func (p *Provider) GetEventTrigger(context.Context, *gestalt.GetWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
+func (p *Provider) SignalWorkflowRun(context.Context, *gestalt.SignalWorkflowRunRequest) (*gestalt.WorkflowRunSignal, error) {
+	return &gestalt.WorkflowRunSignal{Run: &gestalt.WorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValueRunning}}, nil
 }
 
-func (p *Provider) ListEventTriggers(context.Context, *gestalt.ListWorkflowProviderEventTriggersRequest) (*gestalt.ListWorkflowProviderEventTriggersResponse, error) {
-	return &gestalt.ListWorkflowProviderEventTriggersResponse{}, nil
+func (p *Provider) SignalOrStartWorkflowRun(context.Context, *gestalt.SignalOrStartWorkflowRunRequest) (*gestalt.WorkflowRunSignal, error) {
+	return &gestalt.WorkflowRunSignal{Run: &gestalt.WorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValueRunning}, StartedRun: true}, nil
 }
 
-func (p *Provider) DeleteEventTrigger(context.Context, *gestalt.DeleteWorkflowProviderEventTriggerRequest) error {
-	return nil
+func (p *Provider) CancelWorkflowRun(context.Context, *gestalt.CancelWorkflowRunRequest) (*gestalt.WorkflowRun, error) {
+	return &gestalt.WorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValueCanceled}, nil
 }
 
-func (p *Provider) PauseEventTrigger(context.Context, *gestalt.PauseWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger", Paused: true}, nil
+func (p *Provider) GetWorkflowRun(context.Context, *gestalt.GetWorkflowRunRequest) (*gestalt.WorkflowRun, error) {
+	return &gestalt.WorkflowRun{ID: "generated-run", Status: gestalt.WorkflowRunStatusValuePending}, nil
 }
 
-func (p *Provider) ResumeEventTrigger(context.Context, *gestalt.ResumeWorkflowProviderEventTriggerRequest) (*gestalt.BoundWorkflowEventTrigger, error) {
-	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
+func (p *Provider) ListWorkflowRuns(context.Context, *gestalt.ListWorkflowRunsRequest) (*gestalt.ListWorkflowRunsResponse, error) {
+	return &gestalt.ListWorkflowRunsResponse{}, nil
 }
 
-func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) error {
-	return nil
+func (p *Provider) DeliverWorkflowEvent(context.Context, *gestalt.DeliverWorkflowEventRequest) (*gestalt.DeliverWorkflowEventResponse, error) {
+	return &gestalt.DeliverWorkflowEventResponse{}, nil
+}
+
+func (p *Provider) GetWorkflowRunEvents(context.Context, *gestalt.GetWorkflowRunEventsRequest) (*gestalt.ListWorkflowRunEventsResponse, error) {
+	return &gestalt.ListWorkflowRunEventsResponse{}, nil
+}
+
+func (p *Provider) GetWorkflowRunOutput(context.Context, *gestalt.GetWorkflowRunOutputRequest) (*gestalt.WorkflowRunOutput, error) {
+	return &gestalt.WorkflowRunOutput{}, nil
 }
 `
 }

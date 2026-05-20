@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -13,6 +15,7 @@ import (
 )
 
 const ConfigManagedSchedulePrefix = "cfg_"
+const StepActionPermissionPlugin = "__gestalt.workflow.step_actions__"
 
 type RunStatus string
 
@@ -175,6 +178,12 @@ type ExecutionReference struct {
 	Permissions         []core.AccessPermission
 	CreatedAt           *time.Time
 	RevokedAt           *time.Time
+	TargetDigest        string
+	ProviderPlanDigest  string
+	PermissionsDigest   string
+	SemanticsVersion    string
+	Generation          int64
+	Seal                string
 }
 
 type ExecutionReferenceStore interface {
@@ -203,33 +212,88 @@ type EventMatch struct {
 
 type ScheduleTrigger struct {
 	ScheduleID   string
+	ActivationID string
 	ScheduledFor *time.Time
 }
 
 type EventTriggerInvocation struct {
-	TriggerID string
-	Event     Event
+	TriggerID    string
+	ActivationID string
+	Event        Event
 }
 
 type RunTrigger struct {
-	Manual   bool
-	Schedule *ScheduleTrigger
-	Event    *EventTriggerInvocation
+	DeploymentID         string
+	DeploymentGeneration int64
+	ActivationID         string
+	Manual               bool
+	Schedule             *ScheduleTrigger
+	Event                *EventTriggerInvocation
 }
 
 type Run struct {
-	ID            string
-	Status        RunStatus
-	WorkflowKey   string
-	Target        Target
-	Trigger       RunTrigger
-	ExecutionRef  string
-	CreatedBy     Actor
-	CreatedAt     *time.Time
-	StartedAt     *time.Time
-	CompletedAt   *time.Time
-	StatusMessage string
-	ResultBody    string
+	ID                     string
+	DeploymentID           string
+	DeploymentGeneration   int64
+	Status                 RunStatus
+	WorkflowKey            string
+	Target                 Target
+	Trigger                RunTrigger
+	Input                  map[string]any
+	ExecutionRef           string
+	ExecutionRefGeneration int64
+	CreatedBy              Actor
+	CreatedAt              *time.Time
+	StartedAt              *time.Time
+	CompletedAt            *time.Time
+	StatusMessage          string
+	ResultBody             string
+	TargetDigest           string
+	SpecDigest             string
+	ActionTableDigest      string
+	PlanDigest             string
+	Steps                  []StepState
+	Error                  *RunError
+}
+
+type StepStatus string
+
+const (
+	StepStatusPending   StepStatus = "pending"
+	StepStatusRunning   StepStatus = "running"
+	StepStatusSucceeded StepStatus = "succeeded"
+	StepStatusFailed    StepStatus = "failed"
+	StepStatusSkipped   StepStatus = "skipped"
+	StepStatusCanceled  StepStatus = "canceled"
+)
+
+type OutputSummary struct {
+	EnvelopeVersion string
+	Kind            string
+	SizeBytes       int64
+	SHA256          string
+	Truncated       bool
+	Redacted        bool
+	MediaType       string
+}
+
+type RunError struct {
+	Code     string
+	Message  string
+	StepID   string
+	ActionID string
+}
+
+type StepState struct {
+	StepID        string
+	StepIndex     int
+	Status        StepStatus
+	SkippedReason string
+	AttemptNumber int
+	OutputSummary *OutputSummary
+	OutputRef     string
+	Error         *RunError
+	UpdatedAt     *time.Time
 }
 
 type Schedule struct {
@@ -257,11 +321,16 @@ type EventTrigger struct {
 }
 
 type StartRunRequest struct {
-	Target         Target
-	IdempotencyKey string
-	WorkflowKey    string
-	CreatedBy      Actor
-	ExecutionRef   string
+	DeploymentID         string
+	DeploymentGeneration int64
+	ActivationID         string
+	Target               Target
+	Input                map[string]any
+	IdempotencyKey       string
+	WorkflowKey          string
+	CreatedBy            Actor
+	ExecutionRef         string
+	PlanBinding          *PlanBinding
 }
 
 type GetRunRequest struct {
@@ -269,6 +338,7 @@ type GetRunRequest struct {
 }
 
 type ListRunsRequest struct {
+	DeploymentID string
 	PageSize     int
 	PageToken    string
 	TargetPlugin string
@@ -302,12 +372,17 @@ type SignalRunRequest struct {
 }
 
 type SignalOrStartRunRequest struct {
-	WorkflowKey    string
-	Target         Target
-	IdempotencyKey string
-	CreatedBy      Actor
-	ExecutionRef   string
-	Signal         Signal
+	DeploymentID         string
+	DeploymentGeneration int64
+	ActivationID         string
+	WorkflowKey          string
+	Target               Target
+	Input                map[string]any
+	IdempotencyKey       string
+	CreatedBy            Actor
+	ExecutionRef         string
+	Signal               Signal
+	PlanBinding          *PlanBinding
 }
 
 type SignalRunResponse struct {
@@ -325,6 +400,7 @@ type UpsertScheduleRequest struct {
 	Paused       bool
 	RequestedBy  Actor
 	ExecutionRef string
+	PlanBinding  *PlanBinding
 }
 
 type ListSchedulesRequest struct{}
@@ -352,6 +428,7 @@ type UpsertEventTriggerRequest struct {
 	Paused       bool
 	RequestedBy  Actor
 	ExecutionRef string
+	PlanBinding  *PlanBinding
 }
 
 type ListEventTriggersRequest struct{}
@@ -373,9 +450,251 @@ type ResumeEventTriggerRequest struct {
 }
 
 type PublishEventRequest struct {
-	PluginName  string
-	Event       Event
-	PublishedBy Actor
+	PluginName     string
+	DeliveryID     string
+	Event          Event
+	PublishedBy    Actor
+	IdempotencyKey string
+}
+
+type ActivationMode string
+
+const (
+	ActivationModeStart         ActivationMode = "start"
+	ActivationModeSignal        ActivationMode = "signal"
+	ActivationModeSignalOrStart ActivationMode = "signal_or_start"
+)
+
+type Activation struct {
+	ID             string
+	Paused         bool
+	Mode           ActivationMode
+	Input          Value
+	RunKey         Value
+	IdempotencyKey Value
+	Manual         bool
+	Schedule       *ScheduleActivation
+	Event          *EventActivation
+}
+
+type ScheduleActivation struct {
+	Cron     string
+	Timezone string
+}
+
+type EventActivation struct {
+	Match EventMatch
+}
+
+type DeploymentSpec struct {
+	ID                       string
+	Generation               int64
+	Target                   Target
+	Activations              []Activation
+	Paused                   bool
+	RunAs                    *core.RunAsSubject
+	Permissions              []core.AccessPermission
+	Labels                   map[string]string
+	WorkflowSemanticsVersion string
+}
+
+func DeploymentSpecDigest(spec DeploymentSpec) (string, error) {
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+type PlanWorkflowRequest struct {
+	Spec                          DeploymentSpec
+	SpecDigest                    string
+	TargetDigest                  string
+	ActionTableDigest             string
+	TargetCanonicalizationVersion string
+	WorkflowSemanticsVersion      string
+}
+
+type CompileTargetResponse struct {
+	AcceptedSpecDigest        string
+	ProviderPlanID            string
+	ProviderPlanDigest        string
+	ProviderPlanFormatVersion string
+	Unsupported               []UnsupportedFeature
+	SupportedFeatureFlags     []string
+}
+
+type UnsupportedFeature struct {
+	Feature string
+	Reason  string
+}
+
+type PlanBinding struct {
+	ID                     string
+	ExecutionRef           string
+	ExecutionRefGeneration int64
+	ExecutionRefSeal       string
+	DeploymentID           string
+	DeploymentGeneration   int64
+	SpecDigest             string
+	TargetDigest           string
+	ActionTableDigest      string
+	ProviderPlanID         string
+	ProviderPlanDigest     string
+	SemanticsVersion       string
+	RequestID              string
+	IdempotencyKey         string
+	PrepareOnly            bool
+}
+
+type DeploymentBinding = PlanBinding
+
+type DeploymentStatus string
+
+const (
+	DeploymentStatusPending DeploymentStatus = "pending"
+	DeploymentStatusActive  DeploymentStatus = "active"
+	DeploymentStatusPaused  DeploymentStatus = "paused"
+	DeploymentStatusDeleted DeploymentStatus = "deleted"
+	DeploymentStatusFailed  DeploymentStatus = "failed"
+)
+
+type Deployment struct {
+	Spec               DeploymentSpec
+	Status             DeploymentStatus
+	CreatedAt          *time.Time
+	UpdatedAt          *time.Time
+	AppliedGeneration  int64
+	SpecDigest         string
+	TargetDigest       string
+	ActionTableDigest  string
+	ProviderPlanID     string
+	ProviderPlanDigest string
+	Binding            *DeploymentBinding
+	Error              *RunError
+}
+
+type ApplyDeploymentRequest struct {
+	Spec         DeploymentSpec
+	Plan         *CompileTargetResponse
+	Binding      *DeploymentBinding
+	RequestID    string
+	ValidateOnly bool
+}
+
+type GetDeploymentRequest struct {
+	DeploymentID string
+}
+
+type ListDeploymentsRequest struct {
+	PageSize  int
+	PageToken string
+	Labels    map[string]string
+}
+
+type ListDeploymentsResponse struct {
+	Deployments   []*Deployment
+	NextPageToken string
+}
+
+type DeleteDeploymentRequest struct {
+	DeploymentID string
+	Generation   int64
+	RequestID    string
+}
+
+type SetDeploymentPausedRequest struct {
+	DeploymentID string
+	Paused       bool
+	RequestID    string
+}
+
+type SetActivationPausedRequest struct {
+	DeploymentID string
+	ActivationID string
+	Paused       bool
+	RequestID    string
+}
+
+type EventDeliveryResult struct {
+	DeploymentID string
+	ActivationID string
+	Run          *Run
+	Signal       Signal
+	StartedRun   bool
+}
+
+type DeliverEventResponse struct {
+	Results []EventDeliveryResult
+}
+
+type RunEventType string
+
+const (
+	RunEventTypeRunStarted      RunEventType = "run_started"
+	RunEventTypeRunCompleted    RunEventType = "run_completed"
+	RunEventTypeRunFailed       RunEventType = "run_failed"
+	RunEventTypeRunCanceled     RunEventType = "run_canceled"
+	RunEventTypeSignalReceived  RunEventType = "signal_received"
+	RunEventTypeStepStarted     RunEventType = "step_started"
+	RunEventTypeStepSucceeded   RunEventType = "step_succeeded"
+	RunEventTypeStepFailed      RunEventType = "step_failed"
+	RunEventTypeStepSkipped     RunEventType = "step_skipped"
+	RunEventTypeActionInvoked   RunEventType = "action_invoked"
+	RunEventTypeActionCompleted RunEventType = "action_completed"
+	RunEventTypeActionFailed    RunEventType = "action_failed"
+)
+
+type RunEvent struct {
+	ID            string
+	RunID         string
+	Sequence      int64
+	Type          RunEventType
+	StepID        string
+	ActionID      string
+	AttemptNumber int
+	Message       string
+	OutputSummary *OutputSummary
+	OutputRef     string
+	Error         *RunError
+	ObservedAt    *time.Time
+}
+
+type GetRunEventsRequest struct {
+	RunID     string
+	PageSize  int
+	PageToken string
+}
+
+type ListRunEventsResponse struct {
+	Events        []RunEvent
+	NextPageToken string
+}
+
+type GetRunOutputRequest struct {
+	RunID     string
+	OutputRef string
+	StepID    string
+}
+
+type RunOutput struct {
+	OutputRef string
+	Summary   *OutputSummary
+	Body      any
+}
+
+type DeploymentProvider interface {
+	PlanWorkflow(ctx context.Context, req PlanWorkflowRequest) (*CompileTargetResponse, error)
+	ApplyWorkflowDeployment(ctx context.Context, req ApplyDeploymentRequest) (*Deployment, error)
+	GetWorkflowDeployment(ctx context.Context, req GetDeploymentRequest) (*Deployment, error)
+	ListWorkflowDeployments(ctx context.Context, req ListDeploymentsRequest) (*ListDeploymentsResponse, error)
+	DeleteWorkflowDeployment(ctx context.Context, req DeleteDeploymentRequest) error
+	SetWorkflowDeploymentPaused(ctx context.Context, req SetDeploymentPausedRequest) (*Deployment, error)
+	SetWorkflowActivationPaused(ctx context.Context, req SetActivationPausedRequest) (*Deployment, error)
+	DeliverWorkflowEvent(ctx context.Context, req PublishEventRequest) (*DeliverEventResponse, error)
+	GetWorkflowRunEvents(ctx context.Context, req GetRunEventsRequest) (*ListRunEventsResponse, error)
+	GetWorkflowRunOutput(ctx context.Context, req GetRunOutputRequest) (*RunOutput, error)
 }
 
 type InvokeOperationRequest struct {
@@ -395,32 +714,158 @@ type InvokeOperationResponse struct {
 	Body   string
 }
 
+type HostActionSelector struct {
+	ExecutionRef           string
+	ExecutionRefGeneration int64
+	ExecutionRefSeal       string
+	RunID                  string
+	StepID                 string
+	ActionID               string
+	AttemptNumber          int
+	IdempotencyKey         string
+	TargetDigest           string
+	ActionTableDigest      string
+	ProviderPlanDigest     string
+}
+
+type PluginActionPayload struct {
+	Input map[string]any
+}
+
+type AgentTurnPayload struct {
+	Prompt   Text
+	Messages []AgentMessage
+}
+
+type InvokeActionRequest struct {
+	ProviderName string
+	Selector     HostActionSelector
+	Plugin       *PluginActionPayload
+	AgentTurn    *AgentTurnPayload
+	Metadata     map[string]any
+	Trigger      RunTrigger
+	Signals      []Signal
+}
+
+type CancelHostActionRequest struct {
+	ProviderName string
+	Selector     HostActionSelector
+	Reason       string
+}
+
+type HostActionResponse struct {
+	ActionEventID string
+	Status        int
+	Body          string
+	OutputSummary *OutputSummary
+	OutputRef     string
+	Error         *RunError
+}
+
 type Provider interface {
+	DeploymentProvider
 	StartRun(ctx context.Context, req StartRunRequest) (*Run, error)
 	GetRun(ctx context.Context, req GetRunRequest) (*Run, error)
 	ListRuns(ctx context.Context, req ListRunsRequest) (*ListRunsResponse, error)
 	CancelRun(ctx context.Context, req CancelRunRequest) (*Run, error)
 	SignalRun(ctx context.Context, req SignalRunRequest) (*SignalRunResponse, error)
 	SignalOrStartRun(ctx context.Context, req SignalOrStartRunRequest) (*SignalRunResponse, error)
-	UpsertSchedule(ctx context.Context, req UpsertScheduleRequest) (*Schedule, error)
-	GetSchedule(ctx context.Context, req GetScheduleRequest) (*Schedule, error)
-	ListSchedules(ctx context.Context, req ListSchedulesRequest) ([]*Schedule, error)
-	DeleteSchedule(ctx context.Context, req DeleteScheduleRequest) error
-	PauseSchedule(ctx context.Context, req PauseScheduleRequest) (*Schedule, error)
-	ResumeSchedule(ctx context.Context, req ResumeScheduleRequest) (*Schedule, error)
-	UpsertEventTrigger(ctx context.Context, req UpsertEventTriggerRequest) (*EventTrigger, error)
-	GetEventTrigger(ctx context.Context, req GetEventTriggerRequest) (*EventTrigger, error)
-	ListEventTriggers(ctx context.Context, req ListEventTriggersRequest) ([]*EventTrigger, error)
-	DeleteEventTrigger(ctx context.Context, req DeleteEventTriggerRequest) error
-	PauseEventTrigger(ctx context.Context, req PauseEventTriggerRequest) (*EventTrigger, error)
-	ResumeEventTrigger(ctx context.Context, req ResumeEventTriggerRequest) (*EventTrigger, error)
-	PublishEvent(ctx context.Context, req PublishEventRequest) error
 	Ping(ctx context.Context) error
 	Close() error
 }
 
 type Host interface {
 	InvokeOperation(ctx context.Context, req InvokeOperationRequest) (*InvokeOperationResponse, error)
+	InvokeWorkflowAction(ctx context.Context, req InvokeActionRequest) (*HostActionResponse, error)
+	CancelWorkflowHostAction(ctx context.Context, req CancelHostActionRequest) (*HostActionResponse, error)
+}
+
+const (
+	WorkflowStepPluginActionSuffix   = "plugin"
+	WorkflowStepAgentActionSuffix    = "agent-turn"
+	WorkflowStepDeliveryActionSuffix = "delivery"
+)
+
+func ValidStepID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '_' || r == '-' || r == '.':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func StepActionID(stepID, suffix string) (string, bool) {
+	if !ValidStepID(stepID) {
+		return "", false
+	}
+	switch suffix {
+	case WorkflowStepPluginActionSuffix, WorkflowStepAgentActionSuffix, WorkflowStepDeliveryActionSuffix:
+		return "step/" + stepID + "/" + suffix, true
+	default:
+		return "", false
+	}
+}
+
+func StepPluginActionID(stepID string) (string, bool) {
+	return StepActionID(stepID, WorkflowStepPluginActionSuffix)
+}
+
+func StepAgentActionID(stepID string) (string, bool) {
+	return StepActionID(stepID, WorkflowStepAgentActionSuffix)
+}
+
+func StepDeliveryActionID(stepID string) (string, bool) {
+	return StepActionID(stepID, WorkflowStepDeliveryActionSuffix)
+}
+
+type targetActionTableEntry struct {
+	ActionID string `json:"action_id"`
+	Kind     string `json:"kind"`
+	StepID   string `json:"step_id"`
+}
+
+func TargetActionTableDigest(target Target) (string, error) {
+	entries := make([]targetActionTableEntry, 0, len(target.Steps)*2)
+	for i := range target.Steps {
+		step := target.Steps[i]
+		stepID := strings.TrimSpace(step.ID)
+		if step.Plugin != nil {
+			actionID, ok := StepPluginActionID(stepID)
+			if !ok {
+				return "", fmt.Errorf("workflow step %q has invalid plugin action id", stepID)
+			}
+			entries = append(entries, targetActionTableEntry{ActionID: actionID, Kind: WorkflowStepPluginActionSuffix, StepID: stepID})
+		}
+		if step.Agent != nil {
+			actionID, ok := StepAgentActionID(stepID)
+			if !ok {
+				return "", fmt.Errorf("workflow step %q has invalid agent action id", stepID)
+			}
+			entries = append(entries, targetActionTableEntry{ActionID: actionID, Kind: WorkflowStepAgentActionSuffix, StepID: stepID})
+		}
+		if step.OutputDelivery != nil {
+			actionID, ok := StepDeliveryActionID(stepID)
+			if !ok {
+				return "", fmt.Errorf("workflow step %q has invalid delivery action id", stepID)
+			}
+			entries = append(entries, targetActionTableEntry{ActionID: actionID, Kind: WorkflowStepDeliveryActionSuffix, StepID: stepID})
+		}
+	}
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func TargetsEqual(left, right Target) bool {
@@ -433,6 +878,9 @@ func TargetsEqual(left, right Target) bool {
 }
 
 func TargetFingerprint(target Target) (string, error) {
+	if len(target.Steps) == 0 {
+		return "", fmt.Errorf("workflow target.steps is required")
+	}
 	data, err := json.Marshal(normalizedTargetComparisonPayload(target))
 	if err != nil {
 		return "", err
@@ -446,49 +894,82 @@ type targetComparisonPayload struct {
 }
 
 func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
-	out := targetComparisonPayload{Steps: append([]Step(nil), target.Steps...)}
-	for i := range out.Steps {
-		step := &out.Steps[i]
-		if len(step.Inputs) == 0 {
-			step.Inputs = nil
-		}
-		if step.Plugin != nil {
-			plugin := *step.Plugin
-			plugin.Input = normalizedWorkflowValue(plugin.Input)
-			step.Plugin = &plugin
-		}
-		if step.Agent != nil {
-			agent := *step.Agent
-			if len(agent.Messages) == 0 {
-				agent.Messages = nil
+	out := targetComparisonPayload{}
+	if len(target.Steps) > 0 {
+		out.Steps = append([]Step(nil), target.Steps...)
+		for i := range out.Steps {
+			step := &out.Steps[i]
+			if len(step.Inputs) == 0 {
+				step.Inputs = nil
+			} else {
+				inputs := make(map[string]Value, len(step.Inputs))
+				for key := range step.Inputs {
+					inputs[key] = normalizedWorkflowValue(step.Inputs[key])
+				}
+				step.Inputs = inputs
 			}
-			if len(agent.ToolRefs) == 0 {
-				agent.ToolRefs = nil
+			if step.Plugin != nil {
+				plugin := *step.Plugin
+				plugin.Input = normalizedWorkflowValue(plugin.Input)
+				step.Plugin = &plugin
 			}
-			if len(agent.ResponseSchema) == 0 {
-				agent.ResponseSchema = nil
+			if step.When != nil {
+				when := *step.When
+				when.Value = normalizedWorkflowValue(when.Value)
+				step.When = &when
 			}
-			if len(agent.ModelOptions) == 0 {
-				agent.ModelOptions = nil
+			if step.Agent != nil {
+				agent := *step.Agent
+				if len(agent.Messages) == 0 {
+					agent.Messages = nil
+				}
+				if len(agent.ToolRefs) == 0 {
+					agent.ToolRefs = nil
+				}
+				if len(agent.ResponseSchema) == 0 {
+					agent.ResponseSchema = nil
+				}
+				if len(agent.ModelOptions) == 0 {
+					agent.ModelOptions = nil
+				}
+				step.Agent = &agent
 			}
-			step.Agent = &agent
+			if len(step.Metadata) == 0 {
+				step.Metadata = nil
+			}
+			step.OutputDelivery = normalizedStepDelivery(step.OutputDelivery)
 		}
-		if len(step.Metadata) == 0 {
-			step.Metadata = nil
-		}
-		step.OutputDelivery = normalizedStepDelivery(step.OutputDelivery)
+		return out
 	}
 	return out
 }
 
 func normalizedWorkflowValue(value Value) Value {
+	out := value
+	if value.LiteralSet {
+		if literal, ok := value.Literal.(map[string]any); ok {
+			if len(literal) == 0 {
+				out.Literal = nil
+			}
+		}
+	}
 	if len(value.Object) == 0 {
-		value.Object = nil
+		out.Object = nil
+	} else {
+		out.Object = make(map[string]Value, len(value.Object))
+		for key := range value.Object {
+			out.Object[key] = normalizedWorkflowValue(value.Object[key])
+		}
 	}
 	if len(value.Array) == 0 {
-		value.Array = nil
+		out.Array = nil
+	} else {
+		out.Array = make([]Value, len(value.Array))
+		for i := range value.Array {
+			out.Array[i] = normalizedWorkflowValue(value.Array[i])
+		}
 	}
-	return value
+	return out
 }
 
 func normalizedStepDelivery(delivery *StepDelivery) *StepDelivery {

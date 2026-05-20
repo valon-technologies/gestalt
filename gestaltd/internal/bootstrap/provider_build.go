@@ -2432,6 +2432,34 @@ func (unavailableWorkflowManager) DeleteDefinition(context.Context, *principal.P
 	return fmt.Errorf("workflow manager is not available")
 }
 
+func (unavailableWorkflowManager) PlanDeployment(context.Context, *principal.Principal, workflowmanager.DeploymentPlan) (*coreworkflow.CompileTargetResponse, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) ApplyDeployment(context.Context, *principal.Principal, workflowmanager.DeploymentApply) (*workflowmanager.ManagedDeployment, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) GetDeployment(context.Context, *principal.Principal, string) (*workflowmanager.ManagedDeployment, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) ListDeployments(context.Context, *principal.Principal) ([]*workflowmanager.ManagedDeployment, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) DeleteDeployment(context.Context, *principal.Principal, string) error {
+	return fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) SetDeploymentPaused(context.Context, *principal.Principal, string, bool) (*workflowmanager.ManagedDeployment, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) SetActivationPaused(context.Context, *principal.Principal, string, string, bool) (*workflowmanager.ManagedDeployment, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
 func (unavailableWorkflowManager) ListSchedules(context.Context, *principal.Principal) ([]*workflowmanager.ManagedSchedule, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
@@ -2509,6 +2537,10 @@ func (unavailableWorkflowManager) SignalRun(context.Context, *principal.Principa
 }
 
 func (unavailableWorkflowManager) SignalOrStartRun(context.Context, *principal.Principal, workflowmanager.RunSignalOrStart) (*workflowmanager.ManagedRunSignal, error) {
+	return nil, fmt.Errorf("workflow manager is not available")
+}
+
+func (unavailableWorkflowManager) DeliverEvent(context.Context, *principal.Principal, workflowmanager.EventPublish) (*coreworkflow.DeliverEventResponse, error) {
 	return nil, fmt.Errorf("workflow manager is not available")
 }
 

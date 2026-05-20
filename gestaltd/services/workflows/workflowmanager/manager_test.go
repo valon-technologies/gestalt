@@ -1142,6 +1142,9 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	}
 
 	wantPermissions := []core.AccessPermission{{
+		Plugin:  coreworkflow.StepActionPermissionPlugin,
+		Actions: []string{"step/run/agent-turn", "step/run/delivery", "step/session_ready/plugin"},
+	}, {
 		Plugin: "github",
 		Operations: []string{
 			"bot.commentFinal",
@@ -1392,6 +1395,7 @@ func TestSignalOrStartRunRejectsAgentStepWithoutPromptOrMessages(t *testing.T) {
 				ProviderName: "simple",
 			},
 		}}},
+		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "workflow target agent prompt or messages is required") {
 		t.Fatalf("SignalOrStartRun error = %v, want missing agent prompt/messages validation", err)
@@ -1644,6 +1648,96 @@ func TestSignalOrStartRunReusesExecutionRefForSameWorkflowKeyAndTarget(t *testin
 	}
 	if len(provider.refs) != 1 {
 		t.Fatalf("execution refs stored = %d, want 1", len(provider.refs))
+	}
+}
+
+func TestSignalOrStartRunStepsTargetCompilesAndBindsProviderPlan(t *testing.T) {
+	t.Parallel()
+
+	provider := newTestWorkflowProvider()
+	manager := New(Config{
+		Providers: testutil.NewProviderRegistry(t,
+			&coretesting.StubIntegration{
+				N:        "github",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name:       "github",
+					Operations: []catalog.CatalogOperation{{ID: "issues.triage", Method: "POST"}},
+				},
+			},
+			&coretesting.StubIntegration{
+				N:        "slack",
+				ConnMode: core.ConnectionModeNone,
+				CatalogVal: &catalog.Catalog{
+					Name:       "slack",
+					Operations: []catalog.CatalogOperation{{ID: "chat.post", Method: "POST"}},
+				},
+			},
+		),
+		Workflow: testWorkflowControl{provider: provider},
+	})
+	permissions := principal.CompilePermissions([]core.AccessPermission{
+		{Plugin: "github", Operations: []string{"issues.triage"}},
+		{Plugin: "slack", Operations: []string{"chat.post"}},
+	})
+	caller := principal.Canonicalize(&principal.Principal{
+		SubjectID:        principal.UserSubjectID("ada"),
+		UserID:           "ada",
+		Kind:             principal.KindUser,
+		TokenPermissions: permissions,
+		Scopes:           principal.PermissionPlugins(permissions),
+	})
+	target := coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID: "diagnose",
+		Plugin: &coreworkflow.PluginCall{
+			Name:      "github",
+			Operation: "issues.triage",
+			Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+				"title": {SignalPayload: "event.title"},
+			}},
+		},
+		OutputDelivery: &coreworkflow.StepDelivery{Plugin: &coreworkflow.PluginCall{
+			Name:      "slack",
+			Operation: "chat.post",
+			Input:     coreworkflow.Value{Object: map[string]coreworkflow.Value{}},
+		}},
+	}}}
+
+	managed, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
+		ProviderName:     "local",
+		WorkflowKey:      "github:issues:triage",
+		Target:           target,
+		IdempotencyKey:   "event-1",
+		CallerPluginName: "github",
+		Signal:           coreworkflow.Signal{ID: "signal-1", Name: "event", Payload: map[string]any{"title": "bug"}},
+	})
+	if err != nil {
+		t.Fatalf("SignalOrStartRun: %v", err)
+	}
+	if managed == nil || managed.ExecutionRef == nil {
+		t.Fatalf("managed = %#v, want execution ref", managed)
+	}
+	if len(provider.compileRequests) != 1 {
+		t.Fatalf("compile requests = %d, want 1", len(provider.compileRequests))
+	}
+	if got := provider.compileRequests[0].WorkflowSemanticsVersion; got != workflowStepsSemanticsVersion {
+		t.Fatalf("compile semantics = %q, want %q", got, workflowStepsSemanticsVersion)
+	}
+	if managed.ExecutionRef.TargetDigest == "" || managed.ExecutionRef.ProviderPlanDigest == "" || managed.ExecutionRef.Seal == "" || managed.ExecutionRef.Generation == 0 {
+		t.Fatalf("execution ref digests/seal = %#v", managed.ExecutionRef)
+	}
+	if len(provider.signalOrStartRequests) != 1 || provider.signalOrStartRequests[0].PlanBinding == nil {
+		t.Fatalf("signal-or-start request binding = %#v", provider.signalOrStartRequests)
+	}
+	binding := provider.signalOrStartRequests[0].PlanBinding
+	if binding.ExecutionRef != managed.ExecutionRef.ID || binding.TargetDigest != managed.ExecutionRef.TargetDigest || binding.ProviderPlanDigest != managed.ExecutionRef.ProviderPlanDigest {
+		t.Fatalf("plan binding = %#v, ref = %#v", binding, managed.ExecutionRef)
+	}
+	if !workflowTestAccessPermissionHasAction(managed.ExecutionRef.Permissions, coreworkflow.StepActionPermissionPlugin, "step/diagnose/plugin") {
+		t.Fatalf("execution ref permissions missing plugin action: %#v", managed.ExecutionRef.Permissions)
+	}
+	if !workflowTestAccessPermissionHasAction(managed.ExecutionRef.Permissions, coreworkflow.StepActionPermissionPlugin, "step/diagnose/delivery") {
+		t.Fatalf("execution ref permissions missing delivery action: %#v", managed.ExecutionRef.Permissions)
 	}
 }
 
@@ -2213,12 +2307,17 @@ type testWorkflowProvider struct {
 	coreworkflow.Provider
 	refs                            map[string]*coreworkflow.ExecutionReference
 	runs                            map[string]*coreworkflow.Run
+	deployments                     map[string]*coreworkflow.Deployment
 	schedules                       map[string]*coreworkflow.Schedule
 	eventTriggers                   map[string]*coreworkflow.EventTrigger
+	startRunRequests                []coreworkflow.StartRunRequest
+	signalOrStartRequests           []coreworkflow.SignalOrStartRunRequest
 	startRunHook                    func(coreworkflow.StartRunRequest) (*coreworkflow.Run, error)
 	listRunsHook                    func(coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error)
 	upsertedSchedules               []coreworkflow.UpsertScheduleRequest
 	upsertedEventTriggers           []coreworkflow.UpsertEventTriggerRequest
+	compileRequests                 []coreworkflow.PlanWorkflowRequest
+	compileErr                      error
 	signalOrStartErr                error
 	signalOrStartCalls              int
 	publishedEvents                 []coreworkflow.PublishEventRequest
@@ -2231,12 +2330,28 @@ func newTestWorkflowProvider() *testWorkflowProvider {
 	return &testWorkflowProvider{
 		refs:          map[string]*coreworkflow.ExecutionReference{},
 		runs:          map[string]*coreworkflow.Run{},
+		deployments:   map[string]*coreworkflow.Deployment{},
 		schedules:     map[string]*coreworkflow.Schedule{},
 		eventTriggers: map[string]*coreworkflow.EventTrigger{},
 	}
 }
 
+func workflowTestAccessPermissionHasAction(permissions []core.AccessPermission, plugin, action string) bool {
+	for i := range permissions {
+		if strings.TrimSpace(permissions[i].Plugin) != strings.TrimSpace(plugin) {
+			continue
+		}
+		for _, candidate := range permissions[i].Actions {
+			if strings.TrimSpace(candidate) == strings.TrimSpace(action) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (p *testWorkflowProvider) StartRun(_ context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+	p.startRunRequests = append(p.startRunRequests, req)
 	if p.startRunHook != nil {
 		return p.startRunHook(req)
 	}
@@ -2255,6 +2370,7 @@ func (p *testWorkflowProvider) StartRun(_ context.Context, req coreworkflow.Star
 
 func (p *testWorkflowProvider) SignalOrStartRun(_ context.Context, req coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
 	p.signalOrStartCalls++
+	p.signalOrStartRequests = append(p.signalOrStartRequests, req)
 	if p.signalOrStartErr != nil {
 		return nil, p.signalOrStartErr
 	}
@@ -2384,6 +2500,182 @@ func (p *testWorkflowProvider) GetEventTrigger(_ context.Context, req coreworkfl
 func (p *testWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) error {
 	p.publishedEvents = append(p.publishedEvents, req)
 	return nil
+}
+
+func (p *testWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
+	p.compileRequests = append(p.compileRequests, req)
+	if p.compileErr != nil {
+		return nil, p.compileErr
+	}
+	return &coreworkflow.CompileTargetResponse{
+		AcceptedSpecDigest: req.SpecDigest,
+		ProviderPlanID:     "plan-test",
+		ProviderPlanDigest: "plan-digest-" + req.TargetDigest[:12],
+	}, nil
+}
+
+func (p *testWorkflowProvider) ApplyWorkflowDeployment(_ context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
+	deployment := &coreworkflow.Deployment{
+		Spec:               req.Spec,
+		Status:             coreworkflow.DeploymentStatusActive,
+		AppliedGeneration:  req.Spec.Generation,
+		TargetDigest:       "",
+		ProviderPlanID:     "",
+		ProviderPlanDigest: "",
+		Binding:            req.Binding,
+	}
+	if req.Spec.Paused {
+		deployment.Status = coreworkflow.DeploymentStatusPaused
+	}
+	if req.Plan != nil {
+		deployment.ProviderPlanID = req.Plan.ProviderPlanID
+		deployment.ProviderPlanDigest = req.Plan.ProviderPlanDigest
+		if req.Binding != nil {
+			deployment.TargetDigest = req.Binding.TargetDigest
+		}
+	}
+	p.deployments[strings.TrimSpace(req.Spec.ID)] = deployment
+	if schedule := workflowScheduleFromDeployment(deployment, p.refs[workflowExecutionRefID(nil, deployment)]); schedule != nil {
+		p.upsertedSchedules = append(p.upsertedSchedules, coreworkflow.UpsertScheduleRequest{
+			ScheduleID:   schedule.ID,
+			Cron:         schedule.Cron,
+			Timezone:     schedule.Timezone,
+			Target:       schedule.Target,
+			Paused:       schedule.Paused,
+			ExecutionRef: schedule.ExecutionRef,
+			PlanBinding:  req.Binding,
+		})
+		p.schedules[schedule.ID] = schedule
+	}
+	if trigger := workflowEventTriggerFromDeployment(deployment, p.refs[workflowExecutionRefID(nil, deployment)]); trigger != nil {
+		p.upsertedEventTriggers = append(p.upsertedEventTriggers, coreworkflow.UpsertEventTriggerRequest{
+			TriggerID:    trigger.ID,
+			Match:        trigger.Match,
+			Target:       trigger.Target,
+			Paused:       trigger.Paused,
+			ExecutionRef: trigger.ExecutionRef,
+			PlanBinding:  req.Binding,
+		})
+		p.eventTriggers[trigger.ID] = trigger
+	}
+	copied := *deployment
+	return &copied, nil
+}
+
+func (p *testWorkflowProvider) GetWorkflowDeployment(_ context.Context, req coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
+	id := strings.TrimSpace(req.DeploymentID)
+	deployment := p.deployments[id]
+	if deployment == nil {
+		if schedule := p.schedules[id]; schedule != nil {
+			deployment = &coreworkflow.Deployment{
+				Spec: coreworkflow.DeploymentSpec{
+					ID:     schedule.ID,
+					Target: schedule.Target,
+					Paused: schedule.Paused,
+					Activations: []coreworkflow.Activation{{
+						ID:     "schedule",
+						Paused: schedule.Paused,
+						Mode:   coreworkflow.ActivationModeStart,
+						Schedule: &coreworkflow.ScheduleActivation{
+							Cron:     schedule.Cron,
+							Timezone: schedule.Timezone,
+						},
+					}},
+				},
+				Status: coreworkflow.DeploymentStatusActive,
+				Binding: &coreworkflow.DeploymentBinding{
+					ExecutionRef: schedule.ExecutionRef,
+				},
+			}
+		}
+	}
+	if deployment == nil {
+		if trigger := p.eventTriggers[id]; trigger != nil {
+			deployment = &coreworkflow.Deployment{
+				Spec: coreworkflow.DeploymentSpec{
+					ID:     trigger.ID,
+					Target: trigger.Target,
+					Paused: trigger.Paused,
+					Activations: []coreworkflow.Activation{{
+						ID:     "event",
+						Paused: trigger.Paused,
+						Mode:   coreworkflow.ActivationModeSignalOrStart,
+						Event: &coreworkflow.EventActivation{
+							Match: trigger.Match,
+						},
+					}},
+				},
+				Status: coreworkflow.DeploymentStatusActive,
+				Binding: &coreworkflow.DeploymentBinding{
+					ExecutionRef: trigger.ExecutionRef,
+				},
+			}
+		}
+	}
+	if deployment == nil {
+		return nil, core.ErrNotFound
+	}
+	copied := *deployment
+	return &copied, nil
+}
+
+func (p *testWorkflowProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
+	out := &coreworkflow.ListDeploymentsResponse{}
+	for _, deployment := range p.deployments {
+		copied := *deployment
+		out.Deployments = append(out.Deployments, &copied)
+	}
+	return out, nil
+}
+
+func (p *testWorkflowProvider) DeleteWorkflowDeployment(_ context.Context, req coreworkflow.DeleteDeploymentRequest) error {
+	id := strings.TrimSpace(req.DeploymentID)
+	delete(p.deployments, id)
+	delete(p.schedules, id)
+	delete(p.eventTriggers, id)
+	return nil
+}
+
+func (p *testWorkflowProvider) SetWorkflowDeploymentPaused(ctx context.Context, req coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
+	deployment, err := p.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: req.DeploymentID})
+	if err != nil {
+		return nil, err
+	}
+	deployment.Spec.Paused = req.Paused
+	if req.Paused {
+		deployment.Status = coreworkflow.DeploymentStatusPaused
+	} else {
+		deployment.Status = coreworkflow.DeploymentStatusActive
+	}
+	p.deployments[strings.TrimSpace(req.DeploymentID)] = deployment
+	return deployment, nil
+}
+
+func (p *testWorkflowProvider) SetWorkflowActivationPaused(ctx context.Context, req coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
+	deployment, err := p.GetWorkflowDeployment(ctx, coreworkflow.GetDeploymentRequest{DeploymentID: req.DeploymentID})
+	if err != nil {
+		return nil, err
+	}
+	for i := range deployment.Spec.Activations {
+		if strings.TrimSpace(deployment.Spec.Activations[i].ID) == strings.TrimSpace(req.ActivationID) {
+			deployment.Spec.Activations[i].Paused = req.Paused
+		}
+	}
+	p.deployments[strings.TrimSpace(req.DeploymentID)] = deployment
+	return deployment, nil
+}
+
+func (p *testWorkflowProvider) DeliverWorkflowEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
+	p.publishedEvents = append(p.publishedEvents, req)
+	return &coreworkflow.DeliverEventResponse{}, nil
+}
+
+func (p *testWorkflowProvider) GetWorkflowRunEvents(context.Context, coreworkflow.GetRunEventsRequest) (*coreworkflow.ListRunEventsResponse, error) {
+	return &coreworkflow.ListRunEventsResponse{}, nil
+}
+
+func (p *testWorkflowProvider) GetWorkflowRunOutput(context.Context, coreworkflow.GetRunOutputRequest) (*coreworkflow.RunOutput, error) {
+	return nil, core.ErrNotFound
 }
 
 func (p *testWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {

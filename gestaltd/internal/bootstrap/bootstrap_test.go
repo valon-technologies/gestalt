@@ -59,13 +59,20 @@ import (
 
 func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
-	var pluginTarget *coreworkflow.PluginCall
-	if len(target.Steps) > 0 {
-		pluginTarget = target.Steps[0].Plugin
-	}
+	target = workflowHostPluginStepTargetFromTarget(t, target)
+	step := target.Steps[0]
+	pluginTarget := step.Plugin
 	if pluginTarget == nil {
-		t.Fatalf("workflow target plugin is nil: %#v", target)
+		t.Fatalf("workflow target plugin step is nil: %#v", target)
 		return ""
+	}
+	actionID, ok := coreworkflow.StepPluginActionID(step.ID)
+	if !ok {
+		t.Fatalf("workflow step action id is invalid for step %q", step.ID)
+	}
+	targetDigest, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("target fingerprint: %v", err)
 	}
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
 	if err != nil {
@@ -76,19 +83,87 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 		t.Fatalf("workflow provider %q does not support execution refs", providerName)
 	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
-		ProviderName: providerName,
-		Target:       target,
-		SubjectID:    "system:config",
+		ID:                 fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
+		ProviderName:       providerName,
+		Target:             target,
+		SubjectID:          "system:config",
+		TargetDigest:       targetDigest,
+		ProviderPlanDigest: "test-plan",
+		Generation:         1,
+		Seal:               "test-seal",
 		Permissions: []core.AccessPermission{{
 			Plugin:     pluginTarget.Name,
 			Operations: []string{pluginTarget.Operation},
+		}, {
+			Plugin:  coreworkflow.StepActionPermissionPlugin,
+			Actions: []string{actionID},
 		}},
 	})
 	if err != nil {
 		t.Fatalf("store workflow execution ref: %v", err)
 	}
 	return ref.ID
+}
+
+func workflowHostPluginStepTargetFromTarget(t *testing.T, target coreworkflow.Target) coreworkflow.Target {
+	t.Helper()
+	if len(target.Steps) > 0 {
+		return target
+	}
+	t.Fatalf("workflow target.steps is empty: %#v", target)
+	return coreworkflow.Target{}
+}
+
+func workflowHostPluginActionRequest(t *testing.T, executionRef string, target coreworkflow.Target) *proto.InvokeWorkflowActionRequest {
+	t.Helper()
+	target = workflowHostPluginStepTargetFromTarget(t, target)
+	step := target.Steps[0]
+	actionID, ok := coreworkflow.StepPluginActionID(step.ID)
+	if !ok {
+		t.Fatalf("workflow step action id is invalid for step %q", step.ID)
+	}
+	targetDigest, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("target fingerprint: %v", err)
+	}
+	actionTableDigest, err := coreworkflow.TargetActionTableDigest(target)
+	if err != nil {
+		t.Fatalf("target action table digest: %v", err)
+	}
+	return &proto.InvokeWorkflowActionRequest{
+		Selector: &proto.WorkflowHostActionSelector{
+			ExecutionRef:           executionRef,
+			ExecutionRefGeneration: 1,
+			ExecutionRefSeal:       "test-seal",
+			RunId:                  "test-run",
+			StepId:                 step.ID,
+			ActionId:               actionID,
+			AttemptNumber:          1,
+			IdempotencyKey:         "test-run:" + step.ID + ":plugin:1",
+			TargetDigest:           targetDigest,
+			ActionTableDigest:      actionTableDigest,
+			ProviderPlanDigest:     "test-plan",
+		},
+		Action: &proto.InvokeWorkflowActionRequest_Plugin{
+			Plugin: &proto.WorkflowPluginActionPayload{Input: &structpb.Struct{}},
+		},
+	}
+}
+
+func workflowHostPluginActionRequestForRef(t *testing.T, ref *coreworkflow.ExecutionReference) *proto.InvokeWorkflowActionRequest {
+	t.Helper()
+	if ref == nil {
+		t.Fatal("workflow execution ref is nil")
+	}
+	req := workflowHostPluginActionRequest(t, ref.ID, ref.Target)
+	req.Selector.ExecutionRefGeneration = ref.Generation
+	req.Selector.ExecutionRefSeal = ref.Seal
+	req.Selector.ProviderPlanDigest = ref.ProviderPlanDigest
+	req.Selector.TargetDigest = ref.TargetDigest
+	if actionTableDigest, err := coreworkflow.TargetActionTableDigest(ref.Target); err == nil {
+		req.Selector.ActionTableDigest = actionTableDigest
+	}
+	return req
 }
 
 func bootstrapGraphQLStringPtr(value string) *string {
@@ -540,6 +615,36 @@ func (s *stubWorkflowProvider) SignalRun(context.Context, coreworkflow.SignalRun
 }
 func (s *stubWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
 	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
+}
+func (s *stubWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
+	return &coreworkflow.CompileTargetResponse{AcceptedSpecDigest: req.SpecDigest, ProviderPlanDigest: "plan-digest"}, nil
+}
+func (s *stubWorkflowProvider) ApplyWorkflowDeployment(_ context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{Spec: req.Spec, Status: coreworkflow.DeploymentStatusActive, Binding: req.Binding}, nil
+}
+func (s *stubWorkflowProvider) GetWorkflowDeployment(context.Context, coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+func (s *stubWorkflowProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
+	return &coreworkflow.ListDeploymentsResponse{}, nil
+}
+func (s *stubWorkflowProvider) DeleteWorkflowDeployment(context.Context, coreworkflow.DeleteDeploymentRequest) error {
+	return nil
+}
+func (s *stubWorkflowProvider) SetWorkflowDeploymentPaused(context.Context, coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+func (s *stubWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+func (s *stubWorkflowProvider) DeliverWorkflowEvent(context.Context, coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
+	return &coreworkflow.DeliverEventResponse{}, nil
+}
+func (s *stubWorkflowProvider) GetWorkflowRunEvents(context.Context, coreworkflow.GetRunEventsRequest) (*coreworkflow.ListRunEventsResponse, error) {
+	return &coreworkflow.ListRunEventsResponse{}, nil
+}
+func (s *stubWorkflowProvider) GetWorkflowRunOutput(context.Context, coreworkflow.GetRunOutputRequest) (*coreworkflow.RunOutput, error) {
+	return &coreworkflow.RunOutput{}, nil
 }
 func (s *stubWorkflowProvider) UpsertSchedule(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
 	return &coreworkflow.Schedule{}, nil
@@ -1353,6 +1458,257 @@ type recordingWorkflowProvider struct {
 	closed                      *atomic.Bool
 }
 
+func (p *recordingWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
+	return &coreworkflow.CompileTargetResponse{
+		ProviderPlanID:     "test-plan",
+		ProviderPlanDigest: "test-plan-" + req.TargetDigest,
+	}, nil
+}
+
+func (p *recordingWorkflowProvider) ApplyWorkflowDeployment(ctx context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
+	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Schedule != nil {
+		activation := req.Spec.Activations[0]
+		executionRef := ""
+		if req.Binding != nil {
+			executionRef = req.Binding.ExecutionRef
+		}
+		if _, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{
+			ScheduleID: req.Spec.ID,
+			Cron:       activation.Schedule.Cron,
+			Timezone:   activation.Schedule.Timezone,
+			Target:     req.Spec.Target,
+			Paused:     req.Spec.Paused || activation.Paused,
+			RequestedBy: coreworkflow.Actor{
+				SubjectID:   "system:config",
+				SubjectKind: "system",
+				DisplayName: "Gestalt config",
+				AuthSource:  "config",
+			},
+			ExecutionRef: executionRef,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Event != nil {
+		activation := req.Spec.Activations[0]
+		executionRef := ""
+		if req.Binding != nil {
+			executionRef = req.Binding.ExecutionRef
+		}
+		if _, err := p.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{
+			TriggerID: req.Spec.ID,
+			Match:     activation.Event.Match,
+			Target:    req.Spec.Target,
+			Paused:    req.Spec.Paused || activation.Paused,
+			RequestedBy: coreworkflow.Actor{
+				SubjectID:   "system:config",
+				SubjectKind: "system",
+				DisplayName: "Gestalt config",
+				AuthSource:  "config",
+			},
+			ExecutionRef: executionRef,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return p.workflowDeploymentFromSpec(req.Spec, req.Binding), nil
+}
+
+func (p *recordingWorkflowProvider) GetWorkflowDeployment(_ context.Context, req coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
+	if p.getSchedule != nil || p.getScheduleErr != nil {
+		if p.getScheduleErr != nil {
+			return nil, p.getScheduleErr
+		}
+		return p.workflowDeploymentFromSchedule(p.scheduleGetResponse(p.getSchedule)), nil
+	}
+	if p.schedules != nil {
+		if schedule, ok := p.schedules[req.DeploymentID]; ok {
+			return p.workflowDeploymentFromSchedule(p.scheduleGetResponse(schedule)), nil
+		}
+	}
+	if p.getEventTrigger != nil || p.getEventTriggerErr != nil {
+		if p.getEventTriggerErr != nil {
+			return nil, p.getEventTriggerErr
+		}
+		return p.workflowDeploymentFromEventTrigger(p.getEventTrigger), nil
+	}
+	if p.eventTriggers != nil {
+		if trigger, ok := p.eventTriggers[req.DeploymentID]; ok {
+			return p.workflowDeploymentFromEventTrigger(trigger), nil
+		}
+	}
+	return nil, core.ErrNotFound
+}
+
+func (p *recordingWorkflowProvider) ListWorkflowDeployments(_ context.Context, req coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
+	if p.listSchedulesErr != nil {
+		return nil, p.listSchedulesErr
+	}
+	if p.listEventTriggersErr != nil {
+		return nil, p.listEventTriggersErr
+	}
+	schedules := p.listedSchedules
+	if schedules == nil {
+		for _, schedule := range p.schedules {
+			schedules = append(schedules, schedule)
+		}
+	}
+	triggers := p.listedEventTriggers
+	if triggers == nil {
+		for _, trigger := range p.eventTriggers {
+			triggers = append(triggers, trigger)
+		}
+	}
+	out := &coreworkflow.ListDeploymentsResponse{Deployments: make([]*coreworkflow.Deployment, 0, len(schedules)+len(triggers))}
+	kind := strings.TrimSpace(req.Labels["gestalt.config.kind"])
+	for _, schedule := range schedules {
+		if kind == "" || kind == "schedule" {
+			if p.schedules == nil {
+				p.schedules = map[string]*coreworkflow.Schedule{}
+			}
+			p.schedules[schedule.ID] = schedule
+			out.Deployments = append(out.Deployments, p.workflowDeploymentFromSchedule(p.scheduleGetResponse(schedule)))
+		}
+	}
+	for _, trigger := range triggers {
+		if kind == "" || kind == "event_trigger" {
+			if p.eventTriggers == nil {
+				p.eventTriggers = map[string]*coreworkflow.EventTrigger{}
+			}
+			p.eventTriggers[trigger.ID] = trigger
+			out.Deployments = append(out.Deployments, p.workflowDeploymentFromEventTrigger(trigger))
+		}
+	}
+	return out, nil
+}
+
+func (p *recordingWorkflowProvider) DeleteWorkflowDeployment(ctx context.Context, req coreworkflow.DeleteDeploymentRequest) error {
+	if _, ok := p.eventTriggers[req.DeploymentID]; ok {
+		return p.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: req.DeploymentID})
+	}
+	if _, ok := p.schedules[req.DeploymentID]; ok {
+		return p.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: req.DeploymentID})
+	}
+	if !p.deleteMissingNotFound {
+		if err := p.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{ScheduleID: req.DeploymentID}); err == nil || !errors.Is(err, core.ErrNotFound) {
+			return err
+		}
+	}
+	return p.DeleteEventTrigger(ctx, coreworkflow.DeleteEventTriggerRequest{TriggerID: req.DeploymentID})
+}
+
+func (p *recordingWorkflowProvider) SetWorkflowDeploymentPaused(context.Context, coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+
+func (p *recordingWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+
+func (p *recordingWorkflowProvider) DeliverWorkflowEvent(context.Context, coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
+	return &coreworkflow.DeliverEventResponse{}, nil
+}
+
+func (p *recordingWorkflowProvider) GetWorkflowRunEvents(context.Context, coreworkflow.GetRunEventsRequest) (*coreworkflow.ListRunEventsResponse, error) {
+	return &coreworkflow.ListRunEventsResponse{}, nil
+}
+
+func (p *recordingWorkflowProvider) GetWorkflowRunOutput(context.Context, coreworkflow.GetRunOutputRequest) (*coreworkflow.RunOutput, error) {
+	return &coreworkflow.RunOutput{}, nil
+}
+
+func (p *recordingWorkflowProvider) workflowDeploymentFromSchedule(schedule *coreworkflow.Schedule) *coreworkflow.Deployment {
+	if schedule == nil {
+		return nil
+	}
+	var labels map[string]string
+	if recordingWorkflowActorIsConfig(schedule.CreatedBy) {
+		labels = map[string]string{
+			"gestalt.config.kind":   "schedule",
+			"gestalt.config.plugin": recordingWorkflowTargetLabel(schedule.Target),
+		}
+	}
+	spec := coreworkflow.DeploymentSpec{
+		ID:         schedule.ID,
+		Generation: 1,
+		Target:     schedule.Target,
+		Paused:     schedule.Paused,
+		Labels:     labels,
+		Activations: []coreworkflow.Activation{{
+			ID:     "schedule",
+			Paused: schedule.Paused,
+			Mode:   coreworkflow.ActivationModeStart,
+			Schedule: &coreworkflow.ScheduleActivation{
+				Cron:     schedule.Cron,
+				Timezone: schedule.Timezone,
+			},
+		}},
+	}
+	return p.workflowDeploymentFromSpec(spec, &coreworkflow.DeploymentBinding{ExecutionRef: schedule.ExecutionRef})
+}
+
+func (p *recordingWorkflowProvider) workflowDeploymentFromEventTrigger(trigger *coreworkflow.EventTrigger) *coreworkflow.Deployment {
+	if trigger == nil {
+		return nil
+	}
+	var labels map[string]string
+	if recordingWorkflowActorIsConfig(trigger.CreatedBy) {
+		labels = map[string]string{
+			"gestalt.config.kind":   "event_trigger",
+			"gestalt.config.plugin": recordingWorkflowTargetLabel(trigger.Target),
+		}
+	}
+	spec := coreworkflow.DeploymentSpec{
+		ID:         trigger.ID,
+		Generation: 1,
+		Target:     trigger.Target,
+		Paused:     trigger.Paused,
+		Labels:     labels,
+		Activations: []coreworkflow.Activation{{
+			ID:     "event",
+			Paused: trigger.Paused,
+			Mode:   coreworkflow.ActivationModeSignalOrStart,
+			Event: &coreworkflow.EventActivation{
+				Match: trigger.Match,
+			},
+		}},
+	}
+	return p.workflowDeploymentFromSpec(spec, &coreworkflow.DeploymentBinding{ExecutionRef: trigger.ExecutionRef})
+}
+
+func recordingWorkflowActorIsConfig(actor coreworkflow.Actor) bool {
+	return actor.SubjectID == "system:config" && actor.SubjectKind == "system" && actor.AuthSource == "config"
+}
+
+func recordingWorkflowTargetLabel(target coreworkflow.Target) string {
+	for i := range target.Steps {
+		if target.Steps[i].Plugin != nil && strings.TrimSpace(target.Steps[i].Plugin.Name) != "" {
+			return strings.TrimSpace(target.Steps[i].Plugin.Name)
+		}
+		if target.Steps[i].Agent != nil {
+			providerName := strings.TrimSpace(target.Steps[i].Agent.ProviderName)
+			if providerName == "" {
+				providerName = "default"
+			}
+			return "agent:" + providerName
+		}
+	}
+	return ""
+}
+
+func (p *recordingWorkflowProvider) workflowDeploymentFromSpec(spec coreworkflow.DeploymentSpec, binding *coreworkflow.DeploymentBinding) *coreworkflow.Deployment {
+	status := coreworkflow.DeploymentStatusActive
+	if spec.Paused {
+		status = coreworkflow.DeploymentStatusPaused
+	}
+	return &coreworkflow.Deployment{
+		Spec:              spec,
+		Status:            status,
+		AppliedGeneration: spec.Generation,
+		Binding:           binding,
+	}
+}
+
 func (p *recordingWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil
 }
@@ -1622,6 +1978,37 @@ func cloneBootstrapWorkflowTarget(target coreworkflow.Target) coreworkflow.Targe
 		step.Metadata = maps.Clone(step.Metadata)
 		clone.Steps[i] = step
 	}
+	if len(target.Steps) > 0 {
+		clone.Steps = make([]coreworkflow.Step, len(target.Steps))
+		for i := range target.Steps {
+			step := target.Steps[i]
+			step.Inputs = maps.Clone(step.Inputs)
+			for key, value := range step.Inputs {
+				step.Inputs[key] = coreworkflow.CloneValue(value)
+			}
+			if step.Plugin != nil {
+				plugin := *step.Plugin
+				plugin.Input = coreworkflow.CloneValue(plugin.Input)
+				step.Plugin = &plugin
+			}
+			if step.Agent != nil {
+				agent := *step.Agent
+				agent.Messages = slices.Clone(agent.Messages)
+				agent.ToolRefs = slices.Clone(agent.ToolRefs)
+				agent.ResponseSchema = maps.Clone(agent.ResponseSchema)
+				agent.ModelOptions = maps.Clone(agent.ModelOptions)
+				step.Agent = &agent
+			}
+			step.OutputDelivery = coreworkflow.CloneStepDelivery(step.OutputDelivery)
+			if step.When != nil {
+				when := *step.When
+				when.Value = coreworkflow.CloneValue(when.Value)
+				step.When = &when
+			}
+			step.Metadata = maps.Clone(step.Metadata)
+			clone.Steps[i] = step
+		}
+	}
 	return clone
 }
 
@@ -1695,7 +2082,7 @@ func validFactories() *bootstrap.FactoryRegistry {
 	return f
 }
 
-func invokeWorkflowHostCallback(t *testing.T, hostServices []runtimehost.HostService, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
+func invokeWorkflowHostCallback(t *testing.T, hostServices []runtimehost.HostService, req *proto.InvokeWorkflowActionRequest) (*proto.WorkflowActionResult, error) {
 	t.Helper()
 
 	if len(hostServices) != 1 {
@@ -1727,7 +2114,7 @@ func invokeWorkflowHostCallback(t *testing.T, hostServices []runtimehost.HostSer
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	return proto.NewWorkflowHostClient(conn).InvokeOperation(context.Background(), req)
+	return proto.NewWorkflowHostClient(conn).InvokeWorkflowAction(context.Background(), req)
 }
 
 func invokeAgentHostCallback(t *testing.T, hostServices []runtimehost.HostService, req *proto.ExecuteAgentToolRequest) (*proto.ExecuteAgentToolResponse, error) {
@@ -1971,15 +2358,6 @@ func requireCoreWorkflowPluginTarget(t *testing.T, target coreworkflow.Target) *
 func coreWorkflowPluginTarget(pluginName, operation string) coreworkflow.Target {
 	return coreworkflow.Target{
 		Steps: []coreworkflow.Step{{ID: operation, Plugin: &coreworkflow.PluginCall{Name: pluginName, Operation: operation}}},
-	}
-}
-
-func protoWorkflowPluginTarget(pluginName, operation string) *proto.BoundWorkflowTarget {
-	return &proto.BoundWorkflowTarget{
-		Steps: []*proto.WorkflowStep{{
-			Id:     operation,
-			Action: &proto.WorkflowStep_Plugin{Plugin: &proto.WorkflowStepPluginCall{Name: pluginName, Operation: operation}},
-		}},
 	}
 }
 
@@ -4791,8 +5169,9 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
 	}
 	wantPermissions := []core.AccessPermission{
+		{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/sync/plugin"}},
 		{Plugin: "roadmap", Operations: []string{"sync"}},
-		{Plugin: "slack", Operations: []string{"conversations.list", "conversations.history"}},
+		{Plugin: "slack", Operations: []string{"conversations.history", "conversations.list"}},
 	}
 	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
 		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
@@ -4900,6 +5279,7 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 		t.Fatalf("Get new execution ref: %v", err)
 	}
 	wantPermissions := []core.AccessPermission{
+		{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/sync/plugin"}},
 		{Plugin: "roadmap", Operations: []string{"sync"}},
 		{Plugin: "slack", Operations: []string{"conversations.history"}},
 	}
@@ -4908,7 +5288,7 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 	}
 }
 
-func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefreshFails(t *testing.T) {
+func TestBootstrapFailsConfiguredWorkflowScheduleWhenExecutionRefRefreshFails(t *testing.T) {
 	t.Parallel()
 
 	factories := validFactories()
@@ -4994,11 +5374,12 @@ func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefresh
 	failExecutionRefWrites = true
 
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err != nil {
-		t.Fatalf("Bootstrap with stale execution ref index: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "execution ref index unavailable") {
+		if result != nil {
+			_ = result.Close(context.Background())
+		}
+		t.Fatalf("Bootstrap error = %v, want execution ref write failure", err)
 	}
-	defer func() { _ = result.Close(context.Background()) }()
-	<-result.ProvidersReady
 
 	if len(recorders) != 2 {
 		t.Fatalf("recorders = %d, want 2", len(recorders))
@@ -5371,6 +5752,7 @@ func TestBootstrapAllowsConfiguredWorkflowSchedulePermissionScopesForUserCredent
 		t.Fatalf("Get execution ref: %v", err)
 	}
 	wantPermissions := []core.AccessPermission{
+		{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/sync/plugin"}},
 		{Plugin: "roadmap", Operations: []string{"sync"}},
 		{Plugin: "slack", Operations: []string{"conversations.list"}},
 	}
@@ -5439,6 +5821,7 @@ func TestBootstrapConfiguredWorkflowScheduleInvokesScopesExecutionRef(t *testing
 		t.Fatalf("Get execution ref: %v", err)
 	}
 	wantPermissions := []core.AccessPermission{
+		{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/sync/plugin"}},
 		{Plugin: "roadmap", Operations: []string{"sync"}},
 		{Plugin: "slack", Operations: []string{"conversations.list"}},
 	}
@@ -6371,6 +6754,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 		t.Fatalf("subjectID = %q, want %q", ref.SubjectID, "system:config")
 	}
 	wantPermissions := []core.AccessPermission{
+		{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{"step/sync/plugin"}},
 		{Plugin: "roadmap", Operations: []string{"sync"}},
 		{Plugin: "slack", Operations: []string{"conversations.history"}},
 	}
@@ -6523,12 +6907,16 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 		if err != nil {
 			t.Fatalf("Get execution ref %q: %v", executionRef, err)
 		}
-		if len(ref.Permissions) != 2 {
+		if len(ref.Permissions) != 3 {
 			t.Fatalf("permissions = %#v", ref.Permissions)
 		}
+		seenStepAction := false
 		seenAgentProvider := false
 		seenPluginOperation := false
 		for _, permission := range ref.Permissions {
+			if permission.Plugin == coreworkflow.StepActionPermissionPlugin && len(permission.Actions) == 1 && permission.Actions[0] == "step/main/agent-turn" {
+				seenStepAction = true
+			}
 			if permission.Plugin == "managed" && len(permission.Operations) == 0 {
 				seenAgentProvider = true
 			}
@@ -6536,7 +6924,7 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 				seenPluginOperation = true
 			}
 		}
-		if !seenAgentProvider || !seenPluginOperation {
+		if !seenStepAction || !seenAgentProvider || !seenPluginOperation {
 			t.Fatalf("permissions = %#v", ref.Permissions)
 		}
 	}
@@ -7059,15 +7447,13 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
-		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target:       protoWorkflowPluginTarget("roadmap", "sync"),
-			ExecutionRef: executionRef,
-		})
+		target := coreWorkflowPluginTarget("roadmap", "sync")
+		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, target)
+		resp, err := invokeWorkflowHostCallback(t, hostServices, workflowHostPluginActionRequest(t, executionRef, target))
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
 		}
-		if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
+		if resp.GetStatus() != http.StatusAccepted || !strings.Contains(resp.GetBody(), `"ok":true`) {
 			return nil, fmt.Errorf("startup callback response = %#v", resp)
 		}
 		return &stubWorkflowProvider{}, nil
@@ -7112,15 +7498,13 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
-		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target:       protoWorkflowPluginTarget("roadmap", "sync"),
-			ExecutionRef: executionRef,
-		})
+		target := coreWorkflowPluginTarget("roadmap", "sync")
+		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, target)
+		resp, err := invokeWorkflowHostCallback(t, hostServices, workflowHostPluginActionRequest(t, executionRef, target))
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
 		}
-		if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
+		if resp.GetStatus() != http.StatusAccepted || !strings.Contains(resp.GetBody(), `"ok":true`) {
 			return nil, fmt.Errorf("startup callback response = %#v", resp)
 		}
 		return &stubWorkflowProvider{}, nil
@@ -7171,9 +7555,7 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		_, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: protoWorkflowPluginTarget("roadmap", "sync"),
-		})
+		_, err := invokeWorkflowHostCallback(t, hostServices, workflowHostPluginActionRequest(t, "", coreWorkflowPluginTarget("roadmap", "sync")))
 		if err == nil {
 			return nil, fmt.Errorf("expected startup callback execution_ref failure")
 		}
@@ -7707,14 +8089,15 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedPl
 	if executionRef == "" {
 		t.Fatal("execution ref is empty")
 	}
-	resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-		Target:       protoWorkflowPluginTarget("roadmap", "sync"),
-		ExecutionRef: executionRef,
-	})
+	ref, err := recorder.GetExecutionReference(context.Background(), executionRef)
+	if err != nil {
+		t.Fatalf("Get execution ref: %v", err)
+	}
+	resp, err := invokeWorkflowHostCallback(t, hostServices, workflowHostPluginActionRequestForRef(t, ref))
 	if err != nil {
 		t.Fatalf("invoke workflow host callback: %v", err)
 	}
-	if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
+	if resp.GetStatus() != http.StatusAccepted || !strings.Contains(resp.GetBody(), `"ok":true`) {
 		t.Fatalf("workflow host callback response = %#v", resp)
 	}
 	if got, _ := requestPath.Load().(string); got != "/sync" {
@@ -7785,15 +8168,13 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				}); err != nil {
 					return nil, fmt.Errorf("store startup token: %w", err)
 				}
-				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowPluginTarget("roadmap", "sync"))
-				resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-					Target:       protoWorkflowPluginTarget("roadmap", "sync"),
-					ExecutionRef: executionRef,
-				})
+				target := coreWorkflowPluginTarget("roadmap", "sync")
+				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, target)
+				resp, err := invokeWorkflowHostCallback(t, hostServices, workflowHostPluginActionRequest(t, executionRef, target))
 				if err != nil {
 					return nil, fmt.Errorf("startup callback: %w", err)
 				}
-				if resp.GetStatus() != http.StatusOK || !strings.Contains(resp.GetBody(), `"finalStepId":"sync"`) {
+				if resp.GetStatus() != http.StatusAccepted {
 					return nil, fmt.Errorf("startup callback response = %#v", resp)
 				}
 				return &stubWorkflowProvider{}, nil

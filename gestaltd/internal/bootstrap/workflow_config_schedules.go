@@ -34,6 +34,17 @@ type desiredWorkflowConfigSchedule struct {
 
 type workflowConfigProviderFilter func(providerName string) bool
 
+const (
+	workflowConfigDeploymentLabelKind        = "gestalt.config.kind"
+	workflowConfigDeploymentLabelScheduleKey = "gestalt.config.schedule_key"
+	workflowConfigDeploymentLabelTriggerKey  = "gestalt.config.trigger_key"
+	workflowConfigDeploymentLabelPlugin      = "gestalt.config.plugin"
+	workflowConfigDeploymentKindSchedule     = "schedule"
+	workflowConfigDeploymentKindEventTrigger = "event_trigger"
+	workflowConfigSemanticsVersionSteps      = "workflow_steps_v1"
+	workflowConfigTargetCanonicalizationV1   = "target_fingerprint_v1"
+)
+
 func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, runtime *workflowRuntime, includeProvider workflowConfigProviderFilter) error {
 	if cfg == nil || runtime == nil {
 		return nil
@@ -49,29 +60,34 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			continue
 		}
 		schedule := desiredEntry.schedule
-		target := workflowConfigTarget(schedule.Target)
+		target := workflowConfigExecutionRefTarget(workflowConfigTarget(schedule.Target))
 		pluginName := workflowConfigTargetLabel(target)
 		providerName, provider, err := runtime.ResolveProviderSelection(schedule.Provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
+		deploymentProvider, ok := provider.(coreworkflow.DeploymentProvider)
+		if !ok {
+			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: workflow provider %q does not support deployments", desiredEntry.ScheduleKey, pluginName, providerName)
+		}
+		spec := workflowConfigScheduleDeploymentSpec(desiredEntry, target, schedule)
 		existingExecutionRef := ""
 		providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
-		existing, err := provider.GetSchedule(providerCtx, coreworkflow.GetScheduleRequest{
-			ScheduleID: desiredEntry.ScheduleID,
+		existing, err := deploymentProvider.GetWorkflowDeployment(providerCtx, coreworkflow.GetDeploymentRequest{
+			DeploymentID: desiredEntry.ScheduleID,
 		})
 		switch {
 		case err == nil:
-			if !isWorkflowConfigOwnedSchedule(existing, pluginName, desiredEntry.ScheduleID) {
+			if !isWorkflowConfigOwnedDeployment(existing, pluginName, desiredEntry) {
 				return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q conflicts with existing unmanaged schedule id %q", desiredEntry.ScheduleKey, pluginName, desiredEntry.ScheduleID)
 			}
 		case isWorkflowObjectNotFound(err):
 			existing = nil
 		default:
-			return fmt.Errorf("bootstrap: get workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleID, pluginName, err)
+			return fmt.Errorf("bootstrap: get workflow deployment %q for plugin %q: %w", desiredEntry.ScheduleID, pluginName, err)
 		}
-		if existing != nil {
-			existingExecutionRef = strings.TrimSpace(existing.ExecutionRef)
+		if existing != nil && existing.Binding != nil {
+			existingExecutionRef = strings.TrimSpace(existing.Binding.ExecutionRef)
 		}
 		runAs, err := workflowConfigRunAsSubject("workflows.schedules."+desiredEntry.ScheduleKey+".runAs", schedule.RunAs)
 		if err != nil {
@@ -81,10 +97,41 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
+		spec.RunAs = runAs
+		spec.Permissions = append([]core.AccessPermission(nil), permissions...)
 		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target, runAs, permissions)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
+		targetDigest, err := coreworkflow.TargetFingerprint(target)
+		if err != nil {
+			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q target digest: %w", desiredEntry.ScheduleKey, pluginName, err)
+		}
+		actionTableDigest, err := coreworkflow.TargetActionTableDigest(target)
+		if err != nil {
+			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q action table digest: %w", desiredEntry.ScheduleKey, pluginName, err)
+		}
+		specDigest, err := coreworkflow.DeploymentSpecDigest(spec)
+		if err != nil {
+			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q spec digest: %w", desiredEntry.ScheduleKey, pluginName, err)
+		}
+		plan, err := deploymentProvider.PlanWorkflow(providerCtx, coreworkflow.PlanWorkflowRequest{
+			Spec:                          spec,
+			SpecDigest:                    specDigest,
+			TargetDigest:                  targetDigest,
+			ActionTableDigest:             actionTableDigest,
+			TargetCanonicalizationVersion: workflowConfigTargetCanonicalizationV1,
+			WorkflowSemanticsVersion:      workflowConfigSemanticsVersionSteps,
+		})
+		if err != nil {
+			return fmt.Errorf("bootstrap: plan workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+		}
+		if plan == nil || strings.TrimSpace(plan.ProviderPlanDigest) == "" {
+			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q provider returned empty plan digest", desiredEntry.ScheduleKey, pluginName)
+		}
+		desiredExecutionRef.TargetDigest = targetDigest
+		desiredExecutionRef.ProviderPlanDigest = strings.TrimSpace(plan.ProviderPlanDigest)
+		desiredExecutionRef.SemanticsVersion = workflowConfigSemanticsVersionSteps
 		executionRefs, err := workflowExecutionReferenceStore(providerName, provider)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
@@ -97,24 +144,33 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			existingExecutionRef,
 		)
 		if err != nil {
-			if existingExecutionRef != "" && workflowConfigScheduleDefinitionMatches(existing, target, schedule) {
-				continue
-			}
 			return fmt.Errorf("bootstrap: store workflow execution ref for schedule %q on plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
-		if _, err := provider.UpsertSchedule(providerCtx, coreworkflow.UpsertScheduleRequest{
-			ScheduleID:   desiredEntry.ScheduleID,
-			Cron:         schedule.Cron,
-			Timezone:     schedule.Timezone,
-			Target:       target,
-			Paused:       schedule.Paused,
-			RequestedBy:  workflowConfigActor(),
-			ExecutionRef: executionRefID,
+		binding := &coreworkflow.DeploymentBinding{
+			ID:                     workflowConfigSHA256(strings.Join([]string{"config-binding", providerName, desiredEntry.ScheduleID, executionRefID, strings.TrimSpace(plan.ProviderPlanDigest)}, "\x00")),
+			ExecutionRef:           executionRefID,
+			ExecutionRefGeneration: desiredExecutionRef.Generation,
+			ExecutionRefSeal:       strings.TrimSpace(desiredExecutionRef.Seal),
+			DeploymentID:           desiredEntry.ScheduleID,
+			DeploymentGeneration:   spec.Generation,
+			SpecDigest:             specDigest,
+			TargetDigest:           targetDigest,
+			ActionTableDigest:      actionTableDigest,
+			ProviderPlanID:         strings.TrimSpace(plan.ProviderPlanID),
+			ProviderPlanDigest:     strings.TrimSpace(plan.ProviderPlanDigest),
+			SemanticsVersion:       workflowConfigSemanticsVersionSteps,
+			IdempotencyKey:         desiredEntry.ScheduleID,
+		}
+		if _, err := deploymentProvider.ApplyWorkflowDeployment(providerCtx, coreworkflow.ApplyDeploymentRequest{
+			Spec:      spec,
+			Plan:      plan,
+			Binding:   binding,
+			RequestID: desiredEntry.ScheduleID,
 		}); err != nil {
 			if createdExecutionRef {
 				_ = workflowRevokeExecutionRefByID(ctx, executionRefs, executionRefID)
 			}
-			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+			return fmt.Errorf("bootstrap: workflow deployment %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		if replacedUnreadableExecutionRef != "" {
 			workflowLogReplacedUnreadableExecutionRef(ctx, "schedule", desiredEntry.ScheduleKey, desiredEntry.ScheduleID, providerName, pluginName, replacedUnreadableExecutionRef, executionRefID, replacedUnreadableExecutionRefErr)
@@ -139,14 +195,29 @@ func workflowConfigProviderIncluded(includeProvider workflowConfigProviderFilter
 	return includeProvider(strings.TrimSpace(providerName))
 }
 
-func workflowConfigScheduleDefinitionMatches(existing *coreworkflow.Schedule, target coreworkflow.Target, schedule config.WorkflowScheduleConfig) bool {
-	if existing == nil {
-		return false
+func workflowConfigScheduleDeploymentSpec(entry desiredWorkflowConfigSchedule, target coreworkflow.Target, schedule config.WorkflowScheduleConfig) coreworkflow.DeploymentSpec {
+	pluginName := workflowConfigTargetLabel(target)
+	return coreworkflow.DeploymentSpec{
+		ID:                       entry.ScheduleID,
+		Generation:               1,
+		Target:                   target,
+		Paused:                   schedule.Paused,
+		WorkflowSemanticsVersion: workflowConfigSemanticsVersionSteps,
+		Labels: map[string]string{
+			workflowConfigDeploymentLabelKind:        workflowConfigDeploymentKindSchedule,
+			workflowConfigDeploymentLabelScheduleKey: strings.TrimSpace(entry.ScheduleKey),
+			workflowConfigDeploymentLabelPlugin:      pluginName,
+		},
+		Activations: []coreworkflow.Activation{{
+			ID:     "schedule",
+			Paused: schedule.Paused,
+			Mode:   coreworkflow.ActivationModeStart,
+			Schedule: &coreworkflow.ScheduleActivation{
+				Cron:     strings.TrimSpace(schedule.Cron),
+				Timezone: strings.TrimSpace(schedule.Timezone),
+			},
+		}},
 	}
-	return strings.TrimSpace(existing.Cron) == strings.TrimSpace(schedule.Cron) &&
-		strings.TrimSpace(existing.Timezone) == strings.TrimSpace(schedule.Timezone) &&
-		existing.Paused == schedule.Paused &&
-		coreworkflow.TargetsEqual(existing.Target, target)
 }
 
 func desiredWorkflowConfigSchedules(cfg *config.Config) (map[string]desiredWorkflowConfigSchedule, error) {
@@ -192,23 +263,30 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 		if err != nil {
 			return fmt.Errorf("bootstrap: cleanup workflow schedules requires provider %q: %w", providerName, err)
 		}
-		schedules, err := provider.ListSchedules(ctx, coreworkflow.ListSchedulesRequest{})
+		deploymentProvider, ok := provider.(coreworkflow.DeploymentProvider)
+		if !ok {
+			workflowLogSkippedConfigWorkflowCleanup(ctx, "deployments", providerName, fmt.Errorf("workflow provider does not support deployments"))
+			continue
+		}
+		deployments, err := deploymentProvider.ListWorkflowDeployments(ctx, coreworkflow.ListDeploymentsRequest{
+			Labels: map[string]string{workflowConfigDeploymentLabelKind: workflowConfigDeploymentKindSchedule},
+		})
 		if err != nil {
-			workflowLogSkippedConfigWorkflowCleanup(ctx, "schedules", providerName, err)
+			workflowLogSkippedConfigWorkflowCleanup(ctx, "deployments", providerName, err)
 			continue
 		}
 		var executionRefs coreworkflow.ExecutionReferenceStore
-		for _, schedule := range schedules {
-			if schedule == nil || !isWorkflowConfigOwnedSchedule(schedule, workflowConfigTargetLabel(schedule.Target), schedule.ID) {
+		for _, deployment := range deployments.Deployments {
+			if deployment == nil || !isWorkflowConfigOwnedDeployment(deployment, workflowConfigTargetLabel(deployment.Spec.Target), desiredWorkflowConfigSchedule{ScheduleKey: deployment.Spec.Labels[workflowConfigDeploymentLabelScheduleKey], ScheduleID: deployment.Spec.ID}) {
 				continue
 			}
-			if _, ok := desiredByProviderSchedule[workflowConfigProviderObjectKey(providerName, schedule.ID)]; ok {
+			if _, ok := desiredByProviderSchedule[workflowConfigProviderObjectKey(providerName, deployment.Spec.ID)]; ok {
 				continue
 			}
-			pluginName := workflowConfigTargetLabel(schedule.Target)
+			pluginName := workflowConfigTargetLabel(deployment.Spec.Target)
 			providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
-			if err := provider.DeleteSchedule(providerCtx, coreworkflow.DeleteScheduleRequest{ScheduleID: schedule.ID}); err != nil && !isWorkflowObjectNotFound(err) {
-				return fmt.Errorf("bootstrap: delete workflow schedule %q for plugin %q: %w", schedule.ID, pluginName, err)
+			if err := deploymentProvider.DeleteWorkflowDeployment(providerCtx, coreworkflow.DeleteDeploymentRequest{DeploymentID: deployment.Spec.ID, Generation: deployment.Spec.Generation}); err != nil && !isWorkflowObjectNotFound(err) {
+				return fmt.Errorf("bootstrap: delete workflow deployment %q for plugin %q: %w", deployment.Spec.ID, pluginName, err)
 			}
 			if executionRefs == nil {
 				executionRefs, err = workflowExecutionReferenceStore(providerName, provider)
@@ -216,8 +294,12 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 					return fmt.Errorf("bootstrap: cleanup workflow schedules for provider %q: %w", providerName, err)
 				}
 			}
-			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, schedule.ExecutionRef); err != nil {
-				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on plugin %q: %w", schedule.ExecutionRef, schedule.ID, pluginName, err)
+			executionRefID := ""
+			if deployment.Binding != nil {
+				executionRefID = strings.TrimSpace(deployment.Binding.ExecutionRef)
+			}
+			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, executionRefID); err != nil {
+				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for deployment %q on plugin %q: %w", executionRefID, deployment.Spec.ID, pluginName, err)
 			}
 		}
 	}
@@ -236,22 +318,39 @@ func workflowLogSkippedConfigWorkflowCleanup(ctx context.Context, objectType, pr
 	)
 }
 
-func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, pluginName, scheduleID string) bool {
+func isWorkflowConfigOwnedDeployment(existing *coreworkflow.Deployment, pluginName string, desired desiredWorkflowConfigSchedule) bool {
 	if existing == nil {
 		return false
 	}
-	actor := workflowConfigActor()
-	return existing.ID == scheduleID &&
-		workflowConfigTargetLabel(existing.Target) == pluginName &&
-		existing.CreatedBy.SubjectID == actor.SubjectID &&
-		existing.CreatedBy.SubjectKind == actor.SubjectKind &&
-		existing.CreatedBy.AuthSource == actor.AuthSource
+	labels := existing.Spec.Labels
+	if strings.TrimSpace(existing.Spec.ID) != strings.TrimSpace(desired.ScheduleID) ||
+		strings.TrimSpace(labels[workflowConfigDeploymentLabelKind]) != workflowConfigDeploymentKindSchedule ||
+		strings.TrimSpace(labels[workflowConfigDeploymentLabelPlugin]) != strings.TrimSpace(pluginName) {
+		return false
+	}
+	if scheduleKey := strings.TrimSpace(labels[workflowConfigDeploymentLabelScheduleKey]); scheduleKey != "" && scheduleKey != strings.TrimSpace(desired.ScheduleKey) {
+		return false
+	}
+	return true
 }
 
 func workflowConfigTargetLabel(target coreworkflow.Target) string {
 	for i := range target.Steps {
 		step := target.Steps[i]
 		if step.Plugin != nil {
+			return strings.TrimSpace(step.Plugin.Name)
+		}
+		if step.Agent != nil {
+			providerName := strings.TrimSpace(step.Agent.ProviderName)
+			if providerName == "" {
+				providerName = "default"
+			}
+			return "agent:" + providerName
+		}
+	}
+	for i := range target.Steps {
+		step := target.Steps[i]
+		if step.Plugin != nil && strings.TrimSpace(step.Plugin.Name) != "" {
 			return strings.TrimSpace(step.Plugin.Name)
 		}
 		if step.Agent != nil {
@@ -381,10 +480,10 @@ func workflowConfigValueMap(values map[string]config.WorkflowValueConfig) map[st
 
 func workflowConfigValue(value config.WorkflowValueConfig) coreworkflow.Value {
 	out := coreworkflow.Value{
-		Literal:         value.Literal,
-		LiteralSet:      value.LiteralSet,
-		Object:          workflowConfigValueMap(value.Object),
-		Array:           workflowConfigValueArray(value.Array),
+		Literal:       value.Literal,
+		LiteralSet:    value.LiteralSet,
+		Object:        workflowConfigValueMap(value.Object),
+		Array:         workflowConfigValueArray(value.Array),
 		RunInput:      strings.TrimSpace(value.RunInput),
 		SignalPayload: strings.TrimSpace(value.SignalPayload),
 	}
@@ -478,15 +577,6 @@ func workflowConfigExecutionPermissions(cfg *config.Config, path string, invokes
 	return out, nil
 }
 
-func workflowConfigActor() coreworkflow.Actor {
-	return coreworkflow.Actor{
-		SubjectID:   workflowConfigOwnerSubjectID(),
-		SubjectKind: "system",
-		DisplayName: "Workflow Config",
-		AuthSource:  "config",
-	}
-}
-
 func workflowConfigScheduleID(scheduleKey string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(scheduleKey)))
 	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
@@ -528,11 +618,19 @@ func workflowEnsureConfigExecutionRef(
 			}
 			continue
 		}
-		if workflowConfigExecutionRefMatches(existing, desired) {
+		desiredForCandidate := *desired
+		desiredForCandidate.ID = candidateID
+		if err := workflowConfigFinalizeExecutionRef(&desiredForCandidate); err != nil {
+			return "", false, "", nil, err
+		}
+		if workflowConfigExecutionRefMatches(existing, &desiredForCandidate) {
 			return candidateID, false, "", nil, nil
 		}
 	}
 	desired.ID = refID
+	if err := workflowConfigFinalizeExecutionRef(desired); err != nil {
+		return "", false, "", nil, err
+	}
 	stored, err := store.PutExecutionReference(ctx, desired)
 	if err != nil {
 		return "", false, "", nil, err
@@ -549,84 +647,212 @@ func workflowEnsureConfigExecutionRef(
 	return refID, true, replacedUnreadableCandidateID, replacedUnreadableCandidateErr, nil
 }
 
+func workflowConfigFinalizeExecutionRef(ref *coreworkflow.ExecutionReference) error {
+	if ref == nil {
+		return nil
+	}
+	if strings.TrimSpace(ref.TargetDigest) == "" {
+		digest, err := coreworkflow.TargetFingerprint(ref.Target)
+		if err != nil {
+			return err
+		}
+		ref.TargetDigest = digest
+	}
+	if strings.TrimSpace(ref.ProviderPlanDigest) == "" {
+		ref.ProviderPlanDigest = workflowConfigSHA256(strings.Join([]string{
+			"config-managed",
+			strings.TrimSpace(ref.ProviderName),
+			strings.TrimSpace(ref.TargetDigest),
+		}, "\x00"))
+	}
+	if ref.Generation == 0 {
+		ref.Generation = 1
+	}
+	ref.PermissionsDigest = workflowConfigPermissionsDigest(ref.Permissions)
+	if strings.TrimSpace(ref.Seal) == "" {
+		ref.Seal = workflowConfigExecutionRefSeal(ref)
+	}
+	return nil
+}
+
+func workflowConfigPermissionsDigest(permissions []core.AccessPermission) string {
+	data, err := json.Marshal(permissions)
+	if err != nil {
+		return ""
+	}
+	return workflowConfigSHA256(string(data))
+}
+
+func workflowConfigExecutionRefSeal(ref *coreworkflow.ExecutionReference) string {
+	if ref == nil {
+		return ""
+	}
+	return workflowConfigSHA256(strings.Join([]string{
+		strings.TrimSpace(ref.ID),
+		strings.TrimSpace(ref.ProviderName),
+		strings.TrimSpace(ref.SubjectID),
+		strings.TrimSpace(ref.CredentialSubjectID),
+		strings.TrimSpace(ref.CallerPluginName),
+		strings.TrimSpace(ref.TargetDigest),
+		strings.TrimSpace(ref.ProviderPlanDigest),
+		strings.TrimSpace(ref.PermissionsDigest),
+		strings.TrimSpace(ref.SemanticsVersion),
+		fmt.Sprintf("%d", ref.Generation),
+	}, "\x00"))
+}
+
+func workflowConfigSHA256(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
 func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explicit ...[]core.AccessPermission) []core.AccessPermission {
-	base := make([]core.AccessPermission, 0)
-	for i := range target.Steps {
-		step := target.Steps[i]
-		if step.Plugin != nil {
-			pluginName := strings.TrimSpace(step.Plugin.Name)
-			operation := strings.TrimSpace(step.Plugin.Operation)
-			if pluginName != "" && operation != "" {
-				base = append(base, core.AccessPermission{Plugin: pluginName, Operations: []string{operation}})
-			}
-		}
-		if step.Agent != nil {
-			providerName := strings.TrimSpace(step.Agent.ProviderName)
-			if providerName != "" {
-				base = append(base, core.AccessPermission{Plugin: providerName})
-			}
-			for j := range step.Agent.ToolRefs {
-				tool := step.Agent.ToolRefs[j]
-				pluginName := strings.TrimSpace(tool.Plugin)
-				operation := strings.TrimSpace(tool.Operation)
-				if pluginName == "" || operation == "" {
-					continue
+	var base []core.AccessPermission
+	if len(target.Steps) > 0 {
+		for i := range target.Steps {
+			step := target.Steps[i]
+			if step.Plugin != nil {
+				pluginName := strings.TrimSpace(step.Plugin.Name)
+				operation := strings.TrimSpace(step.Plugin.Operation)
+				if pluginName != "" && operation != "" {
+					base = append(base, core.AccessPermission{
+						Plugin:     pluginName,
+						Operations: []string{operation},
+					})
 				}
-				base = append(base, core.AccessPermission{Plugin: pluginName, Operations: []string{operation}})
+				if actionID, ok := coreworkflow.StepPluginActionID(step.ID); ok {
+					base = append(base, core.AccessPermission{
+						Plugin:  coreworkflow.StepActionPermissionPlugin,
+						Actions: []string{actionID},
+					})
+				}
+			}
+			if step.Agent != nil {
+				agentProvider := strings.TrimSpace(step.Agent.ProviderName)
+				if agentProvider != "" {
+					base = append(base, core.AccessPermission{
+						Plugin: agentProvider,
+					})
+				}
+				if actionID, ok := coreworkflow.StepAgentActionID(step.ID); ok {
+					base = append(base, core.AccessPermission{
+						Plugin:  coreworkflow.StepActionPermissionPlugin,
+						Actions: []string{actionID},
+					})
+				}
+				for j := range step.Agent.ToolRefs {
+					tool := step.Agent.ToolRefs[j]
+					if strings.TrimSpace(tool.System) != "" {
+						continue
+					}
+					pluginName := strings.TrimSpace(tool.Plugin)
+					operation := strings.TrimSpace(tool.Operation)
+					if pluginName == "" || operation == "" {
+						continue
+					}
+					base = append(base, core.AccessPermission{
+						Plugin:     pluginName,
+						Operations: []string{operation},
+					})
+				}
+			}
+			if delivery := step.OutputDelivery; delivery != nil && delivery.Plugin != nil {
+				pluginName := strings.TrimSpace(delivery.Plugin.Name)
+				operation := strings.TrimSpace(delivery.Plugin.Operation)
+				if pluginName != "" && operation != "" {
+					base = append(base, core.AccessPermission{
+						Plugin:     pluginName,
+						Operations: []string{operation},
+					})
+				}
+				if actionID, ok := coreworkflow.StepDeliveryActionID(step.ID); ok {
+					base = append(base, core.AccessPermission{
+						Plugin:  coreworkflow.StepActionPermissionPlugin,
+						Actions: []string{actionID},
+					})
+				}
 			}
 		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
-			pluginName := strings.TrimSpace(step.OutputDelivery.Plugin.Name)
-			operation := strings.TrimSpace(step.OutputDelivery.Plugin.Operation)
-			if pluginName != "" && operation != "" {
-				base = append(base, core.AccessPermission{Plugin: pluginName, Operations: []string{operation}})
-			}
-		}
+		return workflowMergeExecutionRefPermissions(append([][]core.AccessPermission{base}, explicit...)...)
 	}
 	return workflowMergeExecutionRefPermissions(append([][]core.AccessPermission{base}, explicit...)...)
 }
 
 func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []core.AccessPermission {
-	out := make([]core.AccessPermission, 0)
-	pluginIndexes := map[string]int{}
-	seenOperations := map[string]map[string]struct{}{}
+	type permissionParts struct {
+		provider   bool
+		operations map[string]struct{}
+		actions    map[string]struct{}
+	}
+	byPlugin := map[string]*permissionParts{}
 	for _, group := range groups {
 		for _, value := range group {
 			plugin := strings.TrimSpace(value.Plugin)
 			if plugin == "" {
 				continue
 			}
-			operations := make([]string, 0, len(value.Operations))
-			for _, operation := range value.Operations {
-				operation = strings.TrimSpace(operation)
-				if operation != "" {
-					operations = append(operations, operation)
-				}
+			parts := byPlugin[plugin]
+			if parts == nil {
+				parts = &permissionParts{}
+				byPlugin[plugin] = parts
 			}
-			if len(operations) == 0 {
-				if _, ok := pluginIndexes[plugin]; !ok {
-					pluginIndexes[plugin] = len(out)
-					out = append(out, core.AccessPermission{Plugin: plugin})
-				}
+			if len(value.Operations) == 0 && len(value.Actions) == 0 {
+				parts.provider = true
 				continue
 			}
-			idx, ok := pluginIndexes[plugin]
-			if !ok {
-				idx = len(out)
-				pluginIndexes[plugin] = idx
-				seenOperations[plugin] = map[string]struct{}{}
-				out = append(out, core.AccessPermission{Plugin: plugin})
-			} else if seenOperations[plugin] == nil {
-				seenOperations[plugin] = map[string]struct{}{}
-			}
-			for _, operation := range operations {
-				if _, exists := seenOperations[plugin][operation]; exists {
+			for _, operation := range value.Operations {
+				operation = strings.TrimSpace(operation)
+				if operation == "" {
 					continue
 				}
-				seenOperations[plugin][operation] = struct{}{}
-				out[idx].Operations = append(out[idx].Operations, operation)
+				if parts.operations == nil {
+					parts.operations = map[string]struct{}{}
+				}
+				parts.operations[operation] = struct{}{}
+			}
+			for _, action := range value.Actions {
+				action = strings.TrimSpace(action)
+				if action == "" {
+					continue
+				}
+				if parts.actions == nil {
+					parts.actions = map[string]struct{}{}
+				}
+				parts.actions[action] = struct{}{}
 			}
 		}
+	}
+	plugins := make([]string, 0, len(byPlugin))
+	for plugin := range byPlugin {
+		plugins = append(plugins, plugin)
+	}
+	slices.Sort(plugins)
+	out := make([]core.AccessPermission, 0, len(plugins))
+	for _, plugin := range plugins {
+		parts := byPlugin[plugin]
+		if parts == nil {
+			continue
+		}
+		perm := core.AccessPermission{Plugin: plugin}
+		if !parts.provider {
+			if len(parts.operations) > 0 {
+				operations := make([]string, 0, len(parts.operations))
+				for operation := range parts.operations {
+					operations = append(operations, operation)
+				}
+				slices.Sort(operations)
+				perm.Operations = operations
+			}
+			if len(parts.actions) > 0 {
+				actions := make([]string, 0, len(parts.actions))
+				for action := range parts.actions {
+					actions = append(actions, action)
+				}
+				slices.Sort(actions)
+				perm.Actions = actions
+			}
+		}
+		out = append(out, perm)
 	}
 	if len(out) == 0 {
 		return nil
@@ -636,16 +862,17 @@ func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []c
 
 func workflowConfigExecutionReference(cfg *config.Config, providerName string, target coreworkflow.Target, runAs *core.RunAsSubject, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
 	runAs = core.NormalizeRunAsSubject(runAs)
+	executionTarget := workflowConfigExecutionRefTarget(target)
 	ref := &coreworkflow.ExecutionReference{
 		ProviderName:        providerName,
-		Target:              target,
+		Target:              executionTarget,
 		SubjectID:           workflowConfigOwnerSubjectID(),
 		SubjectKind:         "system",
 		DisplayName:         "Gestalt config",
 		AuthSource:          "config",
 		CredentialSubjectID: workflowConfigOwnerSubjectID(),
 		RunAs:               runAs,
-		Permissions:         workflowExecutionRefPermissionsForTarget(target, permissions),
+		Permissions:         workflowExecutionRefPermissionsForTarget(executionTarget, permissions),
 	}
 	hasRunAs := runAs != nil
 	for i := range target.Steps {
@@ -671,13 +898,17 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 				}
 			}
 		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
-			if err := workflowConfigValidateNoUserCredentialTarget(cfg, *step.OutputDelivery.Plugin, hasRunAs); err != nil {
+		if delivery := step.OutputDelivery; delivery != nil && delivery.Plugin != nil {
+			if err := workflowConfigValidateNoUserCredentialTarget(cfg, *delivery.Plugin, hasRunAs); err != nil {
 				return nil, err
 			}
 		}
 	}
 	return ref, nil
+}
+
+func workflowConfigExecutionRefTarget(target coreworkflow.Target) coreworkflow.Target {
+	return target
 }
 
 func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.PluginCall, hasRunAs bool) error {
@@ -852,6 +1083,21 @@ func workflowConfigExecutionRefMatches(existing, desired *coreworkflow.Execution
 		return false
 	}
 	if !coreworkflow.TargetsEqual(existing.Target, desired.Target) {
+		return false
+	}
+	if strings.TrimSpace(existing.TargetDigest) != strings.TrimSpace(desired.TargetDigest) {
+		return false
+	}
+	if strings.TrimSpace(existing.ProviderPlanDigest) != strings.TrimSpace(desired.ProviderPlanDigest) {
+		return false
+	}
+	if strings.TrimSpace(existing.PermissionsDigest) != strings.TrimSpace(desired.PermissionsDigest) {
+		return false
+	}
+	if existing.Generation != desired.Generation {
+		return false
+	}
+	if strings.TrimSpace(existing.Seal) != strings.TrimSpace(desired.Seal) {
 		return false
 	}
 	existingJSON, existingErr := json.Marshal(existing.Permissions)

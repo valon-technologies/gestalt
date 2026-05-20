@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -46,6 +47,19 @@ type startableStartupTestWorkflowProvider struct {
 func (p *startableStartupTestWorkflowProvider) Start(context.Context) error {
 	p.started++
 	return nil
+}
+
+type compilingStartupTestWorkflowProvider struct {
+	startupTestWorkflowProvider
+	compileRequests []coreworkflow.PlanWorkflowRequest
+}
+
+func (p *compilingStartupTestWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
+	p.compileRequests = append(p.compileRequests, req)
+	return &coreworkflow.CompileTargetResponse{
+		AcceptedSpecDigest: req.SpecDigest,
+		ProviderPlanDigest: "plan-digest",
+	}, nil
 }
 
 type noopTelemetryProvider struct{}
@@ -75,6 +89,49 @@ func (p startupTestWorkflowProvider) SignalRun(context.Context, coreworkflow.Sig
 
 func (p startupTestWorkflowProvider) SignalOrStartRun(context.Context, coreworkflow.SignalOrStartRunRequest) (*coreworkflow.SignalRunResponse, error) {
 	return &coreworkflow.SignalRunResponse{Run: &coreworkflow.Run{}}, nil
+}
+
+func (p startupTestWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
+	return &coreworkflow.CompileTargetResponse{
+		AcceptedSpecDigest: req.SpecDigest,
+		ProviderPlanDigest: "plan-digest",
+	}, nil
+}
+
+func (p startupTestWorkflowProvider) ApplyWorkflowDeployment(_ context.Context, req coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{Spec: req.Spec, Status: coreworkflow.DeploymentStatusActive, Binding: req.Binding}, nil
+}
+
+func (p startupTestWorkflowProvider) GetWorkflowDeployment(context.Context, coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+
+func (p startupTestWorkflowProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
+	return &coreworkflow.ListDeploymentsResponse{}, nil
+}
+
+func (p startupTestWorkflowProvider) DeleteWorkflowDeployment(context.Context, coreworkflow.DeleteDeploymentRequest) error {
+	return nil
+}
+
+func (p startupTestWorkflowProvider) SetWorkflowDeploymentPaused(context.Context, coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+
+func (p startupTestWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+
+func (p startupTestWorkflowProvider) DeliverWorkflowEvent(context.Context, coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
+	return &coreworkflow.DeliverEventResponse{}, nil
+}
+
+func (p startupTestWorkflowProvider) GetWorkflowRunEvents(context.Context, coreworkflow.GetRunEventsRequest) (*coreworkflow.ListRunEventsResponse, error) {
+	return &coreworkflow.ListRunEventsResponse{}, nil
+}
+
+func (p startupTestWorkflowProvider) GetWorkflowRunOutput(context.Context, coreworkflow.GetRunOutputRequest) (*coreworkflow.RunOutput, error) {
+	return &coreworkflow.RunOutput{}, nil
 }
 
 func (p startupTestWorkflowProvider) UpsertSchedule(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
@@ -254,7 +311,7 @@ func buildModifiedExampleProviderBinary(t *testing.T, mutate func(string) string
 	return bin, root
 }
 
-func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []runtimehost.HostService, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
+func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []runtimehost.HostService, req *proto.InvokeWorkflowActionRequest) (*proto.WorkflowActionResult, error) {
 	t.Helper()
 
 	if len(hostServices) != 1 {
@@ -281,13 +338,13 @@ func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []runtimehost.Ho
 		t.Fatalf("grpc.NewClient: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	return proto.NewWorkflowHostClient(conn).InvokeOperation(context.Background(), req)
+	return proto.NewWorkflowHostClient(conn).InvokeWorkflowAction(context.Background(), req)
 }
 
 func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
 	if len(target.Steps) == 0 || target.Steps[0].Plugin == nil {
-		t.Fatalf("workflow target plugin step is missing: %#v", target)
+		t.Fatalf("workflow target step plugin is nil: %#v", target)
 		return ""
 	}
 	pluginTarget := target.Steps[0].Plugin
@@ -299,17 +356,62 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 	if !ok {
 		t.Fatalf("workflow provider %q does not support execution refs", providerName)
 	}
+	targetDigest, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("workflow target fingerprint: %v", err)
+	}
+	actionID, ok := coreworkflow.StepPluginActionID(target.Steps[0].ID)
+	if !ok {
+		t.Fatalf("workflow step action id for %q", target.Steps[0].ID)
+	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
-		ProviderName: providerName,
-		Target:       target,
-		SubjectID:    "system:config",
-		Permissions:  workflowExecutionRefPermissionsForTarget(target),
+		ID:                 fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
+		ProviderName:       providerName,
+		Target:             target,
+		SubjectID:          "system:config",
+		Permissions:        workflowExecutionRefPermissionsForTarget(target, []core.AccessPermission{{Plugin: coreworkflow.StepActionPermissionPlugin, Actions: []string{actionID}}}),
+		TargetDigest:       targetDigest,
+		ProviderPlanDigest: "startup-plan",
+		Generation:         1,
+		Seal:               "startup-seal",
 	})
 	if err != nil {
 		t.Fatalf("store workflow execution ref: %v", err)
 	}
 	return ref.ID
+}
+
+func startupWorkflowStepTarget(pluginName, operation string) coreworkflow.Target {
+	return coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID: "startup",
+		Plugin: &coreworkflow.PluginCall{
+			Name:      pluginName,
+			Operation: operation,
+		},
+	}}}
+}
+
+func startupWorkflowActionRequest(executionRef string, target coreworkflow.Target) *proto.InvokeWorkflowActionRequest {
+	targetDigest, _ := coreworkflow.TargetFingerprint(target)
+	actionTableDigest, _ := coreworkflow.TargetActionTableDigest(target)
+	return &proto.InvokeWorkflowActionRequest{
+		Selector: &proto.WorkflowHostActionSelector{
+			ExecutionRef:           executionRef,
+			ExecutionRefGeneration: 1,
+			ExecutionRefSeal:       "startup-seal",
+			RunId:                  "startup-run",
+			StepId:                 "startup",
+			ActionId:               "step/startup/plugin",
+			AttemptNumber:          1,
+			IdempotencyKey:         "startup-run:startup:plugin:1",
+			TargetDigest:           targetDigest,
+			ActionTableDigest:      actionTableDigest,
+			ProviderPlanDigest:     "startup-plan",
+		},
+		Action: &proto.InvokeWorkflowActionRequest_Plugin{
+			Plugin: &proto.WorkflowPluginActionPayload{Input: &structpb.Struct{}},
+		},
+	}
 }
 
 func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testing.T) {
@@ -351,19 +453,9 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedPluginProvider(t *testin
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeStartupExecutionRef(t, deps, name, testWorkflowPluginTarget("roadmap", "status"))
-		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: &proto.BoundWorkflowTarget{
-				Steps: []*proto.WorkflowStep{{
-					Id: "status",
-					Action: &proto.WorkflowStep_Plugin{Plugin: &proto.WorkflowStepPluginCall{
-						Name:      "roadmap",
-						Operation: "status",
-					}},
-				}},
-			},
-			ExecutionRef: executionRef,
-		})
+		target := startupWorkflowStepTarget("roadmap", "status")
+		executionRef := storeStartupExecutionRef(t, deps, name, target)
+		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, startupWorkflowActionRequest(executionRef, target))
 		if err != nil {
 			return nil, fmt.Errorf("startup callback: %w", err)
 		}
@@ -453,6 +545,81 @@ func TestWorkflowCleanupWrappersForwardStart(t *testing.T) {
 	}
 }
 
+func TestWorkflowWrappersForwardPlanInterfaces(t *testing.T) {
+	t.Parallel()
+
+	makeProxy := func(inner *compilingStartupTestWorkflowProvider) coreworkflow.Provider {
+		proxy := newStartupWorkflowProviderProxy("basic", nil)
+		proxy.publish(inner)
+		return proxy
+	}
+	cases := []struct {
+		name     string
+		provider func(*compilingStartupTestWorkflowProvider) coreworkflow.Provider
+	}{
+		{
+			name: "cleanup",
+			provider: func(inner *compilingStartupTestWorkflowProvider) coreworkflow.Provider {
+				return &workflowProviderWithCleanup{Provider: inner}
+			},
+		},
+		{
+			name: "execution references cleanup",
+			provider: func(inner *compilingStartupTestWorkflowProvider) coreworkflow.Provider {
+				return &workflowProviderWithExecutionReferencesAndCleanup{
+					Provider:                inner,
+					ExecutionReferenceStore: newWorkflowRuntimeExecutionRefProvider(),
+				}
+			},
+		},
+		{
+			name: "runtime workers",
+			provider: func(inner *compilingStartupTestWorkflowProvider) coreworkflow.Provider {
+				return &workflowProviderWithRuntimeWorkers{Provider: inner}
+			},
+		},
+		{
+			name: "runtime workers execution references",
+			provider: func(inner *compilingStartupTestWorkflowProvider) coreworkflow.Provider {
+				return &workflowProviderWithRuntimeWorkersAndExecutionReferences{
+					workflowProviderWithRuntimeWorkers: &workflowProviderWithRuntimeWorkers{Provider: inner},
+					ExecutionReferenceStore:            newWorkflowRuntimeExecutionRefProvider(),
+				}
+			},
+		},
+		{
+			name:     "startup proxy",
+			provider: makeProxy,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			inner := &compilingStartupTestWorkflowProvider{}
+			provider := tc.provider(inner)
+			planner, ok := provider.(coreworkflow.DeploymentProvider)
+			if !ok {
+				t.Fatalf("%T does not expose DeploymentProvider", provider)
+			}
+
+			resp, err := planner.PlanWorkflow(context.Background(), coreworkflow.PlanWorkflowRequest{SpecDigest: "spec-digest"})
+			if err != nil {
+				t.Fatalf("PlanWorkflow: %v", err)
+			}
+			if resp == nil || resp.AcceptedSpecDigest != "spec-digest" {
+				t.Fatalf("PlanWorkflow response = %#v", resp)
+			}
+
+			if got := len(inner.compileRequests); got != 1 {
+				t.Fatalf("inner plan requests = %d, want 1", got)
+			}
+		})
+	}
+}
+
 func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 	t.Parallel()
 
@@ -485,17 +652,7 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		_, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: &proto.BoundWorkflowTarget{
-				Steps: []*proto.WorkflowStep{{
-					Id: "status",
-					Action: &proto.WorkflowStep_Plugin{Plugin: &proto.WorkflowStepPluginCall{
-						Name:      "roadmap",
-						Operation: "status",
-					}},
-				}},
-			},
-		})
+		_, err := invokeWorkflowHostDuringStartup(t, hostServices, startupWorkflowActionRequest("", startupWorkflowStepTarget("roadmap", "status")))
 		if err == nil {
 			return nil, fmt.Errorf("startup callback unexpectedly succeeded without execution_ref")
 		}

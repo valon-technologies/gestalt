@@ -1266,6 +1266,70 @@ func TestWorkflowRuntimeInvokeAgentTargetRunsStepsInOneSession(t *testing.T) {
 	}
 }
 
+func TestWorkflowRuntimeInvokeSkipsNestedStepOutputWhenDependencySkipped(t *testing.T) {
+	t.Parallel()
+
+	runtime := &workflowRuntime{}
+	var invoked bool
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+			invoked = true
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	req := coreworkflow.InvokeOperationRequest{
+		ProviderName: "temporal",
+		Target: coreworkflow.Target{Steps: []coreworkflow.Step{
+			{
+				ID: "optional",
+				When: &coreworkflow.StepWhen{
+					Value:     coreworkflow.Value{Literal: false, LiteralSet: true},
+					Equals:    true,
+					EqualsSet: true,
+				},
+				Plugin: &coreworkflow.PluginCall{Name: "roadmap", Operation: "sync"},
+			},
+			{
+				ID: "dependent",
+				When: &coreworkflow.StepWhen{
+					Value: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+						"ok": {StepOutput: &coreworkflow.StepOutputSource{StepID: "optional", Path: "plugin.body.json.ok"}},
+					}},
+					Equals:    map[string]any{"ok": true},
+					EqualsSet: true,
+				},
+				Plugin: &coreworkflow.PluginCall{Name: "roadmap", Operation: "followup"},
+			},
+		}},
+	}
+
+	ctx := principal.WithPrincipal(context.Background(), principal.Canonicalize(&principal.Principal{SubjectID: principal.UserSubjectID("ada")}))
+	resp, err := runtime.Invoke(ctx, req)
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if resp.Status != http.StatusOK {
+		t.Fatalf("response status = %d, want 200: %s", resp.Status, resp.Body)
+	}
+	var result workflowStepsResult
+	if err := json.Unmarshal([]byte(resp.Body), &result); err != nil {
+		t.Fatalf("response body json: %v\n%s", err, resp.Body)
+	}
+	if len(result.Steps) != 2 {
+		t.Fatalf("steps = %#v, want two skipped steps", result.Steps)
+	}
+	if result.Steps[0].Status != "skipped" || result.Steps[0].SkippedReason != "when_false" {
+		t.Fatalf("optional step = %#v, want when_false skip", result.Steps[0])
+	}
+	if result.Steps[1].Status != "skipped" || result.Steps[1].SkippedReason != "missing_dependency" {
+		t.Fatalf("dependent step = %#v, want missing_dependency skip", result.Steps[1])
+	}
+	if invoked {
+		t.Fatal("invoker was called for skipped workflow steps")
+	}
+}
+
 func TestWorkflowRuntimeInvokeAgentTargetFinalOutputDeliveryFailureFailsRun(t *testing.T) {
 	t.Parallel()
 
@@ -1697,6 +1761,72 @@ func TestWorkflowRuntimeInvokeConfigExecutionRefRunAsUsesServiceAccountPrincipal
 	}
 	if !gotInternalConnectionAccess {
 		t.Fatal("config-owned runAs execution ref did not authorize internal connection access")
+	}
+}
+
+func TestWorkflowRuntimeInvokeWorkflowActionRejectsMissingStepActionPermissions(t *testing.T) {
+	t.Parallel()
+
+	target := testWorkflowPluginTarget("roadmap", "sync")
+	actionID, ok := coreworkflow.StepPluginActionID(target.Steps[0].ID)
+	if !ok {
+		t.Fatal("step action id was not generated")
+	}
+	targetDigest, err := coreworkflow.TargetFingerprint(target)
+	if err != nil {
+		t.Fatalf("TargetFingerprint: %v", err)
+	}
+	actionTableDigest, err := coreworkflow.TargetActionTableDigest(target)
+	if err != nil {
+		t.Fatalf("TargetActionTableDigest: %v", err)
+	}
+
+	refProvider := newWorkflowRuntimeExecutionRefProvider()
+	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
+		ID:           "exec-ref-no-step-actions",
+		ProviderName: "temporal",
+		Target:       target,
+		SubjectID:    "user:ada",
+		SubjectKind:  string(principal.KindUser),
+		Generation:   1,
+		Seal:         "seal",
+		TargetDigest: targetDigest,
+	}); err != nil {
+		t.Fatalf("Put execution ref: %v", err)
+	}
+
+	runtime := &workflowRuntime{
+		providers: map[string]coreworkflow.Provider{"temporal": refProvider},
+	}
+	var invoked bool
+	runtime.SetInvoker(funcInvoker{
+		invoke: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+			invoked = true
+			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+		},
+	})
+
+	_, err = runtime.InvokeWorkflowAction(context.Background(), coreworkflow.InvokeActionRequest{
+		ProviderName: "temporal",
+		Selector: coreworkflow.HostActionSelector{
+			ExecutionRef:           "exec-ref-no-step-actions",
+			ExecutionRefGeneration: 1,
+			ExecutionRefSeal:       "seal",
+			RunID:                  "run-1",
+			StepID:                 target.Steps[0].ID,
+			ActionID:               actionID,
+			AttemptNumber:          1,
+			IdempotencyKey:         "action-1",
+			TargetDigest:           targetDigest,
+			ActionTableDigest:      actionTableDigest,
+		},
+		Plugin: &coreworkflow.PluginActionPayload{Input: map[string]any{}},
+	})
+	if !errors.Is(err, invocation.ErrAuthorizationDenied) {
+		t.Fatalf("InvokeWorkflowAction error = %v, want authorization denied", err)
+	}
+	if invoked {
+		t.Fatal("invoker was called without step-action permissions")
 	}
 }
 

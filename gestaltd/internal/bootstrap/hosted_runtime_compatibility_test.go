@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
 )
@@ -143,6 +144,38 @@ func (p *noopWorkflowProvider) ResumeEventTrigger(context.Context, coreworkflow.
 }
 func (p *noopWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
 	return nil
+}
+func (p *noopWorkflowProvider) PlanWorkflow(_ context.Context, req coreworkflow.PlanWorkflowRequest) (*coreworkflow.CompileTargetResponse, error) {
+	return &coreworkflow.CompileTargetResponse{
+		ProviderPlanDigest: "noop-plan",
+	}, nil
+}
+func (p *noopWorkflowProvider) ApplyWorkflowDeployment(context.Context, coreworkflow.ApplyDeploymentRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+func (p *noopWorkflowProvider) GetWorkflowDeployment(context.Context, coreworkflow.GetDeploymentRequest) (*coreworkflow.Deployment, error) {
+	return nil, core.ErrNotFound
+}
+func (p *noopWorkflowProvider) ListWorkflowDeployments(context.Context, coreworkflow.ListDeploymentsRequest) (*coreworkflow.ListDeploymentsResponse, error) {
+	return &coreworkflow.ListDeploymentsResponse{}, nil
+}
+func (p *noopWorkflowProvider) DeleteWorkflowDeployment(context.Context, coreworkflow.DeleteDeploymentRequest) error {
+	return nil
+}
+func (p *noopWorkflowProvider) SetWorkflowDeploymentPaused(context.Context, coreworkflow.SetDeploymentPausedRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+func (p *noopWorkflowProvider) SetWorkflowActivationPaused(context.Context, coreworkflow.SetActivationPausedRequest) (*coreworkflow.Deployment, error) {
+	return &coreworkflow.Deployment{}, nil
+}
+func (p *noopWorkflowProvider) DeliverWorkflowEvent(context.Context, coreworkflow.PublishEventRequest) (*coreworkflow.DeliverEventResponse, error) {
+	return &coreworkflow.DeliverEventResponse{}, nil
+}
+func (p *noopWorkflowProvider) GetWorkflowRunEvents(context.Context, coreworkflow.GetRunEventsRequest) (*coreworkflow.ListRunEventsResponse, error) {
+	return &coreworkflow.ListRunEventsResponse{}, nil
+}
+func (p *noopWorkflowProvider) GetWorkflowRunOutput(context.Context, coreworkflow.GetRunOutputRequest) (*coreworkflow.RunOutput, error) {
+	return &coreworkflow.RunOutput{}, nil
 }
 func (p *noopWorkflowProvider) Ping(context.Context) error { return nil }
 func (p *noopWorkflowProvider) Close() error               { return nil }

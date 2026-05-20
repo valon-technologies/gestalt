@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -23,7 +24,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -818,6 +818,16 @@ func (p *notifyingRuntimeWorkflowControlProvider) UpsertSchedule(ctx context.Con
 	return schedule, err
 }
 
+func (p *notifyingRuntimeWorkflowControlProvider) ApplyWorkflowDeployment(ctx context.Context, req workflow.ApplyDeploymentRequest) (*workflow.Deployment, error) {
+	deployment, err := p.recordingWorkflowControlProvider.ApplyWorkflowDeployment(ctx, req)
+	if err == nil {
+		p.once.Do(func() {
+			close(p.upsertedSchedule)
+		})
+	}
+	return deployment, err
+}
+
 type blockingRuntimeWorkflowControlProvider struct {
 	*recordingWorkflowControlProvider
 	waitStarted chan struct{}
@@ -935,6 +945,141 @@ func (p *recordingWorkflowControlProvider) ListEventTriggers(context.Context, wo
 		out = append(out, cloneWorkflowEventTrigger(trigger))
 	}
 	return out, nil
+}
+
+func (p *recordingWorkflowControlProvider) PlanWorkflow(_ context.Context, req workflow.PlanWorkflowRequest) (*workflow.CompileTargetResponse, error) {
+	return &workflow.CompileTargetResponse{
+		ProviderPlanDigest: "hosted-plan-" + req.TargetDigest,
+	}, nil
+}
+
+func (p *recordingWorkflowControlProvider) ApplyWorkflowDeployment(ctx context.Context, req workflow.ApplyDeploymentRequest) (*workflow.Deployment, error) {
+	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Schedule != nil {
+		activation := req.Spec.Activations[0]
+		executionRef := ""
+		if req.Binding != nil {
+			executionRef = req.Binding.ExecutionRef
+		}
+		if _, err := p.UpsertSchedule(ctx, workflow.UpsertScheduleRequest{
+			ScheduleID:   req.Spec.ID,
+			Cron:         activation.Schedule.Cron,
+			Timezone:     activation.Schedule.Timezone,
+			Target:       req.Spec.Target,
+			Paused:       req.Spec.Paused || activation.Paused,
+			ExecutionRef: executionRef,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	if len(req.Spec.Activations) == 1 && req.Spec.Activations[0].Event != nil {
+		activation := req.Spec.Activations[0]
+		executionRef := ""
+		if req.Binding != nil {
+			executionRef = req.Binding.ExecutionRef
+		}
+		if _, err := p.UpsertEventTrigger(ctx, workflow.UpsertEventTriggerRequest{
+			TriggerID:    req.Spec.ID,
+			Match:        activation.Event.Match,
+			Target:       req.Spec.Target,
+			Paused:       req.Spec.Paused || activation.Paused,
+			ExecutionRef: executionRef,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return workflowDeploymentFromSpec(req.Spec, req.Binding), nil
+}
+
+func (p *recordingWorkflowControlProvider) GetWorkflowDeployment(_ context.Context, req workflow.GetDeploymentRequest) (*workflow.Deployment, error) {
+	if schedule := p.schedules[req.DeploymentID]; schedule != nil {
+		return workflowDeploymentFromSchedule(schedule), nil
+	}
+	if trigger := p.eventTriggers[req.DeploymentID]; trigger != nil {
+		return workflowDeploymentFromEventTrigger(trigger), nil
+	}
+	return nil, core.ErrNotFound
+}
+
+func (p *recordingWorkflowControlProvider) ListWorkflowDeployments(context.Context, workflow.ListDeploymentsRequest) (*workflow.ListDeploymentsResponse, error) {
+	out := &workflow.ListDeploymentsResponse{Deployments: make([]*workflow.Deployment, 0, len(p.schedules)+len(p.eventTriggers))}
+	for _, schedule := range p.schedules {
+		out.Deployments = append(out.Deployments, workflowDeploymentFromSchedule(schedule))
+	}
+	for _, trigger := range p.eventTriggers {
+		out.Deployments = append(out.Deployments, workflowDeploymentFromEventTrigger(trigger))
+	}
+	return out, nil
+}
+
+func (p *recordingWorkflowControlProvider) DeleteWorkflowDeployment(ctx context.Context, req workflow.DeleteDeploymentRequest) error {
+	if p.schedules != nil {
+		delete(p.schedules, req.DeploymentID)
+	}
+	if p.eventTriggers != nil {
+		delete(p.eventTriggers, req.DeploymentID)
+	}
+	return nil
+}
+
+func workflowDeploymentFromSchedule(schedule *workflow.Schedule) *workflow.Deployment {
+	if schedule == nil {
+		return nil
+	}
+	spec := workflow.DeploymentSpec{
+		ID:         schedule.ID,
+		Generation: 1,
+		Target:     schedule.Target,
+		Paused:     schedule.Paused,
+		Labels: map[string]string{
+			workflowConfigDeploymentLabelKind:        workflowConfigDeploymentKindSchedule,
+			workflowConfigDeploymentLabelScheduleKey: strings.TrimPrefix(schedule.ID, workflow.ConfigManagedSchedulePrefix),
+			workflowConfigDeploymentLabelPlugin:      workflowConfigTargetLabel(schedule.Target),
+		},
+		Activations: []workflow.Activation{{
+			ID:     "schedule",
+			Paused: schedule.Paused,
+			Mode:   workflow.ActivationModeStart,
+			Schedule: &workflow.ScheduleActivation{
+				Cron:     schedule.Cron,
+				Timezone: schedule.Timezone,
+			},
+		}},
+	}
+	return workflowDeploymentFromSpec(spec, &workflow.DeploymentBinding{ExecutionRef: schedule.ExecutionRef})
+}
+
+func workflowDeploymentFromEventTrigger(trigger *workflow.EventTrigger) *workflow.Deployment {
+	if trigger == nil {
+		return nil
+	}
+	spec := workflow.DeploymentSpec{
+		ID:         trigger.ID,
+		Generation: 1,
+		Target:     trigger.Target,
+		Paused:     trigger.Paused,
+		Labels: map[string]string{
+			workflowConfigDeploymentLabelKind:       workflowConfigDeploymentKindEventTrigger,
+			workflowConfigDeploymentLabelTriggerKey: strings.TrimPrefix(trigger.ID, workflow.ConfigManagedSchedulePrefix),
+			workflowConfigDeploymentLabelPlugin:     workflowConfigTargetLabel(trigger.Target),
+		},
+		Activations: []workflow.Activation{{
+			ID:     "event",
+			Paused: trigger.Paused,
+			Mode:   workflow.ActivationModeSignalOrStart,
+			Event: &workflow.EventActivation{
+				Match: trigger.Match,
+			},
+		}},
+	}
+	return workflowDeploymentFromSpec(spec, &workflow.DeploymentBinding{ExecutionRef: trigger.ExecutionRef})
+}
+
+func workflowDeploymentFromSpec(spec workflow.DeploymentSpec, binding *workflow.DeploymentBinding) *workflow.Deployment {
+	status := workflow.DeploymentStatusActive
+	if spec.Paused {
+		status = workflow.DeploymentStatusPaused
+	}
+	return &workflow.Deployment{Spec: spec, Status: status, AppliedGeneration: spec.Generation, Binding: binding}
 }
 
 func cloneWorkflowExecutionReference(ref *workflow.ExecutionReference) *workflow.ExecutionReference {
@@ -1135,14 +1280,10 @@ type recordingHostedWorkflowServer struct {
 	proto.UnimplementedWorkflowProviderServer
 
 	startProviderCalls atomic.Int32
-	mu                 sync.Mutex
-	executionRefs      map[string]*proto.WorkflowExecutionReference
 }
 
 func newRecordingHostedWorkflowServer() *recordingHostedWorkflowServer {
-	return &recordingHostedWorkflowServer{
-		executionRefs: map[string]*proto.WorkflowExecutionReference{},
-	}
+	return &recordingHostedWorkflowServer{}
 }
 
 func (s *recordingHostedWorkflowServer) GetProviderIdentity(context.Context, *emptypb.Empty) (*proto.ProviderIdentity, error) {
@@ -1165,37 +1306,4 @@ func (s *recordingHostedWorkflowServer) HealthCheck(context.Context, *emptypb.Em
 func (s *recordingHostedWorkflowServer) StartProvider(context.Context, *emptypb.Empty) (*proto.StartRuntimeProviderResponse, error) {
 	s.startProviderCalls.Add(1)
 	return &proto.StartRuntimeProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
-}
-
-func (s *recordingHostedWorkflowServer) PutExecutionReference(_ context.Context, req *proto.PutWorkflowExecutionReferenceRequest) (*proto.WorkflowExecutionReference, error) {
-	ref := req.GetReference()
-	if ref.GetId() == "" {
-		return nil, status.Error(codes.InvalidArgument, "missing execution reference id")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.executionRefs[ref.GetId()] = gproto.Clone(ref).(*proto.WorkflowExecutionReference)
-	return gproto.Clone(ref).(*proto.WorkflowExecutionReference), nil
-}
-
-func (s *recordingHostedWorkflowServer) GetExecutionReference(_ context.Context, req *proto.GetWorkflowExecutionReferenceRequest) (*proto.WorkflowExecutionReference, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ref := s.executionRefs[req.GetId()]
-	if ref == nil {
-		return nil, status.Error(codes.NotFound, "execution reference not found")
-	}
-	return gproto.Clone(ref).(*proto.WorkflowExecutionReference), nil
-}
-
-func (s *recordingHostedWorkflowServer) ListExecutionReferences(_ context.Context, req *proto.ListWorkflowExecutionReferencesRequest) (*proto.ListWorkflowExecutionReferencesResponse, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	refs := make([]*proto.WorkflowExecutionReference, 0, len(s.executionRefs))
-	for _, ref := range s.executionRefs {
-		if req.GetSubjectId() == "" || ref.GetSubjectId() == req.GetSubjectId() {
-			refs = append(refs, gproto.Clone(ref).(*proto.WorkflowExecutionReference))
-		}
-	}
-	return &proto.ListWorkflowExecutionReferencesResponse{References: refs}, nil
 }
