@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -1863,6 +1864,10 @@ func writeManifestFile(t *testing.T, pluginDir string, manifest *providermanifes
 	}
 }
 
+// e2ePortBindMu serializes releasing reserved ports and starting gestaltd so parallel
+// serve tests cannot steal each other's ports between listener close and process bind.
+var e2ePortBindMu sync.Mutex
+
 func reservePort(t *testing.T) (int, net.Listener) {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -1870,6 +1875,18 @@ func reservePort(t *testing.T) (int, net.Listener) {
 		t.Fatalf("listen for free port: %v", err)
 	}
 	return l.Addr().(*net.TCPAddr).Port, l
+}
+
+func releasePortHoldersAndStart(t *testing.T, holders []net.Listener, start func()) {
+	t.Helper()
+	e2ePortBindMu.Lock()
+	defer e2ePortBindMu.Unlock()
+	for _, holder := range holders {
+		if holder != nil {
+			_ = holder.Close()
+		}
+	}
+	start()
 }
 
 func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
@@ -2250,16 +2267,17 @@ func startGestaltdWithConfigsAndArgs(t *testing.T, cfgPaths []string, args []str
 		t.Fatalf("write config: %v", err)
 	}
 
-	_ = holder.Close()
 	for _, cfgPath := range cfgPaths {
 		args = append(args, "--config", cfgPath)
 	}
 	cmd := exec.Command(gestaltdBin, args...)
-	if requiredPath != "" {
-		startCommandAndWaitReadyAndFile(t, cmd, baseURL, requiredPath)
-	} else {
-		startCommandAndWaitReady(t, cmd, baseURL)
-	}
+	releasePortHoldersAndStart(t, []net.Listener{holder}, func() {
+		if requiredPath != "" {
+			startCommandAndWaitReadyAndFile(t, cmd, baseURL, requiredPath)
+		} else {
+			startCommandAndWaitReady(t, cmd, baseURL)
+		}
+	})
 	return baseURL
 }
 
@@ -2858,11 +2876,11 @@ func TestE2EServeSplitManagementRoutes(t *testing.T) {
 	publicURL := fmt.Sprintf("http://127.0.0.1:%d", publicPort)
 	managementURL := fmt.Sprintf("http://127.0.0.1:%d", managementPort)
 	cfgPath := writeServeConfigWithManagement(t, dir, publicPort, managementPort, mountedUI)
-	_ = publicHolder.Close()
-	_ = managementHolder.Close()
 
 	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
-	startCommandAndWaitReady(t, cmd, publicURL)
+	releasePortHoldersAndStart(t, []net.Listener{publicHolder, managementHolder}, func() {
+		startCommandAndWaitReady(t, cmd, publicURL)
+	})
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	for _, tc := range []struct {
