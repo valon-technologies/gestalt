@@ -121,6 +121,12 @@ fn connect_error_kind(err: &anyhow::Error) -> Option<ConnectErrorKind> {
         if message.contains("expired or was revoked") {
             return Some(ConnectErrorKind::ReconnectRequired);
         }
+        let lower_message = message.to_ascii_lowercase();
+        if lower_message.contains("specify which instance")
+            || lower_message.contains("pass --instance")
+        {
+            return Some(ConnectErrorKind::InstanceSelectionRequired);
+        }
     }
     None
 }
@@ -224,6 +230,9 @@ fn selector_pairs_for_plugin_matching_selector(
                     let Some(instance_name) = instance["name"].as_str() else {
                         continue;
                     };
+                    if !is_connected_selector(connection, instance) {
+                        continue;
+                    }
                     let connection_name =
                         instance["connection"].as_str().unwrap_or(connection_name);
                     if connection_filter.is_some_and(|filter| filter != connection_name) {
@@ -245,6 +254,15 @@ fn selector_pairs_for_plugin_matching_selector(
     }
 
     unique.into_iter().collect()
+}
+
+fn is_connected_selector(connection: &serde_json::Value, instance: &serde_json::Value) -> bool {
+    let status = instance["credentialState"]
+        .as_str()
+        .or_else(|| instance["status"].as_str())
+        .or_else(|| connection["credentialState"].as_str())
+        .or_else(|| connection["status"].as_str());
+    matches!(status, Some("connected" | "ready"))
 }
 
 impl SelectorCommand {

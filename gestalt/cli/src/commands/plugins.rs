@@ -171,7 +171,7 @@ fn connection_rows(connection: &serde_json::Value) -> Vec<(String, String, Strin
         .as_array()
         .filter(|instances| !instances.is_empty())
     {
-        return instances
+        let rows: Vec<_> = instances
             .iter()
             .filter_map(|instance| {
                 let instance_name = instance["name"].as_str()?;
@@ -183,6 +183,9 @@ fn connection_rows(connection: &serde_json::Value) -> Vec<(String, String, Strin
                 ))
             })
             .collect();
+        if !rows.is_empty() {
+            return rows;
+        }
     }
 
     vec![(

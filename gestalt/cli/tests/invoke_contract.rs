@@ -109,7 +109,7 @@ fn test_invoke_instance_selection_error_suggests_instance_flag() {
         "/api/v1/slack/channels",
         StatusCode::CONFLICT
     )
-    .with_body(r#"{"error":"ambiguous instance: integration \"slack\" has 2 connections ([team-a team-b]); specify which instance to use with the \"_instance\" parameter","code":"instance_selection_required","integration":"slack"}"#)
+    .with_body(r#"{"error":"ambiguous instance: integration \"slack\" has 2 connections ([team-a team-b]); specify which instance to use with the \"_instance\" parameter","integration":"slack"}"#)
     .create();
 
     let _integrations_mock =
@@ -204,7 +204,7 @@ fn test_list_operations_infers_only_connected_instance_before_catalog_resolution
             "connections":[
                 {"name":"dev","credentialState":"missing","instances":[]},
                 {"name":"prod","credentialState":"connected","status":"ready","instances":[{"connection":"prod","name":"default"}]},
-                {"name":"stage","credentialState":"missing","instances":[]}
+                {"name":"stage","credentialState":"disconnected","instances":[{"connection":"stage","name":"default"}]}
             ]
         }]"#,
             )
