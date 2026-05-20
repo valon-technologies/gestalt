@@ -11,10 +11,11 @@ import (
 // authorization static policy model.
 func AuthorizationStaticConfig(cfg AuthorizationConfig, pluginDefs map[string]*ProviderEntry) authorization.StaticConfig {
 	out := authorization.StaticConfig{
-		Policies:         make(map[string]authorization.StaticSubjectPolicy, len(cfg.Policies)),
-		ProviderPolicies: make(map[string]string, len(pluginDefs)),
-		ModelFragments:   authorizationModelFragments(cfg),
-		Relationships:    authorizationRelationships(cfg),
+		Policies:                make(map[string]authorization.StaticSubjectPolicy, len(cfg.Policies)),
+		ProviderPolicies:        make(map[string]string, len(pluginDefs)),
+		ModelFragments:          authorizationModelFragments(cfg),
+		Relationships:           authorizationRelationships(cfg),
+		ResourceDynamicPolicies: authorizationResourceDynamicPolicies(cfg),
 	}
 	for policyID, def := range cfg.Policies {
 		policy := authorization.StaticSubjectPolicy{
@@ -37,6 +38,26 @@ func AuthorizationStaticConfig(cfg AuthorizationConfig, pluginDefs map[string]*P
 	return out
 }
 
+func authorizationResourceDynamicPolicies(cfg AuthorizationConfig) map[string]authorization.StaticResourceDynamicPolicy {
+	out := map[string]authorization.StaticResourceDynamicPolicy{}
+	for name, resourceType := range cfg.ResourceTypes {
+		if resourceType.Dynamic.AllowAdditionalRelationships {
+			out[name] = authorization.StaticResourceDynamicPolicy{AllowAdditionalRelationships: true}
+		}
+	}
+	for _, model := range cfg.Models {
+		for name, resourceType := range model.ResourceTypes {
+			if resourceType.Dynamic.AllowAdditionalRelationships {
+				out[name] = authorization.StaticResourceDynamicPolicy{AllowAdditionalRelationships: true}
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func authorizationModelFragments(cfg AuthorizationConfig) []*core.AuthorizationModelResourceType {
 	var out []*core.AuthorizationModelResourceType
 	for _, model := range cfg.Models {
@@ -54,14 +75,12 @@ func authorizationModelResourceType(name string, def AuthorizationResourceTypeDe
 			Name:           relationName,
 			SubjectTypes:   append([]string(nil), relation.SubjectTypes...),
 			AllowedTargets: authorizationAllowedTargets(relation.AllowedTargets),
-			Rewrite:        authorizationRewrite(relation.Rewrite),
 		})
 	}
 	for actionName, action := range def.Actions {
 		resourceType.Actions = append(resourceType.Actions, &core.AuthorizationModelAction{
 			Name:      actionName,
 			Relations: append([]string(nil), action.Relations...),
-			Rewrite:   authorizationRewrite(action.Rewrite),
 		})
 	}
 	return resourceType
@@ -89,31 +108,6 @@ func authorizationAllowedTargets(targets []AuthorizationAllowedTargetDef) []*cor
 		}
 	}
 	return out
-}
-
-func authorizationRewrite(def *AuthorizationRewriteDef) *core.AuthorizationModelRewrite {
-	if def == nil {
-		return nil
-	}
-	switch {
-	case def.This != nil:
-		return &core.AuthorizationModelRewrite{Kind: &proto.AuthorizationModelRewrite_This{This: &core.AuthorizationModelRewriteThis{}}}
-	case def.ComputedUserset != nil:
-		return &core.AuthorizationModelRewrite{Kind: &proto.AuthorizationModelRewrite_ComputedUserset{ComputedUserset: &core.AuthorizationModelComputedUserset{Relation: def.ComputedUserset.Relation}}}
-	case def.TupleToUserset != nil:
-		return &core.AuthorizationModelRewrite{Kind: &proto.AuthorizationModelRewrite_TupleToUserset{TupleToUserset: &core.AuthorizationModelTupleToUserset{
-			TuplesetRelation: def.TupleToUserset.TuplesetRelation,
-			ComputedRelation: def.TupleToUserset.ComputedRelation,
-		}}}
-	case len(def.Union) > 0:
-		children := make([]*core.AuthorizationModelRewrite, 0, len(def.Union))
-		for i := range def.Union {
-			children = append(children, authorizationRewrite(&def.Union[i]))
-		}
-		return &core.AuthorizationModelRewrite{Kind: &proto.AuthorizationModelRewrite_Union{Union: &core.AuthorizationModelRewriteUnion{Children: children}}}
-	default:
-		return nil
-	}
 }
 
 func authorizationRelationships(cfg AuthorizationConfig) []*core.Relationship {

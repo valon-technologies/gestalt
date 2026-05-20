@@ -623,7 +623,14 @@ func (a *ProviderBackedAuthorizer) readAllRelationships(ctx context.Context, mod
 	}
 }
 
-func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string]*core.Relationship, fragmentRelationships []*core.Relationship) (map[string]*core.Relationship, providerBackedRoleState, error) {
+type dynamicFragmentRelationship struct {
+	Relationship *core.Relationship
+	SourceID     string
+	OwnerKind    string
+	OwnerID      string
+}
+
+func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string]*core.Relationship, fragmentRelationships []dynamicFragmentRelationship) (map[string]*core.Relationship, providerBackedRoleState, error) {
 	desired := map[string]*core.Relationship{}
 	state := providerBackedRoleState{
 		policyStaticRoles:  map[string][]string{},
@@ -684,11 +691,6 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 				continue
 			}
 			addDesiredRelationship(desired, synthesizedRelationship(rel, "provider_existing", "managed_subject", "", ""))
-		case resourceTypeAgentSession:
-			if !validManagedAgentSessionRelationship(rel) {
-				continue
-			}
-			addDesiredRelationship(desired, synthesizedRelationship(rel, "provider_existing", "agent_session", "", ""))
 		case resourceTypeEveryone, resourceTypeTeam, resourceTypeSlackChannel:
 			if !validManagedMembershipRelationship(rel) {
 				continue
@@ -697,9 +699,14 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 		}
 	}
 
-	for _, rel := range fragmentRelationships {
+	for _, fragmentRel := range fragmentRelationships {
+		rel := fragmentRel.Relationship
 		if rel == nil || rel.GetResource() == nil {
 			continue
+		}
+		sourceID := strings.TrimSpace(fragmentRel.SourceID)
+		if sourceID == "" {
+			sourceID = "dynamic_fragment"
 		}
 		switch strings.TrimSpace(rel.GetResource().GetType()) {
 		case resourceTypePluginDynamic:
@@ -708,7 +715,7 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 			if resourceID == "" || relation == "" {
 				continue
 			}
-			addDesiredRelationship(desired, synthesizedRelationship(rel, "dynamic_fragment", "plugin/"+resourceID, "plugin", resourceID))
+			addDesiredRelationship(desired, synthesizedRelationship(rel, "dynamic_fragment", sourceID, "plugin", resourceID))
 			ensureRoleSet(pluginDynamicRoles, resourceID)[relation] = struct{}{}
 		case resourceTypeAdminDynamic:
 			resourceID := strings.TrimSpace(rel.GetResource().GetId())
@@ -716,8 +723,10 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 			if resourceID != resourceIDAdminDynamicGlobal || relation == "" {
 				continue
 			}
-			addDesiredRelationship(desired, synthesizedRelationship(rel, "dynamic_fragment", "global", "global", resourceIDAdminDynamicGlobal))
+			addDesiredRelationship(desired, synthesizedRelationship(rel, "dynamic_fragment", sourceID, "global", resourceIDAdminDynamicGlobal))
 			adminDynamicRoles[relation] = struct{}{}
+		default:
+			addDesiredRelationship(desired, synthesizedRelationship(rel, "dynamic_fragment", sourceID, fragmentRel.OwnerKind, fragmentRel.OwnerID))
 		}
 	}
 
@@ -782,7 +791,7 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 	return desired, state, nil
 }
 
-func (a *ProviderBackedAuthorizer) dynamicFragmentState(ctx context.Context, existing map[string]*core.Relationship) ([]*core.Relationship, []*core.AuthorizationModelResourceType, error) {
+func (a *ProviderBackedAuthorizer) dynamicFragmentState(ctx context.Context, existing map[string]*core.Relationship) ([]dynamicFragmentRelationship, []*core.AuthorizationModelResourceType, error) {
 	if a.fragmentSource == nil {
 		return nil, nil, nil
 	}
@@ -793,25 +802,91 @@ func (a *ProviderBackedAuthorizer) dynamicFragmentState(ctx context.Context, exi
 	if err != nil {
 		return nil, nil, fmt.Errorf("list dynamic authorization fragments: %w", err)
 	}
-	var relationships []*core.Relationship
+	var relationships []dynamicFragmentRelationship
 	var modelFragments []*core.AuthorizationModelResourceType
+	staticResourceTypes, resourceRelations := a.staticResourceTypeState(dynamicFragmentRoleState(fragments))
+	seenOwners := map[string]string{}
 	for _, fragment := range fragments {
 		if fragment == nil || strings.TrimSpace(fragment.Status) != coredata.AuthorizationFragmentStatusActive {
 			continue
 		}
+		ownerKey := dynamicFragmentOwnerKey(fragment.Owner)
+		if existingID, ok := seenOwners[ownerKey]; ok {
+			slog.WarnContext(ctx, "authorization: removing duplicate dynamic authorization fragment owner", "fragment", fragment.ID, "existing_fragment", existingID, "owner", ownerKey)
+			if err := a.fragmentSource.DeleteFragment(ctx, fragment.ID); err != nil {
+				return nil, nil, fmt.Errorf("delete duplicate dynamic authorization fragment %q: %w", fragment.ID, err)
+			}
+			continue
+		}
+		seenOwners[ownerKey] = fragment.ID
+		localResourceTypes := dynamicFragmentLocalResourceTypes(fragment)
+		fragmentRelationshipsStart := len(relationships)
+		fragmentModelsStart := len(modelFragments)
+		fragmentResourceNames := []string{}
+		fragmentValid := true
 		for resourceTypeName, raw := range fragment.ResourceTypes {
-			resourceType, err := dynamicFragmentModelResourceType(resourceTypeName, raw)
+			canonicalName, err := dynamicFragmentCanonicalResourceType(fragment.Owner, resourceTypeName, localResourceTypes)
 			if err != nil {
-				return nil, nil, fmt.Errorf("dynamic authorization fragment %q resource type %q: %w", fragment.ID, resourceTypeName, err)
+				slog.WarnContext(ctx, "authorization: removing invalid dynamic authorization fragment resource type", "fragment", fragment.ID, "resource_type", resourceTypeName, "error", err)
+				fragmentValid = false
+				break
+			}
+			if _, ok := staticResourceTypes[canonicalName]; ok {
+				slog.WarnContext(ctx, "authorization: removing conflicting dynamic authorization fragment resource type", "fragment", fragment.ID, "resource_type", canonicalName)
+				fragmentValid = false
+				break
+			}
+			resourceType, err := dynamicFragmentModelResourceType(fragment.Owner, resourceTypeName, raw, localResourceTypes)
+			if err != nil {
+				slog.WarnContext(ctx, "authorization: removing invalid dynamic authorization fragment model", "fragment", fragment.ID, "resource_type", resourceTypeName, "error", err)
+				fragmentValid = false
+				break
 			}
 			modelFragments = append(modelFragments, resourceType)
+			resourceRelations[canonicalName] = modelResourceTypeRelations(resourceType)
+			fragmentResourceNames = append(fragmentResourceNames, canonicalName)
+		}
+		if !fragmentValid {
+			if err := a.fragmentSource.DeleteFragment(ctx, fragment.ID); err != nil {
+				return nil, nil, fmt.Errorf("delete invalid dynamic authorization fragment %q: %w", fragment.ID, err)
+			}
+			modelFragments = modelFragments[:fragmentModelsStart]
+			for _, resourceType := range fragmentResourceNames {
+				delete(resourceRelations, resourceType)
+			}
+			continue
 		}
 		for _, relationship := range fragment.Relationships {
-			rel := relationshipFromDynamicFragment(relationship)
+			rel, err := relationshipFromDynamicFragment(fragment.Owner, relationship, localResourceTypes)
+			if err != nil {
+				slog.WarnContext(ctx, "authorization: removing invalid dynamic authorization fragment relationship", "fragment", fragment.ID, "error", err)
+				fragmentValid = false
+				break
+			}
 			if rel == nil {
 				continue
 			}
-			relationships = append(relationships, rel)
+			if err := a.validateDynamicRelationship(rel, resourceRelations, staticResourceTypes); err != nil {
+				slog.WarnContext(ctx, "authorization: removing invalid dynamic authorization fragment relationship", "fragment", fragment.ID, "resource_type", rel.GetResource().GetType(), "relation", rel.GetRelation(), "error", err)
+				fragmentValid = false
+				break
+			}
+			relationships = append(relationships, dynamicFragmentRelationship{
+				Relationship: rel,
+				SourceID:     fragment.ID,
+				OwnerKind:    strings.TrimSpace(fragment.Owner.Kind),
+				OwnerID:      dynamicFragmentOwnerID(fragment.Owner),
+			})
+		}
+		if !fragmentValid {
+			if err := a.fragmentSource.DeleteFragment(ctx, fragment.ID); err != nil {
+				return nil, nil, fmt.Errorf("delete invalid dynamic authorization fragment %q: %w", fragment.ID, err)
+			}
+			relationships = relationships[:fragmentRelationshipsStart]
+			modelFragments = modelFragments[:fragmentModelsStart]
+			for _, resourceType := range fragmentResourceNames {
+				delete(resourceRelations, resourceType)
+			}
 		}
 	}
 	return relationships, modelFragments, nil
@@ -843,17 +918,174 @@ func (a *ProviderBackedAuthorizer) backfillDynamicFragments(ctx context.Context,
 	return nil
 }
 
-func relationshipFromDynamicFragment(relationship coredata.AuthorizationDynamicFragmentRelationship) *core.Relationship {
+func (a *ProviderBackedAuthorizer) staticResourceTypeState(roles providerBackedRoleState) (map[string]struct{}, map[string]map[string]struct{}) {
+	names := map[string]struct{}{}
+	relations := map[string]map[string]struct{}{}
+	addResourceTypes := func(resourceTypes []*core.AuthorizationModelResourceType) {
+		for _, resourceType := range resourceTypes {
+			name := strings.TrimSpace(resourceType.GetName())
+			if name == "" {
+				continue
+			}
+			names[name] = struct{}{}
+			relations[name] = modelResourceTypeRelations(resourceType)
+		}
+	}
+	addResourceTypes(buildProviderAuthorizationModel(roles).GetResourceTypes())
+	addResourceTypes(a.base.modelFragments)
+	for _, resourceType := range providerAuthorizationResourceTypes {
+		if name := strings.TrimSpace(resourceType); name != "" {
+			names[name] = struct{}{}
+		}
+	}
+	return names, relations
+}
+
+func dynamicFragmentRoleState(fragments []*coredata.AuthorizationDynamicFragment) providerBackedRoleState {
+	state := providerBackedRoleState{
+		pluginDynamicRoles: map[string][]string{},
+	}
+	pluginRoles := map[string]map[string]struct{}{}
+	adminRoles := map[string]struct{}{}
+	for _, fragment := range fragments {
+		if fragment == nil || strings.TrimSpace(fragment.Status) != coredata.AuthorizationFragmentStatusActive {
+			continue
+		}
+		localResourceTypes := dynamicFragmentLocalResourceTypes(fragment)
+		for _, relationship := range fragment.Relationships {
+			resourceType, err := dynamicFragmentCanonicalResourceType(fragment.Owner, relationship.Resource.Type, localResourceTypes)
+			if err != nil {
+				continue
+			}
+			relation := strings.TrimSpace(relationship.Relation)
+			if relation == "" {
+				continue
+			}
+			switch resourceType {
+			case resourceTypePluginDynamic:
+				resourceID := strings.TrimSpace(relationship.Resource.ID)
+				if resourceID != "" {
+					ensureRoleSet(pluginRoles, resourceID)[relation] = struct{}{}
+				}
+			case resourceTypeAdminDynamic:
+				if strings.TrimSpace(relationship.Resource.ID) == resourceIDAdminDynamicGlobal {
+					adminRoles[relation] = struct{}{}
+				}
+			}
+		}
+	}
+	for resourceID, roles := range pluginRoles {
+		state.pluginDynamicRoles[resourceID] = normalizeRoleList(roles)
+	}
+	state.adminDynamicRoles = normalizeRoleList(adminRoles)
+	return state
+}
+
+func modelResourceTypeRelations(resourceType *core.AuthorizationModelResourceType) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, relation := range resourceType.GetRelations() {
+		if name := strings.TrimSpace(relation.GetName()); name != "" {
+			out[name] = struct{}{}
+		}
+	}
+	return out
+}
+
+func dynamicFragmentLocalResourceTypes(fragment *coredata.AuthorizationDynamicFragment) map[string]struct{} {
+	out := map[string]struct{}{}
+	if fragment == nil {
+		return out
+	}
+	for name := range fragment.ResourceTypes {
+		if name = strings.TrimSpace(name); name != "" {
+			out[name] = struct{}{}
+		}
+	}
+	return out
+}
+
+func dynamicFragmentCanonicalResourceType(owner coredata.AuthorizationFragmentOwner, resourceType string, localResourceTypes map[string]struct{}) (string, error) {
+	resourceType = strings.TrimSpace(resourceType)
+	if resourceType == "" {
+		return "", fmt.Errorf("resource type is required")
+	}
+	if strings.TrimSpace(owner.Kind) != coredata.AuthorizationFragmentOwnerKindPlugin {
+		return resourceType, nil
+	}
+	plugin := strings.TrimSpace(owner.Plugin)
+	if plugin == "" {
+		return "", fmt.Errorf("plugin owner requires plugin")
+	}
+	prefix := "plugin/" + plugin + "/"
+	if strings.HasPrefix(resourceType, "plugin/") {
+		if !strings.HasPrefix(resourceType, prefix) {
+			return "", fmt.Errorf("plugin fragment cannot reference resource type %q outside %q", resourceType, prefix)
+		}
+		return resourceType, nil
+	}
+	if _, ok := localResourceTypes[resourceType]; ok {
+		return prefix + resourceType, nil
+	}
+	switch resourceType {
+	case resourceTypePluginDynamic:
+		return resourceType, nil
+	default:
+		return "", fmt.Errorf("plugin fragment cannot reference non-local resource type %q", resourceType)
+	}
+}
+
+func dynamicFragmentOwnerKey(owner coredata.AuthorizationFragmentOwner) string {
+	return strings.TrimSpace(owner.Kind) + "\x00" + dynamicFragmentOwnerID(owner)
+}
+
+func dynamicFragmentOwnerID(owner coredata.AuthorizationFragmentOwner) string {
+	if strings.TrimSpace(owner.Kind) == coredata.AuthorizationFragmentOwnerKindPlugin {
+		return strings.TrimSpace(owner.Plugin)
+	}
+	return coredata.AuthorizationFragmentOwnerKindGlobal
+}
+
+func (a *ProviderBackedAuthorizer) validateDynamicRelationship(rel *core.Relationship, resourceRelations map[string]map[string]struct{}, staticResourceTypes map[string]struct{}) error {
+	resourceType := strings.TrimSpace(rel.GetResource().GetType())
+	relation := strings.TrimSpace(rel.GetRelation())
+	if resourceType == "" || relation == "" {
+		return fmt.Errorf("resource type and relation are required")
+	}
+	relations := resourceRelations[resourceType]
+	if len(relations) == 0 {
+		return fmt.Errorf("resource type %q is not defined by the composed model", resourceType)
+	}
+	if _, ok := relations[relation]; !ok {
+		return fmt.Errorf("relation %q is not defined on resource type %q", relation, resourceType)
+	}
+	if _, static := staticResourceTypes[resourceType]; static &&
+		resourceType != resourceTypePluginDynamic &&
+		resourceType != resourceTypeAdminDynamic &&
+		!a.base.resourceDynamicPolicies[resourceType].AllowAdditionalRelationships {
+		return fmt.Errorf("static resource type %q does not allow dynamic relationships", resourceType)
+	}
+	return nil
+}
+
+func relationshipFromDynamicFragment(owner coredata.AuthorizationFragmentOwner, relationship coredata.AuthorizationDynamicFragmentRelationship, localResourceTypes map[string]struct{}) (*core.Relationship, error) {
 	subject := &core.SubjectRef{Type: strings.TrimSpace(relationship.Subject.Type), Id: strings.TrimSpace(relationship.Subject.ID)}
-	resource := &core.ResourceRef{Type: strings.TrimSpace(relationship.Resource.Type), Id: strings.TrimSpace(relationship.Resource.ID)}
+	resourceType, err := dynamicFragmentCanonicalResourceType(owner, relationship.Resource.Type, localResourceTypes)
+	if err != nil {
+		return nil, err
+	}
+	resource := &core.ResourceRef{Type: resourceType, Id: strings.TrimSpace(relationship.Resource.ID)}
 	if subject.GetType() == "" || subject.GetId() == "" || resource.GetType() == "" || resource.GetId() == "" || strings.TrimSpace(relationship.Relation) == "" {
-		return nil
+		return nil, nil
+	}
+	target, err := dynamicFragmentRelationshipTarget(owner, relationship.Target, localResourceTypes)
+	if err != nil {
+		return nil, err
 	}
 	rel := &core.Relationship{
 		Subject:  subject,
 		Relation: strings.TrimSpace(relationship.Relation),
 		Resource: resource,
-		Target:   dynamicFragmentRelationshipTarget(relationship.Target),
+		Target:   target,
 	}
 	if len(relationship.Properties) > 0 {
 		properties := make(map[string]any, len(relationship.Properties))
@@ -862,7 +1094,7 @@ func relationshipFromDynamicFragment(relationship coredata.AuthorizationDynamicF
 		}
 		rel.Properties, _ = structpb.NewStruct(properties)
 	}
-	return rel
+	return rel, nil
 }
 
 func dynamicFragmentRelationshipFromProvider(rel *core.Relationship) (coredata.AuthorizationDynamicFragmentRelationship, coredata.AuthorizationFragmentOwner, bool) {
@@ -970,141 +1202,94 @@ func (a *ProviderBackedAuthorizer) buildComposedAuthorizationModel(roles provide
 	return model
 }
 
-type dynamicFragmentResourceTypeDef struct {
-	Relations map[string]dynamicFragmentRelationDef `json:"relations,omitempty"`
-	Actions   map[string]dynamicFragmentActionDef   `json:"actions,omitempty"`
-}
-
-type dynamicFragmentRelationDef struct {
-	SubjectTypes   []string                          `json:"subjectTypes,omitempty"`
-	AllowedTargets []dynamicFragmentAllowedTargetDef `json:"allowedTargets,omitempty"`
-	Rewrite        *dynamicFragmentRewriteDef        `json:"rewrite,omitempty"`
-}
-
-type dynamicFragmentActionDef struct {
-	Relations []string                   `json:"relations,omitempty"`
-	Rewrite   *dynamicFragmentRewriteDef `json:"rewrite,omitempty"`
-}
-
-type dynamicFragmentAllowedTargetDef struct {
-	SubjectType  string                            `json:"subjectType,omitempty"`
-	ResourceType string                            `json:"resourceType,omitempty"`
-	SubjectSet   *dynamicFragmentSubjectSetTypeDef `json:"subjectSet,omitempty"`
-}
-
-type dynamicFragmentSubjectSetTypeDef struct {
-	ResourceType string `json:"resourceType,omitempty"`
-	Relation     string `json:"relation,omitempty"`
-}
-
-type dynamicFragmentRewriteDef struct {
-	This            *struct{}                      `json:"this,omitempty"`
-	ComputedUserset *dynamicFragmentRelationRef    `json:"computedUserset,omitempty"`
-	TupleToUserset  *dynamicFragmentTupleToUserset `json:"tupleToUserset,omitempty"`
-	Union           []dynamicFragmentRewriteDef    `json:"union,omitempty"`
-}
-
-type dynamicFragmentRelationRef struct {
-	Relation string `json:"relation,omitempty"`
-}
-
-type dynamicFragmentTupleToUserset struct {
-	TuplesetRelation string `json:"tuplesetRelation,omitempty"`
-	ComputedRelation string `json:"computedRelation,omitempty"`
-}
-
-func dynamicFragmentModelResourceType(name string, raw json.RawMessage) (*core.AuthorizationModelResourceType, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
+func dynamicFragmentModelResourceType(owner coredata.AuthorizationFragmentOwner, name string, raw json.RawMessage, localResourceTypes map[string]struct{}) (*core.AuthorizationModelResourceType, error) {
+	canonicalName, err := dynamicFragmentCanonicalResourceType(owner, name, localResourceTypes)
+	if err != nil {
+		return nil, err
+	}
+	if canonicalName == "" {
 		return nil, fmt.Errorf("name is required")
 	}
-	var def dynamicFragmentResourceTypeDef
+	var def coredata.AuthorizationDynamicFragmentResourceTypeDef
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &def); err != nil {
 			return nil, err
 		}
 	}
-	resourceType := &core.AuthorizationModelResourceType{Name: name}
+	resourceType := &core.AuthorizationModelResourceType{Name: canonicalName}
 	for relationName, relation := range def.Relations {
+		allowedTargets, err := dynamicFragmentAllowedTargets(owner, relation.AllowedTargets, localResourceTypes)
+		if err != nil {
+			return nil, fmt.Errorf("relations.%s.allowedTargets: %w", relationName, err)
+		}
 		resourceType.Relations = append(resourceType.Relations, &core.AuthorizationModelRelation{
 			Name:           relationName,
 			SubjectTypes:   append([]string(nil), relation.SubjectTypes...),
-			AllowedTargets: dynamicFragmentAllowedTargets(relation.AllowedTargets),
-			Rewrite:        dynamicFragmentRewrite(relation.Rewrite),
+			AllowedTargets: allowedTargets,
 		})
 	}
 	for actionName, action := range def.Actions {
 		resourceType.Actions = append(resourceType.Actions, &core.AuthorizationModelAction{
 			Name:      actionName,
 			Relations: append([]string(nil), action.Relations...),
-			Rewrite:   dynamicFragmentRewrite(action.Rewrite),
 		})
 	}
 	return resourceType, nil
 }
 
-func dynamicFragmentAllowedTargets(targets []dynamicFragmentAllowedTargetDef) []*core.AuthorizationModelAllowedTarget {
+func dynamicFragmentAllowedTargets(owner coredata.AuthorizationFragmentOwner, targets []coredata.AuthorizationDynamicFragmentAllowedTarget, localResourceTypes map[string]struct{}) ([]*core.AuthorizationModelAllowedTarget, error) {
 	out := make([]*core.AuthorizationModelAllowedTarget, 0, len(targets))
-	for _, target := range targets {
+	for i, target := range targets {
 		switch {
 		case strings.TrimSpace(target.SubjectType) != "":
 			out = append(out, &core.AuthorizationModelAllowedTarget{
 				Kind: &proto.AuthorizationModelAllowedTarget_SubjectType{SubjectType: strings.TrimSpace(target.SubjectType)},
 			})
 		case strings.TrimSpace(target.ResourceType) != "":
+			resourceType, err := dynamicFragmentCanonicalResourceType(owner, target.ResourceType, localResourceTypes)
+			if err != nil {
+				return nil, fmt.Errorf("[%d]: %w", i, err)
+			}
 			out = append(out, &core.AuthorizationModelAllowedTarget{
-				Kind: &proto.AuthorizationModelAllowedTarget_ResourceType{ResourceType: strings.TrimSpace(target.ResourceType)},
+				Kind: &proto.AuthorizationModelAllowedTarget_ResourceType{ResourceType: resourceType},
 			})
 		case target.SubjectSet != nil:
+			resourceType, err := dynamicFragmentCanonicalResourceType(owner, target.SubjectSet.ResourceType, localResourceTypes)
+			if err != nil {
+				return nil, fmt.Errorf("[%d]: %w", i, err)
+			}
 			out = append(out, &core.AuthorizationModelAllowedTarget{
 				Kind: &proto.AuthorizationModelAllowedTarget_SubjectSet{SubjectSet: &core.AuthorizationModelSubjectSetTarget{
-					ResourceType: strings.TrimSpace(target.SubjectSet.ResourceType),
+					ResourceType: resourceType,
 					Relation:     strings.TrimSpace(target.SubjectSet.Relation),
 				}},
 			})
 		}
 	}
-	return out
+	return out, nil
 }
 
-func dynamicFragmentRewrite(def *dynamicFragmentRewriteDef) *core.AuthorizationModelRewrite {
-	if def == nil {
-		return nil
-	}
-	switch {
-	case def.This != nil:
-		return &core.AuthorizationModelRewrite{Kind: &proto.AuthorizationModelRewrite_This{This: &core.AuthorizationModelRewriteThis{}}}
-	case def.ComputedUserset != nil:
-		return &core.AuthorizationModelRewrite{Kind: &proto.AuthorizationModelRewrite_ComputedUserset{ComputedUserset: &core.AuthorizationModelComputedUserset{Relation: strings.TrimSpace(def.ComputedUserset.Relation)}}}
-	case def.TupleToUserset != nil:
-		return &core.AuthorizationModelRewrite{Kind: &proto.AuthorizationModelRewrite_TupleToUserset{TupleToUserset: &core.AuthorizationModelTupleToUserset{
-			TuplesetRelation: strings.TrimSpace(def.TupleToUserset.TuplesetRelation),
-			ComputedRelation: strings.TrimSpace(def.TupleToUserset.ComputedRelation),
-		}}}
-	case len(def.Union) > 0:
-		children := make([]*core.AuthorizationModelRewrite, 0, len(def.Union))
-		for i := range def.Union {
-			children = append(children, dynamicFragmentRewrite(&def.Union[i]))
-		}
-		return &core.AuthorizationModelRewrite{Kind: &proto.AuthorizationModelRewrite_Union{Union: &core.AuthorizationModelRewriteUnion{Children: children}}}
-	default:
-		return nil
-	}
-}
-
-func dynamicFragmentRelationshipTarget(target coredata.AuthorizationDynamicFragmentTarget) *core.RelationshipTargetRef {
+func dynamicFragmentRelationshipTarget(owner coredata.AuthorizationFragmentOwner, target coredata.AuthorizationDynamicFragmentTarget, localResourceTypes map[string]struct{}) (*core.RelationshipTargetRef, error) {
 	switch {
 	case target.Subject != nil:
-		return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{Type: strings.TrimSpace(target.Subject.Type), Id: strings.TrimSpace(target.Subject.ID)}}}
+		return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{Subject: &core.SubjectRef{Type: strings.TrimSpace(target.Subject.Type), Id: strings.TrimSpace(target.Subject.ID)}}}, nil
 	case target.Resource != nil:
-		return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Resource{Resource: &core.ResourceRef{Type: strings.TrimSpace(target.Resource.Type), Id: strings.TrimSpace(target.Resource.ID)}}}
+		resourceType, err := dynamicFragmentCanonicalResourceType(owner, target.Resource.Type, localResourceTypes)
+		if err != nil {
+			return nil, err
+		}
+		return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Resource{Resource: &core.ResourceRef{Type: resourceType, Id: strings.TrimSpace(target.Resource.ID)}}}, nil
 	case target.SubjectSet != nil:
+		resourceType, err := dynamicFragmentCanonicalResourceType(owner, target.SubjectSet.Resource.Type, localResourceTypes)
+		if err != nil {
+			return nil, err
+		}
 		return &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_SubjectSet{SubjectSet: &core.SubjectSetRef{
-			Resource: &core.ResourceRef{Type: strings.TrimSpace(target.SubjectSet.Resource.Type), Id: strings.TrimSpace(target.SubjectSet.Resource.ID)},
+			Resource: &core.ResourceRef{Type: resourceType, Id: strings.TrimSpace(target.SubjectSet.Resource.ID)},
 			Relation: strings.TrimSpace(target.SubjectSet.Relation),
-		}}}
+		}}}, nil
 	default:
-		return nil
+		return nil, nil
 	}
 }
 

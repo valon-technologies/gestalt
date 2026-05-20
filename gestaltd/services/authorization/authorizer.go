@@ -31,10 +31,15 @@ type StaticSubjectMember struct {
 }
 
 type StaticConfig struct {
-	Policies         map[string]StaticSubjectPolicy
-	ProviderPolicies map[string]string
-	ModelFragments   []*core.AuthorizationModelResourceType
-	Relationships    []*core.Relationship
+	Policies                map[string]StaticSubjectPolicy
+	ProviderPolicies        map[string]string
+	ModelFragments          []*core.AuthorizationModelResourceType
+	Relationships           []*core.Relationship
+	ResourceDynamicPolicies map[string]StaticResourceDynamicPolicy
+}
+
+type StaticResourceDynamicPolicy struct {
+	AllowAdditionalRelationships bool
 }
 
 type StaticSubjectPolicy struct {
@@ -43,18 +48,20 @@ type StaticSubjectPolicy struct {
 }
 
 type Authorizer struct {
-	policies         map[string]*SubjectPolicy
-	providerPolicies map[string]string
-	modelFragments   []*core.AuthorizationModelResourceType
-	relationships    []*core.Relationship
+	policies                map[string]*SubjectPolicy
+	providerPolicies        map[string]string
+	modelFragments          []*core.AuthorizationModelResourceType
+	relationships           []*core.Relationship
+	resourceDynamicPolicies map[string]StaticResourceDynamicPolicy
 }
 
 func New(cfg StaticConfig) (*Authorizer, error) {
 	a := &Authorizer{
-		policies:         map[string]*SubjectPolicy{},
-		providerPolicies: map[string]string{},
-		modelFragments:   cloneModelResourceTypes(cfg.ModelFragments),
-		relationships:    cloneRelationships(cfg.Relationships),
+		policies:                map[string]*SubjectPolicy{},
+		providerPolicies:        map[string]string{},
+		modelFragments:          cloneModelResourceTypes(cfg.ModelFragments),
+		relationships:           cloneRelationships(cfg.Relationships),
+		resourceDynamicPolicies: cloneResourceDynamicPolicies(cfg.ResourceDynamicPolicies),
 	}
 
 	for policyID, def := range cfg.Policies {
@@ -104,6 +111,19 @@ func cloneRelationships(in []*core.Relationship) []*core.Relationship {
 			continue
 		}
 		out = append(out, gproto.Clone(relationship).(*core.Relationship))
+	}
+	return out
+}
+
+func cloneResourceDynamicPolicies(in map[string]StaticResourceDynamicPolicy) map[string]StaticResourceDynamicPolicy {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]StaticResourceDynamicPolicy, len(in))
+	for name, policy := range in {
+		if name = strings.TrimSpace(name); name != "" {
+			out[name] = policy
+		}
 	}
 	return out
 }

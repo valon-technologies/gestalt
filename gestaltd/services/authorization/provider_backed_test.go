@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -152,8 +153,26 @@ func TestProviderBackedReloadComposesConfigAndDynamicFragmentSources(t *testing.
 		ResourceTypes: map[string]json.RawMessage{
 			"project": json.RawMessage(`{"relations":{"viewer":{"subjectTypes":["subject"]}},"actions":{"view":{"relations":["viewer"]}}}`),
 		},
+		Relationships: []coredata.AuthorizationDynamicFragmentRelationship{{
+			Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: subjectTypeSubject, ID: "user:carol"},
+			Relation: "viewer",
+			Resource: coredata.AuthorizationDynamicFragmentResource{Type: "project", ID: "proj-1"},
+		}},
 	}, coredata.AuthorizationDynamicFragmentUpdate{Audit: coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test_dynamic_model"}}); err != nil {
 		t.Fatalf("PutFragment: %v", err)
+	}
+	if _, err := services.AuthzFragments.PutFragment(ctx, &coredata.AuthorizationDynamicFragment{
+		Owner: coredata.AuthorizationPluginFragmentOwner("github"),
+		ResourceTypes: map[string]json.RawMessage{
+			"repository": json.RawMessage(`{"relations":{"maintainer":{"subjectTypes":["subject"]}},"actions":{"administer":{"relations":["maintainer"]}}}`),
+		},
+		Relationships: []coredata.AuthorizationDynamicFragmentRelationship{{
+			Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: subjectTypeSubject, ID: "user:dana"},
+			Relation: "maintainer",
+			Resource: coredata.AuthorizationDynamicFragmentResource{Type: "repository", ID: "valon-tools"},
+		}},
+	}, coredata.AuthorizationDynamicFragmentUpdate{Audit: coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test_plugin_model"}}); err != nil {
+		t.Fatalf("PutFragment plugin: %v", err)
 	}
 	base, err := New(StaticConfig{
 		ModelFragments: []*core.AuthorizationModelResourceType{{
@@ -181,6 +200,15 @@ func TestProviderBackedReloadComposesConfigAndDynamicFragmentSources(t *testing.
 	}
 	if authorizationModelResourceType(provider.lastModel, "project") == nil {
 		t.Fatalf("composed model resource types = %#v, want project fragment", provider.lastModel.GetResourceTypes())
+	}
+	if authorizationModelResourceType(provider.lastModel, "plugin/github/repository") == nil {
+		t.Fatalf("composed model resource types = %#v, want plugin/github/repository fragment", provider.lastModel.GetResourceTypes())
+	}
+	if !provider.hasRelationship(providerBackedRoleTestRelationship("user:carol", "project", "proj-1", "viewer")) {
+		t.Fatal("provider is missing generic dynamic fragment relationship")
+	}
+	if !provider.hasRelationship(providerBackedRoleTestRelationship("user:dana", "plugin/github/repository", "valon-tools", "maintainer")) {
+		t.Fatal("provider is missing plugin-qualified dynamic fragment relationship")
 	}
 	if !provider.hasRelationship(legacyDynamic) {
 		t.Fatal("provider is missing backfilled plugin dynamic relationship")
@@ -214,6 +242,158 @@ func TestProviderBackedReloadComposesConfigAndDynamicFragmentSources(t *testing.
 	}
 	if provider.hasRelationship(legacyDynamic) {
 		t.Fatal("provider still has plugin dynamic relationship after source fragment deletion")
+	}
+}
+
+func TestProviderBackedReloadRemovesInvalidDynamicFragmentAndContinues(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	if _, err := services.AuthzFragments.PutFragment(ctx, &coredata.AuthorizationDynamicFragment{
+		Owner: coredata.AuthorizationGlobalFragmentOwner(),
+		ResourceTypes: map[string]json.RawMessage{
+			"workspace": json.RawMessage(`{"relations":{"viewer":{"subjectTypes":["subject"]}}}`),
+		},
+	}, coredata.AuthorizationDynamicFragmentUpdate{Audit: coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test_conflict"}}); err != nil {
+		t.Fatalf("PutFragment invalid: %v", err)
+	}
+	base, err := New(StaticConfig{
+		ModelFragments: []*core.AuthorizationModelResourceType{{
+			Name: "workspace",
+			Relations: []*core.AuthorizationModelRelation{{
+				Name:         "member",
+				SubjectTypes: []string{subjectTypeSubject},
+			}},
+		}},
+		Relationships: []*core.Relationship{providerBackedRoleTestRelationship("user:bob", "workspace", "ws-1", "member")},
+	})
+	if err != nil {
+		t.Fatalf("New authorizer: %v", err)
+	}
+	provider := newProviderBackedComposerTestProvider("model-0")
+	authorizer, err := NewProviderBacked(base, provider, WithDynamicFragmentSource(services.AuthzFragments))
+	if err != nil {
+		t.Fatalf("NewProviderBacked: %v", err)
+	}
+	if err := authorizer.ReloadAuthorizationState(ctx); err != nil {
+		t.Fatalf("ReloadAuthorizationState: %v", err)
+	}
+	if _, err := services.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationGlobalFragmentOwner()); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetFragmentByOwner invalid err = %v, want not found", err)
+	}
+	if !provider.hasRelationship(providerBackedRoleTestRelationship("user:bob", "workspace", "ws-1", "member")) {
+		t.Fatal("provider is missing static relationship after invalid dynamic fragment cleanup")
+	}
+}
+
+func TestProviderBackedReloadRemovesDynamicFragmentRedefiningProviderResourceType(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	if _, err := services.AuthzFragments.PutFragment(ctx, &coredata.AuthorizationDynamicFragment{
+		Owner: coredata.AuthorizationGlobalFragmentOwner(),
+		ResourceTypes: map[string]json.RawMessage{
+			resourceTypePluginStatic: json.RawMessage(`{"relations":{"viewer":{"subjectTypes":["subject"]}}}`),
+		},
+	}, coredata.AuthorizationDynamicFragmentUpdate{Audit: coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test_builtin_conflict"}}); err != nil {
+		t.Fatalf("PutFragment invalid: %v", err)
+	}
+	base, err := New(StaticConfig{})
+	if err != nil {
+		t.Fatalf("New authorizer: %v", err)
+	}
+	provider := newProviderBackedComposerTestProvider("model-0")
+	authorizer, err := NewProviderBacked(base, provider, WithDynamicFragmentSource(services.AuthzFragments))
+	if err != nil {
+		t.Fatalf("NewProviderBacked: %v", err)
+	}
+
+	if err := authorizer.ReloadAuthorizationState(ctx); err != nil {
+		t.Fatalf("ReloadAuthorizationState: %v", err)
+	}
+	if _, err := services.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationGlobalFragmentOwner()); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetFragmentByOwner invalid err = %v, want not found", err)
+	}
+}
+
+func TestProviderBackedReloadRemovesDynamicFragmentWithInvalidRelationshipTarget(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	services, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	if _, err := services.AuthzFragments.PutFragment(ctx, &coredata.AuthorizationDynamicFragment{
+		Owner: coredata.AuthorizationPluginFragmentOwner("github"),
+		ResourceTypes: map[string]json.RawMessage{
+			"repository": json.RawMessage(`{"relations":{"maintainer":{"subjectTypes":["subject"]}}}`),
+		},
+		Relationships: []coredata.AuthorizationDynamicFragmentRelationship{{
+			Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: subjectTypeSubject, ID: "user:dana"},
+			Relation: "maintainer",
+			Resource: coredata.AuthorizationDynamicFragmentResource{Type: "repository", ID: "valon-tools"},
+			Target: coredata.AuthorizationDynamicFragmentTarget{
+				Resource: &coredata.AuthorizationDynamicFragmentResource{Type: "workspace", ID: "ws-1"},
+			},
+		}},
+	}, coredata.AuthorizationDynamicFragmentUpdate{Audit: coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test_invalid_target"}}); err != nil {
+		t.Fatalf("PutFragment invalid target: %v", err)
+	}
+	base, err := New(StaticConfig{})
+	if err != nil {
+		t.Fatalf("New authorizer: %v", err)
+	}
+	provider := newProviderBackedComposerTestProvider("model-0")
+	authorizer, err := NewProviderBacked(base, provider, WithDynamicFragmentSource(services.AuthzFragments))
+	if err != nil {
+		t.Fatalf("NewProviderBacked: %v", err)
+	}
+
+	if err := authorizer.ReloadAuthorizationState(ctx); err != nil {
+		t.Fatalf("ReloadAuthorizationState: %v", err)
+	}
+	if _, err := services.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationPluginFragmentOwner("github")); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetFragmentByOwner invalid target err = %v, want not found", err)
+	}
+	if provider.hasRelationship(providerBackedRoleTestRelationship("user:dana", "plugin/github/repository", "valon-tools", "maintainer")) {
+		t.Fatal("provider has relationship from invalid dynamic fragment target")
+	}
+}
+
+func TestProviderBackedValidateDynamicRelationshipChecksCompatibilityDynamicRelations(t *testing.T) {
+	t.Parallel()
+
+	base, err := New(StaticConfig{})
+	if err != nil {
+		t.Fatalf("New authorizer: %v", err)
+	}
+	authorizer := &ProviderBackedAuthorizer{base: base}
+	fragments := []*coredata.AuthorizationDynamicFragment{{
+		Owner:  coredata.AuthorizationPluginFragmentOwner("github"),
+		Status: coredata.AuthorizationFragmentStatusActive,
+		Relationships: []coredata.AuthorizationDynamicFragmentRelationship{{
+			Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: subjectTypeSubject, ID: "user:alice"},
+			Relation: "viewer",
+			Resource: coredata.AuthorizationDynamicFragmentResource{Type: resourceTypePluginDynamic, ID: "github"},
+		}},
+	}}
+	staticResourceTypes, resourceRelations := authorizer.staticResourceTypeState(dynamicFragmentRoleState(fragments))
+
+	if err := authorizer.validateDynamicRelationship(providerBackedRoleTestRelationship("user:alice", resourceTypePluginDynamic, "github", "viewer"), resourceRelations, staticResourceTypes); err != nil {
+		t.Fatalf("validateDynamicRelationship viewer: %v", err)
+	}
+	err = authorizer.validateDynamicRelationship(providerBackedRoleTestRelationship("user:alice", resourceTypePluginDynamic, "github", "owner"), resourceRelations, staticResourceTypes)
+	if err == nil || !strings.Contains(err.Error(), `relation "owner" is not defined`) {
+		t.Fatalf("validateDynamicRelationship owner error = %v, want undefined relation", err)
 	}
 }
 
@@ -269,6 +449,15 @@ func mustStruct(t *testing.T, fields map[string]any) *structpb.Struct {
 		t.Fatalf("structpb.NewStruct: %v", err)
 	}
 	return out
+}
+
+func authorizationModelResourceType(model *core.AuthorizationModel, name string) *core.AuthorizationModelResourceType {
+	for _, resourceType := range model.GetResourceTypes() {
+		if resourceType.GetName() == name {
+			return resourceType
+		}
+	}
+	return nil
 }
 
 type providerBackedComposerTestProvider struct {
