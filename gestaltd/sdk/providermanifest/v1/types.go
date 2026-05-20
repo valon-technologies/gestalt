@@ -496,8 +496,16 @@ type ManifestOperationOverride struct {
 }
 
 type ManifestGraphQLOperation struct {
-	OperationType string `json:"operationType,omitempty" yaml:"operationType,omitempty"`
-	SelectionSet  string `json:"selectionSet,omitempty" yaml:"selectionSet,omitempty"`
+	OperationType string                     `json:"operationType,omitempty" yaml:"operationType,omitempty"`
+	SelectionSet  string                     `json:"selectionSet,omitempty" yaml:"selectionSet,omitempty"`
+	Arguments     *[]ManifestGraphQLArgument `json:"arguments,omitempty" yaml:"arguments,omitempty"`
+}
+
+type ManifestGraphQLArgument struct {
+	Name          string `json:"name" yaml:"name"`
+	Type          string `json:"type" yaml:"type"`
+	Description   string `json:"description,omitempty" yaml:"description,omitempty"`
+	ParameterType string `json:"parameterType,omitempty" yaml:"parameterType,omitempty"`
 }
 
 type ManifestConnectionDef struct {
