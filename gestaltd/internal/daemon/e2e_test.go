@@ -1455,6 +1455,18 @@ func setPluginManifestSource(t *testing.T, pluginDir, source string) {
 	writeManifestFile(t, pluginDir, manifest)
 }
 
+func setPluginManifestDisplayName(t *testing.T, manifestPath, displayName string) {
+	t.Helper()
+
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile(%s): %v", manifestPath, err)
+	}
+	manifest.Kind = providermanifestv1.KindPlugin
+	manifest.DisplayName = displayName
+	writeManifestFile(t, filepath.Dir(manifestPath), manifest)
+}
+
 func setUIManifestSource(t *testing.T, manifestPath, source string) {
 	t.Helper()
 
@@ -2263,8 +2275,18 @@ func startGestaltdWithConfigs(t *testing.T, cfgPaths []string, locked bool) stri
 func startCommandAndWaitReady(t *testing.T, cmd *exec.Cmd, baseURL string) {
 	t.Helper()
 
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
+	startCommandAndWaitReadyWithOutput(t, cmd, baseURL, nil)
+}
+
+func startCommandAndWaitReadyWithOutput(t *testing.T, cmd *exec.Cmd, baseURL string, output io.Writer) {
+	t.Helper()
+
+	cmdOutput := io.Writer(os.Stderr)
+	if output != nil {
+		cmdOutput = io.MultiWriter(os.Stderr, output)
+	}
+	cmd.Stdout = cmdOutput
+	cmd.Stderr = cmdOutput
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start gestaltd: %v", err)
 	}
@@ -2393,6 +2415,36 @@ func waitForHTTPBody(t *testing.T, client *http.Client, url, wantBody string) st
 			lastStatus = resp.StatusCode
 			lastBody = string(body)
 			if resp.StatusCode == http.StatusOK && strings.Contains(lastBody, wantBody) {
+				return lastBody
+			}
+		}
+	}
+}
+
+func waitForFileBody(t *testing.T, path, wantBody string) string {
+	t.Helper()
+
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	timeout := time.After(60 * time.Second)
+	var lastBody string
+	var lastErr error
+	for {
+		select {
+		case <-timeout:
+			if lastErr != nil {
+				t.Fatalf("%s did not become readable within 60 seconds; last error: %v", path, lastErr)
+			}
+			t.Fatalf("%s did not contain expected body within 60 seconds; body=%s", path, lastBody)
+		case <-tick.C:
+			body, err := os.ReadFile(path)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			lastErr = nil
+			lastBody = string(body)
+			if strings.Contains(lastBody, wantBody) {
 				return lastBody
 			}
 		}
@@ -2623,6 +2675,119 @@ func TestE2EServePathAutoMountsSiblingUIForPlugin(t *testing.T) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	_ = waitForHTTPBody(t, client, baseURL+"/vm-style-guide/sync", "Roadmap Review UI")
 	_ = waitForHTTPBody(t, client, baseURL+"/vm-style-guide/assets/app.js", "ready")
+}
+
+func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping serve --watch config test in short mode")
+	}
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+	manifestPath := componentProviderManifestPath(t, pluginDir)
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_ = holder.Close()
+	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
+	originalConfig, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+
+	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath, "--plugin", "example", "--watch")
+	cmd.Env = append(os.Environ(), "GOTELEMETRY=off")
+	startCommandAndWaitReady(t, cmd, baseURL)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
+
+	setPluginManifestDisplayName(t, manifestPath, "Config Watch Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Config Watch Provider")
+
+	invalidConfig := strings.Replace(string(originalConfig), manifestPath, filepath.Join(dir, "missing", "manifest.yaml"), 1)
+	if invalidConfig == string(originalConfig) {
+		t.Fatalf("test config did not contain manifest path %s", manifestPath)
+	}
+	if err := os.WriteFile(cfgPath, []byte(invalidConfig), 0o644); err != nil {
+		t.Fatalf("write invalid config: %v", err)
+	}
+	time.Sleep(750 * time.Millisecond)
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Config Watch Provider")
+
+	if err := os.WriteFile(cfgPath, originalConfig, 0o644); err != nil {
+		t.Fatalf("restore config: %v", err)
+	}
+	setPluginManifestDisplayName(t, manifestPath, "Recovered Config Watch Provider")
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Recovered Config Watch Provider")
+}
+
+func TestE2EServeConfigWatchReloadsLocalReleaseMetadata(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping serve --watch local release metadata test in short mode")
+	}
+
+	dir := t.TempDir()
+	pluginDir := setupPrebuiltPluginDir(t, dir)
+	metadataPath := filepath.Join(pluginDir, "provider-release.yaml")
+	if err := writeLocalProviderReleaseMetadata(pluginDir); err != nil {
+		t.Fatalf("write provider-release metadata: %v", err)
+	}
+	port, holder := reservePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	_ = holder.Close()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
+server:
+  baseUrl: %s
+  public:
+    port: %d
+  encryptionKey: test-watch-release-key
+%splugins:
+  example:
+    source: %s
+`, e2eLoopbackBaseURL(port), port, authIndexedDBConfigYAML(t, dir, "", "sqlite", filepath.Join(dir, "gestalt.db")), metadataPath)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	logPath := filepath.Join(dir, "gestaltd-watch.log")
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		t.Fatalf("create watch log: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = logFile.Close()
+	})
+
+	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath, "--plugin", "example", "--watch")
+	cmd.Env = append(os.Environ(), "GOTELEMETRY=off")
+	startCommandAndWaitReadyWithOutput(t, cmd, baseURL, logFile)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
+
+	missingArchive := "missing-after-watch.tar.gz"
+	metadata := fmt.Sprintf(`schema: gestaltd-provider-release
+schemaVersion: 1
+package: github.com/test/plugins/provider
+kind: plugin
+version: 0.0.1-alpha.1
+runtime: %s
+artifacts:
+  %s:
+    path: %s
+    sha256: %s
+`, "executable", providerpkg.CurrentPlatformString(), missingArchive, strings.Repeat("0", 64))
+	if err := os.WriteFile(metadataPath, []byte(metadata), 0o644); err != nil {
+		t.Fatalf("write %s: %v", metadataPath, err)
+	}
+
+	_ = waitForFileBody(t, logPath, missingArchive)
+	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
 }
 
 //nolint:paralleltest // Uses the default 8080 startup path intentionally.

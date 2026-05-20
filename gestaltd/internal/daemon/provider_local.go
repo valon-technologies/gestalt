@@ -115,6 +115,7 @@ func runServeProviderLocal(opts providerLocalCommandOptions) error {
 		}
 		port = selectedPort
 	}
+	opts.Port = port
 
 	session, err := prepareProviderLocalSession(providerLocalCommandOptions{
 		Path:        opts.Path,
