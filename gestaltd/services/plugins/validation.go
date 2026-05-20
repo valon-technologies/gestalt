@@ -152,7 +152,10 @@ func validateDependencies(ctx context.Context, cfg *ValidationConfig, cache *cat
 				continue
 			}
 			if resolved.sessionOnly {
-				return fmt.Errorf("config validation: plugins.%s.invokes[%d] references session-catalog-only operation %q on plugin %q, which is unsupported during init/validate", callerName, i, dependency.Operation, dependency.Plugin)
+				// Static validation cannot prove session-catalog-only operations,
+				// but runtime resolution still enforces that the operation exists
+				// for the effective subject before invocation.
+				continue
 			}
 			return fmt.Errorf("config validation: plugins.%s.invokes[%d] references unknown effective operation %q on plugin %q", callerName, i, dependency.Operation, dependency.Plugin)
 		}
