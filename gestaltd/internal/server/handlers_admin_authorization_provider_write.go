@@ -60,10 +60,6 @@ func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, 
 		Type: authorization.ProviderResourceTypePluginDynamic,
 		Id:   strings.TrimSpace(plugin),
 	}
-	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
-		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: authorization.ProviderSubjectTypeSubject, ID: strings.TrimSpace(subjectID)},
-		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
-	}
 	existing, _, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
 	if err != nil {
 		return err
@@ -72,7 +68,7 @@ func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, 
 		return core.ErrNotFound
 	}
 	for _, rel := range existing {
-		fragmentRel.Relation = strings.TrimSpace(rel.GetRelation())
+		fragmentRel := authorizationDynamicFragmentRelationshipFromCore(rel)
 		_, _, err := s.deleteAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationPluginFragmentOwner(plugin), fragmentRel, "plugin_member_delete")
 		if err != nil {
 			return err
@@ -118,10 +114,6 @@ func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, subjectID
 		Type: authorization.ProviderResourceTypeAdminDynamic,
 		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
 	}
-	fragmentRel := coredata.AuthorizationDynamicFragmentRelationship{
-		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: authorization.ProviderSubjectTypeSubject, ID: strings.TrimSpace(subjectID)},
-		Resource: coredata.AuthorizationDynamicFragmentResource{Type: resource.GetType(), ID: resource.GetId()},
-	}
 	existing, _, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
 	if err != nil {
 		return err
@@ -130,7 +122,7 @@ func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, subjectID
 		return core.ErrNotFound
 	}
 	for _, rel := range existing {
-		fragmentRel.Relation = strings.TrimSpace(rel.GetRelation())
+		fragmentRel := authorizationDynamicFragmentRelationshipFromCore(rel)
 		_, _, err := s.deleteAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationGlobalFragmentOwner(), fragmentRel, "admin_member_delete")
 		if err != nil {
 			return err

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -97,7 +98,7 @@ func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if plugin, ok := adminAuthorizationPluginMemberRoutePlugin(r); ok {
+		if plugin, ok := pluginScopedAdminAuthorizationRoutePlugin(r); ok {
 			access, allowed := s.authorizer.ResolveAccess(r.Context(), p, plugin)
 			if allowed && adminAuthorizationPluginRoleCanMutate(access.Role) {
 				s.serveAdminAPIWithAccess(next, w, r, p, access)
@@ -120,11 +121,14 @@ func (s *Server) serveAdminAPIWithAccess(next http.Handler, w http.ResponseWrite
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
-func adminAuthorizationPluginMemberRoutePlugin(r *http.Request) (string, bool) {
+func pluginScopedAdminAuthorizationRoutePlugin(r *http.Request) (string, bool) {
 	if r == nil || r.URL == nil {
 		return "", false
 	}
 	path := adminAuthorizationRoutePath(r)
+	if plugin, ok := adminAuthorizationFragmentRoutePlugin(path); ok {
+		return plugin, true
+	}
 	var rest string
 	switch {
 	case strings.HasPrefix(path, "/authorization/plugins/"):
@@ -153,6 +157,28 @@ func adminAuthorizationPluginMemberRoutePlugin(r *http.Request) (string, bool) {
 		return "", false
 	}
 	return plugin, true
+}
+
+func adminAuthorizationFragmentRoutePlugin(path string) (string, bool) {
+	var rest string
+	switch {
+	case strings.HasPrefix(path, "/authorization/fragments/"):
+		rest = strings.TrimPrefix(path, "/authorization/fragments/")
+	case strings.HasPrefix(path, "/admin/api/v1/authorization/fragments/"):
+		rest = strings.TrimPrefix(path, "/admin/api/v1/authorization/fragments/")
+	default:
+		return "", false
+	}
+	rest, err := url.PathUnescape(rest)
+	if err != nil {
+		return "", false
+	}
+	plugin, ok := strings.CutPrefix(rest, "plugin/")
+	if !ok || plugin == "" || strings.Contains(plugin, "/") {
+		return "", false
+	}
+	plugin = strings.TrimSpace(plugin)
+	return plugin, plugin != ""
 }
 
 func adminAuthorizationRoutePath(r *http.Request) string {

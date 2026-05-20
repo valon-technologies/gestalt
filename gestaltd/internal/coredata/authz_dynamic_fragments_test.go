@@ -2,6 +2,7 @@ package coredata_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -59,6 +60,98 @@ func TestAuthorizationDynamicFragmentServiceUpsertsOwnerRecord(t *testing.T) {
 	}
 }
 
+func TestAuthorizationDynamicFragmentServiceDeleteMissingOwnerDoesNotCreateFragment(t *testing.T) {
+	t.Parallel()
+
+	svc, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	ctx := context.Background()
+	deleted, fragment, err := svc.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), coredata.AuthorizationDynamicFragmentRelationship{
+		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "user:alice"},
+		Relation: "viewer",
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "plugin_dynamic", ID: "github"},
+	}, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "delete_missing"})
+	if err != nil {
+		t.Fatalf("DeleteRelationship missing owner: %v", err)
+	}
+	if deleted || fragment != nil {
+		t.Fatalf("DeleteRelationship missing owner = deleted %v fragment %#v, want false nil", deleted, fragment)
+	}
+	if _, err := svc.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationPluginFragmentOwner("github")); err != core.ErrNotFound {
+		t.Fatalf("GetFragmentByOwner err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAuthorizationDynamicFragmentRelationshipKeyUsesTrimmedPropertyValues(t *testing.T) {
+	t.Parallel()
+
+	svc, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	ctx := context.Background()
+	relationship := coredata.AuthorizationDynamicFragmentRelationship{
+		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "user:alice"},
+		Relation: "viewer",
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "plugin_dynamic", ID: "github"},
+		Properties: map[string]string{
+			" source ": " provider ",
+		},
+	}
+
+	if _, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "first"}); err != nil {
+		t.Fatalf("UpsertRelationship first: %v", err)
+	}
+	relationship.Properties[" source "] = " write_path "
+	fragment, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "second"})
+	if err != nil {
+		t.Fatalf("UpsertRelationship second: %v", err)
+	}
+	if len(fragment.Relationships) != 2 {
+		t.Fatalf("relationships = %#v, want distinct entries for distinct trimmed property values", fragment.Relationships)
+	}
+}
+
+func TestAuthorizationDynamicFragmentRelationshipKeyIncludesSubjectAndTarget(t *testing.T) {
+	t.Parallel()
+
+	svc, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	ctx := context.Background()
+	relationship := coredata.AuthorizationDynamicFragmentRelationship{
+		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "user:alice"},
+		Relation: "viewer",
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "plugin/github/repository", ID: "gestalt"},
+		Target: coredata.AuthorizationDynamicFragmentTarget{
+			Resource: &coredata.AuthorizationDynamicFragmentResource{Type: "team", ID: "servicing"},
+		},
+	}
+
+	if _, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "first"}); err != nil {
+		t.Fatalf("UpsertRelationship first: %v", err)
+	}
+	relationship.Subject.ID = "user:bob"
+	fragment, err := svc.AuthzFragments.UpsertRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "second"})
+	if err != nil {
+		t.Fatalf("UpsertRelationship second: %v", err)
+	}
+	if len(fragment.Relationships) != 2 {
+		t.Fatalf("relationships = %#v, want distinct entries for distinct subjects with same target", fragment.Relationships)
+	}
+
+	deleted, fragment, err := svc.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("github"), relationship, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "delete_second"})
+	if err != nil {
+		t.Fatalf("DeleteRelationship second: %v", err)
+	}
+	if !deleted || len(fragment.Relationships) != 1 || fragment.Relationships[0].Subject.ID != "user:alice" {
+		t.Fatalf("after delete deleted=%v relationships=%#v, want only alice relationship", deleted, fragment.Relationships)
+	}
+}
+
 func TestAuthorizationDynamicFragmentServiceRejectsVersionMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -82,6 +175,35 @@ func TestAuthorizationDynamicFragmentServiceRejectsVersionMismatch(t *testing.T)
 	_, err = svc.AuthzFragments.PutFragment(ctx, fragment, coredata.AuthorizationDynamicFragmentUpdate{ExpectedVersion: &stale})
 	if err == nil || !strings.Contains(err.Error(), "version mismatch") {
 		t.Fatalf("PutFragment stale version error = %v, want version mismatch", err)
+	}
+}
+
+func TestAuthorizationDynamicFragmentResourceTypeValidationUsesTrimmedRelationKeys(t *testing.T) {
+	t.Parallel()
+
+	svc, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	ctx := context.Background()
+	_, err = svc.AuthzFragments.PutFragment(ctx, &coredata.AuthorizationDynamicFragment{
+		Owner: coredata.AuthorizationGlobalFragmentOwner(),
+		ResourceTypes: map[string]json.RawMessage{
+			"team": json.RawMessage(`{"relations":{" viewer ":{"subjectTypes":["subject"]}},"actions":{"view":{"relations":["viewer"]}}}`),
+		},
+	}, coredata.AuthorizationDynamicFragmentUpdate{})
+	if err != nil {
+		t.Fatalf("PutFragment with trimmed action relation reference: %v", err)
+	}
+
+	_, err = svc.AuthzFragments.PutFragment(ctx, &coredata.AuthorizationDynamicFragment{
+		Owner: coredata.AuthorizationGlobalFragmentOwner(),
+		ResourceTypes: map[string]json.RawMessage{
+			"team": json.RawMessage(`{"relations":{"viewer":{"subjectTypes":["subject"]}," viewer ":{"subjectTypes":["subject"]}}}`),
+		},
+	}, coredata.AuthorizationDynamicFragmentUpdate{})
+	if err == nil || !strings.Contains(err.Error(), `duplicate key after trimming "viewer"`) {
+		t.Fatalf("PutFragment duplicate trimmed relation key error = %v, want duplicate key error", err)
 	}
 }
 

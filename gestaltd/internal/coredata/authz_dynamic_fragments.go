@@ -86,6 +86,31 @@ type AuthorizationDynamicFragmentUpdate struct {
 	Audit           AuthorizationDynamicFragmentAuditMetadata
 }
 
+type AuthorizationDynamicFragmentResourceTypeDef struct {
+	Relations map[string]AuthorizationDynamicFragmentRelationDef `json:"relations,omitempty"`
+	Actions   map[string]AuthorizationDynamicFragmentActionDef   `json:"actions,omitempty"`
+}
+
+type AuthorizationDynamicFragmentRelationDef struct {
+	SubjectTypes   []string                                    `json:"subjectTypes,omitempty"`
+	AllowedTargets []AuthorizationDynamicFragmentAllowedTarget `json:"allowedTargets,omitempty"`
+}
+
+type AuthorizationDynamicFragmentActionDef struct {
+	Relations []string `json:"relations,omitempty"`
+}
+
+type AuthorizationDynamicFragmentAllowedTarget struct {
+	SubjectType  string                                        `json:"subjectType,omitempty"`
+	ResourceType string                                        `json:"resourceType,omitempty"`
+	SubjectSet   *AuthorizationDynamicFragmentSubjectSetTarget `json:"subjectSet,omitempty"`
+}
+
+type AuthorizationDynamicFragmentSubjectSetTarget struct {
+	ResourceType string `json:"resourceType,omitempty"`
+	Relation     string `json:"relation,omitempty"`
+}
+
 func NewAuthorizationDynamicFragmentService(ds indexeddb.IndexedDB) *AuthorizationDynamicFragmentService {
 	return &AuthorizationDynamicFragmentService{store: ds.ObjectStore(StoreAuthorizationDynamicFragments)}
 }
@@ -260,6 +285,12 @@ func (s *AuthorizationDynamicFragmentService) ReplaceSubjectResourceRelationship
 }
 
 func (s *AuthorizationDynamicFragmentService) DeleteRelationship(ctx context.Context, owner AuthorizationFragmentOwner, relationship AuthorizationDynamicFragmentRelationship, audit AuthorizationDynamicFragmentAuditMetadata) (bool, *AuthorizationDynamicFragment, error) {
+	if _, err := s.GetFragmentByOwner(ctx, owner); err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return false, nil, nil
+		}
+		return false, nil, err
+	}
 	deleted := false
 	fragment, err := s.UpdateFragment(ctx, owner, AuthorizationDynamicFragmentUpdate{Audit: audit}, func(fragment *AuthorizationDynamicFragment) error {
 		relationship = normalizeAuthorizationFragmentRelationship(relationship)
@@ -309,11 +340,91 @@ func validateAuthorizationDynamicFragment(fragment *AuthorizationDynamicFragment
 		if strings.TrimSpace(resourceType) == "" {
 			return fmt.Errorf("resourceTypes keys must be non-empty")
 		}
+		if err := validateAuthorizationFragmentResourceType(resourceType, fragment.ResourceTypes[resourceType]); err != nil {
+			return fmt.Errorf("resourceTypes.%s: %w", resourceType, err)
+		}
 	}
 	for i, relationship := range fragment.Relationships {
 		if err := validateAuthorizationFragmentRelationship(normalizeAuthorizationFragmentRelationship(relationship)); err != nil {
 			return fmt.Errorf("relationships[%d]: %w", i, err)
 		}
+	}
+	return nil
+}
+
+func validateAuthorizationFragmentResourceType(name string, raw json.RawMessage) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("resource type name is required")
+	}
+	var def AuthorizationDynamicFragmentResourceTypeDef
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &def); err != nil {
+			return err
+		}
+	}
+	if len(def.Relations) == 0 {
+		return fmt.Errorf("relations must define at least one relation")
+	}
+	relationNames := map[string]struct{}{}
+	for relationName, relation := range def.Relations {
+		relationName = strings.TrimSpace(relationName)
+		if relationName == "" {
+			return fmt.Errorf("relations keys must be non-empty")
+		}
+		if _, ok := relationNames[relationName]; ok {
+			return fmt.Errorf("relations duplicate key after trimming %q", relationName)
+		}
+		relationNames[relationName] = struct{}{}
+		if len(relation.SubjectTypes) == 0 && len(relation.AllowedTargets) == 0 {
+			return fmt.Errorf("relations.%s must set subjectTypes or allowedTargets", relationName)
+		}
+		for i, target := range relation.AllowedTargets {
+			if err := validateAuthorizationFragmentAllowedTarget(target); err != nil {
+				return fmt.Errorf("relations.%s.allowedTargets[%d]: %w", relationName, i, err)
+			}
+		}
+	}
+	for actionName, action := range def.Actions {
+		actionName = strings.TrimSpace(actionName)
+		if actionName == "" {
+			return fmt.Errorf("actions keys must be non-empty")
+		}
+		if len(action.Relations) == 0 {
+			return fmt.Errorf("actions.%s.relations must contain at least one value", actionName)
+		}
+		for _, relation := range action.Relations {
+			relation = strings.TrimSpace(relation)
+			if relation == "" {
+				return fmt.Errorf("actions.%s.relations must not contain empty values", actionName)
+			}
+			if _, ok := relationNames[relation]; !ok {
+				return fmt.Errorf("actions.%s.relations references unknown relation %q", actionName, relation)
+			}
+		}
+	}
+	return nil
+}
+
+func validateAuthorizationFragmentAllowedTarget(target AuthorizationDynamicFragmentAllowedTarget) error {
+	set := 0
+	if strings.TrimSpace(target.SubjectType) != "" {
+		set++
+	}
+	if strings.TrimSpace(target.ResourceType) != "" {
+		set++
+	}
+	if target.SubjectSet != nil {
+		set++
+		if strings.TrimSpace(target.SubjectSet.ResourceType) == "" {
+			return fmt.Errorf("subjectSet.resourceType is required")
+		}
+		if strings.TrimSpace(target.SubjectSet.Relation) == "" {
+			return fmt.Errorf("subjectSet.relation is required")
+		}
+	}
+	if set != 1 {
+		return fmt.Errorf("must set exactly one of subjectType, resourceType, or subjectSet")
 	}
 	return nil
 }
@@ -467,25 +578,63 @@ func cloneAuthorizationDynamicFragment(fragment *AuthorizationDynamicFragment) *
 
 func authorizationFragmentRelationshipKey(relationship AuthorizationDynamicFragmentRelationship) string {
 	relationship = normalizeAuthorizationFragmentRelationship(relationship)
-	return relationship.Subject.Type + ":" + relationship.Subject.ID + "|" + relationship.Relation + "|" + relationship.Resource.Type + ":" + relationship.Resource.ID
+	return strings.Join([]string{
+		authorizationFragmentSubjectKey(relationship.Subject),
+		relationshipTargetKey(relationship.Target),
+		relationship.Relation,
+		relationship.Resource.Type,
+		relationship.Resource.ID,
+		relationshipPropertiesKey(relationship.Properties),
+	}, "\x00")
+}
+
+func authorizationFragmentSubjectKey(subject AuthorizationDynamicFragmentSubject) string {
+	return strings.Join([]string{"subject", subject.Type, subject.ID}, "\x00")
+}
+
+func relationshipTargetKey(target AuthorizationDynamicFragmentTarget) string {
+	switch {
+	case target.Subject != nil:
+		return authorizationFragmentSubjectKey(*target.Subject)
+	case target.Resource != nil:
+		return strings.Join([]string{"resource", target.Resource.Type, target.Resource.ID}, "\x00")
+	case target.SubjectSet != nil:
+		return strings.Join([]string{"subject_set", target.SubjectSet.Resource.Type, target.SubjectSet.Resource.ID, target.SubjectSet.Relation}, "\x00")
+	default:
+		return ""
+	}
+}
+
+func relationshipPropertiesKey(properties map[string]string) string {
+	if len(properties) == 0 {
+		return ""
+	}
+	type propertyPart struct {
+		key   string
+		value string
+	}
+	propertyParts := make([]propertyPart, 0, len(properties))
+	for key, value := range properties {
+		propertyParts = append(propertyParts, propertyPart{
+			key:   strings.TrimSpace(key),
+			value: strings.TrimSpace(value),
+		})
+	}
+	sort.Slice(propertyParts, func(i, j int) bool {
+		if propertyParts[i].key != propertyParts[j].key {
+			return propertyParts[i].key < propertyParts[j].key
+		}
+		return propertyParts[i].value < propertyParts[j].value
+	})
+	parts := make([]string, 0, len(propertyParts)*2)
+	for _, part := range propertyParts {
+		parts = append(parts, part.key, part.value)
+	}
+	return strings.Join(parts, "\x00")
 }
 
 func sortAuthorizationFragmentRelationships(relationships []AuthorizationDynamicFragmentRelationship) {
 	sort.Slice(relationships, func(i, j int) bool {
 		return authorizationFragmentRelationshipKey(relationships[i]) < authorizationFragmentRelationshipKey(relationships[j])
 	})
-}
-
-func recInt64(rec indexeddb.Record, key string) int64 {
-	v := rec[key]
-	switch n := v.(type) {
-	case int:
-		return int64(n)
-	case int64:
-		return n
-	case float64:
-		return int64(n)
-	default:
-		return 0
-	}
 }

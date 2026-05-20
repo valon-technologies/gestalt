@@ -80,7 +80,17 @@ import (
 	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
+
+func mustStruct(t *testing.T, fields map[string]any) *structpb.Struct {
+	t.Helper()
+	out, err := structpb.NewStruct(fields)
+	if err != nil {
+		t.Fatalf("structpb.NewStruct: %v", err)
+	}
+	return out
+}
 
 func configPluginInvocationDependencies(deps []invocation.PluginInvocationDependency) []config.PluginInvocationDependency {
 	if len(deps) == 0 {
@@ -2290,7 +2300,7 @@ func cloneMemoryAuthorizationRelationship(rel *core.Relationship) *core.Relation
 	if rel == nil {
 		return nil
 	}
-	return &core.Relationship{
+	out := &core.Relationship{
 		Subject:  cloneMemoryAuthorizationSubject(rel.GetSubject()),
 		Relation: rel.GetRelation(),
 		Resource: &core.ResourceRef{
@@ -2299,6 +2309,10 @@ func cloneMemoryAuthorizationRelationship(rel *core.Relationship) *core.Relation
 		},
 		Target: cloneMemoryAuthorizationTarget(rel.GetTarget(), rel.GetSubject()),
 	}
+	if rel.GetProperties() != nil {
+		out.Properties = gproto.Clone(rel.GetProperties()).(*structpb.Struct)
+	}
+	return out
 }
 
 func cloneMemoryAuthorizationSubject(subject *core.SubjectRef) *core.SubjectRef {
@@ -5968,9 +5982,12 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 
 	rawSubjectID := principal.UserSubjectID("raw-subject")
 	provider.putRelationship(provider.activeModelID, &core.Relationship{
-		Subject:  &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: rawSubjectID},
 		Relation: "viewer",
 		Resource: &core.ResourceRef{Type: authorization.ProviderResourceTypePluginDynamic, Id: "sample_plugin"},
+		Target: &core.RelationshipTargetRef{Kind: &proto.RelationshipTarget_Subject{
+			Subject: &core.SubjectRef{Type: authorization.ProviderSubjectTypeSubject, Id: rawSubjectID},
+		}},
+		Properties: mustStruct(t, map[string]any{"source": "provider"}),
 	})
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/fragments/"+url.PathEscape("plugin/sample_plugin"), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
@@ -5989,6 +6006,12 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	}
 	if len(pluginFragmentResp.Relationships) != 1 || pluginFragmentResp.Relationships[0].Subject.ID != rawSubjectID {
 		t.Fatalf("plugin fragment relationships = %#v, want backfilled provider relationship", pluginFragmentResp.Relationships)
+	}
+	if pluginFragmentResp.Relationships[0].Target.Subject == nil || pluginFragmentResp.Relationships[0].Target.Subject.ID != rawSubjectID {
+		t.Fatalf("plugin fragment target = %#v, want subject target", pluginFragmentResp.Relationships[0].Target)
+	}
+	if pluginFragmentResp.Relationships[0].Properties["source"] != "provider" {
+		t.Fatalf("plugin fragment properties = %#v, want provider source", pluginFragmentResp.Relationships[0].Properties)
 	}
 
 	dynamicUser := seedUser(t, svc, "dynamic@example.test")

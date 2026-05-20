@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 )
 
 type putAuthorizationDynamicFragmentRequest struct {
@@ -70,9 +71,6 @@ func (s *Server) putAdminAuthorizationFragment(w http.ResponseWriter, r *http.Re
 		writeError(w, http.StatusInternalServerError, "failed to backfill authorization fragments")
 		return
 	}
-	if !s.ensureAdminAuthorizationWriteAccess(w, r) {
-		return
-	}
 	id, err := decodedURLParam(r, "fragmentID")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -91,6 +89,9 @@ func (s *Server) putAdminAuthorizationFragment(w http.ResponseWriter, r *http.Re
 	}
 	if expected := coredataFragmentID(req.Owner); expected != "" && expected != id {
 		writeError(w, http.StatusBadRequest, "fragment id does not match owner")
+		return
+	}
+	if !s.ensureAuthorizationFragmentWriteAccess(w, r, req.Owner) {
 		return
 	}
 	fragment, err := s.authzFragments.PutFragment(r.Context(), &coredata.AuthorizationDynamicFragment{
@@ -122,12 +123,13 @@ func (s *Server) deleteAdminAuthorizationFragment(w http.ResponseWriter, r *http
 		writeError(w, http.StatusInternalServerError, "failed to backfill authorization fragments")
 		return
 	}
-	if !s.ensureAdminAuthorizationWriteAccess(w, r) {
-		return
-	}
 	id, err := decodedURLParam(r, "fragmentID")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	owner := authorizationFragmentOwnerFromID(id)
+	if !s.ensureAuthorizationFragmentWriteAccess(w, r, owner) {
 		return
 	}
 	fragment, getErr := s.authzFragments.GetFragment(r.Context(), id)
@@ -145,6 +147,24 @@ func (s *Server) deleteAdminAuthorizationFragment(w http.ResponseWriter, r *http
 	}
 	s.auditAuthorizationFragmentMutation(r.Context(), "authorization.fragment.delete", fragment, nil)
 	writeJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
+}
+
+func (s *Server) ensureAuthorizationFragmentWriteAccess(w http.ResponseWriter, r *http.Request, owner coredata.AuthorizationFragmentOwner) bool {
+	owner.Kind = strings.TrimSpace(owner.Kind)
+	owner.Plugin = strings.TrimSpace(owner.Plugin)
+	access := invocation.AccessContextFromContext(r.Context())
+	if s.adminRoleCanMutate(access.Role) {
+		return true
+	}
+	if owner.Kind == coredata.AuthorizationFragmentOwnerKindPlugin && owner.Plugin != "" {
+		p := principal.FromContext(r.Context())
+		pluginAccess, allowed := s.authorizer.ResolveAccess(r.Context(), p, owner.Plugin)
+		if allowed && adminAuthorizationPluginRoleCanMutate(pluginAccess.Role) {
+			return true
+		}
+	}
+	writeError(w, http.StatusForbidden, "authorization fragment changes require admin access or plugin admin access")
+	return false
 }
 
 func (s *Server) ensureAuthorizationDynamicFragmentStore(w http.ResponseWriter) bool {
@@ -258,7 +278,7 @@ func (s *Server) auditAuthorizationFragmentMutation(ctx context.Context, operati
 }
 
 func authorizationDynamicFragmentRelationshipFromProvider(rel *core.Relationship) (coredata.AuthorizationDynamicFragmentRelationship, coredata.AuthorizationFragmentOwner, bool) {
-	if rel == nil || rel.GetSubject() == nil || rel.GetResource() == nil {
+	if rel == nil || authorization.RelationshipSubject(rel) == nil || rel.GetResource() == nil {
 		return coredata.AuthorizationDynamicFragmentRelationship{}, coredata.AuthorizationFragmentOwner{}, false
 	}
 	resource := rel.GetResource()
@@ -280,17 +300,62 @@ func authorizationDynamicFragmentRelationshipFromProvider(rel *core.Relationship
 }
 
 func authorizationDynamicFragmentRelationshipFromCore(rel *core.Relationship) coredata.AuthorizationDynamicFragmentRelationship {
+	subject := authorization.RelationshipSubject(rel)
+	properties := map[string]string{}
+	for key, value := range rel.GetProperties().GetFields() {
+		properties[key] = fmt.Sprint(value.AsInterface())
+	}
+	if len(properties) == 0 {
+		properties = nil
+	}
 	return coredata.AuthorizationDynamicFragmentRelationship{
 		Subject: coredata.AuthorizationDynamicFragmentSubject{
-			Type: strings.TrimSpace(rel.GetSubject().GetType()),
-			ID:   strings.TrimSpace(rel.GetSubject().GetId()),
+			Type: strings.TrimSpace(subject.GetType()),
+			ID:   strings.TrimSpace(subject.GetId()),
 		},
 		Relation: strings.TrimSpace(rel.GetRelation()),
 		Resource: coredata.AuthorizationDynamicFragmentResource{
 			Type: strings.TrimSpace(rel.GetResource().GetType()),
 			ID:   strings.TrimSpace(rel.GetResource().GetId()),
 		},
+		Target:     authorizationDynamicFragmentTargetFromCore(rel.GetTarget()),
+		Properties: properties,
 	}
+}
+
+func authorizationDynamicFragmentTargetFromCore(target *core.RelationshipTargetRef) coredata.AuthorizationDynamicFragmentTarget {
+	if target == nil {
+		return coredata.AuthorizationDynamicFragmentTarget{}
+	}
+	if subject := target.GetSubject(); subject != nil {
+		return coredata.AuthorizationDynamicFragmentTarget{
+			Subject: &coredata.AuthorizationDynamicFragmentSubject{
+				Type: strings.TrimSpace(subject.GetType()),
+				ID:   strings.TrimSpace(subject.GetId()),
+			},
+		}
+	}
+	if resource := target.GetResource(); resource != nil {
+		return coredata.AuthorizationDynamicFragmentTarget{
+			Resource: &coredata.AuthorizationDynamicFragmentResource{
+				Type: strings.TrimSpace(resource.GetType()),
+				ID:   strings.TrimSpace(resource.GetId()),
+			},
+		}
+	}
+	if subjectSet := target.GetSubjectSet(); subjectSet != nil {
+		resource := subjectSet.GetResource()
+		return coredata.AuthorizationDynamicFragmentTarget{
+			SubjectSet: &coredata.AuthorizationDynamicFragmentSubjectSet{
+				Resource: coredata.AuthorizationDynamicFragmentResource{
+					Type: strings.TrimSpace(resource.GetType()),
+					ID:   strings.TrimSpace(resource.GetId()),
+				},
+				Relation: strings.TrimSpace(subjectSet.GetRelation()),
+			},
+		}
+	}
+	return coredata.AuthorizationDynamicFragmentTarget{}
 }
 
 func coredataFragmentID(owner coredata.AuthorizationFragmentOwner) string {
@@ -305,4 +370,15 @@ func coredataFragmentID(owner coredata.AuthorizationFragmentOwner) string {
 	default:
 		return ""
 	}
+}
+
+func authorizationFragmentOwnerFromID(id string) coredata.AuthorizationFragmentOwner {
+	id = strings.TrimSpace(id)
+	if id == coredata.AuthorizationFragmentOwnerKindGlobal {
+		return coredata.AuthorizationGlobalFragmentOwner()
+	}
+	if strings.HasPrefix(id, "plugin/") {
+		return coredata.AuthorizationPluginFragmentOwner(strings.TrimSpace(strings.TrimPrefix(id, "plugin/")))
+	}
+	return coredata.AuthorizationFragmentOwner{}
 }
