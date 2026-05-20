@@ -100,6 +100,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	var portFlag *int
 	var remoteFlag *string
 	var remoteTokenFlag *string
+	var watchFlag *bool
 	if opts.allowProviderLocal {
 		pluginFlag = fs.String("plugin", "", "run only the named plugin and its local dependency closure")
 		pathFlag = fs.String("path", "", "provider manifest path or directory for local source serve")
@@ -107,6 +108,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 		portFlag = fs.Int("port", 0, "public port for --path (defaults to a free localhost port)")
 		remoteFlag = fs.String("remote", "", "remote gestaltd base URL to attach local source plugins to")
 		remoteTokenFlag = fs.String("remote-token", "", "bearer token for --remote (defaults to GESTALT_API_KEY)")
+		watchFlag = fs.Bool("watch", false, "watch local source files and restart/rebuild after changes")
 	}
 	var lockedFlag *bool
 	if opts.allowLocked {
@@ -134,6 +136,10 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	if lockedFlag != nil {
 		locked = *lockedFlag
 	}
+	watch := flagBoolValue(watchFlag)
+	if watch && locked {
+		return fmt.Errorf("--watch cannot be combined with --locked")
+	}
 
 	if opts.allowProviderLocal {
 		ranProviderLocal, err := maybeRunServeProviderLocal(serveProviderLocalOptions{
@@ -148,10 +154,18 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			LockfilePath:  *lockfilePath,
 			Locked:        locked,
 			LockedAllowed: lockedFlag != nil,
+			Watch:         watch,
 		})
 		if ranProviderLocal || err != nil {
 			return err
 		}
+	}
+	if watch {
+		return runServeWatch(resolvedConfigPaths, operator.StatePaths{
+			ArtifactsDir: *artifactsDir,
+			LockfilePath: *lockfilePath,
+			PluginScope:  []string{flagStringValue(pluginFlag)},
+		})
 	}
 
 	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, operator.StatePaths{
@@ -177,6 +191,7 @@ type serveProviderLocalOptions struct {
 	LockfilePath  string
 	Locked        bool
 	LockedAllowed bool
+	Watch         bool
 }
 
 func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
@@ -198,6 +213,9 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 		}
 		if opts.LockedAllowed && opts.Locked {
 			return true, fmt.Errorf("--locked cannot be combined with --remote")
+		}
+		if opts.Watch {
+			return true, fmt.Errorf("--watch cannot be combined with --remote")
 		}
 		if plugin != "" && path != "" {
 			return true, fmt.Errorf("--plugin cannot be combined with --path")
@@ -221,6 +239,9 @@ func maybeRunServeProviderLocal(opts serveProviderLocalOptions) (bool, error) {
 	if path != "" {
 		if plugin != "" {
 			return true, fmt.Errorf("--plugin cannot be combined with --path")
+		}
+		if opts.Watch {
+			return true, fmt.Errorf("--watch cannot be combined with --path")
 		}
 		if opts.ArtifactsDir != "" {
 			return true, fmt.Errorf("--artifacts-dir cannot be combined with --path")
@@ -264,6 +285,13 @@ func flagStringValue(flag *string) string {
 func flagIntValue(flag *int) int {
 	if flag == nil {
 		return 0
+	}
+	return *flag
+}
+
+func flagBoolValue(flag *bool) bool {
+	if flag == nil {
+		return false
 	}
 	return *flag
 }
@@ -458,7 +486,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
 	writeUsageLine(w, "  gestaltd lock [--config PATH]... [--lockfile PATH] [--platform PLATFORMS] [--check]")
 	writeUsageLine(w, "  gestaltd sync --locked [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--parallelism N] [--check]")
-	writeUsageLine(w, "  gestaltd serve [--plugin NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd serve [--plugin NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd serve --remote URL (--path PATH | --config PATH...) [--name NAME]")
 	writeUsageLine(w, "  gestaltd agent <command> [flags]")
@@ -482,7 +510,7 @@ func printMainUsage(w io.Writer) {
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [--plugin NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd serve [--plugin NAME] [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked] [--watch]")
 	writeUsageLine(w, "  gestaltd serve --path PATH [--config PATH]... [--name NAME] [--port PORT]")
 	writeUsageLine(w, "  gestaltd serve --remote URL --config PATH [--config PATH]... [--name NAME]")
 	writeUsageLine(w, "  gestaltd serve --remote URL --path PATH [--config PATH]... [--name NAME]")
@@ -490,6 +518,7 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Start the server. Without --locked, auto lock/syncs if state is missing or stale.")
 	writeUsageLine(w, "Use --plugin for local scoped development of one configured plugin without preparing the full config.")
 	writeUsageLine(w, "Use --path to serve one local source plugin or UI bundle inside a synthesized Gestalt config.")
+	writeUsageLine(w, "Use --watch to rebuild/restart after debounced local file changes.")
 	writeUsageLine(w, "Use --remote to attach local source plugins to an authenticated remote gestaltd session.")
 	writeUsageLine(w, "For production, strongly prefer --locked so startup uses the pinned")
 	writeUsageLine(w, "lockfile and prepared artifacts instead of resolving or mutating state.")

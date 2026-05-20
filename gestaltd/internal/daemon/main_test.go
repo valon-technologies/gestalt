@@ -50,7 +50,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "serve",
 			args:      []string{"serve", "--help"},
-			wantParts: []string{"gestaltd serve --path PATH", "gestaltd serve --remote URL", "--plugin NAME", "--port PORT"},
+			wantParts: []string{"gestaltd serve --path PATH", "gestaltd serve --remote URL", "--plugin NAME", "--port PORT", "--watch"},
 		},
 		{
 			name:      "provider repo",
@@ -237,6 +237,21 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 			name:     "serve path trailing args",
 			args:     []string{"serve", "--path", ".", "extra"},
 			wantPart: "unexpected arguments: extra",
+		},
+		{
+			name:     "serve watch rejects locked",
+			args:     []string{"serve", "--watch", "--locked"},
+			wantPart: "--watch cannot be combined with --locked",
+		},
+		{
+			name:     "serve watch rejects remote",
+			args:     []string{"serve", "--remote", "https://gestalt.example.com", "--path", ".", "--watch"},
+			wantPart: "--watch cannot be combined with --remote",
+		},
+		{
+			name:     "serve watch rejects path",
+			args:     []string{"serve", "--path", ".", "--watch"},
+			wantPart: "--watch cannot be combined with --path",
 		},
 	}
 
