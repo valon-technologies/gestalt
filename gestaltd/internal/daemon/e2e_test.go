@@ -1889,6 +1889,20 @@ func releasePortHoldersAndStart(t *testing.T, holders []net.Listener, start func
 	start()
 }
 
+func startCommandAfterReleasingPort(t *testing.T, holder net.Listener, cmd *exec.Cmd, baseURL string) {
+	t.Helper()
+	releasePortHoldersAndStart(t, []net.Listener{holder}, func() {
+		startCommandAndWaitReady(t, cmd, baseURL)
+	})
+}
+
+func startCommandAfterReleasingPortWithOutput(t *testing.T, holder net.Listener, cmd *exec.Cmd, baseURL string, output io.Writer) {
+	t.Helper()
+	releasePortHoldersAndStart(t, []net.Listener{holder}, func() {
+		startCommandAndWaitReadyWithOutput(t, cmd, baseURL, output)
+	})
+}
+
 func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
 	t.Helper()
 
@@ -2559,14 +2573,13 @@ func TestE2EServePathServesAdminWithoutInjectingRootUI(t *testing.T) {
 	pluginDir := setupPluginDir(t, dir)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	_ = holder.Close()
 
 	cmd := exec.Command(gestaltdBin, "serve", "--path", pluginDir, "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
 	)
-	startCommandAndWaitReady(t, cmd, baseURL)
+	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	adminResp, err := client.Get(baseURL + "/admin/")
@@ -2604,14 +2617,13 @@ func TestE2EServePathAutoMountsOwnedUI(t *testing.T) {
 	attachOwnedUIToPluginSource(t, pluginDir, mountedUI.ManifestPath)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	_ = holder.Close()
 
 	cmd := exec.Command(gestaltdBin, "serve", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
 	)
-	startCommandAndWaitReady(t, cmd, baseURL)
+	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	_ = waitForHTTPBody(t, client, baseURL+"/provider/sync", "Roadmap Review UI")
@@ -2653,14 +2665,13 @@ func TestE2EServePathServesSourceUI(t *testing.T) {
 	setUIManifestSource(t, mountedUI.ManifestPath, "github.com/test/ui/roadmap.review")
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	_ = holder.Close()
 
 	cmd := exec.Command(gestaltdBin, "serve", "--path", mountedUI.ManifestPath, "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
 	)
-	startCommandAndWaitReady(t, cmd, baseURL)
+	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	_ = waitForHTTPBody(t, client, baseURL+"/roadmap.review/sync", "Roadmap Review UI")
@@ -2681,14 +2692,13 @@ func TestE2EServePathAutoMountsSiblingUIForPlugin(t *testing.T) {
 	_ = setupMountedUIDirAt(t, filepath.Join(rootDir, "ui"), nil)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	_ = holder.Close()
 
 	cmd := exec.Command(gestaltdBin, "serve", "--path", componentProviderManifestPath(t, pluginDir), "--port", fmt.Sprintf("%d", port))
 	cmd.Env = append(os.Environ(),
 		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOTELEMETRY=off",
 	)
-	startCommandAndWaitReady(t, cmd, baseURL)
+	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	_ = waitForHTTPBody(t, client, baseURL+"/vm-style-guide/sync", "Roadmap Review UI")
@@ -2707,7 +2717,6 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 	manifestPath := componentProviderManifestPath(t, pluginDir)
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	_ = holder.Close()
 	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
 	originalConfig, err := os.ReadFile(cfgPath)
 	if err != nil {
@@ -2716,7 +2725,7 @@ func TestE2EServeConfigWatchReloadsAndKeepsLastGoodOnFailedPreflight(t *testing.
 
 	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath, "--plugin", "example", "--watch")
 	cmd.Env = append(os.Environ(), "GOTELEMETRY=off")
-	startCommandAndWaitReady(t, cmd, baseURL)
+	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
@@ -2756,7 +2765,6 @@ func TestE2EServeConfigWatchReloadsLocalReleaseMetadata(t *testing.T) {
 	}
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	_ = holder.Close()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`apiVersion: gestaltd.config/v5
 server:
@@ -2783,7 +2791,7 @@ server:
 
 	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath, "--plugin", "example", "--watch")
 	cmd.Env = append(os.Environ(), "GOTELEMETRY=off")
-	startCommandAndWaitReadyWithOutput(t, cmd, baseURL, logFile)
+	startCommandAfterReleasingPortWithOutput(t, holder, cmd, baseURL, logFile)
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	_ = waitForHTTPBody(t, client, baseURL+"/api/v1/integrations", "Example Provider")
@@ -3011,10 +3019,8 @@ plugins:
 	if got := loadedCfg.Providers.UI["roadmap"].OwnerPlugin; got != "example" {
 		t.Fatalf(`Providers.UI["roadmap"].OwnerPlugin = %q, want %q`, got, "example")
 	}
-	_ = publicHolder.Close()
-
 	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
-	startCommandAndWaitReady(t, cmd, publicURL)
+	startCommandAfterReleasingPort(t, publicHolder, cmd, publicURL)
 
 	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(publicURL + "/roadmap/sync")
 	if err != nil {
@@ -3119,10 +3125,9 @@ func TestE2EServeMountsManifestHostedHTTPBindingsForLocalSourcePlugin(t *testing
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
-	_ = holder.Close()
 
 	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
-	startCommandAndWaitReady(t, cmd, baseURL)
+	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
 
 	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/echo-form", strings.NewReader("message=hello"))
 	if err != nil {
@@ -3196,10 +3201,9 @@ plugins:
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	_ = holder.Close()
 
 	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
-	startCommandAndWaitReady(t, cmd, baseURL)
+	startCommandAfterReleasingPort(t, holder, cmd, baseURL)
 
 	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/example/resolve-subject", strings.NewReader("team_id=T123&user_id=U456"))
 	if err != nil {
