@@ -179,6 +179,12 @@ pub struct DescribeArgs {
     pub plugin: String,
     /// Operation name
     pub operation: String,
+    /// Select a named connection for this operation catalog
+    #[arg(long)]
+    pub connection: Option<String>,
+    /// Select a stored connection instance for this operation catalog
+    #[arg(long)]
+    pub instance: Option<String>,
 }
 
 #[derive(Subcommand)]

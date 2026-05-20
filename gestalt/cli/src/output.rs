@@ -63,10 +63,15 @@ pub fn print_table(headers: &[&str], rows: &[Vec<String>]) {
         return;
     }
 
-    println!(
-        "{}",
-        render_table_with_style(headers, rows, TableStyle::BordersOnly)
-    );
+    println!("{}", render_table(headers, rows));
+}
+
+pub fn render_table(headers: &[&str], rows: &[Vec<String>]) -> String {
+    if rows.is_empty() {
+        return "No results.".to_string();
+    }
+
+    render_table_with_style(headers, rows, TableStyle::BordersOnly)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

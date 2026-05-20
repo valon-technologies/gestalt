@@ -1,13 +1,15 @@
 use anyhow::{Context, Result};
 
-use crate::api::{ApiClient, ApiError};
+use crate::api::ApiClient;
 use crate::catalog::{
     self, CatalogOperation, CatalogParameter, OperationsCatalog, ResolvedOperation,
 };
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
-#[derive(Default)]
+use super::plugin_errors;
+
+#[derive(Clone, Copy, Default)]
 pub struct InvokeOptions<'a> {
     pub connection: Option<&'a str>,
     pub instance: Option<&'a str>,
@@ -24,7 +26,34 @@ pub fn run(
     format: Format,
 ) -> Result<()> {
     let query = segments.join(".");
-    let cat =
+    let resolved_selector = match plugin_errors::resolve_selector(
+        client,
+        plugin,
+        &query,
+        options.connection,
+        options.instance,
+        plugin_errors::SelectorCommand::Invoke,
+    ) {
+        plugin_errors::SelectorResolution::Selected(selector) => Some(selector),
+        plugin_errors::SelectorResolution::Message(message) => {
+            anyhow::bail!(message);
+        }
+        plugin_errors::SelectorResolution::Unchanged => None,
+    };
+    let options = InvokeOptions {
+        connection: resolved_selector
+            .as_ref()
+            .map(|selector| selector.connection.as_str())
+            .or(options.connection),
+        instance: resolved_selector
+            .as_ref()
+            .map(|selector| selector.instance.as_str())
+            .or(options.instance),
+        select: options.select,
+        input_file: options.input_file,
+    };
+
+    let mut cat =
         match load_catalog_for_invoke(client, plugin, &query, options.connection, options.instance)
         {
             Ok(cat) => cat,
@@ -35,25 +64,51 @@ pub fn run(
                 return Err(err);
             }
         };
+    if cat.operations().is_empty() && (options.connection.is_some() || options.instance.is_some()) {
+        let fallback_cat = load_catalog_for_invoke(client, plugin, &query, None, None)?;
+        if !fallback_cat.operations().is_empty() {
+            cat = fallback_cat;
+        }
+    }
 
-    match cat.resolve(&query)? {
-        ResolvedOperation::All(ops) => {
-            warn_ignored_params(params, "no operation specified");
-            display_operations(ops, format)
+    let handle_resolved =
+        |cat: &OperationsCatalog, resolved: ResolvedOperation<'_>, options: InvokeOptions<'_>| {
+            match resolved {
+                ResolvedOperation::All(ops) => {
+                    warn_ignored_params(params, "no operation specified");
+                    display_operations(ops, format, options.connection, options.instance)
+                }
+                ResolvedOperation::Exact(_) => {
+                    execute(client, Some(cat), plugin, &query, params, options, format)
+                }
+                ResolvedOperation::Prefix(matches) => {
+                    let n = matches.len();
+                    let reason = format!(
+                        "prefix matched {} operation{}",
+                        n,
+                        if n == 1 { "" } else { "s" }
+                    );
+                    warn_ignored_params(params, &reason);
+                    display_operations(matches, format, options.connection, options.instance)
+                }
+            }
+        };
+
+    match cat.resolve(&query) {
+        Ok(resolved) => handle_resolved(&cat, resolved, options),
+        Err(err)
+            if !query.is_empty()
+                && (options.connection.is_some() || options.instance.is_some()) =>
+        {
+            match load_catalog_for_invoke(client, plugin, &query, None, None) {
+                Ok(fallback_cat) => match fallback_cat.resolve(&query) {
+                    Ok(resolved) => handle_resolved(&fallback_cat, resolved, options),
+                    Err(_) => Err(err),
+                },
+                Err(_) => Err(err),
+            }
         }
-        ResolvedOperation::Exact(_) => {
-            execute(client, Some(&cat), plugin, &query, params, options, format)
-        }
-        ResolvedOperation::Prefix(matches) => {
-            let n = matches.len();
-            let reason = format!(
-                "prefix matched {} operation{}",
-                n,
-                if n == 1 { "" } else { "s" }
-            );
-            warn_ignored_params(params, &reason);
-            display_operations(matches, format)
-        }
+        Err(err) => Err(err),
     }
 }
 
@@ -65,6 +120,32 @@ pub fn invoke(
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
+    let selector_resolution = plugin_errors::resolve_selector(
+        client,
+        plugin,
+        operation,
+        options.connection,
+        options.instance,
+        plugin_errors::SelectorCommand::Invoke,
+    );
+    let resolved_selector = match selector_resolution {
+        plugin_errors::SelectorResolution::Selected(selector) => Some(selector),
+        plugin_errors::SelectorResolution::Message(message) => anyhow::bail!(message),
+        plugin_errors::SelectorResolution::Unchanged => None,
+    };
+    let options = InvokeOptions {
+        connection: resolved_selector
+            .as_ref()
+            .map(|selector| selector.connection.as_str())
+            .or(options.connection),
+        instance: resolved_selector
+            .as_ref()
+            .map(|selector| selector.instance.as_str())
+            .or(options.instance),
+        select: options.select,
+        input_file: options.input_file,
+    };
+
     let cat = match load_catalog_for_invoke(
         client,
         plugin,
@@ -92,8 +173,26 @@ pub fn invoke(
 }
 
 pub fn list_operations(client: &ApiClient, plugin: &str, format: Format) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin, None, None)?;
-    display_operations(cat.operations(), format)
+    list_operations_with_selector(client, plugin, None, None, format)
+}
+
+pub fn list_operations_with_selector(
+    client: &ApiClient,
+    plugin: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+    format: Format,
+) -> Result<()> {
+    let cat = plugin_errors::map_catalog_error(
+        client,
+        plugin,
+        "",
+        connection,
+        instance,
+        plugin_errors::SelectorCommand::Invoke,
+        catalog::fetch_catalog(client, plugin, connection, instance),
+    )?;
+    display_operations(cat.operations(), format, connection, instance)
 }
 
 fn execute(
@@ -131,7 +230,17 @@ fn execute(
     } else {
         client.post(&path, &serde_json::Value::Object(param_map))
     })
-    .map_err(|err| rewrite_connect_error(err, plugin, options.connection, options.instance))
+    .map_err(|err| {
+        plugin_errors::rewrite_connect_error(
+            client,
+            err,
+            plugin,
+            operation,
+            options.connection,
+            options.instance,
+            plugin_errors::SelectorCommand::Invoke,
+        )
+    })
     .with_context(|| format!("failed to invoke {}.{}", plugin, operation))?;
 
     let output_value = match options.select {
@@ -148,15 +257,14 @@ fn execute(
 }
 
 fn should_retry_without_catalog(err: &anyhow::Error, operation: &str) -> bool {
-    matches!(
-        connect_error_kind(err),
-        Some(ConnectErrorKind::NotConnected | ConnectErrorKind::ReconnectRequired)
-    ) && !operation.is_empty()
+    plugin_errors::should_retry_without_catalog(err, operation)
 }
 
 fn display_operations<'a>(
     operations: impl IntoIterator<Item = &'a CatalogOperation>,
     format: Format,
+    connection: Option<&str>,
+    instance: Option<&str>,
 ) -> Result<()> {
     let ops: Vec<&CatalogOperation> = operations.into_iter().collect();
 
@@ -165,6 +273,15 @@ fn display_operations<'a>(
             output::print_json(&serde_json::to_value(&ops).unwrap());
         }
         Format::Table => {
+            if connection.is_some() || instance.is_some() {
+                if let Some(connection) = connection {
+                    println!("Connection: {connection}");
+                }
+                if let Some(instance) = instance {
+                    println!("Instance:   {instance}");
+                }
+                println!();
+            }
             let rows: Vec<Vec<String>> = ops
                 .iter()
                 .map(|op| {
@@ -196,49 +313,16 @@ fn load_catalog_for_invoke(
     connection: Option<&str>,
     instance: Option<&str>,
 ) -> Result<OperationsCatalog> {
-    catalog::fetch_catalog(client, plugin, connection, instance)
-        .map_err(|err| rewrite_connect_error(err, plugin, connection, instance))
-        .with_context(|| format!("failed to invoke {}", invoke_target(plugin, operation)))
-}
-
-fn rewrite_connect_error(
-    err: anyhow::Error,
-    plugin: &str,
-    connection: Option<&str>,
-    instance: Option<&str>,
-) -> anyhow::Error {
-    let connect_command = connect_command(plugin, connection, instance);
-
-    match connect_error_kind(&err) {
-        Some(ConnectErrorKind::NotConnected) => anyhow::anyhow!(
-            "plugin {:?} is not connected. Connect it first with `{}`",
-            plugin,
-            connect_command,
-        ),
-        Some(ConnectErrorKind::ReconnectRequired) => anyhow::anyhow!(
-            "token for plugin {:?} expired or was revoked. Reconnect it with `{}`",
-            plugin,
-            connect_command,
-        ),
-        Some(ConnectErrorKind::InstanceSelectionRequired) => anyhow::anyhow!(
-            "plugin {:?} has multiple connected instances. Pass --instance to choose one",
-            plugin,
-        ),
-        None => err,
-    }
-}
-
-fn connect_command(plugin: &str, connection: Option<&str>, instance: Option<&str>) -> String {
-    let mut connect_command = format!("gestalt plugin connect {}", plugin);
-    if let Some(connection) = connection {
-        connect_command.push_str(" --connection ");
-        connect_command.push_str(connection);
-    }
-    if let Some(instance) = instance {
-        connect_command.push_str(" --instance ");
-        connect_command.push_str(instance);
-    }
-    connect_command
+    plugin_errors::map_catalog_error(
+        client,
+        plugin,
+        operation,
+        connection,
+        instance,
+        plugin_errors::SelectorCommand::Invoke,
+        catalog::fetch_catalog(client, plugin, connection, instance),
+    )
+    .with_context(|| format!("failed to invoke {}", invoke_target(plugin, operation)))
 }
 
 fn invoke_target(plugin: &str, operation: &str) -> String {
@@ -247,42 +331,6 @@ fn invoke_target(plugin: &str, operation: &str) -> String {
     } else {
         format!("{plugin}.{operation}")
     }
-}
-
-enum ConnectErrorKind {
-    NotConnected,
-    ReconnectRequired,
-    InstanceSelectionRequired,
-}
-
-fn connect_error_kind(err: &anyhow::Error) -> Option<ConnectErrorKind> {
-    for cause in err.chain() {
-        if let Some(api_error) = cause.downcast_ref::<ApiError>() {
-            match api_error.code() {
-                Some("not_connected") => return Some(ConnectErrorKind::NotConnected),
-                Some("reconnect_required") => return Some(ConnectErrorKind::ReconnectRequired),
-                Some("instance_selection_required") => {
-                    return Some(ConnectErrorKind::InstanceSelectionRequired);
-                }
-                _ => {}
-            }
-        }
-
-        let message = cause.to_string();
-        if message.contains("no token stored for integration") {
-            return Some(ConnectErrorKind::NotConnected);
-        }
-        if message.contains("is not connected. Connect it first with `") {
-            return Some(ConnectErrorKind::NotConnected);
-        }
-        if message.contains("expired or was revoked") {
-            return Some(ConnectErrorKind::ReconnectRequired);
-        }
-        if message.contains("specify which instance") || message.contains("Pass --instance") {
-            return Some(ConnectErrorKind::InstanceSelectionRequired);
-        }
-    }
-    None
 }
 
 fn format_parameters(params: &[CatalogParameter]) -> String {
