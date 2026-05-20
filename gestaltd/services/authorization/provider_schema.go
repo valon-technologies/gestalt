@@ -195,25 +195,11 @@ func membershipResourceType(name string) *core.AuthorizationModelResourceType {
 			AllowedTargets: []*core.AuthorizationModelAllowedTarget{{
 				Kind: &proto.AuthorizationModelAllowedTarget_SubjectType{SubjectType: subjectTypeSubject},
 			}},
-			Rewrite: rewriteThis(),
 		}},
 		Actions: []*core.AuthorizationModelAction{{
 			Name:      relationMember,
 			Relations: []string{relationMember},
-			Rewrite:   rewriteComputedUserset(relationMember),
 		}},
-	}
-}
-
-func rewriteThis() *core.AuthorizationModelRewrite {
-	return &core.AuthorizationModelRewrite{
-		Kind: &proto.AuthorizationModelRewrite_This{This: &core.AuthorizationModelRewriteThis{}},
-	}
-}
-
-func rewriteComputedUserset(relation string) *core.AuthorizationModelRewrite {
-	return &core.AuthorizationModelRewrite{
-		Kind: &proto.AuthorizationModelRewrite_ComputedUserset{ComputedUserset: &core.AuthorizationModelComputedUserset{Relation: relation}},
 	}
 }
 

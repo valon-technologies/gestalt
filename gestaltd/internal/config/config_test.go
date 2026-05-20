@@ -945,8 +945,6 @@ authorization:
           relations:
             member:
               subjectTypes: [subject]
-              rewrite:
-                this: {}
             admin:
               subjectTypes: [subject]
           actions:
@@ -1017,7 +1015,6 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 	model := func(resourceTypes map[string]AuthorizationResourceTypeDef) AuthorizationModelDef {
 		return AuthorizationModelDef{ResourceTypes: resourceTypes}
 	}
-
 	tests := []struct {
 		name    string
 		authz   AuthorizationConfig
@@ -1055,21 +1052,6 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 				}),
 			}},
 			wantErr: `authorization.models key " default " must not have surrounding whitespace`,
-		},
-		{
-			name: "invalid rewrite relation",
-			authz: AuthorizationConfig{Models: map[string]AuthorizationModelDef{
-				"default": model(map[string]AuthorizationResourceTypeDef{
-					"team": resourceType(
-						map[string]AuthorizationRelationDef{"member": {
-							SubjectTypes: []string{"subject"},
-							Rewrite:      &AuthorizationRewriteDef{ComputedUserset: &AuthorizationComputedUsersetDef{Relation: "admin"}},
-						}},
-						nil,
-					),
-				}),
-			}},
-			wantErr: `computedUserset.relation references unknown relation "admin"`,
 		},
 		{
 			name: "invalid allowed target resource type",

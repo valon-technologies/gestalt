@@ -1833,13 +1833,11 @@ type AuthorizationResourceTypeDef struct {
 type AuthorizationRelationDef struct {
 	SubjectTypes   []string                        `yaml:"subjectTypes,omitempty"`
 	AllowedTargets []AuthorizationAllowedTargetDef `yaml:"allowedTargets,omitempty"`
-	Rewrite        *AuthorizationRewriteDef        `yaml:"rewrite,omitempty"`
 	Source         AuthorizationSourceMetadataDef  `yaml:"source,omitempty"`
 }
 
 type AuthorizationActionDef struct {
 	Relations []string                       `yaml:"relations,omitempty"`
-	Rewrite   *AuthorizationRewriteDef       `yaml:"rewrite,omitempty"`
 	Source    AuthorizationSourceMetadataDef `yaml:"source,omitempty"`
 }
 
@@ -1852,24 +1850,6 @@ type AuthorizationAllowedTargetDef struct {
 type AuthorizationSubjectSetTargetDef struct {
 	ResourceType string `yaml:"resourceType,omitempty"`
 	Relation     string `yaml:"relation,omitempty"`
-}
-
-type AuthorizationRewriteDef struct {
-	This            *AuthorizationRewriteThisDef     `yaml:"this,omitempty"`
-	ComputedUserset *AuthorizationComputedUsersetDef `yaml:"computedUserset,omitempty"`
-	TupleToUserset  *AuthorizationTupleToUsersetDef  `yaml:"tupleToUserset,omitempty"`
-	Union           []AuthorizationRewriteDef        `yaml:"union,omitempty"`
-}
-
-type AuthorizationRewriteThisDef struct{}
-
-type AuthorizationComputedUsersetDef struct {
-	Relation string `yaml:"relation,omitempty"`
-}
-
-type AuthorizationTupleToUsersetDef struct {
-	TuplesetRelation string `yaml:"tuplesetRelation,omitempty"`
-	ComputedRelation string `yaml:"computedRelation,omitempty"`
 }
 
 type AuthorizationRelationshipDef struct {
@@ -3782,35 +3762,13 @@ func normalizedAuthorizationRelationDef(def AuthorizationRelationDef) Authorizat
 			def.AllowedTargets[i].SubjectSet.Relation = strings.TrimSpace(def.AllowedTargets[i].SubjectSet.Relation)
 		}
 	}
-	def.Rewrite = normalizedAuthorizationRewriteDef(def.Rewrite)
 	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
 	return def
 }
 
 func normalizedAuthorizationActionDef(def AuthorizationActionDef) AuthorizationActionDef {
 	def.Relations = trimAuthorizationStringSlice(def.Relations)
-	def.Rewrite = normalizedAuthorizationRewriteDef(def.Rewrite)
 	def.Source = normalizedAuthorizationSourceMetadataDef(def.Source)
-	return def
-}
-
-func normalizedAuthorizationRewriteDef(def *AuthorizationRewriteDef) *AuthorizationRewriteDef {
-	if def == nil {
-		return nil
-	}
-	if def.ComputedUserset != nil {
-		def.ComputedUserset.Relation = strings.TrimSpace(def.ComputedUserset.Relation)
-	}
-	if def.TupleToUserset != nil {
-		def.TupleToUserset.TuplesetRelation = strings.TrimSpace(def.TupleToUserset.TuplesetRelation)
-		def.TupleToUserset.ComputedRelation = strings.TrimSpace(def.TupleToUserset.ComputedRelation)
-	}
-	for i := range def.Union {
-		child := normalizedAuthorizationRewriteDef(&def.Union[i])
-		if child != nil {
-			def.Union[i] = *child
-		}
-	}
 	return def
 }
 

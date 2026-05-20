@@ -1696,9 +1696,6 @@ func validateAuthorizationResourceTypeDef(path, name string, def AuthorizationRe
 				return err
 			}
 		}
-		if err := validateAuthorizationRewriteDef(relationPath+".rewrite", relation.Rewrite, def.Relations); err != nil {
-			return err
-		}
 		if err := validateAuthorizationSourceMetadata(relationPath+".source", relation.Source); err != nil {
 			return err
 		}
@@ -1711,16 +1708,13 @@ func validateAuthorizationResourceTypeDef(path, name string, def AuthorizationRe
 		if err := validateStringList(actionPath+".relations", action.Relations); err != nil {
 			return err
 		}
-		if len(action.Relations) == 0 && action.Rewrite == nil {
-			return fmt.Errorf("config validation: %s must set relations or rewrite", actionPath)
+		if len(action.Relations) == 0 {
+			return fmt.Errorf("config validation: %s.relations must contain at least one value", actionPath)
 		}
 		for _, relation := range action.Relations {
 			if _, ok := def.Relations[relation]; !ok {
 				return fmt.Errorf("config validation: %s.relations references unknown relation %q", actionPath, relation)
 			}
-		}
-		if err := validateAuthorizationRewriteDef(actionPath+".rewrite", action.Rewrite, def.Relations); err != nil {
-			return err
 		}
 		if err := validateAuthorizationSourceMetadata(actionPath+".source", action.Source); err != nil {
 			return err
@@ -1748,52 +1742,6 @@ func validateAuthorizationAllowedTargetDef(path string, target AuthorizationAllo
 	}
 	if set != 1 {
 		return fmt.Errorf("config validation: %s must set exactly one of subjectType, resourceType, or subjectSet", path)
-	}
-	return nil
-}
-
-func validateAuthorizationRewriteDef(path string, rewrite *AuthorizationRewriteDef, relations map[string]AuthorizationRelationDef) error {
-	if rewrite == nil {
-		return nil
-	}
-	set := 0
-	if rewrite.This != nil {
-		set++
-	}
-	if rewrite.ComputedUserset != nil {
-		set++
-		relation := strings.TrimSpace(rewrite.ComputedUserset.Relation)
-		if relation == "" {
-			return fmt.Errorf("config validation: %s.computedUserset.relation is required", path)
-		}
-		if _, ok := relations[relation]; !ok {
-			return fmt.Errorf("config validation: %s.computedUserset.relation references unknown relation %q", path, relation)
-		}
-	}
-	if rewrite.TupleToUserset != nil {
-		set++
-		tupleset := strings.TrimSpace(rewrite.TupleToUserset.TuplesetRelation)
-		computed := strings.TrimSpace(rewrite.TupleToUserset.ComputedRelation)
-		if tupleset == "" {
-			return fmt.Errorf("config validation: %s.tupleToUserset.tuplesetRelation is required", path)
-		}
-		if computed == "" {
-			return fmt.Errorf("config validation: %s.tupleToUserset.computedRelation is required", path)
-		}
-		if _, ok := relations[tupleset]; !ok {
-			return fmt.Errorf("config validation: %s.tupleToUserset.tuplesetRelation references unknown relation %q", path, tupleset)
-		}
-	}
-	if len(rewrite.Union) > 0 {
-		set++
-		for i := range rewrite.Union {
-			if err := validateAuthorizationRewriteDef(fmt.Sprintf("%s.union[%d]", path, i), &rewrite.Union[i], relations); err != nil {
-				return err
-			}
-		}
-	}
-	if set != 1 {
-		return fmt.Errorf("config validation: %s must set exactly one of this, computedUserset, tupleToUserset, or union", path)
 	}
 	return nil
 }
