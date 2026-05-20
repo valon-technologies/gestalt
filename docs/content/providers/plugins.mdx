@@ -1122,6 +1122,21 @@ Repeated `--config` flags merge left-to-right, and `null` deletes inherited
 entries. That makes it possible to boot some supporting providers while
 suppressing others for a local session.
 
+When your config already points at local provider source paths, use config-based
+serve with `--watch` to restart after local config, source provider, or local
+release metadata changes:
+
+```sh
+gestaltd serve \
+  --plugin slack \
+  --config ./base.yaml \
+  --config ./dev/local.yaml \
+  --watch
+```
+
+`--watch` is not supported with `--path`, `--remote`, or `--locked`; use it with
+`--config` files that reference the local sources you want to iterate on.
+
 #### Attaching local code to a remote server
 
 <ActiveDevelopmentCallout changeNote="Behavior, authorization requirements, and attach-session semantics may change between releases without warning.">Remote local serve</ActiveDevelopmentCallout>
