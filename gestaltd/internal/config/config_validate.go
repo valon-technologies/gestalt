@@ -1827,6 +1827,9 @@ func validateAuthorizationRelationshipTargetDef(path string, target Authorizatio
 		if err := validateAuthorizationResourceDef(path+".subjectSet.resource", target.SubjectSet.Resource); err != nil {
 			return err
 		}
+		if strings.TrimSpace(target.SubjectSet.Relation) == "" {
+			return fmt.Errorf("config validation: %s.subjectSet.relation is required", path)
+		}
 		if len(resourceTypes) > 0 {
 			relations, ok := resourceTypes[strings.TrimSpace(target.SubjectSet.Resource.Type)]
 			if !ok {
@@ -1835,9 +1838,6 @@ func validateAuthorizationRelationshipTargetDef(path string, target Authorizatio
 			if _, ok := relations[strings.TrimSpace(target.SubjectSet.Relation)]; !ok {
 				return fmt.Errorf("config validation: %s.subjectSet.relation references unknown relation %q for resource type %q", path, target.SubjectSet.Relation, target.SubjectSet.Resource.Type)
 			}
-		}
-		if strings.TrimSpace(target.SubjectSet.Relation) == "" {
-			return fmt.Errorf("config validation: %s.subjectSet.relation is required", path)
 		}
 	}
 	if set > 1 {

@@ -1083,6 +1083,25 @@ func TestValidateAuthorizationModelFragments(t *testing.T) {
 			wantErr: `resource.type references unknown resource type "missing"`,
 		},
 		{
+			name: "malformed relationship subject set target relation",
+			authz: AuthorizationConfig{
+				Models: map[string]AuthorizationModelDef{
+					"default": model(map[string]AuthorizationResourceTypeDef{
+						"team": resourceType(map[string]AuthorizationRelationDef{"member": subjectRelation("subject")}, nil),
+					}),
+				},
+				Relationships: []AuthorizationRelationshipDef{{
+					Subject:  AuthorizationSubjectDef{Type: "subject", ID: "user:alice"},
+					Relation: "member",
+					Resource: AuthorizationResourceDef{Type: "team", ID: "servicing"},
+					Target: AuthorizationRelationshipTargetDef{SubjectSet: &AuthorizationSubjectSetDef{
+						Resource: AuthorizationResourceDef{Type: "team", ID: "servicing"},
+					}},
+				}},
+			},
+			wantErr: `target.subjectSet.relation is required`,
+		},
+		{
 			name: "relationship without model resource type",
 			authz: AuthorizationConfig{
 				Relationships: []AuthorizationRelationshipDef{{
