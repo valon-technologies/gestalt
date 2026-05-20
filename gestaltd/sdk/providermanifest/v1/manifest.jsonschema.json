@@ -1297,6 +1297,44 @@
         "selectionSet": {
           "type": "string",
           "minLength": 1
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/manifestGraphQLArgument"
+          }
+        }
+      }
+    },
+    "manifestGraphQLArgument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "parameterType": {
+          "type": "string",
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "array",
+            "object"
+          ]
         }
       }
     },

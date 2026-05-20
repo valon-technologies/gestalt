@@ -44,12 +44,8 @@ func validateExplicitSelectionSet(schema *Schema, operation string, ref TypeRef,
 		return fmt.Errorf("operation %q requires graphql.selectionSet for %s return type %q", operation, ft.Kind, typeName)
 	}
 
-	p := selectionParser{input: trimmed}
-	selections, err := p.parseSelectionList(false)
+	selections, err := parseSelectionSet(trimmed)
 	if err != nil {
-		return fmt.Errorf("operation %q graphql.selectionSet: %w", operation, err)
-	}
-	if err := p.expectEnd(); err != nil {
 		return fmt.Errorf("operation %q graphql.selectionSet: %w", operation, err)
 	}
 	if len(selections) == 0 {
@@ -198,6 +194,22 @@ func possibleObjectNames(ft *FullType) (map[string]struct{}, bool) {
 	return names, true
 }
 
+func parseSelectionSet(raw string) ([]selection, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return nil, nil
+	}
+	p := selectionParser{input: trimmed}
+	selections, err := p.parseSelectionList(false)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.expectEnd(); err != nil {
+		return nil, err
+	}
+	return selections, nil
+}
+
 type selectionParser struct {
 	input string
 	pos   int
@@ -285,7 +297,14 @@ func (p *selectionParser) parseBracedSelectionList() ([]selection, error) {
 	if !p.consume("{") {
 		return nil, fmt.Errorf("expected opening brace")
 	}
-	return p.parseSelectionList(true)
+	selections, err := p.parseSelectionList(true)
+	if err != nil {
+		return nil, err
+	}
+	if len(selections) == 0 {
+		return nil, fmt.Errorf("empty selection set")
+	}
+	return selections, nil
 }
 
 func (p *selectionParser) expectEnd() error {

@@ -381,14 +381,22 @@ func rootHasField(schema *Schema, root *TypeName, name string) bool {
 }
 
 func argsToParams(schema *Schema, args []InputValue) []declarative.ParameterDef {
+	return argsToParamsWithTypeOverrides(schema, args, nil)
+}
+
+func argsToParamsWithTypeOverrides(schema *Schema, args []InputValue, typeOverrides map[string]string) []declarative.ParameterDef {
 	if len(args) == 0 {
 		return nil
 	}
 	params := make([]declarative.ParameterDef, 0, len(args))
 	for _, arg := range args {
+		paramType := graphqlParamType(schema, arg.Type)
+		if override := strings.TrimSpace(typeOverrides[arg.Name]); override != "" {
+			paramType = declarative.NormalizeType(override)
+		}
 		params = append(params, declarative.ParameterDef{
 			Name:        arg.Name,
-			Type:        graphqlParamType(schema, arg.Type),
+			Type:        paramType,
 			Description: arg.Description,
 			Required:    arg.Type.isNonNull(),
 		})
@@ -402,23 +410,25 @@ func graphqlParamType(schema *Schema, ref TypeRef) string {
 	}
 
 	typeName := ref.innerType().namedType()
-	ft := schema.lookupType(typeName)
-	if ft == nil || ft.Kind != KindInputObject {
-		return graphqlTypeToSimple(schema, ref)
-	}
-	if len(ft.InputFields) == 0 {
-		return "object"
-	}
+	if schema != nil {
+		ft := schema.lookupType(typeName)
+		if ft != nil && ft.Kind == KindInputObject {
+			if len(ft.InputFields) == 0 {
+				return "object"
+			}
 
-	fields := make([]string, 0, len(ft.InputFields))
-	for _, field := range ft.InputFields {
-		name := field.Name
-		if field.Type.isNonNull() {
-			name += "!"
+			fields := make([]string, 0, len(ft.InputFields))
+			for _, field := range ft.InputFields {
+				name := field.Name
+				if field.Type.isNonNull() {
+					name += "!"
+				}
+				fields = append(fields, name)
+			}
+			return "object{" + strings.Join(fields, ", ") + "}"
 		}
-		fields = append(fields, name)
 	}
-	return "object{" + strings.Join(fields, ", ") + "}"
+	return graphqlTypeToSimple(schema, ref)
 }
 
 func graphqlTypeToSimple(schema *Schema, ref TypeRef) string {
@@ -437,9 +447,12 @@ func graphqlTypeToSimple(schema *Schema, ref TypeRef) string {
 	case "Boolean":
 		return "boolean"
 	default:
-		if ft := schema.lookupType(typeName); ft != nil && (ft.Kind == KindEnum || ft.Kind == KindScalar) {
-			return "string"
+		if schema != nil {
+			if ft := schema.lookupType(typeName); ft != nil && (ft.Kind == KindEnum || ft.Kind == KindScalar) {
+				return "string"
+			}
+			return "object"
 		}
-		return "object"
+		return "string"
 	}
 }
