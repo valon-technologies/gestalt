@@ -18,6 +18,7 @@ import { Callout } from 'nextra/components'
 | --- | --- |
 | `gestaltd` | Local-friendly startup. Generates a config if needed and serves. |
 | `gestaltd serve --config PATH` | Start the server. Repeat `--config` to layer overrides. |
+| `gestaltd serve --config PATH --watch` | Start from layered config and restart after debounced local config, source provider, or local release metadata changes. |
 | `gestaltd serve --locked --config PATH` | Start read-only from an existing lockfile and prepared artifacts. Repeat `--config` to layer overrides. |
 | `gestaltd serve --artifacts-dir DIR` | Directory for prepared provider artifacts. |
 | `gestaltd serve --lockfile PATH` | Override the lockfile location. `PATH` resolves like a normal CLI path. |
@@ -80,6 +81,28 @@ update the lockfile by default. `provider add` and `provider remove` accept
 `GOMAXPROCS`; `--parallelism 1` forces sequential preparation. Other provider
 types and `sync --locked --check` remain sequential.
 
+## Config Watch Mode
+
+Use `gestaltd serve --watch` for config-based local development when your
+layered config points at local provider source paths or local
+`provider-release.yaml` metadata. Watch mode starts normally, then restarts the
+server after local file changes settle. If reload preparation fails, the current
+server keeps running and the failure is logged.
+
+For faster iteration on one configured plugin, combine `--watch` with
+`--plugin NAME` so unrelated configured plugins are not validated or prepared:
+
+```sh
+gestaltd serve \
+  --plugin support \
+  --config ./config.yaml \
+  --config ./local.yaml \
+  --watch
+```
+
+Watch mode applies only to config-based serve. It cannot be combined with
+`--locked`, `--path`, or `--remote`.
+
 ## Examples
 
 ```sh
@@ -92,6 +115,8 @@ gestaltd validate --config ./config.yaml
 gestaltd lock --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd sync --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd serve --config ./config.yaml --lockfile ./local/gestalt.lock.json
+gestaltd serve --config ./config.yaml --watch
+gestaltd serve --plugin support --config ./config.yaml --config ./local.yaml --watch
 gestaltd serve --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd lock --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd sync --locked --config ./base.yaml --config ./overrides/prod.yaml
