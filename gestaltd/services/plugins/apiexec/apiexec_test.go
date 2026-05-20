@@ -40,6 +40,24 @@ func TestSubstitutePath_Success(t *testing.T) {
 	}
 }
 
+func TestSubstitutePath_EncodesSlashesInPathParams(t *testing.T) {
+	t.Parallel()
+	result, err := substitutePath(
+		"/storage/v1/b/{bucket}/o/{object}",
+		map[string]any{
+			"bucket": "my-bucket",
+			"object": "folder/sub/file.json",
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "/storage/v1/b/my-bucket/o/folder%2Fsub%2Ffile.json"
+	if result != want {
+		t.Errorf("got %q, want %q", result, want)
+	}
+}
+
 func TestDoGETWithQueryAndPathParams(t *testing.T) {
 	t.Parallel()
 
