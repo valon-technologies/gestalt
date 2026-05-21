@@ -3,30 +3,30 @@
 class Gestalt < Formula
   desc "CLI for Gestalt API - authentication, integration management, and operation invocation"
   homepage "https://github.com/valon-technologies/gestalt"
-  version "0.0.1"
+  version "0.0.2-alpha.1"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1/gestalt-macos-arm64.tar.gz"
-      sha256 "6c75c37477c616284816021cb98c1fc59c8c3fc40baf11ae1debc4f2057b01c4"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.1/gestalt-macos-arm64.tar.gz"
+      sha256 "74f512d2d0476f79f17c8196d6b5747878761b27401e957add47d6e01ebd1685"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1/gestalt-macos-x86_64.tar.gz"
-      sha256 "075490c157132c3c8e81f218908ce690b524ed314ecd152c9254febf7992ec57"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.1/gestalt-macos-x86_64.tar.gz"
+      sha256 "8af90094cf46346ec9ddc0f07be1ba4363f27f5b9b90e13b263179d81e817146"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1/gestalt-linux-arm64.tar.gz"
-      sha256 "0629f1d284392f3026b0cc4217e7c0a54f756a2af8b8835ee090b72bff8cc2ff"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.1/gestalt-linux-arm64.tar.gz"
+      sha256 "98e24d1538347a8eec2d5db81a9da73870a84f57151b1d2618e78bac43212fbe"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1/gestalt-linux-x86_64.tar.gz"
-      sha256 "95583cb2dd8706b168982575b06cb80ee205e7afb857f7ffbf2606b9e586fd09"
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.2-alpha.1/gestalt-linux-x86_64.tar.gz"
+      sha256 "d5dda6cf0b4742662b59794a234cfe0fcc047192c2a583cb267a4d0528a51c38"
     end
   end
 
