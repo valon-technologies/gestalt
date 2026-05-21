@@ -3438,6 +3438,35 @@ func TestBuildStartupProviderSpecPreservesStaticCatalogConnectionRouting(t *test
 	if got := operationRouting.connections["echo"]; got != config.PluginConnectionName {
 		t.Fatalf("echo connection = %q, want %q", got, config.PluginConnectionName)
 	}
+
+	manifestRoot = writeStaticCatalog(t, &catalog.Catalog{
+		Name: "schema",
+		Operations: []catalog.CatalogOperation{
+			{ID: "versions.list", Method: http.MethodPost, Transport: "graphql"},
+		},
+	})
+	manifest = newExecutableManifest("Schema", "GraphQL startup routing")
+	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"dev":  {Mode: providermanifestv1.ConnectionModeUser},
+		"prod": {Mode: providermanifestv1.ConnectionModeUser},
+	}
+	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+		GraphQL: &providermanifestv1.GraphQLSurface{URL: "https://{graphql_host}/graphql"},
+	}
+
+	spec, operationRouting, err = buildStartupProviderSpec("schema", &config.ProviderEntry{
+		ResolvedManifest:     manifest,
+		ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+	})
+	if err != nil {
+		t.Fatalf("buildStartupProviderSpec ambiguous graphql: %v", err)
+	}
+	if spec.Catalog == nil || len(spec.Catalog.Operations) != 1 {
+		t.Fatalf("unexpected ambiguous graphql startup catalog: %+v", spec.Catalog)
+	}
+	if got, ok := operationRouting.connections["versions.list"]; ok {
+		t.Fatalf("versions.list connection = %q, want no static connection so the selected connection can apply", got)
+	}
 }
 
 func TestStartupProviderProxyResolvesDeclarativeConnectionSelectorBeforeProviderReady(t *testing.T) {

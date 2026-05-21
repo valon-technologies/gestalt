@@ -423,18 +423,7 @@ func (plan StaticConnectionPlan) resolveSurfaceConnectionName(raw string) string
 	if name := ResolveConnectionAlias(raw); name != "" {
 		return name
 	}
-	if plan.defaultConnection != "" {
-		return plan.defaultConnection
-	}
-	if _, ok := plan.namedConnections["default"]; ok {
-		return "default"
-	}
-	if len(plan.namedConnections) == 1 {
-		for name := range plan.namedConnections {
-			return name
-		}
-	}
-	return PluginConnectionName
+	return plan.fallbackConnection()
 }
 
 func (plan StaticConnectionPlan) shouldAdvertisePluginConnection() bool {
