@@ -1440,12 +1440,11 @@ same action. API tokens must carry `permissions[].actions:
 operation permissions do not grant attach, and the attach action does not grant
 operation invocation.
 
-Source-backed executable plugins must declare how to build the runnable
-artifact and where that artifact will appear. Gestalt runs `build.command`
-before local execution or release packaging, then starts
-`entrypoint.artifactPath`. The command can call any runtime or compiler
-available in the preparation environment; Gestalt does not infer the provider
-language or synthesize executable wrappers.
+Source-backed executable plugins can declare a local source command with
+top-level `run`. Gestalt runs that argv from the manifest directory when
+serving local source. Use object-form `build.command` with
+`entrypoint.artifactPath` when the same source package also needs a compiled
+release artifact.
 
 ```yaml
 kind: plugin
@@ -1458,6 +1457,10 @@ build:
     - scripts
     - src
     - package.json
+run:
+  - npm
+  - run
+  - dev:provider
 entrypoint:
   artifactPath: .gestalt/build/provider
 spec:

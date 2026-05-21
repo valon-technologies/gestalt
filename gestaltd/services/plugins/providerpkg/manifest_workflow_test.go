@@ -189,63 +189,6 @@ func TestManifestWorkflow_SourceExecutableDeclaresEntrypointNotArtifacts(t *test
 	}
 }
 
-func TestManifestWorkflow_SourcePrepareBuildAndRunPrefix(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
-kind: plugin
-source: github.com/acme/plugins/uv-source
-version: 0.0.1-alpha.1
-build: [uv, sync, --frozen, --no-install-project]
-run:
-  commandPrefix: [uv, run, --frozen]
-spec:
-  connections:
-    default:
-      auth:
-        type: none
-`))
-
-	_, manifest, err := ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("ReadSourceManifestFile: %v", err)
-	}
-	if manifest.Build == nil || !manifest.Build.PrepareOnly {
-		t.Fatalf("build = %#v, want prepare-only build", manifest.Build)
-	}
-	if got := strings.Join(manifest.Build.Command, " "); got != "uv sync --frozen --no-install-project" {
-		t.Fatalf("build.command = %q", got)
-	}
-	if manifest.Run == nil || strings.Join(manifest.Run.CommandPrefix, " ") != "uv run --frozen" {
-		t.Fatalf("run = %#v", manifest.Run)
-	}
-
-	cloned, err := cloneManifest(manifest)
-	if err != nil {
-		t.Fatalf("cloneManifest: %v", err)
-	}
-	if cloned.Build == nil || !cloned.Build.PrepareOnly {
-		t.Fatalf("cloned build = %#v, want prepare-only build", cloned.Build)
-	}
-
-	encoded, err := EncodeSourceManifestFormat(cloned, ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat: %v", err)
-	}
-	roundTripped, err := DecodeSourceManifestFormat(encoded, ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("DecodeSourceManifestFormat(round trip): %v\n%s", err, encoded)
-	}
-	if roundTripped.Build == nil || !roundTripped.Build.PrepareOnly {
-		t.Fatalf("round-tripped build = %#v, want prepare-only build", roundTripped.Build)
-	}
-
-	if _, _, err := ReadManifestFile(manifestPath); err == nil || !strings.Contains(err.Error(), "build metadata is only allowed in source manifests") {
-		t.Fatalf("ReadManifestFile error = %v, want package build rejection", err)
-	}
-}
-
 func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 	t.Parallel()
 
@@ -485,14 +428,13 @@ spec:
 			wantError:  "build.typo is not supported",
 		},
 		{
-			name: "rejects empty source run prefix",
+			name: "rejects empty source run command",
 			buildData: func(t *testing.T, dir string) string {
 				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 kind: plugin
-source: github.com/acme/plugins/empty-source-run-prefix
+source: github.com/acme/plugins/empty-source-run-command
 version: 1.0.0
-run:
-  commandPrefix: []
+run: []
 entrypoint:
   artifactPath: provider
 spec:
@@ -503,7 +445,65 @@ spec:
 `))
 			},
 			readSource: true,
-			wantError:  "run.commandPrefix is required",
+			wantError:  "run command is required",
+		},
+		{
+			name: "rejects empty source run arg",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
+source: github.com/acme/plugins/empty-source-run-arg
+version: 1.0.0
+run: [uv, ""]
+entrypoint:
+  artifactPath: provider
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`))
+			},
+			readSource: true,
+			wantError:  "run[1] is required",
+		},
+		{
+			name: "rejects legacy source run prefix object",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
+source: github.com/acme/plugins/legacy-source-run-prefix
+version: 1.0.0
+run:
+  commandPrefix: [uv, run, --frozen]
+entrypoint:
+  artifactPath: provider
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+`))
+			},
+			readSource: true,
+			wantError:  "cannot unmarshal",
+		},
+		{
+			name: "rejects source ui run metadata",
+			buildData: func(t *testing.T, dir string) string {
+				return mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: ui
+source: github.com/acme/plugins/source-ui-run
+version: 1.0.0
+build:
+  command: [npm, run, build]
+run: [npm, run, dev]
+spec:
+  assetRoot: dist
+`))
+			},
+			readSource: true,
+			wantError:  "run metadata is not supported for ui manifests",
 		},
 		{
 			name: "released package rejects run metadata",
@@ -512,8 +512,7 @@ spec:
 kind: plugin
 source: github.com/acme/plugins/released-run-metadata
 version: 1.0.0
-run:
-  commandPrefix: [uv, run, --frozen]
+run: [uv, run, --frozen, provider.py]
 spec:
   connections:
     default:

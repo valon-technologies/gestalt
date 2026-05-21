@@ -163,6 +163,9 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if !sourceMode {
 			return fmt.Errorf("run metadata is only allowed in source manifests")
 		}
+		if kind == providermanifestv1.KindUI {
+			return fmt.Errorf("run metadata is not supported for ui manifests")
+		}
 		if err := validateSourceRun(manifest.Run); err != nil {
 			return err
 		}
@@ -479,16 +482,16 @@ func validateSourceBuild(build *providermanifestv1.SourceBuild) error {
 	return nil
 }
 
-func validateSourceRun(run *providermanifestv1.SourceRun) error {
+func validateSourceRun(run []string) error {
 	if run == nil {
 		return nil
 	}
-	if len(run.CommandPrefix) == 0 {
-		return fmt.Errorf("run.commandPrefix is required")
+	if len(run) == 0 {
+		return fmt.Errorf("run command is required")
 	}
-	for i, arg := range run.CommandPrefix {
+	for i, arg := range run {
 		if strings.TrimSpace(arg) == "" {
-			return fmt.Errorf("run.commandPrefix[%d] is required", i)
+			return fmt.Errorf("run[%d] is required", i)
 		}
 	}
 	return nil

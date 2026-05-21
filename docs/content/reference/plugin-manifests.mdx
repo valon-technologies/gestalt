@@ -44,6 +44,7 @@ These fields appear at the top level of every manifest regardless of kind.
 | `artifacts`   | Artifact[] | no       | Prepared or released executable artifacts keyed by platform. Source manifests must omit this field.                                                        |
 | `entrypoint`  | Entrypoint | no       | Executable entrypoint metadata for the provider.                                                                                                                                                     |
 | `build`       | SourceBuild | no       | Source-only command that prepares the declared runtime output. Prepared and released manifests strip this field.                                                                                     |
+| `run`         | string[] | no       | Source-only command argv for local source execution. Prepared and released manifests strip this field.                                                                                              |
 | `spec`        | object     | no       | Kind-specific configuration block.                                                                                                                                                                   |
 
 ## Entrypoint
@@ -61,10 +62,11 @@ entrypoint:
   args: ["--verbose"]
 ```
 
-For executable source manifests, `entrypoint.artifactPath` is also the build
-output path. When `build` is present, Gestalt runs `build.command` before
-preparing, serving, or releasing the package, and the command must produce that
-file.
+For executable source manifests, `entrypoint.artifactPath` is the packaged
+executable path. When object-form `build.command` is present, Gestalt runs it
+before release packaging and requires the command to produce that file. If a
+source manifest also declares `run`, local source execution uses `run` instead
+of `entrypoint`.
 
 ```yaml
 kind: indexeddb
@@ -573,12 +575,32 @@ spec:
 Top-level `build` is source-only and supported for UI and executable source
 manifests. It is the recommended form for new UI packages authored from
 TypeScript, React, Next.js static export, Vite, or similar frontend source.
+For executable source manifests, `build` can be a sequence that prepares local
+source dependencies. As an object, `build.command` must produce the output declared by
+`entrypoint.artifactPath` for executables or `spec.assetRoot` for UI bundles.
 
 | Build field | Type     | Required | Purpose                                                                                           |
 | ----------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
 | `command`   | string[] | yes      | Command argv to run before preparing the static assets.                                           |
 | `workdir`   | string   | no       | Manifest-relative directory where `command` runs. Defaults to the manifest directory.             |
 | `inputs`    | string[] | no       | Literal manifest-relative files or directories used to fingerprint local source builds. Glob syntax is not supported. |
+
+## Run
+
+Top-level `run` is source-only and starts an executable provider from local
+source. It is an argv array, not a shell string. Gestalt runs it from the
+manifest directory, so project-local executables should usually include `./`.
+
+```yaml
+build: [uv, sync, --frozen, --no-install-project]
+run: [uv, run, --frozen, ./provider.py, --serve]
+```
+
+`run` is never included in prepared or released manifests. Use
+`entrypoint.artifactPath` and `artifacts` for the compiled package command.
+A manifest that only declares `run` is local-only; add SDK-native provider
+metadata or object-form `build.command` with `entrypoint.artifactPath` before
+using it with lock, sync, or release packaging.
 
 ## Artifacts
 
@@ -810,11 +832,11 @@ and MCP may be added alongside either or both.
 A connection using `mcp_oauth` auth requires the plugin to declare an MCP surface (via `spec.surfaces.mcp` or an equivalent). Manifests that set `auth.type: mcp_oauth` without an MCP surface fail validation.
 
 Executable source providers may either use the SDK-native Go, Rust, Python, or
-TypeScript source-package metadata, or declare top-level `build.command` with
-`entrypoint.artifactPath`. When `build.command` is present, Gestalt runs it
-before source-manifest preparation and requires the command to produce that
-artifact path. Source manifests must not include `artifacts`; prepared and
-released manifests include `artifacts` and omit `build`.
+TypeScript source-package metadata, or declare top-level `run` for local source
+execution. Use object-form `build.command` with `entrypoint.artifactPath` when
+the source package needs to produce a compiled release artifact. Source
+manifests must not include `artifacts`; prepared and released manifests include
+`artifacts` and omit `build` and `run`.
 
 ```yaml
 kind: indexeddb
@@ -836,6 +858,21 @@ entrypoint:
   artifactPath: .gestalt/build/indexeddb
 spec:
   configSchemaPath: schemas/config.schema.yaml
+```
+
+For local-only source execution, `run` can start the provider directly:
+
+```yaml
+kind: plugin
+source: github.com/acme/plugins/slack
+version: 1.0.0
+build: [uv, sync, --frozen, --no-install-project]
+run: [uv, run, --frozen, ./provider.py, --serve]
+spec:
+  connections:
+    default:
+      auth:
+        type: none
 ```
 
 Declarative plugin manifests that only describe hosted HTTP, GraphQL, MCP, or
@@ -882,18 +919,19 @@ gestaltd provider release --version 1.2.3
 
 `gestaltd provider release` preserves the source manifest format, so
 `manifest.yaml` stays YAML and `manifest.json` stays JSON in the release archive.
-For source manifests with `build.command`, release runs the command before
-packaging. Executable providers must produce `entrypoint.artifactPath`; UI
-providers must produce `spec.assetRoot`. Released manifests strip `build` and
-record the prepared `artifacts` metadata. Hosted HTTP/security metadata is read
-from manifest `spec.securitySchemes` / `spec.http` and preserved in the
-packaged manifest.
+For source manifests with object-form `build.command`, release runs the command
+before packaging. Executable providers must produce
+`entrypoint.artifactPath`; UI providers must produce `spec.assetRoot`. Released
+manifests strip `build` and `run`, then record the prepared `artifacts`
+metadata. Hosted HTTP/security metadata is read from manifest
+`spec.securitySchemes` / `spec.http` and preserved in the packaged manifest.
 
-Executable source packages require `build.command` for release packaging and
-build the host-platform artifact by default. Platform-neutral packages, such as
-UI and declarative providers, produce a generic archive by default. Pass
-`--platform` for an explicit `os/arch[/libc]` target list, or `--platform all`
-in CI to build the full supported release matrix. For explicit platforms,
-Gestalt sets target environment variables such as `GOOS`, `GOARCH`,
-`GESTALT_TARGET_OS`, `GESTALT_TARGET_ARCH`, and `GESTALT_TARGET_LIBC` for build
-scripts that need them.
+Executable source packages that are not SDK-native require `build.command` for
+release packaging and build the host-platform artifact by default.
+Platform-neutral packages, such as UI and declarative providers, produce a
+generic archive by default. Pass `--platform` for an explicit
+`os/arch[/libc]` target list, or `--platform all` in CI to build the full
+supported release matrix. For explicit platforms, Gestalt sets target
+environment variables such as `GOOS`, `GOARCH`, `GESTALT_TARGET_OS`,
+`GESTALT_TARGET_ARCH`, and `GESTALT_TARGET_LIBC` for build scripts that need
+them.

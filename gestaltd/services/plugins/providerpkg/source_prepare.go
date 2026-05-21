@@ -14,7 +14,26 @@ import (
 
 const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
 
+type sourceCatalogOptions struct {
+	SkipExplicitRun bool
+	RefreshExisting bool
+}
+
 func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Manifest, error) {
+	return prepareSourceManifest(manifestPath, false)
+}
+
+func prepareSourceManifestForPreparedInstall(manifestPath string) ([]byte, *providermanifestv1.Manifest, error) {
+	return prepareSourceManifest(manifestPath, true)
+}
+
+// Local prepare may create catalog.yaml from run; packaging must regenerate it
+// from the packaged entrypoint instead.
+func explicitRunStaleCatalog(manifest *providermanifestv1.Manifest) bool {
+	return HasExplicitSourceRun(manifest)
+}
+
+func prepareSourceManifest(manifestPath string, packaging bool) ([]byte, *providermanifestv1.Manifest, error) {
 	absoluteManifestPath, err := filepath.Abs(manifestPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve manifest path: %w", err)
@@ -34,12 +53,14 @@ func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Man
 	if err != nil {
 		return nil, nil, err
 	}
-	if build := EffectiveSourceBuild(manifest); build != nil && build.PrepareOnly {
-		if err := RunSourceBuild(manifestPath, manifest, SourceBuildOptions{}); err != nil {
-			return nil, nil, err
-		}
+	if err := ensurePrepareOnlyBuild(manifestPath, manifest, SourceBuildOptions{}); err != nil {
+		return nil, nil, err
 	}
-	if err := EnsureSourceStaticCatalog(manifestPath, manifest); err != nil {
+	catalogOptions := sourceCatalogOptions{SkipExplicitRun: packaging}
+	if packaging {
+		catalogOptions.RefreshExisting = explicitRunStaleCatalog(manifest)
+	}
+	if err := ensureSourceStaticCatalog(manifestPath, manifest, catalogOptions); err != nil {
 		return nil, nil, err
 	}
 	updatedEncoded, err := EncodeSourceManifestFormat(manifest, format)
@@ -53,6 +74,10 @@ func PrepareSourceManifest(manifestPath string) ([]byte, *providermanifestv1.Man
 }
 
 func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1.Manifest) error {
+	return ensureSourceStaticCatalog(manifestPath, manifest, sourceCatalogOptions{})
+}
+
+func ensureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1.Manifest, opts sourceCatalogOptions) error {
 	if manifest == nil || manifest.Kind != providermanifestv1.KindPlugin {
 		return nil
 	}
@@ -62,12 +87,17 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 	if err != nil {
 		return fmt.Errorf("resolve static catalog path %q: %w", catalogPath, err)
 	}
-	if _, err := os.Stat(absoluteCatalogPath); err == nil {
+	if _, err := os.Stat(absoluteCatalogPath); err == nil && !opts.RefreshExisting {
 		return nil
 	} else if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("stat static catalog %q: %w", StaticCatalogFile, err)
 	}
-	if err := generateSourceStaticCatalog(manifestPath, rootDir, manifest, absoluteCatalogPath); err != nil {
+	if opts.RefreshExisting {
+		if err := os.Remove(absoluteCatalogPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove static catalog %q: %w", StaticCatalogFile, err)
+		}
+	}
+	if err := generateSourceStaticCatalog(manifestPath, rootDir, manifest, absoluteCatalogPath, opts); err != nil {
 		return err
 	}
 	if _, err := os.Stat(absoluteCatalogPath); err != nil {
@@ -79,21 +109,22 @@ func EnsureSourceStaticCatalog(manifestPath string, manifest *providermanifestv1
 	return nil
 }
 
-func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *providermanifestv1.Manifest, catalogPath string) error {
+func generateSourceStaticCatalog(manifestPath, rootDir string, manifest *providermanifestv1.Manifest, catalogPath string, opts sourceCatalogOptions) error {
 	var execEnv map[string]string
-	execution, err := sourceManifestExecution(manifestPath, manifest, providermanifestv1.KindPlugin, SourceBuildOptions{})
+	resolved, err := resolveSourceExecution(manifestPath, manifest, providermanifestv1.KindPlugin, SourceBuildOptions{}, opts.SkipExplicitRun)
 	if err != nil {
 		if errors.Is(err, ErrNoSourceProviderPackage) {
 			return nil
 		}
 		return fmt.Errorf("prepare synthesized source provider for static catalog: %w", err)
 	}
-	if EntrypointForKind(manifest, providermanifestv1.KindPlugin) == nil {
+	if resolved.Intent == SourceExecutionIntentSynthesizedSDK {
 		execEnv, err = SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			return fmt.Errorf("prepare synthesized source provider environment for static catalog: %w", err)
 		}
 	}
+	execution := resolved.SourceExecution
 	if execution.Cleanup != nil {
 		defer execution.Cleanup()
 	}
