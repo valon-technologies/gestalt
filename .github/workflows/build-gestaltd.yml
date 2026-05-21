@@ -169,11 +169,27 @@ jobs:
           fail_ci_if_error: false
 
   race:
-    name: Go Race Tests
+    name: Go Race Tests (${{ matrix.name }})
     needs: resolve-ref
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: bootstrap
+            packages: ./internal/bootstrap
+            parallel: default
+          - name: operator
+            packages: ./internal/operator
+            parallel: 16
+          - name: daemon
+            packages: ./internal/daemon
+            parallel: 16
+          - name: rest
+            packages: rest
+            parallel: 16
     defaults:
       run:
         working-directory: gestaltd
@@ -190,7 +206,23 @@ jobs:
           cache-dependency-path: gestaltd/go.sum
 
       - name: Run race tests
-        run: go test -race -timeout=15m ./...
+        env:
+          RACE_PACKAGES: ${{ matrix.packages }}
+          RACE_PARALLEL: ${{ matrix.parallel }}
+        run: |
+          set -euo pipefail
+
+          parallel_flag=()
+          if [[ "${RACE_PARALLEL}" != "default" ]]; then
+            parallel_flag=(-parallel="${RACE_PARALLEL}")
+          fi
+
+          if [[ "${RACE_PACKAGES}" == "rest" ]]; then
+            packages="$(go list ./... | grep -Ev '/internal/(bootstrap|daemon|operator)$')"
+            go test -race "${parallel_flag[@]}" -timeout=15m ${packages}
+          else
+            go test -race "${parallel_flag[@]}" -timeout=15m "${RACE_PACKAGES}"
+          fi
 
   docs-build:
     name: Docs Build
