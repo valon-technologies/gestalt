@@ -90,8 +90,9 @@ providers:
 
 Local sources point at a provider manifest near the config, such as
 `./plugins/my-plugin/manifest.yaml`. Use them for development and testing before
-packaging. Executable source manifests declare `build.command` and
-`entrypoint.artifactPath`; UI source manifests declare `build.command` and
+packaging. Executable source manifests can declare `run` for local source
+execution and `build.command` plus `entrypoint.artifactPath` for compiled
+release artifacts. UI source manifests declare `build.command` and
 `spec.assetRoot`.
 
 ```yaml
@@ -423,16 +424,13 @@ spec:
         type: none
 ```
 
-Executable source packages declare exactly how to build the runnable artifact
-and where that artifact will appear. Gestalt runs `build.command` before source
-manifest preparation during lock, sync, `serve --path`, and release packaging.
-For executable providers, the command must produce `entrypoint.artifactPath`.
-
-The command can call any toolchain available in the preparation environment:
-Go, Cargo, npm, Python, or an internal wrapper script all use the same manifest
-shape. Gestalt does not infer a provider language, read runtime-specific target
-metadata, or synthesize an executable wrapper. Declarative plugin manifests that
-only describe hosted/spec-loaded surfaces may omit `build` and `entrypoint`.
+Executable source packages can declare a local `run` command and a separate
+compiled package artifact. Gestalt uses `run` for local source execution and
+uses object-form `build.command` plus `entrypoint.artifactPath` for release
+packaging. The build command can call any toolchain available in the preparation
+environment: Go, Cargo, npm, Python, or an internal wrapper script all use the
+same manifest shape. Declarative plugin manifests that only describe
+hosted/spec-loaded surfaces may omit `build`, `run`, and `entrypoint`.
 
 #### Source UI builds
 
@@ -515,12 +513,12 @@ gestaltd provider release --version 0.0.1-alpha.1
 Run it from the provider source directory. It writes release archives and
 checksums.
 
-For source manifests that declare `build.command`, release runs that command,
-verifies that the declared output exists, strips `build` metadata from the
-packaged manifest, and records released artifacts. The build environment must
-provide whatever runtime or compiler the command invokes. When you pass
-`--platform`, Gestalt sets target environment variables such as `GOOS`,
-`GOARCH`, `GESTALT_TARGET_OS`, `GESTALT_TARGET_ARCH`, and
+For source manifests that declare object-form `build.command`, release runs
+that command, verifies that the declared output exists, strips `build` and
+`run` metadata from the packaged manifest, and records released artifacts. The
+build environment must provide whatever runtime or compiler the command invokes.
+When you pass `--platform`, Gestalt sets target environment variables such as
+`GOOS`, `GOARCH`, `GESTALT_TARGET_OS`, `GESTALT_TARGET_ARCH`, and
 `GESTALT_TARGET_LIBC` for build scripts that need them.
 
 ### Release archive layout
