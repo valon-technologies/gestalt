@@ -774,10 +774,13 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "operation access denied")
 		return
 	}
-	operationConnection, err := invocation.ResolveOperationConnection(surfaceProv, opMeta.ID, params)
-	if err != nil {
-		s.writeInvocationError(w, r, providerName, operationName, err)
-		return
+	operationConnection := resolvedConnection
+	if operationConnection == "" {
+		operationConnection, err = invocation.ResolveOperationConnection(surfaceProv, opMeta.ID, params)
+		if err != nil {
+			s.writeInvocationError(w, r, providerName, operationName, err)
+			return
+		}
 	}
 	explicitConnection := connectionInput
 	if explicitConnection != "" {
@@ -803,9 +806,6 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	ctx = invocation.WithCatalogOperation(ctx, providerName, opMeta)
 	if connection == "" {
 		connection = operationConnection
-		if connection == "" {
-			connection = resolvedConnection
-		}
 	}
 	if connection != "" {
 		if !safeParamValue.MatchString(connection) {
