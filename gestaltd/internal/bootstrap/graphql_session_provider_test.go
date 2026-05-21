@@ -168,6 +168,8 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 			data = map[string]any{"record": map[string]any{"id": payload.Variables["id"]}}
 		} else if strings.Contains(payload.Query, "status") {
 			data = map[string]any{"status": "ok"}
+		} else if strings.Contains(payload.Query, "viewer") {
+			data = map[string]any{"viewer": map[string]any{"id": "user_123"}}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
 	}))
@@ -189,7 +191,6 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 				"status": {
 					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
 						OperationType: "query",
-						Arguments:     graphQLTestArgs(),
 					},
 				},
 				"record": {
@@ -223,6 +224,9 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("buildConfiguredSpecProvider: %v", err)
+	}
+	if core.SupportsSessionCatalog(prov) {
+		t.Fatal("static GraphQL provider reports session catalog support; want static catalog only")
 	}
 	if _, ok := prov.(core.SessionCatalogProvider); ok {
 		t.Fatal("static GraphQL provider implements SessionCatalogProvider; want static catalog only")
@@ -269,6 +273,55 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
 	}
+
+	noArgProv, _, err := buildConfiguredSpecProvider(
+		context.Background(),
+		"exampleGraphQL",
+		config.ResolvedSpecSurface{
+			Surface: config.SpecSurfaceGraphQL,
+			URL:     srv.URL,
+			Connection: config.ConnectionDef{
+				Auth: config.ConnectionAuthDef{Type: providermanifestv1.AuthTypeNone},
+			},
+		},
+		providerMetadata{},
+		specProviderConfig{
+			allowedOperations: map[string]*config.OperationOverride{
+				"status": {
+					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+						OperationType: "query",
+					},
+				},
+				"viewer": {
+					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
+						OperationType: "query",
+						SelectionSet:  "id",
+					},
+				},
+			},
+		},
+		Deps{},
+	)
+	if err != nil {
+		t.Fatalf("build no-arg provider: %v", err)
+	}
+	if core.SupportsSessionCatalog(noArgProv) {
+		t.Fatal("no-arg static GraphQL provider reports session catalog support; want static catalog only")
+	}
+	result, err = noArgProv.Execute(context.Background(), "status", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(no-arg status): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+	result, err = noArgProv.Execute(context.Background(), "viewer", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(no-arg viewer): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
 	if got := introspectionCalls.Load(); got != 0 {
 		t.Fatalf("introspection calls = %d, want 0", got)
 	}
@@ -288,6 +341,10 @@ func TestConfiguredStaticGraphQLProviderSkipsSessionCatalog(t *testing.T) {
 		{
 			Query: "query { status }",
 		},
+		{
+			Query: "query { status }",
+		},
+		{Query: "query { viewer { id } }"},
 	}
 	if !reflect.DeepEqual(gotRequests, wantRequests) {
 		t.Fatalf("requests = %#v, want %#v", gotRequests, wantRequests)
@@ -302,22 +359,6 @@ func TestConfiguredStaticGraphQLProviderRejectsInvalidStaticConfig(t *testing.T)
 		operations map[string]*config.OperationOverride
 		wantErr    string
 	}{
-		{
-			name: "all graphql operations must opt in with arguments",
-			operations: map[string]*config.OperationOverride{
-				"status": {
-					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						Arguments: graphQLTestArgs(),
-					},
-				},
-				"viewer": {
-					GraphQL: &providermanifestv1.ManifestGraphQLOperation{
-						SelectionSet: "id",
-					},
-				},
-			},
-			wantErr: `allowed operation "viewer" must set graphql.arguments`,
-		},
 		{
 			name: "invalid argument type",
 			operations: map[string]*config.OperationOverride{

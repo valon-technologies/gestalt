@@ -14,17 +14,13 @@ import (
 
 func StaticAllowedOperationsDefinition(name, endpoint string, allowedOps map[string]*operationexposure.OperationOverride, selectionOverrides map[string]string) (*declarative.Definition, error) {
 	graphQLNames := make([]string, 0)
-	hasStaticArgs := false
 	for opName, override := range allowedOps {
 		if override == nil || override.GraphQL == nil {
 			continue
 		}
 		graphQLNames = append(graphQLNames, opName)
-		if override.GraphQL.Arguments != nil {
-			hasStaticArgs = true
-		}
 	}
-	if !hasStaticArgs {
+	if len(graphQLNames) == 0 {
 		return nil, nil
 	}
 	if len(selectionOverrides) > 0 {
@@ -32,12 +28,6 @@ func StaticAllowedOperationsDefinition(name, endpoint string, allowedOps map[str
 	}
 
 	sort.Strings(graphQLNames)
-	for _, opName := range graphQLNames {
-		if allowedOps[opName].GraphQL.Arguments == nil {
-			return nil, fmt.Errorf("graphql %s: allowed operation %q must set graphql.arguments to use static GraphQL catalogs", name, opName)
-		}
-	}
-
 	def := StaticDefinition(name, endpoint)
 	for _, opName := range graphQLNames {
 		override := allowedOps[opName]
@@ -86,7 +76,11 @@ func staticOperationDefinition(name string, override *operationexposure.Operatio
 }
 
 func staticOperationQuery(operationType, fieldName string, graphQLOp *providermanifestv1.ManifestGraphQLOperation) (string, []declarative.ParameterDef, error) {
-	args, typeOverrides, err := staticInputValues(*graphQLOp.Arguments)
+	var rawArgs []providermanifestv1.ManifestGraphQLArgument
+	if graphQLOp.Arguments != nil {
+		rawArgs = *graphQLOp.Arguments
+	}
+	args, typeOverrides, err := staticInputValues(rawArgs)
 	if err != nil {
 		return "", nil, err
 	}
