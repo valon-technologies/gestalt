@@ -81,65 +81,68 @@ type BuiltinAdminUIOptions struct {
 }
 
 type Server struct {
-	router                 chi.Router
-	handler                http.Handler
-	auth                   core.AuthenticationProvider
-	authProviders          map[string]core.AuthenticationProvider
-	serverAuthProvider     string
-	auditSink              core.AuditSink
-	users                  *coredata.UserService
-	externalCredentials    core.ExternalCredentialProvider
-	apiTokens              *coredata.APITokenService
-	managedSubjects        *coredata.ManagedSubjectService
-	agent                  bootstrap.AgentControl
-	workflowSchedules      *workflowmanager.Manager
-	agentRuns              agentmanager.Service
-	authorizationProvider  core.AuthorizationProvider
-	providers              *registry.ProviderMap[core.Provider]
-	workflow               bootstrap.WorkflowControl
-	pluginRuntimes         bootstrap.RuntimeInspector
-	resolver               *principal.Resolver
-	authResolvers          map[string]*principal.Resolver
-	invoker                invocation.Invoker
-	pluginInvoker          invocation.Invoker
-	apiRouteTimeout        time.Duration
-	agentStreamHeartbeat   time.Duration
-	defaultConnection      map[string]string
-	catalogConnection      map[string]string
-	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
-	manualConnectionAuth   func() map[string]map[string]bootstrap.ManualTokenExchanger
-	pluginDefs             map[string]*config.ProviderEntry
-	agentDefs              map[string]*config.ProviderEntry
-	authorizer             authorization.RuntimeAuthorizer
-	noAuth                 bool
-	anonymousPrincipal     *principal.Principal
-	publicBaseURL          string
-	managementBaseURL      string
-	secureCookies          bool
-	encryptor              *cryptoutil.AESGCMEncryptor
-	sessionIssuer          []byte
-	stateCodec             *integrationOAuthStateCodec
-	apiTokenTTL            time.Duration
-	now                    func() time.Time
-	readiness              ReadinessChecker
-	meterProvider          metric.MeterProvider
-	prometheusMetrics      http.Handler
-	mcpHandler             http.Handler
-	hostServiceRelayTokens *runtimehost.HostServiceRelayTokenManager
-	hostServiceMu          sync.Mutex
-	hostServiceHandlers    map[uint64]http.Handler
-	publicHostServices     *runtimehost.PublicHostServiceRegistry
-	s3                     map[string]s3store.Client
-	s3ObjectAccessURLs     *s3.ObjectAccessURLManager
-	egressProxyTokens      *egressproxy.TokenManager
-	providerDevSessions    *providerdev.Manager
-	providerDevAttach      bool
-	mountedHTTPBindings    []MountedHTTPBinding
-	mountedUIs             []MountedUI
-	adminRoute             AdminRouteConfig
-	adminUI                http.Handler
-	routeProfile           RouteProfile
-	httpBindingReplayStore httpBindingReplayStore
+	router                  chi.Router
+	handler                 http.Handler
+	auth                    core.AuthenticationProvider
+	authProviders           map[string]core.AuthenticationProvider
+	serverAuthProvider      string
+	auditSink               core.AuditSink
+	users                   *coredata.UserService
+	externalCredentials     core.ExternalCredentialProvider
+	apiTokens               *coredata.APITokenService
+	managedSubjects         *coredata.ManagedSubjectService
+	authzFragments          *coredata.AuthorizationDynamicFragmentService
+	agent                   bootstrap.AgentControl
+	workflowSchedules       *workflowmanager.Manager
+	agentRuns               agentmanager.Service
+	authorizationProvider   core.AuthorizationProvider
+	providers               *registry.ProviderMap[core.Provider]
+	workflow                bootstrap.WorkflowControl
+	pluginRuntimes          bootstrap.RuntimeInspector
+	resolver                *principal.Resolver
+	authResolvers           map[string]*principal.Resolver
+	invoker                 invocation.Invoker
+	pluginInvoker           invocation.Invoker
+	apiRouteTimeout         time.Duration
+	agentStreamHeartbeat    time.Duration
+	defaultConnection       map[string]string
+	catalogConnection       map[string]string
+	connectionAuth          func() map[string]map[string]bootstrap.OAuthHandler
+	manualConnectionAuth    func() map[string]map[string]bootstrap.ManualTokenExchanger
+	pluginDefs              map[string]*config.ProviderEntry
+	agentDefs               map[string]*config.ProviderEntry
+	authorizer              authorization.RuntimeAuthorizer
+	noAuth                  bool
+	anonymousPrincipal      *principal.Principal
+	publicBaseURL           string
+	managementBaseURL       string
+	secureCookies           bool
+	encryptor               *cryptoutil.AESGCMEncryptor
+	sessionIssuer           []byte
+	stateCodec              *integrationOAuthStateCodec
+	apiTokenTTL             time.Duration
+	now                     func() time.Time
+	readiness               ReadinessChecker
+	meterProvider           metric.MeterProvider
+	prometheusMetrics       http.Handler
+	mcpHandler              http.Handler
+	hostServiceRelayTokens  *runtimehost.HostServiceRelayTokenManager
+	hostServiceMu           sync.Mutex
+	hostServiceHandlers     map[uint64]http.Handler
+	publicHostServices      *runtimehost.PublicHostServiceRegistry
+	s3                      map[string]s3store.Client
+	s3ObjectAccessURLs      *s3.ObjectAccessURLManager
+	egressProxyTokens       *egressproxy.TokenManager
+	providerDevSessions     *providerdev.Manager
+	providerDevAttach       bool
+	mountedHTTPBindings     []MountedHTTPBinding
+	mountedUIs              []MountedUI
+	adminRoute              AdminRouteConfig
+	adminUI                 http.Handler
+	routeProfile            RouteProfile
+	httpBindingReplayStore  httpBindingReplayStore
+	authzFragmentBackfillMu sync.Mutex
+	authzFragmentBackfilled bool
 }
 
 func (s *Server) catalogSelectorConfig() invocation.CatalogSelectorConfig {
@@ -291,6 +294,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	apiTokens := cfg.Services.APITokens
 	managedSubjects := cfg.Services.ManagedSubjects
+	authzFragments := cfg.Services.AuthzFragments
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens)
 	authProviders := make(map[string]core.AuthenticationProvider, len(cfg.AuthProviders)+1)
 	for name, provider := range cfg.AuthProviders {
@@ -345,6 +349,7 @@ func New(cfg Config) (*Server, error) {
 		externalCredentials:    externalCredentials,
 		apiTokens:              apiTokens,
 		managedSubjects:        managedSubjects,
+		authzFragments:         authzFragments,
 		agent:                  cfg.Agent,
 		agentRuns:              cfg.AgentManager,
 		authorizationProvider:  cfg.AuthorizationProvider,
