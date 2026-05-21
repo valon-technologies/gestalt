@@ -247,6 +247,12 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
     entrypoint:
       artifactPath: .gestalt/build/slack
     ```
+
+    For repeated Python source builds, set `GESTALT_BUILD_CACHE_DIR` to a
+    writable directory before running `gestaltd sync`, `gestaltd serve`, or
+    `gestaltd provider release`. The cache stores SDK-internal packaging
+    accelerators only; deleting it or unsetting the variable restores clean
+    temporary builds.
   </Tabs.Tab>
   <Tabs.Tab>
     You need the current stable Rust toolchain, Cargo, and a running `gestaltd` instance for testing.
@@ -334,6 +340,26 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
 ### Defining operations
 
 Operations are the callable units of a plugin. Each operation has an ID, an HTTP method, input and output types, and a handler function. Executable source plugins can use SDK-native source package metadata, or declare `build.command` and `entrypoint.artifactPath` when they need a custom build.
+
+Executable source providers can also declare a prepare-only build when a local
+dependency step must run before SDK-native source execution, but that step does
+not produce a release artifact. Use array-form `build` for that case, and use
+`run.commandPrefix` when the generated provider command should be launched
+through another runtime command:
+
+```yaml
+build:
+  - uv
+  - sync
+run:
+  commandPrefix:
+    - uv
+    - run
+```
+
+Prepare-only builds are for executable source providers. Source UI manifests
+must use object-form `build` plus `spec.assetRoot` so Gestalt can verify and
+serve the generated static asset directory.
 
 The following example defines a `conversations.getMessage` operation that fetches a single Slack message by channel and timestamp. The handler uses the resolved runtime token from the request context to call the Slack API.
 
@@ -1123,8 +1149,18 @@ entries. That makes it possible to boot some supporting providers while
 suppressing others for a local session.
 
 When your config already points at local provider source paths, use config-based
-serve with `--watch` to restart after local config, source provider, or local
-release metadata changes:
+serve with `--plugin NAME` to prepare and run only that configured plugin and
+the supporting providers it needs:
+
+```sh
+gestaltd serve \
+  --plugin slack \
+  --config ./base.yaml \
+  --config ./dev/local.yaml
+```
+
+Add `--watch` to restart after local config, source provider, or local release
+metadata changes:
 
 ```sh
 gestaltd serve \

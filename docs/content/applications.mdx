@@ -62,17 +62,18 @@ spec:
 ```
 
 The UI bundle should be authored from source. Check in the UI source and
-dependency lockfile, declare a `build` command and `output` directory, and leave
-the generated `out/` or `dist/` directory out of source control. Gestalt builds
-the static assets during preparation and serves the prepared output at runtime.
+dependency lockfile, declare a `build` command and `spec.assetRoot` output
+directory, and leave the generated `out/` or `dist/` directory out of source
+control. Gestalt builds the static assets during preparation and serves the
+prepared output at runtime.
 Route rules are required when the mounted plugin binds an `authorizationPolicy`.
 For UI package details, see [Providers > UI](/providers/ui).
 
 <Callout type="info">
   Source-built UI packages are the recommended shape for new applications, but
   the workflow is still alpha. Current manifests need explicit build commands,
-  output paths, and build tools in the preparation environment; improving those
-  ergonomics is on the radar.
+  `spec.assetRoot` paths, and build tools in the preparation environment;
+  improving those ergonomics is on the radar.
 </Callout>
 
 ```yaml
@@ -875,6 +876,13 @@ bindings in a development config file:
 ```sh
 gestaltd provider validate --path ./workspace-review/plugin --config ./dev.yaml
 gestaltd serve --path ./workspace-review/plugin --config ./dev.yaml
+```
+
+When `dev.yaml` already points at the local application plugin source, use a
+config-scoped serve to skip unrelated configured providers during iteration:
+
+```sh
+gestaltd serve --plugin workspace_review --config ./dev.yaml --watch
 ```
 
 For local UI detection, config overlays, and remote attach workflows, see

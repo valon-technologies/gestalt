@@ -175,6 +175,11 @@ For deterministic production deployments:
    artifacts.
 3. Run `gestaltd serve --locked --config ./config.yaml` at runtime.
 
+Configured local source providers are intentionally omitted from canonical lock
+metadata. Keep them in local overlays for development, then let
+`gestaltd sync --locked` or unlocked/scoped local serve prepare them from source
+when those overlays are active.
+
 See [Deploy](/deploy), [Docker](/deploy/docker), [Helm](/deploy/helm), and the
 [Server CLI](/reference/cli) for deployment-specific workflows.
 

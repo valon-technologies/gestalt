@@ -1381,6 +1381,14 @@ For local development with a source provider package:
 source: ./manifest.yaml
 ```
 
+Configured local source providers are omitted from canonical `gestalt.lock.json`
+metadata during `gestaltd lock` and `gestaltd lock --check`. They are prepared
+from source during `gestaltd sync --locked`, unlocked `gestaltd serve`, scoped
+`gestaltd serve --plugin`, `gestaltd serve --path`, and
+`gestaltd provider validate --path`.
+
+### Provider development
+
 When a remote `gestaltd` instance is running the provider-dev endpoints,
 authenticated developers can attach a local implementation for configured
 plugins that are registered on the remote server and that they are authorized to
@@ -1440,12 +1448,11 @@ same action. API tokens must carry `permissions[].actions:
 operation permissions do not grant attach, and the attach action does not grant
 operation invocation.
 
-Source-backed executable plugins must declare how to build the runnable
-artifact and where that artifact will appear. Gestalt runs `build.command`
-before local execution or release packaging, then starts
-`entrypoint.artifactPath`. The command can call any runtime or compiler
-available in the preparation environment; Gestalt does not infer the provider
-language or synthesize executable wrappers.
+When source-backed executable plugins declare object-form `build`, they must
+declare how to build the runnable artifact and where that artifact will appear.
+Gestalt runs `build.command` before local execution or release packaging, then
+starts `entrypoint.artifactPath`. The command can call any runtime or compiler
+available in the preparation environment.
 
 ```yaml
 kind: plugin
@@ -1460,6 +1467,28 @@ build:
     - package.json
 entrypoint:
   artifactPath: .gestalt/build/provider
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+```
+
+Executable source providers that use SDK-native source-package metadata can use
+array-form `build` for prepare-only dependency setup, and `run.commandPrefix`
+to launch the resolved provider command through another local runtime command:
+
+```yaml
+kind: plugin
+source: github.com/acme/plugins/my-python-plugin
+version: 1.0.0
+build:
+  - uv
+  - sync
+run:
+  commandPrefix:
+    - uv
+    - run
 spec:
   connections:
     default:
