@@ -597,20 +597,37 @@ fn test_cli_plugins_list_table_output() {
     );
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
 		.with_body(
-			r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","status":"ready","connections":[{"name":"workspace","status":"ready"}]}]"#,
+			r#"[
+                {"name":"acme_crm","description":"Acme CRM plugin with a longer description","status":"ready","connections":[{"name":"workspace","status":"ready"}]},
+                {"name":"legacy_svc","description":"Legacy service","status":"ready","connections":[{"name":"legacy","status":"ready","instances":[{"displayName":"Legacy"}]}]},
+                {"name":"multi_svc","description":"Multi-instance service","status":"needs_instance_selection","connections":[{"name":"workspace","status":"needs_instance_selection","credentialState":"connected","instances":[{"name":"team-a"},{"name":"team-b"}]}]}
+            ]"#,
 		)
         .create();
 
     let mut cmd = cli_command(home.path());
     cmd.args(["plugin", "list"]);
-    cmd.assert()
-        .success()
-        .stdout(predicate::str::contains("ACME_CRM").or(predicate::str::contains("acme_crm")))
-        .stdout(predicate::str::contains("Acme CRM plugin"))
-        .stdout(predicate::str::contains("Status"))
-        .stdout(predicate::str::contains("Connections"))
-        .stdout(predicate::str::contains("ready"))
-        .stdout(predicate::str::contains("workspace: ready"));
+    let output = cmd.output().unwrap();
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("acme_crm"), "stdout: {stdout}");
+    assert!(stdout.contains("Acme CRM plugin"), "stdout: {stdout}");
+    assert!(stdout.contains("Status"), "stdout: {stdout}");
+    assert!(stdout.contains("Connection"), "stdout: {stdout}");
+    assert!(stdout.contains("Instance"), "stdout: {stdout}");
+    assert!(!stdout.contains("Connections"), "stdout: {stdout}");
+    assert!(stdout.contains("ready"), "stdout: {stdout}");
+    assert!(stdout.contains("workspace"), "stdout: {stdout}");
+    assert!(stdout.contains("legacy_svc"), "stdout: {stdout}");
+    assert!(stdout.contains("legacy"), "stdout: {stdout}");
+    assert!(stdout.contains("team-a"), "stdout: {stdout}");
+    assert!(stdout.contains("team-b"), "stdout: {stdout}");
+    assert!(stdout.contains("connected"), "stdout: {stdout}");
+    assert_eq!(stdout.matches("Multi-instance service").count(), 1);
 
     mock.assert();
 

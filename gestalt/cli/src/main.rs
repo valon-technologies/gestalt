@@ -362,9 +362,19 @@ fn dispatch_plugin_command(
             },
             format,
         ),
-        PluginCommands::Describe(DescribeArgs { plugin, operation }) => {
-            commands::describe::describe(&client, &plugin, &operation, format)
-        }
+        PluginCommands::Describe(DescribeArgs {
+            plugin,
+            operation,
+            connection,
+            instance,
+        }) => commands::describe::describe(
+            &client,
+            &plugin,
+            &operation,
+            connection.as_deref(),
+            instance.as_deref(),
+            format,
+        ),
     }
 }
 

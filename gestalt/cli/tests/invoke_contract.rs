@@ -109,17 +109,243 @@ fn test_invoke_instance_selection_error_suggests_instance_flag() {
         "/api/v1/slack/channels",
         StatusCode::CONFLICT
     )
-    .with_body(r#"{"error":"ambiguous instance: integration \"slack\" has 2 connections ([team-a team-b]); specify which instance to use with the \"_instance\" parameter","code":"instance_selection_required","integration":"slack"}"#)
+    .with_body(r#"{"error":"ambiguous instance: integration \"slack\" has 2 connections ([team-a team-b]); specify which instance to use with the \"_instance\" parameter","integration":"slack"}"#)
     .create();
+
+    let _integrations_mock =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
+            "name":"slack",
+            "connections":[
+                {"name":"workspace","credentialState":"connected","instances":[{"name":"default"}]},
+                {"name":"--sandbox","credentialState":"connected","instances":[{"name":"-team"}]}
+            ]
+        }]"#,
+            )
+            .create();
 
     cli_command_for_server(home.path(), &server)
         .args(["plugin", "invoke", "slack", "channels"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "plugin \"slack\" has multiple connected instances. Pass --instance to choose one",
+            "plugin \"slack\" has multiple connected instances.",
         ))
+        .stderr(predicate::str::contains(
+            "Choose a connection and instance.",
+        ))
+        .stderr(predicate::str::contains("Connection"))
+        .stderr(predicate::str::contains("Instance"))
+        .stderr(predicate::str::contains("Example"))
+        .stderr(predicate::str::contains("workspace"))
+        .stderr(predicate::str::contains("default"))
+        .stderr(predicate::str::contains("--sandbox"))
+        .stderr(predicate::str::contains("-team"))
+        .stderr(predicate::str::contains(
+            "gestalt plugin invoke slack channels",
+        ))
+        .stderr(predicate::str::contains("'--sandbox'"))
+        .stderr(predicate::str::contains("'-team'"))
         .stderr(predicate::str::contains("gestalt plugin connect").not());
+}
+
+#[test]
+fn test_invoke_requires_selector_before_catalog_resolution_when_multiple_connections_exist() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let integrations_mock =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
+            "name":"multi_svc",
+            "connections":[
+                {"name":"dev","credentialState":"connected","instances":[{"name":"default"}]},
+                {"name":"stage","credentialState":"connected","instances":[{"name":"default"}]}
+            ]
+        }]"#,
+            )
+            .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args(["plugin", "invoke", "multi_svc", "healthcheck"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Choose a connection and instance.",
+        ))
+        .stderr(predicate::str::contains("Connection"))
+        .stderr(predicate::str::contains("Instance"))
+        .stderr(predicate::str::contains("Example"))
+        .stderr(predicate::str::contains("dev"))
+        .stderr(predicate::str::contains("stage"))
+        .stderr(predicate::str::contains("default"))
+        .stderr(predicate::str::contains(
+            "gestalt plugin invoke multi_svc healthcheck",
+        ))
+        .stderr(predicate::str::contains("--connection dev"))
+        .stderr(predicate::str::contains("--instance default"))
+        .stderr(predicate::str::contains("no operation matching").not());
+
+    integrations_mock.assert();
+}
+
+#[test]
+fn test_list_operations_infers_only_connected_instance_before_catalog_resolution() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let integrations_mock =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
+            "name":"frontPorch",
+            "connections":[
+                {"name":"dev","credentialState":"missing","instances":[]},
+                {"name":"prod","credentialState":"connected","status":"ready","instances":[{"connection":"prod","name":"default"}]},
+                {"name":"stage","credentialState":"disconnected","instances":[{"connection":"stage","name":"default"}]}
+            ]
+        }]"#,
+            )
+            .create();
+
+    let catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/frontPorch/operations?_connection=prod&_instance=default",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("healthcheck"))
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args(["plugin", "invoke", "frontPorch"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Connection: prod"))
+        .stdout(predicate::str::contains("Instance:   default"))
+        .stdout(predicate::str::contains("healthcheck"))
+        .stderr(predicate::str::contains("plugin \"frontPorch\" is not connected").not());
+
+    integrations_mock.assert();
+    catalog_mock.assert();
+}
+
+#[test]
+fn test_invoke_with_connection_infers_only_matching_instance() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let integrations_mock =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
+            "name":"multi_svc",
+            "connections":[
+                {"name":"dev","credentialState":"connected","instances":[{"name":"default"}]},
+                {"name":"stage","credentialState":"connected","instances":[{"name":"default"}]}
+            ]
+        }]"#,
+            )
+            .create();
+
+    let catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/multi_svc/operations?_connection=dev&_instance=default",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("healthcheck"))
+    .create();
+
+    let invoke_mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/multi_svc/healthcheck",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"_connection":"dev","_instance":"default"}"#.to_string(),
+    ))
+    .with_body(r#"{"healthcheck":"OK"}"#)
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "plugin",
+            "invoke",
+            "multi_svc",
+            "healthcheck",
+            "--connection",
+            "dev",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("healthcheck"))
+        .stdout(predicate::str::contains("OK"));
+
+    integrations_mock.assert();
+    catalog_mock.assert();
+    invoke_mock.assert();
+}
+
+#[test]
+fn test_invoke_with_unknown_connection_does_not_infer_unrelated_instance() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let integrations_mock =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
+            "name":"multi_svc",
+            "connections":[
+                {"name":"dev","credentialState":"connected","instances":[{"name":"default"}]}
+            ]
+        }]"#,
+            )
+            .create();
+
+    let catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/multi_svc/operations?_connection=stage",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("healthcheck"))
+    .create();
+
+    let invoke_mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/multi_svc/healthcheck",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"_connection":"stage"}"#.to_string(),
+    ))
+    .with_body(r#"{"healthcheck":"OK"}"#)
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "plugin",
+            "invoke",
+            "multi_svc",
+            "healthcheck",
+            "--connection",
+            "stage",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("OK"));
+
+    integrations_mock.assert();
+    catalog_mock.assert();
+    invoke_mock.assert();
 }
 
 #[test]
@@ -380,6 +606,40 @@ fn test_invoke_with_connection_and_instance() {
 }
 
 #[test]
+fn test_list_operations_uses_unselected_catalog_when_selected_catalog_is_empty() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let selected_catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/sample_svc/operations?_connection=dev",
+        StatusCode::OK
+    )
+    .with_body(r#"[]"#)
+    .create();
+    let fallback_catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/sample_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("healthcheck"))
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args(["plugin", "invoke", "sample_svc", "--connection", "dev"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Connection: dev"))
+        .stdout(predicate::str::contains("healthcheck"))
+        .stdout(predicate::str::contains("No results.").not());
+
+    selected_catalog_mock.assert();
+    fallback_catalog_mock.assert();
+}
+
+#[test]
 fn test_invoke_retries_without_catalog_when_preflight_masks_surface_error() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
@@ -455,6 +715,9 @@ fn test_cli_lists_operations_with_connection_and_instance() {
     ]);
     cmd.assert()
         .success()
+        .stdout(predicate::str::contains("Connection: workspace"))
+        .stdout(predicate::str::contains("Instance:   team-a"))
+        .stdout(predicate::str::contains("Selector:").not())
         .stdout(predicate::str::contains("do_thing"));
 
     catalog_mock.assert();
@@ -474,8 +737,14 @@ fn test_describe_operation() {
     .create();
 
     let client = create_client(&server);
-    let result =
-        gestalt::commands::describe::describe(&client, "test_svc", "do_thing", Format::Table);
+    let result = gestalt::commands::describe::describe(
+        &client,
+        "test_svc",
+        "do_thing",
+        None,
+        None,
+        Format::Table,
+    );
 
     mock.assert();
     assert!(result.is_ok());
@@ -513,6 +782,90 @@ fn test_describe_operation() {
         String::from_utf8_lossy(&output.stderr)
     );
     mock.assert();
+}
+
+#[test]
+fn test_cli_describe_operation_with_connection_and_instance() {
+    let mut server = Server::new();
+
+    let mock = json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
+        StatusCode::OK
+    )
+    .with_body(catalog_body())
+    .create();
+
+    let output = run_cli(
+        &server,
+        &[
+            "plugin",
+            "describe",
+            "test_svc",
+            "do_thing",
+            "--connection",
+            "workspace",
+            "--instance",
+            "team-a",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Connection:  workspace"),
+        "stdout: {stdout}"
+    );
+    assert!(stdout.contains("Instance:    team-a"), "stdout: {stdout}");
+    assert!(!stdout.contains("Selector:"), "stdout: {stdout}");
+    assert!(stdout.contains("Transport:   rest"), "stdout: {stdout}");
+    mock.assert();
+}
+
+#[test]
+fn test_cli_describe_fallback_error_lists_unselected_catalog_operations() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let selected_catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/sample_svc/operations?_connection=dev",
+        StatusCode::OK
+    )
+    .with_body(r#"[]"#)
+    .create();
+
+    let fallback_catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/sample_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(single_operation_catalog("healthcheck"))
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "plugin",
+            "describe",
+            "sample_svc",
+            "missing",
+            "--connection",
+            "dev",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "operation 'missing' not found; available operations: healthcheck",
+        ));
+
+    selected_catalog_mock.assert();
+    fallback_catalog_mock.assert();
 }
 
 #[test]

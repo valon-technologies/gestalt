@@ -5,6 +5,7 @@ pub mod config;
 pub mod describe;
 pub mod init;
 pub mod invoke;
+mod plugin_errors;
 pub mod plugins;
 pub mod tokens;
 pub mod workflows;
