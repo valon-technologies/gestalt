@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -60,21 +61,7 @@ func (s *Server) deleteProviderPluginAuthorization(ctx context.Context, plugin, 
 		Type: authorization.ProviderResourceTypePluginDynamic,
 		Id:   strings.TrimSpace(plugin),
 	}
-	existing, _, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
-	if err != nil {
-		return err
-	}
-	if len(existing) == 0 {
-		return core.ErrNotFound
-	}
-	for _, rel := range existing {
-		fragmentRel := authorizationDynamicFragmentRelationshipFromCore(rel)
-		_, _, err := s.deleteAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationPluginFragmentOwner(plugin), fragmentRel, "plugin_member_delete")
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return s.deleteProviderDynamicFragmentMembership(ctx, coredata.AuthorizationPluginFragmentOwner(plugin), resource, subjectID, "plugin_member_delete")
 }
 
 func (s *Server) upsertProviderAdminAuthorization(ctx context.Context, subject *adminAuthorizationWriteSubject, role string) (*providerAdminAuthorizationMembership, error) {
@@ -114,6 +101,10 @@ func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, subjectID
 		Type: authorization.ProviderResourceTypeAdminDynamic,
 		Id:   authorization.ProviderResourceIDAdminDynamicGlobal,
 	}
+	return s.deleteProviderDynamicFragmentMembership(ctx, coredata.AuthorizationGlobalFragmentOwner(), resource, subjectID, "admin_member_delete")
+}
+
+func (s *Server) deleteProviderDynamicFragmentMembership(ctx context.Context, owner coredata.AuthorizationFragmentOwner, resource *core.ResourceRef, subjectID, reason string) error {
 	existing, _, err := s.deleteProviderDynamicMembership(ctx, resource, subjectID)
 	if err != nil {
 		return err
@@ -121,14 +112,30 @@ func (s *Server) deleteProviderAdminAuthorization(ctx context.Context, subjectID
 	if len(existing) == 0 {
 		return core.ErrNotFound
 	}
-	for _, rel := range existing {
-		fragmentRel := authorizationDynamicFragmentRelationshipFromCore(rel)
-		_, _, err := s.deleteAuthorizationDynamicFragmentRelationship(ctx, coredata.AuthorizationGlobalFragmentOwner(), fragmentRel, "admin_member_delete")
-		if err != nil {
-			return err
-		}
+	deleted, _, err := s.deleteDynamicFragmentMembership(ctx, owner, resource, subjectID, reason)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		slog.WarnContext(ctx, "provider authorization membership deleted without matching dynamic fragment relationship",
+			"owner_kind", owner.Kind,
+			"owner_plugin", owner.Plugin,
+			"resource_type", resource.GetType(),
+			"resource_id", resource.GetId(),
+			"subject_id", strings.TrimSpace(subjectID),
+		)
 	}
 	return nil
+}
+
+func (s *Server) deleteDynamicFragmentMembership(ctx context.Context, owner coredata.AuthorizationFragmentOwner, resource *core.ResourceRef, subjectID, reason string) (bool, *coredata.AuthorizationDynamicFragment, error) {
+	return s.deleteAuthorizationDynamicFragmentSubjectResourceRelationships(ctx, owner, coredata.AuthorizationDynamicFragmentSubject{
+		Type: authorization.ProviderSubjectTypeSubject,
+		ID:   strings.TrimSpace(subjectID),
+	}, coredata.AuthorizationDynamicFragmentResource{
+		Type: resource.GetType(),
+		ID:   resource.GetId(),
+	}, reason)
 }
 
 func (s *Server) upsertManagedSubjectExternalIdentity(ctx context.Context, subjectID string, ref externalIdentityRef) error {
