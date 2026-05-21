@@ -104,20 +104,11 @@
       ]
     },
     "sourceRun": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "commandPrefix"
-      ],
-      "properties": {
-        "commandPrefix": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
-        }
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
       }
     },
     "spec": {

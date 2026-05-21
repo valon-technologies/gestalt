@@ -69,7 +69,7 @@ type Manifest struct {
 	Description string       `json:"description,omitempty" yaml:"description,omitempty"`
 	IconFile    string       `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
 	Build       *SourceBuild `json:"build,omitempty" yaml:"build,omitempty"`
-	Run         *SourceRun   `json:"run,omitempty" yaml:"run,omitempty"`
+	Run         []string     `json:"run,omitempty" yaml:"run,omitempty"`
 	Artifacts   []Artifact   `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
 	Entrypoint  *Entrypoint  `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
 	Spec        *Spec        `json:"spec,omitempty" yaml:"spec,omitempty"`
@@ -80,10 +80,6 @@ type SourceBuild struct {
 	Command     []string `json:"command" yaml:"command"`
 	Inputs      []string `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 	PrepareOnly bool     `json:"-" yaml:"-"`
-}
-
-type SourceRun struct {
-	CommandPrefix []string `json:"commandPrefix,omitempty" yaml:"commandPrefix,omitempty"`
 }
 
 type sourceBuildWire struct {

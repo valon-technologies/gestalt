@@ -12,14 +12,43 @@ func ReleaseRequiresBuild(manifest *providermanifestv1.Manifest) bool {
 	if err != nil {
 		return false
 	}
+	return releaseRequiresBuildForKind(manifest, kind)
+}
+
+func releaseRequiresBuildForKind(manifest *providermanifestv1.Manifest, kind string) bool {
 	switch kind {
 	case providermanifestv1.KindPlugin:
-		return manifest.Entrypoint == nil && (manifest.Spec == nil || !manifest.Spec.IsManifestBacked())
+		return manifest != nil && manifest.Entrypoint == nil && (manifest.Spec == nil || !manifest.Spec.IsManifestBacked())
 	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 		return EntrypointForKind(manifest, kind) == nil
 	default:
 		return false
 	}
+}
+
+func HasExplicitSourceRun(manifest *providermanifestv1.Manifest) bool {
+	return manifest != nil && len(manifest.Run) > 0
+}
+
+func ValidateExplicitRunPackaging(root string, manifest *providermanifestv1.Manifest) error {
+	if !HasExplicitSourceRun(manifest) {
+		return nil
+	}
+	kind, err := ManifestKind(manifest)
+	if err != nil {
+		return err
+	}
+	if kind == providermanifestv1.KindUI || !releaseRequiresBuildForKind(manifest, kind) {
+		return nil
+	}
+	hasSource, err := HasSourceReleaseTarget(root, kind)
+	if err != nil {
+		return fmt.Errorf("detect source %s package: %w", kind, err)
+	}
+	if hasSource {
+		return nil
+	}
+	return LocalOnlyRunReleaseError(kind)
 }
 
 func HasSourceReleaseTarget(root, kind string) (bool, error) {
@@ -84,5 +113,16 @@ func MissingSourceReleaseTargetError(kind string) error {
 		return fmt.Errorf("no Go runtime source package found")
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)
+	}
+}
+
+func LocalOnlyRunReleaseError(kind string) error {
+	switch kind {
+	case providermanifestv1.KindPlugin:
+		return fmt.Errorf("run is local-only and cannot be packaged; add SDK-native provider metadata or object-form build.command with entrypoint.artifactPath")
+	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
+		return fmt.Errorf("run is local-only and cannot be packaged; add SDK-native %s provider metadata or object-form build.command with entrypoint.artifactPath", kind)
+	default:
+		return fmt.Errorf("run is local-only and cannot be packaged for %q", kind)
 	}
 }

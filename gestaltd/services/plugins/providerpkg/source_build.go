@@ -25,11 +25,24 @@ type SourceBuildOptions struct {
 	LibC   string
 }
 
+type SourceExecutionIntent int
+
+const (
+	SourceExecutionIntentLocalRun SourceExecutionIntent = iota
+	SourceExecutionIntentPackagedEntrypoint
+	SourceExecutionIntentSynthesizedSDK
+)
+
 type SourceExecution struct {
 	Command string
 	Args    []string
 	Workdir string
 	Cleanup func()
+}
+
+type ResolvedSourceExecution struct {
+	SourceExecution
+	Intent SourceExecutionIntent
 }
 
 func EffectiveSourceBuild(manifest *providermanifestv1.Manifest) *ResolvedSourceBuild {
@@ -205,6 +218,14 @@ func EnsureSourceBuildOutput(manifestPath string, manifest *providermanifestv1.M
 	return verifySourceBuildOutput(outputPath, outputRel, outputKind, opts)
 }
 
+func ensurePrepareOnlyBuild(manifestPath string, manifest *providermanifestv1.Manifest, opts SourceBuildOptions) error {
+	build := EffectiveSourceBuild(manifest)
+	if build == nil || !build.PrepareOnly {
+		return nil
+	}
+	return RunSourceBuild(manifestPath, manifest, opts)
+}
+
 func SourceBuildInputs(manifest *providermanifestv1.Manifest) []string {
 	build := EffectiveSourceBuild(manifest)
 	if build == nil {
@@ -223,26 +244,40 @@ func SourceManifestExecution(manifestPath, kind string, opts SourceBuildOptions)
 	if err != nil {
 		return SourceExecution{}, err
 	}
+	if HasExplicitSourceRun(manifest) {
+		if err := ensurePrepareOnlyBuild(manifestPath, manifest, opts); err != nil {
+			return SourceExecution{}, err
+		}
+		return explicitRunExecution(filepath.Dir(manifestPath), manifest).SourceExecution, nil
+	}
 	if err := EnsureSourceBuildOutput(manifestPath, manifest, opts); err != nil {
 		return SourceExecution{}, err
 	}
-	return sourceManifestExecution(manifestPath, manifest, kind, opts)
+	resolved, err := resolveSourceExecution(manifestPath, manifest, kind, opts, true)
+	if err != nil {
+		return SourceExecution{}, err
+	}
+	return resolved.SourceExecution, nil
 }
 
-func sourceManifestExecution(manifestPath string, manifest *providermanifestv1.Manifest, kind string, opts SourceBuildOptions) (SourceExecution, error) {
-	if strings.TrimSpace(kind) == "" {
-		var err error
-		kind, err = ManifestKind(manifest)
-		if err != nil {
-			return SourceExecution{}, err
-		}
-	}
+func resolveSourceExecution(manifestPath string, manifest *providermanifestv1.Manifest, kind string, opts SourceBuildOptions, skipExplicitRun bool) (ResolvedSourceExecution, error) {
 	rootDir := filepath.Dir(manifestPath)
+	if !skipExplicitRun && HasExplicitSourceRun(manifest) {
+		return explicitRunExecution(rootDir, manifest), nil
+	}
+	kind, err := sourceExecutionKind(manifest, kind)
+	if err != nil {
+		return ResolvedSourceExecution{}, err
+	}
 	exec := SourceExecution{Workdir: rootDir}
 	entry := EntrypointForKind(manifest, kind)
 	if entry != nil && strings.TrimSpace(entry.ArtifactPath) != "" {
 		exec.Command = filepath.Join(rootDir, filepath.FromSlash(entry.ArtifactPath))
 		exec.Args = append([]string(nil), entry.Args...)
+		return ResolvedSourceExecution{
+			SourceExecution: exec,
+			Intent:          SourceExecutionIntentPackagedEntrypoint,
+		}, nil
 	} else {
 		goos, goarch := SourceBuildTarget(opts)
 		var err error
@@ -252,22 +287,32 @@ func sourceManifestExecution(manifestPath string, manifest *providermanifestv1.M
 		case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
 			exec.Command, exec.Args, exec.Cleanup, err = SourceComponentExecutionCommand(rootDir, kind, goos, goarch)
 		default:
-			return SourceExecution{}, fmt.Errorf("manifest does not define a %s entrypoint", kind)
+			return ResolvedSourceExecution{}, fmt.Errorf("manifest does not define a %s entrypoint", kind)
 		}
 		if err != nil {
-			return SourceExecution{}, err
+			return ResolvedSourceExecution{}, err
 		}
 	}
-	return applySourceRunCommandPrefix(exec, manifest), nil
+	return ResolvedSourceExecution{
+		SourceExecution: exec,
+		Intent:          SourceExecutionIntentSynthesizedSDK,
+	}, nil
 }
 
-func applySourceRunCommandPrefix(exec SourceExecution, manifest *providermanifestv1.Manifest) SourceExecution {
-	if manifest == nil || manifest.Run == nil || len(manifest.Run.CommandPrefix) == 0 || exec.Command == "" {
-		return exec
+func explicitRunExecution(rootDir string, manifest *providermanifestv1.Manifest) ResolvedSourceExecution {
+	return ResolvedSourceExecution{
+		SourceExecution: SourceExecution{
+			Command: manifest.Run[0],
+			Args:    append([]string(nil), manifest.Run[1:]...),
+			Workdir: rootDir,
+		},
+		Intent: SourceExecutionIntentLocalRun,
 	}
-	prefix := append([]string(nil), manifest.Run.CommandPrefix...)
-	original := append([]string{exec.Command}, exec.Args...)
-	exec.Command = prefix[0]
-	exec.Args = append(append([]string(nil), prefix[1:]...), original...)
-	return exec
+}
+
+func sourceExecutionKind(manifest *providermanifestv1.Manifest, kind string) (string, error) {
+	if strings.TrimSpace(kind) != "" {
+		return kind, nil
+	}
+	return ManifestKind(manifest)
 }

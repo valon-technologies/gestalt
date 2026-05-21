@@ -270,6 +270,9 @@ func resolveReleaseBuildTarget(root string, manifest *providermanifestv1.Manifes
 	if kind == providermanifestv1.KindUI {
 		return nil, nil
 	}
+	if err := providerpkg.ValidateExplicitRunPackaging(root, manifest); err != nil {
+		return nil, err
+	}
 	if providerpkg.EffectiveSourceBuild(manifest) != nil {
 		entry := providerpkg.EntrypointForKind(manifest, kind)
 		if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {

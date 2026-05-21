@@ -66,12 +66,15 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 			return nil, err
 		}
 	}
+	if err := ValidateExplicitRunPackaging(filepath.Dir(manifestPath), manifest); err != nil {
+		return nil, err
+	}
 	targetOpts := SourceBuildOptions{GOOS: opts.GOOS, GOARCH: opts.GOARCH}
 	hostBuiltForCatalog, err := ensureHostBuildForSourceStaticCatalog(manifestPath, manifest)
 	if err != nil {
 		return nil, err
 	}
-	_, srcManifest, err := PrepareSourceManifest(manifestPath)
+	_, srcManifest, err := prepareSourceManifestForPreparedInstall(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s: %w", manifestPath, err)
 	}
@@ -89,11 +92,11 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 }
 
 func ensureHostBuildForSourceStaticCatalog(manifestPath string, manifest *providermanifestv1.Manifest) (bool, error) {
-	mayGenerate, err := sourceStaticCatalogMayBeGenerated(manifestPath, manifest)
+	shouldPrepare, err := sourceStaticCatalogShouldBePreparedForPackaging(manifestPath, manifest)
 	if err != nil {
 		return false, err
 	}
-	if !SourceBuildProducesOutput(manifest) || !mayGenerate {
+	if !SourceBuildProducesOutput(manifest) || !shouldPrepare {
 		return false, nil
 	}
 	if err := EnsureSourceBuildOutput(manifestPath, manifest, SourceBuildOptions{}); err != nil {
@@ -102,13 +105,16 @@ func ensureHostBuildForSourceStaticCatalog(manifestPath string, manifest *provid
 	return true, nil
 }
 
-func sourceStaticCatalogMayBeGenerated(manifestPath string, manifest *providermanifestv1.Manifest) (bool, error) {
+func sourceStaticCatalogShouldBePreparedForPackaging(manifestPath string, manifest *providermanifestv1.Manifest) (bool, error) {
 	if manifest == nil || manifest.Kind != providermanifestv1.KindPlugin {
 		return false, nil
 	}
 	entry := EntrypointForKind(manifest, providermanifestv1.KindPlugin)
 	if entry == nil || strings.TrimSpace(entry.ArtifactPath) == "" {
 		return false, nil
+	}
+	if explicitRunStaleCatalog(manifest) {
+		return true, nil
 	}
 	if _, err := os.Stat(StaticCatalogPath(filepath.Dir(manifestPath))); err == nil {
 		return false, nil
@@ -139,11 +145,14 @@ func StagePreparedInstallDir(manifestPath, stagingDir string, opts StagePrepared
 	}
 	manifestPath = absoluteManifestPath
 
-	_, _, err = ReadSourceManifestFile(manifestPath)
+	_, manifest, err := ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", manifestPath, err)
 	}
-	_, srcManifest, err := PrepareSourceManifest(manifestPath)
+	if err := ValidateExplicitRunPackaging(filepath.Dir(manifestPath), manifest); err != nil {
+		return nil, err
+	}
+	_, srcManifest, err := prepareSourceManifestForPreparedInstall(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s: %w", manifestPath, err)
 	}
@@ -263,21 +272,10 @@ func resolvePreparedInstallBuildKind(root string, manifest *providermanifestv1.M
 		return "", nil
 	}
 
-	if preparedInstallRequiresBuild(manifest, kind) {
+	if releaseRequiresBuildForKind(manifest, kind) {
 		return "", missingPreparedInstallBuildTargetError(kind)
 	}
 	return "", nil
-}
-
-func preparedInstallRequiresBuild(manifest *providermanifestv1.Manifest, kind string) bool {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return manifest != nil && manifest.Entrypoint == nil && (manifest.Spec == nil || !manifest.Spec.IsManifestBacked())
-	case providermanifestv1.KindAuthentication, providermanifestv1.KindAuthorization, providermanifestv1.KindExternalCredentials, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindAgent, providermanifestv1.KindSecrets, providermanifestv1.KindRuntime:
-		return EntrypointForKind(manifest, kind) == nil
-	default:
-		return false
-	}
 }
 
 func resolvePreparedInstallBuildTarget(root, kind string) (string, error) {

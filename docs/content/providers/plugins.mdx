@@ -277,12 +277,14 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
   </Tabs.Tab>
   <Tabs.Tab>
     You need the package manager and TypeScript runtime or compiler used by
-    your `build.command`, plus a running `gestaltd` instance for testing.
+    your `run` and `build.command`, plus a running `gestaltd` instance for
+    testing.
 
     ```sh
     mkdir slack && cd slack
     npm init -y
     npm install @valon-technologies/gestalt
+    npm install --save-dev tsx
     ```
 
     Recommended layout:
@@ -306,10 +308,14 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
       "private": true,
       "type": "module",
       "scripts": {
-        "build": "node ./scripts/build-provider.mjs"
+        "build": "node ./scripts/build-provider.mjs",
+        "dev:provider": "tsx ./provider.ts"
       },
       "dependencies": {
         "@valon-technologies/gestalt": "latest"
+      },
+      "devDependencies": {
+        "tsx": "latest"
       }
     }
     ```
@@ -325,6 +331,10 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
         - package-lock.json
         - provider.ts
         - scripts
+    run:
+      - npm
+      - run
+      - dev:provider
     entrypoint:
       artifactPath: .gestalt/build/slack
     ```
@@ -333,7 +343,7 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
 
 ### Defining operations
 
-Operations are the callable units of a plugin. Each operation has an ID, an HTTP method, input and output types, and a handler function. Executable source plugins can use SDK-native source package metadata, or declare `build.command` and `entrypoint.artifactPath` when they need a custom build.
+Operations are the callable units of a plugin. Each operation has an ID, an HTTP method, input and output types, and a handler function. Executable source plugins can use SDK-native source package metadata, declare `run` for local source execution, or declare `build.command` and `entrypoint.artifactPath` when they need a compiled release artifact.
 
 The following example defines a `conversations.getMessage` operation that fetches a single Slack message by channel and timestamp. The handler uses the resolved runtime token from the request context to call the Slack API.
 
@@ -495,9 +505,9 @@ The following example defines a `conversations.getMessage` operation that fetche
     });
     ```
 
-    The manifest `build.command` packages this source into the executable file
-    declared by `entrypoint.artifactPath`; Gestalt starts that artifact for
-    local source execution and release packaging.
+    The manifest `run` command starts this source locally. Object-form
+    `build.command` packages the release executable declared by
+    `entrypoint.artifactPath`.
   </Tabs.Tab>
 </Tabs>
 
