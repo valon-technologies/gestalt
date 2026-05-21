@@ -120,7 +120,7 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 
 	if op, ok := CatalogOperationFromContext(ctx, provName, operation); ok {
 		catalogSource = "context"
-		return op, OperationTransport(op), "", nil
+		return op, OperationTransport(op), ConnectionFromContext(ctx), nil
 	}
 
 	staticOp, staticOK := CatalogOperation(providerCatalog(prov), operation)

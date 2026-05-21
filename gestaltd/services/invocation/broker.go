@@ -291,10 +291,13 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(core.ErrMCPOnly)
 	}
 
+	operationConnection := resolvedConnection
 	if strings.TrimSpace(conn) != "" {
-		operationConnection, err := ResolveOperationConnection(execProv, opMeta.ID, params)
-		if err != nil {
-			return fail(err)
+		if operationConnection == "" {
+			operationConnection, err = ResolveOperationConnection(execProv, opMeta.ID, params)
+			if err != nil {
+				return fail(err)
+			}
 		}
 		operationConnection = core.ResolveConnectionAlias(operationConnection)
 		explicitConnection := core.ResolveConnectionAlias(conn)
@@ -312,18 +315,17 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		}
 	}
 	if conn == "" {
-		conn = resolvedConnection
+		conn = operationConnection
 	}
-	if conn == "" {
-		if transport == catalog.TransportMCPPassthrough {
-			conn = b.mcpConnection(providerName)
-		} else {
-			var err error
-			conn, err = ResolveOperationConnection(execProv, opMeta.ID, params)
-			if err != nil {
-				return fail(err)
-			}
+	if conn == "" && transport == catalog.TransportMCPPassthrough {
+		conn = b.mcpConnection(providerName)
+	}
+	if conn == "" && transport != catalog.TransportMCPPassthrough {
+		operationConnection, err = ResolveOperationConnection(execProv, opMeta.ID, params)
+		if err != nil {
+			return fail(err)
 		}
+		conn = operationConnection
 	}
 	if conn == "" && b.connMapper != nil {
 		conn = b.connMapper.ConnectionForProvider(providerName)

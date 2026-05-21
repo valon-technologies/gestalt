@@ -13026,6 +13026,63 @@ func TestExecuteOperation_RejectsExplicitConnectionForStaticOperation(t *testing
 	}
 }
 
+func TestExecuteOperation_UsesResolvedConnectionForSessionCatalogOperation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		integration = "sample-svc"
+		operation   = "session_graphql"
+	)
+
+	executed := false
+	prov := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        integration,
+				ConnMode: core.ConnectionModeNone,
+				ExecuteFn: func(_ context.Context, gotOperation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					executed = true
+					if gotOperation != operation {
+						t.Fatalf("operation = %q, want %q", gotOperation, operation)
+					}
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
+			},
+		},
+		operationConnection: config.PluginConnectionName,
+		catalog: &catalog.Catalog{
+			Name: integration,
+			Operations: []catalog.CatalogOperation{{
+				ID:        operation,
+				Method:    http.MethodPost,
+				Transport: "graphql",
+			}},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := strings.NewReader(`{"_connection":"prod"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/"+integration+"/"+operation, body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if !executed {
+		t.Fatal("expected provider execution")
+	}
+}
+
 func TestExecuteOperation_AllowsExplicitConnectionAliasForStaticOperation(t *testing.T) {
 	t.Parallel()
 
@@ -18609,12 +18666,17 @@ func (s *stubIntegrationWithCatalog) Catalog() *catalog.Catalog {
 type stubIntegrationWithSessionCatalog struct {
 	stubIntegrationWithOps
 	catalog             *catalog.Catalog
+	operationConnection string
 	catalogForRequestFn func(context.Context, string) (*catalog.Catalog, error)
 	callFn              func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }
 
 func (s *stubIntegrationWithSessionCatalog) Catalog() *catalog.Catalog {
 	return s.catalog
+}
+
+func (s *stubIntegrationWithSessionCatalog) ConnectionForOperation(string) string {
+	return s.operationConnection
 }
 
 func (s *stubIntegrationWithSessionCatalog) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
