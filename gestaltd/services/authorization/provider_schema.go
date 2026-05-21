@@ -60,25 +60,30 @@ const (
 	subjectTypeUser    = ProviderSubjectTypeUser
 )
 
+var providerAuthorizationResourceTypes = []string{
+	ProviderResourceTypePolicyStatic,
+	ProviderResourceTypePluginStatic,
+	ProviderResourceTypePluginDynamic,
+	ProviderResourceTypeAdminPolicyStatic,
+	ProviderResourceTypeAdminDynamic,
+	ProviderResourceTypeExternalIdentity,
+	ProviderResourceTypeManagedSubject,
+	ProviderResourceTypeEveryone,
+	ProviderResourceTypeTeam,
+	ProviderResourceTypeSlackChannel,
+}
+
 func IsManagedProviderRelationship(rel *core.Relationship) bool {
 	if rel == nil || rel.GetResource() == nil {
 		return false
 	}
-	switch rel.GetResource().GetType() {
-	case ProviderResourceTypePolicyStatic,
-		ProviderResourceTypePluginStatic,
-		ProviderResourceTypePluginDynamic,
-		ProviderResourceTypeAdminPolicyStatic,
-		ProviderResourceTypeAdminDynamic,
-		ProviderResourceTypeExternalIdentity,
-		ProviderResourceTypeManagedSubject,
-		ProviderResourceTypeEveryone,
-		ProviderResourceTypeTeam,
-		ProviderResourceTypeSlackChannel:
-		return true
-	default:
-		return false
+	resourceType := strings.TrimSpace(rel.GetResource().GetType())
+	for _, managedResourceType := range providerAuthorizationResourceTypes {
+		if resourceType == managedResourceType {
+			return true
+		}
 	}
+	return false
 }
 
 func ProviderAuthorizationModelForRoles(policyRoles, pluginStaticRoles, pluginDynamicRoles, adminDynamicRoles []string) *core.AuthorizationModel {

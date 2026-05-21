@@ -7,6 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	gproto "google.golang.org/protobuf/proto"
 )
 
 const (
@@ -30,8 +31,15 @@ type StaticSubjectMember struct {
 }
 
 type StaticConfig struct {
-	Policies         map[string]StaticSubjectPolicy
-	ProviderPolicies map[string]string
+	Policies                map[string]StaticSubjectPolicy
+	ProviderPolicies        map[string]string
+	ModelFragments          []*core.AuthorizationModelResourceType
+	Relationships           []*core.Relationship
+	ResourceDynamicPolicies map[string]StaticResourceDynamicPolicy
+}
+
+type StaticResourceDynamicPolicy struct {
+	AllowAdditionalRelationships bool
 }
 
 type StaticSubjectPolicy struct {
@@ -40,14 +48,20 @@ type StaticSubjectPolicy struct {
 }
 
 type Authorizer struct {
-	policies         map[string]*SubjectPolicy
-	providerPolicies map[string]string
+	policies                map[string]*SubjectPolicy
+	providerPolicies        map[string]string
+	modelFragments          []*core.AuthorizationModelResourceType
+	relationships           []*core.Relationship
+	resourceDynamicPolicies map[string]StaticResourceDynamicPolicy
 }
 
 func New(cfg StaticConfig) (*Authorizer, error) {
 	a := &Authorizer{
-		policies:         map[string]*SubjectPolicy{},
-		providerPolicies: map[string]string{},
+		policies:                map[string]*SubjectPolicy{},
+		providerPolicies:        map[string]string{},
+		modelFragments:          cloneModelResourceTypes(cfg.ModelFragments),
+		relationships:           cloneRelationships(cfg.Relationships),
+		resourceDynamicPolicies: cloneResourceDynamicPolicies(cfg.ResourceDynamicPolicies),
 	}
 
 	for policyID, def := range cfg.Policies {
@@ -71,6 +85,47 @@ func New(cfg StaticConfig) (*Authorizer, error) {
 	}
 
 	return a, nil
+}
+
+func cloneModelResourceTypes(in []*core.AuthorizationModelResourceType) []*core.AuthorizationModelResourceType {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]*core.AuthorizationModelResourceType, 0, len(in))
+	for _, resourceType := range in {
+		if resourceType == nil {
+			continue
+		}
+		out = append(out, gproto.Clone(resourceType).(*core.AuthorizationModelResourceType))
+	}
+	return out
+}
+
+func cloneRelationships(in []*core.Relationship) []*core.Relationship {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]*core.Relationship, 0, len(in))
+	for _, relationship := range in {
+		if relationship == nil {
+			continue
+		}
+		out = append(out, gproto.Clone(relationship).(*core.Relationship))
+	}
+	return out
+}
+
+func cloneResourceDynamicPolicies(in map[string]StaticResourceDynamicPolicy) map[string]StaticResourceDynamicPolicy {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]StaticResourceDynamicPolicy, len(in))
+	for name, policy := range in {
+		if name = strings.TrimSpace(name); name != "" {
+			out[name] = policy
+		}
+	}
+	return out
 }
 
 func (a *Authorizer) Start(ctx context.Context) error {
