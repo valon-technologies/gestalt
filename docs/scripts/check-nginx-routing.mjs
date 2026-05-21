@@ -27,6 +27,7 @@ try {
   const baseUrl = `http://127.0.0.1:${port}`;
   const devAssetPath = findStaticAssetPath("dev/_next/static");
   const latestAssetPath = findStaticAssetPath("latest/_next/static");
+  const pagefindScriptPath = "/_pagefind/pagefind.js";
   await waitForNginx(baseUrl);
   const versionsManifest = await readVersionsManifest(
     `${baseUrl}/versions.json`,
@@ -87,6 +88,11 @@ try {
     cacheControlIncludes: "immutable",
   });
   await assertResponse({
+    url: `${baseUrl}/dev${pagefindScriptPath}`,
+    host: "gestaltd.ai",
+    status: 200,
+  });
+  await assertResponse({
     url: `${baseUrl}/dev/providers/`,
     host: "gestaltd.ai",
     status: 301,
@@ -129,10 +135,20 @@ try {
     cacheControlIncludes: "immutable",
   });
   await assertResponse({
+    url: `${baseUrl}/latest${pagefindScriptPath}`,
+    host: "gestaltd.ai",
+    status: 200,
+  });
+  await assertResponse({
     url: `${baseUrl}/latest/getting-started/`,
     host: "gestaltd.ai",
     status: 301,
     location: "/latest/getting-started",
+  });
+  await assertResponse({
+    url: `${baseUrl}${exactVersionPrefix}${pagefindScriptPath}`,
+    host: "gestaltd.ai",
+    status: 200,
   });
   await assertResponse({
     url: `${baseUrl}${exactVersionPrefix}/reference/cli`,

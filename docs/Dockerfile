@@ -84,6 +84,10 @@ server {
         try_files $uri =404;
     }
 
+    location ~ ^/(dev|latest|versions/v[^/]+)/_pagefind/(.*)$ {
+        try_files /_pagefind/$2 =404;
+    }
+
     location /dev/ {
         try_files $uri $uri.html $uri/ =404;
     }

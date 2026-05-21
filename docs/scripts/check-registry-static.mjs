@@ -54,6 +54,7 @@ try {
   const { port } = server.address();
   const baseUrl = `http://127.0.0.1:${port}`;
   const devAssetPath = findStaticAssetPath("dev/_next/static");
+  const pagefindScriptPath = "/_pagefind/pagefind.js";
   const versionsManifest = await readVersionsManifest(
     `${baseUrl}/versions.json`,
     "gestaltd.ai",
@@ -144,6 +145,11 @@ try {
     host: "gestaltd.ai",
     status: 200,
   });
+  await assertResponse({
+    url: `${baseUrl}/dev${pagefindScriptPath}`,
+    host: "gestaltd.ai",
+    status: 200,
+  });
   await assertRedirect({
     url: `${baseUrl}/dev/providers/`,
     host: "gestaltd.ai",
@@ -169,6 +175,11 @@ try {
     includes: "Getting Started",
     excludes: registryMarker,
   });
+  await assertResponse({
+    url: `${baseUrl}/latest${pagefindScriptPath}`,
+    host: "gestaltd.ai",
+    status: 200,
+  });
   await assertRedirect({
     url: `${baseUrl}/latest/getting-started/`,
     host: "gestaltd.ai",
@@ -192,6 +203,11 @@ try {
     status: 200,
     includes: "Server CLI",
     excludes: registryMarker,
+  });
+  await assertResponse({
+    url: `${baseUrl}${exactVersionPrefix}${pagefindScriptPath}`,
+    host: "gestaltd.ai",
+    status: 200,
   });
   await assertRedirect({
     url: `${baseUrl}${exactVersionPrefix}/reference/cli/`,
@@ -307,6 +323,12 @@ async function serveDocsHost(pathname, response) {
   const versionPageWithSlash = pathname.match(/^(\/versions\/v[^/]+\/.+)\/$/);
   if (versionPageWithSlash) {
     return redirect(response, versionPageWithSlash[1]);
+  }
+  const versionedPagefindPath = pathname.match(
+    /^\/(?:dev|latest|versions\/v[^/]+)(\/_pagefind\/.*)$/,
+  );
+  if (versionedPagefindPath) {
+    return serveFile(versionedPagefindPath[1], response, false);
   }
   if (
     pathname.startsWith("/dev/") ||
