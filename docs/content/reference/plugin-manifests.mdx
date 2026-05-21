@@ -596,8 +596,8 @@ build:
 Prepare-only builds are not valid for source UI manifests, because UI packages
 must produce the directory declared by `spec.assetRoot`.
 
-Top-level `run` is source-only. `run.commandPrefix` wraps the resolved provider
-command when Gestalt launches the local source provider:
+Top-level `run` is source-only. `run.commandPrefix` is prepended to the command
+Gestalt would normally use to start the local source provider:
 
 ```yaml
 run:
@@ -608,7 +608,7 @@ run:
 
 | Run field | Type | Required | Purpose |
 | --- | --- | --- | --- |
-| `commandPrefix` | string[] | yes | Command argv prepended to the resolved provider command. |
+| `commandPrefix` | string[] | yes | Command argv prepended to the command Gestalt would normally use to start the local source provider. |
 
 ## Artifacts
 

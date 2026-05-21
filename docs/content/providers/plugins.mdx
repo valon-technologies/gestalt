@@ -248,11 +248,6 @@ See [Provider Manifests](/reference/plugin-manifests) for the full field referen
       artifactPath: .gestalt/build/slack
     ```
 
-    For repeated Python source builds, set `GESTALT_BUILD_CACHE_DIR` to a
-    writable directory before running `gestaltd sync`, `gestaltd serve`, or
-    `gestaltd provider release`. The cache stores SDK-internal packaging
-    accelerators only; deleting it or unsetting the variable restores clean
-    temporary builds.
   </Tabs.Tab>
   <Tabs.Tab>
     You need the current stable Rust toolchain, Cargo, and a running `gestaltd` instance for testing.
