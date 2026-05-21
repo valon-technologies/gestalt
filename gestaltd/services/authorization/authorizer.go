@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	defaultSubjectRole = "viewer"
+	defaultSubjectRole        = "viewer"
+	serviceAccountSubjectKind = principal.Kind("service_account")
 )
 
 type AccessContext struct {
@@ -343,7 +344,14 @@ func (p *SubjectPolicy) roleForPrincipal(pr *principal.Principal) (string, bool)
 }
 
 func defaultAllowAppliesToPrincipal(p *principal.Principal) bool {
-	return !principal.IsNonUserPrincipal(p)
+	p = principal.Canonicalized(p)
+	if p == nil || strings.TrimSpace(p.SubjectID) == "" {
+		return false
+	}
+	// Static default-allow grants the baseline viewer role only to authenticated
+	// user and service-account callers. Other managed subject kinds still need
+	// explicit policy membership.
+	return p.Kind == principal.KindUser || p.Kind == serviceAccountSubjectKind
 }
 
 func (p *SubjectPolicy) staticRoleForIdentity(subjectID string) (string, bool) {

@@ -5817,10 +5817,10 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("invoke default-allow plugin without managed subject grant: %v", err)
 	}
-	if resp.StatusCode != http.StatusForbidden {
+	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		t.Fatalf("default-allow invocation without grant status = %d, want 403: %s", resp.StatusCode, body)
+		t.Fatalf("default-allow invocation without grant status = %d, want 200: %s", resp.StatusCode, body)
 	}
 	_ = resp.Body.Close()
 

@@ -266,17 +266,7 @@ func (s *AuthorizationDynamicFragmentService) ReplaceSubjectResourceRelationship
 		if err := validateAuthorizationFragmentRelationship(relationship); err != nil {
 			return err
 		}
-		out := make([]AuthorizationDynamicFragmentRelationship, 0, len(fragment.Relationships)+1)
-		for _, existing := range fragment.Relationships {
-			existing = normalizeAuthorizationFragmentRelationship(existing)
-			if existing.Subject.Type == relationship.Subject.Type &&
-				existing.Subject.ID == relationship.Subject.ID &&
-				existing.Resource.Type == relationship.Resource.Type &&
-				existing.Resource.ID == relationship.Resource.ID {
-				continue
-			}
-			out = append(out, existing)
-		}
+		out, _ := removeAuthorizationFragmentRelationshipsForSubjectResource(fragment.Relationships, relationship.Subject, relationship.Resource)
 		out = append(out, relationship)
 		fragment.Relationships = out
 		sortAuthorizationFragmentRelationships(fragment.Relationships)
@@ -306,7 +296,75 @@ func (s *AuthorizationDynamicFragmentService) DeleteRelationship(ctx context.Con
 		fragment.Relationships = out
 		return nil
 	})
-	return deleted, fragment, err
+	if err != nil || !deleted {
+		return deleted, fragment, err
+	}
+	fragment, err = s.maybeDeleteEmptyFragment(ctx, fragment)
+	return true, fragment, err
+}
+
+func (s *AuthorizationDynamicFragmentService) DeleteSubjectResourceRelationships(ctx context.Context, owner AuthorizationFragmentOwner, subject AuthorizationDynamicFragmentSubject, resource AuthorizationDynamicFragmentResource, audit AuthorizationDynamicFragmentAuditMetadata) (bool, *AuthorizationDynamicFragment, error) {
+	existing, err := s.GetFragmentByOwner(ctx, owner)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return false, nil, nil
+		}
+		return false, nil, err
+	}
+	subject.Type = strings.TrimSpace(subject.Type)
+	subject.ID = strings.TrimSpace(subject.ID)
+	resource.Type = strings.TrimSpace(resource.Type)
+	resource.ID = strings.TrimSpace(resource.ID)
+	if subject.Type == "" || subject.ID == "" || resource.Type == "" || resource.ID == "" {
+		return false, existing, fmt.Errorf("subject and resource are required")
+	}
+
+	deleted := false
+	fragment, err := s.UpdateFragment(ctx, owner, AuthorizationDynamicFragmentUpdate{Audit: audit}, func(fragment *AuthorizationDynamicFragment) error {
+		out, removed := removeAuthorizationFragmentRelationshipsForSubjectResource(fragment.Relationships, subject, resource)
+		deleted = removed
+		fragment.Relationships = out
+		return nil
+	})
+	if err != nil || !deleted {
+		return deleted, fragment, err
+	}
+	fragment, err = s.maybeDeleteEmptyFragment(ctx, fragment)
+	return true, fragment, err
+}
+
+func (s *AuthorizationDynamicFragmentService) maybeDeleteEmptyFragment(ctx context.Context, fragment *AuthorizationDynamicFragment) (*AuthorizationDynamicFragment, error) {
+	if fragment == nil {
+		return nil, nil
+	}
+	if len(fragment.Relationships) == 0 && len(fragment.ResourceTypes) == 0 {
+		if err := s.DeleteFragment(ctx, fragment.ID); err != nil {
+			return fragment, err
+		}
+		return nil, nil
+	}
+	return fragment, nil
+}
+
+func removeAuthorizationFragmentRelationshipsForSubjectResource(relationships []AuthorizationDynamicFragmentRelationship, subject AuthorizationDynamicFragmentSubject, resource AuthorizationDynamicFragmentResource) ([]AuthorizationDynamicFragmentRelationship, bool) {
+	out := relationships[:0]
+	removed := false
+	for _, relationship := range relationships {
+		relationship = normalizeAuthorizationFragmentRelationship(relationship)
+		if authorizationFragmentRelationshipMatchesSubjectResource(relationship, subject, resource) {
+			removed = true
+			continue
+		}
+		out = append(out, relationship)
+	}
+	return out, removed
+}
+
+func authorizationFragmentRelationshipMatchesSubjectResource(relationship AuthorizationDynamicFragmentRelationship, subject AuthorizationDynamicFragmentSubject, resource AuthorizationDynamicFragmentResource) bool {
+	return relationship.Subject.Type == subject.Type &&
+		relationship.Subject.ID == subject.ID &&
+		relationship.Resource.Type == resource.Type &&
+		relationship.Resource.ID == resource.ID
 }
 
 func normalizeAuthorizationFragmentOwner(owner AuthorizationFragmentOwner) AuthorizationFragmentOwner {

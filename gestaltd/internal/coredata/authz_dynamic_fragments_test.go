@@ -55,8 +55,11 @@ func TestAuthorizationDynamicFragmentServiceUpsertsOwnerRecord(t *testing.T) {
 	if !deleted {
 		t.Fatal("DeleteRelationship deleted = false, want true")
 	}
-	if updated.Version != 3 {
-		t.Fatalf("version after delete = %d, want 3", updated.Version)
+	if updated != nil {
+		t.Fatalf("fragment after deleting only relationship = %#v, want deleted fragment", updated)
+	}
+	if _, err := svc.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationPluginFragmentOwner("github")); err != core.ErrNotFound {
+		t.Fatalf("GetFragmentByOwner after delete err = %v, want ErrNotFound", err)
 	}
 }
 
@@ -81,6 +84,45 @@ func TestAuthorizationDynamicFragmentServiceDeleteMissingOwnerDoesNotCreateFragm
 	}
 	if _, err := svc.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationPluginFragmentOwner("github")); err != core.ErrNotFound {
 		t.Fatalf("GetFragmentByOwner err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAuthorizationDynamicFragmentServiceDeleteSubjectResourceRelationships(t *testing.T) {
+	t.Parallel()
+
+	svc, err := coredata.New(&coretesting.StubIndexedDB{})
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	ctx := context.Background()
+	owner := coredata.AuthorizationPluginFragmentOwner("github")
+	directMember := coredata.AuthorizationDynamicFragmentRelationship{
+		Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "service_account:bot"},
+		Relation: "viewer",
+		Resource: coredata.AuthorizationDynamicFragmentResource{Type: "plugin_dynamic", ID: "github"},
+	}
+	targetedMember := directMember
+	targetedMember.Relation = "editor"
+	targetedMember.Target.Subject = &coredata.AuthorizationDynamicFragmentSubject{Type: "subject", ID: "service_account:bot"}
+	if _, err := svc.AuthzFragments.UpsertRelationship(ctx, owner, directMember, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "direct"}); err != nil {
+		t.Fatalf("UpsertRelationship direct: %v", err)
+	}
+	if _, err := svc.AuthzFragments.UpsertRelationship(ctx, owner, targetedMember, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "targeted"}); err != nil {
+		t.Fatalf("UpsertRelationship targeted: %v", err)
+	}
+
+	deleted, fragment, err := svc.AuthzFragments.DeleteSubjectResourceRelationships(ctx, owner, directMember.Subject, directMember.Resource, coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "delete_member"})
+	if err != nil {
+		t.Fatalf("DeleteSubjectResourceRelationships: %v", err)
+	}
+	if !deleted {
+		t.Fatal("DeleteSubjectResourceRelationships deleted = false, want true")
+	}
+	if fragment != nil {
+		t.Fatalf("fragment after deleting only member relationships = %#v, want deleted fragment", fragment)
+	}
+	if _, err := svc.AuthzFragments.GetFragmentByOwner(ctx, owner); err != core.ErrNotFound {
+		t.Fatalf("GetFragmentByOwner after delete err = %v, want ErrNotFound", err)
 	}
 }
 

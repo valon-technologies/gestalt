@@ -225,19 +225,22 @@ func (s *Server) upsertAuthorizationDynamicFragmentRelationship(ctx context.Cont
 	return fragment, nil
 }
 
-func (s *Server) deleteAuthorizationDynamicFragmentRelationship(ctx context.Context, owner coredata.AuthorizationFragmentOwner, relationship coredata.AuthorizationDynamicFragmentRelationship, reason string) (bool, *coredata.AuthorizationDynamicFragment, error) {
+func (s *Server) deleteAuthorizationDynamicFragmentSubjectResourceRelationships(ctx context.Context, owner coredata.AuthorizationFragmentOwner, subject coredata.AuthorizationDynamicFragmentSubject, resource coredata.AuthorizationDynamicFragmentResource, reason string) (bool, *coredata.AuthorizationDynamicFragment, error) {
 	if s.authzFragments == nil {
 		return false, nil, nil
 	}
 	if err := s.ensureAuthorizationDynamicFragmentsBackfilled(ctx); err != nil {
 		return false, nil, err
 	}
-	deleted, fragment, err := s.authzFragments.DeleteRelationship(ctx, owner, relationship, s.authorizationFragmentAuditMetadata(ctx, reason))
+	deleted, fragment, err := s.authzFragments.DeleteSubjectResourceRelationships(ctx, owner, subject, resource, s.authorizationFragmentAuditMetadata(ctx, reason))
 	if err != nil {
 		return false, nil, err
 	}
 	if deleted {
-		s.auditAuthorizationFragmentMutation(ctx, "authorization.fragment.relationship.delete", fragment, &relationship)
+		s.auditAuthorizationFragmentMutation(ctx, "authorization.fragment.relationship.delete", fragment, &coredata.AuthorizationDynamicFragmentRelationship{
+			Subject:  subject,
+			Resource: resource,
+		})
 	}
 	return deleted, fragment, nil
 }
