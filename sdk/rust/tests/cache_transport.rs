@@ -17,7 +17,10 @@ use generated::v1::{
     CacheSetManyRequest, CacheSetRequest, CacheTouchRequest, CacheTouchResponse,
     ConfigureProviderRequest, ProviderKind,
 };
-use gestalt::{CacheEntry, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET, RuntimeMetadata};
+use gestalt::{
+    CacheEntry, CacheProvider, CacheSetOptions, ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN,
+    RuntimeMetadata,
+};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::{TcpListener, UnixStream};
 use tokio_stream::wrappers::TcpListenerStream;
@@ -26,7 +29,6 @@ use tonic::{Code, Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
 const CACHE_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
-const ENV_CACHE_SOCKET_TOKEN: &str = "GESTALT_CACHE_SOCKET_TOKEN";
 
 #[derive(Default)]
 struct TestCacheProvider {
@@ -291,8 +293,7 @@ async fn cache_runtime_and_client_round_trip_over_named_socket() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-cache.sock");
     let _provider_socket = helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
-    let cache_env = gestalt::cache_socket_env("shared-cache");
-    let _cache_socket = helpers::EnvGuard::set(cache_env, socket.as_os_str());
+    let _cache_socket = helpers::EnvGuard::set(ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let provider = Arc::new(TestCacheProvider::default());
     let serve_provider = Arc::clone(&provider);
@@ -460,8 +461,8 @@ async fn cache_connects_over_tcp_and_forwards_relay_token() {
         .await
         .expect("bind tcp listener");
     let address = listener.local_addr().expect("local addr");
-    let _socket_guard = helpers::EnvGuard::set(ENV_CACHE_SOCKET, format!("tcp://{address}"));
-    let _token_guard = helpers::EnvGuard::set(ENV_CACHE_SOCKET_TOKEN, "relay-token-rust");
+    let _socket_guard = helpers::EnvGuard::set(ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
+    let _token_guard = helpers::EnvGuard::set(ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
     let provider = Arc::new(TestCacheProvider::default());
     let server = ObservedCacheServer {

@@ -64,7 +64,7 @@ func TestWorkflowManagerFromContextDefaultsRunIdempotencyKey(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(EnvWorkflowManagerSocket, "tcp://"+lis.Addr().String())
+	t.Setenv(EnvHostServiceSocket, "tcp://"+lis.Addr().String())
 
 	ctx := WithIdempotencyKey(context.Background(), "request-key")
 	ctx = withInvocationToken(ctx, "parent-token")

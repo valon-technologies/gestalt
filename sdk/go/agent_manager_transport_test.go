@@ -75,8 +75,8 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvAgentManagerSocket, "tcp://"+address)
-	t.Setenv(gestalt.EnvAgentManagerSocketToken, "relay-token-go")
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
 	client, err := gestalt.AgentManager("parent-token")
 	if err != nil {
@@ -157,8 +157,8 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvAgentManagerSocket, "tcp://"+address)
-	t.Setenv(gestalt.EnvAgentManagerSocketToken, "relay-token-go")
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
 	client, err := gestalt.AgentManager("parent-token")
 	if err != nil {

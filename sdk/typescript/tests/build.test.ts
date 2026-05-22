@@ -47,7 +47,8 @@ import {
   bunTarget,
   parseBuildArgs,
 } from "../src/build.ts";
-import { Cache, cacheSocketEnv } from "../src/cache.ts";
+import { Cache } from "../src/cache.ts";
+import { ENV_HOST_SERVICE_SOCKET } from "../src/host-service.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
   ENV_PROVIDER_SOCKET,
@@ -557,10 +558,8 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
   const tempDir = makeTempDir("gts-cache-");
   const outputPath = join(tempDir, `fixture-cache${executableSuffix}`);
   const socketPath = join(tempDir, "p.sock");
-  const previousDefaultSocket = process.env.GESTALT_CACHE_SOCKET;
-  const previousNamedSocket = process.env[cacheSocketEnv("named")];
-  const previousCafeSocket = process.env[cacheSocketEnv("café")];
-  const previousEmojiSocket = process.env[cacheSocketEnv("😀")];
+  const hostServiceSocketEnv = ENV_HOST_SERVICE_SOCKET;
+  const previousHostServiceSocket = process.env[hostServiceSocketEnv];
   let child: ChildProcess | undefined;
 
   try {
@@ -604,17 +603,12 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
       }),
     );
 
-    process.env.GESTALT_CACHE_SOCKET = socketPath;
-    process.env[cacheSocketEnv("named")] = socketPath;
-    process.env[cacheSocketEnv("café")] = socketPath;
-    process.env[cacheSocketEnv("😀")] = socketPath;
+    process.env[hostServiceSocketEnv] = socketPath;
 
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
     const cache = new Cache();
     const namedCache = new Cache("named");
-    const cafeCache = new Cache("café");
-    const emojiCache = new Cache("😀");
 
     await cache.set("alpha", encoder.encode("one"), {
       ttlMs: 1_500,
@@ -637,8 +631,6 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
       alpha: "one",
       gamma: "three",
     });
-    await cafeCache.set("unicode", encoder.encode("accent"));
-    expect(decoder.decode((await emojiCache.get("unicode"))!)).toBe("accent");
     const reserved = await namedCache.getMany([
       "toString",
       "__proto__",
@@ -670,25 +662,10 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
       false,
     ]);
   } finally {
-    if (previousDefaultSocket === undefined) {
-      delete process.env.GESTALT_CACHE_SOCKET;
+    if (previousHostServiceSocket === undefined) {
+      delete process.env[hostServiceSocketEnv];
     } else {
-      process.env.GESTALT_CACHE_SOCKET = previousDefaultSocket;
-    }
-    if (previousNamedSocket === undefined) {
-      delete process.env[cacheSocketEnv("named")];
-    } else {
-      process.env[cacheSocketEnv("named")] = previousNamedSocket;
-    }
-    if (previousCafeSocket === undefined) {
-      delete process.env[cacheSocketEnv("café")];
-    } else {
-      process.env[cacheSocketEnv("café")] = previousCafeSocket;
-    }
-    if (previousEmojiSocket === undefined) {
-      delete process.env[cacheSocketEnv("😀")];
-    } else {
-      process.env[cacheSocketEnv("😀")] = previousEmojiSocket;
+      process.env[hostServiceSocketEnv] = previousHostServiceSocket;
     }
     if (child) {
       await stopProcess(child);

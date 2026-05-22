@@ -7,9 +7,9 @@ use std::net::TcpListener;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
+use gestalt::ENV_HOST_SERVICE_SOCKET;
 use gestalt::s3::{
-    ByteRange, ENV_S3_SOCKET, ListOptions, PresignMethod, PresignOptions, ReadOptions, S3, S3Error,
-    WriteOptions, s3_socket_env, s3_socket_token_env,
+    ByteRange, ListOptions, PresignMethod, PresignOptions, ReadOptions, S3, S3Error, WriteOptions,
 };
 
 struct Harness {
@@ -133,7 +133,7 @@ async fn start_tcp_harness(expect_token: Option<&str>, env_name: &str) -> Harnes
 #[tokio::test]
 async fn write_read_and_stat_round_trip() {
     let _lock = helpers::env_lock().lock().await;
-    let _harness = start_harness("s3-round-trip.sock", ENV_S3_SOCKET).await;
+    let _harness = start_harness("s3-round-trip.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
     let mut object = s3.object("bucket", "docs/hello.txt");
@@ -165,7 +165,7 @@ async fn write_read_and_stat_round_trip() {
 #[tokio::test]
 async fn large_in_memory_write_bytes_round_trip() {
     let _lock = helpers::env_lock().lock().await;
-    let _harness = start_harness("s3-large-write.sock", ENV_S3_SOCKET).await;
+    let _harness = start_harness("s3-large-write.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
     let mut object = s3.object("bucket", "docs/large.bin");
@@ -186,8 +186,8 @@ async fn large_in_memory_write_bytes_round_trip() {
 #[tokio::test]
 async fn named_socket_json_and_preconditions() {
     let _lock = helpers::env_lock().lock().await;
-    let env_name = s3_socket_env("reports");
-    let _harness = start_harness("s3-named.sock", &env_name).await;
+    let env_name = ENV_HOST_SERVICE_SOCKET;
+    let _harness = start_harness("s3-named.sock", env_name).await;
 
     let s3 = S3::connect_named("reports").await.expect("connect");
     let mut object = s3.object("bucket", "reports/summary.json");
@@ -227,7 +227,7 @@ async fn named_socket_json_and_preconditions() {
 #[tokio::test]
 async fn tcp_target_round_trip() {
     let _lock = helpers::env_lock().lock().await;
-    let _harness = start_tcp_harness(None, ENV_S3_SOCKET).await;
+    let _harness = start_tcp_harness(None, ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
     let mut object = s3.object("bucket", "docs/tcp.txt");
@@ -242,8 +242,8 @@ async fn tcp_target_round_trip() {
 #[tokio::test]
 async fn tcp_target_with_token_round_trip() {
     let _lock = helpers::env_lock().lock().await;
-    let _harness = start_tcp_harness(Some("relay-token-rust"), ENV_S3_SOCKET).await;
-    let _token_env = helpers::EnvGuard::set(s3_socket_token_env(""), "relay-token-rust");
+    let _harness = start_tcp_harness(Some("relay-token-rust"), ENV_HOST_SERVICE_SOCKET).await;
+    let _token_env = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
     let s3 = S3::connect().await.expect("connect");
     let mut object = s3.object("bucket", "docs/tcp-token.txt");
@@ -261,10 +261,10 @@ async fn tcp_target_with_token_round_trip() {
 #[tokio::test]
 async fn named_tcp_target_uses_named_token_env() {
     let _lock = helpers::env_lock().lock().await;
-    let env_name = s3_socket_env("reports");
-    let _harness = start_tcp_harness(Some("named-relay-token-rust"), &env_name).await;
+    let env_name = ENV_HOST_SERVICE_SOCKET;
+    let _harness = start_tcp_harness(Some("named-relay-token-rust"), env_name).await;
     let _token_env =
-        helpers::EnvGuard::set(s3_socket_token_env("reports"), "named-relay-token-rust");
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "named-relay-token-rust");
 
     let s3 = S3::connect_named("reports").await.expect("connect");
     let mut object = s3.object("bucket", "reports/named-tcp.txt");
@@ -282,7 +282,7 @@ async fn named_tcp_target_uses_named_token_env() {
 #[tokio::test]
 async fn chunked_write_range_read_and_error_mapping() {
     let _lock = helpers::env_lock().lock().await;
-    let _harness = start_harness("s3-range.sock", ENV_S3_SOCKET).await;
+    let _harness = start_harness("s3-range.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
     let mut object = s3.object("bucket", "docs/chunked.txt");
@@ -335,7 +335,7 @@ async fn chunked_write_range_read_and_error_mapping() {
 #[tokio::test]
 async fn zero_byte_objects_round_trip() {
     let _lock = helpers::env_lock().lock().await;
-    let _harness = start_harness("s3-empty.sock", ENV_S3_SOCKET).await;
+    let _harness = start_harness("s3-empty.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
     let mut object = s3.object("bucket", "docs/empty.bin");
@@ -355,7 +355,7 @@ async fn zero_byte_objects_round_trip() {
 #[tokio::test]
 async fn list_copy_delete_and_exists() {
     let _lock = helpers::env_lock().lock().await;
-    let _harness = start_harness("s3-list.sock", ENV_S3_SOCKET).await;
+    let _harness = start_harness("s3-list.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let mut s3 = S3::connect().await.expect("connect");
     for (key, body) in [
@@ -451,7 +451,7 @@ async fn list_copy_delete_and_exists() {
 #[tokio::test]
 async fn presign_round_trip() {
     let _lock = helpers::env_lock().lock().await;
-    let _harness = start_harness("s3-presign.sock", ENV_S3_SOCKET).await;
+    let _harness = start_harness("s3-presign.sock", ENV_HOST_SERVICE_SOCKET).await;
 
     let s3 = S3::connect().await.expect("connect");
     let mut object = s3.object("bucket", "docs/presign.txt");

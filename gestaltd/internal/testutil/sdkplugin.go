@@ -480,10 +480,13 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Provider struct {
@@ -635,7 +638,12 @@ func (p *Provider) ValidateCredentialConfig(ctx context.Context, req *gestalt.Va
 		return err
 	} else if ok {
 		defer func() { _ = client.Close() }()
-		return client.ValidateCredentialConfig(ctx, req)
+		if err := client.ValidateCredentialConfig(ctx, req); err != nil {
+			if externalCredentialHostServiceMissing(err) {
+				return nil
+			}
+			return err
+		}
 	}
 	return nil
 }
@@ -721,7 +729,7 @@ func externalCredentialLookupKey(subjectID, connectionID, instance string) strin
 }
 
 func externalCredentialHostClient() (*gestalt.ExternalCredentialClient, bool, error) {
-	if os.Getenv(gestalt.EnvExternalCredentialSocket) == "" {
+	if os.Getenv(gestalt.EnvHostServiceSocket) == "" {
 		return nil, false, nil
 	}
 	client, err := gestalt.ExternalCredentials()
@@ -729,6 +737,13 @@ func externalCredentialHostClient() (*gestalt.ExternalCredentialClient, bool, er
 		return nil, false, err
 	}
 	return client, true, nil
+}
+
+func externalCredentialHostServiceMissing(err error) bool {
+	if status.Code(err) != codes.Unimplemented {
+		return false
+	}
+	return strings.Contains(status.Convert(err).Message(), "unknown service gestalt.provider.v1.ExternalCredentialProvider")
 }
 `
 }

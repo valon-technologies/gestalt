@@ -25,10 +25,8 @@ from gestalt import (
     AGENT_INTERACTION_TYPE_APPROVAL,
     AGENT_SESSION_STATE_ACTIVE,
     AGENT_SESSION_STATE_ARCHIVED,
-    ENV_AGENT_HOST_SOCKET,
-    ENV_AGENT_HOST_SOCKET_TOKEN,
-    ENV_AGENT_MANAGER_SOCKET,
-    ENV_AGENT_MANAGER_SOCKET_TOKEN,
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
     AgentHost,
     AgentInteraction,
     AgentManager,
@@ -675,6 +673,10 @@ def setUpModule() -> None:
 
     _host_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
     agent_pb2_grpc.add_AgentHostServicer_to_server(_AgentHostServicer(), _host_server)
+    agent_pb2_grpc.add_AgentProviderServicer_to_server(
+        _AgentManagerServicer(),
+        _host_server,
+    )
     _host_server.add_insecure_port(f"unix:{_host_socket}")
     _host_server.start()
 
@@ -686,12 +688,10 @@ def setUpModule() -> None:
     _manager_server.add_insecure_port(f"unix:{_manager_socket}")
     _manager_server.start()
 
-    for env_name, value in (
-        (ENV_AGENT_HOST_SOCKET, _host_socket),
-        (ENV_AGENT_HOST_SOCKET_TOKEN, "relay-token-py"),
-        (ENV_AGENT_MANAGER_SOCKET, _manager_socket),
-        (ENV_AGENT_MANAGER_SOCKET_TOKEN, "relay-token-py"),
-    ):
+    for env_name, value in {
+        ENV_HOST_SERVICE_SOCKET: _host_socket,
+        ENV_HOST_SERVICE_TOKEN: "relay-token-py",
+    }.items():
         _previous_envs[env_name] = os.environ.get(env_name)
         os.environ[env_name] = value
 

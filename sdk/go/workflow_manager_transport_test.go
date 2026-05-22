@@ -79,8 +79,8 @@ func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvWorkflowManagerSocket, "tcp://"+address)
-	t.Setenv(gestalt.EnvWorkflowManagerSocketToken, "relay-token-go")
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
 	client, err := gestalt.WorkflowManager("parent-token")
 	if err != nil {
@@ -138,8 +138,8 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvWorkflowManagerSocket, "tcp://"+address)
-	t.Setenv(gestalt.EnvWorkflowManagerSocketToken, "relay-token-go")
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
 	client, err := gestalt.WorkflowManager("parent-token")
 	if err != nil {
@@ -220,8 +220,8 @@ func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvWorkflowManagerSocket, "tcp://"+address)
-	t.Setenv(gestalt.EnvWorkflowManagerSocketToken, "relay-token-go")
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
 	client, err := gestalt.WorkflowManager("parent-token")
 	if err != nil {

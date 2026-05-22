@@ -41,10 +41,9 @@ use gestalt::{
     ActionSearchResponse, Authorization, AuthorizationAction, AuthorizationMetadata,
     AuthorizationModelRef, AuthorizationProvider as SdkAuthorizationProvider,
     AuthorizationRelationshipTarget, AuthorizationResource, AuthorizationSubject,
-    AuthorizationSubjectSet, ENV_AUTHORIZATION_SOCKET, EffectiveSubjectSearchRequest,
-    ExpandRequest, GetActiveModelResponse, ListModelsResponse, ReadRelationshipsResponse,
-    Relationship, ResourceSearchRequest, ResourceSearchResponse, SubjectSearchRequest,
-    SubjectSearchResponse, WriteRelationshipsRequest,
+    AuthorizationSubjectSet, EffectiveSubjectSearchRequest, ExpandRequest, GetActiveModelResponse,
+    ListModelsResponse, ReadRelationshipsResponse, Relationship, ResourceSearchRequest,
+    ResourceSearchResponse, SubjectSearchRequest, SubjectSearchResponse, WriteRelationshipsRequest,
 };
 use hyper_util::rt::TokioIo;
 use tokio::net::{UnixListener, UnixStream};
@@ -52,8 +51,6 @@ use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
-
-const ENV_AUTHORIZATION_SOCKET_TOKEN: &str = "GESTALT_AUTHORIZATION_SOCKET_TOKEN";
 
 #[derive(Clone, Default)]
 struct TestAuthorizationServer {
@@ -416,8 +413,8 @@ async fn authorization_client_uses_public_sdk_types_for_search_and_writes() {
         tokio::spawn(async move { serve_authorization(serve_server, &serve_socket).await });
     helpers::wait_for_socket(&socket).await;
 
-    let _socket_guard = helpers::EnvGuard::set(ENV_AUTHORIZATION_SOCKET, &socket);
-    let _token_guard = helpers::EnvGuard::set(ENV_AUTHORIZATION_SOCKET_TOKEN, "relay-token-rust");
+    let _socket_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, &socket);
+    let _token_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
     let mut authorization = Authorization::connect()
         .await

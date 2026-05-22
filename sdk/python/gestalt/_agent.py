@@ -12,7 +12,11 @@ from ._api import ExternalIdentity, Subject
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._gen.v1 import plugin_pb2 as _plugin_pb
-from ._grpc_transport import host_service_channel
+from ._grpc_transport import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
+    host_service_channel,
+)
 from ._protocol import (
     JsonObjectInput,
     datetime_from_timestamp,
@@ -35,11 +39,6 @@ from ._protocol import (
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
-
-ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET"
-ENV_AGENT_HOST_SOCKET_TOKEN = f"{ENV_AGENT_HOST_SOCKET}_TOKEN"
-ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_PROVIDER_SOCKET"
-ENV_AGENT_MANAGER_SOCKET_TOKEN = f"{ENV_AGENT_MANAGER_SOCKET}_TOKEN"
 
 AGENT_EXECUTION_STATUS_UNSPECIFIED = pb.AGENT_EXECUTION_STATUS_UNSPECIFIED
 AGENT_EXECUTION_STATUS_PENDING = pb.AGENT_EXECUTION_STATUS_PENDING
@@ -1734,16 +1733,16 @@ def agent_messages_from_dicts(messages: Iterable[Mapping[str, Any]]) -> list[Any
 class AgentHost:
     """Client for the agent host service available inside agent providers.
 
-    ``AgentHost`` reads ``GESTALT_AGENT_HOST_SOCKET`` and its optional relay
+    ``AgentHost`` reads ``GESTALT_HOST_SERVICE_SOCKET`` and its optional relay
     token from the environment and exposes the host RPCs that agent providers
     use to discover and call tools during a turn.
     """
 
     def __init__(self) -> None:
-        target = os.environ.get(ENV_AGENT_HOST_SOCKET, "")
+        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
-            raise RuntimeError(f"{ENV_AGENT_HOST_SOCKET} is not set")
-        relay_token = os.environ.get(ENV_AGENT_HOST_SOCKET_TOKEN, "")
+            raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
+        relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
         self._channel = host_service_channel("agent host", target, token=relay_token)
         self._stub = pb_grpc.AgentHostStub(self._channel)
 
@@ -2074,10 +2073,10 @@ class AgentManager:
         if not trimmed_token:
             raise RuntimeError("agent manager: invocation token is not available")
 
-        target = os.environ.get(ENV_AGENT_MANAGER_SOCKET, "")
+        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
-            raise RuntimeError(f"agent manager: {ENV_AGENT_MANAGER_SOCKET} is not set")
-        relay_token = os.environ.get(ENV_AGENT_MANAGER_SOCKET_TOKEN, "")
+            raise RuntimeError(f"agent manager: {ENV_HOST_SERVICE_SOCKET} is not set")
+        relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
 
         self._channel = host_service_channel("agent manager", target, token=relay_token)
         self._stub = pb_grpc.AgentProviderStub(self._channel)

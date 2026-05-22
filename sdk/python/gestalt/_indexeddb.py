@@ -8,8 +8,7 @@ import queue
 from dataclasses import dataclass, field
 from functools import cmp_to_key
 from numbers import Real
-from typing import Any, Iterator, Protocol, cast
-from urllib import parse as _urlparse
+from typing import Any, Iterator, cast
 
 import grpc as _grpc
 from google.protobuf import struct_pb2 as _struct_pb2
@@ -18,9 +17,9 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from ._gen.v1 import datastore_pb2 as _pb
 from ._gen.v1 import datastore_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
-    insecure_internal_channel,
-    internal_channel_target,
-    secure_internal_channel,
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
+    host_service_channel,
 )
 
 grpc: Any = cast(Any, _grpc)
@@ -28,10 +27,6 @@ pb: Any = cast(Any, _pb)
 pb_grpc: Any = cast(Any, _pb_grpc)
 struct_pb2: Any = cast(Any, _struct_pb2)
 timestamp_pb2: Any = cast(Any, _timestamp_pb2)
-
-ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET"
-_INDEXEDDB_SOCKET_TOKEN_SUFFIX = "_TOKEN"
-_INDEXEDDB_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 
 #: Iterate in ascending key order.
 CURSOR_NEXT = 0
@@ -41,22 +36,6 @@ CURSOR_NEXT_UNIQUE = 1
 CURSOR_PREV = 2
 #: Iterate in descending key order while collapsing duplicate index keys.
 CURSOR_PREV_UNIQUE = 3
-
-
-def indexeddb_socket_env(name: str | None = None) -> str:
-    """Return the environment variable name for an IndexedDB socket binding."""
-
-    trimmed = (name or "").strip()
-    if not trimmed:
-        return ENV_INDEXEDDB_SOCKET
-    normalized = "".join(ch.upper() if ch.isalnum() else "_" for ch in trimmed)
-    return f"{ENV_INDEXEDDB_SOCKET}_{normalized}"
-
-
-def indexeddb_socket_token_env(name: str | None = None) -> str:
-    """Return the environment variable name for an IndexedDB relay token."""
-
-    return f"{indexeddb_socket_env(name)}{_INDEXEDDB_SOCKET_TOKEN_SUFFIX}"
 
 
 class NotFoundError(Exception):
@@ -375,12 +354,13 @@ class IndexedDB:
     """Client for a host-provided IndexedDB-compatible store."""
 
     def __init__(self, name: str | None = None) -> None:
-        env_name = indexeddb_socket_env(name)
-        target = os.environ.get(env_name, "")
+        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
-            raise RuntimeError(f"{env_name} is not set")
-        token = os.environ.get(indexeddb_socket_token_env(name), "")
-        self._channel = _indexeddb_channel(target, token=token)
+            raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
+        token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
+        self._channel = host_service_channel(
+            "IndexedDB", target, token=token.strip(), binding=(name or "").strip()
+        )
         self._stub = pb_grpc.IndexedDBStub(self._channel)
 
     def close(self) -> None:
@@ -935,121 +915,6 @@ class TransactionIndex:
             values=[_to_typed_value(v) for v in values],
             range=_kr_to_proto(key_range),
         )
-
-
-def _indexeddb_channel(raw_target: str, *, token: str = "") -> grpc.Channel:
-    target = raw_target.strip()
-    if not target:
-        raise RuntimeError("IndexedDB transport target is required")
-    if target.startswith("tcp://"):
-        address = target[len("tcp://") :].strip()
-        if not address:
-            raise RuntimeError(
-                f"IndexedDB tcp target {raw_target!r} is missing host:port"
-            )
-        return _with_indexeddb_relay_token(
-            insecure_internal_channel(internal_channel_target("tcp", address)),
-            token,
-        )
-    if target.startswith("tls://"):
-        address = target[len("tls://") :].strip()
-        if not address:
-            raise RuntimeError(
-                f"IndexedDB tls target {raw_target!r} is missing host:port"
-            )
-        return _with_indexeddb_relay_token(
-            secure_internal_channel(internal_channel_target("tls", address)),
-            token,
-        )
-    if target.startswith("unix://"):
-        socket_path = target[len("unix://") :].strip()
-        if not socket_path:
-            raise RuntimeError(
-                f"IndexedDB unix target {raw_target!r} is missing a socket path"
-            )
-        return _with_indexeddb_relay_token(
-            insecure_internal_channel(internal_channel_target("unix", socket_path)),
-            token,
-        )
-    if "://" in target:
-        parsed = _urlparse.urlparse(target)
-        raise RuntimeError(f"unsupported IndexedDB target scheme {parsed.scheme!r}")
-    return _with_indexeddb_relay_token(
-        insecure_internal_channel(internal_channel_target("unix", target)),
-        token,
-    )
-
-
-def _with_indexeddb_relay_token(channel: grpc.Channel, token: str) -> grpc.Channel:
-    token = token.strip()
-    if not token:
-        return channel
-
-    class _ClientCallDetails(grpc.ClientCallDetails):
-        def __init__(
-            self,
-            method: str,
-            timeout: float | None,
-            metadata: Any,
-            credentials: Any,
-            wait_for_ready: bool | None,
-            compression: Any,
-        ) -> None:
-            self.method = method
-            self.timeout = timeout
-            self.metadata = metadata
-            self.credentials = credentials
-            self.wait_for_ready = wait_for_ready
-            self.compression = compression
-
-    class _RelayTokenInterceptor(
-        grpc.UnaryUnaryClientInterceptor,
-        grpc.StreamStreamClientInterceptor,
-    ):
-        def __init__(self, token: str) -> None:
-            self._token = token
-
-        def _details(
-            self, client_call_details: grpc.ClientCallDetails
-        ) -> grpc.ClientCallDetails:
-            details = cast(_ClientCallDetailsFields, client_call_details)
-            metadata = list(details.metadata or [])
-            metadata.append((_INDEXEDDB_RELAY_TOKEN_HEADER, self._token))
-            return _ClientCallDetails(
-                details.method,
-                details.timeout,
-                metadata,
-                details.credentials,
-                details.wait_for_ready,
-                details.compression,
-            )
-
-        def intercept_unary_unary(
-            self,
-            continuation: Any,
-            client_call_details: grpc.ClientCallDetails,
-            request: Any,
-        ) -> Any:
-            return continuation(self._details(client_call_details), request)
-
-        def intercept_stream_stream(
-            self,
-            continuation: Any,
-            client_call_details: grpc.ClientCallDetails,
-            request_iterator: Any,
-        ) -> Any:
-            return continuation(self._details(client_call_details), request_iterator)
-
-    return grpc.intercept_channel(channel, _RelayTokenInterceptor(token))
-
-
-class _ClientCallDetailsFields(Protocol):
-    method: str
-    timeout: float | None
-    metadata: Any
-    credentials: Any
-    wait_for_ready: bool | None
-    compression: Any
 
 
 class _RequestIterator:

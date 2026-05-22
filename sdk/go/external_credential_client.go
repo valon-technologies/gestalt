@@ -3,19 +3,13 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"os"
+	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
-
-// EnvExternalCredentialSocket names the environment variable containing the
-// external-credential service target.
-const EnvExternalCredentialSocket = "GESTALT_EXTERNAL_CREDENTIAL_SOCKET"
-
-// EnvExternalCredentialSocketToken names the optional external-credential
-// relay-token variable.
-const EnvExternalCredentialSocketToken = EnvExternalCredentialSocket + "_TOKEN"
 
 // ExternalCredentialClient calls the host-managed external credential provider.
 type ExternalCredentialClient struct {
@@ -27,11 +21,10 @@ var sharedExternalCredentialTransport sharedManagerTransport[proto.ExternalCrede
 // ExternalCredentials connects to the ExternalCredentialProvider exposed by
 // gestaltd.
 func ExternalCredentials() (*ExternalCredentialClient, error) {
-	target := os.Getenv(EnvExternalCredentialSocket)
-	if target == "" {
-		return nil, fmt.Errorf("external credentials: %s is not set", EnvExternalCredentialSocket)
+	target, token, err := hostServiceTarget("external credentials")
+	if err != nil {
+		return nil, err
 	}
-	token := os.Getenv(EnvExternalCredentialSocketToken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -70,6 +63,9 @@ func (c *ExternalCredentialClient) GetCredential(ctx context.Context, req *GetEx
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
 	resp, err := c.client.GetCredential(ctx, getExternalCredentialRequestToProto(req))
+	if externalCredentialHostServiceMissing(err) {
+		return nil, ErrExternalCredentialNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +81,9 @@ func (c *ExternalCredentialClient) ListCredentials(ctx context.Context, req *Lis
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
 	resp, err := c.client.ListCredentials(ctx, listExternalCredentialsRequestToProto(req))
+	if externalCredentialHostServiceMissing(err) {
+		return &ListExternalCredentialsResponse{}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -114,6 +113,13 @@ func (c *ExternalCredentialClient) ValidateCredentialConfig(ctx context.Context,
 	return err
 }
 
+func externalCredentialHostServiceMissing(err error) bool {
+	if status.Code(err) != codes.Unimplemented {
+		return false
+	}
+	return strings.Contains(status.Convert(err).Message(), "unknown service gestalt.provider.v1.ExternalCredentialProvider")
+}
+
 func (c *ExternalCredentialClient) ResolveCredential(ctx context.Context, req *ResolveExternalCredentialRequest) (*ResolveExternalCredentialResponse, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("external credentials: client is not initialized")
@@ -122,6 +128,9 @@ func (c *ExternalCredentialClient) ResolveCredential(ctx context.Context, req *R
 		return nil, fmt.Errorf("external credentials: request is required")
 	}
 	resp, err := c.client.ResolveCredential(ctx, resolveExternalCredentialRequestToProto(req))
+	if externalCredentialHostServiceMissing(err) {
+		return nil, ErrExternalCredentialNotFound
+	}
 	if err != nil {
 		return nil, err
 	}

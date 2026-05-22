@@ -817,8 +817,8 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 	sessionVerifier := newRelayTestSessionVerifier("session-1")
 	var registerCalls atomic.Int64
 	hostService := runtimehost.HostService{
-		Name:   "cache",
-		EnvVar: envVar,
+		Name:           "cache",
+		MethodPrefixes: []string{"/gestalt.provider.v1.Cache/"},
 		Register: func(srv *grpc.Server) {
 			registerCalls.Add(1)
 			proto.RegisterCacheServer(srv, cacheSrv)
@@ -843,7 +843,6 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 		PluginName:   "support",
 		SessionID:    "session-1",
 		Service:      "cache",
-		EnvVar:       envVar,
 		MethodPrefix: "/gestalt.provider.v1.Cache/",
 		TTL:          time.Minute,
 	})
@@ -916,8 +915,8 @@ func TestHostServiceRelayProxiesGRPCRequestsOnManagementProfile(t *testing.T) {
 	const envVar = "GESTALT_TEST_CACHE_SOCKET"
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-1"), runtimehost.HostService{
-		Name:   "cache",
-		EnvVar: envVar,
+		Name:           "cache",
+		MethodPrefixes: []string{"/gestalt.provider.v1.Cache/"},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, cacheSrv)
 		},
@@ -940,7 +939,6 @@ func TestHostServiceRelayProxiesGRPCRequestsOnManagementProfile(t *testing.T) {
 		PluginName:   "support",
 		SessionID:    "session-1",
 		Service:      "cache",
-		EnvVar:       envVar,
 		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})
@@ -974,15 +972,15 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 	cacheSrv2 := &relayTestCacheServer{}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	hostService1 := runtimehost.HostService{
-		Name:   "cache",
-		EnvVar: envVar,
+		Name:           "cache",
+		MethodPrefixes: []string{"/gestalt.provider.v1.Cache/"},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, cacheSrv1)
 		},
 	}
 	hostService2 := runtimehost.HostService{
-		Name:   "cache",
-		EnvVar: envVar,
+		Name:           "cache",
+		MethodPrefixes: []string{"/gestalt.provider.v1.Cache/"},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, cacheSrv2)
 		},
@@ -1007,7 +1005,6 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 		PluginName:   "support",
 		SessionID:    "session-2",
 		Service:      "cache",
-		EnvVar:       envVar,
 		MethodPrefix: "/gestalt.provider.v1.Cache/",
 		TTL:          time.Minute,
 	})
@@ -1035,7 +1032,6 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 		PluginName:   "support",
 		SessionID:    "session-1",
 		Service:      "cache",
-		EnvVar:       envVar,
 		MethodPrefix: "/gestalt.provider.v1.Cache/",
 		TTL:          time.Minute,
 	})
@@ -1073,8 +1069,8 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	sessionVerifier := newRelayTestSessionVerifier("session-1")
 	hostService := runtimehost.HostService{
-		Name:   "cache",
-		EnvVar: envVar,
+		Name:           "cache",
+		MethodPrefixes: []string{"/gestalt.provider.v1.Cache/"},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, cacheSrv)
 		},
@@ -1098,7 +1094,6 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 		PluginName:   "support",
 		SessionID:    "session-1",
 		Service:      "cache",
-		EnvVar:       envVar,
 		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})
@@ -1146,8 +1141,8 @@ func TestHostServiceRelayRoutesRegisteredPluginInvokerService(t *testing.T) {
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	sessionVerifier := newRelayTestSessionVerifier("provider-dev-session")
 	publicHostServices.RegisterVerified("support", sessionVerifier, runtimehost.HostService{
-		Name:   "plugin_invoker",
-		EnvVar: plugininvokerservice.DefaultSocketEnv,
+		Name:           "plugin_invoker",
+		MethodPrefixes: []string{"/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/"},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer("support", invokes, invoker, invocationTokens))
 		},
@@ -1169,7 +1164,6 @@ func TestHostServiceRelayRoutesRegisteredPluginInvokerService(t *testing.T) {
 		PluginName:   "support",
 		SessionID:    "provider-dev-session",
 		Service:      "plugin_invoker",
-		EnvVar:       plugininvokerservice.DefaultSocketEnv,
 		MethodPrefix: "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})
@@ -1275,7 +1269,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 		{
 			name:         "runtime log host",
 			service:      "runtime_log_host",
-			envVar:       runtimehost.DefaultRuntimeLogHostSocketEnv,
+			envVar:       runtimehost.DefaultHostServiceSocketEnv,
 			methodPrefix: "/" + proto.PluginRuntimeLogHost_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
 				proto.RegisterPluginRuntimeLogHostServer(srv, relayTestRuntimeLogHostServer{calls: calls})
@@ -1310,8 +1304,8 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 			sessionVerifier := newRelayTestSessionVerifier("session-1")
 			publicHostServices.RegisterVerified("support", sessionVerifier, runtimehost.HostService{
-				Name:   tc.service,
-				EnvVar: tc.envVar,
+				Name:           tc.service,
+				MethodPrefixes: []string{tc.methodPrefix},
 				Register: func(srv *grpc.Server) {
 					tc.register(srv, &calls)
 				},
@@ -1334,7 +1328,6 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 				PluginName:   "support",
 				SessionID:    "session-1",
 				Service:      tc.service,
-				EnvVar:       tc.envVar,
 				MethodPrefix: tc.methodPrefix,
 				TTL:          time.Minute,
 			})
@@ -1407,7 +1400,6 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 		PluginName:   "support",
 		SessionID:    "provider-dev-session",
 		Service:      "plugin_invoker",
-		EnvVar:       plugininvokerservice.DefaultSocketEnv,
 		MethodPrefix: "/" + proto.PluginInvoker_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})
@@ -1462,8 +1454,8 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 	const envVar = "GESTALT_TEST_CACHE_SOCKET"
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	publicHostServices.RegisterVerified("support", newRelayTestSessionVerifier("session-1"), runtimehost.HostService{
-		Name:   "cache",
-		EnvVar: envVar,
+		Name:           "cache",
+		MethodPrefixes: []string{"/gestalt.provider.v1.Cache/"},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, cacheSrv)
 		},
@@ -1486,7 +1478,6 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 		PluginName:   "support",
 		SessionID:    "session-1",
 		Service:      "cache",
-		EnvVar:       envVar,
 		MethodPrefix: "/gestalt.provider.v1.IndexedDB/",
 		TTL:          time.Minute,
 	})
@@ -1514,8 +1505,8 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 	stubDB := &coretesting.StubIndexedDB{}
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	publicHostServices.RegisterVerified("relay-plugin", newRelayTestSessionVerifier("session-1"), runtimehost.HostService{
-		Name:   "indexeddb",
-		EnvVar: indexeddbservice.DefaultSocketEnv,
+		Name:           "indexeddb",
+		MethodPrefixes: []string{"/" + proto.IndexedDB_ServiceDesc.ServiceName + "/"},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(stubDB, "relay-plugin", indexeddbservice.ServerOptions{
 				AllowedStores: []string{"tasks"},
@@ -1540,7 +1531,6 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 		PluginName:   "relay-plugin",
 		SessionID:    "session-1",
 		Service:      "indexeddb",
-		EnvVar:       indexeddbservice.DefaultSocketEnv,
 		MethodPrefix: "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})

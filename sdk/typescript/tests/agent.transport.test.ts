@@ -22,8 +22,8 @@ import {
   AgentHost,
   createAgentProviderService,
   defineAgentProvider,
-  ENV_AGENT_HOST_SOCKET,
-  ENV_AGENT_HOST_SOCKET_TOKEN,
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
@@ -118,8 +118,8 @@ async function reserveTCPAddress(): Promise<string> {
 }
 
 test("AgentHost honors tcp target env and relay token env", async () => {
-  const previousSocket = process.env[ENV_AGENT_HOST_SOCKET];
-  const previousToken = process.env[ENV_AGENT_HOST_SOCKET_TOKEN];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
+  const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const seenTokens: string[] = [];
   const address = await reserveTCPAddress();
 
@@ -155,8 +155,8 @@ test("AgentHost honors tcp target env and relay token env", async () => {
       });
     });
 
-    process.env[ENV_AGENT_HOST_SOCKET] = `tcp://${address}`;
-    process.env[ENV_AGENT_HOST_SOCKET_TOKEN] = "relay-token-typescript";
+    process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
+    process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
     const host = new AgentHost();
     const response = await host.executeTool(
@@ -173,14 +173,14 @@ test("AgentHost honors tcp target env and relay token env", async () => {
     expect(seenTokens).toEqual(["relay-token-typescript"]);
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_AGENT_HOST_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_AGENT_HOST_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
     if (previousToken === undefined) {
-      delete process.env[ENV_AGENT_HOST_SOCKET_TOKEN];
+      delete process.env[ENV_HOST_SERVICE_TOKEN];
     } else {
-      process.env[ENV_AGENT_HOST_SOCKET_TOKEN] = previousToken;
+      process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
     }
     if (server.listening) {
       await new Promise<void>((resolve) => {
@@ -193,7 +193,7 @@ test("AgentHost honors tcp target env and relay token env", async () => {
 test("AgentHost executes tools through the configured unix socket", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-agent-host-"));
   const socketPath = join(tempDir, "agent-host.sock");
-  const previousSocket = process.env[ENV_AGENT_HOST_SOCKET];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const calls: Array<{
     turnId: string;
     toolCallId: string;
@@ -298,7 +298,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
       });
     });
 
-    process.env[ENV_AGENT_HOST_SOCKET] = socketPath;
+    process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 
     const host = new AgentHost();
     const response = await host.executeToolForTurn({
@@ -380,9 +380,9 @@ test("AgentHost executes tools through the configured unix socket", async () => 
     ]);
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_AGENT_HOST_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_AGENT_HOST_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
     if (server.listening) {
       await new Promise<void>((resolve) => {

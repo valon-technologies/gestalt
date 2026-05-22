@@ -34,8 +34,8 @@ use generated::v1::{
 };
 use gestalt::{
     AgentMessage, AgentMessagePart, BoundWorkflowAgentTarget, BoundWorkflowPluginTarget,
-    BoundWorkflowTarget, ENV_WORKFLOW_MANAGER_SOCKET, Request, WorkflowEvent, WorkflowEventMatch,
-    WorkflowManager, WorkflowManagerCreateDefinition, WorkflowManagerCreateEventTrigger,
+    BoundWorkflowTarget, Request, WorkflowEvent, WorkflowEventMatch, WorkflowManager,
+    WorkflowManagerCreateDefinition, WorkflowManagerCreateEventTrigger,
     WorkflowManagerCreateSchedule, WorkflowManagerDeleteDefinition,
     WorkflowManagerDeleteEventTrigger, WorkflowManagerDeleteSchedule, WorkflowManagerGetDefinition,
     WorkflowManagerGetEventTrigger, WorkflowManagerGetSchedule, WorkflowManagerPauseEventTrigger,
@@ -49,8 +49,6 @@ use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
-
-const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_PROVIDER_SOCKET_TOKEN";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
@@ -627,9 +625,8 @@ async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
         .expect("bind tcp listener");
     let address = listener.local_addr().expect("local addr");
     let _socket_guard =
-        helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, format!("tcp://{address}"));
-    let _token_guard =
-        helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, "relay-token-rust");
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
+    let _token_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
     let server = TestWorkflowManagerServer::default();
     let serve_server = server.clone();
@@ -670,7 +667,8 @@ async fn workflow_manager_connects_over_tcp_and_sends_relay_token() {
 async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-wm.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let server = TestWorkflowManagerServer::default();
     let serve_server = server.clone();
@@ -1087,7 +1085,8 @@ async fn workflow_manager_connects_over_unix_socket_and_sends_invocation_token()
 async fn workflow_manager_signal_or_start_accepts_native_values() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-wm-native.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let server = TestWorkflowManagerServer::default();
     let serve_server = server.clone();
@@ -1178,7 +1177,8 @@ async fn workflow_manager_signal_or_start_accepts_native_values() {
 async fn request_workflow_manager_uses_embedded_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-req-wm.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_WORKFLOW_MANAGER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let server = TestWorkflowManagerServer::default();
     let serve_server = server.clone();

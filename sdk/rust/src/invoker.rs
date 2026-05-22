@@ -19,9 +19,9 @@ use crate::protocol;
 type PluginInvokerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
 /// Environment variable containing the plugin-invoker host-service target.
-pub const ENV_PLUGIN_INVOKER_SOCKET: &str = "GESTALT_PLUGIN_INVOKER_SOCKET";
+pub const ENV_PLUGIN_INVOKER_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
 /// Environment variable containing the optional plugin-invoker relay token.
-pub const ENV_PLUGIN_INVOKER_SOCKET_TOKEN: &str = "GESTALT_PLUGIN_INVOKER_SOCKET_TOKEN";
+pub const ENV_PLUGIN_INVOKER_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const PLUGIN_INVOKER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]

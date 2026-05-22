@@ -56,8 +56,7 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 		Name:    "modal",
 		Command: runtimeBin,
 		HostServices: []runtimehost.HostService{{
-			Name:   "runtime_logs",
-			EnvVar: runtimehost.DefaultRuntimeLogHostSocketEnv,
+			Name: "runtime_logs",
 			Register: func(srv *grpc.Server) {
 				runtimehost.RegisterRuntimeLogHostServer(srv, "modal", services.RuntimeSessionLogs.AppendSessionLogs)
 			},

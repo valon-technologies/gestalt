@@ -1631,31 +1631,27 @@ func buildExternalCredentialsHostServices(name string, deps Deps) ([]runtimehost
 	if len(deps.IndexedDBs) == 0 || deps.SelectedIndexedDBName == "" {
 		return nil, fmt.Errorf("indexeddb host services are not available")
 	}
-	hostServices := make([]runtimehost.HostService, 0, len(deps.IndexedDBs)+1)
-	if ds := deps.IndexedDBs[deps.SelectedIndexedDBName]; ds != nil {
-		hostServices = append(hostServices, externalCredentialsIndexedDBHostService(indexeddbservice.DefaultSocketEnv, name, ds))
-	}
+	bindings := make(map[string]indexeddb.IndexedDB, len(deps.IndexedDBs))
 	for _, indexedDBName := range slices.Sorted(maps.Keys(deps.IndexedDBs)) {
 		ds := deps.IndexedDBs[indexedDBName]
 		if ds == nil {
 			continue
 		}
-		hostServices = append(hostServices, externalCredentialsIndexedDBHostService(indexeddbservice.SocketEnv(indexedDBName), name, ds))
+		bindings[indexedDBName] = ds
 	}
-	if len(hostServices) == 0 {
+	if len(bindings) == 0 {
 		return nil, fmt.Errorf("indexeddb %q is not available", deps.SelectedIndexedDBName)
 	}
-	return hostServices, nil
+	return []runtimehost.HostService{externalCredentialsIndexedDBHostService(name, deps.SelectedIndexedDBName, bindings)}, nil
 }
 
-func externalCredentialsIndexedDBHostService(envVar, providerName string, ds indexeddb.IndexedDB) runtimehost.HostService {
+func externalCredentialsIndexedDBHostService(providerName, defaultBinding string, bindings map[string]indexeddb.IndexedDB) runtimehost.HostService {
+	opts := indexeddbservice.ServerOptions{AllowedStores: []string{"external_credentials"}}
 	return runtimehost.HostService{
-		Name:   "indexeddb",
-		EnvVar: envVar,
+		Name:           "indexeddb",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, providerName, indexeddbservice.ServerOptions{
-				AllowedStores: []string{"external_credentials"},
-			}))
+			proto.RegisterIndexedDBServer(srv, registerIndexedDBServer(bindings, defaultBinding, providerName, opts))
 		},
 	}
 }
@@ -1819,27 +1815,27 @@ func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]i
 		return nil
 	}
 
-	hostServices := make([]runtimehost.HostService, 0, len(indexeddbs)+1)
-	if selected := indexeddbs[selectedName]; strings.TrimSpace(selectedName) != "" && selected != nil {
-		hostServices = append(hostServices, indexedDBHostService(indexeddbservice.DefaultSocketEnv, selectedName, selected))
-	}
-
+	bindings := make(map[string]indexeddb.IndexedDB, len(indexeddbs))
 	for _, name := range slices.Sorted(maps.Keys(indexeddbs)) {
 		ds := indexeddbs[name]
 		if ds == nil {
 			continue
 		}
-		hostServices = append(hostServices, indexedDBHostService(indexeddbservice.SocketEnv(name), name, ds))
+		bindings[name] = ds
 	}
-	return hostServices
+	if len(bindings) == 0 {
+		return nil
+	}
+	return []runtimehost.HostService{indexedDBHostService(strings.TrimSpace(selectedName), bindings)}
 }
 
-func indexedDBHostService(envVar, name string, ds indexeddb.IndexedDB) runtimehost.HostService {
+func indexedDBHostService(defaultBinding string, bindings map[string]indexeddb.IndexedDB) runtimehost.HostService {
+	pluginName := strings.TrimSpace(defaultBinding)
 	return runtimehost.HostService{
-		Name:   "indexeddb",
-		EnvVar: envVar,
+		Name:           "indexeddb",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{}))
+			proto.RegisterIndexedDBServer(srv, registerIndexedDBServer(bindings, defaultBinding, pluginName, indexeddbservice.ServerOptions{}))
 		},
 	}
 }
@@ -1901,8 +1897,8 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		}
 	}
 	hostServices := []runtimehost.HostService{{
-		Name:   "workflow_host",
-		EnvVar: workflowservice.DefaultHostSocketEnv,
+		Name:           "workflow_host",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterWorkflowHostServer(srv, workflowservice.NewHostServer(name, deps.WorkflowRuntime.Invoke))
 		},
@@ -1918,7 +1914,7 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		return nil, fmt.Errorf("workflow provider: %w", err)
 	}
 	if effectiveIndexedDB.Enabled {
-		indexedDBHostServices, indexedDBCleanup, err := buildWorkflowIndexedDBHostServices(name, effectiveIndexedDB, deps)
+		indexedDBHostServices, indexedDBCleanup, err := buildIndexedDBHostServices(name, name, effectiveIndexedDB, deps)
 		if err != nil {
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
@@ -1978,8 +1974,8 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		}
 	}
 	hostServices := []runtimehost.HostService{{
-		Name:   "agent_host",
-		EnvVar: agentservice.DefaultHostSocketEnv,
+		Name:           "agent_host",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.AgentHost_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterAgentHostServer(srv, agentservice.NewHostServerWithConnections(name, deps.AgentRuntime.ListTools, deps.AgentRuntime.ExecuteTool, deps.AgentRuntime.ResolveConnection))
 		},
@@ -1995,7 +1991,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		return nil, fmt.Errorf("agent provider: %w", err)
 	}
 	if effectiveIndexedDB.Enabled {
-		indexedDBHostServices, indexedDBCleanup, err := buildAgentIndexedDBHostServices(name, effectiveIndexedDB, deps)
+		indexedDBHostServices, indexedDBCleanup, err := buildIndexedDBHostServices(name, name, effectiveIndexedDB, deps)
 		if err != nil {
 			return nil, fmt.Errorf("agent provider: %w", err)
 		}

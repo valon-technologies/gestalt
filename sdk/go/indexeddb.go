@@ -3,56 +3,54 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	rpcstatus "google.golang.org/genproto/googleapis/rpc/status"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 )
 
-// EnvIndexedDBSocket is the default Unix-socket environment variable used by
-// [IndexedDB].
-const EnvIndexedDBSocket = "GESTALT_INDEXEDDB_SOCKET"
-const indexedDBSocketTokenSuffix = "_TOKEN"
-
-// IndexedDBSocketEnv returns the environment variable name used for a named
-// IndexedDB transport socket.
-func IndexedDBSocketEnv(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return EnvIndexedDBSocket
-	}
-	var b strings.Builder
-	b.WriteString(EnvIndexedDBSocket)
-	b.WriteByte('_')
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r - ('a' - 'A'))
-		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
+// IndexedDBClient speaks to a running IndexedDB provider over the unified host-service socket.
+type IndexedDBClient struct {
+	client proto.IndexedDBClient
 }
 
-// IndexedDBSocketTokenEnv returns the companion environment variable name used
-// to discover a host-service relay token for an IndexedDB binding.
-func IndexedDBSocketTokenEnv(name string) string {
-	return IndexedDBSocketEnv(name) + indexedDBSocketTokenSuffix
+var sharedIndexedDBTransports sync.Map
+
+// IndexedDB connects to the IndexedDB provider exposed by gestaltd.
+func IndexedDB(name ...string) (*IndexedDBClient, error) {
+	target, token, err := hostServiceTarget("indexeddb")
+	if err != nil {
+		return nil, err
+	}
+	binding := firstIndex(name)
+	transport := getSharedIndexedDBTransport(binding)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	client, err := hostServiceTransportClient(ctx, "indexeddb", target, token, binding, transport, proto.NewIndexedDBClient)
+	if err != nil {
+		return nil, fmt.Errorf("indexeddb: connect to host: %w", err)
+	}
+	return &IndexedDBClient{client: client}, nil
 }
+
+func getSharedIndexedDBTransport(binding string) *sharedManagerTransport[proto.IndexedDBClient] {
+	val, _ := sharedIndexedDBTransports.LoadOrStore(binding, &sharedManagerTransport[proto.IndexedDBClient]{})
+	return val.(*sharedManagerTransport[proto.IndexedDBClient])
+}
+
+func firstIndex(name []string) string {
+	if len(name) == 0 {
+		return ""
+	}
+	return name[0]
+}
+
+// Close is a no-op because this client uses shared transport.
+func (db *IndexedDBClient) Close() error { return nil }
 
 var (
 	// ErrNotFound indicates that the requested store entry or cursor row does
@@ -160,148 +158,6 @@ type ColumnDef struct {
 type ObjectStoreSchema struct {
 	Indexes []IndexSchema
 	Columns []ColumnDef
-}
-
-// IndexedDBClient speaks to a running IndexedDB provider over a host-provided
-// transport target.
-type IndexedDBClient struct {
-	client proto.IndexedDBClient
-	conn   *grpc.ClientConn
-}
-
-// IndexedDB connects to the IndexedDB provider exposed by gestaltd. The target
-// can be a plain Unix socket path, a unix:///path URI, or a tcp://host:port or
-// tls://host:port URI.
-func IndexedDB(name ...string) (*IndexedDBClient, error) {
-	envName := EnvIndexedDBSocket
-	if len(name) > 0 {
-		envName = IndexedDBSocketEnv(name[0])
-	}
-	target := os.Getenv(envName)
-	if target == "" {
-		return nil, fmt.Errorf("indexeddb: %s is not set", envName)
-	}
-	network, address, err := parseIndexedDBTarget(target)
-	if err != nil {
-		return nil, err
-	}
-	token := os.Getenv(IndexedDBSocketTokenEnv(firstIndex(name)))
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	var conn *grpc.ClientConn
-	opts := indexedDBDialOptions(token)
-	switch network {
-	case "unix":
-		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-					var d net.Dialer
-					return d.DialContext(ctx, "unix", address)
-				}),
-				grpc.WithAuthority("localhost"),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tcp":
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tls":
-		host, _, splitErr := net.SplitHostPort(address)
-		if splitErr != nil {
-			return nil, fmt.Errorf("indexeddb: parse tls target %q: %w", address, splitErr)
-		}
-		tlsConfig, tlsErr := hostServiceTLSConfig("indexeddb", host)
-		if tlsErr != nil {
-			return nil, tlsErr
-		}
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	default:
-		return nil, fmt.Errorf("indexeddb: unsupported transport network %q", network)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("indexeddb: connect to host: %w", err)
-	}
-	return &IndexedDBClient{
-		client: proto.NewIndexedDBClient(conn),
-		conn:   conn,
-	}, nil
-}
-
-func indexedDBDialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil
-	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(indexedDBRelayPerRPCCredentials{token: token})}
-}
-
-func firstIndex(name []string) string {
-	if len(name) == 0 {
-		return ""
-	}
-	return name[0]
-}
-
-type indexedDBRelayPerRPCCredentials struct {
-	token string
-}
-
-func (c indexedDBRelayPerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{
-		"x-gestalt-host-service-relay-token": c.token,
-	}, nil
-}
-
-func (indexedDBRelayPerRPCCredentials) RequireTransportSecurity() bool { return false }
-
-func parseIndexedDBTarget(raw string) (network string, address string, err error) {
-	target := strings.TrimSpace(raw)
-	if target == "" {
-		return "", "", fmt.Errorf("indexeddb: transport target is required")
-	}
-	switch {
-	case strings.HasPrefix(target, "tcp://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tcp://"))
-		if address == "" {
-			return "", "", fmt.Errorf("indexeddb: tcp target %q is missing host:port", raw)
-		}
-		return "tcp", address, nil
-	case strings.HasPrefix(target, "tls://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-		if address == "" {
-			return "", "", fmt.Errorf("indexeddb: tls target %q is missing host:port", raw)
-		}
-		return "tls", address, nil
-	case strings.HasPrefix(target, "unix://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "unix://"))
-		if address == "" {
-			return "", "", fmt.Errorf("indexeddb: unix target %q is missing a socket path", raw)
-		}
-		return "unix", address, nil
-	case strings.Contains(target, "://"):
-		parsed, parseErr := url.Parse(target)
-		if parseErr != nil {
-			return "", "", fmt.Errorf("indexeddb: parse target %q: %w", raw, parseErr)
-		}
-		return "", "", fmt.Errorf("indexeddb: unsupported target scheme %q", parsed.Scheme)
-	default:
-		return "unix", filepath.Clean(target), nil
-	}
-}
-
-// Close closes the underlying gRPC transport.
-func (db *IndexedDBClient) Close() error {
-	return db.conn.Close()
 }
 
 // CreateObjectStore creates a named object store with the supplied schema.

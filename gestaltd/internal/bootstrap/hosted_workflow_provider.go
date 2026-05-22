@@ -208,20 +208,18 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 		workflowAllowedHosts = append([]string(nil), launch.allowedHosts...)
 	}
 	allowedHosts := hostedWorkflowAllowedHosts(workflowAllowedHosts, launch.runtimePlan)
-	for _, hostService := range hostServiceBindingDescriptorsFromConfigured(hostServices) {
-		bindingEnv, relayHost, err := buildHostedRuntimeHostServiceEnv(name, sessionID, hostService, deps)
-		if err != nil {
-			return nil, err
+	bindingEnv, relayHost, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, hostServiceBindingDescriptorsFromConfigured(hostServices), deps)
+	if err != nil {
+		return nil, err
+	}
+	if len(bindingEnv) > 0 {
+		if startEnv == nil {
+			startEnv = make(map[string]string, len(bindingEnv))
 		}
-		if len(bindingEnv) > 0 {
-			if startEnv == nil {
-				startEnv = make(map[string]string, len(bindingEnv))
-			}
-			maps.Copy(startEnv, bindingEnv)
-		}
-		if launch.runtimePlan.RequiresHostnameEgress {
-			allowedHosts = appendAllowedHost(allowedHosts, relayHost)
-		}
+		maps.Copy(startEnv, bindingEnv)
+	}
+	if launch.runtimePlan.RequiresHostnameEgress {
+		allowedHosts = appendAllowedHost(allowedHosts, relayHost)
 	}
 	egressPlan, err := buildHostedRuntimeEgressLaunchPlan(name, sessionID, deps.Egress.Policy(workflowAllowedHosts), allowedHosts, launch.runtimePlan, deps)
 	if err != nil {

@@ -10,14 +10,16 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from ._gen.v1 import pluginruntime_pb2 as _pb
 from ._gen.v1 import pluginruntime_pb2_grpc as _pb_grpc
-from ._grpc_transport import host_service_channel
+from ._grpc_transport import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
+    host_service_channel,
+)
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 timestamp_pb2: Any = cast(Any, _timestamp_pb2)
 
-ENV_RUNTIME_LOG_HOST_SOCKET = "GESTALT_RUNTIME_LOG_SOCKET"
-ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN = f"{ENV_RUNTIME_LOG_HOST_SOCKET}_TOKEN"
 ENV_RUNTIME_SESSION_ID = "GESTALT_RUNTIME_SESSION_ID"
 
 _STREAMS = {
@@ -30,19 +32,19 @@ _STREAMS = {
 class RuntimeLogHost:
     """Client for appending runtime logs to the host log stream.
 
-    ``RuntimeLogHost`` reads ``GESTALT_RUNTIME_LOG_SOCKET`` and its optional
+    ``RuntimeLogHost`` reads ``GESTALT_HOST_SERVICE_SOCKET`` and its optional
     relay token from the environment. Use it directly for structured log
     entries, or create a :class:`RuntimeLogWriter`/:class:`RuntimeLogHandler`
     when redirecting standard streams or Python logging output.
     """
 
     def __init__(self) -> None:
-        target = os.environ.get(ENV_RUNTIME_LOG_HOST_SOCKET, "").strip()
+        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "").strip()
         if not target:
             raise RuntimeError(
-                f"runtime log host: {ENV_RUNTIME_LOG_HOST_SOCKET} is not set"
+                f"runtime log host: {ENV_HOST_SERVICE_SOCKET} is not set"
             )
-        relay_token = os.environ.get(ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN, "").strip()
+        relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "").strip()
         self._channel = host_service_channel(
             "runtime log host",
             target,

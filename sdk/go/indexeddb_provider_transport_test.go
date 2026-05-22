@@ -16,13 +16,15 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
 
+const nativeIndexedDBProviderBinding = "native-provider"
+
 func TestServeIndexedDBProvider_NativeCursorAndErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	socket := nativeIndexedDBSocket(t, "cursor")
 	t.Setenv(proto.EnvProviderSocket, socket)
-	t.Setenv(gestalt.EnvIndexedDBSocket, socket)
+	t.Setenv(gestalt.EnvHostServiceSocket, socket)
 
 	provider := newNativeIndexedDBProvider()
 	serveErr := make(chan error, 1)
@@ -31,7 +33,7 @@ func TestServeIndexedDBProvider_NativeCursorAndErrors(t *testing.T) {
 	}()
 	waitForSocket(t, socket, serveErr)
 
-	client, err := gestalt.IndexedDB()
+	client, err := gestalt.IndexedDB(nativeIndexedDBProviderBinding)
 	if err != nil {
 		t.Fatalf("IndexedDB: %v", err)
 	}
@@ -615,7 +617,7 @@ func TestServeIndexedDBProvider_NativeReadonlySentinel(t *testing.T) {
 
 	socket := nativeIndexedDBSocket(t, "readonly")
 	t.Setenv(proto.EnvProviderSocket, socket)
-	t.Setenv(gestalt.EnvIndexedDBSocket, socket)
+	t.Setenv(gestalt.EnvHostServiceSocket, socket)
 
 	provider := newNativeIndexedDBProvider()
 	serveErr := make(chan error, 1)
@@ -624,7 +626,7 @@ func TestServeIndexedDBProvider_NativeReadonlySentinel(t *testing.T) {
 	}()
 	waitForSocket(t, socket, serveErr)
 
-	client, err := gestalt.IndexedDB()
+	client, err := gestalt.IndexedDB(nativeIndexedDBProviderBinding)
 	if err != nil {
 		t.Fatalf("IndexedDB: %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"google.golang.org/grpc/codes"
@@ -47,7 +48,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
 	}
-	result, err := s.provider.Execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
+	result, err := s.provider.Execute(ctx, req.GetOperation(), protoutil.MapFromStruct(req.GetParams()), req.GetToken())
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "execute: %v", err)
 	}
@@ -126,7 +127,7 @@ func httpSubjectRequestFromProto(req *proto.HTTPSubjectRequest) *core.HTTPSubjec
 		ContentType:     req.GetContentType(),
 		Headers:         mapStringLists(req.GetHeaders()),
 		Query:           mapStringLists(req.GetQuery()),
-		Params:          mapFromStruct(req.GetParams()),
+		Params:          protoutil.MapFromStruct(req.GetParams()),
 		RawBody:         append([]byte(nil), req.GetRawBody()...),
 		SecurityScheme:  req.GetSecurityScheme(),
 		VerifiedSubject: req.GetVerifiedSubject(),

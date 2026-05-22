@@ -14,8 +14,8 @@ import {
   WorkflowProvider as WorkflowProviderService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
 import {
-  ENV_WORKFLOW_HOST_SOCKET,
-  ENV_WORKFLOW_HOST_SOCKET_TOKEN,
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
   WorkflowHost,
   WorkflowRunStatus,
   createWorkflowProviderService,
@@ -250,8 +250,8 @@ test("WorkflowProvider service converts transport messages to native callbacks",
 });
 
 test("WorkflowHost honors tcp target env and relay token env", async () => {
-  const previousSocket = process.env[ENV_WORKFLOW_HOST_SOCKET];
-  const previousToken = process.env[ENV_WORKFLOW_HOST_SOCKET_TOKEN];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
+  const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const seenTokens: string[] = [];
   const address = await reserveTCPAddress();
 
@@ -287,8 +287,8 @@ test("WorkflowHost honors tcp target env and relay token env", async () => {
       });
     });
 
-    process.env[ENV_WORKFLOW_HOST_SOCKET] = `tcp://${address}`;
-    process.env[ENV_WORKFLOW_HOST_SOCKET_TOKEN] = "relay-token-typescript";
+    process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
+    process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
     const host = new WorkflowHost();
     const response = await host.invokeOperation({ runId: "run-123" });
@@ -298,14 +298,14 @@ test("WorkflowHost honors tcp target env and relay token env", async () => {
     expect(seenTokens).toEqual(["relay-token-typescript"]);
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_WORKFLOW_HOST_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_WORKFLOW_HOST_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
     if (previousToken === undefined) {
-      delete process.env[ENV_WORKFLOW_HOST_SOCKET_TOKEN];
+      delete process.env[ENV_HOST_SERVICE_TOKEN];
     } else {
-      process.env[ENV_WORKFLOW_HOST_SOCKET_TOKEN] = previousToken;
+      process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
     }
     if (server.listening) {
       await new Promise<void>((resolve) => {

@@ -7,10 +7,15 @@ import {
   ConnectError,
   createClient,
   type Client,
-  type Interceptor,
   type ServiceImpl,
 } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+} from "./host-service.ts";
 
 import {
   AgentHost as AgentHostService,
@@ -94,12 +99,6 @@ import {
   optionalStruct,
 } from "./protocol-internal.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
-
-/** Environment variable containing the agent-host service target. */
-export const ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET";
-/** Environment variable containing the optional agent-host relay token. */
-export const ENV_AGENT_HOST_SOCKET_TOKEN = `${ENV_AGENT_HOST_SOCKET}_TOKEN`;
-const AGENT_HOST_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
 /** Native message-part type constants for authored agent messages. */
 export const AgentMessagePartType = {
@@ -1141,15 +1140,15 @@ export class AgentHost {
   private readonly client: Client<typeof AgentHostService>;
 
   constructor() {
-    const target = process.env[ENV_AGENT_HOST_SOCKET];
+    const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
     if (!target) {
-      throw new Error(`agent host: ${ENV_AGENT_HOST_SOCKET} is not set`);
+      throw new Error(`agent host: ${ENV_HOST_SERVICE_SOCKET} is not set`);
     }
-    const relayToken = process.env[ENV_AGENT_HOST_SOCKET_TOKEN]?.trim() ?? "";
-    const transport = createGrpcTransport({
-      ...agentHostTransportOptions(target),
-      interceptors: relayToken ? [agentHostRelayTokenInterceptor(relayToken)] : [],
-    });
+    const relayToken = process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("agent host", target),
+      hostServiceMetadataInterceptors(relayToken, ""),
+    );
     this.client = createClient(AgentHostService, transport);
   }
 
@@ -1227,57 +1226,6 @@ export class AgentHost {
       },
     );
   }
-}
-
-function agentHostTransportOptions(rawTarget: string): {
-  baseUrl: string;
-  nodeOptions?: { path: string };
-} {
-  const target = rawTarget.trim();
-  if (!target) {
-    throw new Error("agent host: transport target is required");
-  }
-  if (target.startsWith("tcp://")) {
-    const address = target.slice("tcp://".length).trim();
-    if (!address) {
-      throw new Error(
-        `agent host: tcp target ${JSON.stringify(rawTarget)} is missing host:port`,
-      );
-    }
-    return { baseUrl: `http://${address}` };
-  }
-  if (target.startsWith("tls://")) {
-    const address = target.slice("tls://".length).trim();
-    if (!address) {
-      throw new Error(
-        `agent host: tls target ${JSON.stringify(rawTarget)} is missing host:port`,
-      );
-    }
-    return { baseUrl: `https://${address}` };
-  }
-  if (target.startsWith("unix://")) {
-    const socketPath = target.slice("unix://".length).trim();
-    if (!socketPath) {
-      throw new Error(
-        `agent host: unix target ${JSON.stringify(rawTarget)} is missing a socket path`,
-      );
-    }
-    return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
-  }
-  if (target.includes("://")) {
-    const parsed = new URL(target);
-    throw new Error(
-      `agent host: unsupported target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`,
-    );
-  }
-  return { baseUrl: "http://localhost", nodeOptions: { path: target } };
-}
-
-function agentHostRelayTokenInterceptor(token: string): Interceptor {
-  return (next) => async (req) => {
-    req.header.set(AGENT_HOST_RELAY_TOKEN_HEADER, token);
-    return next(req);
-  };
 }
 
 /** Builds the Connect service implementation used by the TypeScript runtime. */

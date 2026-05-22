@@ -18,8 +18,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const envRuntimeLogHostSocket = "GESTALT_RUNTIME_LOG_SOCKET"
-
 //nolint:staticcheck // grpc.DialContext/WithBlock are still used for this test-only Unix dialer.
 func newRuntimeLogHostTestClient(t *testing.T, socket string) proto.PluginRuntimeLogHostClient {
 	t.Helper()
@@ -62,8 +60,7 @@ func TestRuntimeLogHostServerAppendsLogsOverSDKTransport(t *testing.T) {
 	)
 
 	hostServices, err := StartHostServices([]HostService{{
-		Name:   "runtime_logs",
-		EnvVar: envRuntimeLogHostSocket,
+		Name: "runtime_logs",
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", func(_ context.Context, runtimeProviderName, sessionID string, entries []runtimelogs.AppendEntry) (int64, error) {
 				mu.Lock()
@@ -154,8 +151,7 @@ func TestRuntimeLogHostServerAppendsLogsAfterSessionStoppedOverSDKTransport(t *t
 	}
 
 	hostServices, err := StartHostServices([]HostService{{
-		Name:   "runtime_logs",
-		EnvVar: envRuntimeLogHostSocket,
+		Name: "runtime_logs",
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
 		},
@@ -223,8 +219,7 @@ func TestRuntimeLogHostServerMapsUnknownSessionToNotFound(t *testing.T) {
 	}
 
 	hostServices, err := StartHostServices([]HostService{{
-		Name:   "runtime_logs",
-		EnvVar: envRuntimeLogHostSocket,
+		Name: "runtime_logs",
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
 		},
@@ -279,8 +274,7 @@ func TestRuntimeLogHostServerKeepsStoppedSessionThroughEvictionPressure(t *testi
 	}
 
 	hostServices, err := StartHostServices([]HostService{{
-		Name:   "runtime_logs",
-		EnvVar: envRuntimeLogHostSocket,
+		Name: "runtime_logs",
 		Register: func(srv *grpc.Server) {
 			proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer("modal", store.AppendSessionLogs))
 		},

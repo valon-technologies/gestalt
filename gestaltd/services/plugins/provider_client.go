@@ -13,6 +13,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
+	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
@@ -177,7 +178,7 @@ func (p *remoteProviderBase) ConnectionMode() core.ConnectionMode {
 }
 
 func (p *remoteProviderBase) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
-	msg, err := structFromMap(params)
+	msg, err := protoutil.StructFromMap(params)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +324,7 @@ func (p *remoteProviderBase) decorateCatalog(cat *catalog.Catalog) *catalog.Cata
 }
 
 func callStartProvider(ctx context.Context, client proto.IntegrationProviderClient, name string, config map[string]any) error {
-	cfgStruct, err := structFromMap(config)
+	cfgStruct, err := protoutil.StructFromMap(config)
 	if err != nil {
 		return fmt.Errorf("encode provider config: %w", err)
 	}
@@ -389,7 +390,7 @@ func requestContextProto(ctx context.Context, publicBaseURL string) (*proto.Requ
 		}
 	}
 	if workflow := invocation.WorkflowContextFromContext(ctx); workflow != nil {
-		value, err := structFromMap(workflow)
+		value, err := protoutil.StructFromMap(workflow)
 		if err != nil {
 			return nil, fmt.Errorf("workflow request context: %w", err)
 		}

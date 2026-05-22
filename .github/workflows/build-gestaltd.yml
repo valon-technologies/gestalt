@@ -105,6 +105,19 @@ jobs:
           repo_root="$(git rev-parse --show-toplevel)"
           bash "$repo_root/.github/scripts/check-go-proto-split.sh" "$repo_root/gestaltd"
 
+      - name: Verify checked-in routinggen output
+        run: |
+          repo_root="$(git rev-parse --show-toplevel)"
+          cd "$repo_root/gestaltd/services/cache" && go generate ./...
+          cd "$repo_root/gestaltd/services/indexeddb" && go generate ./...
+          cd "$repo_root/gestaltd/services/s3" && go generate ./...
+          cd "$repo_root"
+          git diff --exit-code -- \
+            gestaltd/services/cache/routing_cache_gen.go \
+            gestaltd/services/indexeddb/routing_indexeddb_gen.go \
+            gestaltd/services/s3/routing_s3_gen.go \
+            gestaltd/services/s3/routing_s3_object_access_gen.go
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@9fae48acfc02a90574d7c304a1758ef9895495fa # v7
         with:

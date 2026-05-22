@@ -1,5 +1,8 @@
 package s3
 
+//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/s3_grpc.pb.go -service S3Server -receiver routingS3Server -binding s3 -package s3 -server-type proto.S3Server -output routing_s3_gen.go
+//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/s3_grpc.pb.go -service S3ObjectAccessServer -receiver routingS3ObjectAccessServer -binding s3 -package s3 -server-type proto.S3ObjectAccessServer -output routing_s3_object_access_gen.go
+
 import (
 	"context"
 	"encoding/base64"
@@ -11,6 +14,7 @@ import (
 
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -45,6 +49,65 @@ func NewServerWithOptions(client s3store.Client, pluginName string, opts ServerO
 		bindingName: strings.TrimSpace(opts.BindingName),
 		accessURLs:  opts.AccessURLs,
 	}
+}
+
+type routingS3Server struct {
+	proto.UnimplementedS3Server
+	servers        map[string]proto.S3Server
+	defaultBinding string
+}
+
+type routingS3ObjectAccessServer struct {
+	proto.UnimplementedS3ObjectAccessServer
+	servers        map[string]proto.S3ObjectAccessServer
+	defaultBinding string
+}
+
+func NewRoutingServers(clients map[string]s3store.Client, defaultBinding string, pluginName string, accessURLs *ObjectAccessURLManager) (proto.S3Server, proto.S3ObjectAccessServer) {
+	s3Servers := make(map[string]proto.S3Server, len(clients))
+	accessServers := make(map[string]proto.S3ObjectAccessServer, len(clients))
+	for binding, client := range clients {
+		binding = strings.TrimSpace(binding)
+		if binding == "" || client == nil {
+			continue
+		}
+		s3Servers[binding] = NewServerWithOptions(client, pluginName, ServerOptions{
+			BindingName: binding,
+			AccessURLs:  accessURLs,
+		})
+		accessServers[binding] = NewObjectAccessServer(accessURLs, pluginName, binding)
+	}
+	defaultBinding = strings.TrimSpace(defaultBinding)
+	if defaultBinding == "" && len(s3Servers) == 1 {
+		for binding := range s3Servers {
+			defaultBinding = binding
+		}
+	}
+	return &routingS3Server{servers: s3Servers, defaultBinding: defaultBinding}, &routingS3ObjectAccessServer{servers: accessServers, defaultBinding: defaultBinding}
+}
+
+func (s *routingS3Server) server(ctx context.Context) (proto.S3Server, error) {
+	return runtimehost.ResolveBinding(ctx, "s3", s.defaultBinding, s.servers)
+}
+
+func (s *routingS3Server) ReadObject(req *proto.ReadObjectRequest, stream proto.S3_ReadObjectServer) error {
+	server, err := s.server(stream.Context())
+	if err != nil {
+		return err
+	}
+	return server.ReadObject(req, stream)
+}
+
+func (s *routingS3Server) WriteObject(stream proto.S3_WriteObjectServer) error {
+	server, err := s.server(stream.Context())
+	if err != nil {
+		return err
+	}
+	return server.WriteObject(stream)
+}
+
+func (s *routingS3ObjectAccessServer) server(ctx context.Context) (proto.S3ObjectAccessServer, error) {
+	return runtimehost.ResolveBinding(ctx, "s3", s.defaultBinding, s.servers)
 }
 
 func (s *s3Server) HeadObject(ctx context.Context, req *proto.HeadObjectRequest) (*proto.HeadObjectResponse, error) {

@@ -19,9 +19,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"go.opentelemetry.io/otel/metric"
 	metricnoop "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/trace"
@@ -161,8 +159,8 @@ func TestBuildWorkflowRegistersExecutableWorkflowHostPublicRelay(t *testing.T) {
 		t.Fatalf("buildWorkflow: %v", err)
 	}
 
-	assertPublicHostServicesVerified(t, deps.PublicHostServices, "workflow_host", workflowservice.DefaultHostSocketEnv)
-	assertPublicHostServicesVerified(t, deps.PublicHostServices, "indexeddb", indexeddbservice.DefaultSocketEnv)
+	assertPublicHostServicesVerified(t, deps.PublicHostServices, "workflow_host")
+	assertPublicHostServicesVerified(t, deps.PublicHostServices, "indexeddb")
 	if err := provider.Close(); err != nil {
 		t.Fatalf("provider.Close: %v", err)
 	}

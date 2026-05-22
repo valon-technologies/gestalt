@@ -33,8 +33,6 @@ export {
   AuthorizationClient,
   AuthorizationProvider,
   AUTHORIZATION_SUBJECT_TYPE_SUBJECT,
-  ENV_AUTHORIZATION_SOCKET,
-  ENV_AUTHORIZATION_SOCKET_TOKEN,
   authorizationAction,
   createAuthorizationProviderService,
   defineAuthorizationProvider,
@@ -139,16 +137,12 @@ export {
   parseBuildArgs,
 } from "./build.ts";
 export {
-  ENV_PLUGIN_INVOKER_SOCKET,
-  ENV_PLUGIN_INVOKER_SOCKET_TOKEN,
   PluginInvoker,
   type PluginGraphQLInvokeOptions,
   type PluginInvocationGrant,
   type PluginInvokeOptions,
 } from "./invoker.ts";
 export {
-  ENV_AGENT_MANAGER_SOCKET,
-  ENV_AGENT_MANAGER_SOCKET_TOKEN,
   AgentManager,
   type AgentManagerCancelTurn,
   type AgentManagerCreateSession,
@@ -165,8 +159,6 @@ export {
   type AgentManagerWorkspaceGitCheckout,
 } from "./agent-manager.ts";
 export {
-  ENV_WORKFLOW_MANAGER_SOCKET,
-  ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
   WorkflowManager,
   type WorkflowManagerCreateDefinition,
   type WorkflowManagerCreateTrigger,
@@ -190,8 +182,6 @@ export {
   type WorkflowManagerUpdateSchedule,
 } from "./workflow-manager.ts";
 export {
-  ENV_RUNTIME_LOG_HOST_SOCKET,
-  ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN,
   ENV_RUNTIME_SESSION_ID,
   RuntimeLogHost,
   type RuntimeLogAppendInput,
@@ -215,16 +205,18 @@ export {
 export {
   Cache,
   CacheProvider,
-  cacheSocketEnv,
-  cacheSocketTokenEnv,
   defineCacheProvider,
   isCacheProvider,
-  ENV_CACHE_SOCKET,
-  ENV_CACHE_SOCKET_TOKEN,
   type CacheEntry,
   type CacheProviderOptions,
   type CacheSetOptions,
 } from "./cache.ts";
+export {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_BINDING_HEADER,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 export {
   defineSecretsProvider,
   isSecretsProvider,
@@ -342,8 +334,6 @@ export {
   ColumnType,
   compareIndexedDBValues,
   indexedDBRangeBounds,
-  indexedDBSocketEnv,
-  indexedDBSocketTokenEnv,
   newIndexedDBCursorSnapshot,
   type Record,
   type KeyRange,
@@ -368,10 +358,6 @@ export {
   createS3Service,
   defineS3Provider,
   isS3Provider,
-  ENV_S3_SOCKET,
-  ENV_S3_SOCKET_TOKEN,
-  s3SocketEnv,
-  s3SocketTokenEnv,
   type ByteRange,
   type CopyOptions,
   type ListOptions,
@@ -390,8 +376,6 @@ export {
   type WriteOptions,
 } from "./s3.ts";
 export {
-  ENV_AGENT_HOST_SOCKET,
-  ENV_AGENT_HOST_SOCKET_TOKEN,
   AgentHost,
   AgentExecutionStatus,
   AgentInteractionState,
@@ -452,8 +436,6 @@ export {
   type UpdateAgentProviderSessionRequest,
 } from "./agent.ts";
 export {
-  ENV_WORKFLOW_HOST_SOCKET,
-  ENV_WORKFLOW_HOST_SOCKET_TOKEN,
   WorkflowHost,
   WorkflowProvider,
   WorkflowRunStatus,

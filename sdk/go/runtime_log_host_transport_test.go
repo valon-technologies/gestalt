@@ -58,7 +58,7 @@ func TestRuntimeLogHostAppendUsesRuntimeSessionEnv(t *testing.T) {
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvRuntimeLogHostSocket, socket)
+	t.Setenv(gestalt.EnvHostServiceSocket, socket)
 	t.Setenv(gestalt.EnvRuntimeSessionID, "runtime-session-1")
 
 	client, err := gestalt.RuntimeLogHost()

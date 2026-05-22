@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,28 +16,33 @@ import (
 )
 
 type sharedManagerTransport[C any] struct {
-	mu     sync.Mutex
-	target string
-	token  string
-	conn   *grpc.ClientConn
-	client C
+	mu      sync.Mutex
+	target  string
+	token   string
+	binding string
+	conn    *grpc.ClientConn
+	client  C
 }
 
 func managerTransportClient[C any](ctx context.Context, serviceName, target, token string, transport *sharedManagerTransport[C], newClient func(grpc.ClientConnInterface) C) (C, error) {
+	return hostServiceTransportClient(ctx, serviceName, target, token, "", transport, newClient)
+}
+
+func hostServiceTransportClient[C any](ctx context.Context, serviceName, target, token, binding string, transport *sharedManagerTransport[C], newClient func(grpc.ClientConnInterface) C) (C, error) {
 	var zero C
 	if transport == nil {
 		return zero, fmt.Errorf("%s: shared transport is not initialized", serviceName)
 	}
 
 	transport.mu.Lock()
-	if transport.conn != nil && transport.target == target && transport.token == token {
+	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
 		client := transport.client
 		transport.mu.Unlock()
 		return client, nil
 	}
 	transport.mu.Unlock()
 
-	conn, err := dialManagerTransport(ctx, serviceName, target, token)
+	conn, err := dialHostService(ctx, serviceName, target, token, binding)
 	if err != nil {
 		return zero, err
 	}
@@ -45,7 +51,7 @@ func managerTransportClient[C any](ctx context.Context, serviceName, target, tok
 	transport.mu.Lock()
 	defer transport.mu.Unlock()
 
-	if transport.conn != nil && transport.target == target && transport.token == token {
+	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
 		_ = conn.Close()
 		return transport.client, nil
 	}
@@ -55,17 +61,21 @@ func managerTransportClient[C any](ctx context.Context, serviceName, target, tok
 
 	transport.target = target
 	transport.token = token
+	transport.binding = binding
 	transport.conn = conn
 	transport.client = client
 	return client, nil
 }
 
-func dialManagerTransport(ctx context.Context, serviceName, target, token string) (*grpc.ClientConn, error) {
+func dialHostService(ctx context.Context, serviceName, target, token, binding string) (*grpc.ClientConn, error) {
+	return dialManagerTransport(ctx, serviceName, target, hostServiceDialOptions(token, binding)...)
+}
+
+func dialManagerTransport(ctx context.Context, serviceName, target string, extraOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	network, address, err := parseManagerTransportTarget(serviceName, target)
 	if err != nil {
 		return nil, err
 	}
-	opts := managerRelayDialOptions(token)
 	switch network {
 	case "unix":
 		return grpc.DialContext(ctx, "passthrough:///localhost",
@@ -77,14 +87,14 @@ func dialManagerTransport(ctx context.Context, serviceName, target, token string
 				}),
 				grpc.WithAuthority("localhost"),
 				grpc.WithBlock(),
-			), opts...)...,
+			), extraOpts...)...,
 		)
 	case "tcp":
 		return grpc.DialContext(ctx, address,
 			append(internalHostServiceBaseDialOptions(
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock(),
-			), opts...)...,
+			), extraOpts...)...,
 		)
 	case "tls":
 		host, _, err := net.SplitHostPort(address)
@@ -99,32 +109,49 @@ func dialManagerTransport(ctx context.Context, serviceName, target, token string
 			append(internalHostServiceBaseDialOptions(
 				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 				grpc.WithBlock(),
-			), opts...)...,
+			), extraOpts...)...,
 		)
 	default:
 		return nil, fmt.Errorf("%s: unsupported transport network %q", serviceName, network)
 	}
 }
 
-func managerRelayDialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
+func hostServiceTarget(serviceName string) (string, string, error) {
+	target := strings.TrimSpace(os.Getenv(EnvHostServiceSocket))
+	if target == "" {
+		return "", "", fmt.Errorf("%s: %s is not set", serviceName, EnvHostServiceSocket)
+	}
+	return target, strings.TrimSpace(os.Getenv(EnvHostServiceToken)), nil
+}
+
+func hostServiceDialOptions(token string, binding string) []grpc.DialOption {
+	creds := hostServicePerRPCCredentials{
+		token:   strings.TrimSpace(token),
+		binding: strings.TrimSpace(binding),
+	}
+	if creds.token == "" && creds.binding == "" {
 		return nil
 	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(managerRelayPerRPCCredentials{token: token})}
+	return []grpc.DialOption{grpc.WithPerRPCCredentials(creds)}
 }
 
-type managerRelayPerRPCCredentials struct {
-	token string
+type hostServicePerRPCCredentials struct {
+	token   string
+	binding string
 }
 
-func (c managerRelayPerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{
-		"x-gestalt-host-service-relay-token": c.token,
-	}, nil
+func (c hostServicePerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	md := make(map[string]string, 2)
+	if c.token != "" {
+		md[hostServiceRelayTokenHeader] = c.token
+	}
+	if c.binding != "" {
+		md[HostServiceBindingMetadata] = c.binding
+	}
+	return md, nil
 }
 
-func (managerRelayPerRPCCredentials) RequireTransportSecurity() bool { return false }
+func (hostServicePerRPCCredentials) RequireTransportSecurity() bool { return false }
 
 func parseManagerTransportTarget(serviceName, raw string) (network string, address string, err error) {
 	target := strings.TrimSpace(raw)

@@ -12,13 +12,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// EnvRuntimeLogHostSocket names the environment variable containing the
-// runtime-log service target.
-const EnvRuntimeLogHostSocket = "GESTALT_RUNTIME_LOG_SOCKET"
-
-// EnvRuntimeLogHostSocketToken names the optional runtime-log relay-token variable.
-const EnvRuntimeLogHostSocketToken = EnvRuntimeLogHostSocket + "_TOKEN"
-
 // EnvRuntimeSessionID names the environment variable containing the current
 // plugin-runtime session id.
 const EnvRuntimeSessionID = "GESTALT_RUNTIME_SESSION_ID"
@@ -50,11 +43,10 @@ type RuntimeLogEntry struct {
 
 // RuntimeLogHost returns a shared client for the runtime-log host service.
 func RuntimeLogHost() (*RuntimeLogHostClient, error) {
-	target := strings.TrimSpace(os.Getenv(EnvRuntimeLogHostSocket))
-	if target == "" {
-		return nil, fmt.Errorf("runtime log host: %s is not set", EnvRuntimeLogHostSocket)
+	target, token, err := hostServiceTarget("runtime log host")
+	if err != nil {
+		return nil, err
 	}
-	token := strings.TrimSpace(os.Getenv(EnvRuntimeLogHostSocketToken))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

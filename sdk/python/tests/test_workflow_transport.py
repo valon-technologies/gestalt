@@ -12,9 +12,8 @@ from typing import Any, TypedDict
 import grpc
 
 from gestalt import (
-    ENV_WORKFLOW_HOST_SOCKET,
-    ENV_WORKFLOW_MANAGER_SOCKET,
-    ENV_WORKFLOW_MANAGER_SOCKET_TOKEN,
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
     BoundWorkflowPluginTarget,
     BoundWorkflowTarget,
     Request,
@@ -145,6 +144,9 @@ def setUpModule() -> None:
     workflow_pb2_grpc.add_WorkflowHostServicer_to_server(
         _WorkflowHostServicer(), _server
     )
+    workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(
+        _WorkflowManagerServicer(), _server
+    )
     _server.add_insecure_port(f"unix:{_socket_path}")
     _server.start()
 
@@ -155,9 +157,9 @@ def setUpModule() -> None:
     _manager_server.add_insecure_port(f"unix:{_manager_socket_path}")
     _manager_server.start()
 
-    os.environ[ENV_WORKFLOW_HOST_SOCKET] = _socket_path
-    os.environ[ENV_WORKFLOW_MANAGER_SOCKET] = _manager_socket_path
-    os.environ[ENV_WORKFLOW_MANAGER_SOCKET_TOKEN] = "relay-token-py"
+    os.environ[ENV_HOST_SERVICE_SOCKET] = _socket_path
+    os.environ[ENV_HOST_SERVICE_SOCKET] = _socket_path
+    os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-py"
 
 
 def tearDownModule() -> None:

@@ -19,7 +19,6 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
-	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -61,8 +60,8 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		"command": "/bin/temporal-provider",
 		"config":  map[string]any{"namespace": "default"},
 	}), []runtimehost.HostService{{
-		Name:   "workflow_host",
-		EnvVar: workflowservice.DefaultHostSocketEnv,
+		Name:           "workflow_host",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
@@ -71,7 +70,7 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	provider := wrapWorkflowProviderWithRuntimeWorkers(control, workers)
 	result := &Result{ExtraWorkflows: []workflow.Provider{provider}}
 	t.Cleanup(func() { _ = provider.Close() })
-	assertPublicHostServicesVerified(t, deps.PublicHostServices, "workflow_host", workflowservice.DefaultHostSocketEnv)
+	assertPublicHostServicesVerified(t, deps.PublicHostServices, "workflow_host")
 	executionRefs, ok := provider.(workflow.ExecutionReferenceStore)
 	if !ok {
 		t.Fatalf("hosted workflow pool does not expose ExecutionReferenceStore")
@@ -130,11 +129,11 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		t.Fatalf("StartPlugin requests after StartWorkflowProviders = %d, want 2 workers", len(startRequests))
 	}
 	workerReq := startRequests[0]
-	if got := workerReq.Env[workflowservice.DefaultHostSocketEnv]; got != "tcp://127.0.0.1:8080" {
-		t.Fatalf("worker env %s = %q, want public relay target", workflowservice.DefaultHostSocketEnv, got)
+	if got := workerReq.Env[runtimehost.DefaultHostServiceSocketEnv]; got != "tcp://127.0.0.1:8080" {
+		t.Fatalf("worker env %s = %q, want public relay target", runtimehost.DefaultHostServiceSocketEnv, got)
 	}
-	if got := workerReq.Env[workflowservice.HostSocketTokenEnv()]; got == "" {
-		t.Fatalf("worker env missing %s", workflowservice.HostSocketTokenEnv())
+	if got := workerReq.Env[runtimehost.DefaultHostServiceTokenEnv]; got == "" {
+		t.Fatalf("worker env missing %s", runtimehost.DefaultHostServiceTokenEnv)
 	}
 	sessions := runtimeProvider.startSessionRequestsCopy()
 	if len(sessions) != 2 {
@@ -183,8 +182,8 @@ func TestHostedWorkflowProviderPoolStartupDoesNotBlockWorkflowReadiness(t *testi
 	workers, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
-		Name:   "workflow_host",
-		EnvVar: workflowservice.DefaultHostSocketEnv,
+		Name:           "workflow_host",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
@@ -242,8 +241,8 @@ func TestWorkflowConfigReconciliationWaitsForRuntimeWorkers(t *testing.T) {
 	workers, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
-		Name:   "workflow_host",
-		EnvVar: workflowservice.DefaultHostSocketEnv,
+		Name:           "workflow_host",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
@@ -405,8 +404,8 @@ func TestHostedWorkflowProviderPoolRejectsIncompatibleStartupSession(t *testing.
 	pool, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
-		Name:   "workflow_host",
-		EnvVar: workflowservice.DefaultHostSocketEnv,
+		Name:           "workflow_host",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
@@ -664,8 +663,8 @@ func TestHostedWorkflowProviderKeepsSharedRuntimeOpen(t *testing.T) {
 	workers, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
-		Name:   "workflow_host",
-		EnvVar: workflowservice.DefaultHostSocketEnv,
+		Name:           "workflow_host",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)
@@ -707,8 +706,8 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 	pool, err := buildHostedWorkflowWorkerPool(ctx, "temporal", entry, mustNode(t, map[string]any{
 		"command": "/bin/temporal-provider",
 	}), []runtimehost.HostService{{
-		Name:   "workflow_host",
-		EnvVar: workflowservice.DefaultHostSocketEnv,
+		Name:           "workflow_host",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.WorkflowHost_ServiceDesc.ServiceName)},
 	}}, deps)
 	if err != nil {
 		t.Fatalf("buildHostedWorkflowWorkerPool: %v", err)

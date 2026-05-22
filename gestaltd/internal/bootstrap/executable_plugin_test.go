@@ -42,14 +42,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
-	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
 	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
@@ -59,7 +56,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
-	s3service "github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -708,24 +704,35 @@ func (r *capturingBundlePluginRuntime) cleanupFakeHostedPlugin(sessionID string)
 	_ = os.RemoveAll(fake.dir)
 }
 
-func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[string]string) (map[string]any, error) {
-	envName := indexeddbservice.DefaultSocketEnv
-	tokenEnvName := indexeddbservice.SocketTokenEnv("")
-	if strings.TrimSpace(binding) != "" {
-		envName = indexeddbservice.SocketEnv(binding)
-		tokenEnvName = indexeddbservice.SocketTokenEnv(binding)
-	}
-	target := strings.TrimSpace(env[envName])
+func fakeHostedHostServiceRelay(serviceName string, env map[string]string) (string, string, error) {
+	target := strings.TrimSpace(env[runtimehost.DefaultHostServiceSocketEnv])
 	if target == "" {
-		return nil, fmt.Errorf("missing indexeddb relay target in %s", envName)
+		return "", "", fmt.Errorf("missing %s relay target in %s", serviceName, runtimehost.DefaultHostServiceSocketEnv)
 	}
-	token := strings.TrimSpace(env[tokenEnvName])
+	token := strings.TrimSpace(env[runtimehost.DefaultHostServiceTokenEnv])
 	if token == "" {
-		return nil, fmt.Errorf("missing indexeddb relay token in %s", tokenEnvName)
+		return "", "", fmt.Errorf("missing %s relay token in %s", serviceName, runtimehost.DefaultHostServiceTokenEnv)
 	}
 	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
 	if address == "" || address == target {
-		return nil, fmt.Errorf("unsupported indexeddb relay target %q", target)
+		return "", "", fmt.Errorf("unsupported %s relay target %q", serviceName, target)
+	}
+	return address, token, nil
+}
+
+func fakeHostedHostServiceContext(token, binding string) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	pairs := []string{runtimehost.HostServiceRelayTokenHeader, token}
+	if binding = strings.TrimSpace(binding); binding != "" {
+		pairs = append(pairs, runtimehost.HostServiceBindingHeader, binding)
+	}
+	return metadata.NewOutgoingContext(ctx, metadata.Pairs(pairs...)), cancel
+}
+
+func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[string]string) (map[string]any, error) {
+	address, token, err := fakeHostedHostServiceRelay("indexeddb", env)
+	if err != nil {
+		return nil, err
 	}
 
 	conn, err := grpc.NewClient(
@@ -741,9 +748,8 @@ func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[stri
 	}
 	defer func() { _ = conn.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := fakeHostedHostServiceContext(token, binding)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewIndexedDBClient(conn)
 	if _, err := client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{Name: store}); err != nil {
@@ -768,23 +774,9 @@ func fakeHostedIndexedDBRoundTrip(store, id, value, binding string, env map[stri
 }
 
 func fakeHostedCacheRoundTrip(key, value, binding string, env map[string]string) (map[string]any, error) {
-	envName := cacheservice.DefaultSocketEnv
-	tokenEnvName := cacheservice.SocketTokenEnv("")
-	if strings.TrimSpace(binding) != "" {
-		envName = cacheservice.SocketEnv(binding)
-		tokenEnvName = cacheservice.SocketTokenEnv(binding)
-	}
-	target := strings.TrimSpace(env[envName])
-	if target == "" {
-		return nil, fmt.Errorf("missing cache relay target in %s", envName)
-	}
-	token := strings.TrimSpace(env[tokenEnvName])
-	if token == "" {
-		return nil, fmt.Errorf("missing cache relay token in %s", tokenEnvName)
-	}
-	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-	if address == "" || address == target {
-		return nil, fmt.Errorf("unsupported cache relay target %q", target)
+	address, token, err := fakeHostedHostServiceRelay("cache", env)
+	if err != nil {
+		return nil, err
 	}
 
 	conn, err := grpc.NewClient(
@@ -800,9 +792,8 @@ func fakeHostedCacheRoundTrip(key, value, binding string, env map[string]string)
 	}
 	defer func() { _ = conn.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := fakeHostedHostServiceContext(token, binding)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewCacheClient(conn)
 	if _, err := client.Set(ctx, &proto.CacheSetRequest{
@@ -849,23 +840,9 @@ func fakeHostedMakeHTTPRequest(targetURL string, env map[string]string) (map[str
 }
 
 func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]string) (map[string]any, error) {
-	envName := s3service.DefaultSocketEnv
-	tokenEnvName := s3service.SocketTokenEnv("")
-	if strings.TrimSpace(binding) != "" {
-		envName = s3service.SocketEnv(binding)
-		tokenEnvName = s3service.SocketTokenEnv(binding)
-	}
-	target := strings.TrimSpace(env[envName])
-	if target == "" {
-		return nil, fmt.Errorf("missing s3 relay target in %s", envName)
-	}
-	token := strings.TrimSpace(env[tokenEnvName])
-	if token == "" {
-		return nil, fmt.Errorf("missing s3 relay token in %s", tokenEnvName)
-	}
-	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-	if address == "" || address == target {
-		return nil, fmt.Errorf("unsupported s3 relay target %q", target)
+	address, token, err := fakeHostedHostServiceRelay("s3", env)
+	if err != nil {
+		return nil, err
 	}
 
 	conn, err := grpc.NewClient(
@@ -881,9 +858,8 @@ func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]st
 	}
 	defer func() { _ = conn.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := fakeHostedHostServiceContext(token, binding)
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewS3Client(conn)
 	writeStream, err := client.WriteObject(ctx)
@@ -967,17 +943,9 @@ func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]st
 }
 
 func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]string) (map[string]any, error) {
-	target := strings.TrimSpace(env[workflowservice.DefaultProviderSocketEnv])
-	if target == "" {
-		return nil, fmt.Errorf("missing workflow manager relay target in %s", workflowservice.DefaultProviderSocketEnv)
-	}
-	token := strings.TrimSpace(env[workflowservice.ProviderSocketTokenEnv()])
-	if token == "" {
-		return nil, fmt.Errorf("missing workflow manager relay token in %s", workflowservice.ProviderSocketTokenEnv())
-	}
-	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-	if address == "" || address == target {
-		return nil, fmt.Errorf("unsupported workflow manager relay target %q", target)
+	address, token, err := fakeHostedHostServiceRelay("workflow manager", env)
+	if err != nil {
+		return nil, err
 	}
 
 	conn, err := grpc.NewClient(
@@ -993,9 +961,8 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 	}
 	defer func() { _ = conn.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := fakeHostedHostServiceContext(token, "")
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewWorkflowProviderClient(conn)
 	created, err := client.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
@@ -1037,17 +1004,9 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 }
 
 func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, error) {
-	target := strings.TrimSpace(env[authorizationservice.DefaultSocketEnv])
-	if target == "" {
-		return nil, fmt.Errorf("missing authorization relay target in %s", authorizationservice.DefaultSocketEnv)
-	}
-	token := strings.TrimSpace(env[authorizationservice.SocketTokenEnv()])
-	if token == "" {
-		return nil, fmt.Errorf("missing authorization relay token in %s", authorizationservice.SocketTokenEnv())
-	}
-	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-	if address == "" || address == target {
-		return nil, fmt.Errorf("unsupported authorization relay target %q", target)
+	address, token, err := fakeHostedHostServiceRelay("authorization", env)
+	if err != nil {
+		return nil, err
 	}
 
 	conn, err := grpc.NewClient(
@@ -1063,9 +1022,8 @@ func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, er
 	}
 	defer func() { _ = conn.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := fakeHostedHostServiceContext(token, "")
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewAuthorizationProviderClient(conn)
 	meta, err := client.GetMetadata(ctx, &emptypb.Empty{})
@@ -1097,17 +1055,9 @@ func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, er
 }
 
 func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]string) (map[string]any, error) {
-	target := strings.TrimSpace(env[agentservice.DefaultProviderSocketEnv])
-	if target == "" {
-		return nil, fmt.Errorf("missing agent manager relay target in %s", agentservice.DefaultProviderSocketEnv)
-	}
-	token := strings.TrimSpace(env[agentservice.ProviderSocketTokenEnv()])
-	if token == "" {
-		return nil, fmt.Errorf("missing agent manager relay token in %s", agentservice.ProviderSocketTokenEnv())
-	}
-	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-	if address == "" || address == target {
-		return nil, fmt.Errorf("unsupported agent manager relay target %q", target)
+	address, token, err := fakeHostedHostServiceRelay("agent manager", env)
+	if err != nil {
+		return nil, err
 	}
 
 	conn, err := grpc.NewClient(
@@ -1123,9 +1073,8 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 	}
 	defer func() { _ = conn.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := fakeHostedHostServiceContext(token, "")
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	client := proto.NewAgentProviderClient(conn)
 	session, err := client.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
@@ -1243,17 +1192,9 @@ func fakeHostedInvokePlugin(targetPlugin, targetOperation, invocationToken strin
 		TargetPlugin:    targetPlugin,
 		TargetOperation: targetOperation,
 	}
-	target := strings.TrimSpace(env[plugininvokerservice.DefaultSocketEnv])
-	if target == "" {
-		return envelope, fmt.Errorf("missing plugin invoker relay target in %s", plugininvokerservice.DefaultSocketEnv)
-	}
-	token := strings.TrimSpace(env[plugininvokerservice.SocketTokenEnv()])
-	if token == "" {
-		return envelope, fmt.Errorf("missing plugin invoker relay token in %s", plugininvokerservice.SocketTokenEnv())
-	}
-	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-	if address == "" || address == target {
-		return envelope, fmt.Errorf("unsupported plugin invoker relay target %q", target)
+	address, token, err := fakeHostedHostServiceRelay("plugin invoker", env)
+	if err != nil {
+		return envelope, err
 	}
 
 	conn, err := grpc.NewClient(
@@ -1269,9 +1210,8 @@ func fakeHostedInvokePlugin(targetPlugin, targetOperation, invocationToken strin
 	}
 	defer func() { _ = conn.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := fakeHostedHostServiceContext(token, "")
 	defer cancel()
-	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
 	resp, err := proto.NewPluginInvokerClient(conn).Invoke(ctx, &proto.PluginInvokeRequest{
 		InvocationToken: invocationToken,
@@ -1357,11 +1297,11 @@ func assertStartPluginEgressPolicy(t *testing.T, req pluginruntime.StartPluginRe
 
 func assertStartPluginRelayEnv(t *testing.T, req pluginruntime.StartPluginRequest, wantEnvVar string) {
 	t.Helper()
-	if got := req.Env[wantEnvVar]; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("StartPlugin env %s = %q, want tls:// public relay target", wantEnvVar, got)
+	if got := req.Env[runtimehost.DefaultHostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("StartPlugin env %s = %q, want tls:// public relay target for %s", runtimehost.DefaultHostServiceSocketEnv, got, wantEnvVar)
 	}
-	if got := req.Env[wantEnvVar+"_TOKEN"]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartPlugin env missing non-empty %s_TOKEN", wantEnvVar)
+	if got := req.Env[runtimehost.DefaultHostServiceTokenEnv]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartPlugin env missing non-empty %s for %s", runtimehost.DefaultHostServiceTokenEnv, wantEnvVar)
 	}
 }
 
@@ -3879,19 +3819,19 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, indexeddbservice.DefaultSocketEnv); !got {
-		t.Fatal("default IndexedDB env should be set when plugin omits indexeddb and inherits the host selection")
+	if got := checkEnv(t, nil, runtimehost.DefaultHostServiceSocketEnv); !got {
+		t.Fatal("unified host-service env should be set when plugin omits indexeddb and inherits the host selection")
 	}
-	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{}, indexeddbservice.DefaultSocketEnv); !got {
-		t.Fatal("default IndexedDB env should be set when plugin indexeddb is explicitly empty")
+	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{}, runtimehost.DefaultHostServiceSocketEnv); !got {
+		t.Fatal("unified host-service env should be set when plugin indexeddb is explicitly empty")
 	}
-	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, indexeddbservice.DefaultSocketEnv); !got {
-		t.Fatal("default IndexedDB env should be set when plugin explicitly selects one indexeddb provider")
+	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+		t.Fatal("unified host-service env should be set when plugin explicitly selects one indexeddb provider")
 	}
-	if got := checkEnv(t, nil, indexeddbservice.SocketEnv("main")); got {
+	if got := checkEnv(t, nil, "GESTALT_INDEXEDDB_SOCKET_MAIN"); got {
 		t.Fatal("named IndexedDB env should not be set for inherited plugin indexeddb access")
 	}
-	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, indexeddbservice.SocketEnv("archive")); got {
+	if got := checkEnv(t, &config.HostIndexedDBBindingConfig{Provider: "archive"}, "GESTALT_INDEXEDDB_SOCKET_ARCHIVE"); got {
 		t.Fatal("named IndexedDB env should not be set when plugins expose a single indexeddb socket")
 	}
 }
@@ -3934,7 +3874,7 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(caller): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": plugininvokerservice.DefaultSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.DefaultHostServiceSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -3947,7 +3887,7 @@ func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("plugin invoker env %q should be set when plugin declares invokes", plugininvokerservice.DefaultSocketEnv)
+		t.Fatalf("host-service env %q should be set when plugin declares invokes", runtimehost.DefaultHostServiceSocketEnv)
 	}
 }
 
@@ -3987,7 +3927,7 @@ func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": workflowservice.DefaultProviderSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.DefaultHostServiceSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -4000,7 +3940,7 @@ func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("workflow manager env %q should be set for executable plugins", workflowservice.DefaultProviderSocketEnv)
+		t.Fatalf("host-service env %q should be set for executable plugins", runtimehost.DefaultHostServiceSocketEnv)
 	}
 }
 
@@ -4040,7 +3980,7 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": agentservice.DefaultProviderSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.DefaultHostServiceSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -4053,7 +3993,7 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("agent manager env %q should be set for executable plugins", agentservice.DefaultProviderSocketEnv)
+		t.Fatalf("host-service env %q should be set for executable plugins", runtimehost.DefaultHostServiceSocketEnv)
 	}
 }
 
@@ -4172,7 +4112,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	defer func() { _ = CloseProviders(providers) }()
-	assertPublicHostServicesVerified(t, publicHostServices, "agent_provider", agentservice.DefaultProviderSocketEnv)
+	assertPublicHostServicesVerified(t, publicHostServices, "agent_provider")
 
 	prov, err := providers.Get("echoext")
 	if err != nil {
@@ -4325,7 +4265,7 @@ func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": authorizationservice.DefaultSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": runtimehost.DefaultHostServiceSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -4338,7 +4278,7 @@ func TestPluginHostedHTTPBindingsExposeAuthorizationSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("authorization env %q should be set for executable plugins with hosted HTTP bindings", authorizationservice.DefaultSocketEnv)
+		t.Fatalf("host-service env %q should be set for executable plugins with hosted HTTP bindings", runtimehost.DefaultHostServiceSocketEnv)
 	}
 }
 
@@ -5608,23 +5548,23 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, cacheservice.DefaultSocketEnv); got {
-		t.Fatal("default cache env should not be set without plugin cache bindings")
+	if got := checkEnv(t, nil, "GESTALT_CACHE_SOCKET"); got {
+		t.Fatal("legacy cache env should not be set without plugin cache bindings")
 	}
-	if got := checkEnv(t, []string{"session"}, cacheservice.DefaultSocketEnv); !got {
-		t.Fatal("default cache env should be set with a single plugin cache binding")
+	if got := checkEnv(t, []string{"session"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+		t.Fatal("unified host-service env should be set with a single plugin cache binding")
 	}
-	if got := checkEnv(t, []string{"session"}, cacheservice.SocketEnv("session")); !got {
-		t.Fatal("named cache env should be set with a single plugin cache binding")
+	if got := checkEnv(t, []string{"session"}, "GESTALT_CACHE_SOCKET_SESSION"); got {
+		t.Fatal("named cache env should not be set when plugin uses the unified host-service socket")
 	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, cacheservice.DefaultSocketEnv); got {
-		t.Fatal("default cache env should not be set with multiple plugin cache bindings")
+	if got := checkEnv(t, []string{"session", "rate_limit"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+		t.Fatal("unified host-service env should be set with multiple plugin cache bindings")
 	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, cacheservice.SocketEnv("session")); !got {
-		t.Fatal(`named cache env for "session" should be set with multiple plugin cache bindings`)
+	if got := checkEnv(t, []string{"session", "rate_limit"}, "GESTALT_CACHE_SOCKET_SESSION"); got {
+		t.Fatal(`named cache env for "session" should not be set when plugin uses the unified host-service socket`)
 	}
-	if got := checkEnv(t, []string{"session", "rate_limit"}, cacheservice.SocketEnv("rate_limit")); !got {
-		t.Fatal(`named cache env for "rate_limit" should be set with multiple plugin cache bindings`)
+	if got := checkEnv(t, []string{"session", "rate_limit"}, "GESTALT_CACHE_SOCKET_RATE_LIMIT"); got {
+		t.Fatal(`named cache env for "rate_limit" should not be set when plugin uses the unified host-service socket`)
 	}
 }
 
@@ -6264,30 +6204,18 @@ func TestPluginRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(s3service.DefaultSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin s3 env %s = (%q, %v), want (%q, true)", s3service.DefaultSocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(runtimehost.DefaultHostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.DefaultHostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	for _, binding := range []string{"main"} {
-		envName := s3service.SocketEnv(binding)
-		if got, found := checkEnv(envName); !found || got != "tls://gestalt.example.test:443" {
-			t.Fatalf("plugin s3 env %s = (%q, %v), want (%q, true)", envName, got, found, "tls://gestalt.example.test:443")
-		}
-		tokenEnvName := s3service.SocketTokenEnv(binding)
-		if got, found := checkEnv(tokenEnvName); !found || got == "" {
-			t.Fatalf("plugin s3 token env %s = (%q, %v), want non-empty token", tokenEnvName, got, found)
-		}
-	}
-	if got, found := checkEnv(s3service.SocketTokenEnv("")); !found || got == "" {
-		t.Fatalf("plugin s3 token env %s = (%q, %v), want non-empty token", s3service.SocketTokenEnv(""), got, found)
+	if got, found := checkEnv(runtimehost.DefaultHostServiceTokenEnv); !found || got == "" {
+		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.DefaultHostServiceTokenEnv, got, found)
 	}
 
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	for _, binding := range []string{"", "main"} {
-		assertStartPluginRelayEnv(t, startRequests[0], s3service.SocketEnv(binding))
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], runtimehost.DefaultHostServiceSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -6353,15 +6281,11 @@ func TestProviderDevRuntimeEnvUsesPublicHostServiceRelay(t *testing.T) {
 	}
 	env := session.Providers[0].Env
 
-	for _, binding := range []string{"", "main"} {
-		socketEnv := s3service.SocketEnv(binding)
-		if got := env[socketEnv]; !strings.HasPrefix(got, "tls://") {
-			t.Fatalf("runtime env %s = %q, want tls relay target", socketEnv, got)
-		}
-		tokenEnv := s3service.SocketTokenEnv(binding)
-		if got := env[tokenEnv]; got == "" {
-			t.Fatalf("runtime env %s is empty, want relay token", tokenEnv)
-		}
+	if got := env[runtimehost.DefaultHostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("runtime env %s = %q, want tls relay target", runtimehost.DefaultHostServiceSocketEnv, got)
+	}
+	if got := env[runtimehost.DefaultHostServiceTokenEnv]; got == "" {
+		t.Fatalf("runtime env %s is empty, want relay token", runtimehost.DefaultHostServiceTokenEnv)
 	}
 	record, err := fakeHostedS3RoundTrip("assets", "plans/q3.txt", "ship-it", "main", env)
 	if err != nil {
@@ -6428,8 +6352,8 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 			t.Fatalf("provider dev manager close: %v", err)
 		}
 	})
-	assertPublicHostServicesVerified(t, publicHostServices, "s3", s3service.SocketEnv("main"))
-	assertPublicHostServicesVerified(t, publicHostServices, "cache", cacheservice.SocketEnv("main"))
+	assertPublicHostServicesVerified(t, publicHostServices, "s3")
+	assertPublicHostServicesVerified(t, publicHostServices, "cache")
 
 	p := &principal.Principal{SubjectID: "user:test-user", UserID: "test-user", Kind: principal.KindUser}
 	session, err := manager.CreateSession(context.Background(), p, providerdev.CreateSessionRequest{
@@ -6442,7 +6366,7 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 		t.Fatalf("cache factory calls after CreateSession = %d, want startup-only open", calls)
 	}
 	for _, service := range publicHostServices.Snapshot() {
-		if strings.TrimSpace(service.Service.Name) != "s3" || strings.TrimSpace(service.Service.EnvVar) != s3service.SocketEnv("main") {
+		if strings.TrimSpace(service.Service.Name) != "s3" {
 			continue
 		}
 		if service.SessionVerifier == nil {
@@ -6459,7 +6383,7 @@ func TestBuildProviderDevManagerRegistersMemoryModePublicHostServiceVerifiers(t 
 		}
 		return
 	}
-	t.Fatalf("public host services = %#v, want s3/%s", publicHostServices.Snapshot(), s3service.SocketEnv("main"))
+	t.Fatalf("public host services = %#v, want s3 verifier entry", publicHostServices.Snapshot())
 }
 
 func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCapability(t *testing.T) {
@@ -6582,18 +6506,18 @@ func TestPluginRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnel
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(authorizationservice.DefaultSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin authorization env %s = (%q, %v), want (%q, true)", authorizationservice.DefaultSocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(runtimehost.DefaultHostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.DefaultHostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	if got, found := checkEnv(authorizationservice.SocketTokenEnv()); !found || got == "" {
-		t.Fatalf("plugin authorization token env %s = (%q, %v), want non-empty token", authorizationservice.SocketTokenEnv(), got, found)
+	if got, found := checkEnv(runtimehost.DefaultHostServiceTokenEnv); !found || got == "" {
+		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.DefaultHostServiceTokenEnv, got, found)
 	}
 
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], authorizationservice.DefaultSocketEnv)
+	assertStartPluginRelayEnv(t, startRequests[0], "authorization")
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
 	}
@@ -6687,18 +6611,18 @@ func TestPluginRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapa
 		return env.Value
 	}
 
-	if got := checkEnv(indexeddbservice.DefaultSocketEnv); got != "tls://gestalt.example.test:443" {
+	if got := checkEnv(runtimehost.DefaultHostServiceSocketEnv); got != "tls://gestalt.example.test:443" {
 		t.Fatalf("plugin indexeddb socket env = %q, want %q", got, "tls://gestalt.example.test:443")
 	}
-	if got := checkEnv(indexeddbservice.SocketTokenEnv("")); got == "" {
-		t.Fatal("plugin indexeddb socket token env should be set for the public relay")
+	if got := checkEnv(runtimehost.DefaultHostServiceTokenEnv); got == "" {
+		t.Fatal("plugin host-service token env should be set for the public relay")
 	}
 
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], indexeddbservice.DefaultSocketEnv)
+	assertStartPluginRelayEnv(t, startRequests[0], "indexeddb")
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -6818,11 +6742,11 @@ func TestPluginRuntimePublicIndexedDBRelayRoundTripsThroughHostedPlugin(t *testi
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[indexeddbservice.SocketTokenEnv("")]; got == "" {
-		t.Fatal("StartPlugin env should include the IndexedDB relay token")
+	if got := startRequests[0].Env[runtimehost.DefaultHostServiceTokenEnv]; got == "" {
+		t.Fatal("StartPlugin env should include the host-service relay token")
 	}
-	if got := startRequests[0].Env[indexeddbservice.DefaultSocketEnv]; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("StartPlugin env %s = %q, want tls relay target", indexeddbservice.DefaultSocketEnv, got)
+	if got := startRequests[0].Env[runtimehost.DefaultHostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
+		t.Fatalf("StartPlugin env %s = %q, want tls relay target", runtimehost.DefaultHostServiceSocketEnv, got)
 	}
 
 	expiredAt := time.Now().Add(-time.Minute)
@@ -6921,27 +6845,18 @@ func TestPluginRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapabili
 		return env.Value, env.Found
 	}
 
-	if _, found := checkEnv(cacheservice.DefaultSocketEnv); found {
-		t.Fatalf("env %s should not be set with multiple cache bindings", cacheservice.DefaultSocketEnv)
+	if got, found := checkEnv(runtimehost.DefaultHostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.DefaultHostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	for _, binding := range []string{"session", "rate_limit"} {
-		envName := cacheservice.SocketEnv(binding)
-		if got, found := checkEnv(envName); !found || got != "tls://gestalt.example.test:443" {
-			t.Fatalf("plugin cache env %s = (%q, %v), want (%q, true)", envName, got, found, "tls://gestalt.example.test:443")
-		}
-		tokenEnvName := cacheservice.SocketTokenEnv(binding)
-		if got, found := checkEnv(tokenEnvName); !found || got == "" {
-			t.Fatalf("plugin cache token env %s = (%q, %v), want non-empty token", tokenEnvName, got, found)
-		}
+	if got, found := checkEnv(runtimehost.DefaultHostServiceTokenEnv); !found || got == "" {
+		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.DefaultHostServiceTokenEnv, got, found)
 	}
 
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	for _, binding := range []string{"session", "rate_limit"} {
-		assertStartPluginRelayEnv(t, startRequests[0], cacheservice.SocketEnv(binding))
-	}
+	assertStartPluginRelayEnv(t, startRequests[0], runtimehost.DefaultHostServiceSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -7061,7 +6976,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], cacheservice.DefaultSocketEnv)
+	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_CACHE_SOCKET")
 }
 
 func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
@@ -7192,8 +7107,8 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], s3service.DefaultSocketEnv)
-	assertStartPluginRelayEnv(t, startRequests[0], s3service.SocketEnv("main"))
+	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_S3_SOCKET")
+	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_S3_SOCKET_MAIN")
 }
 
 func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *testing.T) {
@@ -7288,7 +7203,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
-	assertPublicHostServicesVerified(t, publicHostServices, "plugin_invoker", plugininvokerservice.DefaultSocketEnv)
+	assertPublicHostServicesVerified(t, publicHostServices, "plugin_invoker")
 
 	services, err := coredata.New(&coretesting.StubIndexedDB{})
 	if err != nil {
@@ -7358,7 +7273,7 @@ func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *t
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], plugininvokerservice.DefaultSocketEnv)
+	assertStartPluginRelayEnv(t, startRequests[0], "plugin_invoker")
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
 	}
@@ -7439,11 +7354,11 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(workflowservice.DefaultProviderSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin workflow manager env %s = (%q, %v), want (%q, true)", workflowservice.DefaultProviderSocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(runtimehost.DefaultHostServiceSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin host-service env %s = (%q, %v), want (%q, true)", runtimehost.DefaultHostServiceSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	if got, found := checkEnv(workflowservice.ProviderSocketTokenEnv()); !found || got == "" {
-		t.Fatalf("plugin workflow manager token env %s = (%q, %v), want non-empty token", workflowservice.ProviderSocketTokenEnv(), got, found)
+	if got, found := checkEnv(runtimehost.DefaultHostServiceTokenEnv); !found || got == "" {
+		t.Fatalf("plugin host-service token env %s = (%q, %v), want non-empty token", runtimehost.DefaultHostServiceTokenEnv, got, found)
 	}
 
 	startRequests := runtimeProvider.startPluginRequestsCopy()
@@ -7629,35 +7544,32 @@ func TestPluginRuntimeConfigInjectsRuntimeLogSessionAndHostService(t *testing.T)
 	if got := startRequests[0].Env[runtimehost.DefaultRuntimeSessionIDEnv]; got != startRequests[0].SessionID {
 		t.Fatalf("StartPlugin %s = %q, want session id %q", runtimehost.DefaultRuntimeSessionIDEnv, got, startRequests[0].SessionID)
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultRuntimeLogHostSocketEnv]; got != "tls://gestalt.example.test:443" {
+	if got := startRequests[0].Env[runtimehost.DefaultHostServiceSocketEnv]; got != "tls://gestalt.example.test:443" {
 		t.Fatalf("runtime log host relay target = %q, want public relay target", got)
 	}
-	if got := startRequests[0].Env[runtimehost.DefaultRuntimeLogHostSocketEnv+"_TOKEN"]; got == "" {
-		t.Fatalf("StartPlugin env missing %s_TOKEN", runtimehost.DefaultRuntimeLogHostSocketEnv)
+	if got := startRequests[0].Env[runtimehost.DefaultHostServiceTokenEnv]; got == "" {
+		t.Fatalf("StartPlugin env missing %s", runtimehost.DefaultHostServiceTokenEnv)
 	}
 }
 
-func assertPublicHostServicesVerified(t *testing.T, registry *runtimehost.PublicHostServiceRegistry, serviceName, envVar string) {
+func assertPublicHostServicesVerified(t *testing.T, registry *runtimehost.PublicHostServiceRegistry, serviceName string) {
 	t.Helper()
 
 	if registry == nil {
-		t.Fatalf("public host services registry is nil, want %s/%s verifier entry", serviceName, envVar)
+		t.Fatalf("public host services registry is nil, want %s verifier entry", serviceName)
 	}
 	found := false
 	for _, service := range registry.Snapshot() {
 		if strings.TrimSpace(service.Service.Name) != strings.TrimSpace(serviceName) {
 			continue
 		}
-		if strings.TrimSpace(service.Service.EnvVar) != strings.TrimSpace(envVar) {
-			continue
-		}
 		found = true
 		if service.SessionVerifier == nil {
-			t.Fatalf("public host services = %#v, want %s/%s verifier entry", registry.Snapshot(), serviceName, envVar)
+			t.Fatalf("public host services = %#v, want %s verifier entry", registry.Snapshot(), serviceName)
 		}
 	}
 	if !found {
-		t.Fatalf("public host services = %#v, want %s/%s verifier entry", registry.Snapshot(), serviceName, envVar)
+		t.Fatalf("public host services = %#v, want %s verifier entry", registry.Snapshot(), serviceName)
 	}
 }
 
@@ -7679,7 +7591,7 @@ func newRuntimeRelayTestHandler(t *testing.T, stateSecret []byte, publicHostServ
 			writeRuntimeRelayGRPCTrailersOnly(w, codes.PermissionDenied, "host-service-relay-method-not-allowed")
 			return
 		}
-		handler, err := runtimeRelayPublicHostServiceHandler(r.Context(), publicHostServices, target)
+		handler, err := runtimeRelayPublicHostServiceHandler(r.Context(), publicHostServices, target, r.URL.Path)
 		if err != nil {
 			writeRuntimeRelayGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-session")
 			return
@@ -7737,7 +7649,7 @@ func testRuntimePublicEndpointDeps(t *testing.T, deps Deps) Deps {
 	return deps
 }
 
-func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *runtimehost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget) (http.Handler, error) {
+func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *runtimehost.PublicHostServiceRegistry, target runtimehost.HostServiceRelayTarget, methodPath string) (http.Handler, error) {
 	if registry == nil {
 		return nil, nil
 	}
@@ -7745,17 +7657,14 @@ func runtimeRelayPublicHostServiceHandler(ctx context.Context, registry *runtime
 		if strings.TrimSpace(entry.PluginName) != strings.TrimSpace(target.PluginName) {
 			continue
 		}
-		if strings.TrimSpace(entry.Service.Name) != strings.TrimSpace(target.Service) {
-			continue
-		}
-		if strings.TrimSpace(entry.Service.EnvVar) != strings.TrimSpace(target.EnvVar) {
+		if !entry.Service.AllowsMethod(methodPath) {
 			continue
 		}
 		if entry.Service.Register == nil {
 			continue
 		}
 		if entry.SessionVerifier == nil {
-			return nil, fmt.Errorf("public host service %s/%s/%s requires a session verifier", strings.TrimSpace(target.PluginName), strings.TrimSpace(target.Service), strings.TrimSpace(target.EnvVar))
+			return nil, fmt.Errorf("public host service %s/%s requires a session verifier", strings.TrimSpace(target.PluginName), strings.TrimSpace(target.Service))
 		}
 		if err := entry.SessionVerifier.VerifyHostServiceSession(ctx, target.SessionID); err != nil {
 			return nil, err
@@ -8016,7 +7925,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
-	assertPublicHostServicesVerified(t, publicHostServices, "workflow_provider", workflowservice.DefaultProviderSocketEnv)
+	assertPublicHostServicesVerified(t, publicHostServices, "workflow_provider")
 
 	prov, err := providers.Get("echoext")
 	if err != nil {
@@ -8220,7 +8129,7 @@ func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *t
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], authorizationservice.DefaultSocketEnv)
+	assertStartPluginRelayEnv(t, startRequests[0], "authorization")
 }
 
 func TestPluginRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability(t *testing.T) {
@@ -8445,7 +8354,7 @@ func TestPluginRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *tes
 	if got := startRequests[0].Env["HTTPS_PROXY"]; !strings.Contains(got, "@gestalt.example.test") {
 		t.Fatalf("StartPlugin HTTPS_PROXY = %q, want public egress proxy on gestalt.example.test", got)
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], cacheservice.SocketEnv("session"))
+	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_CACHE_SOCKET_SESSION")
 	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestalt.example.test"}, pluginruntime.PolicyDeny)
 }
 
@@ -8753,7 +8662,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 					if len(startRequests) != 1 {
 						t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 					}
-					assertStartPluginRelayEnv(t, startRequests[0], indexeddbservice.DefaultSocketEnv)
+					assertStartPluginRelayEnv(t, startRequests[0], "indexeddb")
 				}
 			})
 		}
@@ -9064,7 +8973,7 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 				if len(startRequests) != 1 {
 					t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 				}
-				assertStartPluginRelayEnv(t, startRequests[0], indexeddbservice.DefaultSocketEnv)
+				assertStartPluginRelayEnv(t, startRequests[0], "indexeddb")
 			}
 
 			_ = CloseProviders(providers)
@@ -9451,23 +9360,23 @@ func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, s3service.DefaultSocketEnv); got {
-		t.Fatal("default S3 env should not be set without plugin s3 bindings")
+	if got := checkEnv(t, nil, "GESTALT_S3_SOCKET"); got {
+		t.Fatal("legacy S3 env should not be set without plugin s3 bindings")
 	}
-	if got := checkEnv(t, []string{"main"}, s3service.DefaultSocketEnv); !got {
-		t.Fatal("default S3 env should be set with a single plugin s3 binding")
+	if got := checkEnv(t, []string{"main"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+		t.Fatal("unified host-service env should be set with a single plugin s3 binding")
 	}
-	if got := checkEnv(t, []string{"main"}, s3service.SocketEnv("main")); !got {
-		t.Fatal("named S3 env should be set with a single plugin s3 binding")
+	if got := checkEnv(t, []string{"main"}, "GESTALT_S3_SOCKET_MAIN"); got {
+		t.Fatal("named S3 env should not be set when plugin uses the unified host-service socket")
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, s3service.DefaultSocketEnv); got {
-		t.Fatal("default S3 env should not be set with multiple plugin s3 bindings")
+	if got := checkEnv(t, []string{"main", "archive"}, runtimehost.DefaultHostServiceSocketEnv); !got {
+		t.Fatal("unified host-service env should be set with multiple plugin s3 bindings")
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, s3service.SocketEnv("main")); !got {
-		t.Fatal(`named S3 env for "main" should be set with multiple plugin s3 bindings`)
+	if got := checkEnv(t, []string{"main", "archive"}, "GESTALT_S3_SOCKET_MAIN"); got {
+		t.Fatal(`named S3 env for "main" should not be set when plugin uses the unified host-service socket`)
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, s3service.SocketEnv("archive")); !got {
-		t.Fatal(`named S3 env for "archive" should be set with multiple plugin s3 bindings`)
+	if got := checkEnv(t, []string{"main", "archive"}, "GESTALT_S3_SOCKET_ARCHIVE"); got {
+		t.Fatal(`named S3 env for "archive" should not be set when plugin uses the unified host-service socket`)
 	}
 }
 

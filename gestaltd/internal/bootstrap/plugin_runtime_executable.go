@@ -6,6 +6,7 @@ import (
 	"maps"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/runtimelogs"
@@ -47,8 +48,8 @@ func buildRuntimeProviderHostServices(name string, deps Deps) []runtimehost.Host
 		return nil
 	}
 	return []runtimehost.HostService{{
-		Name:   "runtime_log_host",
-		EnvVar: runtimehost.DefaultRuntimeLogHostSocketEnv,
+		Name:           "runtime_log_host",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.PluginRuntimeLogHost_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			runtimehost.RegisterRuntimeLogHostServer(srv, name, deps.Services.RuntimeSessionLogs.AppendSessionLogs)
 		},

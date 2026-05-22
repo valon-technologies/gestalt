@@ -6,54 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
-	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
+	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-// EnvS3Socket is the default Unix-socket environment variable used by [S3].
-const EnvS3Socket = "GESTALT_S3_SOCKET"
-const s3SocketTokenSuffix = "_TOKEN"
-
-// S3SocketEnv returns the environment variable name used for a named S3
-// transport socket.
-func S3SocketEnv(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return EnvS3Socket
-	}
-	var b strings.Builder
-	b.WriteString(EnvS3Socket)
-	b.WriteByte('_')
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r - ('a' - 'A'))
-		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
-}
-
-// S3SocketTokenEnv returns the environment variable name used for a named S3
-// relay token.
-func S3SocketTokenEnv(name string) string {
-	return S3SocketEnv(name) + s3SocketTokenSuffix
-}
 
 var (
 	// ErrS3NotFound indicates that the requested object does not exist.
@@ -171,84 +132,92 @@ type ObjectAccessURLOptions = PresignOptions
 // ObjectAccessURL is a hosted URL plus any required headers.
 type ObjectAccessURL = PresignResult
 
-// S3Client speaks to a running S3 provider over a transport target.
+// S3Client speaks to a running S3 provider over the unified host-service socket.
 type S3Client struct {
 	client             proto.S3Client
 	objectAccessClient proto.S3ObjectAccessClient
-	conn               *grpc.ClientConn
 }
 
-// S3 connects to the S3 provider exposed by gestaltd. The target can be a
-// plain Unix socket path, a unix:///path URI, or a tcp://host:port or
-// tls://host:port URI.
+type sharedS3Transport struct {
+	mu                 sync.Mutex
+	target             string
+	token              string
+	binding            string
+	conn               *grpc.ClientConn
+	client             proto.S3Client
+	objectAccessClient proto.S3ObjectAccessClient
+}
+
+var sharedS3Transports sync.Map
+
+// S3 connects to the S3 provider exposed by gestaltd.
 func S3(name ...string) (*S3Client, error) {
-	envName := EnvS3Socket
-	if len(name) > 0 {
-		envName = S3SocketEnv(name[0])
-	}
-	target := os.Getenv(envName)
-	if target == "" {
-		return nil, fmt.Errorf("s3: %s is not set", envName)
-	}
-	network, address, err := parseS3Target(target)
+	target, token, err := hostServiceTarget("s3")
 	if err != nil {
 		return nil, err
 	}
-	token := os.Getenv(S3SocketTokenEnv(firstS3Name(name)))
+	binding := firstS3Name(name)
+	transport := getSharedS3Transport(binding)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	var conn *grpc.ClientConn
-	opts := s3DialOptions(token)
-	switch network {
-	case "unix":
-		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-					var d net.Dialer
-					return d.DialContext(ctx, "unix", address)
-				}),
-				grpc.WithAuthority("localhost"),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tcp":
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tls":
-		host, _, splitErr := net.SplitHostPort(address)
-		if splitErr != nil {
-			return nil, fmt.Errorf("s3: parse tls target %q: %w", address, splitErr)
-		}
-		tlsConfig, tlsErr := hostServiceTLSConfig("s3", host)
-		if tlsErr != nil {
-			return nil, tlsErr
-		}
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	default:
-		return nil, fmt.Errorf("s3: unsupported transport network %q", network)
-	}
+	client, objectAccessClient, err := sharedS3Clients(ctx, target, token, binding, transport)
 	if err != nil {
 		return nil, fmt.Errorf("s3: connect to host: %w", err)
 	}
 	return &S3Client{
-		client:             proto.NewS3Client(conn),
-		objectAccessClient: proto.NewS3ObjectAccessClient(conn),
-		conn:               conn,
+		client:             client,
+		objectAccessClient: objectAccessClient,
 	}, nil
 }
 
-// Close closes the underlying gRPC transport.
-func (c *S3Client) Close() error { return c.conn.Close() }
+func getSharedS3Transport(binding string) *sharedS3Transport {
+	val, _ := sharedS3Transports.LoadOrStore(binding, &sharedS3Transport{})
+	return val.(*sharedS3Transport)
+}
+
+func sharedS3Clients(ctx context.Context, target, token, binding string, transport *sharedS3Transport) (proto.S3Client, proto.S3ObjectAccessClient, error) {
+	if transport == nil {
+		return nil, nil, fmt.Errorf("s3: shared transport is not initialized")
+	}
+
+	transport.mu.Lock()
+	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
+		client := transport.client
+		objectAccessClient := transport.objectAccessClient
+		transport.mu.Unlock()
+		return client, objectAccessClient, nil
+	}
+	transport.mu.Unlock()
+
+	conn, err := dialHostService(ctx, "s3", target, token, binding)
+	if err != nil {
+		return nil, nil, err
+	}
+	client := proto.NewS3Client(conn)
+	objectAccessClient := proto.NewS3ObjectAccessClient(conn)
+
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+
+	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
+		_ = conn.Close()
+		return transport.client, transport.objectAccessClient, nil
+	}
+	if transport.conn != nil {
+		_ = transport.conn.Close()
+	}
+
+	transport.target = target
+	transport.token = token
+	transport.binding = binding
+	transport.conn = conn
+	transport.client = client
+	transport.objectAccessClient = objectAccessClient
+	return client, objectAccessClient, nil
+}
+
+// Close is a no-op because this client uses shared transport.
+func (c *S3Client) Close() error { return nil }
 
 // Object returns a convenience handle for one object key.
 func (c *S3Client) Object(bucket, key string) *Object {
@@ -873,66 +842,11 @@ func cloneStringMap(values map[string]string) map[string]string {
 	return out
 }
 
-func s3DialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil
-	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(s3RelayPerRPCCredentials{token: token})}
-}
-
 func firstS3Name(name []string) string {
 	if len(name) == 0 {
 		return ""
 	}
 	return name[0]
-}
-
-type s3RelayPerRPCCredentials struct {
-	token string
-}
-
-func (c s3RelayPerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{
-		"x-gestalt-host-service-relay-token": c.token,
-	}, nil
-}
-
-func (s3RelayPerRPCCredentials) RequireTransportSecurity() bool { return false }
-
-func parseS3Target(raw string) (network string, address string, err error) {
-	target := strings.TrimSpace(raw)
-	if target == "" {
-		return "", "", fmt.Errorf("s3: transport target is required")
-	}
-	switch {
-	case strings.HasPrefix(target, "tcp://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tcp://"))
-		if address == "" {
-			return "", "", fmt.Errorf("s3: tcp target %q is missing host:port", raw)
-		}
-		return "tcp", address, nil
-	case strings.HasPrefix(target, "tls://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-		if address == "" {
-			return "", "", fmt.Errorf("s3: tls target %q is missing host:port", raw)
-		}
-		return "tls", address, nil
-	case strings.HasPrefix(target, "unix://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "unix://"))
-		if address == "" {
-			return "", "", fmt.Errorf("s3: unix target %q is missing a socket path", raw)
-		}
-		return "unix", address, nil
-	case strings.Contains(target, "://"):
-		parsed, parseErr := url.Parse(target)
-		if parseErr != nil {
-			return "", "", fmt.Errorf("s3: parse target %q: %w", raw, parseErr)
-		}
-		return "", "", fmt.Errorf("s3: unsupported target scheme %q", parsed.Scheme)
-	default:
-		return "unix", filepath.Clean(target), nil
-	}
 }
 
 func grpcS3Err(err error) error {

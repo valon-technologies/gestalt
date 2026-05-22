@@ -1,13 +1,18 @@
 import {
   createClient,
   type Client,
-  type Interceptor,
 } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
   WorkflowProvider as WorkflowProviderService,
 } from "./internal/gen/v1/workflow_pb.ts";
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+} from "./host-service.ts";
 import type { Request } from "./api.ts";
 import {
   boundWorkflowTargetToProto,
@@ -37,13 +42,6 @@ import {
  * Manager clients call the facade. Provider runtimes still listen on
  * GESTALT_PLUGIN_SOCKET.
  */
-export const ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_PROVIDER_SOCKET";
-/** Environment variable containing the optional workflow-manager relay token. */
-export const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN =
-  `${ENV_WORKFLOW_MANAGER_SOCKET}_TOKEN`;
-const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER =
-  "x-gestalt-host-service-relay-token";
-
 /** Shape accepted when starting a workflow run. */
 export interface WorkflowManagerStartRun {
   providerName: string;
@@ -200,21 +198,19 @@ export class WorkflowManager {
     this.invocationToken = normalizeInvocationToken(requestOrToken);
     this.idempotencyKey = normalizeIdempotencyKey(requestOrToken);
 
-    const target = process.env[ENV_WORKFLOW_MANAGER_SOCKET];
+    const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
     if (!target) {
       throw new Error(
-        `workflow manager: ${ENV_WORKFLOW_MANAGER_SOCKET} is not set`,
+        `workflow manager: ${ENV_HOST_SERVICE_SOCKET} is not set`,
       );
     }
     const relayToken =
-      process.env[ENV_WORKFLOW_MANAGER_SOCKET_TOKEN]?.trim() ?? "";
+      process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
 
-    const transport = createGrpcTransport({
-      ...workflowManagerTransportOptions(target),
-      interceptors: relayToken
-        ? [workflowManagerRelayTokenInterceptor(relayToken)]
-        : [],
-    });
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("workflow manager", target),
+      hostServiceMetadataInterceptors(relayToken, ""),
+    );
     this.client = createClient(WorkflowProviderService, transport);
   }
 
@@ -511,55 +507,4 @@ function normalizeIdempotencyKey(requestOrToken: Request | string): string {
     return "";
   }
   return requestOrToken.idempotencyKey.trim();
-}
-
-function workflowManagerTransportOptions(rawTarget: string): {
-  baseUrl: string;
-  nodeOptions?: { path: string };
-} {
-  const target = rawTarget.trim();
-  if (!target) {
-    throw new Error("workflow manager: transport target is required");
-  }
-  if (target.startsWith("tcp://")) {
-    const address = target.slice("tcp://".length).trim();
-    if (!address) {
-      throw new Error(
-        `workflow manager: tcp target ${JSON.stringify(rawTarget)} is missing host:port`,
-      );
-    }
-    return { baseUrl: `http://${address}` };
-  }
-  if (target.startsWith("tls://")) {
-    const address = target.slice("tls://".length).trim();
-    if (!address) {
-      throw new Error(
-        `workflow manager: tls target ${JSON.stringify(rawTarget)} is missing host:port`,
-      );
-    }
-    return { baseUrl: `https://${address}` };
-  }
-  if (target.startsWith("unix://")) {
-    const socketPath = target.slice("unix://".length).trim();
-    if (!socketPath) {
-      throw new Error(
-        `workflow manager: unix target ${JSON.stringify(rawTarget)} is missing a socket path`,
-      );
-    }
-    return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
-  }
-  if (target.includes("://")) {
-    const parsed = new URL(target);
-    throw new Error(
-      `workflow manager: unsupported target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`,
-    );
-  }
-  return { baseUrl: "http://localhost", nodeOptions: { path: target } };
-}
-
-function workflowManagerRelayTokenInterceptor(token: string): Interceptor {
-  return (next) => async (req) => {
-    req.header.set(WORKFLOW_MANAGER_RELAY_TOKEN_HEADER, token);
-    return next(req);
-  };
 }

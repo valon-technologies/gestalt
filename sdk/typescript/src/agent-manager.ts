@@ -1,9 +1,7 @@
 import {
   createClient,
   type Client,
-  type Interceptor,
 } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
   AgentProvider as AgentProviderService,
@@ -41,13 +39,13 @@ import {
   optionalObjectFromStruct,
   optionalStruct,
 } from "./protocol-internal.ts";
-
-/** Environment variable containing the agent-manager host-service target. */
-export const ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_PROVIDER_SOCKET";
-/** Environment variable containing the optional agent-manager relay token. */
-export const ENV_AGENT_MANAGER_SOCKET_TOKEN =
-  `${ENV_AGENT_MANAGER_SOCKET}_TOKEN`;
-const AGENT_MANAGER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+} from "./host-service.ts";
 
 export interface AgentManagerWorkspaceGitCheckout {
   url?: string | undefined;
@@ -159,19 +157,17 @@ export class AgentManager {
   constructor(requestOrToken: Request | string) {
     this.invocationToken = normalizeInvocationToken(requestOrToken);
 
-    const target = process.env[ENV_AGENT_MANAGER_SOCKET];
+    const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
     if (!target) {
-      throw new Error(`agent manager: ${ENV_AGENT_MANAGER_SOCKET} is not set`);
+      throw new Error(`agent manager: ${ENV_HOST_SERVICE_SOCKET} is not set`);
     }
     const relayToken =
-      process.env[ENV_AGENT_MANAGER_SOCKET_TOKEN]?.trim() ?? "";
+      process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
 
-    const transport = createGrpcTransport({
-      ...agentManagerTransportOptions(target),
-      interceptors: relayToken
-        ? [agentManagerRelayTokenInterceptor(relayToken)]
-        : [],
-    });
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("agent manager", target),
+      hostServiceMetadataInterceptors(relayToken, ""),
+    );
     this.client = createClient(AgentProviderService, transport);
   }
 
@@ -417,55 +413,4 @@ function agentInteractionFromProto(
 
 function optionalDate(timestamp?: Parameters<typeof dateFromTimestamp>[0]) {
   return timestamp === undefined ? undefined : dateFromTimestamp(timestamp);
-}
-
-function agentManagerTransportOptions(rawTarget: string): {
-  baseUrl: string;
-  nodeOptions?: { path: string };
-} {
-  const target = rawTarget.trim();
-  if (!target) {
-    throw new Error("agent manager: transport target is required");
-  }
-  if (target.startsWith("tcp://")) {
-    const address = target.slice("tcp://".length).trim();
-    if (!address) {
-      throw new Error(
-        `agent manager: tcp target ${JSON.stringify(rawTarget)} is missing host:port`,
-      );
-    }
-    return { baseUrl: `http://${address}` };
-  }
-  if (target.startsWith("tls://")) {
-    const address = target.slice("tls://".length).trim();
-    if (!address) {
-      throw new Error(
-        `agent manager: tls target ${JSON.stringify(rawTarget)} is missing host:port`,
-      );
-    }
-    return { baseUrl: `https://${address}` };
-  }
-  if (target.startsWith("unix://")) {
-    const socketPath = target.slice("unix://".length).trim();
-    if (!socketPath) {
-      throw new Error(
-        `agent manager: unix target ${JSON.stringify(rawTarget)} is missing a socket path`,
-      );
-    }
-    return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
-  }
-  if (target.includes("://")) {
-    const parsed = new URL(target);
-    throw new Error(
-      `agent manager: unsupported target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`,
-    );
-  }
-  return { baseUrl: "http://localhost", nodeOptions: { path: target } };
-}
-
-function agentManagerRelayTokenInterceptor(token: string): Interceptor {
-  return (next) => async (req) => {
-    req.header.set(AGENT_MANAGER_RELAY_TOKEN_HEADER, token);
-    return next(req);
-  };
 }

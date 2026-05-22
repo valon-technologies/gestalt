@@ -21,7 +21,11 @@ from ._gen.v1 import agent_pb2 as _agent_pb
 from ._gen.v1 import plugin_pb2 as _plugin_pb
 from ._gen.v1 import workflow_pb2 as _pb
 from ._gen.v1 import workflow_pb2_grpc as _pb_grpc
-from ._grpc_transport import host_service_channel
+from ._grpc_transport import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
+    host_service_channel,
+)
 from ._protocol import (
     coerce_model as _coerce,
 )
@@ -53,13 +57,6 @@ from ._protocol import (
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
-
-ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET"
-ENV_WORKFLOW_HOST_SOCKET_TOKEN = f"{ENV_WORKFLOW_HOST_SOCKET}_TOKEN"
-# Workflow manager clients call the gestaltd workflow-provider facade. Provider
-# runtimes still listen on GESTALT_PLUGIN_SOCKET.
-ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_PROVIDER_SOCKET"
-ENV_WORKFLOW_MANAGER_SOCKET_TOKEN = f"{ENV_WORKFLOW_MANAGER_SOCKET}_TOKEN"
 
 WORKFLOW_RUN_STATUS_UNSPECIFIED = pb.WORKFLOW_RUN_STATUS_UNSPECIFIED
 WORKFLOW_RUN_STATUS_PENDING = pb.WORKFLOW_RUN_STATUS_PENDING
@@ -2374,16 +2371,16 @@ def workflow_run_status_name(status: int) -> str:
 class WorkflowHost:
     """Client for the workflow host service available inside workflow code.
 
-    ``WorkflowHost`` reads ``GESTALT_WORKFLOW_HOST_SOCKET`` and its optional
+    ``WorkflowHost`` reads ``GESTALT_HOST_SERVICE_SOCKET`` and its optional
     relay token from the environment, then exposes the host operation-invocation
     RPC used by workflow providers.
     """
 
     def __init__(self) -> None:
-        target = os.environ.get(ENV_WORKFLOW_HOST_SOCKET, "")
+        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
-            raise RuntimeError(f"{ENV_WORKFLOW_HOST_SOCKET} is not set")
-        relay_token = os.environ.get(ENV_WORKFLOW_HOST_SOCKET_TOKEN, "")
+            raise RuntimeError(f"{ENV_HOST_SERVICE_SOCKET} is not set")
+        relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
         self._channel = host_service_channel("workflow host", target, token=relay_token)
         self._stub = pb_grpc.WorkflowHostStub(self._channel)
 
@@ -2431,12 +2428,12 @@ class WorkflowManager:
         if not trimmed_token:
             raise RuntimeError("workflow manager: invocation token is not available")
 
-        target = os.environ.get(ENV_WORKFLOW_MANAGER_SOCKET, "")
+        target = os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
         if not target:
             raise RuntimeError(
-                f"workflow manager: {ENV_WORKFLOW_MANAGER_SOCKET} is not set"
+                f"workflow manager: {ENV_HOST_SERVICE_SOCKET} is not set"
             )
-        relay_token = os.environ.get(ENV_WORKFLOW_MANAGER_SOCKET_TOKEN, "")
+        relay_token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
 
         self._channel = host_service_channel(
             "workflow manager", target, token=relay_token

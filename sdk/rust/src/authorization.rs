@@ -22,9 +22,9 @@ use crate::rpc_status::rpc_status;
 type AuthorizationTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
 /// Environment variable containing the authorization host-service target.
-pub const ENV_AUTHORIZATION_SOCKET: &str = "GESTALT_AUTHORIZATION_SOCKET";
+pub const ENV_AUTHORIZATION_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
 /// Environment variable containing the optional authorization relay token.
-pub const ENV_AUTHORIZATION_SOCKET_TOKEN: &str = "GESTALT_AUTHORIZATION_SOCKET_TOKEN";
+pub const ENV_AUTHORIZATION_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const AUTHORIZATION_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 /// Subject type used for canonical Gestalt subject ids in managed grants.
 pub const AUTHORIZATION_SUBJECT_TYPE_SUBJECT: &str = "subject";

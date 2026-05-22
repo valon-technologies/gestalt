@@ -7,12 +7,12 @@ import { spawn, type Subprocess } from "bun";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
   PresignMethod,
   S3,
   S3NotFoundError,
   S3PreconditionFailedError,
-  s3SocketEnv,
-  s3SocketTokenEnv,
 } from "../src/index.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
@@ -63,8 +63,7 @@ beforeAll(async () => {
   // Keep the heavier default round-trip tests on TCP. Bun's HTTP/2 Unix-socket
   // client can flake after many S3 calls; the named binding test still covers
   // raw Unix socket dialing.
-  process.env.GESTALT_S3_SOCKET = defaultTCP.target;
-  process.env[s3SocketEnv("named")] = socketPath;
+  process.env[ENV_HOST_SERVICE_SOCKET] = defaultTCP.target;
 }, 60_000);
 
 async function reserveTCPAddress(): Promise<string> {
@@ -118,9 +117,8 @@ afterAll(() => {
   proc?.kill();
   defaultTCPProc?.kill();
   defaultClient = undefined;
-  delete process.env.GESTALT_S3_SOCKET;
-  delete process.env[s3SocketEnv("named")];
-  delete process.env[s3SocketTokenEnv()];
+  delete process.env[ENV_HOST_SERVICE_SOCKET];
+  delete process.env[ENV_HOST_SERVICE_TOKEN];
   if (tmpDir) {
     rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -142,7 +140,8 @@ describe("S3 transport", () => {
 
   test("tcp target env selects the requested binding", async () => {
     const { proc: tcpProc, target } = await startTCPHarness();
-    const envName = s3SocketEnv("tcp");
+    const envName = ENV_HOST_SERVICE_SOCKET;
+    const previousTarget = process.env[envName];
     process.env[envName] = target;
     try {
       const object = new S3("tcp").object("tcp-bucket", "hello.txt");
@@ -150,15 +149,21 @@ describe("S3 transport", () => {
       expect(await object.text()).toBe("tcp binding");
     } finally {
       tcpProc.kill();
-      delete process.env[envName];
+      if (previousTarget === undefined) {
+        delete process.env[envName];
+      } else {
+        process.env[envName] = previousTarget;
+      }
     }
   });
 
   test("tcp target token env selects the requested binding", async () => {
     const token = "relay-token-typescript";
     const { proc: tcpProc, target } = await startTCPHarness(token);
-    const envName = s3SocketEnv("tcp-token");
-    const tokenEnvName = s3SocketTokenEnv("tcp-token");
+    const envName = ENV_HOST_SERVICE_SOCKET;
+    const tokenEnvName = ENV_HOST_SERVICE_TOKEN;
+    const previousTarget = process.env[envName];
+    const previousToken = process.env[tokenEnvName];
     process.env[envName] = target;
     process.env[tokenEnvName] = token;
     try {
@@ -167,8 +172,16 @@ describe("S3 transport", () => {
       expect(await object.text()).toBe("token binding");
     } finally {
       tcpProc.kill();
-      delete process.env[envName];
-      delete process.env[tokenEnvName];
+      if (previousTarget === undefined) {
+        delete process.env[envName];
+      } else {
+        process.env[envName] = previousTarget;
+      }
+      if (previousToken === undefined) {
+        delete process.env[tokenEnvName];
+      } else {
+        process.env[tokenEnvName] = previousToken;
+      }
     }
   });
 

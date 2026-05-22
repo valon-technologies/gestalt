@@ -116,8 +116,8 @@ func TestTransport_PluginInvokerTCPTargetTokenEnv(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvPluginInvokerSocket, "tcp://"+address)
-	t.Setenv(gestalt.EnvPluginInvokerSocketToken, "relay-token-go")
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 	t.Setenv("http_proxy", "http://127.0.0.1:1")
 	t.Setenv("https_proxy", "http://127.0.0.1:1")
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")

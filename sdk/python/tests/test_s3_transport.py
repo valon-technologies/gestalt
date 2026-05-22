@@ -10,6 +10,8 @@ import tempfile
 import unittest
 
 from gestalt import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
     S3,
     ByteRange,
     CopyOptions,
@@ -22,8 +24,6 @@ from gestalt import (
     S3NotFoundError,
     S3PreconditionFailedError,
     WriteOptions,
-    s3_socket_env,
-    s3_socket_token_env,
 )
 
 
@@ -68,8 +68,7 @@ def setUpModule() -> None:
     if line != "READY":
         _harness_proc.kill()
         raise RuntimeError(f"harness did not print READY, got: {line!r}")
-    os.environ["GESTALT_S3_SOCKET"] = _socket_path
-    os.environ[s3_socket_env("named")] = _socket_path
+    os.environ[ENV_HOST_SERVICE_SOCKET] = _socket_path
 
 
 def tearDownModule() -> None:
@@ -111,15 +110,12 @@ def _client() -> S3:
 
 
 class TestNamedSocketEnv(unittest.TestCase):
-    def test_named_socket_env_roundtrip(self) -> None:
+    def test_named_binding_roundtrip(self) -> None:
         client = S3("named")
         obj = client.object("docs", "named.txt")
         obj.write_text("named")
         self.assertEqual(obj.text(), "named")
         client.close()
-
-    def test_named_socket_env_matches_host_ascii_normalization(self) -> None:
-        self.assertEqual(s3_socket_env("sø3"), "GESTALT_S3_SOCKET_S_3")
 
 
 class TestTCPTargetEnv(unittest.TestCase):
@@ -128,19 +124,18 @@ class TestTCPTargetEnv(unittest.TestCase):
         self.addCleanup(proc.wait)
         self.addCleanup(proc.kill)
 
-        env_name = s3_socket_env()
-        previous_target = os.environ.get(env_name)
+        previous_target = os.environ.get(ENV_HOST_SERVICE_SOCKET)
 
         def restore_target() -> None:
             if previous_target is None:
-                os.environ.pop(env_name, None)
+                os.environ.pop(ENV_HOST_SERVICE_SOCKET, None)
             else:
-                os.environ[env_name] = previous_target
+                os.environ[ENV_HOST_SERVICE_SOCKET] = previous_target
 
-        os.environ[env_name] = target
+        os.environ[ENV_HOST_SERVICE_SOCKET] = target
         self.addCleanup(restore_target)
 
-        client = _client()
+        client = S3("tcp")
         obj = client.object("docs", "tcp.txt")
         obj.write_text("tcp")
         self.assertEqual(obj.text(), "tcp")
@@ -152,8 +147,8 @@ class TestTCPTargetEnv(unittest.TestCase):
         self.addCleanup(proc.wait)
         self.addCleanup(proc.kill)
 
-        target_env = s3_socket_env()
-        token_env = s3_socket_token_env()
+        target_env = ENV_HOST_SERVICE_SOCKET
+        token_env = ENV_HOST_SERVICE_TOKEN
         previous_target = os.environ.get(target_env)
         previous_token = os.environ.get(token_env)
 
@@ -171,7 +166,7 @@ class TestTCPTargetEnv(unittest.TestCase):
         os.environ[token_env] = token
         self.addCleanup(restore_env)
 
-        client = _client()
+        client = S3("tcp-token")
         obj = client.object("docs", "tcp-token.txt")
         obj.write_text("token")
         self.assertEqual(obj.text(), "token")
