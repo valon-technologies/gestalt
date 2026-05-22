@@ -324,13 +324,6 @@ fn test_cli_updates_single_plugin_schedule_preserves_step_fields() {
                 },
                 "when":{"value":{"runInput":"enabled"},"equals":true},
                 "timeoutSeconds":30,
-                "outputDelivery":{
-                    "plugin":{
-                        "name":"notify",
-                        "operation":"reply",
-                        "input":{"literal":{"channel":"C1"}}
-                    }
-                },
                 "metadata":{"owner":"ops"}
             }]
         },
@@ -370,13 +363,6 @@ fn test_cli_updates_single_plugin_schedule_preserves_step_fields() {
                     },
                     "when":{"value":{"runInput":"enabled"},"equals":true},
                     "timeoutSeconds":30,
-                    "outputDelivery":{
-                        "plugin":{
-                            "name":"notify",
-                            "operation":"reply",
-                            "input":{"literal":{"channel":"C1"}}
-                        }
-                    },
                     "metadata":{"owner":"ops"}
                 }]
             },

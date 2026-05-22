@@ -781,15 +781,6 @@ func cloneStartupWorkflowTarget(target coreworkflow.Target) coreworkflow.Target 
 			when.Value = cloneStartupWorkflowValue(when.Value)
 			step.When = &when
 		}
-		if step.OutputDelivery != nil {
-			delivery := *step.OutputDelivery
-			if delivery.Plugin != nil {
-				plugin := *delivery.Plugin
-				plugin.Input = cloneStartupWorkflowValue(plugin.Input)
-				delivery.Plugin = &plugin
-			}
-			step.OutputDelivery = &delivery
-		}
 		step.Metadata = maps.Clone(step.Metadata)
 	}
 	return clone

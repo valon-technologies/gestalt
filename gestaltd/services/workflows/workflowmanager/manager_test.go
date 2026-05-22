@@ -1123,9 +1123,10 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 						{Plugin: "github", Operation: "bot.openPullRequest"},
 					},
 				},
-				OutputDelivery: &coreworkflow.StepDelivery{
-					Plugin: testWorkflowPluginCall("github", "bot.commentFinal", nil, core.ConnectionModeNone),
-				},
+			},
+			{
+				ID:     "comment_final",
+				Plugin: testWorkflowPluginCall("github", "bot.commentFinal", nil, core.ConnectionModeNone),
 			},
 			{
 				ID:     "session_ready",
@@ -1159,10 +1160,10 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	if managed.ExecutionRef.CallerPluginName != "github" {
 		t.Fatalf("caller plugin = %q, want github", managed.ExecutionRef.CallerPluginName)
 	}
-	if got := managed.ExecutionRef.Target.Steps[0].OutputDelivery.Plugin.CredentialMode; got != core.ConnectionModeNone {
-		t.Fatalf("output delivery credential mode = %q, want %q", got, core.ConnectionModeNone)
-	}
 	if got := requireWorkflowPluginStep(t, managed.ExecutionRef.Target, 1).CredentialMode; got != core.ConnectionModeNone {
+		t.Fatalf("final comment plugin credential mode = %q, want %q", got, core.ConnectionModeNone)
+	}
+	if got := requireWorkflowPluginStep(t, managed.ExecutionRef.Target, 2).CredentialMode; got != core.ConnectionModeNone {
 		t.Fatalf("session ready plugin credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 }
@@ -1342,16 +1343,6 @@ func TestResolveTargetRejectsInvalidStepOutputRefsOutsideWhen(t *testing.T) {
 			},
 			want: `workflow target.steps[1].plugin.input.text.step_output.step_id "future" must reference an earlier step`,
 		},
-		{
-			name: "output delivery input",
-			mutate: func(target *coreworkflow.Target) {
-				target.Steps[1].OutputDelivery = &coreworkflow.StepDelivery{Plugin: testWorkflowPluginCall("slack", "chat.postMessage", map[string]any{})}
-				target.Steps[1].OutputDelivery.Plugin.Input = coreworkflow.Value{Object: map[string]coreworkflow.Value{
-					"text": stepOutput("future", "plugin.body"),
-				}}
-			},
-			want: `workflow target.steps[1].output_delivery.plugin.input.text.step_output.step_id "future" must reference an earlier step`,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1400,55 +1391,6 @@ func TestSignalOrStartRunRejectsAgentStepWithoutPromptOrMessages(t *testing.T) {
 	}
 	if provider.signalOrStartCalls != 0 {
 		t.Fatalf("SignalOrStartRun provider calls = %d, want 0", provider.signalOrStartCalls)
-	}
-}
-
-func TestSignalOrStartRunRejectsOutputDeliveryTargetCredentialMode(t *testing.T) {
-	t.Parallel()
-
-	provider := newTestWorkflowProvider()
-	manager := New(Config{
-		Workflow:     testWorkflowControl{provider: provider},
-		Agent:        testAgentControl{},
-		AgentManager: testAgentManager{},
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
-			"github": {
-				{Plugin: "github", Operation: "bot.commentFinal", CredentialMode: core.ConnectionModeNone},
-			},
-		},
-	})
-	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin:     "github",
-		Operations: []string{"events.handle", "bot.commentFinal"},
-	}, {
-		Plugin: "simple",
-	}})
-	caller := principal.Canonicalize(&principal.Principal{
-		SubjectID:        principal.UserSubjectID("ada"),
-		UserID:           "ada",
-		Kind:             principal.KindUser,
-		TokenPermissions: callerPermissions,
-		Scopes:           principal.PermissionPlugins(callerPermissions),
-	})
-
-	_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
-		CallerPluginName: "github",
-		Target: coreworkflow.Target{Steps: []coreworkflow.Step{{
-			ID: "run",
-			Agent: &coreworkflow.AgentTurn{
-				ProviderName: "simple",
-				Prompt:       coreworkflow.Text{Template: "Handle the webhook."},
-			},
-			OutputDelivery: &coreworkflow.StepDelivery{
-				Plugin: testWorkflowPluginCall("github", "bot.commentFinal", nil, core.ConnectionMode("unsupported")),
-			},
-		}}},
-		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
-	})
-	if !errors.Is(err, invocation.ErrInvalidInvocation) {
-		t.Fatalf("SignalOrStartRun error = %v, want invalid invocation", err)
 	}
 }
 

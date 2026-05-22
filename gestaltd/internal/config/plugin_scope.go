@@ -265,7 +265,6 @@ func workflowRefsFromNode(workflowNode *yaml.Node) workflowPluginRefs {
 				refs.Add(scalarStringNode(mappingValueNode(tool, "plugin")))
 			}
 		}
-		addWorkflowDeliveryRefsFromNode(refs, mappingValueNode(stepNode, "outputDelivery"))
 	}
 	if invokesNode := mappingValueNode(workflowNode, "invokes"); invokesNode != nil && invokesNode.Kind == yaml.SequenceNode {
 		for _, invoke := range invokesNode.Content {
@@ -292,10 +291,6 @@ func workflowStepNodesFromTargetNode(targetNode *yaml.Node) []*yaml.Node {
 		}
 	}
 	return out
-}
-
-func addWorkflowDeliveryRefsFromNode(refs workflowPluginRefs, deliveryNode *yaml.Node) {
-	refs.Add(scalarStringNode(mappingValueNode(mappingValueNode(deliveryNode, "plugin"), "name")))
 }
 
 func filterWorkflowNodes(workflowsNode *yaml.Node, keep map[string]workflowPluginRefs) {
@@ -1109,15 +1104,7 @@ func addWorkflowTargetRefs(refs workflowPluginRefs, target *WorkflowTargetConfig
 				refs.Add(tool.Plugin)
 			}
 		}
-		addWorkflowOutputDeliveryRefs(refs, step.OutputDelivery)
 	}
-}
-
-func addWorkflowOutputDeliveryRefs(refs workflowPluginRefs, delivery *WorkflowStepDeliveryConfig) {
-	if delivery == nil || delivery.Plugin == nil {
-		return
-	}
-	refs.Add(delivery.Plugin.Name)
 }
 
 func addWorkflowInvokeRefs(refs workflowPluginRefs, invokes []WorkflowInvokeConfig) {

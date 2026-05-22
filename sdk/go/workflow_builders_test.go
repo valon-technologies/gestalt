@@ -198,20 +198,6 @@ func TestNewBoundWorkflowAgentStepCopiesNativeFields(t *testing.T) {
 				},
 				TimeoutSeconds: 45,
 				Metadata:       map[string]any{"kind": "diagnosis"},
-				OutputDelivery: &WorkflowStepDelivery{
-					Plugin: &WorkflowStepPluginCall{
-						Name:      "slack",
-						Operation: "chat.postMessage",
-						Input: WorkflowValue{Object: map[string]WorkflowValue{
-							"text": {
-								StepOutput: &WorkflowStepOutputSource{
-									StepID: "diagnosis",
-									Path:   "agent.text",
-								},
-							},
-						}},
-					},
-				},
 			},
 			{
 				ID: "pr_fix",
@@ -246,9 +232,6 @@ func TestNewBoundWorkflowAgentStepCopiesNativeFields(t *testing.T) {
 	}
 	if got := agent.GetResponseSchema().AsMap()["type"]; got != "object" {
 		t.Fatalf("response schema type = %#v, want object", got)
-	}
-	if got := diagnosis.GetOutputDelivery().GetPlugin().GetInput().GetObject().GetFields()["text"].GetStepOutput().GetPath(); got != "agent.text" {
-		t.Fatalf("output delivery text path = %#v, want agent.text", got)
 	}
 	if got := agent.GetTools()[0].GetPlugin(); got != "datadog" {
 		t.Fatalf("step tool ref plugin = %q, want datadog", got)

@@ -132,7 +132,6 @@ non-aliased message copies.
    WorkflowStep
    WorkflowStepPluginCall
    WorkflowStepAgentTurn
-   WorkflowStepDelivery
    WorkflowValue
    BoundWorkflowRun
    BoundWorkflowSchedule
@@ -143,7 +142,6 @@ non-aliased message copies.
    workflow_step
    workflow_step_plugin_call
    workflow_step_agent_turn
-   workflow_step_delivery
    workflow_value
    workflow_event
    workflow_event_from_event
@@ -168,8 +166,6 @@ non-aliased message copies.
 
 .. autoclass:: WorkflowStepAgentTurn
 
-.. autoclass:: WorkflowStepDelivery
-
 .. autoclass:: WorkflowValue
 
 .. autoclass:: BoundWorkflowRun
@@ -189,8 +185,6 @@ non-aliased message copies.
 .. autofunction:: workflow_step_plugin_call
 
 .. autofunction:: workflow_step_agent_turn
-
-.. autofunction:: workflow_step_delivery
 
 .. autofunction:: workflow_value
 

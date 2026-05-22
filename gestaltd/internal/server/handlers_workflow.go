@@ -50,7 +50,6 @@ type workflowStepTargetRequest struct {
 	Inputs         map[string]workflowValueRequest `json:"inputs,omitempty"`
 	Plugin         *workflowPluginTargetRequest    `json:"plugin,omitempty"`
 	Agent          *workflowAgentTargetRequest     `json:"agent,omitempty"`
-	OutputDelivery *workflowOutputDeliveryRequest  `json:"outputDelivery,omitempty"`
 	Metadata       map[string]any                  `json:"metadata,omitempty"`
 	TimeoutSeconds int                             `json:"timeoutSeconds,omitempty"`
 	When           *workflowStepWhenRequest        `json:"when,omitempty"`
@@ -73,10 +72,6 @@ func (r *workflowTextRequest) UnmarshalJSON(data []byte) error {
 	}
 	*r = workflowTextRequest(out)
 	return nil
-}
-
-type workflowOutputDeliveryRequest struct {
-	Plugin *workflowPluginTargetRequest `json:"plugin,omitempty"`
 }
 
 type workflowMessageRequest struct {
@@ -238,22 +233,17 @@ type workflowAgentTargetInfo struct {
 }
 
 type workflowStepTargetInfo struct {
-	ID             string                      `json:"id,omitempty"`
-	Inputs         map[string]any              `json:"inputs,omitempty"`
-	Plugin         *workflowPluginTargetInfo   `json:"plugin,omitempty"`
-	Agent          *workflowAgentTargetInfo    `json:"agent,omitempty"`
-	OutputDelivery *workflowOutputDeliveryInfo `json:"outputDelivery,omitempty"`
-	Metadata       map[string]any              `json:"metadata,omitempty"`
-	TimeoutSeconds int                         `json:"timeoutSeconds,omitempty"`
-	When           *workflowStepWhenInfo       `json:"when,omitempty"`
+	ID             string                    `json:"id,omitempty"`
+	Inputs         map[string]any            `json:"inputs,omitempty"`
+	Plugin         *workflowPluginTargetInfo `json:"plugin,omitempty"`
+	Agent          *workflowAgentTargetInfo  `json:"agent,omitempty"`
+	Metadata       map[string]any            `json:"metadata,omitempty"`
+	TimeoutSeconds int                       `json:"timeoutSeconds,omitempty"`
+	When           *workflowStepWhenInfo     `json:"when,omitempty"`
 }
 
 type workflowTextInfo struct {
 	Template string `json:"template,omitempty"`
-}
-
-type workflowOutputDeliveryInfo struct {
-	Plugin *workflowPluginTargetInfo `json:"plugin,omitempty"`
 }
 
 type workflowMessageInfo struct {
@@ -451,7 +441,6 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 			Inputs:         workflowValueMapFromRequest(step.Inputs),
 			Plugin:         workflowPluginCallFromRequest(step.Plugin),
 			Agent:          workflowAgentTurnFromRequest(step.Agent),
-			OutputDelivery: workflowStepDeliveryFromRequest(step.OutputDelivery),
 			Metadata:       maps.Clone(step.Metadata),
 			TimeoutSeconds: step.TimeoutSeconds,
 			When:           workflowStepWhenFromRequest(step.When),
@@ -484,9 +473,6 @@ func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) e
 		step := target.Steps[i]
 		if step.Plugin != nil && strings.TrimSpace(step.Plugin.CredentialMode) != "" {
 			return fmt.Errorf("workflow target.steps[%d].plugin.credentialMode is not supported on public requests", i)
-		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil && strings.TrimSpace(step.OutputDelivery.Plugin.CredentialMode) != "" {
-			return fmt.Errorf("workflow target.steps[%d].outputDelivery.plugin.credentialMode is not supported on public requests", i)
 		}
 	}
 	return nil
@@ -531,13 +517,6 @@ func workflowStepWhenFromRequest(when *workflowStepWhenRequest) *coreworkflow.St
 		Equals:    when.Equals,
 		EqualsSet: when.EqualsSet,
 	}
-}
-
-func workflowStepDeliveryFromRequest(delivery *workflowOutputDeliveryRequest) *coreworkflow.StepDelivery {
-	if delivery == nil {
-		return nil
-	}
-	return &coreworkflow.StepDelivery{Plugin: workflowPluginCallFromRequest(delivery.Plugin)}
 }
 
 func workflowTextFromRequest(text workflowTextRequest) coreworkflow.Text {
@@ -673,7 +652,6 @@ func workflowStepInfoFromCore(step coreworkflow.Step) workflowStepTargetInfo {
 		Inputs:         workflowValueMapInfoFromCore(step.Inputs),
 		Plugin:         workflowPluginInfoFromCore(step.Plugin),
 		Agent:          workflowAgentInfoFromCore(step.Agent),
-		OutputDelivery: workflowOutputDeliveryInfoFromCore(step.OutputDelivery),
 		Metadata:       maps.Clone(step.Metadata),
 		TimeoutSeconds: step.TimeoutSeconds,
 		When:           workflowStepWhenInfoFromCore(step.When),
@@ -718,15 +696,6 @@ func workflowStepWhenInfoFromCore(when *coreworkflow.StepWhen) *workflowStepWhen
 		Value:     workflowValueInfoFromCore(when.Value),
 		Equals:    when.Equals,
 		EqualsSet: when.EqualsSet,
-	}
-}
-
-func workflowOutputDeliveryInfoFromCore(delivery *coreworkflow.StepDelivery) *workflowOutputDeliveryInfo {
-	if delivery == nil {
-		return nil
-	}
-	return &workflowOutputDeliveryInfo{
-		Plugin: workflowPluginInfoFromCore(delivery.Plugin),
 	}
 }
 

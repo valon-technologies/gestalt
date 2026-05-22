@@ -290,7 +290,6 @@ func workflowConfigSteps(steps []config.WorkflowStepConfig) []coreworkflow.Step 
 			Inputs:         workflowConfigValueMap(step.Inputs),
 			Plugin:         workflowConfigPluginCall(step.Plugin),
 			Agent:          workflowConfigAgentTurn(step.Agent),
-			OutputDelivery: workflowConfigStepDelivery(step.OutputDelivery),
 			Metadata:       maps.Clone(step.Metadata),
 			TimeoutSeconds: timeoutSeconds,
 			When:           workflowConfigStepWhen(step.When),
@@ -359,13 +358,6 @@ func workflowConfigStepWhen(when *config.WorkflowStepWhenConfig) *coreworkflow.S
 		Equals:    when.Equals,
 		EqualsSet: when.EqualsSet(),
 	}
-}
-
-func workflowConfigStepDelivery(delivery *config.WorkflowStepDeliveryConfig) *coreworkflow.StepDelivery {
-	if delivery == nil {
-		return nil
-	}
-	return &coreworkflow.StepDelivery{Plugin: workflowConfigPluginCall(delivery.Plugin)}
 }
 
 func workflowConfigValueMap(values map[string]config.WorkflowValueConfig) map[string]coreworkflow.Value {
@@ -575,13 +567,6 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 				base = append(base, core.AccessPermission{Plugin: pluginName, Operations: []string{operation}})
 			}
 		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
-			pluginName := strings.TrimSpace(step.OutputDelivery.Plugin.Name)
-			operation := strings.TrimSpace(step.OutputDelivery.Plugin.Operation)
-			if pluginName != "" && operation != "" {
-				base = append(base, core.AccessPermission{Plugin: pluginName, Operations: []string{operation}})
-			}
-		}
 	}
 	return workflowMergeExecutionRefPermissions(append([][]core.AccessPermission{base}, explicit...)...)
 }
@@ -669,11 +654,6 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 				}, hasRunAs); err != nil {
 					return nil, err
 				}
-			}
-		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
-			if err := workflowConfigValidateNoUserCredentialTarget(cfg, *step.OutputDelivery.Plugin, hasRunAs); err != nil {
-				return nil, err
 			}
 		}
 	}

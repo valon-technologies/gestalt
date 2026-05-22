@@ -1610,7 +1610,6 @@ func cloneBootstrapWorkflowTarget(target coreworkflow.Target) coreworkflow.Targe
 			when.Value = coreworkflow.CloneValue(when.Value)
 			step.When = &when
 		}
-		step.OutputDelivery = coreworkflow.CloneStepDelivery(step.OutputDelivery)
 		step.Metadata = maps.Clone(step.Metadata)
 		clone.Steps[i] = step
 	}

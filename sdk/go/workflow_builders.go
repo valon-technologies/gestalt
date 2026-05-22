@@ -24,13 +24,11 @@ type WorkflowStep struct {
 	Agent          *WorkflowStepAgentTurn
 	When           *WorkflowStepWhen
 	TimeoutSeconds int32
-	OutputDelivery *WorkflowStepDelivery
 	Metadata       any
 }
 
-// WorkflowStepPluginCall contains fields for a plugin action or plugin output
-// delivery. Input is a WorkflowValue that must resolve to a JSON object at
-// runtime.
+// WorkflowStepPluginCall contains fields for a plugin action. Input is a
+// WorkflowValue that must resolve to a JSON object at runtime.
 type WorkflowStepPluginCall struct {
 	Name           string
 	Operation      string
@@ -38,11 +36,6 @@ type WorkflowStepPluginCall struct {
 	Connection     string
 	Instance       string
 	CredentialMode string
-}
-
-// WorkflowStepDelivery contains fields for step output delivery.
-type WorkflowStepDelivery struct {
-	Plugin *WorkflowStepPluginCall
 }
 
 // WorkflowStepAgentTurn contains fields for an agent action inside a workflow
@@ -79,11 +72,11 @@ type WorkflowStepWhen struct {
 // WorkflowValue contains one workflow value expression. LiteralSet
 // distinguishes an explicit literal null from an unset value.
 type WorkflowValue struct {
-	Literal         any
-	LiteralSet      bool
-	Object          map[string]WorkflowValue
-	Array           []WorkflowValue
-	Template        *WorkflowText
+	Literal       any
+	LiteralSet    bool
+	Object        map[string]WorkflowValue
+	Array         []WorkflowValue
+	Template      *WorkflowText
 	RunInput      string
 	SignalPayload string
 	StepOutput    *WorkflowStepOutputSource
@@ -197,16 +190,11 @@ func workflowStepToProto(step WorkflowStep) (*proto.WorkflowStep, error) {
 	if err != nil {
 		return nil, fmt.Errorf("metadata: %w", err)
 	}
-	delivery, err := workflowStepDeliveryToProto(step.OutputDelivery)
-	if err != nil {
-		return nil, fmt.Errorf("output_delivery: %w", err)
-	}
 	out := &proto.WorkflowStep{
 		Id:             step.ID,
 		Inputs:         inputs,
 		When:           when,
 		TimeoutSeconds: step.TimeoutSeconds,
-		OutputDelivery: delivery,
 		Metadata:       metadata,
 	}
 	switch {
@@ -237,7 +225,6 @@ func workflowStepFromProto(step *proto.WorkflowStep) WorkflowStep {
 		Inputs:         workflowValueMapFromProto(step.GetInputs()),
 		When:           workflowStepWhenFromProto(step.GetWhen()),
 		TimeoutSeconds: step.GetTimeoutSeconds(),
-		OutputDelivery: workflowStepDeliveryFromProto(step.GetOutputDelivery()),
 		Metadata:       mapFromStruct(step.GetMetadata()),
 	}
 	if step.GetPlugin() != nil {
@@ -279,24 +266,6 @@ func workflowStepPluginCallFromProto(value *proto.WorkflowStepPluginCall) *Workf
 		Instance:       value.GetInstance(),
 		CredentialMode: value.GetCredentialMode(),
 	}
-}
-
-func workflowStepDeliveryToProto(input *WorkflowStepDelivery) (*proto.WorkflowStepDelivery, error) {
-	if input == nil {
-		return nil, nil
-	}
-	plugin, err := workflowStepPluginCallToProto(input.Plugin)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowStepDelivery{Plugin: plugin}, nil
-}
-
-func workflowStepDeliveryFromProto(value *proto.WorkflowStepDelivery) *WorkflowStepDelivery {
-	if value == nil {
-		return nil
-	}
-	return &WorkflowStepDelivery{Plugin: workflowStepPluginCallFromProto(value.GetPlugin())}
 }
 
 func workflowStepAgentTurnToProto(input *WorkflowStepAgentTurn) (*proto.WorkflowStepAgentTurn, error) {

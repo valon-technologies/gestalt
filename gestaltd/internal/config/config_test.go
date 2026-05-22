@@ -3268,113 +3268,6 @@ server:
 				want: `workflows.schedules.nightly.target.steps[0].plugin.credentialMode "platform" is not supported`,
 			},
 			{
-				name: "agent output delivery rejects nested target credential mode",
-				yaml: `
-plugins:
-  slack:
-    source:
-      path: ./providers/slack/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: reply
-            agent:
-              provider: simple
-              prompt: "reply"
-            outputDelivery:
-              plugin:
-                name: slack
-                operation: chat.postMessage
-                credentialMode: none
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `workflows.schedules.nightly.target.steps[0].outputDelivery.plugin.credentialMode is not supported`,
-			},
-			{
-				name: "plugin delivery rejects nested target credential mode",
-				yaml: `
-plugins:
-  slack:
-    source:
-      path: ./providers/slack/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: reply
-            agent:
-              provider: simple
-              prompt: "reply"
-            outputDelivery:
-              plugin:
-                name: slack
-                operation: events.replySessionStarted
-                credentialMode: none
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `workflows.schedules.nightly.target.steps[0].outputDelivery.plugin.credentialMode is not supported`,
-			},
-			{
-				name: "step output delivery plugin requires a target",
-				yaml: `
-plugins:
-  slack:
-    source:
-      path: ./providers/slack/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: reply
-            agent:
-              provider: simple
-              prompt: "reply"
-            outputDelivery: {}
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`,
-				want: `workflows.schedules.nightly.target.steps[0].outputDelivery.plugin is required`,
-			},
-			{
 				name: "agent step when rejects self reference",
 				yaml: `
 workflows:
@@ -3555,52 +3448,6 @@ server:
 					t.Fatalf("Load error = %v, want %q", err, tc.want)
 				}
 			})
-		}
-	})
-
-	t.Run("workflow output delivery can reference current step output", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-plugins:
-  slack:
-    source:
-      path: ./providers/slack/manifest.yaml
-workflows:
-  schedules:
-    nightly:
-      provider: temporal
-      cron: "0 2 * * *"
-      target:
-        steps:
-          - id: diagnosis
-            agent:
-              provider: simple
-              prompt: "diagnose"
-            outputDelivery:
-              plugin:
-                name: slack
-                operation: chat.postMessage
-                input:
-                  object:
-                    text:
-                      stepOutput:
-                        stepId: diagnosis
-                        path: agent.text
-providers:
-  agent:
-    simple:
-      source:
-        path: ./providers/agent/simple
-  workflow:
-    temporal:
-      source:
-        path: ./providers/workflow/temporal
-server:
-  encryptionKey: server-key
-`)
-		if _, err := Load(path); err != nil {
-			t.Fatalf("Load: %v", err)
 		}
 	})
 
@@ -7106,10 +6953,10 @@ workflows:
             agent:
               provider: agent_two
               prompt: "Fix"
-            outputDelivery:
-              plugin:
-                name: beta
-                operation: reply
+          - id: reply
+            plugin:
+              name: beta
+              operation: reply
     dropped:
       cron: "0 4 * * *"
       target:

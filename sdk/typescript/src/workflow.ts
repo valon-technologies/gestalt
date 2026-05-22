@@ -84,7 +84,6 @@ import {
   type WorkflowEventTriggerInvocation as ProtoWorkflowEventTriggerInvocation,
   type WorkflowExecutionReference as ProtoWorkflowExecutionReference,
   WorkflowStepAgentTurnSchema,
-  WorkflowStepDeliverySchema,
   WorkflowStepOutputSourceSchema,
   WorkflowStepPluginCallSchema,
   WorkflowStepSchema,
@@ -98,7 +97,6 @@ import {
   type WorkflowSignal as ProtoWorkflowSignal,
   type WorkflowStep as ProtoWorkflowStep,
   type WorkflowStepAgentTurn as ProtoWorkflowStepAgentTurn,
-  type WorkflowStepDelivery as ProtoWorkflowStepDelivery,
   type WorkflowStepOutputSource as ProtoWorkflowStepOutputSource,
   type WorkflowStepPluginCall as ProtoWorkflowStepPluginCall,
   type WorkflowStepWhen as ProtoWorkflowStepWhen,
@@ -182,10 +180,6 @@ export interface WorkflowStepPluginCall {
   credentialMode?: string | undefined;
 }
 
-export interface WorkflowStepDelivery {
-  plugin?: WorkflowStepPluginCall | undefined;
-}
-
 export interface WorkflowAgentMessage {
   role?: string | undefined;
   text?: WorkflowText | string | undefined;
@@ -224,7 +218,6 @@ export interface WorkflowStep {
   agent?: WorkflowStepAgentTurn | undefined;
   when?: WorkflowStepWhen | undefined;
   timeoutSeconds?: number | undefined;
-  outputDelivery?: WorkflowStepDelivery | undefined;
   metadata?: JsonObjectInput | undefined;
   action?: WorkflowStepActionKind | undefined;
 }
@@ -783,27 +776,6 @@ export function workflowStepPluginCallInputFromCall(
   };
 }
 
-/** Creates a workflow step output delivery from native input. */
-export function workflowStepDelivery(
-  input: WorkflowStepDelivery = {},
-): WorkflowStepDelivery {
-  return {
-    plugin: input.plugin === undefined ? undefined : workflowStepPluginCall(input.plugin),
-  };
-}
-
-/** Returns native input copied from a workflow step output delivery. */
-export function workflowStepDeliveryInputFromDelivery(
-  input?: WorkflowStepDelivery,
-): WorkflowStepDelivery | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    plugin: workflowStepPluginCallInputFromCall(input.plugin),
-  };
-}
-
 /** Creates a workflow agent message from native input. */
 export function workflowAgentMessage(
   input: WorkflowAgentMessage = {},
@@ -916,9 +888,6 @@ export function workflowStep(input: WorkflowStep = {}): WorkflowStep {
     action,
     when: input.when === undefined ? undefined : workflowStepWhen(input.when),
     timeoutSeconds: input.timeoutSeconds ?? 0,
-    outputDelivery: input.outputDelivery === undefined
-      ? undefined
-      : workflowStepDelivery(input.outputDelivery),
     metadata: input.metadata === undefined ? undefined : structFromObject(input.metadata),
   };
 }
@@ -952,7 +921,6 @@ export function workflowStepInputFromStep(
           : { case: undefined },
     when: workflowStepWhenInputFromWhen(input.when),
     timeoutSeconds: input.timeoutSeconds,
-    outputDelivery: workflowStepDeliveryInputFromDelivery(input.outputDelivery),
     metadata: input.metadata === undefined ? undefined : jsonObjectClone(input.metadata),
   };
 }
@@ -2209,28 +2177,6 @@ export function workflowStepPluginCallFromProto(
   };
 }
 
-export function workflowStepDeliveryToProto(
-  input?: WorkflowStepDelivery | undefined,
-): ProtoWorkflowStepDelivery | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return create(WorkflowStepDeliverySchema, {
-    plugin: workflowStepPluginCallToProto(input.plugin),
-  });
-}
-
-export function workflowStepDeliveryFromProto(
-  input?: ProtoWorkflowStepDelivery | undefined,
-): WorkflowStepDelivery | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  return {
-    plugin: workflowStepPluginCallFromProto(input.plugin),
-  };
-}
-
 export function workflowAgentMessageToProto(
   input: WorkflowAgentMessage,
 ): ProtoWorkflowAgentMessage {
@@ -2334,7 +2280,6 @@ export function workflowStepToProto(input: WorkflowStep): ProtoWorkflowStep {
         : { case: undefined },
     when: workflowStepWhenToProto(step.when),
     timeoutSeconds: step.timeoutSeconds ?? 0,
-    outputDelivery: workflowStepDeliveryToProto(step.outputDelivery),
     metadata: optionalStruct(step.metadata),
   });
 }
@@ -2358,7 +2303,6 @@ export function workflowStepFromProto(input: ProtoWorkflowStep): WorkflowStep {
     action,
     when: workflowStepWhenFromProto(input.when),
     timeoutSeconds: input.timeoutSeconds,
-    outputDelivery: workflowStepDeliveryFromProto(input.outputDelivery),
     metadata: optionalObjectFromStruct(input.metadata),
   };
 }

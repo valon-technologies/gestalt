@@ -137,22 +137,6 @@ class WorkflowHelperTests(unittest.TestCase):
                         model_options={"temperature": 0},
                     ),
                     timeout_seconds=45,
-                    output_delivery=gestalt.WorkflowStepDelivery(
-                        plugin=gestalt.WorkflowStepPluginCall(
-                            name="slack",
-                            operation="reply",
-                            input=gestalt.WorkflowValue(
-                                object={
-                                    "text": gestalt.WorkflowValue(
-                                        step_output=gestalt.WorkflowStepOutputSource(
-                                            step_id="diagnosis",
-                                            path="agent.text",
-                                        )
-                                    )
-                                }
-                            ),
-                        ),
-                    ),
                     metadata={"kind": "diagnosis"},
                 ),
                 gestalt.WorkflowStep(
@@ -185,10 +169,6 @@ class WorkflowHelperTests(unittest.TestCase):
         copied = gestalt.bound_workflow_target_input_from_target(target)
         self.assertIsInstance(copied.steps[0].agent.messages[0], gestalt.WorkflowAgentMessage)
         self.assertEqual(copied.steps[0].agent.response_schema["type"], "object")
-        self.assertEqual(
-            copied.steps[0].output_delivery.plugin.name,
-            "slack",
-        )
         self.assertEqual(
             copied.steps[1].when.value.step_output.path,
             "agent.structuredOutput.actionableForPr",

@@ -42,7 +42,6 @@ type Step struct {
 	Agent          *AgentTurn
 	When           *StepWhen
 	TimeoutSeconds int
-	OutputDelivery *StepDelivery
 	Metadata       map[string]any
 }
 
@@ -98,10 +97,6 @@ type StepOutputSource struct {
 	Path   string
 }
 
-type StepDelivery struct {
-	Plugin *PluginCall
-}
-
 func CloneValue(value Value) Value {
 	out := value
 	out.Literal = cloneLiteral(value.Literal)
@@ -145,19 +140,6 @@ func cloneLiteral(value any) any {
 	default:
 		return value
 	}
-}
-
-func CloneStepDelivery(delivery *StepDelivery) *StepDelivery {
-	if delivery == nil {
-		return nil
-	}
-	out := *delivery
-	if delivery.Plugin != nil {
-		plugin := *delivery.Plugin
-		plugin.Input = CloneValue(delivery.Plugin.Input)
-		out.Plugin = &plugin
-	}
-	return &out
 }
 
 type ExecutionReference struct {
@@ -487,7 +469,6 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 		if len(step.Metadata) == 0 {
 			step.Metadata = nil
 		}
-		step.OutputDelivery = normalizedStepDelivery(step.OutputDelivery)
 	}
 	return out
 }
@@ -516,17 +497,4 @@ func normalizedWorkflowValue(value Value) Value {
 		}
 	}
 	return value
-}
-
-func normalizedStepDelivery(delivery *StepDelivery) *StepDelivery {
-	if delivery == nil {
-		return nil
-	}
-	out := *delivery
-	if out.Plugin != nil {
-		plugin := *out.Plugin
-		plugin.Input = normalizedWorkflowValue(plugin.Input)
-		out.Plugin = &plugin
-	}
-	return &out
 }

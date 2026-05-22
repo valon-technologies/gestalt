@@ -28,8 +28,9 @@ schedules and triggers are created through the global API or CLI and
 execute as the subject that created them.
 
 Each schedule or trigger points at one ordered step plan. Use plugin steps for
-deterministic operations, agent steps for model turns, `when` for conditional
-later steps, and `outputDelivery` to send a step result through another plugin.
+deterministic operations, agent steps for model turns, and `when` for
+conditional later steps. To send a prior step result through another plugin,
+model that delivery as its own plugin step.
 
 Workflow provider selection is global, not plugin-scoped. A config-managed
 workflow object chooses a provider with `provider`, or inherits the sole/default

@@ -2144,7 +2144,6 @@ func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
 			when.Value = coreworkflow.CloneValue(when.Value)
 			step.When = &when
 		}
-		step.OutputDelivery = coreworkflow.CloneStepDelivery(step.OutputDelivery)
 		step.Metadata = maps.Clone(step.Metadata)
 		out.Steps[i] = step
 	}

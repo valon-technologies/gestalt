@@ -48,7 +48,6 @@ class WorkflowStep(_message.Message):
     INPUTS_FIELD_NUMBER: _ClassVar[int]
     WHEN_FIELD_NUMBER: _ClassVar[int]
     TIMEOUT_SECONDS_FIELD_NUMBER: _ClassVar[int]
-    OUTPUT_DELIVERY_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
     PLUGIN_FIELD_NUMBER: _ClassVar[int]
     AGENT_FIELD_NUMBER: _ClassVar[int]
@@ -56,11 +55,10 @@ class WorkflowStep(_message.Message):
     inputs: _containers.MessageMap[str, WorkflowValue]
     when: WorkflowStepWhen
     timeout_seconds: int
-    output_delivery: WorkflowStepDelivery
     metadata: _struct_pb2.Struct
     plugin: WorkflowStepPluginCall
     agent: WorkflowStepAgentTurn
-    def __init__(self, id: _Optional[str] = ..., inputs: _Optional[_Mapping[str, WorkflowValue]] = ..., when: _Optional[_Union[WorkflowStepWhen, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., output_delivery: _Optional[_Union[WorkflowStepDelivery, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., plugin: _Optional[_Union[WorkflowStepPluginCall, _Mapping]] = ..., agent: _Optional[_Union[WorkflowStepAgentTurn, _Mapping]] = ...) -> None: ...
+    def __init__(self, id: _Optional[str] = ..., inputs: _Optional[_Mapping[str, WorkflowValue]] = ..., when: _Optional[_Union[WorkflowStepWhen, _Mapping]] = ..., timeout_seconds: _Optional[int] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., plugin: _Optional[_Union[WorkflowStepPluginCall, _Mapping]] = ..., agent: _Optional[_Union[WorkflowStepAgentTurn, _Mapping]] = ...) -> None: ...
 
 class WorkflowStepPluginCall(_message.Message):
     __slots__ = ()
@@ -77,12 +75,6 @@ class WorkflowStepPluginCall(_message.Message):
     instance: str
     credential_mode: str
     def __init__(self, name: _Optional[str] = ..., operation: _Optional[str] = ..., input: _Optional[_Union[WorkflowValue, _Mapping]] = ..., connection: _Optional[str] = ..., instance: _Optional[str] = ..., credential_mode: _Optional[str] = ...) -> None: ...
-
-class WorkflowStepDelivery(_message.Message):
-    __slots__ = ()
-    PLUGIN_FIELD_NUMBER: _ClassVar[int]
-    plugin: WorkflowStepPluginCall
-    def __init__(self, plugin: _Optional[_Union[WorkflowStepPluginCall, _Mapping]] = ...) -> None: ...
 
 class WorkflowStepAgentTurn(_message.Message):
     __slots__ = ()

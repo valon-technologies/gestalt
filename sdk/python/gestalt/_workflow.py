@@ -110,13 +110,6 @@ class WorkflowStepPluginCall:
 
 
 @_dataclasses.dataclass(slots=True)
-class WorkflowStepDelivery:
-    """Native data for a workflow step output delivery."""
-
-    plugin: Any | None = None
-
-
-@_dataclasses.dataclass(slots=True)
 class WorkflowStepAgentTurn:
     """Native data for a workflow agent step turn."""
 
@@ -157,7 +150,6 @@ class WorkflowStep:
     agent: Any | None = None
     when: Any | None = None
     timeout_seconds: int = 0
-    output_delivery: Any | None = None
     metadata: Any | None = None
 
 
@@ -915,32 +907,6 @@ def workflow_step_plugin_call_input_from_call(
     )
 
 
-def workflow_step_delivery(value: Any | None = None, **kwargs: Any) -> Any:
-    """Create a workflow step output delivery."""
-
-    if isinstance(value, pb.WorkflowStepDelivery):
-        return _copy(value)
-    data = _data(value, kwargs)
-    plugin = data.get("plugin")
-    return pb.WorkflowStepDelivery(
-        plugin=workflow_step_plugin_call(plugin) if plugin is not None else None,
-    )
-
-
-def workflow_step_delivery_input_from_delivery(
-    value: Any | None,
-) -> WorkflowStepDelivery | None:
-    """Return input copied from a workflow step output delivery."""
-
-    if value is None:
-        return None
-    return WorkflowStepDelivery(
-        plugin=workflow_step_plugin_call_input_from_call(value.plugin)
-        if has_field(value, "plugin")
-        else None,
-    )
-
-
 def workflow_agent_message(value: Any | None = None, **kwargs: Any) -> Any:
     """Create a workflow agent message."""
 
@@ -1085,9 +1051,6 @@ def workflow_step(value: Any | None = None, **kwargs: Any) -> Any:
     when = data.get("when")
     if when is not None:
         step.when.CopyFrom(workflow_step_when(when))
-    output_delivery = data.get("output_delivery")
-    if output_delivery is not None:
-        step.output_delivery.CopyFrom(workflow_step_delivery(output_delivery))
     return step
 
 
@@ -1112,11 +1075,6 @@ def workflow_step_input_from_step(value: Any | None) -> WorkflowStep | None:
         if has_field(value, "when")
         else None,
         timeout_seconds=value.timeout_seconds,
-        output_delivery=workflow_step_delivery_input_from_delivery(
-            value.output_delivery
-        )
-        if has_field(value, "output_delivery")
-        else None,
         metadata=struct_to_dict(value.metadata)
         if has_field(value, "metadata")
         else None,

@@ -322,16 +322,6 @@ func (r *workflowRuntime) invokeWorkflowSteps(ctx context.Context, req coreworkf
 			return workflowFailedStepResponse(result, stepID, "step_failed", err.Error())
 		}
 		result.Outputs[stepID] = output
-		if step.OutputDelivery != nil {
-			if step.OutputDelivery.Plugin == nil {
-				delete(result.Outputs, stepID)
-				return workflowFailedStepResponse(result, stepID, "delivery_failed", "output_delivery.plugin is required")
-			}
-			if _, err := r.invokeWorkflowPluginStep(ctx, req, invoker, p, step.OutputDelivery.Plugin, inputs, result.Outputs, invocationScope, stepID, "output_delivery"); err != nil {
-				delete(result.Outputs, stepID)
-				return workflowFailedStepResponse(result, stepID, "delivery_failed", err.Error())
-			}
-		}
 		result.FinalStepID = stepID
 		result.FinalOutput = output
 		result.Steps = append(result.Steps, workflowStepResult{ID: stepID, Status: "succeeded", TurnID: turnID})
@@ -610,7 +600,7 @@ func workflowEvaluateValue(value coreworkflow.Value, req coreworkflow.InvokeOper
 	case strings.TrimSpace(value.RunInput) != "":
 		return workflowMapPathValue(req.Input, value.RunInput)
 	case strings.TrimSpace(value.SignalPayload) != "":
-		signal := workflowOutputDeliverySignal(req.Signals)
+		signal := workflowLatestSignal(req.Signals)
 		if signal == nil {
 			return nil, false, nil
 		}
@@ -696,7 +686,7 @@ func workflowTemplateExpressionValue(expr string, req coreworkflow.InvokeOperati
 	case strings.HasPrefix(expr, "runInput."):
 		return workflowMapPathValue(req.Input, strings.TrimPrefix(expr, "runInput."))
 	case strings.HasPrefix(expr, "signalPayload."):
-		signal := workflowOutputDeliverySignal(req.Signals)
+		signal := workflowLatestSignal(req.Signals)
 		if signal == nil {
 			return nil, false, nil
 		}
@@ -729,7 +719,7 @@ func workflowStableJSON(value any) string {
 }
 
 func workflowStepInvocationScope(req coreworkflow.InvokeOperationRequest) string {
-	if signal := workflowOutputDeliverySignal(req.Signals); signal != nil {
+	if signal := workflowLatestSignal(req.Signals); signal != nil {
 		if signalID := strings.TrimSpace(signal.ID); signalID != "" {
 			return "signal-id:" + signalID
 		}
@@ -895,7 +885,7 @@ func workflowAgentNumber(value any) (float64, bool) {
 	}
 }
 
-func workflowOutputDeliverySignal(signals []coreworkflow.Signal) *coreworkflow.Signal {
+func workflowLatestSignal(signals []coreworkflow.Signal) *coreworkflow.Signal {
 	if len(signals) == 0 {
 		return nil
 	}
@@ -1303,12 +1293,6 @@ func workflowTargetContext(target coreworkflow.Target) map[string]any {
 			item["model"] = strings.TrimSpace(step.Agent.Model)
 		default:
 			item["kind"] = "unknown"
-		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
-			item["outputDelivery"] = map[string]any{
-				"plugin":    strings.TrimSpace(step.OutputDelivery.Plugin.Name),
-				"operation": strings.TrimSpace(step.OutputDelivery.Plugin.Operation),
-			}
 		}
 		steps = append(steps, item)
 	}

@@ -3094,8 +3094,6 @@ pub struct WorkflowStep {
     pub when: ::core::option::Option<WorkflowStepWhen>,
     #[prost(int32, tag = "4")]
     pub timeout_seconds: i32,
-    #[prost(message, optional, tag = "5")]
-    pub output_delivery: ::core::option::Option<WorkflowStepDelivery>,
     #[prost(message, optional, tag = "6")]
     pub metadata: ::core::option::Option<::prost_types::Struct>,
     #[prost(oneof = "workflow_step::Action", tags = "10, 11")]
@@ -3125,11 +3123,6 @@ pub struct WorkflowStepPluginCall {
     pub instance: ::prost::alloc::string::String,
     #[prost(string, tag = "6")]
     pub credential_mode: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct WorkflowStepDelivery {
-    #[prost(message, optional, tag = "1")]
-    pub plugin: ::core::option::Option<WorkflowStepPluginCall>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct WorkflowStepAgentTurn {

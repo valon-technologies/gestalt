@@ -121,14 +121,15 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 				},
 				Metadata:       map[string]any{"kind": "diagnosis"},
 				TimeoutSeconds: 45,
-				OutputDelivery: &coreworkflow.StepDelivery{
-					Plugin: &coreworkflow.PluginCall{
-						Name:      "slack",
-						Operation: "reply",
-						Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
-							"text": {StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.text"}},
-						}},
-					},
+			},
+			{
+				ID: "reply",
+				Plugin: &coreworkflow.PluginCall{
+					Name:      "slack",
+					Operation: "reply",
+					Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
+						"text": {StepOutput: &coreworkflow.StepOutputSource{StepID: "diagnosis", Path: "agent.text"}},
+					}},
 				},
 			},
 			{
@@ -153,12 +154,12 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 	if got := target.GetSteps()[0].GetAgent().GetResponseSchema().AsMap()["type"]; got != "object" {
 		t.Fatalf("step response schema = %#v, want object", got)
 	}
-	if got := target.GetSteps()[1].GetWhen().GetEquals().GetBoolValue(); got != true {
+	if got := target.GetSteps()[2].GetWhen().GetEquals().GetBoolValue(); got != true {
 		t.Fatalf("step when equals = %v, want true", got)
 	}
 
 	roundTrip := workflowTargetFromProto(target)
-	if len(roundTrip.Steps) != 2 {
+	if len(roundTrip.Steps) != 3 {
 		t.Fatalf("round trip steps = %#v", roundTrip.Steps)
 	}
 	diagnosis := roundTrip.Steps[0]
@@ -171,10 +172,11 @@ func TestWorkflowTargetStepsProtoRoundTrip(t *testing.T) {
 	if len(diagnosis.Agent.ToolRefs) != 1 || diagnosis.Agent.ToolRefs[0].Plugin != "datadog" || diagnosis.Agent.ToolRefs[0].Operation != "queryLogs" {
 		t.Fatalf("round trip diagnosis tool refs = %#v", diagnosis.Agent.ToolRefs)
 	}
-	if diagnosis.OutputDelivery == nil || diagnosis.OutputDelivery.Plugin.Name != "slack" {
-		t.Fatalf("round trip diagnosis output delivery = %#v", diagnosis.OutputDelivery)
+	reply := roundTrip.Steps[1]
+	if reply.Plugin == nil || reply.Plugin.Name != "slack" || reply.Plugin.Operation != "reply" {
+		t.Fatalf("round trip reply step = %#v", reply)
 	}
-	prFix := roundTrip.Steps[1]
+	prFix := roundTrip.Steps[2]
 	if prFix.When == nil || prFix.When.Value.StepOutput.StepID != "diagnosis" || prFix.When.Value.StepOutput.Path != "agent.structuredOutput.actionableForPr" || prFix.When.Equals != true {
 		t.Fatalf("round trip pr_fix when = %#v", prFix.When)
 	}

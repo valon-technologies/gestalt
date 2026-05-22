@@ -13,7 +13,6 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -1127,90 +1126,6 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	}
 	if got := grant.ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
 		t.Fatalf("grant tool refs = %#v, want global broad catalog ref", got)
-	}
-}
-
-func TestManagerCreateTurnCarriesInheritedOutputDeliveryInRunGrant(t *testing.T) {
-	t.Parallel()
-
-	alpha := newRouteCountingAgentProvider("alpha")
-	roadmap := &catalogCountingProvider{StubIntegration: coretesting.StubIntegration{
-		N:        "roadmap",
-		ConnMode: core.ConnectionModeNone,
-		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-			ID: "sync",
-		}}},
-	}}
-	notification := &catalogCountingProvider{StubIntegration: coretesting.StubIntegration{
-		N:        "notification",
-		ConnMode: core.ConnectionModeNone,
-		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-			ID: "reply",
-		}}},
-	}}
-	grants := newAgentManagerTestRunGrants(t)
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, roadmap, notification),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		RunGrants: grants,
-	})
-	p := &principal.Principal{
-		SubjectID: principal.UserSubjectID("user-1"),
-		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
-			{Plugin: "alpha"},
-			{Plugin: "roadmap", Operations: []string{"sync"}},
-			{Plugin: "notification", Operations: []string{"reply"}},
-		}),
-	}
-	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	ctx := WithInheritedOutputDelivery(context.Background(), &coreworkflow.StepDelivery{
-		Plugin: &coreworkflow.PluginCall{
-			Name:      "notification",
-			Operation: "reply",
-			Input: coreworkflow.Value{Object: map[string]coreworkflow.Value{
-				"text":      {StepOutput: &coreworkflow.StepOutputSource{StepID: "final", Path: "agent.text"}},
-				"reply_ref": {Literal: "signed-ref", LiteralSet: true},
-			}},
-		},
-	})
-	_, err = manager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
-		SessionID: session.ID,
-		Model:     "test-model",
-		ToolRefs:  []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if len(alpha.createTurnReqs) != 1 {
-		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
-	}
-	grant, err := grants.Resolve(alpha.createTurnReqs[0].RunGrant)
-	if err != nil {
-		t.Fatalf("Resolve run grant: %v", err)
-	}
-	if grant.InheritedOutputDelivery == nil || grant.InheritedOutputDelivery.Plugin == nil || grant.InheritedOutputDelivery.Plugin.Name != "notification" || grant.InheritedOutputDelivery.Plugin.Operation != "reply" {
-		t.Fatalf("inherited output delivery = %#v", grant.InheritedOutputDelivery)
-	}
-	if got := grant.ToolRefs; len(got) != 1 || got[0].Plugin != "roadmap" || got[0].Operation != "sync" {
-		t.Fatalf("grant tool refs = %#v, want only visible roadmap tool", got)
-	}
-	if !reflect.DeepEqual(grant.Permissions, []core.AccessPermission{
-		{Plugin: "notification", Operations: []string{"reply"}},
-		{Plugin: "roadmap", Operations: []string{"sync"}},
-	}) {
-		t.Fatalf("grant permissions = %#v, want hidden delivery permission merged", grant.Permissions)
 	}
 }
 

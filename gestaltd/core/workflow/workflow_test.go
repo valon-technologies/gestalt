@@ -47,13 +47,6 @@ func TestTargetsEqualNormalizesNestedEmptyWorkflowValues(t *testing.T) {
 				"empty": {Object: map[string]Value{}},
 			}},
 		},
-		OutputDelivery: &StepDelivery{Plugin: &PluginCall{
-			Name:      "notify",
-			Operation: "send",
-			Input: Value{Array: []Value{
-				{Object: map[string]Value{}},
-			}},
-		}},
 	}}}
 	right := Target{Steps: []Step{{
 		ID: "first",
@@ -74,11 +67,6 @@ func TestTargetsEqualNormalizesNestedEmptyWorkflowValues(t *testing.T) {
 				"empty": {},
 			}},
 		},
-		OutputDelivery: &StepDelivery{Plugin: &PluginCall{
-			Name:      "notify",
-			Operation: "send",
-			Input:     Value{Array: []Value{{}}},
-		}},
 	}}}
 
 	if !TargetsEqual(left, right) {

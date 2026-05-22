@@ -97,7 +97,6 @@ pub struct WorkflowStep {
     pub action: WorkflowStepAction,
     pub when: Option<WorkflowStepWhen>,
     pub timeout_seconds: i32,
-    pub output_delivery: Option<WorkflowStepDelivery>,
     pub metadata: Option<WorkflowJson>,
 }
 
@@ -118,11 +117,6 @@ pub struct WorkflowStepPluginCall {
     pub connection: String,
     pub instance: String,
     pub credential_mode: String,
-}
-
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct WorkflowStepDelivery {
-    pub plugin: Option<WorkflowStepPluginCall>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -947,47 +941,6 @@ fn workflow_step_plugin_call_from_proto(
     })
 }
 
-/// Creates a workflow step delivery.
-pub fn new_workflow_step_delivery(
-    input: WorkflowStepDelivery,
-) -> ProviderResult<WorkflowStepDelivery> {
-    Ok(WorkflowStepDelivery {
-        plugin: input
-            .plugin
-            .map(new_workflow_step_plugin_call)
-            .transpose()?,
-    })
-}
-
-/// Returns input copied from a workflow step delivery.
-pub fn workflow_step_delivery_input_from_delivery(
-    input: &WorkflowStepDelivery,
-) -> ProviderResult<WorkflowStepDelivery> {
-    Ok(input.clone())
-}
-
-fn workflow_step_delivery_to_proto(
-    input: WorkflowStepDelivery,
-) -> ProviderResult<pb::WorkflowStepDelivery> {
-    Ok(pb::WorkflowStepDelivery {
-        plugin: input
-            .plugin
-            .map(workflow_step_plugin_call_to_proto)
-            .transpose()?,
-    })
-}
-
-fn workflow_step_delivery_from_proto(
-    input: pb::WorkflowStepDelivery,
-) -> ProviderResult<WorkflowStepDelivery> {
-    Ok(WorkflowStepDelivery {
-        plugin: input
-            .plugin
-            .map(workflow_step_plugin_call_from_proto)
-            .transpose()?,
-    })
-}
-
 /// Creates a workflow agent message.
 pub fn new_workflow_agent_message(input: WorkflowAgentMessage) -> WorkflowAgentMessage {
     input
@@ -1130,10 +1083,6 @@ pub fn new_workflow_step(input: WorkflowStep) -> ProviderResult<WorkflowStep> {
         },
         when: input.when.map(new_workflow_step_when),
         timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .map(new_workflow_step_delivery)
-            .transpose()?,
         metadata: input.metadata,
     })
 }
@@ -1164,10 +1113,6 @@ fn workflow_step_to_proto(input: WorkflowStep) -> ProviderResult<pb::WorkflowSte
         action,
         when: input.when.map(workflow_step_when_to_proto),
         timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .map(workflow_step_delivery_to_proto)
-            .transpose()?,
         metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
     })
 }
@@ -1193,10 +1138,6 @@ fn workflow_step_from_proto(input: pb::WorkflowStep) -> ProviderResult<WorkflowS
         action,
         when: input.when.map(workflow_step_when_from_proto),
         timeout_seconds: input.timeout_seconds,
-        output_delivery: input
-            .output_delivery
-            .map(workflow_step_delivery_from_proto)
-            .transpose()?,
         metadata: input.metadata.as_ref().map(protocol::json_from_struct),
     })
 }

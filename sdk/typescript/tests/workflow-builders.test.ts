@@ -152,17 +152,6 @@ test("agent and plugin workflow steps round-trip through copy helpers", () => {
         },
         timeoutSeconds: 45,
         metadata: { kind: "diagnosis" },
-        outputDelivery: {
-          plugin: {
-            name: "slack",
-            operation: "reply",
-            input: {
-              object: {
-                text: { stepOutput: { stepId: "diagnosis", path: "agent.text" } },
-              },
-            },
-          },
-        },
       },
       {
         id: "pr_fix",
@@ -193,7 +182,6 @@ test("agent and plugin workflow steps round-trip through copy helpers", () => {
   const copied = boundWorkflowTargetFromTarget(target);
   const copiedSteps = copied.steps ?? [];
   expect(copiedSteps[0]?.agent?.responseSchema).toEqual({ type: "object" });
-  expect(copiedSteps[0]?.outputDelivery?.plugin?.name).toBe("slack");
   expect(copiedSteps[1]?.when?.value?.kind).toEqual({
     case: "stepOutput",
     value: {

@@ -842,14 +842,13 @@ type WorkflowTargetConfig struct {
 }
 
 type WorkflowStepConfig struct {
-	ID             string                         `yaml:"id,omitempty"`
-	Inputs         map[string]WorkflowValueConfig `yaml:"inputs,omitempty"`
-	Plugin         *WorkflowStepPluginCallConfig  `yaml:"plugin,omitempty"`
-	Agent          *WorkflowStepAgentConfig       `yaml:"agent,omitempty"`
-	When           *WorkflowStepWhenConfig        `yaml:"when,omitempty"`
-	Timeout        string                         `yaml:"timeout,omitempty"`
-	OutputDelivery *WorkflowStepDeliveryConfig    `yaml:"outputDelivery,omitempty"`
-	Metadata       map[string]any                 `yaml:"metadata,omitempty"`
+	ID       string                         `yaml:"id,omitempty"`
+	Inputs   map[string]WorkflowValueConfig `yaml:"inputs,omitempty"`
+	Plugin   *WorkflowStepPluginCallConfig  `yaml:"plugin,omitempty"`
+	Agent    *WorkflowStepAgentConfig       `yaml:"agent,omitempty"`
+	When     *WorkflowStepWhenConfig        `yaml:"when,omitempty"`
+	Timeout  string                         `yaml:"timeout,omitempty"`
+	Metadata map[string]any                 `yaml:"metadata,omitempty"`
 }
 
 type WorkflowStepPluginCallConfig struct {
@@ -859,10 +858,6 @@ type WorkflowStepPluginCallConfig struct {
 	Instance       string                            `yaml:"instance,omitempty"`
 	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
 	Input          WorkflowValueConfig               `yaml:"input,omitempty"`
-}
-
-type WorkflowStepDeliveryConfig struct {
-	Plugin *WorkflowStepPluginCallConfig `yaml:"plugin,omitempty"`
 }
 
 type WorkflowStepAgentConfig struct {

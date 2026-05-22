@@ -2249,16 +2249,6 @@ func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, tar
 		default:
 			return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d] must set plugin or agent", i)
 		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
-			plugin, err := m.resolveWorkflowStepPlugin(ctx, p, *step.OutputDelivery.Plugin, callerPluginName)
-			if err != nil {
-				return coreworkflow.Target{}, fmt.Errorf("workflow target.steps[%d].output_delivery.plugin: %w", i, err)
-			}
-			if err := validateWorkflowStepValueRefs(fmt.Sprintf("workflow target.steps[%d].output_delivery.plugin.input", i), plugin.Input, workflowStepSeenWithCurrent(seen, step.ID)); err != nil {
-				return coreworkflow.Target{}, err
-			}
-			step.OutputDelivery.Plugin = &plugin
-		}
 		if step.When != nil {
 			if err := validateWorkflowStepWhen(i, step.When, seen); err != nil {
 				return coreworkflow.Target{}, err
@@ -2343,15 +2333,6 @@ func validateWorkflowStepValueRefs(path string, value coreworkflow.Value, previo
 		}
 	}
 	return nil
-}
-
-func workflowStepSeenWithCurrent(seen map[string]struct{}, stepID string) map[string]struct{} {
-	out := make(map[string]struct{}, len(seen)+1)
-	for key := range seen {
-		out[key] = struct{}{}
-	}
-	out[strings.TrimSpace(stepID)] = struct{}{}
-	return out
 }
 
 func validateWorkflowStepWhenValue(index int, value coreworkflow.Value, previousSteps map[string]struct{}) error {
@@ -2789,9 +2770,6 @@ func (m *Manager) executionRefPermissions(p *principal.Principal, target corewor
 		if step.Plugin != nil && m.callerPluginDeclaresInvoke(callerPluginName, step.Plugin.Name, step.Plugin.Operation) {
 			addWorkflowPermission(permissions, step.Plugin.Name, step.Plugin.Operation)
 		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil && m.callerPluginDeclaresInvoke(callerPluginName, step.OutputDelivery.Plugin.Name, step.OutputDelivery.Plugin.Operation) {
-			addWorkflowPermission(permissions, step.OutputDelivery.Plugin.Name, step.OutputDelivery.Plugin.Operation)
-		}
 		if step.Agent == nil {
 			continue
 		}
@@ -2960,12 +2938,10 @@ func (m *Manager) providerAccessContext(ctx context.Context, p *principal.Princi
 }
 
 const (
-	targetAuthorizationComponentTarget               = "target"
-	targetAuthorizationComponentAgentProvider        = "agent_provider"
-	targetAuthorizationComponentAgentToolRef         = "agent_tool_ref"
-	targetAuthorizationComponentOutputDelivery       = "output_delivery"
-	targetAuthorizationComponentSessionReadyDelivery = "session_ready_delivery"
-	targetAuthorizationComponentPluginTarget         = "plugin_target"
+	targetAuthorizationComponentTarget        = "target"
+	targetAuthorizationComponentAgentProvider = "agent_provider"
+	targetAuthorizationComponentAgentToolRef  = "agent_tool_ref"
+	targetAuthorizationComponentPluginTarget  = "plugin_target"
 
 	targetAuthorizationReasonMissingAgentProvider               = "missing_agent_provider"
 	targetAuthorizationReasonAuthorizerProviderDenied           = "authorizer_provider_denied"
@@ -3024,11 +3000,6 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 				if denied := m.checkWorkflowAgentToolAuthorization(ctx, p, step.Agent.ToolRefs[i], hasSystemTools, i); !denied.allowed {
 					return denied
 				}
-			}
-		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
-			if denied := m.checkWorkflowStepPluginAuthorization(ctx, p, step.OutputDelivery.Plugin, targetAuthorizationComponentOutputDelivery); !denied.allowed {
-				return denied
 			}
 		}
 		_ = stepIndex

@@ -832,7 +832,6 @@ workflows:
 | `target.steps[].plugin.input` | Optional workflow value that must resolve to a JSON object. Use `literal` for static params. |
 | `target.steps[].agent` | Optional agent turn using `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `responseSchema`, and `modelOptions`. |
 | `target.steps[].when` | Optional guard with `value` and scalar `equals`; `value.stepOutput.stepId` may reference only earlier steps. |
-| `target.steps[].outputDelivery.plugin` | Optional plugin call that receives this step's output. Its `input` uses workflow values such as `stepOutput`. |
 | `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal and credential subject. Without [`runAs`](/service-accounts#runas), config-managed workflows run as `system:config` and cannot target subject-scoped credentials. |
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
 | `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
@@ -851,7 +850,6 @@ workflows:
 | `target.steps[].plugin` | Plugin step call fields: `name`, `operation`, optional `connection`, optional `instance`, and optional workflow-value `input`. |
 | `target.steps[].agent` | Agent step turn fields: `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `responseSchema`, and `modelOptions`. |
 | `target.steps[].when` | Optional guard with `value` and scalar `equals`; `value.stepOutput.stepId` may reference only earlier steps. |
-| `target.steps[].outputDelivery.plugin` | Optional plugin call that receives this step's output. |
 | `runAs.subject.id` | Optional service-account subject ID used as the runtime principal and credential subject. See [`runAs`](/service-accounts#runas). |
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
 | `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |

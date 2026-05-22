@@ -15,12 +15,12 @@ message BoundWorkflowTarget {
 }
 
 message WorkflowStep {
-  reserved 7, 8, 9;
+  reserved 5, 7, 8, 9;
+  reserved "output_delivery";
   string id = 1;
   map<string, WorkflowValue> inputs = 2;
   WorkflowStepWhen when = 3;
   int32 timeout_seconds = 4;
-  WorkflowStepDelivery output_delivery = 5;
   google.protobuf.Struct metadata = 6;
 
   oneof action {
@@ -36,10 +36,6 @@ message WorkflowStepPluginCall {
   string connection = 4;
   string instance = 5;
   string credential_mode = 6;
-}
-
-message WorkflowStepDelivery {
-  WorkflowStepPluginCall plugin = 1;
 }
 
 message WorkflowStepAgentTurn {

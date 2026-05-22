@@ -90,16 +90,11 @@ func workflowStepToProto(step coreworkflow.Step) (*proto.WorkflowStep, error) {
 	if err != nil {
 		return nil, fmt.Errorf("metadata: %w", err)
 	}
-	delivery, err := workflowStepDeliveryToProto(step.OutputDelivery)
-	if err != nil {
-		return nil, fmt.Errorf("output_delivery: %w", err)
-	}
 	out := &proto.WorkflowStep{
 		Id:             step.ID,
 		Inputs:         inputs,
 		When:           when,
 		TimeoutSeconds: int32(step.TimeoutSeconds),
-		OutputDelivery: delivery,
 		Metadata:       metadata,
 	}
 	switch {
@@ -127,7 +122,6 @@ func workflowStepFromProto(step *proto.WorkflowStep) coreworkflow.Step {
 		Inputs:         workflowValueMapFromProto(step.GetInputs()),
 		When:           workflowStepWhenFromProto(step.GetWhen()),
 		TimeoutSeconds: int(step.GetTimeoutSeconds()),
-		OutputDelivery: workflowStepDeliveryFromProto(step.GetOutputDelivery()),
 		Metadata:       mapFromStruct(step.GetMetadata()),
 	}
 	if step.GetPlugin() != nil {
@@ -294,24 +288,6 @@ func workflowStepWhenFromProto(when *proto.WorkflowStepWhen) *coreworkflow.StepW
 		Equals:    protoValueToAny(when.GetEquals()),
 		EqualsSet: when.Equals != nil,
 	}
-}
-
-func workflowStepDeliveryToProto(delivery *coreworkflow.StepDelivery) (*proto.WorkflowStepDelivery, error) {
-	if delivery == nil {
-		return nil, nil
-	}
-	plugin, err := workflowStepPluginCallToProto(delivery.Plugin)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.WorkflowStepDelivery{Plugin: plugin}, nil
-}
-
-func workflowStepDeliveryFromProto(delivery *proto.WorkflowStepDelivery) *coreworkflow.StepDelivery {
-	if delivery == nil {
-		return nil
-	}
-	return &coreworkflow.StepDelivery{Plugin: workflowStepPluginCallFromProto(delivery.GetPlugin())}
 }
 
 func workflowValueMapToProto(values map[string]coreworkflow.Value) (map[string]*proto.WorkflowValue, error) {

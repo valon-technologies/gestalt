@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::time::{Duration, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -7,8 +6,8 @@ use serde_json::json;
 use gestalt::{
     AgentToolRef, BoundWorkflowRun, BoundWorkflowTarget, WorkflowAgentMessage, WorkflowRunStatus,
     WorkflowRunTrigger, WorkflowSignal, WorkflowStep, WorkflowStepAction, WorkflowStepAgentTurn,
-    WorkflowStepDelivery, WorkflowStepOutputSource, WorkflowStepPluginCall, WorkflowStepWhen,
-    WorkflowText, WorkflowValue, new_bound_workflow_run, new_bound_workflow_target,
+    WorkflowStepOutputSource, WorkflowStepPluginCall, WorkflowStepWhen, WorkflowText,
+    WorkflowValue, new_bound_workflow_run, new_bound_workflow_target,
     new_bound_workflow_target_from_target, new_workflow_signal,
 };
 
@@ -132,20 +131,6 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
                     ..Default::default()
                 }),
                 timeout_seconds: 45,
-                output_delivery: Some(WorkflowStepDelivery {
-                    plugin: Some(WorkflowStepPluginCall {
-                        name: "slack".to_string(),
-                        operation: "reply".to_string(),
-                        input: Some(WorkflowValue::Object(BTreeMap::from([(
-                            "text".to_string(),
-                            WorkflowValue::StepOutput(WorkflowStepOutputSource {
-                                step_id: "diagnosis".to_string(),
-                                path: "agent.text".to_string(),
-                            }),
-                        )]))),
-                        ..Default::default()
-                    }),
-                }),
                 metadata: Some(json!({"kind": "diagnosis"})),
                 ..Default::default()
             },
@@ -190,14 +175,6 @@ fn workflow_steps_round_trip_through_copy_helpers() -> gestalt::Result<()> {
 
     let copied_diagnosis = agent_step(&copied, 0)?;
     assert_eq!(copied_diagnosis.tools[0].operation, "queryLogs");
-    assert_eq!(
-        copied.steps[0]
-            .output_delivery
-            .as_ref()
-            .and_then(|delivery| delivery.plugin.as_ref())
-            .map(|plugin| plugin.name.as_str()),
-        Some("slack")
-    );
     assert_eq!(
         copied.steps[1]
             .when

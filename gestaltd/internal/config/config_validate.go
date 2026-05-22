@@ -2155,11 +2155,6 @@ func validateWorkflowTargetPlugins(cfg *Config, path string, target *WorkflowTar
 				return fmt.Errorf("config validation: %s.plugin.name references unknown plugin %q", stepPath, step.Plugin.Name)
 			}
 		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
-			if _, ok := cfg.Plugins[step.OutputDelivery.Plugin.Name]; !ok {
-				return fmt.Errorf("config validation: %s.outputDelivery.plugin.name references unknown plugin %q", stepPath, step.OutputDelivery.Plugin.Name)
-			}
-		}
 	}
 	return nil
 }
@@ -2352,14 +2347,6 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 				return fmt.Errorf("config validation: %s.timeout %q is invalid: %w", stepPath, step.Timeout, err)
 			}
 		}
-		if err := normalizeWorkflowStepDeliveryConfig(stepPath+".outputDelivery", step.OutputDelivery, false); err != nil {
-			return err
-		}
-		if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
-			if err := validateWorkflowStepValueRefs(stepPath+".outputDelivery.plugin.input", step.OutputDelivery.Plugin.Input, workflowStepSeenWithCurrent(seen, step.ID)); err != nil {
-				return err
-			}
-		}
 		if step.When != nil {
 			if err := normalizeWorkflowValueConfig(stepPath+".when.value", &step.When.Value); err != nil {
 				return err
@@ -2425,15 +2412,6 @@ func validateWorkflowStepValueRefs(path string, value WorkflowValueConfig, seen 
 		}
 	}
 	return nil
-}
-
-func workflowStepSeenWithCurrent(seen map[string]struct{}, stepID string) map[string]struct{} {
-	out := make(map[string]struct{}, len(seen)+1)
-	for key := range seen {
-		out[key] = struct{}{}
-	}
-	out[strings.TrimSpace(stepID)] = struct{}{}
-	return out
 }
 
 func normalizeWorkflowStepPluginCallConfig(path string, plugin *WorkflowStepPluginCallConfig, allowCredentialMode bool) error {
@@ -2538,16 +2516,6 @@ func validateWorkflowAgentToolsConfig(cfg *Config, path string, tools []Workflow
 		}
 	}
 	return nil
-}
-
-func normalizeWorkflowStepDeliveryConfig(path string, delivery *WorkflowStepDeliveryConfig, allowCredentialMode bool) error {
-	if delivery == nil {
-		return nil
-	}
-	if delivery.Plugin == nil {
-		return fmt.Errorf("config validation: %s.plugin is required", path)
-	}
-	return normalizeWorkflowStepPluginCallConfig(path+".plugin", delivery.Plugin, allowCredentialMode)
 }
 
 func normalizeWorkflowValueConfig(path string, value *WorkflowValueConfig) error {
