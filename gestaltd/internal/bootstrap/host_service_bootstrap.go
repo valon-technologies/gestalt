@@ -343,10 +343,10 @@ func buildIndexedDBHostServices(serverLabel, metricsName string, effective confi
 	}
 
 	return []runtimehost.HostService{
-		indexedDBHostService(serverLabel, map[string]indexeddb.IndexedDB{serverLabel: ds}, indexeddbservice.ServerOptions{AllowedStores: effective.ObjectStores}, serverLabel),
-	}, func() {
-		_ = closeIndexedDBs(ds)
-	}, nil
+			indexedDBHostService(serverLabel, map[string]indexeddb.IndexedDB{serverLabel: ds}, indexeddbservice.ServerOptions{AllowedStores: effective.ObjectStores}, serverLabel),
+		}, func() {
+			_ = closeIndexedDBs(ds)
+		}, nil
 }
 
 func indexedDBBindingsFromInstances(instances map[string]indexeddb.IndexedDB) map[string]indexeddb.IndexedDB {

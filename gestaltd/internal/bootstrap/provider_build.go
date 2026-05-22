@@ -1679,7 +1679,6 @@ func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider plugi
 	}
 }
 
-
 func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowedHosts []string, defaultAction egress.PolicyAction, deps Deps) (map[string]string, error) {
 	baseURL, explicitRelayBaseURL := hostedRuntimeRelayBaseURL(deps)
 	if baseURL == "" || len(deps.EncryptionKey) == 0 {
@@ -1710,7 +1709,6 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 		"HTTPS_PROXY": proxyURL.String(),
 	}, nil
 }
-
 
 func appendAllowedHost(allowedHosts []string, host string) []string {
 	host = strings.TrimSpace(host)
@@ -1746,7 +1744,6 @@ func hostedAgentAllowedHosts(allowedHosts []string, runtimePlan RuntimePlacement
 	}
 	return out
 }
-
 
 type unavailablePluginInvoker struct{}
 
@@ -1921,7 +1918,6 @@ func (unavailableAgentManager) ListInteractions(context.Context, *principal.Prin
 func (unavailableAgentManager) ResolveInteraction(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.Interaction, error) {
 	return nil, fmt.Errorf("agent manager is not available")
 }
-
 
 func mapToYAMLNode(value map[string]any) (yaml.Node, error) {
 	data, err := yaml.Marshal(value)
