@@ -1627,35 +1627,6 @@ func buildExternalCredentialsRuntimeConfigNode(name string, entry *config.Provid
 	return mapToYAMLNode(providerCfg)
 }
 
-func buildExternalCredentialsHostServices(name string, deps Deps) ([]runtimehost.HostService, error) {
-	if len(deps.IndexedDBs) == 0 || deps.SelectedIndexedDBName == "" {
-		return nil, fmt.Errorf("indexeddb host services are not available")
-	}
-	bindings := make(map[string]indexeddb.IndexedDB, len(deps.IndexedDBs))
-	for _, indexedDBName := range slices.Sorted(maps.Keys(deps.IndexedDBs)) {
-		ds := deps.IndexedDBs[indexedDBName]
-		if ds == nil {
-			continue
-		}
-		bindings[indexedDBName] = ds
-	}
-	if len(bindings) == 0 {
-		return nil, fmt.Errorf("indexeddb %q is not available", deps.SelectedIndexedDBName)
-	}
-	return []runtimehost.HostService{externalCredentialsIndexedDBHostService(name, deps.SelectedIndexedDBName, bindings)}, nil
-}
-
-func externalCredentialsIndexedDBHostService(providerName, defaultBinding string, bindings map[string]indexeddb.IndexedDB) runtimehost.HostService {
-	opts := indexeddbservice.ServerOptions{AllowedStores: []string{"external_credentials"}}
-	return runtimehost.HostService{
-		Name:           "indexeddb",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
-		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, registerIndexedDBServer(bindings, defaultBinding, providerName, opts))
-		},
-	}
-}
-
 func closeAuth(provider core.AuthenticationProvider) error {
 	closer, ok := provider.(interface{ Close() error })
 	if !ok {
@@ -1780,8 +1751,7 @@ func buildAuthorization(cfg *config.Config, factories *FactoryRegistry, deps Dep
 			return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 		}
 	}
-	hostServices := buildHostIndexedDBHostServices(deps.SelectedIndexedDBName, deps.IndexedDBs)
-	provider, err := factories.Authorization(node, hostServices, deps)
+	provider, err := factories.Authorization(node, hostIndexedDBServicesFromDeps(deps, indexeddbservice.ServerOptions{}, ""), deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
 	}
@@ -1808,36 +1778,6 @@ func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (in
 		return nil, fmt.Errorf("datastore provider: %w", err)
 	}
 	return ds, nil
-}
-
-func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]indexeddb.IndexedDB) []runtimehost.HostService {
-	if len(indexeddbs) == 0 {
-		return nil
-	}
-
-	bindings := make(map[string]indexeddb.IndexedDB, len(indexeddbs))
-	for _, name := range slices.Sorted(maps.Keys(indexeddbs)) {
-		ds := indexeddbs[name]
-		if ds == nil {
-			continue
-		}
-		bindings[name] = ds
-	}
-	if len(bindings) == 0 {
-		return nil
-	}
-	return []runtimehost.HostService{indexedDBHostService(strings.TrimSpace(selectedName), bindings)}
-}
-
-func indexedDBHostService(defaultBinding string, bindings map[string]indexeddb.IndexedDB) runtimehost.HostService {
-	pluginName := strings.TrimSpace(defaultBinding)
-	return runtimehost.HostService{
-		Name:           "indexeddb",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.IndexedDB_ServiceDesc.ServiceName)},
-		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, registerIndexedDBServer(bindings, defaultBinding, pluginName, indexeddbservice.ServerOptions{}))
-		},
-	}
 }
 
 func buildCache(entry *config.ProviderEntry, factories *FactoryRegistry) (corecache.Cache, error) {

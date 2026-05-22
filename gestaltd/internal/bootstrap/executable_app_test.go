@@ -1295,13 +1295,13 @@ func assertStartPluginEgressPolicy(t *testing.T, req appruntime.StartAppRequest,
 	}
 }
 
-func assertStartPluginRelayEnv(t *testing.T, req appruntime.StartAppRequest, wantEnvVar string) {
+func assertStartAppRelayEnv(t *testing.T, req appruntime.StartAppRequest, relayContext string) {
 	t.Helper()
 	if got := req.Env[runtimehost.DefaultHostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("StartApp env %s = %q, want tls:// public relay target for %s", runtimehost.DefaultHostServiceSocketEnv, got, wantEnvVar)
+		t.Fatalf("StartApp env %s = %q, want tls:// public relay target for %s", runtimehost.DefaultHostServiceSocketEnv, got, relayContext)
 	}
 	if got := req.Env[runtimehost.DefaultHostServiceTokenEnv]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartApp env missing non-empty %s for %s", runtimehost.DefaultHostServiceTokenEnv, wantEnvVar)
+		t.Fatalf("StartApp env missing non-empty %s for %s", runtimehost.DefaultHostServiceTokenEnv, relayContext)
 	}
 }
 
@@ -6215,7 +6215,7 @@ func TestAppRuntimeConfigUsesPublicS3RelayWithoutHostServiceTunnelCapability(t *
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], runtimehost.DefaultHostServiceSocketEnv)
+	assertStartAppRelayEnv(t, startRequests[0], runtimehost.DefaultHostServiceSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -6517,7 +6517,7 @@ func TestAppRuntimeConfigUsesPublicAuthorizationRelayWithoutHostServiceTunnelCap
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], "authorization")
+	assertStartAppRelayEnv(t, startRequests[0], "authorization")
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
 		t.Fatalf("StartApp allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
 	}
@@ -6622,7 +6622,7 @@ func TestAppRuntimeConfigUsesPublicIndexedDBRelayWithoutHostServiceTunnelCapabil
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], "indexeddb")
+	assertStartAppRelayEnv(t, startRequests[0], "indexeddb")
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -6856,7 +6856,7 @@ func TestAppRuntimeConfigUsesPublicCacheRelayWithoutHostServiceTunnelCapability(
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], runtimehost.DefaultHostServiceSocketEnv)
+	assertStartAppRelayEnv(t, startRequests[0], runtimehost.DefaultHostServiceSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -6976,7 +6976,7 @@ func TestAppRuntimePublicCacheRelayRoundTripsThroughHostedApp(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_CACHE_SOCKET")
+	assertStartAppRelayEnv(t, startRequests[0], "cache relay round-trip")
 }
 
 func TestAppRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
@@ -7107,8 +7107,8 @@ func TestAppRuntimePublicS3RelayRoundTripsThroughHostedApp(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_S3_SOCKET")
-	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_S3_SOCKET_MAIN")
+	assertStartAppRelayEnv(t, startRequests[0], "s3 relay round-trip")
+	assertStartAppRelayEnv(t, startRequests[0], "s3 multi-binding relay")
 }
 
 func TestAppRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T) {
@@ -7273,7 +7273,7 @@ func TestAppRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T)
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], "app_invoker")
+	assertStartAppRelayEnv(t, startRequests[0], "app_invoker")
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); len(allowedHosts) != 0 {
 		t.Fatalf("StartApp allowed hosts = %#v, want none when hostname egress enforcement is not required", allowedHosts)
 	}
@@ -7365,7 +7365,7 @@ func TestAppRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunnelC
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], workflowservice.DefaultProviderSocketEnv)
+	assertStartAppRelayEnv(t, startRequests[0], workflowservice.DefaultProviderSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartApp allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -7993,7 +7993,7 @@ func TestAppRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedApp(t *testi
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], workflowservice.DefaultProviderSocketEnv)
+	assertStartAppRelayEnv(t, startRequests[0], workflowservice.DefaultProviderSocketEnv)
 }
 
 func TestAppRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing.T) {
@@ -8129,7 +8129,7 @@ func TestAppRuntimePublicAuthorizationRelayRoundTripsThroughHostedApp(t *testing
 	if len(startRequests) != 1 {
 		t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], "authorization")
+	assertStartAppRelayEnv(t, startRequests[0], "authorization")
 }
 
 func TestAppRuntimeConfigInjectsPublicEgressProxyWithoutHostServiceTunnelCapability(t *testing.T) {
@@ -8354,7 +8354,7 @@ func TestAppRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *testin
 	if got := startRequests[0].Env["HTTPS_PROXY"]; !strings.Contains(got, "@gestalt.example.test") {
 		t.Fatalf("StartApp HTTPS_PROXY = %q, want public egress proxy on gestalt.example.test", got)
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_CACHE_SOCKET_SESSION")
+	assertStartAppRelayEnv(t, startRequests[0], "cache session binding relay")
 	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestalt.example.test"}, appruntime.PolicyDeny)
 }
 
@@ -8662,7 +8662,7 @@ func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
 					if len(startRequests) != 1 {
 						t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 					}
-					assertStartPluginRelayEnv(t, startRequests[0], "indexeddb")
+					assertStartAppRelayEnv(t, startRequests[0], "indexeddb")
 				}
 			})
 		}
@@ -8973,7 +8973,7 @@ func TestPluginIndexedDBRouteObjectStores(t *testing.T) {
 				if len(startRequests) != 1 {
 					t.Fatalf("StartApp requests = %d, want 1", len(startRequests))
 				}
-				assertStartPluginRelayEnv(t, startRequests[0], "indexeddb")
+				assertStartAppRelayEnv(t, startRequests[0], "indexeddb")
 			}
 
 			_ = CloseProviders(providers)

@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -177,4 +179,68 @@ func runtimeEgressModeFromSupport(src appruntime.EgressMode) RuntimeEgressMode {
 	default:
 		return RuntimeEgressModeNone
 	}
+}
+
+func pluginRuntimePublicRelayTarget(baseURL string, allowInsecureHTTP bool) (string, string, error) {
+	parsed, host, err := pluginRuntimePublicProxyBaseURL(baseURL, allowInsecureHTTP)
+	if err != nil {
+		return "", "", err
+	}
+	port := parsed.Port()
+	if port == "" {
+		if strings.EqualFold(parsed.Scheme, "http") {
+			port = "80"
+		} else {
+			port = "443"
+		}
+	}
+	target := net.JoinHostPort(host, port)
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+		return "tls://" + target, host, nil
+	case "http":
+		return "tcp://" + target, host, nil
+	default:
+		return "", "", fmt.Errorf("server.baseURL %q has unsupported public runtime relay scheme %q", baseURL, parsed.Scheme)
+	}
+}
+
+func pluginRuntimePublicProxyBaseURL(baseURL string, allowInsecureHTTP bool) (*url.URL, string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return nil, "", fmt.Errorf("parse server.baseURL for public runtime relay: %w", err)
+	}
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" {
+		return nil, "", fmt.Errorf("server.baseURL %q is missing a hostname", baseURL)
+	}
+	if path := strings.TrimSpace(parsed.EscapedPath()); path != "" && path != "/" {
+		return nil, "", fmt.Errorf("server.baseURL %q must not include a path for public runtime relay", baseURL)
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, "", fmt.Errorf("server.baseURL %q must not include a query or fragment for public runtime relay", baseURL)
+	}
+	switch strings.ToLower(parsed.Scheme) {
+	case "https":
+	case "http":
+		if !allowInsecureHTTP && !isLoopbackAllowedHost(host) {
+			return nil, "", fmt.Errorf("server.baseURL %q must use https for public runtime relay unless it targets loopback", baseURL)
+		}
+	default:
+		return nil, "", fmt.Errorf("server.baseURL %q must use https for public runtime relay", baseURL)
+	}
+	parsed.Path = ""
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed, host, nil
+}
+
+func isLoopbackAllowedHost(host string) bool {
+	host = strings.TrimSpace(strings.Trim(host, "[]"))
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
