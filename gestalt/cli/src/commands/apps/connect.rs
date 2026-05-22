@@ -533,8 +533,7 @@ fn fetch_plugin(
     )
     .context("failed to parse plugins")?;
 
-    apps
-        .into_iter()
+    apps.into_iter()
         .find(|app| app.name == name)
         .with_context(|| format!("plugin '{}' not found", name))
 }

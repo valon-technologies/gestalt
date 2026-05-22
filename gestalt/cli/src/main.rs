@@ -2,7 +2,7 @@ use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
     AgentArgs, AgentCommands, AgentSessionCommands, AgentTurnCommands, AgentTurnEventCommands,
-    AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, InvokeArgs, AppCommands,
+    AppCommands, AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, InvokeArgs,
     TokenCommands, WorkflowCommands, WorkflowEventCommands, WorkflowRunCommands,
     WorkflowScheduleCommands, WorkflowTriggerCommands,
 };
@@ -34,9 +34,7 @@ fn run() -> anyhow::Result<()> {
             ConfigCommands::List => commands::config::list(format),
         },
         Commands::App { command } => dispatch_plugin_command(command, url, format),
-        Commands::Invoke(args) => {
-            dispatch_plugin_command(AppCommands::Invoke(args), url, format)
-        }
+        Commands::Invoke(args) => dispatch_plugin_command(AppCommands::Invoke(args), url, format),
         Commands::Describe(args) => {
             dispatch_plugin_command(AppCommands::Describe(args), url, format)
         }
@@ -335,12 +333,7 @@ fn dispatch_plugin_command(
             name,
             connection,
             instance,
-        } => commands::apps::disconnect(
-            &client,
-            &name,
-            connection.as_deref(),
-            instance.as_deref(),
-        ),
+        } => commands::apps::disconnect(&client, &name, connection.as_deref(), instance.as_deref()),
         AppCommands::Invoke(InvokeArgs {
             app,
             operation,

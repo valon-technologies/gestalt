@@ -25,16 +25,11 @@ fn test_list_plugins() {
 #[test]
 fn test_connect_includes_connection_and_instance() {
     let mut server = Server::new();
-    let _integrations = authed_json_mock!(
-        server,
-        Method::GET,
-        "/api/v1/apps",
-        StatusCode::OK
-    )
-    .with_body(
-        r#"[{"name":"acme_crm","connections":[{"name":"workspace","authTypes":["oauth"]}]}]"#,
-    )
-    .create();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"acme_crm","connections":[{"name":"workspace","authTypes":["oauth"]}]}]"#,
+        )
+        .create();
     let mock = authed_json_mock!(
         server,
         Method::POST,
@@ -152,15 +147,14 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_instance() 
 #[test]
 fn test_connect_uses_user_facing_plugin_connection_name_on_the_wire() {
     let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
-            .with_body(
-                r#"[{
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{
                 "name":"acme_crm",
                 "connections":[{"name":"app","displayName":"App OAuth","authTypes":["oauth"]}]
             }]"#,
-            )
-            .create();
+        )
+        .create();
     let mock = authed_json_mock!(
         server,
         Method::POST,
@@ -200,12 +194,8 @@ fn test_disconnect_sends_delete_with_connection_and_instance() {
     .create();
 
     let client = create_client(&server);
-    let result = gestalt::commands::apps::disconnect(
-        &client,
-        "widget_metrics",
-        Some("oauth"),
-        Some("prod"),
-    );
+    let result =
+        gestalt::commands::apps::disconnect(&client, "widget_metrics", Some("oauth"), Some("prod"));
 
     mock.assert();
     assert!(result.is_ok());
@@ -415,18 +405,17 @@ fn test_connection_selection_uses_selected_connection_auth_type() {
 #[test]
 fn test_connect_auto_selects_single_connection_and_uses_its_auth_type() {
     let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
-            .with_body(
-                r#"[{
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{
                     "name":"single-svc",
                     "displayName":"Single Service",
                     "connections":[
                         {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]}
                     ]
                 }]"#,
-            )
-            .create();
+        )
+        .create();
     let _oauth = authed_json_mock!(
         server,
         Method::POST,
@@ -454,18 +443,17 @@ fn test_connect_auto_selects_single_connection_and_uses_its_auth_type() {
 #[test]
 fn test_connect_unknown_connection_lists_normalized_available_names() {
     let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
-            .with_body(
-                r#"[{
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{
                     "name":"manual-svc",
                     "connections":[
                         {"name":"_app","displayName":"App OAuth","authTypes":["oauth"]},
                         {"name":"workspace","displayName":"Workspace OAuth","authTypes":["manual"]}
                     ]
                 }]"#,
-            )
-            .create();
+        )
+        .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
@@ -481,10 +469,9 @@ fn test_connect_unknown_connection_lists_normalized_available_names() {
 #[test]
 fn test_manual_connect_uses_credentials_object_for_multi_field_auth() {
     let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
-            .with_body(
-                r#"[{
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{
                 "name":"widget_metrics",
                 "displayName":"Widget Metrics",
                 "connections":[{
@@ -496,8 +483,8 @@ fn test_manual_connect_uses_credentials_object_for_multi_field_auth() {
                     ]
                 }]
             }]"#,
-            )
-            .create();
+        )
+        .create();
     let _connect = authed_json_mock!(
         server,
         Method::POST,
@@ -525,16 +512,11 @@ fn test_manual_connect_uses_credentials_object_for_multi_field_auth() {
 #[test]
 fn test_manual_connect_falls_back_to_generic_credential_prompt() {
     let mut server = Server::new();
-    let _integrations = authed_json_mock!(
-        server,
-        Method::GET,
-        "/api/v1/apps",
-        StatusCode::OK
-    )
-    .with_body(
-        r#"[{"name":"manual-svc","connections":[{"name":"app","authTypes":["manual"]}]}]"#,
-    )
-    .create();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"manual-svc","connections":[{"name":"app","authTypes":["manual"]}]}]"#,
+        )
+        .create();
     let _connect = authed_json_mock!(
         server,
         Method::POST,
@@ -561,16 +543,11 @@ fn test_manual_connect_falls_back_to_generic_credential_prompt() {
 #[test]
 fn test_manual_connect_fails_when_stdin_closes_during_prompt() {
     let mut server = Server::new();
-    let _integrations = authed_json_mock!(
-        server,
-        Method::GET,
-        "/api/v1/apps",
-        StatusCode::OK
-    )
-    .with_body(
-        r#"[{"name":"manual-svc","connections":[{"name":"app","authTypes":["manual"]}]}]"#,
-    )
-    .create();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"manual-svc","connections":[{"name":"app","authTypes":["manual"]}]}]"#,
+        )
+        .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)

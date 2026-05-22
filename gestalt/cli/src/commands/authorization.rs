@@ -6,9 +6,9 @@ use serde_json::{Map, Value, json};
 
 use crate::api::{ApiClient, encode_path_segment};
 use crate::cli::{
-    AuthorizationAdminCommands, AuthorizationAdminMemberCommands, AuthorizationCommands,
-    AuthorizationManagedSubjectRole, AuthorizationModelCommands, AuthorizationPageArgs,
-    AuthorizationAppCommands, AuthorizationPluginMemberCommands, AuthorizationProviderCommands,
+    AuthorizationAdminCommands, AuthorizationAdminMemberCommands, AuthorizationAppCommands,
+    AuthorizationCommands, AuthorizationManagedSubjectRole, AuthorizationModelCommands,
+    AuthorizationPageArgs, AuthorizationPluginMemberCommands, AuthorizationProviderCommands,
     AuthorizationRelationshipCommands, AuthorizationRelationshipListArgs,
     AuthorizationSubjectCommands, AuthorizationSubjectCreateArgs,
     AuthorizationSubjectExternalIdentityCommands, AuthorizationSubjectGrantCommands,
@@ -52,11 +52,9 @@ pub fn dispatch(client: &ApiClient, command: AuthorizationCommands, format: Form
                 AuthorizationSubjectGrantCommands::List { subject } => {
                     list_subject_grants(client, &subject, format)
                 }
-                AuthorizationSubjectGrantCommands::Set {
-                    subject,
-                    app,
-                    role,
-                } => set_subject_grant(client, &subject, &app, &role, format),
+                AuthorizationSubjectGrantCommands::Set { subject, app, role } => {
+                    set_subject_grant(client, &subject, &app, &role, format)
+                }
                 AuthorizationSubjectGrantCommands::Remove { subject, app } => {
                     remove_subject_grant(client, &subject, &app, format)
                 }

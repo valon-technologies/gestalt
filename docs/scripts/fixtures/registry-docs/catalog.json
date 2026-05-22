@@ -4,7 +4,7 @@
     {
       "configTarget": {
         "entryKind": "app",
-        "section": "plugins"
+        "section": "apps"
       },
       "description": "Read public and private conversations, DMs, and group DMs; send messages; and manage channels.",
       "displayName": "Slack",

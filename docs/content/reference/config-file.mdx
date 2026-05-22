@@ -12,8 +12,8 @@ upstream credential definitions), `providers` (named
 authentication, secrets, telemetry, audit, UI, indexeddb, authorization,
 workflow, cache, s3, and agent entries), `providerRepositories` (package index
 URLs), `runtime` (hosted execution backends), `workflows` (config-managed
-schedules and triggers), and `plugins` (executable integrations and optional
-plugin-backed UI mounts):
+schedules and triggers), and `apps` (executable integrations and optional
+app-backed UI mounts):
 
 ```yaml
 apiVersion: gestaltd.config/v6
@@ -599,7 +599,7 @@ workflows:
         subject:
           id: service_account:roadmap-sync
       target:
-        plugin:
+        app:
           name: roadmap
           operation: sync_items
   eventTriggers:
@@ -608,7 +608,7 @@ workflows:
       match:
         type: roadmap.item.updated
       target:
-        plugin:
+        app:
           name: roadmap
           operation: sync_items
 ```
@@ -753,7 +753,7 @@ through the platform shell.
 
 Top-level `workflows` declares config-managed schedules and triggers.
 These objects are reconciled into the selected workflow provider at startup and
-invoke an explicit `target`. A target is exactly one of `target.plugin` or
+invoke an explicit `target`. A target is exactly one of `target.app` or
 `target.agent`.
 
 Config-managed workflows are deployment-owned. They are created from YAML at
@@ -770,7 +770,7 @@ workflows:
       cron: "0 3 * * *"
       timezone: America/New_York
       target:
-        plugin:
+        app:
           name: roadmap
           operation: sync_items
           connection: default
@@ -778,9 +778,9 @@ workflows:
           input:
             mode: incremental
       invokes:
-        - plugin: slack
+        - app: slack
           operation: conversations.list
-        - plugin: slack
+        - app: slack
           operation: conversations.history
       paused: false
 
@@ -791,7 +791,7 @@ workflows:
         type: roadmap.item.updated
         source: roadmap
       target:
-        plugin:
+        app:
           name: roadmap
           operation: sync_items
           input:
@@ -800,21 +800,21 @@ workflows:
         subject:
           id: service_account:roadmap-events
       invokes:
-        - plugin: slack
+        - app: slack
           operation: chat.postMessage
       paused: false
 ```
 
 `permissions` is accepted as a deprecated alias for `invokes` using the older
-`{ plugin, operations }` shape. A workflow object must not set both fields.
+`{ app, operations }` shape. A workflow object must not set both fields.
 
 ### `workflows.schedules.*`
 
 | Field | Description |
 | --- | --- |
 | `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
-| `target.app.name` | Target app key from `plugins`. Required when `target.plugin` is used. |
-| `target.app.operation` | Target operation ID. Required when `target.plugin` is used. |
+| `target.app.name` | Target app key from `apps`. Required when `target.app` is used. |
+| `target.app.operation` | Target operation ID. Required when `target.app` is used. |
 | `target.app.connection` | Optional target connection name. |
 | `target.app.instance` | Optional target instance name. |
 | `target.app.input` | Optional static input merged into the invocation payload. |
@@ -833,8 +833,8 @@ workflows:
 | Field | Description |
 | --- | --- |
 | `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
-| `target.app.name` | Target app key from `plugins`. Required when `target.plugin` is used. |
-| `target.app.operation` | Target operation ID. Required when `target.plugin` is used. |
+| `target.app.name` | Target app key from `apps`. Required when `target.app` is used. |
+| `target.app.operation` | Target operation ID. Required when `target.app` is used. |
 | `target.app.connection` | Optional target connection name. |
 | `target.app.instance` | Optional target instance name. |
 | `target.app.input` | Optional static input merged into the invocation payload. |
@@ -1200,9 +1200,9 @@ providers:
 
 Disables audit output explicitly. `providers.audit.<name>.config` is not allowed when `providers.audit.<name>.source` is `noop`.
 
-## `plugins`
+## `apps`
 
-Each entry in the `plugins` map is a named app backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/apps`) as stable code surface, while the CLI uses the singular `plugin` command.
+Each entry in the `apps` map is a named app backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/apps`) as stable code surface, while the CLI uses the `app` command.
 
 ```yaml
 apps:
@@ -1247,7 +1247,7 @@ apps:
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
 | `authorizationPolicy` | Optional shared subject access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin, and the built-in admin UI / admin API can manage plugin-scoped dynamic grants for additional members. Static policy members still take precedence. |
 | `ui` | Optional plugin-backed mounted UI binding. Use `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the app manifest's owned `spec.ui`. |
-| `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
+| `source` | **Required.** The backing provider source. See [source shape](#appssource) below. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, `source.git`, or local `provider-release.yaml` metadata. |
 | `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on app HTTP operation routes (`/api/v1/apps/{name}/operations` and `/api/v1/{integration}/{operation}`) and on plugin-backed mounted UIs, including browser-login flows whose `next` path resolves into that plugin's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |

@@ -461,9 +461,7 @@ fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<V
     let app = match args.app.as_deref() {
         Some(value) => value.to_string(),
         None => target_app(existing)
-            .ok_or_else(|| {
-                anyhow!("existing schedule is missing target.app.name; pass --app")
-            })?
+            .ok_or_else(|| anyhow!("existing schedule is missing target.app.name; pass --app"))?
             .to_string(),
     };
     let operation = match args.operation.as_deref() {
@@ -523,9 +521,7 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
     let app = match args.app.as_deref() {
         Some(value) => value.to_string(),
         None => target_app(existing)
-            .ok_or_else(|| {
-                anyhow!("existing trigger is missing target.app.name; pass --app")
-            })?
+            .ok_or_else(|| anyhow!("existing trigger is missing target.app.name; pass --app"))?
             .to_string(),
     };
     let operation = match args.operation.as_deref() {

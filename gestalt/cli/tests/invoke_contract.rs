@@ -112,18 +112,17 @@ fn test_invoke_instance_selection_error_suggests_instance_flag() {
     .with_body(r#"{"error":"ambiguous instance: integration \"slack\" has 2 connections ([team-a team-b]); specify which instance to use with the \"_instance\" parameter","integration":"slack"}"#)
     .create();
 
-    let _integrations_mock =
-        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
-            .with_body(
-                r#"[{
+    let _integrations_mock = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{
             "name":"slack",
             "connections":[
                 {"name":"workspace","credentialState":"connected","instances":[{"name":"default"}]},
                 {"name":"--sandbox","credentialState":"connected","instances":[{"name":"-team"}]}
             ]
         }]"#,
-            )
-            .create();
+        )
+        .create();
 
     cli_command_for_server(home.path(), &server)
         .args(["app", "invoke", "slack", "channels"])
@@ -155,18 +154,17 @@ fn test_invoke_requires_selector_before_catalog_resolution_when_multiple_connect
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
 
-    let integrations_mock =
-        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
-            .with_body(
-                r#"[{
+    let integrations_mock = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{
             "name":"multi_svc",
             "connections":[
                 {"name":"dev","credentialState":"connected","instances":[{"name":"default"}]},
                 {"name":"stage","credentialState":"connected","instances":[{"name":"default"}]}
             ]
         }]"#,
-            )
-            .create();
+        )
+        .create();
 
     cli_command_for_server(home.path(), &server)
         .args(["app", "invoke", "multi_svc", "healthcheck"])
@@ -237,18 +235,17 @@ fn test_invoke_with_connection_infers_only_matching_instance() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
 
-    let integrations_mock =
-        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
-            .with_body(
-                r#"[{
+    let integrations_mock = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{
             "name":"multi_svc",
             "connections":[
                 {"name":"dev","credentialState":"connected","instances":[{"name":"default"}]},
                 {"name":"stage","credentialState":"connected","instances":[{"name":"default"}]}
             ]
         }]"#,
-            )
-            .create();
+        )
+        .create();
 
     let catalog_mock = authed_json_mock!(
         server,
@@ -296,17 +293,16 @@ fn test_invoke_with_unknown_connection_does_not_infer_unrelated_instance() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
 
-    let integrations_mock =
-        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
-            .with_body(
-                r#"[{
+    let integrations_mock = authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
+        .with_body(
+            r#"[{
             "name":"multi_svc",
             "connections":[
                 {"name":"dev","credentialState":"connected","instances":[{"name":"default"}]}
             ]
         }]"#,
-            )
-            .create();
+        )
+        .create();
 
     let catalog_mock = authed_json_mock!(
         server,
@@ -1042,10 +1038,7 @@ fn test_prefix_match_shows_filtered_table() {
         "should not contain non-matching ops: {stdout}"
     );
 
-    let output = run_cli(
-        &server,
-        &["app", "invoke", "test_svc", "widgets", "bulk"],
-    );
+    let output = run_cli(&server, &["app", "invoke", "test_svc", "widgets", "bulk"]);
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -1134,10 +1127,7 @@ fn test_space_separated_segments_invoke() {
     .with_body(r#"{"ok": true}"#)
     .create();
 
-    let output = run_cli(
-        &server,
-        &["app", "invoke", "test_svc", "widgets", "delete"],
-    );
+    let output = run_cli(&server, &["app", "invoke", "test_svc", "widgets", "delete"]);
     assert!(
         output.status.success(),
         "stderr: {}",
