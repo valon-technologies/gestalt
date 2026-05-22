@@ -784,10 +784,10 @@ fn target_plugin_step<'a>(
         if first_plugin_step.is_none() {
             first_plugin_step = Some(plugin_step);
         }
-        if let Some(preferred_plugin) = preferred_plugin {
-            if plugin_step.get("name").and_then(Value::as_str) == Some(preferred_plugin) {
-                return Some(plugin_step);
-            }
+        if preferred_plugin.is_some_and(|preferred_plugin| {
+            plugin_step.get("name").and_then(Value::as_str) == Some(preferred_plugin)
+        }) {
+            return Some(plugin_step);
         }
     }
     first_plugin_step
