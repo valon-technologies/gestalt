@@ -26,6 +26,9 @@ var (
 	testClient      *gestalt.IndexedDBClient
 	testCacheClient *gestalt.CacheClient
 	testS3Client    *gestalt.S3Client
+	testIDBSocket   string
+	testCacheSocket string
+	testS3Socket    string
 )
 
 func TestMain(m *testing.M) {
@@ -36,6 +39,9 @@ func TestMain(m *testing.M) {
 	idbBin, idbSock, idbCmd := buildAndStartHarness("indexeddbtransportd", "go-sdk-idb-test.sock")
 	cacheBin, cacheSock, cacheCmd := buildAndStartHarness("cachetransportd", "go-sdk-cache-test.sock")
 	s3Bin, s3Sock, s3Cmd := buildAndStartHarness("s3transportd", "go-sdk-s3-test.sock")
+	testIDBSocket = idbSock
+	testCacheSocket = cacheSock
+	testS3Socket = s3Sock
 
 	os.Setenv(gestalt.EnvIndexedDBSocket, idbSock)
 	os.Setenv(gestalt.IndexedDBSocketEnv("test"), "unix://"+idbSock)
@@ -161,6 +167,7 @@ func reserveTCPAddress() string {
 }
 
 func TestTransport_NamedSocketEnv(t *testing.T) {
+	t.Setenv(gestalt.EnvHostServiceSocket, "unix://"+testIDBSocket)
 	client, err := gestalt.IndexedDB("test")
 	if err != nil {
 		t.Fatalf("connect named indexeddb: %v", err)

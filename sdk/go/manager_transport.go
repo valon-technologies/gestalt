@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,6 +13,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+)
+
+const (
+	EnvHostServiceSocket        = "GESTALT_HOST_SERVICE_SOCKET"
+	EnvHostServiceToken         = "GESTALT_HOST_SERVICE_TOKEN"
+	HostServiceBindingMetadata  = "x-gestalt-host-binding"
+	hostServiceRelayTokenHeader = "x-gestalt-host-service-relay-token"
 )
 
 type sharedManagerTransport[C any] struct {
@@ -107,24 +115,49 @@ func dialManagerTransport(ctx context.Context, serviceName, target, token string
 }
 
 func managerRelayDialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
+	creds := hostServicePerRPCCredentials{token: strings.TrimSpace(token)}
+	if creds.token == "" {
 		return nil
 	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(managerRelayPerRPCCredentials{token: token})}
+	return []grpc.DialOption{grpc.WithPerRPCCredentials(creds)}
 }
 
-type managerRelayPerRPCCredentials struct {
-	token string
+func hostServiceTarget(serviceName string) (string, string, error) {
+	target := strings.TrimSpace(os.Getenv(EnvHostServiceSocket))
+	if target == "" {
+		return "", "", fmt.Errorf("%s: %s is not set", serviceName, EnvHostServiceSocket)
+	}
+	return target, strings.TrimSpace(os.Getenv(EnvHostServiceToken)), nil
 }
 
-func (c managerRelayPerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{
-		"x-gestalt-host-service-relay-token": c.token,
-	}, nil
+func hostServiceDialOptions(token string, binding string) []grpc.DialOption {
+	creds := hostServicePerRPCCredentials{
+		token:   strings.TrimSpace(token),
+		binding: strings.TrimSpace(binding),
+	}
+	if creds.token == "" && creds.binding == "" {
+		return nil
+	}
+	return []grpc.DialOption{grpc.WithPerRPCCredentials(creds)}
 }
 
-func (managerRelayPerRPCCredentials) RequireTransportSecurity() bool { return false }
+type hostServicePerRPCCredentials struct {
+	token   string
+	binding string
+}
+
+func (c hostServicePerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+	md := make(map[string]string, 2)
+	if c.token != "" {
+		md[hostServiceRelayTokenHeader] = c.token
+	}
+	if c.binding != "" {
+		md[HostServiceBindingMetadata] = c.binding
+	}
+	return md, nil
+}
+
+func (hostServicePerRPCCredentials) RequireTransportSecurity() bool { return false }
 
 func parseManagerTransportTarget(serviceName, raw string) (network string, address string, err error) {
 	target := strings.TrimSpace(raw)

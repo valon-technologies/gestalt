@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,37 +21,21 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// EnvS3Socket is the default Unix-socket environment variable used by [S3].
-const EnvS3Socket = "GESTALT_S3_SOCKET"
+// EnvS3Socket is deprecated. Host-service clients now read
+// [EnvHostServiceSocket].
+const EnvS3Socket = EnvHostServiceSocket
 const s3SocketTokenSuffix = "_TOKEN"
 
 // S3SocketEnv returns the environment variable name used for a named S3
 // transport socket.
 func S3SocketEnv(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return EnvS3Socket
-	}
-	var b strings.Builder
-	b.WriteString(EnvS3Socket)
-	b.WriteByte('_')
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r - ('a' - 'A'))
-		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
+	return EnvHostServiceSocket
 }
 
 // S3SocketTokenEnv returns the environment variable name used for a named S3
 // relay token.
 func S3SocketTokenEnv(name string) string {
-	return S3SocketEnv(name) + s3SocketTokenSuffix
+	return EnvHostServiceToken
 }
 
 var (
@@ -182,23 +165,19 @@ type S3Client struct {
 // plain Unix socket path, a unix:///path URI, or a tcp://host:port or
 // tls://host:port URI.
 func S3(name ...string) (*S3Client, error) {
-	envName := EnvS3Socket
-	if len(name) > 0 {
-		envName = S3SocketEnv(name[0])
-	}
-	target := os.Getenv(envName)
-	if target == "" {
-		return nil, fmt.Errorf("s3: %s is not set", envName)
+	target, token, err := hostServiceTarget("s3")
+	if err != nil {
+		return nil, err
 	}
 	network, address, err := parseS3Target(target)
 	if err != nil {
 		return nil, err
 	}
-	token := os.Getenv(S3SocketTokenEnv(firstS3Name(name)))
+	binding := firstS3Name(name)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var conn *grpc.ClientConn
-	opts := s3DialOptions(token)
+	opts := s3DialOptions(token, binding)
 	switch network {
 	case "unix":
 		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
@@ -873,12 +852,8 @@ func cloneStringMap(values map[string]string) map[string]string {
 	return out
 }
 
-func s3DialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil
-	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(s3RelayPerRPCCredentials{token: token})}
+func s3DialOptions(token string, binding string) []grpc.DialOption {
+	return hostServiceDialOptions(token, binding)
 }
 
 func firstS3Name(name []string) string {

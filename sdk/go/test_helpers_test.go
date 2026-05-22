@@ -11,6 +11,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 )
 
@@ -81,4 +82,16 @@ func waitServeResult(t *testing.T, errCh <-chan error) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("serve did not stop after context cancellation")
 	}
+}
+
+func firstMetadataValue(ctx context.Context, key string) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	values := md.Get(key)
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }

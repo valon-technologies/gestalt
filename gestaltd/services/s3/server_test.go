@@ -13,6 +13,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -56,6 +57,46 @@ func TestS3ServerPrefixesKeysPerPlugin(t *testing.T) {
 	})
 	if !errors.Is(err, s3store.ErrNotFound) {
 		t.Fatalf("HeadObject(unprefixed) error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRoutingS3ServerRoutesByHostBindingMetadata(t *testing.T) {
+	t.Parallel()
+
+	main := &coretesting.StubS3{}
+	archive := &coretesting.StubS3{}
+	srv, _ := NewRoutingServers(map[string]s3store.Client{
+		"main":    main,
+		"archive": archive,
+	}, "", "roadmap", nil)
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(hostServiceBindingHeader, "archive"))
+	stream := newStubS3WriteObjectServer(ctx, []*proto.WriteObjectRequest{
+		{
+			Msg: &proto.WriteObjectRequest_Open{
+				Open: &proto.WriteObjectOpen{
+					Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q2.txt"},
+				},
+			},
+		},
+		{
+			Msg: &proto.WriteObjectRequest_Data{Data: []byte("ready")},
+		},
+	})
+
+	if err := srv.WriteObject(stream); err != nil {
+		t.Fatalf("WriteObject: %v", err)
+	}
+	if _, err := archive.HeadObject(context.Background(), s3store.ObjectRef{
+		Bucket: "docs",
+		Key:    s3NamespacePrefix("roadmap") + "plans/q2.txt",
+	}); err != nil {
+		t.Fatalf("archive HeadObject: %v", err)
+	}
+	if _, err := main.HeadObject(context.Background(), s3store.ObjectRef{
+		Bucket: "docs",
+		Key:    s3NamespacePrefix("roadmap") + "plans/q2.txt",
+	}); !errors.Is(err, s3store.ErrNotFound) {
+		t.Fatalf("main HeadObject error = %v, want ErrNotFound", err)
 	}
 }
 

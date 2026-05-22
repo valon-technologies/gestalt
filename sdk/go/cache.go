@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,9 +16,9 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// EnvCacheSocket is the default Unix-socket environment variable used by
-// [Cache].
-const EnvCacheSocket = "GESTALT_CACHE_SOCKET"
+// EnvCacheSocket is deprecated. Host-service clients now read
+// [EnvHostServiceSocket].
+const EnvCacheSocket = EnvHostServiceSocket
 const cacheSocketTokenSuffix = "_TOKEN"
 
 // CacheEntry is one key/value pair written through [CacheClient.SetMany].
@@ -42,53 +41,32 @@ type CacheClient struct {
 // CacheSocketEnv returns the environment variable name used for a named cache
 // transport socket.
 func CacheSocketEnv(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return EnvCacheSocket
-	}
-	var b strings.Builder
-	b.WriteString(EnvCacheSocket)
-	b.WriteByte('_')
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r - ('a' - 'A'))
-		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
+	return EnvHostServiceSocket
 }
 
 // CacheSocketTokenEnv returns the environment variable name used for a named
 // cache relay token.
 func CacheSocketTokenEnv(name string) string {
-	return CacheSocketEnv(name) + cacheSocketTokenSuffix
+	return EnvHostServiceToken
 }
 
 // Cache connects to the cache provider exposed by gestaltd. The target can be
 // a plain Unix socket path, a unix:///path URI, or a tcp://host:port or
 // tls://host:port URI.
 func Cache(name ...string) (*CacheClient, error) {
-	envName := EnvCacheSocket
-	if len(name) > 0 {
-		envName = CacheSocketEnv(name[0])
-	}
-	target := os.Getenv(envName)
-	if target == "" {
-		return nil, fmt.Errorf("cache: %s is not set", envName)
+	target, token, err := hostServiceTarget("cache")
+	if err != nil {
+		return nil, err
 	}
 	network, address, err := parseCacheTarget(target)
 	if err != nil {
 		return nil, err
 	}
-	token := os.Getenv(CacheSocketTokenEnv(firstCacheName(name)))
+	binding := firstCacheName(name)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var conn *grpc.ClientConn
-	opts := cacheDialOptions(token)
+	opts := cacheDialOptions(token, binding)
 	switch network {
 	case "unix":
 		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
@@ -232,12 +210,8 @@ func cacheTTLToProto(ttl time.Duration) *durationpb.Duration {
 	return durationpb.New(ttl)
 }
 
-func cacheDialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil
-	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(cacheRelayPerRPCCredentials{token: token})}
+func cacheDialOptions(token string, binding string) []grpc.DialOption {
+	return hostServiceDialOptions(token, binding)
 }
 
 func firstCacheName(name []string) string {
