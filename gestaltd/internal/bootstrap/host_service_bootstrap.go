@@ -18,12 +18,12 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
+	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
 	cacheservice "github.com/valon-technologies/gestalt/server/services/cache"
 	externalcredentialsservice "github.com/valon-technologies/gestalt/server/services/externalcredentials"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -33,8 +33,8 @@ import (
 
 const (
 	appRuntimeHostServiceRelayTokenTTL = 30 * 24 * time.Hour
-	hostServiceTLSCAFileEnv               = "GESTALT_HOST_SERVICE_TLS_CA_FILE"
-	hostServiceTLSCAPEMEnv                = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
+	hostServiceTLSCAFileEnv            = "GESTALT_HOST_SERVICE_TLS_CA_FILE"
+	hostServiceTLSCAPEMEnv             = "GESTALT_HOST_SERVICE_TLS_CA_PEM"
 )
 
 func buildAppRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *appinvokerservice.InvocationTokenManager, func(), error) {
@@ -312,9 +312,9 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, de
 		return "", nil, "", false, fmt.Errorf("init host service relay tokens: %w", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName: providerName,
-		SessionID:  sessionID,
-		Service:    "host_service",
+		AppName:   providerName,
+		SessionID: sessionID,
+		Service:   "host_service",
 		// MethodPrefix "/" scopes the relay to the unified host-service surface.
 		// Per-RPC access is enforced by AllowsMethod and session verification, not
 		// by narrowing the token to individual gRPC service prefixes.

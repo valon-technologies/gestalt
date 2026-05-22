@@ -80,7 +80,7 @@ func workflowAppTargetToProto(target *coreworkflow.AppTarget) (*proto.BoundWorkf
 		return nil, fmt.Errorf("workflow target input: %w", err)
 	}
 	return &proto.BoundWorkflowAppTarget{
-		AppName:     target.AppName,
+		AppName:        target.AppName,
 		Operation:      target.Operation,
 		Input:          input,
 		Connection:     target.Connection,
@@ -94,7 +94,7 @@ func workflowAppTargetFromProto(target *proto.BoundWorkflowAppTarget) coreworkfl
 		return coreworkflow.AppTarget{}
 	}
 	return coreworkflow.AppTarget{
-		AppName:     strings.TrimSpace(target.GetAppName()),
+		AppName:        strings.TrimSpace(target.GetAppName()),
 		Operation:      strings.TrimSpace(target.GetOperation()),
 		Connection:     strings.TrimSpace(target.GetConnection()),
 		Instance:       strings.TrimSpace(target.GetInstance()),
@@ -452,7 +452,7 @@ func workflowExecutionReferenceToProto(ref *coreworkflow.ExecutionReference) (*p
 		Id:                  ref.ID,
 		ProviderName:        ref.ProviderName,
 		Target:              target,
-		CallerAppName:    ref.CallerAppName,
+		CallerAppName:       ref.CallerAppName,
 		SourceDefinitionId:  ref.SourceDefinitionID,
 		SubjectId:           ref.SubjectID,
 		SubjectKind:         ref.SubjectKind,
@@ -475,7 +475,7 @@ func workflowExecutionReferenceFromProto(ref *proto.WorkflowExecutionReference) 
 		ID:                  strings.TrimSpace(ref.GetId()),
 		ProviderName:        strings.TrimSpace(ref.GetProviderName()),
 		Target:              target,
-		CallerAppName:    strings.TrimSpace(ref.GetCallerAppName()),
+		CallerAppName:       strings.TrimSpace(ref.GetCallerAppName()),
 		SourceDefinitionID:  strings.TrimSpace(ref.GetSourceDefinitionId()),
 		SubjectID:           strings.TrimSpace(ref.GetSubjectId()),
 		SubjectKind:         strings.TrimSpace(ref.GetSubjectKind()),
@@ -500,7 +500,7 @@ func workflowAccessPermissionsToProto(values []core.AccessPermission) []*proto.W
 			continue
 		}
 		out = append(out, &proto.WorkflowAccessPermission{
-			App:     pluginName,
+			App:        pluginName,
 			Operations: append([]string(nil), value.Operations...),
 		})
 	}
@@ -521,7 +521,7 @@ func workflowAccessPermissionsFromProto(values []*proto.WorkflowAccessPermission
 			continue
 		}
 		out = append(out, core.AccessPermission{
-			App:     pluginName,
+			App:        pluginName,
 			Operations: append([]string(nil), value.GetOperations()...),
 		})
 	}

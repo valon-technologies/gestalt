@@ -12,9 +12,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/apps/httpbinding"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 var validMountedHTTPBindingMethods = map[string]bool{
@@ -93,7 +93,7 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 			}
 			mounted = append(mounted, MountedHTTPBinding{
 				Name:           bindingName,
-				AppName:     pluginName,
+				AppName:        pluginName,
 				Path:           mountedHTTPBindingPath(pluginName, relativePath),
 				Method:         method,
 				Target:         target,

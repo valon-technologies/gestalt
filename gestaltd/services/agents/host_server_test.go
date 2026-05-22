@@ -133,7 +133,7 @@ func TestAgentHostServerListToolsForwardsCatalogRequest(t *testing.T) {
 				InputSchemaJSON: `{"type":"object"}`,
 				Annotations:     core.CapabilityAnnotations{ReadOnlyHint: &readOnly},
 				Ref: coreagent.ToolRef{
-					App:    "linear",
+					App:       "linear",
 					Operation: "issues.create",
 				},
 			}},

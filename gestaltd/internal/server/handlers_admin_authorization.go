@@ -27,7 +27,7 @@ type adminAuthorizationPluginInfo struct {
 }
 
 type adminAuthorizationMemberRow struct {
-	App        string `json:"app"`
+	App           string `json:"app"`
 	Role          string `json:"role"`
 	Source        string `json:"source"`
 	Effective     bool   `json:"effective"`
@@ -274,7 +274,7 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 	}
 
 	row := adminAuthorizationMemberRow{
-		App:        membership.App,
+		App:           membership.App,
 		Role:          membership.Role,
 		Source:        "dynamic",
 		Effective:     true,
@@ -534,7 +534,7 @@ func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, ap
 	rows := make([]adminAuthorizationMemberRow, 0, len(members))
 	for _, member := range members {
 		rows = append(rows, adminAuthorizationMemberRow{
-			App:        app,
+			App:           app,
 			Role:          member.Role,
 			Source:        "static",
 			Effective:     true,
@@ -686,7 +686,7 @@ func adminAuthorizationValidSubjectID(subjectID string) bool {
 }
 
 var (
-	errAdminAuthorizationAppMissing = errors.New("app is required")
+	errAdminAuthorizationAppMissing    = errors.New("app is required")
 	errAdminAuthorizationPluginUnknown = errors.New("plugin not found")
 	errAdminAuthorizationPluginUnbound = errors.New("plugin does not declare authorizationPolicy")
 	errAdminAuthorizationUnavailable   = errors.New("dynamic authorization is unavailable")

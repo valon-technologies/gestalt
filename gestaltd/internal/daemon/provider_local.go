@@ -48,7 +48,7 @@ type providerLocalCommandOptions struct {
 	Path        string
 	ConfigPaths []string
 	Name        string
-	App      string
+	App         string
 	Port        int
 	Remote      string
 	RemoteToken string

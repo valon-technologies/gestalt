@@ -34,7 +34,7 @@ func (m *Manager) MintToolID(target coreagent.ToolTarget) (string, error) {
 	}
 	target = coreagent.ToolTarget{
 		System:                strings.TrimSpace(target.System),
-		App:                strings.TrimSpace(target.App),
+		App:                   strings.TrimSpace(target.App),
 		Operation:             strings.TrimSpace(target.Operation),
 		Connection:            strings.TrimSpace(target.Connection),
 		Instance:              strings.TrimSpace(target.Instance),

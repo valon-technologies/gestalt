@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	KindApp              = "app"
+	KindApp                 = "app"
 	KindAuthentication      = "authentication"
 	KindAuthorization       = "authorization"
 	KindExternalCredentials = "externalcredentials"

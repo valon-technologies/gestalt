@@ -36,7 +36,7 @@ const (
 )
 
 type Support struct {
-	CanHostApps           bool
+	CanHostApps              bool
 	EgressMode               EgressMode
 	SupportsPrepareWorkspace bool
 }
@@ -57,7 +57,7 @@ type SessionLifecycle struct {
 }
 
 type StartSessionRequest struct {
-	AppName    string
+	AppName       string
 	Template      string
 	Image         string
 	ImagePullAuth *ImagePullAuth
@@ -109,7 +109,7 @@ type RemoveWorkspaceRequest struct {
 // HostedApp.DialTarget.
 type StartAppRequest struct {
 	SessionID  string
-	AppName string
+	AppName    string
 	Command    string
 	Args       []string
 	Workdir    string
@@ -126,7 +126,7 @@ type RuntimeEgressPolicy struct {
 type HostedApp struct {
 	ID         string
 	SessionID  string
-	AppName string
+	AppName    string
 	DialTarget string
 }
 

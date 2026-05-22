@@ -27,8 +27,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -84,11 +84,11 @@ type CreateSessionRequest struct {
 }
 
 type AttachProvider struct {
-	Name   string                           `json:"name"`
-	Source string                           `json:"source,omitempty"`
+	Name   string                        `json:"name"`
+	Source string                        `json:"source,omitempty"`
 	Spec   appservice.StaticProviderSpec `json:"spec"`
-	Config *map[string]any                  `json:"config,omitempty"`
-	UI     bool                             `json:"ui,omitempty"`
+	Config *map[string]any               `json:"config,omitempty"`
+	UI     bool                          `json:"ui,omitempty"`
 }
 
 type CreateSessionResponse struct {

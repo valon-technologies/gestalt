@@ -15,10 +15,10 @@ import (
 
 const (
 	AuthorizationFragmentOwnerKindGlobal = "global"
-	AuthorizationFragmentOwnerKindApp = "app"
+	AuthorizationFragmentOwnerKindApp    = "app"
 
 	AuthorizationFragmentScopeGlobal = "global"
-	AuthorizationFragmentScopeApp = "app"
+	AuthorizationFragmentScopeApp    = "app"
 
 	AuthorizationFragmentStatusActive = "active"
 )
@@ -28,15 +28,15 @@ type AuthorizationDynamicFragmentService struct {
 }
 
 type AuthorizationFragmentOwner struct {
-	Kind   string `json:"kind"`
-	App string `json:"app,omitempty"`
+	Kind string `json:"kind"`
+	App  string `json:"app,omitempty"`
 }
 
 type AuthorizationDynamicFragment struct {
 	ID            string                                     `json:"id"`
 	Owner         AuthorizationFragmentOwner                 `json:"owner"`
 	Scope         string                                     `json:"scope"`
-	App        string                                     `json:"app,omitempty"`
+	App           string                                     `json:"app,omitempty"`
 	Version       int64                                      `json:"version"`
 	Status        string                                     `json:"status"`
 	ResourceTypes map[string]json.RawMessage                 `json:"resourceTypes,omitempty"`
@@ -581,7 +581,7 @@ func authorizationDynamicFragmentToRecord(fragment *AuthorizationDynamicFragment
 		"owner_kind":          fragment.Owner.Kind,
 		"owner_id":            ownerID,
 		"scope":               fragment.Scope,
-		"app":              fragment.App,
+		"app":                 fragment.App,
 		"version":             fragment.Version,
 		"status":              fragment.Status,
 		"resource_types_json": string(resourceTypesJSON),
@@ -599,7 +599,7 @@ func recordToAuthorizationDynamicFragment(rec indexeddb.Record) (*AuthorizationD
 		ID:        recString(rec, "id"),
 		Owner:     AuthorizationFragmentOwner{Kind: ownerKind},
 		Scope:     recString(rec, "scope"),
-		App:    recString(rec, "app"),
+		App:       recString(rec, "app"),
 		Version:   recInt64(rec, "version"),
 		Status:    recString(rec, "status"),
 		CreatedAt: recTime(rec, "created_at"),

@@ -94,7 +94,7 @@ func (p *executableProvider) Support(ctx context.Context) (Support, error) {
 
 func (p *executableProvider) StartSession(ctx context.Context, req StartSessionRequest) (*Session, error) {
 	resp, err := p.runtime.StartSession(ctx, &proto.StartAppRuntimeSessionRequest{
-		AppName:    req.AppName,
+		AppName:       req.AppName,
 		Template:      req.Template,
 		Image:         req.Image,
 		ImagePullAuth: imagePullAuthToProto(req.ImagePullAuth),
@@ -252,7 +252,7 @@ func (p *executableProvider) RemoveWorkspace(ctx context.Context, req RemoveWork
 func (p *executableProvider) StartApp(ctx context.Context, req StartAppRequest) (*HostedApp, error) {
 	resp, err := p.runtime.StartApp(ctx, &proto.StartHostedAppRequest{
 		SessionId:     req.SessionID,
-		AppName:    req.AppName,
+		AppName:       req.AppName,
 		Command:       req.Command,
 		Args:          append([]string(nil), req.Args...),
 		Env:           cloneStringMap(req.Env),
@@ -272,7 +272,7 @@ func (p *executableProvider) StartApp(ctx context.Context, req StartAppRequest) 
 	return &HostedApp{
 		ID:         resp.GetId(),
 		SessionID:  resp.GetSessionId(),
-		AppName: resp.GetAppName(),
+		AppName:    resp.GetAppName(),
 		DialTarget: resp.GetDialTarget(),
 	}, nil
 }
@@ -321,7 +321,7 @@ func supportFromProto(src *proto.AppRuntimeSupport) Support {
 		return Support{}
 	}
 	return Support{
-		CanHostApps:           src.GetCanHostApps(),
+		CanHostApps:              src.GetCanHostApps(),
 		EgressMode:               egressModeFromProto(src.GetEgressMode()),
 		SupportsPrepareWorkspace: src.GetSupportsPrepareWorkspace(),
 	}

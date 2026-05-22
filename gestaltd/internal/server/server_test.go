@@ -51,12 +51,6 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	"github.com/valon-technologies/gestalt/server/services/authorization"
-	"github.com/valon-technologies/gestalt/server/services/egressproxy"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
@@ -66,6 +60,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/paraminterp"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
+	"github.com/valon-technologies/gestalt/server/services/authorization"
+	"github.com/valon-technologies/gestalt/server/services/egressproxy"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
@@ -99,7 +99,7 @@ func configAppInvocationDependencies(deps []invocation.AppInvocationDependency) 
 	out := make([]config.AppInvocationDependency, 0, len(deps))
 	for _, dep := range deps {
 		out = append(out, config.AppInvocationDependency{
-			App:         dep.App,
+			App:            dep.App,
 			Operation:      dep.Operation,
 			Surface:        dep.Surface,
 			CredentialMode: providermanifestv1.ConnectionMode(dep.CredentialMode),
@@ -345,7 +345,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 		Key:    " workspaces/acme/tokens/token-1/content.bin ",
 	}
 	putURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
-		AppName:  "brain",
+		AppName:     "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
 		Method:      s3store.PresignMethodPut,
@@ -385,7 +385,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 	}
 
 	getURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
-		AppName:  "brain",
+		AppName:     "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
 		Method:      s3store.PresignMethodGet,
@@ -414,7 +414,7 @@ func TestS3ObjectAccessURLUploadsAndDownloadsAppScopedObject(t *testing.T) {
 	}
 
 	constrainedGetURL, err := manager.MintURL(s3.ObjectAccessURLRequest{
-		AppName:  "brain",
+		AppName:     "brain",
 		BindingName: "brainStorage",
 		Ref:         targetRef,
 		Method:      s3store.PresignMethodGet,
@@ -840,7 +840,7 @@ func TestHostServiceRelayProxiesGRPCRequests(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/gestalt.provider.v1.Cache/",
@@ -936,7 +936,7 @@ func TestHostServiceRelayProxiesGRPCRequestsOnManagementProfile(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
@@ -1002,7 +1002,7 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-2",
 		Service:      "cache",
 		MethodPrefix: "/gestalt.provider.v1.Cache/",
@@ -1029,7 +1029,7 @@ func TestHostServiceRelaySelectsVerifierForDuplicateProviderWideServices(t *test
 
 	session2Registration.Unregister()
 	session1Token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/gestalt.provider.v1.Cache/",
@@ -1091,7 +1091,7 @@ func TestHostServiceRelayStopsServingUnregisteredProviderService(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
@@ -1130,7 +1130,7 @@ func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
 	invokes := []invocation.AppInvocationDependency{{
-		App:         "slack",
+		App:            "slack",
 		Operation:      "events.reply",
 		CredentialMode: core.ConnectionModeNone,
 	}}
@@ -1161,7 +1161,7 @@ func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "provider-dev-session",
 		Service:      "app_invoker",
 		MethodPrefix: "/" + proto.AppInvoker_ServiceDesc.ServiceName + "/",
@@ -1188,7 +1188,7 @@ func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
 	_, err = proto.NewAppInvokerClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
 		InvocationToken: invocationToken,
-		App:          "slack",
+		App:             "slack",
 		Operation:       "events.reply",
 		Instance:        "prod",
 		IdempotencyKey:  "provider-dev-call",
@@ -1206,7 +1206,7 @@ func TestHostServiceRelayRoutesRegisteredAppInvokerService(t *testing.T) {
 	staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
 	_, err = proto.NewAppInvokerClient(conn).Invoke(staleCtx, &proto.AppInvokeRequest{
 		InvocationToken: invocationToken,
-		App:          "slack",
+		App:             "slack",
 		Operation:       "events.reply",
 	})
 	if grpcstatus.Code(err) != codes.Unauthenticated {
@@ -1325,7 +1325,7 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 				t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 			}
 			relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-				AppName:   "support",
+				AppName:      "support",
 				SessionID:    "session-1",
 				Service:      tc.service,
 				MethodPrefix: tc.methodPrefix,
@@ -1376,7 +1376,7 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 	secret := []byte("relay-test-secret-0123456789abcd")
 	invoker := &relayTestInvoker{}
 	invokes := []invocation.AppInvocationDependency{{
-		App:         "slack",
+		App:            "slack",
 		Operation:      "events.reply",
 		CredentialMode: core.ConnectionModeNone,
 	}}
@@ -1397,7 +1397,7 @@ func TestHostServiceRelayDoesNotFallbackWithoutRegisteredService(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	relayToken, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "provider-dev-session",
 		Service:      "app_invoker",
 		MethodPrefix: "/" + proto.AppInvoker_ServiceDesc.ServiceName + "/",
@@ -1475,7 +1475,7 @@ func TestHostServiceRelayRejectsMethodOutsideTokenPrefix(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		Service:      "cache",
 		MethodPrefix: "/gestalt.provider.v1.IndexedDB/",
@@ -1528,7 +1528,7 @@ func TestHostServiceRelaySupportsIndexedDBSDKClient(t *testing.T) {
 		t.Fatalf("NewHostServiceRelayTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		AppName:   "relay-plugin",
+		AppName:      "relay-plugin",
 		SessionID:    "session-1",
 		Service:      "indexeddb",
 		MethodPrefix: "/" + proto.IndexedDB_ServiceDesc.ServiceName + "/",
@@ -1589,7 +1589,7 @@ func TestEgressProxyProxiesHTTPRequest(t *testing.T) {
 	testutil.CloseOnCleanup(t, proxy)
 
 	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
 	})
@@ -1638,7 +1638,7 @@ func TestEgressProxyProxiesHTTPRequestOnManagementProfile(t *testing.T) {
 	testutil.CloseOnCleanup(t, proxy)
 
 	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
 	})
@@ -1679,7 +1679,7 @@ func TestEgressProxyRejectsDisallowedHost(t *testing.T) {
 	testutil.CloseOnCleanup(t, proxy)
 
 	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"api.github.com"},
 	})
@@ -1725,7 +1725,7 @@ func TestEgressProxySupportsHTTPSConnect(t *testing.T) {
 	testutil.CloseOnCleanup(t, proxy)
 
 	proxyURL := mustEgressProxyURL(t, proxy.URL, secret, egressproxy.TokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
 	})
@@ -1802,7 +1802,7 @@ func TestEgressProxyConnectForwardsBufferedClientBytes(t *testing.T) {
 		t.Fatalf("NewTokenManager: %v", err)
 	}
 	token, err := tokenManager.MintToken(egressproxy.TokenRequest{
-		AppName:   "support",
+		AppName:      "support",
 		SessionID:    "session-1",
 		AllowedHosts: []string{"127.0.0.1", "localhost"},
 	})
@@ -3227,7 +3227,7 @@ func TestMountedUIRoutes_HumanAuthorization_UsesPluginRouteAuthOverride(t *testi
 		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
-			AppName:          "sample_portal",
+			AppName:             "sample_portal",
 			AuthorizationPolicy: "sample_policy",
 			Routes: []server.MountedUIRoute{
 				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
@@ -3352,7 +3352,7 @@ func TestMountedUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsers
 		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
-			AppName:          "sample_portal",
+			AppName:             "sample_portal",
 			AuthorizationPolicy: "sample_policy",
 			Routes: []server.MountedUIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
@@ -3464,7 +3464,7 @@ func TestMountedUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 		cfg.MountedUIs = []server.MountedUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
-			AppName:          "sample_portal",
+			AppName:             "sample_portal",
 			AuthorizationPolicy: "sample_policy",
 			Routes: []server.MountedUIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
@@ -4533,12 +4533,12 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 					Loaded:        true,
 					SupportLoaded: true,
 					Advertised: bootstrap.RuntimeBehavior{
-						CanHostApps:    true,
+						CanHostApps:       true,
 						HostServiceAccess: bootstrap.RuntimeHostServiceAccessNone,
 						EgressMode:        bootstrap.RuntimeEgressModeCIDR,
 					},
 					Effective: bootstrap.RuntimeBehavior{
-						CanHostApps:    true,
+						CanHostApps:       true,
 						HostServiceAccess: bootstrap.RuntimeHostServiceAccessRelay,
 						EgressMode:        bootstrap.RuntimeEgressModeCIDR,
 					},
@@ -4546,8 +4546,8 @@ func TestAdminAPI_RuntimeProviders(t *testing.T) {
 						ID:    "session-1",
 						State: appruntime.SessionStateRunning,
 						Metadata: map[string]string{
-							"app": "support",
-							"owner":  "support-platform",
+							"app":   "support",
+							"owner": "support-platform",
 						},
 					}},
 				},
@@ -4627,8 +4627,8 @@ func TestAdminAPI_RuntimeProviderSessions(t *testing.T) {
 					ID:    "session-1",
 					State: appruntime.SessionStateRunning,
 					Metadata: map[string]string{
-						"app": "support",
-						"owner":  "support-platform",
+						"app":   "support",
+						"owner": "support-platform",
 					},
 				}},
 			}},
@@ -4734,12 +4734,12 @@ func TestAdminAPI_RuntimeProviderSessionInspectionErrorKeepsProfile(t *testing.T
 				Loaded:        true,
 				SupportLoaded: true,
 				Advertised: bootstrap.RuntimeBehavior{
-					CanHostApps:    true,
+					CanHostApps:       true,
 					HostServiceAccess: bootstrap.RuntimeHostServiceAccessNone,
 					EgressMode:        bootstrap.RuntimeEgressModeCIDR,
 				},
 				Effective: bootstrap.RuntimeBehavior{
-					CanHostApps:    true,
+					CanHostApps:       true,
 					HostServiceAccess: bootstrap.RuntimeHostServiceAccessRelay,
 					EgressMode:        bootstrap.RuntimeEgressModeCIDR,
 				},
@@ -5299,7 +5299,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 	seedAPITokenWithPermissions(t, svc, scopedToken, scopedHash, "scoped-user", []core.AccessPermission{{
-		App:     "svc",
+		App:        "svc",
 		Operations: []string{"run"},
 	}})
 
@@ -5819,7 +5819,7 @@ func TestAuthorizationManagedSubjectsAPI(t *testing.T) {
 		t.Fatalf("grant subject status = %d, want 200: %s", resp.StatusCode, body)
 	}
 	var grant struct {
-		App  string `json:"app"`
+		App     string `json:"app"`
 		Role    string `json:"role"`
 		Source  string `json:"source"`
 		Mutable bool   `json:"mutable"`
@@ -8267,12 +8267,12 @@ func TestProviderDevAttachmentCreateRequiresAttachActionPermission(t *testing.T)
 	seedAPITokenWithPermissions(t, svc, invokeToken, invokeHash, "invoke-user", []core.AccessPermission{{App: "roadmap"}})
 	attachToken, attachHash := newToken(t)
 	seedAPITokenWithPermissions(t, svc, attachToken, attachHash, "attach-user", []core.AccessPermission{{
-		App:  "roadmap",
+		App:     "roadmap",
 		Actions: []string{core.ProviderActionDevAttach},
 	}})
 	subjectToken, subjectHash := newToken(t)
 	seedSubjectAPITokenWithPermissions(t, svc, subjectHash, "service_account:roadmap-dev", "roadmap-dev", []core.AccessPermission{{
-		App:  "roadmap",
+		App:     "roadmap",
 		Actions: []string{core.ProviderActionDevAttach},
 	}})
 
@@ -9228,10 +9228,10 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 			},
 		}
 		cfg.MountedUIs = []server.MountedUI{{
-			Name:       "github",
+			Name:    "github",
 			AppName: "github",
-			Path:       "/github",
-			Handler:    handler,
+			Path:    "/github",
+			Handler: handler,
 		}}
 		cfg.Services = testutil.NewStubServices(t)
 	})
@@ -9348,7 +9348,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 		cfg.MountedUIs = []server.MountedUI{
 			{
 				Name:                "ops-visible",
-				AppName:          "ops-visible",
+				AppName:             "ops-visible",
 				Path:                "/ops-visible",
 				AuthorizationPolicy: "sample_policy",
 				Routes: []server.MountedUIRoute{
@@ -9358,7 +9358,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 			},
 			{
 				Name:                "settings-visible",
-				AppName:          "settings-visible",
+				AppName:             "settings-visible",
 				Path:                "/settings-visible",
 				AuthorizationPolicy: "sample_policy",
 				Routes: []server.MountedUIRoute{
@@ -9368,7 +9368,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 			},
 			{
 				Name:                "ui-visible",
-				AppName:          "ui-visible",
+				AppName:             "ui-visible",
 				Path:                "/ui-visible",
 				AuthorizationPolicy: "sample_policy",
 				Routes: []server.MountedUIRoute{
@@ -9378,7 +9378,7 @@ func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOp
 			},
 			{
 				Name:                "hidden",
-				AppName:          "hidden",
+				AppName:             "hidden",
 				Path:                "/hidden",
 				AuthorizationPolicy: "sample_policy",
 				Routes: []server.MountedUIRoute{
@@ -10662,9 +10662,9 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			}
 			cfg.Services = testutil.NewStubServices(t)
 			cfg.MountedUIs = []server.MountedUI{{
-				Name:       "clickhouse",
+				Name:    "clickhouse",
 				AppName: "clickhouse",
-				Path:       "/clickhouse",
+				Path:    "/clickhouse",
 				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 					w.WriteHeader(http.StatusOK)
 				}),
@@ -15104,10 +15104,10 @@ func TestStartBrowserLogin_MissingPluginRouteAuthProviderAuditsAttemptedProvider
 		cfg.SelectedAuthProvider = "server"
 		cfg.AuditSink = auditSink
 		cfg.MountedUIs = []server.MountedUI{{
-			Name:       "sample_portal",
-			Path:       "/sample-portal",
+			Name:    "sample_portal",
+			Path:    "/sample-portal",
 			AppName: "sample_portal",
-			Handler:    http.NotFoundHandler(),
+			Handler: http.NotFoundHandler(),
 		}}
 		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_portal": {RouteAuth: &config.RouteAuthDef{Provider: "alt"}},
@@ -15246,10 +15246,10 @@ func TestLoginCallback_MissingPluginRouteAuthProviderAuditsAttemptedProvider(t *
 			"alt": &stubHostIssuedSessionAuth{name: "alt"},
 		}
 		cfg.MountedUIs = []server.MountedUI{{
-			Name:       "sample_portal",
-			Path:       "/sample-portal",
+			Name:    "sample_portal",
+			Path:    "/sample-portal",
 			AppName: "sample_portal",
-			Handler:    http.NotFoundHandler(),
+			Handler: http.NotFoundHandler(),
 		}}
 		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"sample_portal": {RouteAuth: &config.RouteAuthDef{Provider: "alt"}},

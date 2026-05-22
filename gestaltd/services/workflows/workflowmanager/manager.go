@@ -20,11 +20,11 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/jsonvalue"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowprincipal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -138,36 +138,36 @@ type ScheduleUpsert struct {
 	SourceDefinitionID string
 	Paused             bool
 	IdempotencyKey     string
-	CallerAppName   string
+	CallerAppName      string
 	Permissions        []core.AccessPermission
 }
 
 type DefinitionUpsert struct {
-	ProviderName     string
-	Target           coreworkflow.Target
-	IdempotencyKey   string
-	CallerAppName string
-	Permissions      []core.AccessPermission
+	ProviderName   string
+	Target         coreworkflow.Target
+	IdempotencyKey string
+	CallerAppName  string
+	Permissions    []core.AccessPermission
 }
 
 type EventTriggerUpsert struct {
-	ProviderName     string
-	Match            coreworkflow.EventMatch
-	Target           coreworkflow.Target
-	DefinitionID     string
-	Paused           bool
-	IdempotencyKey   string
-	CallerAppName string
+	ProviderName   string
+	Match          coreworkflow.EventMatch
+	Target         coreworkflow.Target
+	DefinitionID   string
+	Paused         bool
+	IdempotencyKey string
+	CallerAppName  string
 }
 
 type RunStart struct {
-	ProviderName     string
-	Target           coreworkflow.Target
-	DefinitionID     string
-	IdempotencyKey   string
-	WorkflowKey      string
-	CallerAppName string
-	Permissions      []core.AccessPermission
+	ProviderName   string
+	Target         coreworkflow.Target
+	DefinitionID   string
+	IdempotencyKey string
+	WorkflowKey    string
+	CallerAppName  string
+	Permissions    []core.AccessPermission
 }
 
 type RunSignal struct {
@@ -176,13 +176,13 @@ type RunSignal struct {
 }
 
 type RunSignalOrStart struct {
-	ProviderName     string
-	WorkflowKey      string
-	Target           coreworkflow.Target
-	DefinitionID     string
-	IdempotencyKey   string
-	Signal           coreworkflow.Signal
-	CallerAppName string
+	ProviderName   string
+	WorkflowKey    string
+	Target         coreworkflow.Target
+	DefinitionID   string
+	IdempotencyKey string
+	Signal         coreworkflow.Signal
+	CallerAppName  string
 }
 
 type EventPublish struct {
@@ -190,7 +190,7 @@ type EventPublish struct {
 	// AppName is trusted owner context. Callers must derive or authorize it before
 	// entering the workflow manager; the manager only normalizes and forwards it.
 	AppName string
-	Event      coreworkflow.Event
+	Event   coreworkflow.Event
 }
 
 type ManagedDefinition struct {
@@ -279,7 +279,7 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		appInvokes:     invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
+		appInvokes:        invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
 		now:               now,
 	}
 }
@@ -596,9 +596,9 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 			}
 			seenProviderTokens[providerPageToken] = struct{}{}
 			resp, err := provider.ListRuns(ctx, coreworkflow.ListRunsRequest{
-				PageSize:     pageSize,
-				PageToken:    providerPageToken,
-				Status:       req.Status,
+				PageSize:  pageSize,
+				PageToken: providerPageToken,
+				Status:    req.Status,
 				TargetApp: strings.TrimSpace(req.TargetApp),
 			})
 			if err != nil {
@@ -821,7 +821,7 @@ type workflowRunListPageToken struct {
 	ProviderFingerprint string                         `json:"providerFingerprint"`
 	Providers           []workflowRunProviderPageState `json:"providers"`
 	PageSize            int                            `json:"pageSize"`
-	TargetApp        string                         `json:"targetApp,omitempty"`
+	TargetApp           string                         `json:"targetApp,omitempty"`
 	Status              coreworkflow.RunStatus         `json:"status,omitempty"`
 }
 
@@ -885,7 +885,7 @@ func workflowRunListNextPageToken(providerNames []string, req coreworkflow.ListR
 		ProviderFingerprint: workflowRunProviderListFingerprint(providerNames),
 		Providers:           cloneWorkflowRunProviderPageStates(states),
 		PageSize:            pageSize,
-		TargetApp:        strings.TrimSpace(req.TargetApp),
+		TargetApp:           strings.TrimSpace(req.TargetApp),
 		Status:              req.Status,
 	}
 	return encodeWorkflowRunListPageToken(token)
@@ -1411,7 +1411,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 		}
 		audit.setProvider(providerName)
 		published, err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
-			AppName:  pluginName,
+			AppName:     pluginName,
 			Event:       event,
 			PublishedBy: publishedBy,
 		})
@@ -1438,7 +1438,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 			return coreworkflow.Event{}, err
 		}
 		_, err = provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
-			AppName:  pluginName,
+			AppName:     pluginName,
 			Event:       event,
 			PublishedBy: publishedBy,
 		})
@@ -2285,7 +2285,7 @@ func (m *Manager) resolveAppTarget(ctx context.Context, p *principal.Principal, 
 		}
 	}
 	pluginTarget := coreworkflow.AppTarget{
-		AppName:     pluginName,
+		AppName:        pluginName,
 		Operation:      opMeta.ID,
 		Connection:     connection,
 		Instance:       sessionInstance,
@@ -2620,7 +2620,7 @@ func (m *Manager) putExecutionRefWithPermissions(ctx context.Context, executionR
 		ID:                  executionRefID,
 		ProviderName:        strings.TrimSpace(providerName),
 		Target:              target,
-		CallerAppName:    strings.TrimSpace(callerAppName),
+		CallerAppName:       strings.TrimSpace(callerAppName),
 		SourceDefinitionID:  strings.TrimSpace(sourceDefinitionID),
 		SubjectID:           subjectID,
 		SubjectKind:         actor.SubjectKind,
@@ -2659,7 +2659,7 @@ func (m *Manager) putRunExecutionRef(ctx context.Context, executionRefID, provid
 		ID:                  executionRefID,
 		ProviderName:        strings.TrimSpace(providerName),
 		Target:              target,
-		CallerAppName:    strings.TrimSpace(callerAppName),
+		CallerAppName:       strings.TrimSpace(callerAppName),
 		SourceDefinitionID:  strings.TrimSpace(sourceDefinitionID),
 		SubjectID:           subjectID,
 		SubjectKind:         actor.SubjectKind,
@@ -2910,7 +2910,7 @@ const (
 	targetAuthorizationComponentAgentToolRef         = "agent_tool_ref"
 	targetAuthorizationComponentOutputDelivery       = "output_delivery"
 	targetAuthorizationComponentSessionReadyDelivery = "session_ready_delivery"
-	targetAuthorizationComponentAppTarget         = "plugin_target"
+	targetAuthorizationComponentAppTarget            = "plugin_target"
 
 	targetAuthorizationReasonMissingAgentProvider               = "missing_agent_provider"
 	targetAuthorizationReasonAuthorizerProviderDenied           = "authorizer_provider_denied"
@@ -2920,8 +2920,8 @@ const (
 	targetAuthorizationReasonNonExactToolRefWithSystemTools     = "non_exact_tool_ref_with_system_tools"
 	targetAuthorizationReasonAuthorizerOperationDenied          = "authorizer_operation_denied"
 	targetAuthorizationReasonPrincipalOperationPermissionDenied = "principal_operation_permission_denied"
-	targetAuthorizationReasonMissingAppTarget                = "missing_plugin_target"
-	targetAuthorizationReasonMissingAppProvider              = "missing_plugin_provider"
+	targetAuthorizationReasonMissingAppTarget                   = "missing_plugin_target"
+	targetAuthorizationReasonMissingAppProvider                 = "missing_plugin_provider"
 	targetAuthorizationReasonMissingPluginOperation             = "missing_plugin_operation"
 )
 

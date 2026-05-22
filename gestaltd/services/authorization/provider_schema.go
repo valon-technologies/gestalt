@@ -10,8 +10,8 @@ import (
 
 const (
 	ProviderResourceTypePolicyStatic                   = "policy_static"
-	ProviderResourceTypeAppStatic                   = "app_static"
-	ProviderResourceTypeAppDynamic                  = "app_dynamic"
+	ProviderResourceTypeAppStatic                      = "app_static"
+	ProviderResourceTypeAppDynamic                     = "app_dynamic"
 	ProviderResourceTypeAdminPolicyStatic              = "admin_policy_static"
 	ProviderResourceTypeAdminDynamic                   = "admin_dynamic"
 	ProviderResourceTypeExternalIdentity               = "external_identity"
@@ -39,8 +39,8 @@ const (
 
 const (
 	resourceTypePolicyStatic       = ProviderResourceTypePolicyStatic
-	resourceTypeAppStatic       = ProviderResourceTypeAppStatic
-	resourceTypeAppDynamic      = ProviderResourceTypeAppDynamic
+	resourceTypeAppStatic          = ProviderResourceTypeAppStatic
+	resourceTypeAppDynamic         = ProviderResourceTypeAppDynamic
 	resourceTypeAdminPolicyStatic  = ProviderResourceTypeAdminPolicyStatic
 	resourceTypeAdminDynamic       = ProviderResourceTypeAdminDynamic
 	resourceTypeExternalIdentity   = ProviderResourceTypeExternalIdentity

@@ -22,11 +22,11 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	appservice "github.com/valon-technologies/gestalt/server/services/apps"
-	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -44,7 +44,7 @@ func testWorkflowAppTarget(pluginName, operation string) coreworkflow.Target {
 func testWorkflowAppTargetWithPayload(pluginName, operation, connection, instance string, input map[string]any) coreworkflow.Target {
 	return coreworkflow.Target{
 		App: &coreworkflow.AppTarget{
-			AppName: pluginName,
+			AppName:    pluginName,
 			Operation:  operation,
 			Connection: connection,
 			Instance:   instance,
@@ -681,7 +681,7 @@ func TestWorkflowRuntimeInvokeAgentTargetCreatesAndSupervisesTurn(t *testing.T) 
 		SubjectID:           principal.UserSubjectID("ada"),
 		CredentialSubjectID: principal.UserSubjectID("ada"),
 		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}, {
 			App: "managed",
@@ -880,9 +880,9 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 			Prompt:       "Summarize the request",
 			OutputDelivery: &coreworkflow.OutputDelivery{
 				Target: coreworkflow.AppTarget{
-					AppName: "notification",
-					Operation:  "reply",
-					Input:      map[string]any{"format": "plain"},
+					AppName:   "notification",
+					Operation: "reply",
+					Input:     map[string]any{"format": "plain"},
 				},
 				CredentialMode: core.ConnectionModeNone,
 				InputBindings: []coreworkflow.OutputBinding{
@@ -912,7 +912,7 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversFinalOutput(t *testing.T) {
 		SubjectID:           principal.UserSubjectID("ada"),
 		CredentialSubjectID: principal.UserSubjectID("ada"),
 		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-			App:     "notification",
+			App:        "notification",
 			Operations: []string{"reply"},
 		}}),
 	})
@@ -970,9 +970,9 @@ func TestWorkflowRuntimeInvokeAgentTargetCarriesMaterializedInheritedOutputDeliv
 			Prompt:       "Start a child workflow if this takes a while.",
 			OutputDelivery: &coreworkflow.OutputDelivery{
 				Target: coreworkflow.AppTarget{
-					AppName: "notification",
-					Operation:  "reply",
-					Input:      map[string]any{"format": "plain"},
+					AppName:   "notification",
+					Operation: "reply",
+					Input:     map[string]any{"format": "plain"},
 				},
 				CredentialMode: core.ConnectionModeNone,
 				InputBindings: []coreworkflow.OutputBinding{
@@ -1077,9 +1077,9 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversSessionReadyBeforeTurn(t *testi
 			Prompt:       "Summarize the request",
 			SessionReadyDelivery: &coreworkflow.OutputDelivery{
 				Target: coreworkflow.AppTarget{
-					AppName: "notification",
-					Operation:  "started",
-					Input:      map[string]any{"format": "plain"},
+					AppName:   "notification",
+					Operation: "started",
+					Input:     map[string]any{"format": "plain"},
 				},
 				CredentialMode: core.ConnectionModeNone,
 				InputBindings: []coreworkflow.OutputBinding{
@@ -1092,8 +1092,8 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversSessionReadyBeforeTurn(t *testi
 			},
 			OutputDelivery: &coreworkflow.OutputDelivery{
 				Target: coreworkflow.AppTarget{
-					AppName: "notification",
-					Operation:  "reply",
+					AppName:   "notification",
+					Operation: "reply",
 				},
 				CredentialMode: core.ConnectionModeNone,
 				InputBindings: []coreworkflow.OutputBinding{
@@ -1121,7 +1121,7 @@ func TestWorkflowRuntimeInvokeAgentTargetDeliversSessionReadyBeforeTurn(t *testi
 		SubjectID:           principal.UserSubjectID("ada"),
 		CredentialSubjectID: principal.UserSubjectID("ada"),
 		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-			App:     "notification",
+			App:        "notification",
 			Operations: []string{"started", "reply"},
 		}}),
 	})
@@ -1446,11 +1446,11 @@ func TestWorkflowRuntimeInvokeAgentTargetWithExecutionRefAcceptsCanonicalTarget(
 	}
 	refProvider := newWorkflowRuntimeExecutionRefProvider()
 	if _, err := refProvider.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:               "agent-ref",
-		ProviderName:     "temporal",
-		Target:           target,
+		ID:            "agent-ref",
+		ProviderName:  "temporal",
+		Target:        target,
 		CallerAppName: "slack",
-		SubjectID:        "service_account:scheduler",
+		SubjectID:     "service_account:scheduler",
 	}); err != nil {
 		t.Fatalf("Put execution ref: %v", err)
 	}
@@ -1703,7 +1703,7 @@ func TestWorkflowRuntimeInvokeExecutionRefAuthorizesInternalConnections(t *testi
 		AuthSource:          "config",
 		CredentialSubjectID: "system:config",
 		Permissions: []core.AccessPermission{{
-			App:     "brain",
+			App:        "brain",
 			Operations: []string{"sources.sync"},
 		}},
 	}); err != nil {
@@ -1758,7 +1758,7 @@ func TestWorkflowRuntimeInvokeConfigExecutionRefRunAsUsesServiceAccountPrincipal
 			AuthSource:  "config",
 		},
 		Permissions: []core.AccessPermission{{
-			App:     "brain",
+			App:        "brain",
 			Operations: []string{"sources.sync"},
 		}},
 	}); err != nil {
@@ -1824,7 +1824,7 @@ func TestWorkflowRuntimeInvokeUserExecutionRefDoesNotAuthorizeInternalConnection
 		SubjectKind:  string(principal.KindUser),
 		AuthSource:   "session",
 		Permissions: []core.AccessPermission{{
-			App:     "brain",
+			App:        "brain",
 			Operations: []string{"sources.sync"},
 		}},
 	}); err != nil {
@@ -1954,7 +1954,7 @@ func TestWorkflowRuntimeInvokeExecutionRefPreservesTokenPermissionCeiling(t *tes
 		Target:       target,
 		SubjectID:    principal.UserSubjectID("user-123"),
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 	}); err != nil {

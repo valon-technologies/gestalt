@@ -32,7 +32,7 @@ type providerLockfile struct {
 }
 
 type providerLockBuckets struct {
-	App              map[string]portableLockEntry `json:"app,omitempty"`
+	App                 map[string]portableLockEntry `json:"app,omitempty"`
 	Authentication      map[string]portableLockEntry `json:"authentication,omitempty"`
 	Authorization       map[string]portableLockEntry `json:"authorization,omitempty"`
 	ExternalCredentials map[string]portableLockEntry `json:"externalCredentials,omitempty"`
@@ -196,7 +196,7 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 		SchemaVersion: providerLockSchemaVersionForLock(lock),
 		Revision:      providerLockRevision,
 		Providers: providerLockBuckets{
-			App:              portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindApp),
+			App:                 portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindApp),
 			Authentication:      portableEntriesFromLockEntries(lock.Authentication, providermanifestv1.KindAuthentication),
 			Authorization:       portableEntriesFromLockEntries(lock.Authorization, providermanifestv1.KindAuthorization),
 			ExternalCredentials: portableEntriesFromLockEntries(lock.ExternalCredentials, providermanifestv1.KindExternalCredentials),

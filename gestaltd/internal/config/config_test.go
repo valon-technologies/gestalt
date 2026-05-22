@@ -3129,7 +3129,7 @@ server:
 				},
 			},
 			Permissions: []core.AccessPermission{{
-				App:     "slack",
+				App:        "slack",
 				Operations: []string{"chat.postMessage"},
 			}},
 			Match: WorkflowEventMatch{
@@ -6155,7 +6155,7 @@ func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 			"slack": {
 				Source: ProviderSource{Path: "./manifest.yaml"},
 				Invokes: []AppInvocationDependency{{
-					App:         "github",
+					App:            "github",
 					Operation:      "bot.createPullRequest",
 					CredentialMode: providermanifestv1.ConnectionModeNone,
 					RunAs: &AppInvocationRunAsConfig{
@@ -6230,7 +6230,7 @@ func TestValidateStructureRejectsPluginInvokeRunAsOnSurface(t *testing.T) {
 			"slack": {
 				Source: ProviderSource{Path: "./manifest.yaml"},
 				Invokes: []AppInvocationDependency{{
-					App:  "github",
+					App:     "github",
 					Surface: string(SpecSurfaceGraphQL),
 					RunAs: &AppInvocationRunAsConfig{
 						Subject: &AppInvocationRunAsSubjectConfig{
@@ -6641,14 +6641,14 @@ func TestApplyAppScopeKeepsPluginClosureAndUI(t *testing.T) {
 					"TOKEN": EncodeSecretRefTransport(SecretRef{Provider: "repo_auth", Name: "plugin-token"}),
 				},
 				Invokes: []AppInvocationDependency{{
-					App:    "beta",
+					App:       "beta",
 					Operation: "ping",
 				}},
 			},
 			"beta": {
 				Source: ProviderSource{Path: "beta/manifest.yaml"},
 				Invokes: []AppInvocationDependency{{
-					App:    "delta",
+					App:       "delta",
 					Operation: "pong",
 				}},
 			},
@@ -6921,7 +6921,7 @@ func TestApplyAppScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
 				"fanout": {
 					Target: &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "alpha"}},
 					Invokes: []WorkflowInvokeConfig{{
-						App:    "beta",
+						App:       "beta",
 						Operation: "ping",
 					}},
 					Permissions: []core.AccessPermission{{App: "gamma"}},
@@ -6929,7 +6929,7 @@ func TestApplyAppScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
 				"dependency_target": {
 					Target: &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "beta"}},
 					Invokes: []WorkflowInvokeConfig{{
-						App:    "delta",
+						App:       "delta",
 						Operation: "pong",
 					}},
 				},

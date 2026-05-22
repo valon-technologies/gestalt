@@ -11,9 +11,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 	"github.com/valon-technologies/gestalt/server/services/apps/paraminterp"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 )
 
 type startOAuthRequest struct {

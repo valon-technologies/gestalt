@@ -13,7 +13,7 @@ import (
 )
 
 type providerPluginAuthorizationMembership struct {
-	App    string
+	App       string
 	SubjectID string
 	Role      string
 }
@@ -47,7 +47,7 @@ func (s *Server) upsertProviderPluginAuthorization(ctx context.Context, subject 
 		return nil, err
 	}
 	return &providerPluginAuthorizationMembership{
-		App:    plugin,
+		App:       plugin,
 		SubjectID: strings.TrimSpace(subject.SubjectID),
 		Role:      role,
 	}, nil

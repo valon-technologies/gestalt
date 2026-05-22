@@ -27,7 +27,7 @@ type TokenManager struct {
 }
 
 type TokenRequest struct {
-	AppName    string
+	AppName       string
 	SessionID     string
 	AllowedHosts  []string
 	DefaultAction egress.PolicyAction
@@ -35,7 +35,7 @@ type TokenRequest struct {
 }
 
 type Target struct {
-	AppName    string
+	AppName       string
 	SessionID     string
 	AllowedHosts  []string
 	DefaultAction egress.PolicyAction
@@ -43,7 +43,7 @@ type Target struct {
 
 type tokenClaims struct {
 	jwt.RegisteredClaims
-	AppName    string              `json:"app,omitempty"`
+	AppName       string              `json:"app,omitempty"`
 	SessionID     string              `json:"session_id,omitempty"`
 	AllowedHosts  []string            `json:"allowed_hosts,omitempty"`
 	DefaultAction egress.PolicyAction `json:"default_action,omitempty"`
@@ -86,7 +86,7 @@ func (m *TokenManager) MintToken(req TokenRequest) (string, error) {
 			NotBefore: jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
-		AppName:    strings.TrimSpace(req.AppName),
+		AppName:       strings.TrimSpace(req.AppName),
 		SessionID:     strings.TrimSpace(req.SessionID),
 		AllowedHosts:  normalizeAllowedHosts(req.AllowedHosts),
 		DefaultAction: normalizeDefaultAction(req.DefaultAction),
@@ -102,7 +102,7 @@ func (m *TokenManager) ResolveToken(token string) (Target, error) {
 		return Target{}, err
 	}
 	return Target{
-		AppName:    strings.TrimSpace(claims.AppName),
+		AppName:       strings.TrimSpace(claims.AppName),
 		SessionID:     strings.TrimSpace(claims.SessionID),
 		AllowedHosts:  normalizeAllowedHosts(claims.AllowedHosts),
 		DefaultAction: normalizeDefaultAction(claims.DefaultAction),

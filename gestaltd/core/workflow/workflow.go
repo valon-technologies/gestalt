@@ -33,12 +33,12 @@ type Actor struct {
 }
 
 type Target struct {
-	App *AppTarget
-	Agent  *AgentTarget
+	App   *AppTarget
+	Agent *AgentTarget
 }
 
 type AppTarget struct {
-	AppName     string
+	AppName        string
 	Operation      string
 	Connection     string
 	Instance       string
@@ -115,7 +115,7 @@ type ExecutionReference struct {
 	ID                  string
 	ProviderName        string
 	Target              Target
-	CallerAppName    string
+	CallerAppName       string
 	SourceDefinitionID  string
 	SubjectID           string
 	SubjectKind         string
@@ -220,10 +220,10 @@ type GetRunRequest struct {
 }
 
 type ListRunsRequest struct {
-	PageSize     int
-	PageToken    string
+	PageSize  int
+	PageToken string
 	TargetApp string
-	Status       RunStatus
+	Status    RunStatus
 }
 
 type ListRunsResponse struct {
@@ -324,7 +324,7 @@ type ResumeEventTriggerRequest struct {
 }
 
 type PublishEventRequest struct {
-	AppName  string
+	AppName     string
 	Event       Event
 	PublishedBy Actor
 }
@@ -396,8 +396,8 @@ func TargetFingerprint(target Target) (string, error) {
 }
 
 type targetComparisonPayload struct {
-	App *AppTarget
-	Agent  *AgentTarget
+	App   *AppTarget
+	Agent *AgentTarget
 }
 
 func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {

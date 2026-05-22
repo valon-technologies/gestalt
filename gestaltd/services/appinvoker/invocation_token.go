@@ -36,7 +36,7 @@ type InvocationTokenManager struct {
 type invocationTokenClaims struct {
 	jwt.RegisteredClaims
 	DelegationExpiresAt *jwt.NumericDate                 `json:"delegation_expires_at,omitempty"`
-	CallerApp        string                           `json:"caller_plugin,omitempty"`
+	CallerApp           string                           `json:"caller_plugin,omitempty"`
 	SubjectKind         string                           `json:"subject_kind,omitempty"`
 	Email               string                           `json:"email,omitempty"`
 	DisplayName         string                           `json:"display_name,omitempty"`
@@ -294,7 +294,7 @@ func claimsFromContext(ctx context.Context, pluginName string, grants Invocation
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
 		DelegationExpiresAt: jwt.NewNumericDate(delegationExpiresAt),
-		CallerApp:        strings.TrimSpace(pluginName),
+		CallerApp:           strings.TrimSpace(pluginName),
 		SubjectKind:         string(subjectKindForInvocationClaims(p)),
 		Email:               emailForInvocationClaims(p),
 		DisplayName:         displayNameForInvocationClaims(p),

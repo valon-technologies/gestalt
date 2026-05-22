@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	gproto "google.golang.org/protobuf/proto"
@@ -105,13 +105,13 @@ type indexedDBSessionRecord struct {
 }
 
 type storedTarget struct {
-	Name      string                           `json:"name"`
-	Source    string                           `json:"source,omitempty"`
+	Name      string                        `json:"name"`
+	Source    string                        `json:"source,omitempty"`
 	Spec      appservice.StaticProviderSpec `json:"spec"`
-	Config    map[string]any                   `json:"config,omitempty"`
-	ConfigSet bool                             `json:"configSet,omitempty"`
-	UI        bool                             `json:"ui,omitempty"`
-	UIPath    string                           `json:"uiPath,omitempty"`
+	Config    map[string]any                `json:"config,omitempty"`
+	ConfigSet bool                          `json:"configSet,omitempty"`
+	UI        bool                          `json:"ui,omitempty"`
+	UIPath    string                        `json:"uiPath,omitempty"`
 }
 
 type indexedDBCallRecord struct {

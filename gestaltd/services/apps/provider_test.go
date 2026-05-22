@@ -579,7 +579,7 @@ func TestRequestContextProto_PreservesToolRefsContext(t *testing.T) {
 	t.Parallel()
 
 	ctx := invocation.WithToolRefsContext(context.Background(), []coreagent.ToolRef{{
-		App:    "github",
+		App:       "github",
 		Operation: "bot.getPullRequest",
 		RunAs: &core.RunAsSubject{
 			SubjectID:           "service_account:github-review",
@@ -625,7 +625,7 @@ func TestApplyRequestContext_PreservesToolRefsContext(t *testing.T) {
 	ctx := applyRequestContext(context.Background(), &proto.RequestContext{
 		ToolRefsSet: true,
 		ToolRefs: []*proto.AgentToolRef{{
-			App:    "github",
+			App:       "github",
 			Operation: "bot.getPullRequest",
 			RunAs: &proto.SubjectContext{
 				Id:                  "service_account:github-review",

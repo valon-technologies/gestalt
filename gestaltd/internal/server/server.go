@@ -18,12 +18,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/egressproxy"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -50,7 +50,7 @@ type MountedUIRoute = providermanifestv1.UIRoute
 type MountedUI struct {
 	Name                string
 	Path                string
-	AppName          string
+	AppName             string
 	AuthorizationPolicy string
 	Routes              []MountedUIRoute
 	Handler             http.Handler
@@ -59,7 +59,7 @@ type MountedUI struct {
 
 type MountedHTTPBinding struct {
 	Name           string
-	AppName     string
+	AppName        string
 	Path           string
 	Method         string
 	Target         string
@@ -163,9 +163,9 @@ type Config struct {
 	Agent                 bootstrap.AgentControl
 	AgentManager          agentmanager.Service
 	Workflow              bootstrap.WorkflowControl
-	AppRuntimes        bootstrap.RuntimeInspector
+	AppRuntimes           bootstrap.RuntimeInspector
 	Invoker               invocation.Invoker
-	AppInvoker         invocation.Invoker
+	AppInvoker            invocation.Invoker
 	DefaultConnection     map[string]string
 	CatalogConnection     map[string]string
 	ConnectionAuth        func() map[string]map[string]bootstrap.OAuthHandler
@@ -406,7 +406,7 @@ func New(cfg Config) (*Server, error) {
 		Authorizer:        cfg.Authorizer,
 		DefaultConnection: cfg.DefaultConnection,
 		CatalogConnection: cfg.CatalogConnection,
-		AppInvokes:     pluginInvokesFromProviderEntries(cfg.AppDefs),
+		AppInvokes:        pluginInvokesFromProviderEntries(cfg.AppDefs),
 		Now:               now,
 	})
 	if noAuth || hasAnonymousAuthProvider(authProviders) {

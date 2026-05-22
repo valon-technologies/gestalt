@@ -11,11 +11,11 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/internal/agentwire"
 	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -53,7 +53,7 @@ type remoteProviderBase struct {
 	closer         io.Closer
 	publicBaseURL  string
 	invTokens      *appinvokerservice.InvocationTokenManager
-	callerApp   string
+	callerApp      string
 	invokeGrants   appinvokerservice.InvocationGrants
 	workflowGrants workflowgrants.Grants
 }

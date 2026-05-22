@@ -14,7 +14,7 @@ func AppInvocationDependencies(deps []config.AppInvocationDependency) []invocati
 	out := make([]invocation.AppInvocationDependency, 0, len(deps))
 	for _, dep := range deps {
 		out = append(out, invocation.AppInvocationDependency{
-			App:                dep.App,
+			App:                   dep.App,
 			Operation:             dep.Operation,
 			Surface:               dep.Surface,
 			CredentialMode:        core.ConnectionMode(dep.CredentialMode),

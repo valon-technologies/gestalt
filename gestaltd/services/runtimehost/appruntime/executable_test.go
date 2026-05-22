@@ -84,9 +84,9 @@ func TestExecutableProviderIncludesPushedRuntimeLogsInStartupFailures(t *testing
 	}
 
 	_, err = runtimeProvider.StartApp(ctx, StartAppRequest{
-		SessionID:  session.ID,
-		AppName: "agent",
-		Command:    "/bin/false",
+		SessionID: session.ID,
+		AppName:   "agent",
+		Command:   "/bin/false",
 	})
 	if err == nil {
 		t.Fatal("StartApp succeeded, want startup failure")
@@ -151,10 +151,10 @@ func TestExecutableProviderForwardsStartPluginWorkdir(t *testing.T) {
 	}
 
 	hosted, err := runtimeProvider.StartApp(ctx, StartAppRequest{
-		SessionID:  session.ID,
-		AppName: "agent",
-		Command:    "/bin/plugin",
-		Workdir:    "/tmp/provider-root",
+		SessionID: session.ID,
+		AppName:   "agent",
+		Command:   "/bin/plugin",
+		Workdir:   "/tmp/provider-root",
 	})
 	if err != nil {
 		t.Fatalf("StartApp: %v", err)

@@ -353,7 +353,7 @@ func buildPlatformArchive(manifestPath, pluginName, version string, platform rel
 	return createReleaseArchive(outputDir, archiveName, func(stagingDir string) (*providerpkg.StagedPreparedInstall, error) {
 		return providerpkg.StageSourcePreparedInstallDir(manifestPath, stagingDir, providerpkg.StageSourcePreparedInstallOptions{
 			VersionOverride: version,
-			AppName:      pluginName,
+			AppName:         pluginName,
 			GOOS:            platform.GOOS,
 			GOARCH:          platform.GOARCH,
 		})

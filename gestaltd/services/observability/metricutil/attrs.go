@@ -46,10 +46,10 @@ const (
 	InvocationSurfaceHTTPBinding = "http_binding"
 	InvocationSurfaceUI          = "ui"
 
-	RPCRoleProviderClient     = "provider_client"
-	RPCRoleProviderServer     = "provider_server"
-	RPCRoleHostedAppClient = "hosted_plugin_client"
-	RPCRoleHostServiceServer  = "host_service_server"
+	RPCRoleProviderClient    = "provider_client"
+	RPCRoleProviderServer    = "provider_server"
+	RPCRoleHostedAppClient   = "hosted_plugin_client"
+	RPCRoleHostServiceServer = "host_service_server"
 
 	DBSystemNameGestaltdIndexedDB = "gestaltd.indexeddb"
 )

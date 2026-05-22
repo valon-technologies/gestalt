@@ -354,8 +354,8 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedAppProvider(t *testing.T
 			Target: &proto.BoundWorkflowTarget{
 				Kind: &proto.BoundWorkflowTarget_App{
 					App: &proto.BoundWorkflowAppTarget{
-						AppName: "roadmap",
-						Operation:  "status",
+						AppName:   "roadmap",
+						Operation: "status",
 					},
 				},
 			},
@@ -486,8 +486,8 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 			Target: &proto.BoundWorkflowTarget{
 				Kind: &proto.BoundWorkflowTarget_App{
 					App: &proto.BoundWorkflowAppTarget{
-						AppName: "roadmap",
-						Operation:  "status",
+						AppName:   "roadmap",
+						Operation: "status",
 					},
 				},
 			},

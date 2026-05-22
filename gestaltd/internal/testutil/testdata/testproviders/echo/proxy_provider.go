@@ -37,7 +37,7 @@ func invocationTokenFromContext(ctx context.Context) string {
 }
 
 type invokePluginInput struct {
-	App          string         `json:"app"`
+	App             string         `json:"app"`
 	Operation       string         `json:"operation"`
 	Connection      string         `json:"connection,omitempty"`
 	Instance        string         `json:"instance,omitempty"`
@@ -46,7 +46,7 @@ type invokePluginInput struct {
 }
 
 type invokePluginGraphQLInput struct {
-	App          string         `json:"app"`
+	App             string         `json:"app"`
 	Document        string         `json:"document"`
 	Connection      string         `json:"connection,omitempty"`
 	Instance        string         `json:"instance,omitempty"`
@@ -55,7 +55,7 @@ type invokePluginGraphQLInput struct {
 }
 
 type workflowScheduleTargetInput struct {
-	App     string         `json:"app"`
+	App        string         `json:"app"`
 	Operation  string         `json:"operation"`
 	Connection string         `json:"connection,omitempty"`
 	Instance   string         `json:"instance,omitempty"`
@@ -246,7 +246,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 		envelope := map[string]any{
 			"ok":                       false,
-			"target_app":            input.App,
+			"target_app":               input.App,
 			"target_operation":         input.Operation,
 			"used_connection_override": strings.TrimSpace(input.Connection) != "",
 		}
@@ -300,7 +300,7 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 		envelope := map[string]any{
 			"ok":                       false,
-			"target_app":            input.App,
+			"target_app":               input.App,
 			"target_operation":         "graphql",
 			"used_connection_override": strings.TrimSpace(input.Connection) != "",
 		}
@@ -785,7 +785,7 @@ func workflowManagerFromContext(ctx context.Context, invocationToken string) (*g
 func workflowTargetInput(target workflowScheduleTargetInput) (*gestalt.BoundWorkflowTarget, error) {
 	return &gestalt.BoundWorkflowTarget{
 		App: &gestalt.BoundWorkflowAppTarget{
-			AppName: target.App,
+			AppName:    target.App,
 			Operation:  target.Operation,
 			Connection: target.Connection,
 			Instance:   target.Instance,
@@ -849,7 +849,7 @@ func managedWorkflowScheduleBody(value *gestalt.WorkflowManagerSchedule) map[str
 			return *schedule.NextRunAt
 		}(),
 		"target": map[string]any{
-			"app":     "",
+			"app":        "",
 			"operation":  "",
 			"connection": "",
 			"instance":   "",
@@ -859,7 +859,7 @@ func managedWorkflowScheduleBody(value *gestalt.WorkflowManagerSchedule) map[str
 	if target != nil && target.App != nil {
 		pluginTarget := target.App
 		body["schedule"].(map[string]any)["target"] = map[string]any{
-			"app":     pluginTarget.AppName,
+			"app":        pluginTarget.AppName,
 			"operation":  pluginTarget.Operation,
 			"connection": pluginTarget.Connection,
 			"instance":   pluginTarget.Instance,
@@ -893,7 +893,7 @@ func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerEventTrigger) map[
 			"subject": "",
 		},
 		"target": map[string]any{
-			"app":     "",
+			"app":        "",
 			"operation":  "",
 			"connection": "",
 			"instance":   "",
@@ -910,7 +910,7 @@ func managedWorkflowTriggerBody(value *gestalt.WorkflowManagerEventTrigger) map[
 	if target != nil && target.App != nil {
 		pluginTarget := target.App
 		body["trigger"].(map[string]any)["target"] = map[string]any{
-			"app":     pluginTarget.AppName,
+			"app":        pluginTarget.AppName,
 			"operation":  pluginTarget.Operation,
 			"connection": pluginTarget.Connection,
 			"instance":   pluginTarget.Instance,

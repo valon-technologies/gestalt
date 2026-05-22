@@ -146,7 +146,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 			ConfigPaths:   []string(configPaths),
 			Path:          flagStringValue(pathFlag),
 			Name:          flagStringValue(nameFlag),
-			App:        flagStringValue(pluginFlag),
+			App:           flagStringValue(pluginFlag),
 			Port:          flagIntValue(portFlag),
 			Remote:        flagStringValue(remoteFlag),
 			RemoteToken:   flagStringValue(remoteTokenFlag),
@@ -164,14 +164,14 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 		return runServeWatch(resolvedConfigPaths, operator.StatePaths{
 			ArtifactsDir: *artifactsDir,
 			LockfilePath: *lockfilePath,
-			AppScope:  []string{flagStringValue(pluginFlag)},
+			AppScope:     []string{flagStringValue(pluginFlag)},
 		})
 	}
 
 	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, operator.StatePaths{
 		ArtifactsDir: *artifactsDir,
 		LockfilePath: *lockfilePath,
-		AppScope:  []string{flagStringValue(pluginFlag)},
+		AppScope:     []string{flagStringValue(pluginFlag)},
 	}, locked)
 	if err != nil {
 		return err
@@ -183,7 +183,7 @@ type serveProviderLocalOptions struct {
 	ConfigPaths   []string
 	Path          string
 	Name          string
-	App        string
+	App           string
 	Port          int
 	Remote        string
 	RemoteToken   string
@@ -376,7 +376,7 @@ func runValidate(args []string) error {
 	}
 	return validateConfig(configPaths, operator.StatePaths{
 		LockfilePath: *lockfilePath,
-		AppScope:  []string{*pluginFlag},
+		AppScope:     []string{*pluginFlag},
 	}, opts)
 }
 
@@ -410,7 +410,7 @@ func validateConfig(configFlags []string, state operator.StatePaths, opts valida
 	result, err := validateConfigWithStatePaths(configFlags, operator.StatePaths{
 		ArtifactsDir: scratchDir,
 		LockfilePath: state.LockfilePath,
-		AppScope:  state.AppScope,
+		AppScope:     state.AppScope,
 	}, opts)
 	if err != nil {
 		return err

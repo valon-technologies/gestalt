@@ -73,7 +73,7 @@ func TestAppInvokerServerInvokePropagatesInternalConnectionAccess(t *testing.T) 
 	}))
 	if _, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
 		InvocationToken: rootToken,
-		App:          "slack",
+		App:             "slack",
 		Operation:       "conversations.history",
 		Connection:      "bot",
 	}); err != nil {
@@ -114,7 +114,7 @@ func TestAppInvokerServerInvokeMapsInvalidInvocationToInvalidArgument(t *testing
 	}))
 	_, err = client.Invoke(context.Background(), &proto.AppInvokeRequest{
 		InvocationToken: rootToken,
-		App:          "gmail",
+		App:             "gmail",
 		Operation:       "gmail.users.messages.modify",
 		Connection:      "override",
 	})
@@ -180,7 +180,7 @@ func TestAppInvokerServerInvokePropagatesIdempotencyKey(t *testing.T) {
 	}))
 	resp, err := client.Invoke(context.Background(), &proto.AppInvokeRequest{
 		InvocationToken: rootToken,
-		App:          " github ",
+		App:             " github ",
 		Operation:       " issues.create ",
 		Instance:        " prod ",
 		IdempotencyKey:  " tool-call-123 ",
@@ -208,7 +208,7 @@ func TestAppInvokerServerInvokePropagatesIdempotencyKey(t *testing.T) {
 	}
 	graphQLResp, err := client.InvokeGraphQL(context.Background(), &proto.AppInvokeGraphQLRequest{
 		InvocationToken: rootToken,
-		App:          " linear ",
+		App:             " linear ",
 		Document:        " query Viewer { viewer { id } } ",
 		Instance:        " prod ",
 		IdempotencyKey:  " graphql-call-123 ",

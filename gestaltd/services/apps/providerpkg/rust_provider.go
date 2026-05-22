@@ -31,7 +31,7 @@ type rustProviderTarget struct {
 }
 
 type rustWrapperData struct {
-	AppNameLiteral  string
+	AppNameLiteral     string
 	RootPathLiteral    string
 	PackageNameLiteral string
 	ServeFunction      string
@@ -354,7 +354,7 @@ func newRustWrapperProject(root, packageName, pluginName, kind string) (string, 
 	}
 
 	data := rustWrapperData{
-		AppNameLiteral:  strconv.Quote(pluginName),
+		AppNameLiteral:     strconv.Quote(pluginName),
 		RootPathLiteral:    strconv.Quote(absRoot),
 		PackageNameLiteral: strconv.Quote(packageName),
 		ServeFunction:      serveFunction,

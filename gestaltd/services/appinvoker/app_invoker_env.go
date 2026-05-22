@@ -4,7 +4,7 @@ import proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 
 const (
 	DefaultAppInvokerSocketEnv = proto.EnvAppInvokerSocket
-	DefaultSocketEnv              = DefaultAppInvokerSocketEnv
+	DefaultSocketEnv           = DefaultAppInvokerSocketEnv
 	defaultAppInvokerTokenEnv  = DefaultAppInvokerSocketEnv + "_TOKEN"
 )
 

@@ -28,14 +28,14 @@ import (
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
-	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
-	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
@@ -174,9 +174,9 @@ type Deps struct {
 	AgentManager          agentmanager.Service
 	Egress                EgressDeps
 	AuthorizationProvider core.AuthorizationProvider
-	AppInvoker         invocation.Invoker
-	AppRuntime         appruntime.Provider
-	AppRuntimeRegistry *pluginRuntimeRegistry
+	AppInvoker            invocation.Invoker
+	AppRuntime            appruntime.Provider
+	AppRuntimeRegistry    *pluginRuntimeRegistry
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 	HostServiceTLSCAFile  string
 	HostServiceTLSCAPEM   string
@@ -240,12 +240,12 @@ type Result struct {
 	ConnectionAuth        func() map[string]map[string]OAuthHandler
 	ManualConnectionAuth  func() map[string]map[string]ManualTokenExchanger
 	Invoker               invocation.Invoker
-	AppInvoker         invocation.Invoker
+	AppInvoker            invocation.Invoker
 	CapabilityLister      invocation.CapabilityLister
 	AuditSink             core.AuditSink
 	SecretManager         core.SecretManager
 	Telemetry             core.TelemetryProvider
-	AppRuntimes        RuntimeInspector
+	AppRuntimes           RuntimeInspector
 	ProviderDevSessions   *providerdev.Manager
 	PublicHostServices    *runtimehost.PublicHostServiceRegistry
 
@@ -1209,7 +1209,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:        authz,
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.APIConnection,
-		AppInvokes:     agentPluginInvokes(cfg),
+		AppInvokes:        agentPluginInvokes(cfg),
 	}))
 	agentManager.SetTarget(agentmanager.New(agentmanager.Config{
 		Providers:                     providers,
@@ -1220,7 +1220,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Authorizer:                    authz,
 		DefaultConnection:             connMaps.DefaultConnection,
 		CatalogConnection:             connMaps.APIConnection,
-		AppInvokes:                 agentPluginInvokes(cfg),
+		AppInvokes:                    agentPluginInvokes(cfg),
 		AgentConnections:              agentConnectionBindings(cfg),
 		SessionStart:                  agentSessionStartConfigs(cfg),
 		DefaultToolNarrowingThreshold: cfg.Server.Agent.DefaultToolNarrowingThreshold,
@@ -1297,12 +1297,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		ConnectionAuth:               connAuthResolver,
 		ManualConnectionAuth:         manualConnAuthResolver,
 		Invoker:                      sharedInvoker,
-		AppInvoker:                pluginInvoker,
+		AppInvoker:                   pluginInvoker,
 		CapabilityLister:             sharedInvoker,
 		AuditSink:                    audit,
 		SecretManager:                prepared.SecretManager,
 		Telemetry:                    prepared.Telemetry,
-		AppRuntimes:               prepared.pluginRuntimeRegistry,
+		AppRuntimes:                  prepared.pluginRuntimeRegistry,
 		ProviderDevSessions:          providerDevSessions,
 		PublicHostServices:           publicHostServices,
 		pluginRuntimeRegistry:        prepared.pluginRuntimeRegistry,

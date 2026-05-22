@@ -308,7 +308,7 @@ func workflowConfigAgentTarget(agent *config.WorkflowAgentConfig) *coreworkflow.
 	for _, tool := range agent.Tools {
 		tools = append(tools, coreagent.ToolRef{
 			System:      strings.TrimSpace(tool.System),
-			App:      strings.TrimSpace(tool.App),
+			App:         strings.TrimSpace(tool.App),
 			Operation:   strings.TrimSpace(tool.Operation),
 			Connection:  strings.TrimSpace(tool.Connection),
 			Instance:    strings.TrimSpace(tool.Instance),
@@ -357,7 +357,7 @@ func workflowConfigAgentSteps(steps []config.WorkflowAgentStepConfig) []corework
 		for _, tool := range step.Tools {
 			tools = append(tools, coreagent.ToolRef{
 				System:      strings.TrimSpace(tool.System),
-				App:      strings.TrimSpace(tool.App),
+				App:         strings.TrimSpace(tool.App),
 				Operation:   strings.TrimSpace(tool.Operation),
 				Connection:  strings.TrimSpace(tool.Connection),
 				Instance:    strings.TrimSpace(tool.Instance),
@@ -399,7 +399,7 @@ func workflowConfigOutputDelivery(delivery *config.WorkflowOutputDeliveryConfig)
 	}
 	out := &coreworkflow.OutputDelivery{
 		Target: coreworkflow.AppTarget{
-			AppName: strings.TrimSpace(delivery.Target.Name),
+			AppName:    strings.TrimSpace(delivery.Target.Name),
 			Operation:  strings.TrimSpace(delivery.Target.Operation),
 			Connection: strings.TrimSpace(delivery.Target.Connection),
 			Instance:   strings.TrimSpace(delivery.Target.Instance),
@@ -573,7 +573,7 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 				continue
 			}
 			base = append(base, core.AccessPermission{
-				App:     pluginName,
+				App:        pluginName,
 				Operations: []string{operation},
 			})
 		}
@@ -582,7 +582,7 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 			operation := strings.TrimSpace(delivery.Target.Operation)
 			if pluginName != "" && operation != "" {
 				base = append(base, core.AccessPermission{
-					App:     pluginName,
+					App:        pluginName,
 					Operations: []string{operation},
 				})
 			}
@@ -592,7 +592,7 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 			operation := strings.TrimSpace(delivery.Target.Operation)
 			if pluginName != "" && operation != "" {
 				base = append(base, core.AccessPermission{
-					App:     pluginName,
+					App:        pluginName,
 					Operations: []string{operation},
 				})
 			}
@@ -607,7 +607,7 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 					continue
 				}
 				base = append(base, core.AccessPermission{
-					App:     pluginName,
+					App:        pluginName,
 					Operations: []string{operation},
 				})
 			}
@@ -616,7 +616,7 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 				operation := strings.TrimSpace(delivery.Target.Operation)
 				if pluginName != "" && operation != "" {
 					base = append(base, core.AccessPermission{
-						App:     pluginName,
+						App:        pluginName,
 						Operations: []string{operation},
 					})
 				}
@@ -632,7 +632,7 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 	operation := strings.TrimSpace(pluginTarget.Operation)
 	if pluginName != "" && operation != "" {
 		base = []core.AccessPermission{{
-			App:     pluginName,
+			App:        pluginName,
 			Operations: []string{operation},
 		}}
 	}
@@ -702,7 +702,7 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 				continue
 			}
 			if err := workflowConfigValidateNoUserCredentialTarget(cfg, coreworkflow.AppTarget{
-				AppName: strings.TrimSpace(tool.App),
+				AppName:    strings.TrimSpace(tool.App),
 				Operation:  strings.TrimSpace(tool.Operation),
 				Connection: strings.TrimSpace(tool.Connection),
 				Instance:   strings.TrimSpace(tool.Instance),
@@ -728,7 +728,7 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 					continue
 				}
 				if err := workflowConfigValidateNoUserCredentialTarget(cfg, coreworkflow.AppTarget{
-					AppName: strings.TrimSpace(tool.App),
+					AppName:    strings.TrimSpace(tool.App),
 					Operation:  strings.TrimSpace(tool.Operation),
 					Connection: strings.TrimSpace(tool.Connection),
 					Instance:   strings.TrimSpace(tool.Instance),

@@ -415,7 +415,7 @@ func (r *workflowRuntime) invokeAgent(ctx context.Context, req coreworkflow.Invo
 		turnCtx = agentmanager.WithInheritedOutputDelivery(turnCtx, inheritedDelivery)
 	}
 	turn, err := agentManager.CreateTurn(turnCtx, principalValue, coreagent.ManagerCreateTurnRequest{
-		CallerAppName:  callerAppName,
+		CallerAppName:     callerAppName,
 		SessionID:         session.ID,
 		Model:             agentTarget.Model,
 		Messages:          messages,
@@ -522,7 +522,7 @@ func (r *workflowRuntime) invokeAgentSteps(runCtx, rootCtx context.Context, req 
 			turnCtx = agentmanager.WithInheritedOutputDelivery(turnCtx, inheritedDelivery)
 		}
 		turn, err := agentManager.CreateTurn(turnCtx, p, coreagent.ManagerCreateTurnRequest{
-			CallerAppName:  callerAppName,
+			CallerAppName:     callerAppName,
 			SessionID:         session.ID,
 			Model:             agentTarget.Model,
 			Messages:          messages,

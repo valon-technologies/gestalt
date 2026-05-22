@@ -57,7 +57,7 @@ type Config struct {
 	Providers                    ProvidersConfig                             `yaml:"providers"`
 	Runtime                      RuntimeConfig                               `yaml:"runtime,omitempty"`
 	Workflows                    WorkflowsConfig                             `yaml:"workflows,omitempty"`
-	Apps                      map[string]*ProviderEntry                   `yaml:"apps,omitempty"`
+	Apps                         map[string]*ProviderEntry                   `yaml:"apps,omitempty"`
 }
 
 type ProviderRepositoryConfig struct {
@@ -500,8 +500,8 @@ type ProviderEntry struct {
 	UI                string                        `yaml:"-"`
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
-	Invokes           []AppInvocationDependency  `yaml:"invokes,omitempty"`
-	Capabilities      *AppCapabilitiesConfig     `yaml:"capabilities,omitempty"`
+	Invokes           []AppInvocationDependency     `yaml:"invokes,omitempty"`
+	Capabilities      *AppCapabilitiesConfig        `yaml:"capabilities,omitempty"`
 	IndexedDB         *HostIndexedDBBindingConfig   `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
@@ -833,13 +833,13 @@ func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
 }
 
 type WorkflowInvokeConfig struct {
-	App    string `yaml:"app,omitempty"`
+	App       string `yaml:"app,omitempty"`
 	Operation string `yaml:"operation,omitempty"`
 }
 
 type WorkflowTargetConfig struct {
-	App *WorkflowAppTargetConfig `yaml:"app,omitempty"`
-	Agent  *WorkflowAgentConfig        `yaml:"agent,omitempty"`
+	App   *WorkflowAppTargetConfig `yaml:"app,omitempty"`
+	Agent *WorkflowAgentConfig     `yaml:"agent,omitempty"`
 }
 
 type WorkflowAppTargetConfig struct {
@@ -915,7 +915,7 @@ func (c *WorkflowAgentStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type WorkflowOutputDeliveryConfig struct {
-	Target         WorkflowAppTargetConfig        `yaml:"target,omitempty"`
+	Target         WorkflowAppTargetConfig           `yaml:"target,omitempty"`
 	InputBindings  []WorkflowOutputBindingConfig     `yaml:"inputBindings,omitempty"`
 	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
 }
@@ -941,7 +941,7 @@ type WorkflowAgentMessage struct {
 
 type WorkflowAgentToolRef struct {
 	System      string `yaml:"system,omitempty"`
-	App      string `yaml:"app,omitempty"`
+	App         string `yaml:"app,omitempty"`
 	Operation   string `yaml:"operation,omitempty"`
 	Connection  string `yaml:"connection,omitempty"`
 	Instance    string `yaml:"instance,omitempty"`
@@ -988,7 +988,7 @@ type ProviderMCPSurfaceOverride struct {
 type UIEntry struct {
 	ProviderEntry `yaml:",inline"`
 	Path          string `yaml:"path,omitempty"`
-	OwnerApp   string `yaml:"-"`
+	OwnerApp      string `yaml:"-"`
 }
 
 func (e *UIEntry) UnmarshalYAML(value *yaml.Node) error {
@@ -2264,11 +2264,11 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 type OperationOverride = providermanifestv1.ManifestOperationOverride
 
 type AppInvocationDependency struct {
-	App         string                            `yaml:"app,omitempty"`
+	App            string                            `yaml:"app,omitempty"`
 	Operation      string                            `yaml:"operation,omitempty"`
 	Surface        string                            `yaml:"surface,omitempty"`
 	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
-	RunAs          *AppInvocationRunAsConfig      `yaml:"runAs,omitempty"`
+	RunAs          *AppInvocationRunAsConfig         `yaml:"runAs,omitempty"`
 }
 
 type AppCapabilitiesConfig struct {
@@ -2282,7 +2282,7 @@ type AppWorkflowCapabilitiesConfig struct {
 type AppInvocationRunAsConfig struct {
 	Subject          *AppInvocationRunAsSubjectConfig     `yaml:"subject,omitempty"`
 	ExternalIdentity *AppInvocationExternalIdentityConfig `yaml:"externalIdentity,omitempty"`
-	ApplyByDefault   *bool                                   `yaml:"applyByDefault,omitempty"`
+	ApplyByDefault   *bool                                `yaml:"applyByDefault,omitempty"`
 }
 
 type AppInvocationRunAsSubjectConfig struct {

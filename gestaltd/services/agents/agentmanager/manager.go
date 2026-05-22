@@ -19,12 +19,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
+	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
-	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -51,7 +51,7 @@ var (
 )
 
 const (
-	agentToolSearchAllApp     = "*"
+	agentToolSearchAllApp        = "*"
 	agentToolListDefaultPageSize = 100
 	agentToolListMaxPageSize     = 1000
 	agentToolSchemaMaxBytes      = 128 * 1024
@@ -139,7 +139,7 @@ type Manager struct {
 	authorizer                    authorization.RuntimeAuthorizer
 	defaultConnection             map[string]string
 	catalogConnection             map[string]string
-	appInvokes                map[string][]invocation.AppInvocationDependency
+	appInvokes                    map[string][]invocation.AppInvocationDependency
 	agentConnections              map[string][]string
 	sessionStart                  map[string]*coreagent.SessionStartConfig
 	defaultToolNarrowingThreshold int
@@ -155,7 +155,7 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		appInvokes:     invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
+		appInvokes:        invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
 		agentConnections:  cloneStringSliceMap(cfg.AgentConnections),
 		sessionStart:      cloneSessionStartConfigMap(cfg.SessionStart),
 		defaultToolNarrowingThreshold: effectiveAgentToolNarrowingThreshold(
@@ -1237,7 +1237,7 @@ func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, prov
 		ProviderName:            providerName,
 		SessionID:               sessionID,
 		TurnID:                  turnID,
-		CallerAppName:        strings.TrimSpace(callerAppName),
+		CallerAppName:           strings.TrimSpace(callerAppName),
 		SubjectID:               subject.SubjectID,
 		SubjectKind:             subject.SubjectKind,
 		CredentialSubjectID:     subject.CredentialSubjectID,
@@ -1571,7 +1571,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		description = strings.TrimSpace(opMeta.Description)
 	}
 	target := coreagent.ToolTarget{
-		App:                pluginName,
+		App:                   pluginName,
 		Operation:             opMeta.ID,
 		Connection:            connection,
 		Instance:              sessionInstance,
@@ -2014,7 +2014,7 @@ func newAgentToolSearchScope(refs []coreagent.ToolRef) agentToolSearchScope {
 		return agentToolSearchScope{all: true}
 	}
 	scope := agentToolSearchScope{
-		apps:  map[string][]coreagent.ToolRef{},
+		apps:     map[string][]coreagent.ToolRef{},
 		exactOps: map[string]map[string][]coreagent.ToolRef{},
 	}
 	for i := range refs {
@@ -2764,7 +2764,7 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 	projectedCandidate.operation = projectedOperation
 	ref := candidate.ref
 	target := coreagent.ToolTarget{
-		App:                strings.TrimSpace(ref.App),
+		App:                   strings.TrimSpace(ref.App),
 		Operation:             strings.TrimSpace(ref.Operation),
 		Connection:            core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
 		Instance:              strings.TrimSpace(ref.Instance),
@@ -2816,7 +2816,7 @@ func (m *Manager) listedUnavailableAgentPluginTool(candidate agentToolUnavailabl
 	ref.Title = ""
 	ref.Description = ""
 	target := coreagent.ToolTarget{
-		App:         ref.App,
+		App:            ref.App,
 		Connection:     ref.Connection,
 		Instance:       ref.Instance,
 		CredentialMode: ref.CredentialMode,
@@ -2861,7 +2861,7 @@ func capabilityAnnotationsFromCatalog(value catalog.OperationAnnotations) core.C
 func agentToolRefFromTarget(target coreagent.ToolTarget) coreagent.ToolRef {
 	return coreagent.ToolRef{
 		System:                target.System,
-		App:                target.App,
+		App:                   target.App,
 		Operation:             target.Operation,
 		Connection:            target.Connection,
 		Instance:              target.Instance,
@@ -2975,7 +2975,7 @@ func agentUnavailableToolMCPName(target coreagent.ToolTarget) string {
 		reason = strings.TrimSpace(target.Unavailable.Reason)
 	}
 	return agentToolMCPName(coreagent.ToolTarget{
-		App:     strings.TrimSpace(target.App),
+		App:        strings.TrimSpace(target.App),
 		Operation:  reason,
 		Connection: core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
 		Instance:   strings.TrimSpace(target.Instance),

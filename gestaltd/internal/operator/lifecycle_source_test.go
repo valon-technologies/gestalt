@@ -35,7 +35,7 @@ import (
 const (
 	testOwner   = "testowner"
 	testRepo    = "testrepo"
-	testApp  = "testplugin"
+	testApp     = "testplugin"
 	testVersion = "1.0.0"
 	testSource  = "github.com/" + testOwner + "/" + testRepo + "/apps/" + testApp
 	testBinary  = "fake-binary-content"
@@ -1073,7 +1073,7 @@ apps:
 	explicitArtifactsDir := filepath.Join(dir, "explicit-artifacts")
 	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{
 		ArtifactsDir: explicitArtifactsDir,
-		AppScope:  []string{"alpha"},
+		AppScope:     []string{"alpha"},
 	}, false); err != nil {
 		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths with explicit artifacts dir: %v", err)
 	}
@@ -1095,7 +1095,7 @@ apps:
 	}
 	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{
 		ArtifactsDir: relativeArtifactsDir,
-		AppScope:  []string{"alpha"},
+		AppScope:     []string{"alpha"},
 	}, false); err != nil {
 		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths with relative artifacts dir: %v", err)
 	}

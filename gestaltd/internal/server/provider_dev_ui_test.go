@@ -75,10 +75,10 @@ func TestProviderDevMountedUIHandlerOverridesFallback(t *testing.T) {
 	})
 	s := &Server{providerDevSessions: manager}
 	handler := s.mountedUIHandler(MountedUI{
-		Name:       "roadmap",
-		Path:       "/roadmap",
+		Name:    "roadmap",
+		Path:    "/roadmap",
 		AppName: "roadmap",
-		Handler:    fallback,
+		Handler: fallback,
 	})
 	req := httptest.NewRequest(http.MethodGet, "/roadmap/sync?tab=preview", nil)
 	req.Header.Set("Range", "bytes=0-3")
@@ -152,8 +152,8 @@ func TestProviderDevMountedUIHandlerUsesMountedAuthRuntime(t *testing.T) {
 		},
 	}
 	mounted := MountedUI{
-		Name:       "roadmap",
-		Path:       "/roadmap",
+		Name:    "roadmap",
+		Path:    "/roadmap",
 		AppName: "roadmap",
 	}
 	req := httptest.NewRequest(http.MethodGet, "/roadmap/", nil)
@@ -198,8 +198,8 @@ func TestProviderDevMountedUIHandlerUsesMountedAuthRuntime(t *testing.T) {
 	}()
 
 	handler := s.mountedUIHandler(MountedUI{
-		Name:       "roadmap",
-		Path:       "/roadmap",
+		Name:    "roadmap",
+		Path:    "/roadmap",
 		AppName: "roadmap",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("remote fallback"))
@@ -246,8 +246,8 @@ func TestProviderDevMountedUIHandlerUsesAnonymousForNoAuthMountedUI(t *testing.T
 		},
 	}
 	mounted := MountedUI{
-		Name:       "roadmap",
-		Path:       "/roadmap",
+		Name:    "roadmap",
+		Path:    "/roadmap",
 		AppName: "roadmap",
 	}
 	p := s.providerDevUIPrincipal(httptest.NewRequest(http.MethodGet, "/roadmap/", nil), mounted)
@@ -289,8 +289,8 @@ func TestProviderDevMountedUIHandlerUsesAnonymousForNoAuthMountedUI(t *testing.T
 	}()
 
 	handler := s.mountedUIHandler(MountedUI{
-		Name:       "roadmap",
-		Path:       "/roadmap",
+		Name:    "roadmap",
+		Path:    "/roadmap",
 		AppName: "roadmap",
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("remote fallback"))

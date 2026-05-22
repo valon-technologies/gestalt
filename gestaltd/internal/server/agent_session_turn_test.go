@@ -393,7 +393,7 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 	user := seedAPITokenWithPermissions(t, services, plaintext, hashed, "agent-user", []core.AccessPermission{{
-		App:     "roadmap",
+		App:        "roadmap",
 		Operations: []string{"sync"},
 	}})
 	ts := newTestServer(t, func(cfg *server.Config) {

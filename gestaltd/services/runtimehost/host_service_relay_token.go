@@ -26,7 +26,7 @@ type HostServiceRelayTokenManager struct {
 }
 
 type HostServiceRelayTokenRequest struct {
-	AppName   string
+	AppName      string
 	SessionID    string
 	Service      string
 	MethodPrefix string
@@ -34,7 +34,7 @@ type HostServiceRelayTokenRequest struct {
 }
 
 type HostServiceRelayTarget struct {
-	AppName   string
+	AppName      string
 	SessionID    string
 	Service      string
 	MethodPrefix string
@@ -42,7 +42,7 @@ type HostServiceRelayTarget struct {
 
 type hostServiceRelayTokenClaims struct {
 	jwt.RegisteredClaims
-	AppName   string `json:"app,omitempty"`
+	AppName      string `json:"app,omitempty"`
 	SessionID    string `json:"session_id,omitempty"`
 	Service      string `json:"service,omitempty"`
 	MethodPrefix string `json:"method_prefix,omitempty"`
@@ -92,7 +92,7 @@ func (m *HostServiceRelayTokenManager) MintToken(req HostServiceRelayTokenReques
 			NotBefore: jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
-		AppName:   strings.TrimSpace(req.AppName),
+		AppName:      strings.TrimSpace(req.AppName),
 		SessionID:    strings.TrimSpace(req.SessionID),
 		Service:      service,
 		MethodPrefix: methodPrefix,
@@ -112,7 +112,7 @@ func (m *HostServiceRelayTokenManager) ResolveToken(token string) (HostServiceRe
 		return HostServiceRelayTarget{}, fmt.Errorf("host service relay token is invalid or expired")
 	}
 	return HostServiceRelayTarget{
-		AppName:   strings.TrimSpace(claims.AppName),
+		AppName:      strings.TrimSpace(claims.AppName),
 		SessionID:    strings.TrimSpace(claims.SessionID),
 		Service:      service,
 		MethodPrefix: methodPrefix,

@@ -24,7 +24,7 @@ const (
 
 type StagePreparedInstallOptions struct {
 	VersionOverride string
-	AppName      string
+	AppName         string
 	GOOS            string
 	GOARCH          string
 }
@@ -32,7 +32,7 @@ type StagePreparedInstallOptions struct {
 type StageSourcePreparedInstallOptions struct {
 	Kind            string
 	VersionOverride string
-	AppName      string
+	AppName         string
 	GOOS            string
 	GOARCH          string
 }
@@ -85,7 +85,7 @@ func StageSourcePreparedInstallDir(manifestPath, stagingDir string, opts StageSo
 	}
 	return stagePreparedInstallDir(manifestPath, stagingDir, srcManifest, StagePreparedInstallOptions{
 		VersionOverride: opts.VersionOverride,
-		AppName:      opts.AppName,
+		AppName:         opts.AppName,
 		GOOS:            opts.GOOS,
 		GOARCH:          opts.GOARCH,
 	})

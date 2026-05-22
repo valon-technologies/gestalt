@@ -64,4 +64,3 @@ func (s *routingCacheServer) Touch(ctx context.Context, req *proto.CacheTouchReq
 	}
 	return server.Touch(ctx, req)
 }
-

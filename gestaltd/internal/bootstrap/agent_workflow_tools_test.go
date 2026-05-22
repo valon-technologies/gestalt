@@ -18,9 +18,9 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 )
 
@@ -31,7 +31,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
@@ -155,9 +155,9 @@ func TestAgentRuntimeWorkflowSystemToolStartsRunWithInheritedOutputDelivery(t *t
 		Tools: []coreagent.Tool{workflowTool},
 		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
 			Target: coreworkflow.AppTarget{
-				AppName: "notification",
-				Operation:  "reply",
-				Input:      map[string]any{"format": "plain"},
+				AppName:   "notification",
+				Operation: "reply",
+				Input:     map[string]any{"format": "plain"},
 			},
 			CredentialMode: core.ConnectionModeNone,
 			InputBindings: []coreworkflow.OutputBinding{
@@ -311,8 +311,8 @@ func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithInheritedOutputDelive
 		Tools: []coreagent.Tool{workflowTool},
 		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
 			Target: coreworkflow.AppTarget{
-				AppName: "notification",
-				Operation:  "reply",
+				AppName:   "notification",
+				Operation: "reply",
 			},
 			InputBindings: []coreworkflow.OutputBinding{
 				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
@@ -409,8 +409,8 @@ func TestAgentRuntimeWorkflowSystemToolRejectsInheritedOutputDeliveryForConditio
 		Tools: []coreagent.Tool{workflowTool},
 		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
 			Target: coreworkflow.AppTarget{
-				AppName: "notification",
-				Operation:  "reply",
+				AppName:   "notification",
+				Operation: "reply",
 			},
 			InputBindings: []coreworkflow.OutputBinding{
 				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
@@ -559,8 +559,8 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 		Tools: []coreagent.Tool{workflowTool},
 		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
 			Target: coreworkflow.AppTarget{
-				AppName: "notification",
-				Operation:  "reply",
+				AppName:   "notification",
+				Operation: "reply",
 			},
 			InputBindings: []coreworkflow.OutputBinding{
 				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
@@ -612,7 +612,7 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 						ID       string `json:"id"`
 						Prompt   string `json:"prompt"`
 						ToolRefs []struct {
-							App    string `json:"app"`
+							App       string `json:"app"`
 							Operation string `json:"operation"`
 						} `json:"toolRefs"`
 					} `json:"steps"`
@@ -1002,7 +1002,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
@@ -1068,13 +1068,13 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithDelegatedCallerToolRef
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		CallerAppName: "slack",
 		Permissions: []core.AccessPermission{{
-			App:     "github",
+			App:        "github",
 			Operations: []string{"bot.createPullRequest"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
 			{
-				App:                "github",
+				App:                   "github",
 				Operation:             "bot.createPullRequest",
 				CredentialMode:        core.ConnectionModeNone,
 				RunAs:                 runAs,
@@ -1138,7 +1138,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithExplicitEmptyAgentTool
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
@@ -1532,7 +1532,7 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
 			"pageSize": 1,
-			"app":   "roadmap",
+			"app":      "roadmap",
 			"status":   string(coreworkflow.RunStatusSucceeded),
 		},
 	})
@@ -1562,7 +1562,7 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 		Arguments: map[string]any{
 			"pageSize":  1,
 			"pageToken": firstBody.NextPageToken,
-			"app":    "roadmap",
+			"app":       "roadmap",
 			"status":    string(coreworkflow.RunStatusSucceeded),
 		},
 	})
@@ -1707,7 +1707,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testi
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
@@ -1747,7 +1747,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 	workflowTool := mustWorkflowSystemTool(t, runtime, workflowSystemToolSchedulesCreate)
 	runGrant := mustMintWorkflowSystemRunGrant(t, runtime, workflowSystemRunGrantScope{
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
@@ -1771,7 +1771,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 						"prompt":   "Sync roadmap",
 						"toolRefs": []any{
 							map[string]any{
-								"app":         "roadmap",
+								"app":            "roadmap",
 								"operation":      "sync",
 								"credentialMode": "subject",
 							},
@@ -2138,7 +2138,7 @@ func (p *workflowSystemToolRecordingProvider) Ping(context.Context) error { retu
 func (p *workflowSystemToolRecordingProvider) Close() error               { return nil }
 
 type workflowSystemRunGrantScope struct {
-	CallerAppName        string
+	CallerAppName           string
 	Permissions             []core.AccessPermission
 	ToolRefs                []coreagent.ToolRef
 	Tools                   []coreagent.Tool
@@ -2153,7 +2153,7 @@ func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope w
 		ProviderName:            "managed",
 		SessionID:               "session-1",
 		TurnID:                  "turn-1",
-		CallerAppName:        strings.TrimSpace(scope.CallerAppName),
+		CallerAppName:           strings.TrimSpace(scope.CallerAppName),
 		SubjectID:               principal.UserSubjectID("ada"),
 		SubjectKind:             string(principal.KindUser),
 		CredentialSubjectID:     principal.UserSubjectID("ada"),

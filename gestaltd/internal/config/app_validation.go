@@ -41,7 +41,7 @@ func pluginInvocationDependencies(dependencies []AppInvocationDependency) []apps
 	result := make([]appservice.InvocationDependency, 0, len(dependencies))
 	for _, dependency := range dependencies {
 		result = append(result, appservice.InvocationDependency{
-			App:    dependency.App,
+			App:       dependency.App,
 			Operation: dependency.Operation,
 			Surface:   appservice.SpecSurface(dependency.Surface),
 		})

@@ -14,10 +14,10 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/ui"
 	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
@@ -136,7 +136,7 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedUI, err
 		mounted = append(mounted, MountedUI{
 			Name:                name,
 			Path:                entry.Path,
-			AppName:          entry.OwnerApp,
+			AppName:             entry.OwnerApp,
 			AuthorizationPolicy: entry.AuthorizationPolicy,
 			Routes:              routes,
 			Handler:             handler,

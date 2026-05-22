@@ -99,7 +99,7 @@ type MessagePart struct {
 
 type ToolTarget struct {
 	System                string `json:",omitempty"`
-	App                string
+	App                   string
 	Operation             string
 	Connection            string
 	Instance              string
@@ -133,7 +133,7 @@ type Tool struct {
 
 type ToolRef struct {
 	System                string `json:",omitempty"`
-	App                string
+	App                   string
 	Operation             string
 	Connection            string
 	Instance              string
@@ -145,8 +145,8 @@ type ToolRef struct {
 }
 
 type ResolveToolsRequest struct {
-	ToolRefs         []ToolRef
-	ToolSource       ToolSourceMode
+	ToolRefs      []ToolRef
+	ToolSource    ToolSourceMode
 	CallerAppName string
 }
 
@@ -541,7 +541,7 @@ type ManagerUpdateSessionRequest struct {
 }
 
 type ManagerCreateTurnRequest struct {
-	CallerAppName  string
+	CallerAppName     string
 	IdempotencyKey    string
 	Model             string
 	SessionID         string

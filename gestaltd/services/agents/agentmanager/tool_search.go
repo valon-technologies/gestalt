@@ -15,7 +15,7 @@ import (
 const agentToolSearchMetadataTextMaxBytes = 1200
 
 type agentToolSearchDocument struct {
-	App      string `json:"app"`
+	App         string `json:"app"`
 	Operation   string `json:"operation"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
@@ -143,7 +143,7 @@ func agentToolSearchDoc(candidate agentToolSearchCandidate) agentToolSearchDocum
 		catalogDescription = cat.Description
 	}
 	return agentToolSearchDocument{
-		App:      agentToolSearchText(candidate.ref.App + " " + catalogName + " " + catalogDisplayName),
+		App:         agentToolSearchText(candidate.ref.App + " " + catalogName + " " + catalogDisplayName),
 		Operation:   agentToolSearchText(candidate.ref.Operation + " " + op.ID + " " + op.ProviderID + " " + op.Path),
 		Title:       agentToolSearchText(op.Title),
 		Description: agentToolSearchText(catalogDescription + " " + op.Description),

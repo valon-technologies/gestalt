@@ -9,9 +9,9 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -169,7 +169,7 @@ func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentP
 		return nil, status.Error(codes.InvalidArgument, "session_id is required")
 	}
 	turn, err := s.manager.CreateTurn(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), coreagent.ManagerCreateTurnRequest{
-		CallerAppName:  strings.TrimSpace(s.pluginName),
+		CallerAppName:     strings.TrimSpace(s.pluginName),
 		IdempotencyKey:    strings.TrimSpace(req.GetIdempotencyKey()),
 		Model:             strings.TrimSpace(req.GetModel()),
 		SessionID:         sessionID,

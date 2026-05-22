@@ -3,8 +3,8 @@ package componentprovider
 import (
 	"fmt"
 
-	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 	"gopkg.in/yaml.v3"
 )
 

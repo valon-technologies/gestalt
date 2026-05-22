@@ -4,7 +4,7 @@ export default {
   "getting-started": "Getting Started",
   "-- server": { type: "separator", title: "Server" },
   providers: "Providers",
-  applications: "Applications",
+  solutions: "Applications",
   "service-accounts": "Service Accounts",
   security: "Security",
   observability: "Observability",

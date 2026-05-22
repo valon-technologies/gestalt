@@ -91,7 +91,7 @@ func decodeManifest(data []byte, format string, sourceMode bool) (*providermanif
 }
 
 var validManifestKinds = map[string]bool{
-	providermanifestv1.KindApp:              true,
+	providermanifestv1.KindApp:                 true,
 	providermanifestv1.KindAuthentication:      true,
 	providermanifestv1.KindAuthorization:       true,
 	providermanifestv1.KindExternalCredentials: true,

@@ -283,7 +283,7 @@ func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRe
 			return nil, status.Error(codes.FailedPrecondition, "presign is not supported for plugin-scoped s3 bindings")
 		}
 		result, err := s.accessURLs.MintURL(ObjectAccessURLRequest{
-			AppName:         s.pluginName,
+			AppName:            s.pluginName,
 			BindingName:        s.bindingName,
 			Ref:                objectRefFromProto(req.GetRef()),
 			Method:             presignMethodFromProto(req.GetMethod()),

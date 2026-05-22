@@ -50,7 +50,7 @@ type managedSubjectMemberInfo struct {
 }
 
 type managedSubjectGrantInfo struct {
-	App  string `json:"app"`
+	App     string `json:"app"`
 	Role    string `json:"role"`
 	Source  string `json:"source"`
 	Mutable bool   `json:"mutable"`

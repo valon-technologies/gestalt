@@ -420,8 +420,8 @@ func newProviderBackedRoleTestAuthorizer(t *testing.T, provider *providerBackedR
 		appStaticRoles: map[string][]string{
 			"slack": roles,
 		},
-		appDynamicRoles: map[string][]string{},
-		policyStaticRoles:  map[string][]string{},
+		appDynamicRoles:   map[string][]string{},
+		policyStaticRoles: map[string][]string{},
 	}
 	return authorizer
 }

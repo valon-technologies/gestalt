@@ -17,7 +17,7 @@ func TestWorkflowTargetToProtoUsesNestedAppTarget(t *testing.T) {
 
 	target, err := workflowTargetToProto(coreworkflow.Target{
 		App: &coreworkflow.AppTarget{
-			AppName:     "demo",
+			AppName:        "demo",
 			Operation:      "refresh",
 			Connection:     "workspace",
 			Instance:       "primary",
@@ -57,7 +57,7 @@ func TestWorkflowTargetFromProtoAcceptsNestedPluginFields(t *testing.T) {
 	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
 		Kind: &proto.BoundWorkflowTarget_App{
 			App: &proto.BoundWorkflowAppTarget{
-				AppName:     " demo ",
+				AppName:        " demo ",
 				Operation:      " refresh ",
 				Connection:     " workspace ",
 				Instance:       " primary ",
@@ -97,7 +97,7 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 		Prompt:       "Sync roadmap",
 		OutputDelivery: &coreworkflow.OutputDelivery{
 			Target: coreworkflow.AppTarget{
-				AppName:     "notification",
+				AppName:        "notification",
 				Operation:      "reply",
 				CredentialMode: core.ConnectionModeUser,
 				Input:          map[string]any{"format": "plain"},
@@ -111,9 +111,9 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 		},
 		SessionReadyDelivery: &coreworkflow.OutputDelivery{
 			Target: coreworkflow.AppTarget{
-				AppName: "notification",
-				Operation:  "started",
-				Input:      map[string]any{"format": "plain"},
+				AppName:   "notification",
+				Operation: "started",
+				Input:     map[string]any{"format": "plain"},
 			},
 			CredentialMode: core.ConnectionModeNone,
 			InputBindings: []coreworkflow.OutputBinding{
@@ -251,8 +251,8 @@ func TestWorkflowAgentTargetSessionReadyDeliveryProtoErrorsUseFieldName(t *testi
 		Prompt:       "reply",
 		SessionReadyDelivery: &coreworkflow.OutputDelivery{
 			Target: coreworkflow.AppTarget{
-				AppName: "notification",
-				Operation:  "started",
+				AppName:   "notification",
+				Operation: "started",
 			},
 			InputBindings: []coreworkflow.OutputBinding{
 				{InputField: "session_id", Value: coreworkflow.OutputValueSource{}},
@@ -297,7 +297,7 @@ func TestWorkflowExecutionReferenceProtoRoundTripsRunAsSubject(t *testing.T) {
 			AuthSource:  "config",
 		},
 		Permissions: []core.AccessPermission{{
-			App:     "brain",
+			App:        "brain",
 			Operations: []string{"sources.sync"},
 		}},
 	}

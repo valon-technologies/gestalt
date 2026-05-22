@@ -18,9 +18,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -39,7 +39,7 @@ type agentRuntime struct {
 type agentSystemToolExecutionRequest struct {
 	Principal               *principal.Principal
 	ProviderName            string
-	CallerAppName        string
+	CallerAppName           string
 	SessionID               string
 	TurnID                  string
 	ToolCallID              string
@@ -333,7 +333,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	}
 	resolvedTool, err := searcher.ResolveTool(ctx, principalValue, coreagent.ToolRef{
 		System:                toolTarget.System,
-		App:                toolTarget.App,
+		App:                   toolTarget.App,
 		Operation:             toolTarget.Operation,
 		Connection:            toolTarget.Connection,
 		Instance:              toolTarget.Instance,
@@ -358,7 +358,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 		return systemTools.ExecuteSystemTool(ctx, agentSystemToolExecutionRequest{
 			Principal:               principalValue,
 			ProviderName:            strings.TrimSpace(grant.ProviderName),
-			CallerAppName:        strings.TrimSpace(grant.CallerAppName),
+			CallerAppName:           strings.TrimSpace(grant.CallerAppName),
 			SessionID:               strings.TrimSpace(req.SessionID),
 			TurnID:                  strings.TrimSpace(req.TurnID),
 			ToolCallID:              strings.TrimSpace(req.ToolCallID),
@@ -1013,7 +1013,7 @@ func executeUnavailableAgentTool(target coreagent.ToolTarget) (*coreagent.Execut
 		"error": map[string]any{
 			"code":       reason,
 			"message":    message,
-			"app":     strings.TrimSpace(target.App),
+			"app":        strings.TrimSpace(target.App),
 			"connection": strings.TrimSpace(target.Connection),
 			"instance":   strings.TrimSpace(target.Instance),
 		},

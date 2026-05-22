@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
+	"github.com/valon-technologies/gestalt/server/services/egress"
 )
 
 const maxPostConnectResponseSize = 5 * 1024 * 1024

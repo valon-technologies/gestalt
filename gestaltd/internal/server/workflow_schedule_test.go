@@ -563,8 +563,8 @@ type workflowEventTriggerResponse struct {
 }
 
 type workflowTargetResponse struct {
-	App *workflowAppTargetResponse `json:"app"`
-	Agent  *workflowAgentTargetResponse  `json:"agent"`
+	App   *workflowAppTargetResponse   `json:"app"`
+	Agent *workflowAgentTargetResponse `json:"agent"`
 }
 
 type workflowAppTargetResponse struct {
@@ -583,7 +583,7 @@ type workflowAgentTargetResponse struct {
 	TimeoutSeconds int    `json:"timeoutSeconds"`
 	ToolRefs       []struct {
 		System    string `json:"system"`
-		App    string `json:"app"`
+		App       string `json:"app"`
 		Operation string `json:"operation"`
 	} `json:"toolRefs"`
 	OutputDelivery       *workflowOutputDeliveryResponse `json:"outputDelivery"`
@@ -1069,7 +1069,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 		ID:   "sched-analytics",
 		Cron: "15 * * * *",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName:     "analytics",
+			AppName:        "analytics",
 			Operation:      "sync",
 			CredentialMode: core.ConnectionModeNone,
 		}},
@@ -1503,7 +1503,7 @@ func TestWorkflowScheduleUpdateFailureKeepsExistingExecutionRef(t *testing.T) {
 	provider := newMemoryWorkflowProvider()
 	oldTarget := coreworkflow.Target{
 		App: &coreworkflow.AppTarget{
-			AppName: "roadmap",
+			AppName:    "roadmap",
 			Operation:  "sync",
 			Connection: "analytics",
 			Instance:   "tenant-a",
@@ -2701,7 +2701,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 		ID:    "trg-ada-advanced",
 		Match: coreworkflow.EventMatch{Type: "analytics.item.synced"},
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName:     "analytics",
+			AppName:        "analytics",
 			Operation:      "sync",
 			CredentialMode: core.ConnectionModeNone,
 		}},

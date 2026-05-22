@@ -79,7 +79,7 @@ func NewLocalProvider(opts ...LocalOption) *LocalProvider {
 
 func (p *LocalProvider) Support(context.Context) (Support, error) {
 	return Support{
-		CanHostApps:           true,
+		CanHostApps:              true,
 		EgressMode:               EgressModeHostname,
 		SupportsPrepareWorkspace: true,
 	}, nil

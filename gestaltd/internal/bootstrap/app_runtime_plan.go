@@ -33,7 +33,7 @@ const (
 )
 
 type RuntimeBehavior struct {
-	CanHostApps    bool
+	CanHostApps       bool
 	HostServiceAccess RuntimeHostServiceAccess
 	EgressMode        RuntimeEgressMode
 }
@@ -65,7 +65,7 @@ func buildAppRuntimePlan(pluginName string, entry *config.ProviderEntry, deps De
 
 func runtimeAdvertisedBehavior(support appruntime.Support) RuntimeBehavior {
 	return RuntimeBehavior{
-		CanHostApps:    support.CanHostApps,
+		CanHostApps:       support.CanHostApps,
 		HostServiceAccess: RuntimeHostServiceAccessNone,
 		EgressMode:        runtimeEgressModeFromSupport(support.EgressMode),
 	}

@@ -9,9 +9,9 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"github.com/valon-technologies/gestalt/server/services/egress"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"

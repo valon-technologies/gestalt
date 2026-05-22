@@ -141,7 +141,7 @@ func TestAppInvokerExchangeRequiresExplicitGrantScope(t *testing.T) {
 	}
 
 	server := NewAppInvokerServer("caller", []invocation.AppInvocationDependency{{
-		App:    "example",
+		App:       "example",
 		Operation: "request_context",
 	}}, nil, manager)
 	_, err = server.ExchangeInvocationToken(context.Background(), &proto.ExchangeInvocationTokenRequest{

@@ -21,8 +21,8 @@ import (
 )
 
 type workflowScheduleTargetRequest struct {
-	App *workflowAppTargetRequest `json:"app,omitempty"`
-	Agent  *workflowAgentTargetRequest  `json:"agent,omitempty"`
+	App   *workflowAppTargetRequest   `json:"app,omitempty"`
+	Agent *workflowAgentTargetRequest `json:"agent,omitempty"`
 }
 
 type workflowAppTargetRequest struct {
@@ -91,7 +91,7 @@ func (r *workflowAgentStepWhenRequest) UnmarshalJSON(data []byte) error {
 }
 
 type workflowOutputDeliveryRequest struct {
-	Target         workflowAppTargetRequest    `json:"target"`
+	Target         workflowAppTargetRequest       `json:"target"`
 	InputBindings  []workflowOutputBindingRequest `json:"inputBindings,omitempty"`
 	CredentialMode string                         `json:"credentialMode,omitempty"`
 }
@@ -118,8 +118,8 @@ type workflowScheduleUpsertRequest struct {
 }
 
 type workflowScheduleTargetInfo struct {
-	App *workflowAppTargetInfo `json:"app,omitempty"`
-	Agent  *workflowAgentTargetInfo  `json:"agent,omitempty"`
+	App   *workflowAppTargetInfo   `json:"app,omitempty"`
+	Agent *workflowAgentTargetInfo `json:"agent,omitempty"`
 }
 
 type workflowAppTargetInfo struct {
@@ -166,7 +166,7 @@ type workflowAgentStepWhenInfo struct {
 }
 
 type workflowOutputDeliveryInfo struct {
-	Target         workflowAppTargetInfo    `json:"target"`
+	Target         workflowAppTargetInfo       `json:"target"`
 	InputBindings  []workflowOutputBindingInfo `json:"inputBindings,omitempty"`
 	CredentialMode string                      `json:"credentialMode,omitempty"`
 }
@@ -472,7 +472,7 @@ func workflowOutputDeliveryFromRequest(delivery *workflowOutputDeliveryRequest) 
 	}
 	return &coreworkflow.OutputDelivery{
 		Target: coreworkflow.AppTarget{
-			AppName:     strings.TrimSpace(delivery.Target.Name),
+			AppName:        strings.TrimSpace(delivery.Target.Name),
 			Operation:      strings.TrimSpace(delivery.Target.Operation),
 			Connection:     strings.TrimSpace(delivery.Target.Connection),
 			Instance:       strings.TrimSpace(delivery.Target.Instance),

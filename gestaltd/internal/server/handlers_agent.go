@@ -70,7 +70,7 @@ type agentMessagePartImageRefRequest struct {
 
 type agentToolRefRequest struct {
 	System         string `json:"system,omitempty"`
-	App         string `json:"app,omitempty"`
+	App            string `json:"app,omitempty"`
 	Operation      string `json:"operation,omitempty"`
 	Connection     string `json:"connection,omitempty"`
 	Instance       string `json:"instance,omitempty"`
@@ -1038,7 +1038,7 @@ func agentToolRefsFromRequest(refs []agentToolRefRequest) []coreagent.ToolRef {
 		ref := refs[i]
 		out = append(out, coreagent.ToolRef{
 			System:         strings.TrimSpace(ref.System),
-			App:         strings.TrimSpace(ref.App),
+			App:            strings.TrimSpace(ref.App),
 			Operation:      strings.TrimSpace(ref.Operation),
 			Connection:     strings.TrimSpace(ref.Connection),
 			Instance:       strings.TrimSpace(ref.Instance),
@@ -1063,7 +1063,7 @@ func agentToolRefsToRequest(refs []coreagent.ToolRef) []agentToolRefRequest {
 		ref := refs[i]
 		out = append(out, agentToolRefRequest{
 			System:         strings.TrimSpace(ref.System),
-			App:         strings.TrimSpace(ref.App),
+			App:            strings.TrimSpace(ref.App),
 			Operation:      strings.TrimSpace(ref.Operation),
 			Connection:     strings.TrimSpace(ref.Connection),
 			Instance:       strings.TrimSpace(ref.Instance),

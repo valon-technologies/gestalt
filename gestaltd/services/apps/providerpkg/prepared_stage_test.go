@@ -48,10 +48,10 @@ fi
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
 	staged, err := StageSourcePreparedInstallDir(manifestPath, stagingDir, StageSourcePreparedInstallOptions{
-		Kind:       providermanifestv1.KindApp,
+		Kind:    providermanifestv1.KindApp,
 		AppName: "prepared-stage-test",
-		GOOS:       runtime.GOOS,
-		GOARCH:     runtime.GOARCH,
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
 	})
 	if err != nil {
 		t.Fatalf("StageSourcePreparedInstallDir: %v", err)
@@ -133,10 +133,10 @@ fi
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
 	if _, err := StageSourcePreparedInstallDir(manifestPath, stagingDir, StageSourcePreparedInstallOptions{
-		Kind:       providermanifestv1.KindApp,
+		Kind:    providermanifestv1.KindApp,
 		AppName: "prepared-stage-test",
-		GOOS:       runtime.GOOS,
-		GOARCH:     runtime.GOARCH,
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
 	}); err != nil {
 		t.Fatalf("StageSourcePreparedInstallDir: %v", err)
 	}
@@ -413,10 +413,10 @@ chmod +x .gestalt/build/provider
 
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
 	_, err := StageSourcePreparedInstallDir(manifestPath, stagingDir, StageSourcePreparedInstallOptions{
-		Kind:       providermanifestv1.KindApp,
+		Kind:    providermanifestv1.KindApp,
 		AppName: "prepared-stage-test",
-		GOOS:       targetGOOS,
-		GOARCH:     targetGOARCH,
+		GOOS:    targetGOOS,
+		GOARCH:  targetGOARCH,
 	})
 	if err != nil {
 		t.Fatalf("StageSourcePreparedInstallDir: %v", err)
@@ -458,10 +458,10 @@ fi
 	}))
 
 	_, err := StageSourcePreparedInstallDir(manifestPath, filepath.Join(t.TempDir(), "prepared"), StageSourcePreparedInstallOptions{
-		Kind:       providermanifestv1.KindApp,
+		Kind:    providermanifestv1.KindApp,
 		AppName: "run-only",
-		GOOS:       runtime.GOOS,
-		GOARCH:     runtime.GOARCH,
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
 	})
 	if err == nil || !strings.Contains(err.Error(), "run is local-only and cannot be packaged") {
 		t.Fatalf("StageSourcePreparedInstallDir error = %v, want local-only run release error", err)
@@ -536,8 +536,8 @@ fi
 	stagingDir := filepath.Join(t.TempDir(), "prepared")
 	_, err := StagePreparedInstallDir(manifestPath, stagingDir, StagePreparedInstallOptions{
 		AppName: "prepared-stage-test",
-		GOOS:       runtime.GOOS,
-		GOARCH:     runtime.GOARCH,
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
 	})
 	if err != nil {
 		t.Fatalf("StagePreparedInstallDir: %v", err)

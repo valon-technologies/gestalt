@@ -43,16 +43,16 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
-	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
-	"github.com/valon-technologies/gestalt/server/services/egress"
-	"github.com/valon-technologies/gestalt/server/services/egressproxy"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
 	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
+	authorizationservice "github.com/valon-technologies/gestalt/server/services/authorization"
+	"github.com/valon-technologies/gestalt/server/services/egress"
+	"github.com/valon-technologies/gestalt/server/services/egressproxy"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
@@ -71,7 +71,7 @@ import (
 
 type invokePluginEnvelope struct {
 	OK                     bool               `json:"ok"`
-	TargetApp           string             `json:"target_app"`
+	TargetApp              string             `json:"target_app"`
 	TargetOperation        string             `json:"target_operation"`
 	UsedConnectionOverride bool               `json:"used_connection_override"`
 	Status                 int                `json:"status"`
@@ -204,7 +204,7 @@ type capturingAppRuntime struct {
 
 	mu                  sync.Mutex
 	startRequests       []appruntime.StartSessionRequest
-	startAppRequests []appruntime.StartAppRequest
+	startAppRequests    []appruntime.StartAppRequest
 	startTimes          []time.Time
 	sessionLifecycles   map[string]*appruntime.SessionLifecycle
 	lifecycleForSession func(index int) *appruntime.SessionLifecycle
@@ -223,7 +223,7 @@ func (r *capturingAppRuntime) Support(ctx context.Context) (appruntime.Support, 
 func (r *capturingAppRuntime) StartSession(ctx context.Context, req appruntime.StartSessionRequest) (*appruntime.Session, error) {
 	r.mu.Lock()
 	r.startRequests = append(r.startRequests, appruntime.StartSessionRequest{
-		AppName:    req.AppName,
+		AppName:       req.AppName,
 		Template:      req.Template,
 		Image:         req.Image,
 		ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
@@ -284,7 +284,7 @@ func (r *capturingAppRuntime) StartApp(ctx context.Context, req appruntime.Start
 	r.mu.Lock()
 	r.startAppRequests = append(r.startAppRequests, appruntime.StartAppRequest{
 		SessionID:  req.SessionID,
-		AppName: req.AppName,
+		AppName:    req.AppName,
 		Command:    req.Command,
 		Args:       slices.Clone(req.Args),
 		Env:        cloneRuntimeMetadata(req.Env),
@@ -305,7 +305,7 @@ func (r *capturingAppRuntime) startSessionRequests() []appruntime.StartSessionRe
 	out := make([]appruntime.StartSessionRequest, len(r.startRequests))
 	for i, req := range r.startRequests {
 		out[i] = appruntime.StartSessionRequest{
-			AppName:    req.AppName,
+			AppName:       req.AppName,
 			Template:      req.Template,
 			Image:         req.Image,
 			ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
@@ -337,7 +337,7 @@ func (r *capturingAppRuntime) startAppRequestsCopy() []appruntime.StartAppReques
 	for i, req := range r.startAppRequests {
 		out[i] = appruntime.StartAppRequest{
 			SessionID:  req.SessionID,
-			AppName: req.AppName,
+			AppName:    req.AppName,
 			Command:    req.Command,
 			Args:       slices.Clone(req.Args),
 			Env:        cloneRuntimeMetadata(req.Env),
@@ -382,10 +382,10 @@ type capturingBundleAppRuntime struct {
 	support    appruntime.Support
 	fakeHosted bool
 
-	mu                  sync.Mutex
-	startAppRequests []appruntime.StartAppRequest
-	sessionLifecycles   map[string]*appruntime.SessionLifecycle
-	fakeApps         map[string]*fakeHostedAppServer
+	mu                sync.Mutex
+	startAppRequests  []appruntime.StartAppRequest
+	sessionLifecycles map[string]*appruntime.SessionLifecycle
+	fakeApps          map[string]*fakeHostedAppServer
 }
 
 type fakeHostedAppServer struct {
@@ -446,7 +446,7 @@ func (r *capturingBundleAppRuntime) StartApp(ctx context.Context, req appruntime
 	r.mu.Lock()
 	r.startAppRequests = append(r.startAppRequests, appruntime.StartAppRequest{
 		SessionID:  req.SessionID,
-		AppName: req.AppName,
+		AppName:    req.AppName,
 		Command:    req.Command,
 		Args:       slices.Clone(req.Args),
 		Env:        cloneRuntimeMetadata(req.Env),
@@ -616,7 +616,7 @@ func (r *capturingBundleAppRuntime) startFakeHostedApp(req appruntime.StartAppRe
 				if err != nil {
 					envelope = invokePluginEnvelope{
 						OK:              false,
-						TargetApp:    targetApp,
+						TargetApp:       targetApp,
 						TargetOperation: targetOperation,
 						Error:           err.Error(),
 					}
@@ -686,7 +686,7 @@ func (r *capturingBundleAppRuntime) startFakeHostedApp(req appruntime.StartAppRe
 	return &appruntime.HostedApp{
 		ID:         "fake-" + req.SessionID,
 		SessionID:  req.SessionID,
-		AppName: req.AppName,
+		AppName:    req.AppName,
 		DialTarget: "unix://" + socketPath,
 	}, nil
 }
@@ -974,8 +974,8 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 		Target: &proto.BoundWorkflowTarget{
 			Kind: &proto.BoundWorkflowTarget_App{
 				App: &proto.BoundWorkflowAppTarget{
-					AppName: "roadmap",
-					Operation:  "sync",
+					AppName:   "roadmap",
+					Operation: "sync",
 				},
 			},
 		},
@@ -1106,7 +1106,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 		IdempotencyKey:  "plugin-agent-turn",
 		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,
 		ToolRefs: []*proto.AgentToolRef{{
-			App:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}},
 		Metadata: turnMetadata,
@@ -1189,7 +1189,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 func fakeHostedInvokePlugin(targetApp, targetOperation, invocationToken string, env map[string]string) (invokePluginEnvelope, error) {
 	envelope := invokePluginEnvelope{
 		OK:              false,
-		TargetApp:    targetApp,
+		TargetApp:       targetApp,
 		TargetOperation: targetOperation,
 	}
 	address, token, err := fakeHostedHostServiceRelay("plugin invoker", env)
@@ -1215,7 +1215,7 @@ func fakeHostedInvokePlugin(targetApp, targetOperation, invocationToken string, 
 
 	resp, err := proto.NewAppInvokerClient(conn).Invoke(ctx, &proto.AppInvokeRequest{
 		InvocationToken: invocationToken,
-		App:          targetApp,
+		App:             targetApp,
 		Operation:       targetOperation,
 	})
 	if err != nil {
@@ -1237,7 +1237,7 @@ func (r *capturingBundleAppRuntime) startAppRequestsCopy() []appruntime.StartApp
 	for i, req := range r.startAppRequests {
 		out[i] = appruntime.StartAppRequest{
 			SessionID:  req.SessionID,
-			AppName: req.AppName,
+			AppName:    req.AppName,
 			Command:    req.Command,
 			Args:       slices.Clone(req.Args),
 			Env:        cloneRuntimeMetadata(req.Env),
@@ -3134,7 +3134,7 @@ func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption)
 
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey: secret,
-		AppInvoker: bridge,
+		AppInvoker:    bridge,
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -3239,7 +3239,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	}
 	if allowSurface {
 		callerInvokes = append(callerInvokes, config.AppInvocationDependency{
-			App:  "linear",
+			App:     "linear",
 			Surface: "graphql",
 		})
 	}
@@ -3265,7 +3265,7 @@ func newGraphQLSurfaceInvokeHarness(t *testing.T, graphQLURL string, allowSurfac
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), testRuntimePublicEndpointDeps(t, Deps{
 		EncryptionKey: secret,
-		AppInvoker: bridge,
+		AppInvoker:    bridge,
 	}))
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -4053,7 +4053,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		Invoker:   broker,
 		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"echoext": {{
-				App:    "roadmap",
+				App:       "roadmap",
 				Operation: "sync",
 			}},
 		},
@@ -4090,7 +4090,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				Runtime:              &config.RuntimePlacementConfig{},
 				Invokes: []config.AppInvocationDependency{{
-					App:    "roadmap",
+					App:       "roadmap",
 					Operation: "sync",
 				}},
 			},
@@ -4120,7 +4120,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 	}
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "roadmap",
+		App:        "roadmap",
 		Operations: []string{"sync"},
 	}, {
 		App: "managed",
@@ -4346,7 +4346,7 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 		"cron":          "*/5 * * * *",
 		"timezone":      "America/New_York",
 		"target": map[string]any{
-			"app":     "roadmap",
+			"app":        "roadmap",
 			"operation":  "sync",
 			"connection": "work",
 			"instance":   "default",
@@ -4365,7 +4365,7 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 			Cron   string `json:"cron"`
 			Paused bool   `json:"paused"`
 			Target struct {
-				App    string         `json:"app"`
+				App       string         `json:"app"`
 				Operation string         `json:"operation"`
 				Input     map[string]any `json:"input"`
 			} `json:"target"`
@@ -4408,7 +4408,7 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 		"timezone":      "UTC",
 		"paused":        true,
 		"target": map[string]any{
-			"app":    "roadmap",
+			"app":       "roadmap",
 			"operation": "status",
 		},
 	}, "")
@@ -4492,7 +4492,7 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 			"subject": "item-123",
 		},
 		"target": map[string]any{
-			"app":    "slack",
+			"app":       "slack",
 			"operation": "chat.postMessage",
 		},
 	}, "")
@@ -4510,7 +4510,7 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 				Subject string `json:"subject"`
 			} `json:"match"`
 			Target struct {
-				App    string `json:"app"`
+				App       string `json:"app"`
 				Operation string `json:"operation"`
 			} `json:"target"`
 		} `json:"trigger"`
@@ -4547,7 +4547,7 @@ func TestPluginWorkflowManagerCRUDUsesRequestContext(t *testing.T) {
 			"type": "roadmap.item.synced",
 		},
 		"target": map[string]any{
-			"app":    "roadmap",
+			"app":       "roadmap",
 			"operation": "status",
 		},
 	}, "")
@@ -4759,7 +4759,7 @@ func TestPluginWorkflowManagerCapabilitiesRestrictHostMethods(t *testing.T) {
 		"provider_name": "basic",
 		"cron":          "*/5 * * * *",
 		"target": map[string]any{
-			"app":    "roadmap",
+			"app":       "roadmap",
 			"operation": "sync",
 		},
 	}, "")
@@ -4823,7 +4823,7 @@ func TestPluginWorkflowManagerRejectsInvalidInvocationToken(t *testing.T) {
 		"invocation_token": "forged-token",
 		"cron":             "*/5 * * * *",
 		"target": map[string]any{
-			"app":    "roadmap",
+			"app":       "roadmap",
 			"operation": "sync",
 		},
 	}, "")
@@ -4912,7 +4912,7 @@ func TestPluginInvokesInheritAmbientConnectionAndAllowOverride(t *testing.T) {
 			}
 
 			params := map[string]any{
-				"app":    "example",
+				"app":       "example",
 				"operation": "request_context",
 			}
 			if tc.invokeConnection != "" {
@@ -4985,7 +4985,7 @@ func TestPluginInvokesInheritResolvedCredentialConnection(t *testing.T) {
 		"",
 		"invoke_plugin",
 		map[string]any{
-			"app":    "example",
+			"app":       "example",
 			"operation": "request_context",
 		},
 	)
@@ -5029,7 +5029,7 @@ func TestPluginInvokesPreserveCallerScopes(t *testing.T) {
 		"",
 		"invoke_plugin",
 		map[string]any{
-			"app":    "example",
+			"app":       "example",
 			"operation": "request_context",
 		},
 	)
@@ -5168,7 +5168,7 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 		"",
 		"invoke_plugin_graphql",
 		map[string]any{
-			"app":   "linear",
+			"app":      "linear",
 			"document": document,
 			"variables": map[string]any{
 				"team": "eng",
@@ -5184,7 +5184,7 @@ func TestPluginInvokesGraphQLSurface(t *testing.T) {
 
 	var got struct {
 		OK                     bool           `json:"ok"`
-		TargetApp           string         `json:"target_app"`
+		TargetApp              string         `json:"target_app"`
 		TargetOperation        string         `json:"target_operation"`
 		UsedConnectionOverride bool           `json:"used_connection_override"`
 		Status                 int            `json:"status"`
@@ -5291,7 +5291,7 @@ func TestPluginInvokesRejectUndeclaredGraphQLSurface(t *testing.T) {
 		"",
 		"invoke_plugin_graphql",
 		map[string]any{
-			"app":   "linear",
+			"app":      "linear",
 			"document": "query Viewer($team: String!) { viewer(team: $team) { id } }",
 			"variables": map[string]any{
 				"team": "eng",
@@ -5347,7 +5347,7 @@ func TestPluginInvokesDoNotLeakCallerAccessToPolicylessTargets(t *testing.T) {
 		"",
 		"invoke_plugin",
 		map[string]any{
-			"app":    "example",
+			"app":       "example",
 			"operation": "request_context",
 		},
 	)
@@ -5393,7 +5393,7 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 				{plugin: "example", connection: "work", instance: "default"},
 			},
 			params: map[string]any{
-				"app":    "example",
+				"app":       "example",
 				"operation": "status",
 			},
 			wantError: `may not invoke example.status`,
@@ -5406,7 +5406,7 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 				{plugin: "example", connection: "work", instance: "default"},
 			},
 			params: map[string]any{
-				"app":           "example",
+				"app":              "example",
 				"operation":        "request_context",
 				"invocation_token": "forged-token",
 			},
@@ -5419,7 +5419,7 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 				{plugin: "caller", connection: "work", instance: "default"},
 			},
 			params: map[string]any{
-				"app":    "example",
+				"app":       "example",
 				"operation": "request_context",
 			},
 			wantError: "code = FailedPrecondition",
@@ -5433,7 +5433,7 @@ func TestPluginInvokesRejectInvalidTargetRequests(t *testing.T) {
 				{plugin: "example", connection: "work", instance: "secondary"},
 			},
 			params: map[string]any{
-				"app":     "example",
+				"app":        "example",
 				"operation":  "request_context",
 				"connection": "work",
 			},
@@ -5685,7 +5685,7 @@ func TestInjectedAppRuntimeStopSessionTimeoutDoesNotHangBootstrapFailure(t *test
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	runtimeProvider := &failingStartPluginSlowStopAppRuntime{
 		slowStopAppRuntime: slowStopAppRuntime{inner: appruntime.NewLocalProvider()},
-		err:                   fmt.Errorf("start failed"),
+		err:                fmt.Errorf("start failed"),
 	}
 	t.Cleanup(func() { _ = runtimeProvider.Close() })
 	cfg := &config.Config{
@@ -7193,7 +7193,7 @@ func TestAppRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T)
 	deps := Deps{
 		BaseURL:            relaySrv.URL,
 		EncryptionKey:      secret,
-		AppInvoker:      bridge,
+		AppInvoker:         bridge,
 		PublicHostServices: publicHostServices,
 	}
 	deps.AppRuntimeRegistry = newAppRuntimeRegistry(cfg, factories.Runtime, deps)
@@ -7238,7 +7238,7 @@ func TestAppRuntimePublicAppInvokerRelayRoundTripsThroughHostedApp(t *testing.T)
 		"default",
 		"invoke_plugin",
 		map[string]any{
-			"app":    "example",
+			"app":       "example",
 			"operation": "request_context",
 		},
 	)

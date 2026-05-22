@@ -24,7 +24,7 @@ const (
 )
 
 type InvocationDependency struct {
-	App    string
+	App       string
 	Operation string
 	Surface   SpecSurface
 }

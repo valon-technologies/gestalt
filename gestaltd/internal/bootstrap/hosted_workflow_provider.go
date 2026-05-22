@@ -233,12 +233,12 @@ func startHostedWorkflowProviderInstance(ctx context.Context, launch *hostedWork
 	}
 
 	hostedApp, err := runtimeProvider.StartApp(ctx, appruntime.StartAppRequest{
-		SessionID:  sessionID,
-		AppName: name,
-		Command:    launch.launch.command,
-		Args:       launch.launch.args,
-		Workdir:    launch.cfg.Workdir,
-		Env:        startEnv,
+		SessionID: sessionID,
+		AppName:   name,
+		Command:   launch.launch.command,
+		Args:      launch.launch.args,
+		Workdir:   launch.cfg.Workdir,
+		Env:       startEnv,
 		Egress: appruntime.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 			DefaultAction: appruntime.PolicyAction(deps.Egress.DefaultAction),

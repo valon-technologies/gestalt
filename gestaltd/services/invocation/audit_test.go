@@ -34,7 +34,7 @@ func TestSlogAuditSink_AllowedEntry(t *testing.T) {
 		Depth:                   1,
 		Allowed:                 true,
 		WorkflowKeySHA256:       "workflow-key-hash",
-		CallerApp:            "slack",
+		CallerApp:               "slack",
 		WorkflowTargetKind:      "app",
 		WorkflowTargetComponent: "plugin_target",
 		WorkflowTargetProvider:  "github",

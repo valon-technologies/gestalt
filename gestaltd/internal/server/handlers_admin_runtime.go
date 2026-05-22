@@ -29,15 +29,15 @@ type adminRuntimeProfilePair struct {
 }
 
 type adminRuntimeProfile struct {
-	CanHostApps    bool   `json:"canHostPlugins"`
+	CanHostApps       bool   `json:"canHostPlugins"`
 	HostServiceAccess string `json:"hostServiceAccess"`
 	EgressMode        string `json:"egressMode"`
 }
 
 type adminRuntimeSessionInfo struct {
-	ID     string `json:"id"`
-	State  string `json:"state"`
-	App string `json:"app,omitempty"`
+	ID    string `json:"id"`
+	State string `json:"state"`
+	App   string `json:"app,omitempty"`
 }
 
 type adminRuntimeLogEntry struct {
@@ -108,9 +108,9 @@ func (s *Server) listAdminRuntimeProviderSessions(w http.ResponseWriter, r *http
 		out := make([]adminRuntimeSessionInfo, 0, len(snapshot.Sessions))
 		for _, session := range snapshot.Sessions {
 			out = append(out, adminRuntimeSessionInfo{
-				ID:     strings.TrimSpace(session.ID),
-				State:  strings.TrimSpace(string(session.State)),
-				App: strings.TrimSpace(session.Metadata["app"]),
+				ID:    strings.TrimSpace(session.ID),
+				State: strings.TrimSpace(string(session.State)),
+				App:   strings.TrimSpace(session.Metadata["app"]),
 			})
 		}
 		writeJSON(w, http.StatusOK, out)
@@ -185,7 +185,7 @@ func adminRuntimeProfilePairFromSnapshot(snapshot *bootstrap.RuntimeProviderSnap
 
 func adminRuntimeProfileFromBootstrap(behavior bootstrap.RuntimeBehavior) adminRuntimeProfile {
 	return adminRuntimeProfile{
-		CanHostApps:    behavior.CanHostApps,
+		CanHostApps:       behavior.CanHostApps,
 		HostServiceAccess: strings.TrimSpace(string(behavior.HostServiceAccess)),
 		EgressMode:        strings.TrimSpace(string(behavior.EgressMode)),
 	}

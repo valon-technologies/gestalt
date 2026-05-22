@@ -219,7 +219,7 @@ func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx contex
 	}
 
 	row := adminAuthorizationMemberRow{
-		App:    app,
+		App:       app,
 		Role:      strings.TrimSpace(rel.GetRelation()),
 		Source:    "dynamic",
 		Effective: true,

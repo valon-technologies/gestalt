@@ -40,9 +40,9 @@ func TestLocalProviderCapturesRuntimeSessionLogsOnPluginStartupFailure(t *testin
 	}
 
 	_, err = runtime.StartApp(ctx, StartAppRequest{
-		SessionID:  session.ID,
-		AppName: "log-test",
-		Command:    "/bin/sh",
+		SessionID: session.ID,
+		AppName:   "log-test",
+		Command:   "/bin/sh",
 		Args: []string{
 			"-c",
 			"printf 'hello stdout\\n'; printf 'hello stderr\\n' >&2; exit 17",

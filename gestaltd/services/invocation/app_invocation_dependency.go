@@ -5,7 +5,7 @@ import "github.com/valon-technologies/gestalt/server/core"
 // AppInvocationDependency describes one plugin-to-plugin invocation grant.
 // It is the service-level form of the config "invokes" entry.
 type AppInvocationDependency struct {
-	App                string
+	App                   string
 	Operation             string
 	Surface               string
 	CredentialMode        core.ConnectionMode

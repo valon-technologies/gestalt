@@ -147,9 +147,9 @@ func (r *remoteWorkflow) ListRuns(ctx context.Context, req coreworkflow.ListRuns
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{
-		PageSize:     int32(req.PageSize),
-		PageToken:    strings.TrimSpace(req.PageToken),
-		Status:       workflowRunStatusToProto(req.Status),
+		PageSize:  int32(req.PageSize),
+		PageToken: strings.TrimSpace(req.PageToken),
+		Status:    workflowRunStatusToProto(req.Status),
 		TargetApp: strings.TrimSpace(req.TargetApp),
 	})
 	if err != nil {
@@ -455,7 +455,7 @@ func (r *remoteWorkflow) PublishEvent(ctx context.Context, req coreworkflow.Publ
 		return nil, err
 	}
 	resp, err := r.client.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
-		AppName:  req.AppName,
+		AppName:     req.AppName,
 		Event:       pbEvent,
 		PublishedBy: workflowActorToProto(req.PublishedBy),
 	})

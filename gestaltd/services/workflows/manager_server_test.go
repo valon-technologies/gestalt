@@ -206,7 +206,7 @@ func TestWorkflowManagerPublishEventSelectedProviderPreservesBlankPlugin(t *test
 
 	_, err := manager.PublishEvent(context.Background(), publishEventPrincipal(), workflowmanager.EventPublish{
 		ProviderName: "selected",
-		AppName:   "   ",
+		AppName:      "   ",
 		Event:        coreworkflow.Event{Type: "valon_sats.attempt.submitted"},
 	})
 	if err != nil {

@@ -12,7 +12,7 @@ import (
 
 type StaticConnectionPlan struct {
 	manifestBacked    bool
-	appConnection    ResolvedConnectionDef
+	appConnection     ResolvedConnectionDef
 	namedConnections  map[string]ResolvedConnectionDef
 	surfaces          map[SpecSurface]ResolvedSpecSurface
 	restConnection    string

@@ -2354,7 +2354,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "slack",
+			App:        "slack",
 			Operations: []string{"chat.postMessage"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "slack", Operation: "chat.postMessage"}},
@@ -2368,7 +2368,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			App:         "slack",
+			App:            "slack",
 			Operation:      "chat.postMessage",
 			CredentialMode: core.ConnectionModeNone,
 		}),
@@ -2386,7 +2386,7 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		SubjectID: principal.UserSubjectID("user-123"),
 	}, coreagent.ResolveToolsRequest{
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "slack",
+			App:       "slack",
 			Operation: "events.reply",
 		}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
@@ -2404,11 +2404,11 @@ func TestAgentRuntimeExecuteToolRejectsHiddenOperationWithoutExactGrant(t *testi
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "slack",
+			App:        "slack",
 			Operations: []string{"events.reply"},
 		}},
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "slack",
+			App:       "slack",
 			Operation: "events.reply",
 		}},
 		Tools:      exactTools,
@@ -2530,7 +2530,7 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			App:    "slack",
+			App:       "slack",
 			Operation: "events.reply",
 		}),
 		RunGrant:  grant,
@@ -2544,7 +2544,7 @@ func TestAgentRuntimeExecuteToolAppliesCredentialModeAndRunAsOnlyForDelegatedToo
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			App:                "github",
+			App:                   "github",
 			Operation:             "bot.createPullRequest",
 			CredentialMode:        core.ConnectionModeNone,
 			RunAs:                 runAs,
@@ -2623,7 +2623,7 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
@@ -2637,7 +2637,7 @@ func TestAgentRuntimeExecuteToolRejectsTerminalTurnGrant(t *testing.T) {
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
 		ToolID: mustMintAgentToolID(t, runGrants, coreagent.ToolTarget{
-			App:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}),
 		RunGrant:  grant,
@@ -2698,7 +2698,7 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
@@ -2742,7 +2742,7 @@ func TestAgentRuntimeAcceptsProviderOwnedTurnIDWithExecutionRefGrant(t *testing.
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
@@ -2914,7 +2914,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync", "sync!", "sync_2"},
 		}},
 		ToolRefs: []coreagent.ToolRef{
@@ -2986,7 +2986,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
@@ -3015,7 +3015,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "docs",
+			App:        "docs",
 			Operations: docsPermissions,
 		}},
 		ToolRefs:   docsRefs,
@@ -3081,7 +3081,7 @@ func TestAgentRuntimeListsMCPCatalogToolsForGrantedTurn(t *testing.T) {
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "roadmap"}},
@@ -3249,7 +3249,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "linear",
+			App:        "linear",
 			Operations: []string{"viewer"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "linear"}},
@@ -3279,7 +3279,7 @@ func TestAgentRuntimeListsUnavailableMCPCatalogSentinelForBroadGrants(t *testing
 		SubjectID:    "user:user-123",
 		SubjectKind:  string(principal.KindUser),
 		Permissions: []core.AccessPermission{{
-			App:     "linear",
+			App:        "linear",
 			Operations: []string{"viewer"},
 		}},
 		ToolRefs:   []coreagent.ToolRef{{App: "linear", Operation: "viewer"}},
@@ -3450,7 +3450,7 @@ func TestAgentRuntimeImageLaunchUsesManifestEntrypoint(t *testing.T) {
 	}), Deps{
 		BaseURL:       "https://gestalt.example.test",
 		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-		AppRuntime: runtimeProvider,
+		AppRuntime:    runtimeProvider,
 	})
 	if err != nil {
 		t.Fatalf("prepareHostedAgentProviderLaunch: %v", err)

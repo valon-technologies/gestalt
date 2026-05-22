@@ -24,11 +24,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocationconfig"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
-	"github.com/valon-technologies/gestalt/server/services/egress"
-	"github.com/valon-technologies/gestalt/server/services/egressproxy"
-	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"github.com/valon-technologies/gestalt/server/services/apps/composite"
@@ -41,6 +36,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
 	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
+	"github.com/valon-technologies/gestalt/server/services/egress"
+	"github.com/valon-technologies/gestalt/server/services/egressproxy"
+	"github.com/valon-technologies/gestalt/server/services/identity/principal"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
+	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
@@ -493,7 +493,7 @@ func buildExecutableAppProvider(ctx context.Context, name string, entry *config.
 }
 
 type specProviderConfig struct {
-	manifestApp       *providermanifestv1.Spec
+	manifestApp          *providermanifestv1.Spec
 	allowedOperations    map[string]*config.OperationOverride
 	allowedHosts         []string
 	baseURL              string
@@ -590,7 +590,7 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 	}
 
 	cfg := specProviderConfig{
-		manifestApp:       manifestApp,
+		manifestApp:          manifestApp,
 		allowedOperations:    allowedOperations,
 		allowedHosts:         entry.EffectiveAllowedHosts(),
 		baseURL:              config.EffectiveProviderSpecBaseURL(entry, manifestApp),
@@ -1087,12 +1087,12 @@ func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEn
 	}
 
 	hostedApp, err := runtimeProvider.StartApp(ctx, appruntime.StartAppRequest{
-		SessionID:  sessionID,
-		AppName: name,
-		Command:    command,
-		Args:       args,
-		Workdir:    workdir,
-		Env:        startEnv,
+		SessionID: sessionID,
+		AppName:   name,
+		Command:   command,
+		Args:      args,
+		Workdir:   workdir,
+		Env:       startEnv,
 		Egress: appruntime.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 			DefaultAction: appruntime.PolicyAction(deps.Egress.DefaultAction),
@@ -1372,12 +1372,12 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 
 	phaseStarted = time.Now()
 	hostedApp, err := runtimeProvider.StartApp(ctx, appruntime.StartAppRequest{
-		SessionID:  sessionID,
-		AppName: name,
-		Command:    launch.launch.command,
-		Args:       launch.launch.args,
-		Workdir:    cfg.Workdir,
-		Env:        startEnv,
+		SessionID: sessionID,
+		AppName:   name,
+		Command:   launch.launch.command,
+		Args:      launch.launch.args,
+		Workdir:   cfg.Workdir,
+		Env:       startEnv,
 		Egress: appruntime.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
 			DefaultAction: appruntime.PolicyAction(deps.Egress.DefaultAction),
@@ -1563,7 +1563,7 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 		metadata["provider_name"] = name
 	}
 	return appruntime.StartSessionRequest{
-		AppName:    name,
+		AppName:       name,
 		Template:      runtimeConfig.Template,
 		Image:         runtimeConfig.Image,
 		ImagePullAuth: hostedRuntimeImagePullAuth(runtimeConfig.ImagePullAuth),
@@ -1693,7 +1693,7 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 		return nil, fmt.Errorf("init egress proxy tokens: %w", err)
 	}
 	token, err := tokenManager.MintToken(egressproxy.TokenRequest{
-		AppName:    providerName,
+		AppName:       providerName,
 		SessionID:     sessionID,
 		AllowedHosts:  slices.Clone(allowedHosts),
 		DefaultAction: defaultAction,

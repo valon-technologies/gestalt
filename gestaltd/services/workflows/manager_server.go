@@ -9,9 +9,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
 	"google.golang.org/grpc/codes"
@@ -58,10 +58,10 @@ func (s *ProviderServer) CreateDefinition(ctx context.Context, req *proto.Create
 		return nil, err
 	}
 	managed, err := s.manager.CreateDefinition(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.DefinitionUpsert{
-		ProviderName:     strings.TrimSpace(req.GetProviderName()),
-		Target:           target,
-		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
-		CallerAppName: strings.TrimSpace(s.pluginName),
+		ProviderName:   strings.TrimSpace(req.GetProviderName()),
+		Target:         target,
+		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
+		CallerAppName:  strings.TrimSpace(s.pluginName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -119,8 +119,8 @@ func (s *ProviderServer) UpdateDefinition(ctx context.Context, req *proto.Update
 		return nil, err
 	}
 	managed, err := s.manager.UpdateDefinition(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), definitionID, workflowmanager.DefinitionUpsert{
-		ProviderName:     strings.TrimSpace(req.GetProviderName()),
-		Target:           target,
+		ProviderName:  strings.TrimSpace(req.GetProviderName()),
+		Target:        target,
 		CallerAppName: strings.TrimSpace(s.pluginName),
 	})
 	if err != nil {
@@ -216,12 +216,12 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 		return nil, err
 	}
 	managed, err := s.manager.StartRun(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.RunStart{
-		ProviderName:     strings.TrimSpace(req.GetProviderName()),
-		Target:           target,
-		DefinitionID:     strings.TrimSpace(req.GetDefinitionId()),
-		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
-		WorkflowKey:      strings.TrimSpace(req.GetWorkflowKey()),
-		CallerAppName: strings.TrimSpace(s.pluginName),
+		ProviderName:   strings.TrimSpace(req.GetProviderName()),
+		Target:         target,
+		DefinitionID:   strings.TrimSpace(req.GetDefinitionId()),
+		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
+		WorkflowKey:    strings.TrimSpace(req.GetWorkflowKey()),
+		CallerAppName:  strings.TrimSpace(s.pluginName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -288,13 +288,13 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 		return nil, err
 	}
 	managed, err = s.manager.SignalOrStartRun(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.RunSignalOrStart{
-		ProviderName:     strings.TrimSpace(req.GetProviderName()),
-		WorkflowKey:      strings.TrimSpace(req.GetWorkflowKey()),
-		Target:           target,
-		DefinitionID:     strings.TrimSpace(req.GetDefinitionId()),
-		IdempotencyKey:   strings.TrimSpace(req.GetIdempotencyKey()),
-		Signal:           workflowSignalFromProto(req.GetSignal()),
-		CallerAppName: strings.TrimSpace(s.pluginName),
+		ProviderName:   strings.TrimSpace(req.GetProviderName()),
+		WorkflowKey:    strings.TrimSpace(req.GetWorkflowKey()),
+		Target:         target,
+		DefinitionID:   strings.TrimSpace(req.GetDefinitionId()),
+		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
+		Signal:         workflowSignalFromProto(req.GetSignal()),
+		CallerAppName:  strings.TrimSpace(s.pluginName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -566,7 +566,7 @@ func (s *ProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWor
 	}
 	published, err := s.manager.PublishEvent(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.EventPublish{
 		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		AppName:   strings.TrimSpace(s.pluginName),
+		AppName:      strings.TrimSpace(s.pluginName),
 		Event:        event,
 	})
 	if err != nil {

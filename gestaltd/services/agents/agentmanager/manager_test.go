@@ -1431,9 +1431,9 @@ func TestManagerCreateTurnKeepsImplicitWildcardForCallerPluginDefaults(t *testin
 	}
 	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
 		CallerAppName: "slack",
-		SessionID:        session.ID,
-		Model:            "test-model",
-		Messages:         []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}},
+		SessionID:     session.ID,
+		Model:         "test-model",
+		Messages:      []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -2071,7 +2071,7 @@ func TestAgentRunPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing.
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "linear",
+		App:        "linear",
 		Operations: []string{"issues"},
 	}})
 	p := &principal.Principal{
@@ -2178,7 +2178,7 @@ func TestAgentRunPermissionsClearsHTTPResolvedUserWildcardRestrictions(t *testin
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "slack",
+		App:        "slack",
 		Operations: []string{"events.reply"},
 	}})
 	p := &principal.Principal{
@@ -2340,7 +2340,7 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialMode(t *testing.T) {
 		Providers: testutil.NewProviderRegistry(t, provider),
 		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slackbot": {{
-				App:         "slack",
+				App:            "slack",
 				Operation:      "events.reply",
 				CredentialMode: core.ConnectionModeNone,
 			}},
@@ -2352,7 +2352,7 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialMode(t *testing.T) {
 	}, coreagent.ResolveToolsRequest{
 		CallerAppName: "slackbot",
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "slack",
+			App:       "slack",
 			Operation: "events.reply",
 		}},
 	})
@@ -2398,7 +2398,7 @@ func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
 		Providers: testutil.NewProviderRegistry(t, provider),
 		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				App:                "github",
+				App:                   "github",
 				Operation:             "bot.createPullRequest",
 				RunAs:                 runAs,
 				RunAsExternalIdentity: externalIdentity,
@@ -2411,7 +2411,7 @@ func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
 	}, coreagent.ResolveToolsRequest{
 		CallerAppName: "slack",
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "github",
+			App:       "github",
 			Operation: "bot.createPullRequest",
 			RunAs: &core.RunAsSubject{
 				SubjectID:   runAs.SubjectID,
@@ -2468,7 +2468,7 @@ func TestResolveToolsExplicitOnlyInvokeRunAsDoesNotApplyImplicitly(t *testing.T)
 		Providers: testutil.NewProviderRegistry(t, provider),
 		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				App:                "notion",
+				App:                   "notion",
 				Operation:             "search",
 				RunAs:                 runAs,
 				RunAsExternalIdentity: externalIdentity,
@@ -2482,7 +2482,7 @@ func TestResolveToolsExplicitOnlyInvokeRunAsDoesNotApplyImplicitly(t *testing.T)
 	}, coreagent.ResolveToolsRequest{
 		CallerAppName: "slack",
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "notion",
+			App:       "notion",
 			Operation: "search",
 		}},
 	})
@@ -2504,7 +2504,7 @@ func TestResolveToolsExplicitOnlyInvokeRunAsDoesNotApplyImplicitly(t *testing.T)
 	}, coreagent.ResolveToolsRequest{
 		CallerAppName: "slack",
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "notion",
+			App:       "notion",
 			Operation: "search",
 			RunAs: &core.RunAsSubject{
 				SubjectID: runAs.SubjectID,
@@ -2541,7 +2541,7 @@ func TestApplyCallerInvokePoliciesExplicitOnlyExternalIdentityRequestAppliesRunA
 	manager := newTestManager(t, Config{
 		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				App:                "notion",
+				App:                   "notion",
 				Operation:             "search",
 				RunAs:                 runAs,
 				RunAsExternalIdentity: externalIdentity,
@@ -2553,7 +2553,7 @@ func TestApplyCallerInvokePoliciesExplicitOnlyExternalIdentityRequestAppliesRunA
 	// Exercise the policy helper directly because normalizeToolRefs rejects this
 	// user-facing shape before policy application.
 	refs, err := manager.applyCallerInvokePolicies("slack", []coreagent.ToolRef{{
-		App:                "notion",
+		App:                   "notion",
 		Operation:             "search",
 		RunAsExternalIdentity: externalIdentity,
 	}})
@@ -2608,7 +2608,7 @@ func TestManagerCreateTurnAppliesExplicitInvokeRunAsToProviderAndRunGrant(t *tes
 		Providers: testutil.NewProviderRegistry(t, provider),
 		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				App:                "notion",
+				App:                   "notion",
 				Operation:             "search",
 				RunAs:                 runAs,
 				RunAsExternalIdentity: externalIdentity,
@@ -2626,13 +2626,13 @@ func TestManagerCreateTurnAppliesExplicitInvokeRunAsToProviderAndRunGrant(t *tes
 		t.Fatalf("CreateSession: %v", err)
 	}
 	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
-		SessionID:        session.ID,
-		Model:            "test-model",
+		SessionID:     session.ID,
+		Model:         "test-model",
 		CallerAppName: "slack",
-		ToolSource:       coreagent.ToolSourceModeMCPCatalog,
-		ToolRefsSet:      true,
+		ToolSource:    coreagent.ToolSourceModeMCPCatalog,
+		ToolRefsSet:   true,
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "notion",
+			App:       "notion",
 			Operation: "search",
 			RunAs: &core.RunAsSubject{
 				SubjectID: runAs.SubjectID,
@@ -2696,7 +2696,7 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialModeAndRunAs(t *testing.T) {
 		Providers: testutil.NewProviderRegistry(t, provider),
 		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				App:         "slack",
+				App:            "slack",
 				Operation:      "chat.postMessage",
 				CredentialMode: core.ConnectionModeNone,
 				RunAs:          runAs,
@@ -2709,7 +2709,7 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialModeAndRunAs(t *testing.T) {
 	}, coreagent.ResolveToolsRequest{
 		CallerAppName: "slack",
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "slack",
+			App:       "slack",
 			Operation: "chat.postMessage",
 		}},
 	})
@@ -2744,7 +2744,7 @@ func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
 		Providers: testutil.NewProviderRegistry(t, provider),
 		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slackbot": {{
-				App:         "slack",
+				App:            "slack",
 				Operation:      "chat.postMessage",
 				CredentialMode: core.ConnectionModeNone,
 			}},
@@ -2752,7 +2752,7 @@ func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
 	})
 
 	for _, tc := range []struct {
-		name             string
+		name          string
 		callerAppName string
 	}{
 		{name: "public request"},
@@ -2767,7 +2767,7 @@ func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
 			}, coreagent.ResolveToolsRequest{
 				CallerAppName: tc.callerAppName,
 				ToolRefs: []coreagent.ToolRef{{
-					App:         "slack",
+					App:            "slack",
 					Operation:      "events.reply",
 					CredentialMode: core.ConnectionModeNone,
 				}},
@@ -2801,7 +2801,7 @@ func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
 		Providers: testutil.NewProviderRegistry(t, provider),
 		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				App:    "github",
+				App:       "github",
 				Operation: "bot.getPullRequest",
 				RunAs:     runAs,
 			}},
@@ -2809,7 +2809,7 @@ func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
 	})
 
 	for _, tc := range []struct {
-		name             string
+		name          string
 		callerAppName string
 	}{
 		{name: "public request"},
@@ -2824,7 +2824,7 @@ func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
 			}, coreagent.ResolveToolsRequest{
 				CallerAppName: tc.callerAppName,
 				ToolRefs: []coreagent.ToolRef{{
-					App:    "github",
+					App:       "github",
 					Operation: "bot.createPullRequest",
 					RunAs:     runAs,
 				}},
@@ -2858,7 +2858,7 @@ func TestResolveToolsRejectsMismatchedRunAsExternalIdentity(t *testing.T) {
 		Providers: testutil.NewProviderRegistry(t, provider),
 		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				App:    "github",
+				App:       "github",
 				Operation: "bot.createPullRequest",
 				RunAs:     runAs,
 				RunAsExternalIdentity: &core.ExternalIdentityRef{
@@ -2874,7 +2874,7 @@ func TestResolveToolsRejectsMismatchedRunAsExternalIdentity(t *testing.T) {
 	}, coreagent.ResolveToolsRequest{
 		CallerAppName: "slack",
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "github",
+			App:       "github",
 			Operation: "bot.createPullRequest",
 			RunAs:     runAs,
 			RunAsExternalIdentity: &core.ExternalIdentityRef{
@@ -3295,7 +3295,7 @@ func TestAgentToolTargetKeyIgnoresRunAsDisplayMetadata(t *testing.T) {
 	t.Parallel()
 
 	base := coreagent.ToolRef{
-		App:    "github",
+		App:       "github",
 		Operation: "bot.createPullRequest",
 		RunAs: &core.RunAsSubject{
 			SubjectID:           "service_account:github_app_installation:99:repo:acme/widgets",

@@ -37,12 +37,12 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
+	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	graphqlschema "github.com/valon-technologies/gestalt/server/services/apps/graphql"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -76,7 +76,7 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 		Target:       target,
 		SubjectID:    "system:config",
 		Permissions: []core.AccessPermission{{
-			App:     pluginTarget.AppName,
+			App:        pluginTarget.AppName,
 			Operations: []string{pluginTarget.Operation},
 		}},
 	})
@@ -1927,8 +1927,8 @@ func requireCoreWorkflowAppTarget(t *testing.T, target coreworkflow.Target) *cor
 func coreWorkflowAppTarget(pluginName, operation string) coreworkflow.Target {
 	return coreworkflow.Target{
 		App: &coreworkflow.AppTarget{
-			AppName: pluginName,
-			Operation:  operation,
+			AppName:   pluginName,
+			Operation: operation,
 		},
 	}
 }
@@ -1937,8 +1937,8 @@ func protoWorkflowAppTarget(pluginName, operation string) *proto.BoundWorkflowTa
 	return &proto.BoundWorkflowTarget{
 		Kind: &proto.BoundWorkflowTarget_App{
 			App: &proto.BoundWorkflowAppTarget{
-				AppName: pluginName,
-				Operation:  operation,
+				AppName:   pluginName,
+				Operation: operation,
 			},
 		},
 	}
@@ -2575,15 +2575,15 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 
 	perms := principal.CompilePermissions([]core.AccessPermission{
 		{
-			App:     "roadmap",
+			App:        "roadmap",
 			Operations: []string{"sync"},
 		},
 		{
-			App:     "lever",
+			App:        "lever",
 			Operations: []string{"sync"},
 		},
 		{
-			App:     "ashby",
+			App:        "ashby",
 			Operations: []string{"sync"},
 		},
 		{
@@ -2615,7 +2615,7 @@ func TestBootstrapAgentManagerCreateTurnPersistsMetadataForToolCallbacks(t *test
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 			Title:     "Roadmap sync",
 		}},
@@ -2741,7 +2741,7 @@ func TestBootstrapAgentHostToolCatalogExecutesExactPluginIssueTool(t *testing.T)
 			},
 		})
 		unavailableIssuePermissions = append(unavailableIssuePermissions, core.AccessPermission{
-			App:     name,
+			App:        name,
 			Operations: []string{"list_issues"},
 		})
 	}
@@ -2873,11 +2873,11 @@ func TestBootstrapAgentHostToolCatalogExecutesExactPluginIssueTool(t *testing.T)
 			App: "managed",
 		},
 		{
-			App:     "linear",
+			App:        "linear",
 			Operations: []string{"list_issues", "list_comments", "list_customers", "list_documents"},
 		},
 		{
-			App:     "customerRoadmapReview",
+			App:        "customerRoadmapReview",
 			Operations: []string{"publish_customer_view", "get_me", "get_endpoints"},
 		},
 	}
@@ -3010,7 +3010,7 @@ func TestBootstrapAgentHostToolCatalogListsAndExecutesVisibleTools(t *testing.T)
 	<-result.ProvidersReady
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "docs",
+		App:        "docs",
 		Operations: []string{"aardvark_admin", "alpha_search", "beta_list", "delta_export", "epsilon_delete", "gamma_get"},
 	}, {
 		App: "managed",
@@ -3237,10 +3237,10 @@ func TestBootstrapAgentDefaultToolNarrowingThresholdConfigNarrowsImplicitCatalog
 	<-result.ProvidersReady
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "linear",
+		App:        "linear",
 		Operations: []string{"issues"},
 	}, {
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues"},
 	}, {
 		App: "managed",
@@ -3380,12 +3380,12 @@ func TestBootstrapHTTPCallerWildcardCatalogToolRefsAreScopedByAuthorization(t *t
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
-		CallerAppName: "slack",
-		SessionID:        session.ID,
-		IdempotencyKey:   "http-slack-linear-search",
-		Model:            "gpt-test",
-		Messages:         []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
-		ToolRefs:         []coreagent.ToolRef{{App: "*"}},
+		CallerAppName:  "slack",
+		SessionID:      session.ID,
+		IdempotencyKey: "http-slack-linear-search",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
+		ToolRefs:       []coreagent.ToolRef{{App: "*"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn wildcard scoped turn: %v", err)
@@ -3485,10 +3485,10 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 	<-result.ProvidersReady
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "linear",
+		App:        "linear",
 		Operations: []string{"issues"},
 	}, {
-		App:     "ashby",
+		App:        "ashby",
 		Operations: []string{"candidates"},
 	}, {
 		App: "managed",
@@ -3512,12 +3512,12 @@ func TestBootstrapGlobalCatalogToolRefsSurfaceUnavailableProviders(t *testing.T)
 		t.Fatalf("AgentManager.CreateSession: %v", err)
 	}
 	turn, err := result.AgentManager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
-		CallerAppName: "slack",
-		SessionID:        session.ID,
-		IdempotencyKey:   "http-global-linear-search",
-		Model:            "gpt-test",
-		Messages:         []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
-		ToolRefs:         []coreagent.ToolRef{{App: "*"}},
+		CallerAppName:  "slack",
+		SessionID:      session.ID,
+		IdempotencyKey: "http-global-linear-search",
+		Model:          "gpt-test",
+		Messages:       []coreagent.Message{{Role: "user", Text: "get my linear tickets"}},
+		ToolRefs:       []coreagent.ToolRef{{App: "*"}},
 	})
 	if err != nil {
 		t.Fatalf("AgentManager.CreateTurn global scoped turn: %v", err)
@@ -4112,7 +4112,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 	<-result.ProvidersReady
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "roadmap",
+		App:        "roadmap",
 		Operations: []string{"sync"},
 	}, {
 		App: "managed",
@@ -4141,7 +4141,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}},
 	})
@@ -4168,7 +4168,7 @@ func TestBootstrapAgentManagerIdempotentTurnReplayRequiresCurrentToolAccess(t *t
 		Model:          "gpt-test",
 		Messages:       []coreagent.Message{{Role: "user", Text: "sync it"}},
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}},
 	})
@@ -4819,7 +4819,7 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Permissions = []core.AccessPermission{{
-		App:     "slack",
+		App:        "slack",
 		Operations: []string{"conversations.history"},
 	}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
@@ -4937,7 +4937,7 @@ func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefresh
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Permissions = []core.AccessPermission{{
-		App:     "slack",
+		App:        "slack",
 		Operations: []string{"conversations.history"},
 	}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
@@ -5292,7 +5292,7 @@ func TestBootstrapAllowsConfiguredWorkflowSchedulePermissionScopesForUserCredent
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Permissions = []core.AccessPermission{{
-		App:     "slack",
+		App:        "slack",
 		Operations: []string{"conversations.list"},
 	}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
@@ -5360,7 +5360,7 @@ func TestBootstrapConfiguredWorkflowScheduleInvokesScopesExecutionRef(t *testing
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
 	nightly.Invokes = []config.WorkflowInvokeConfig{{
-		App:    " slack ",
+		App:       " slack ",
 		Operation: " conversations.list ",
 	}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
@@ -6262,7 +6262,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	})
 	taskUpdated := cfg.Workflows.EventTriggers["task_updated"]
 	taskUpdated.Permissions = []core.AccessPermission{{
-		App:     "slack",
+		App:        "slack",
 		Operations: []string{"conversations.history"},
 	}}
 	cfg.Workflows.EventTriggers["task_updated"] = taskUpdated
@@ -7195,7 +7195,7 @@ func TestBootstrapStartsAgentProvidersAfterInvokerIsReady(t *testing.T) {
 		SessionID: session.ID,
 		Model:     "gpt-test",
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}},
 	})
@@ -7384,7 +7384,7 @@ func TestBootstrapDoesNotRevokeAgentGrantWhenCancelReturnsLiveTurn(t *testing.T)
 		SessionID: session.ID,
 		Model:     "gpt-test",
 		ToolRefs: []coreagent.ToolRef{{
-			App:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		}},
 	})
@@ -7501,7 +7501,7 @@ func TestBootstrapAgentProviderRejectsMismatchedRequestedSessionOrTurnID(t *test
 	tool := coreagent.Tool{
 		ID: "roadmap.sync",
 		Target: coreagent.ToolTarget{
-			App:    "roadmap",
+			App:       "roadmap",
 			Operation: "sync",
 		},
 	}
@@ -7820,7 +7820,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 			SubjectID:           "system:config",
 			CredentialSubjectID: "system:config",
 			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-				App:     "roadmap",
+				App:        "roadmap",
 				Operations: []string{"sync"},
 			}}),
 		}
@@ -9177,7 +9177,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			SubjectID:           "system:config",
 			CredentialSubjectID: "system:config",
 			TokenPermissions: principal.CompilePermissions([]core.AccessPermission{{
-				App:     "roadmap",
+				App:        "roadmap",
 				Operations: []string{"sync"},
 			}}),
 		}

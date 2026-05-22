@@ -44,7 +44,7 @@ func workflowAppTarget(pluginName, operation string) coreworkflow.Target {
 func workflowAppTargetWithRouting(pluginName, operation, connection, instance string) coreworkflow.Target {
 	return coreworkflow.Target{
 		App: &coreworkflow.AppTarget{
-			AppName: pluginName,
+			AppName:    pluginName,
 			Operation:  operation,
 			Connection: connection,
 			Instance:   instance,

@@ -333,10 +333,10 @@ func (t *workflowSystemTools) executeCreateDefinition(ctx context.Context, req a
 		return nil, err
 	}
 	definition, err := t.manager.CreateDefinition(ctx, scopedPrincipal, workflowmanager.DefinitionUpsert{
-		ProviderName:     workflowSystemToolStringArg(args, "provider"),
-		Target:           target,
-		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
-		CallerAppName: workflowSystemToolCallerScope(req),
+		ProviderName:   workflowSystemToolStringArg(args, "provider"),
+		Target:         target,
+		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
+		CallerAppName:  workflowSystemToolCallerScope(req),
 	})
 	if err != nil {
 		return nil, err
@@ -387,10 +387,10 @@ func (t *workflowSystemTools) executeUpdateDefinition(ctx context.Context, req a
 		return nil, err
 	}
 	definition, err := t.manager.UpdateDefinition(ctx, workflowSystemToolManagementPrincipal(req), definitionID, workflowmanager.DefinitionUpsert{
-		ProviderName:     workflowSystemToolStringArg(args, "provider"),
-		Target:           target,
+		ProviderName:  workflowSystemToolStringArg(args, "provider"),
+		Target:        target,
 		CallerAppName: workflowSystemToolCallerScope(req),
-		Permissions:      permissions,
+		Permissions:   permissions,
 	})
 	if err != nil {
 		return nil, err
@@ -479,14 +479,14 @@ func (t *workflowSystemTools) executeCreateSchedule(ctx context.Context, req age
 		upsertTarget = coreworkflow.Target{}
 	}
 	schedule, err := t.manager.CreateSchedule(ctx, scopedPrincipal, workflowmanager.ScheduleUpsert{
-		ProviderName:     workflowSystemToolStringArg(args, "provider"),
-		Cron:             cron,
-		Timezone:         workflowSystemToolStringArg(args, "timezone"),
-		Target:           upsertTarget,
-		DefinitionID:     definitionID,
-		Paused:           workflowSystemToolBoolArg(args, "paused"),
-		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
-		CallerAppName: workflowSystemToolCallerScope(req),
+		ProviderName:   workflowSystemToolStringArg(args, "provider"),
+		Cron:           cron,
+		Timezone:       workflowSystemToolStringArg(args, "timezone"),
+		Target:         upsertTarget,
+		DefinitionID:   definitionID,
+		Paused:         workflowSystemToolBoolArg(args, "paused"),
+		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
+		CallerAppName:  workflowSystemToolCallerScope(req),
 	})
 	if err != nil {
 		return nil, err
@@ -567,13 +567,13 @@ func (t *workflowSystemTools) executeStartRun(ctx context.Context, req agentSyst
 		startTarget = target
 	}
 	run, err := t.manager.StartRun(ctx, scopedPrincipal, workflowmanager.RunStart{
-		ProviderName:     workflowSystemToolStringArg(args, "provider"),
-		Target:           startTarget,
-		DefinitionID:     definitionID,
-		IdempotencyKey:   strings.TrimSpace(req.IdempotencyKey),
-		WorkflowKey:      workflowSystemToolStringArg(args, "workflowKey"),
-		CallerAppName: workflowSystemToolCallerScope(req),
-		Permissions:      permissions,
+		ProviderName:   workflowSystemToolStringArg(args, "provider"),
+		Target:         startTarget,
+		DefinitionID:   definitionID,
+		IdempotencyKey: strings.TrimSpace(req.IdempotencyKey),
+		WorkflowKey:    workflowSystemToolStringArg(args, "workflowKey"),
+		CallerAppName:  workflowSystemToolCallerScope(req),
+		Permissions:    permissions,
 	})
 	if err != nil {
 		return nil, err
@@ -701,7 +701,7 @@ func (t *workflowSystemTools) executeUpdateSchedule(ctx context.Context, req age
 		DefinitionID:       definitionID,
 		SourceDefinitionID: sourceDefinitionID,
 		Paused:             paused,
-		CallerAppName:   workflowSystemToolCallerScope(req),
+		CallerAppName:      workflowSystemToolCallerScope(req),
 		Permissions:        permissions,
 	})
 	if err != nil {
@@ -911,7 +911,7 @@ func workflowSystemToolListRunsSchema() map[string]any {
 	return workflowSystemToolObjectSchema(nil, map[string]any{
 		"pageSize":  map[string]any{"type": "integer", "minimum": 0, "description": "Maximum runs to return."},
 		"pageToken": workflowSystemToolStringSchema("Pagination token from a previous workflow_runs_list response."),
-		"app":    workflowSystemToolStringSchema("Target app name to filter by."),
+		"app":       workflowSystemToolStringSchema("Target app name to filter by."),
 		"status": map[string]any{
 			"type":        "string",
 			"description": "Workflow run status to filter by.",
@@ -1079,7 +1079,7 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 			return coreworkflow.Target{}, err
 		}
 		return coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: pluginName,
+			AppName:    pluginName,
 			Operation:  operation,
 			Connection: workflowSystemToolStringArg(pluginMap, "connection"),
 			Instance:   workflowSystemToolStringArg(pluginMap, "instance"),
@@ -1225,7 +1225,7 @@ func workflowSystemToolOutputDeliveryFromValue(value any, path string) (*corewor
 	}
 	return &coreworkflow.OutputDelivery{
 		Target: coreworkflow.AppTarget{
-			AppName: workflowSystemToolStringArg(targetMap, "name"),
+			AppName:    workflowSystemToolStringArg(targetMap, "name"),
 			Operation:  workflowSystemToolStringArg(targetMap, "operation"),
 			Connection: workflowSystemToolStringArg(targetMap, "connection"),
 			Instance:   workflowSystemToolStringArg(targetMap, "instance"),
@@ -1375,7 +1375,7 @@ func workflowSystemToolInheritedAgentToolRefs(req agentSystemToolExecutionReques
 		}
 		inherited := coreagent.ToolRef{
 			System:     ref.System,
-			App:     ref.App,
+			App:        ref.App,
 			Operation:  ref.Operation,
 			Connection: ref.Connection,
 			Instance:   ref.Instance,
@@ -1400,7 +1400,7 @@ func workflowSystemToolInheritedAgentToolRefs(req agentSystemToolExecutionReques
 			continue
 		}
 		add(coreagent.ToolRef{
-			App:     target.App,
+			App:        target.App,
 			Operation:  target.Operation,
 			Connection: target.Connection,
 			Instance:   target.Instance,
@@ -1428,7 +1428,7 @@ func workflowSystemToolRefsFromValue(value any) ([]coreagent.ToolRef, error) {
 		}
 		out = append(out, coreagent.ToolRef{
 			System:      workflowSystemToolStringArg(refMap, "system"),
-			App:      workflowSystemToolStringArg(refMap, "app"),
+			App:         workflowSystemToolStringArg(refMap, "app"),
 			Operation:   workflowSystemToolStringArg(refMap, "operation"),
 			Connection:  workflowSystemToolStringArg(refMap, "connection"),
 			Instance:    workflowSystemToolStringArg(refMap, "instance"),
@@ -2012,7 +2012,7 @@ func workflowSystemToolStringArg(args map[string]any, key string) string {
 
 func workflowSystemToolListRunsRequest(args map[string]any) (coreworkflow.ListRunsRequest, error) {
 	req := coreworkflow.ListRunsRequest{
-		PageToken:    workflowSystemToolStringArg(args, "pageToken"),
+		PageToken: workflowSystemToolStringArg(args, "pageToken"),
 		TargetApp: workflowSystemToolStringArg(args, "app"),
 	}
 	if value, ok := args["pageSize"]; ok && value != nil {

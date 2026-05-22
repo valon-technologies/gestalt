@@ -113,7 +113,7 @@ type Lifecycle struct {
 type StatePaths struct {
 	ArtifactsDir string
 	LockfilePath string
-	AppScope  []string
+	AppScope     []string
 }
 
 type SyncOptions struct {
@@ -3082,10 +3082,10 @@ func stageLocalSourceInstall(kind, name, manifestPath, destDir string) (*prepare
 		stageKind = providermanifestv1.KindApp
 	}
 	if _, err := providerpkg.StageSourcePreparedInstallDir(manifestPath, tempDir, providerpkg.StageSourcePreparedInstallOptions{
-		Kind:       stageKind,
+		Kind:    stageKind,
 		AppName: name,
-		GOOS:       runtime.GOOS,
-		GOARCH:     runtime.GOARCH,
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
 	}); err != nil {
 		_ = cleanupInstall()
 		return nil, nil, nil, fmt.Errorf("prepare manifest for %s %q: %w", kind, name, err)

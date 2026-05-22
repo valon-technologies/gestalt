@@ -60,7 +60,7 @@ func TestDefinitionCanStartRunFromStoredTargetSnapshot(t *testing.T) {
 		Workflow: testWorkflowControl{provider: provider},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues.triage"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -72,13 +72,13 @@ func TestDefinitionCanStartRunFromStoredTargetSnapshot(t *testing.T) {
 	})
 
 	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
-		ProviderName:     "local",
-		CallerAppName: "github",
-		IdempotencyKey:   "triage-definition",
+		ProviderName:   "local",
+		CallerAppName:  "github",
+		IdempotencyKey: "triage-definition",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: "github",
-			Operation:  "issues.triage",
-			Input:      map[string]any{"mode": "full"},
+			AppName:   "github",
+			Operation: "issues.triage",
+			Input:     map[string]any{"mode": "full"},
 		}},
 	})
 	if err != nil {
@@ -89,10 +89,10 @@ func TestDefinitionCanStartRunFromStoredTargetSnapshot(t *testing.T) {
 	}
 
 	run, err := manager.StartRun(context.Background(), caller, RunStart{
-		ProviderName:     "local",
+		ProviderName:  "local",
 		CallerAppName: "github",
-		DefinitionID:     definition.Definition.ID,
-		WorkflowKey:      "github:issues:triage",
+		DefinitionID:  definition.Definition.ID,
+		WorkflowKey:   "github:issues:triage",
 	})
 	if err != nil {
 		t.Fatalf("StartRun by definition: %v", err)
@@ -135,7 +135,7 @@ func TestStartRunRejectsProviderReplayWithDifferentExecutionRef(t *testing.T) {
 		Workflow: testWorkflowControl{provider: provider},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues.triage"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -146,13 +146,13 @@ func TestStartRunRejectsProviderReplayWithDifferentExecutionRef(t *testing.T) {
 		Scopes:           principal.PermissionApps(permissions),
 	})
 	req := RunStart{
-		ProviderName:     "local",
-		CallerAppName: "github",
-		IdempotencyKey:   "same-idempotency-key",
-		WorkflowKey:      "github:issues:triage:first",
+		ProviderName:   "local",
+		CallerAppName:  "github",
+		IdempotencyKey: "same-idempotency-key",
+		WorkflowKey:    "github:issues:triage:first",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: "github",
-			Operation:  "issues.triage",
+			AppName:   "github",
+			Operation: "issues.triage",
 		}},
 	}
 
@@ -201,14 +201,14 @@ func TestPublishEventPreservesCallerAppName(t *testing.T) {
 
 	if _, err := manager.PublishEvent(context.Background(), caller, EventPublish{
 		ProviderName: "local",
-		AppName:   " github ",
+		AppName:      " github ",
 		Event:        coreworkflow.Event{Type: "issue.created"},
 	}); err != nil {
 		t.Fatalf("PublishEvent selected provider: %v", err)
 	}
 	if _, err := manager.PublishEvent(context.Background(), caller, EventPublish{
 		AppName: " github ",
-		Event:      coreworkflow.Event{Type: "issue.updated"},
+		Event:   coreworkflow.Event{Type: "issue.updated"},
 	}); err != nil {
 		t.Fatalf("PublishEvent fan-out: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 		Workflow: testWorkflowControl{provider: provider},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues.triage"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -252,12 +252,12 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 	})
 
 	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
-		ProviderName:     "local",
+		ProviderName:  "local",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: "github",
-			Operation:  "issues.triage",
-			Input:      map[string]any{"mode": "full"},
+			AppName:   "github",
+			Operation: "issues.triage",
+			Input:     map[string]any{"mode": "full"},
 		}},
 	})
 	if err != nil {
@@ -265,11 +265,11 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 	}
 
 	schedule, err := manager.CreateSchedule(context.Background(), caller, ScheduleUpsert{
-		ProviderName:     "local",
+		ProviderName:  "local",
 		CallerAppName: "github",
-		DefinitionID:     definition.Definition.ID,
-		Cron:             "*/5 * * * *",
-		Timezone:         "UTC",
+		DefinitionID:  definition.Definition.ID,
+		Cron:          "*/5 * * * *",
+		Timezone:      "UTC",
 	})
 	if err != nil {
 		t.Fatalf("CreateSchedule by definition: %v", err)
@@ -291,10 +291,10 @@ func TestDefinitionCanCreateScheduleAndEventTriggerFromStoredTargetSnapshot(t *t
 	}
 
 	trigger, err := manager.CreateEventTrigger(context.Background(), caller, EventTriggerUpsert{
-		ProviderName:     "local",
+		ProviderName:  "local",
 		CallerAppName: "github",
-		DefinitionID:     definition.Definition.ID,
-		Match:            coreworkflow.EventMatch{Type: "github.issue.opened"},
+		DefinitionID:  definition.Definition.ID,
+		Match:         coreworkflow.EventMatch{Type: "github.issue.opened"},
 	})
 	if err != nil {
 		t.Fatalf("CreateEventTrigger by definition: %v", err)
@@ -335,7 +335,7 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 		Workflow: testWorkflowControl{provider: provider},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues.triage", "issues.updated"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -347,12 +347,12 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	})
 
 	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
-		ProviderName:     "local",
+		ProviderName:  "local",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: "github",
-			Operation:  "issues.triage",
-			Input:      map[string]any{"mode": "initial"},
+			AppName:   "github",
+			Operation: "issues.triage",
+			Input:     map[string]any{"mode": "initial"},
 		}},
 	})
 	if err != nil {
@@ -360,12 +360,12 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	}
 
 	scheduleReq := ScheduleUpsert{
-		ProviderName:     "local",
-		CallerAppName: "github",
-		DefinitionID:     definition.Definition.ID,
-		IdempotencyKey:   "triage-schedule",
-		Cron:             "*/5 * * * *",
-		Timezone:         "UTC",
+		ProviderName:   "local",
+		CallerAppName:  "github",
+		DefinitionID:   definition.Definition.ID,
+		IdempotencyKey: "triage-schedule",
+		Cron:           "*/5 * * * *",
+		Timezone:       "UTC",
 	}
 	schedule, err := manager.CreateSchedule(context.Background(), caller, scheduleReq)
 	if err != nil {
@@ -373,12 +373,12 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	}
 
 	if _, err := manager.UpdateDefinition(context.Background(), caller, definition.Definition.ID, DefinitionUpsert{
-		ProviderName:     "local",
+		ProviderName:  "local",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: "github",
-			Operation:  "issues.updated",
-			Input:      map[string]any{"mode": "updated"},
+			AppName:   "github",
+			Operation: "issues.updated",
+			Input:     map[string]any{"mode": "updated"},
 		}},
 	}); err != nil {
 		t.Fatalf("UpdateDefinition: %v", err)
@@ -399,12 +399,12 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	}
 
 	otherDefinition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
-		ProviderName:     "local",
+		ProviderName:  "local",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: "github",
-			Operation:  "issues.updated",
-			Input:      map[string]any{"mode": "other"},
+			AppName:   "github",
+			Operation: "issues.updated",
+			Input:     map[string]any{"mode": "other"},
 		}},
 	})
 	if err != nil {
@@ -418,11 +418,11 @@ func TestDefinitionIdempotentCreateRetriesUseExistingSnapshots(t *testing.T) {
 	}
 
 	triggerReq := EventTriggerUpsert{
-		ProviderName:     "local",
-		CallerAppName: "github",
-		DefinitionID:     definition.Definition.ID,
-		IdempotencyKey:   "triage-trigger",
-		Match:            coreworkflow.EventMatch{Type: "github.issue.opened"},
+		ProviderName:   "local",
+		CallerAppName:  "github",
+		DefinitionID:   definition.Definition.ID,
+		IdempotencyKey: "triage-trigger",
+		Match:          coreworkflow.EventMatch{Type: "github.issue.opened"},
 	}
 	trigger, err := manager.CreateEventTrigger(context.Background(), caller, triggerReq)
 	if err != nil {
@@ -479,7 +479,7 @@ func TestDefinitionRunsUseDefinitionProvider(t *testing.T) {
 		},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues.triage"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -491,11 +491,11 @@ func TestDefinitionRunsUseDefinitionProvider(t *testing.T) {
 	})
 
 	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
-		ProviderName:     "remote",
+		ProviderName:  "remote",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: "github",
-			Operation:  "issues.triage",
+			AppName:   "github",
+			Operation: "issues.triage",
 		}},
 	})
 	if err != nil {
@@ -504,8 +504,8 @@ func TestDefinitionRunsUseDefinitionProvider(t *testing.T) {
 
 	run, err := manager.StartRun(context.Background(), caller, RunStart{
 		CallerAppName: "github",
-		DefinitionID:     definition.Definition.ID,
-		WorkflowKey:      "github:issues:triage",
+		DefinitionID:  definition.Definition.ID,
+		WorkflowKey:   "github:issues:triage",
 	})
 	if err != nil {
 		t.Fatalf("StartRun by definition: %v", err)
@@ -521,10 +521,10 @@ func TestDefinitionRunsUseDefinitionProvider(t *testing.T) {
 	}
 
 	_, err = manager.StartRun(context.Background(), caller, RunStart{
-		ProviderName:     "local",
+		ProviderName:  "local",
 		CallerAppName: "github",
-		DefinitionID:     definition.Definition.ID,
-		WorkflowKey:      "github:issues:triage:local",
+		DefinitionID:  definition.Definition.ID,
+		WorkflowKey:   "github:issues:triage:local",
 	})
 	if !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("StartRun with mismatched provider error = %v, want invalid invocation", err)
@@ -549,7 +549,7 @@ func TestListRunsResumesTokenlessProviderOverrun(t *testing.T) {
 		Workflow: testWorkflowControl{provider: provider},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues.triage"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -560,8 +560,8 @@ func TestListRunsResumesTokenlessProviderOverrun(t *testing.T) {
 		Scopes:           principal.PermissionApps(permissions),
 	})
 	target := coreworkflow.Target{App: &coreworkflow.AppTarget{
-		AppName: "github",
-		Operation:  "issues.triage",
+		AppName:   "github",
+		Operation: "issues.triage",
 	}}
 	for _, id := range []string{"1", "2", "3"} {
 		refID := "ref-" + id
@@ -602,8 +602,8 @@ func TestListRunsSkipsFilteredProviderPages(t *testing.T) {
 
 	provider := newTestWorkflowProvider()
 	target := coreworkflow.Target{App: &coreworkflow.AppTarget{
-		AppName: "github",
-		Operation:  "issues.triage",
+		AppName:   "github",
+		Operation: "issues.triage",
 	}}
 	provider.refs["ref-hidden"] = &coreworkflow.ExecutionReference{
 		ID:           "ref-hidden",
@@ -659,7 +659,7 @@ func TestListRunsSkipsFilteredProviderPages(t *testing.T) {
 		Workflow: testWorkflowControl{provider: provider},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues.triage"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -685,8 +685,8 @@ func TestListRunsOrdersCandidatesAcrossProvidersNewestFirst(t *testing.T) {
 	localProvider := newTestWorkflowProvider()
 	remoteProvider := newTestWorkflowProvider()
 	target := coreworkflow.Target{App: &coreworkflow.AppTarget{
-		AppName: "github",
-		Operation:  "issues.triage",
+		AppName:   "github",
+		Operation: "issues.triage",
 	}}
 	addRun := func(provider *testWorkflowProvider, providerName, runID string, createdAt time.Time) {
 		refID := "ref-" + runID
@@ -729,7 +729,7 @@ func TestListRunsOrdersCandidatesAcrossProvidersNewestFirst(t *testing.T) {
 		},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues.triage"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -762,12 +762,12 @@ func TestListRunsFiltersTargetPluginInManager(t *testing.T) {
 
 	provider := newTestWorkflowProvider()
 	githubTarget := coreworkflow.Target{App: &coreworkflow.AppTarget{
-		AppName: "github",
-		Operation:  "issues.triage",
+		AppName:   "github",
+		Operation: "issues.triage",
 	}}
 	slackTarget := coreworkflow.Target{App: &coreworkflow.AppTarget{
-		AppName: "slack",
-		Operation:  "chat.postMessage",
+		AppName:   "slack",
+		Operation: "chat.postMessage",
 	}}
 	provider.refs["ref-github"] = &coreworkflow.ExecutionReference{
 		ID:           "ref-github",
@@ -849,8 +849,8 @@ func TestListRunsKeepsUnorderedTokenlessProviderRunsReachable(t *testing.T) {
 
 	provider := newTestWorkflowProvider()
 	target := coreworkflow.Target{App: &coreworkflow.AppTarget{
-		AppName: "github",
-		Operation:  "issues.triage",
+		AppName:   "github",
+		Operation: "issues.triage",
 	}}
 	for _, id := range []string{"old", "new"} {
 		refID := "ref-" + id
@@ -896,7 +896,7 @@ func TestListRunsKeepsUnorderedTokenlessProviderRunsReachable(t *testing.T) {
 		Workflow: testWorkflowControl{provider: provider},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues.triage"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -928,9 +928,9 @@ func TestListRunsPageTokenRejectsChangedFiltersOrProviders(t *testing.T) {
 	t.Parallel()
 
 	req := coreworkflow.ListRunsRequest{
-		PageSize:     10,
+		PageSize:  10,
 		TargetApp: "github",
-		Status:       coreworkflow.RunStatusRunning,
+		Status:    coreworkflow.RunStatusRunning,
 	}
 	pageSize, err := effectiveWorkflowRunListPageSize(req.PageSize)
 	if err != nil {
@@ -942,9 +942,9 @@ func TestListRunsPageTokenRejectsChangedFiltersOrProviders(t *testing.T) {
 	})
 
 	if _, err := decodeWorkflowRunListPageToken(token, []string{"local", "remote"}, coreworkflow.ListRunsRequest{
-		PageSize:     10,
+		PageSize:  10,
 		TargetApp: "slack",
-		Status:       coreworkflow.RunStatusRunning,
+		Status:    coreworkflow.RunStatusRunning,
 	}, pageSize); !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("decode token with changed filter error = %v, want invalid invocation", err)
 	}
@@ -954,9 +954,9 @@ func TestListRunsPageTokenRejectsChangedFiltersOrProviders(t *testing.T) {
 	}
 
 	if _, err := decodeWorkflowRunListPageToken(token, []string{"local", "remote"}, coreworkflow.ListRunsRequest{
-		PageSize:     20,
+		PageSize:  20,
 		TargetApp: "github",
-		Status:       coreworkflow.RunStatusRunning,
+		Status:    coreworkflow.RunStatusRunning,
 	}, 20); !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("decode token with changed page size error = %v, want invalid invocation", err)
 	}
@@ -988,7 +988,7 @@ func TestUpdateDefinitionProviderChangeDoesNotExposeDuplicateActiveRefs(t *testi
 		},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"issues.triage"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -1000,11 +1000,11 @@ func TestUpdateDefinitionProviderChangeDoesNotExposeDuplicateActiveRefs(t *testi
 	})
 
 	definition, err := manager.CreateDefinition(context.Background(), caller, DefinitionUpsert{
-		ProviderName:     "local",
+		ProviderName:  "local",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: "github",
-			Operation:  "issues.triage",
+			AppName:   "github",
+			Operation: "issues.triage",
 		}},
 	})
 	if err != nil {
@@ -1027,11 +1027,11 @@ func TestUpdateDefinitionProviderChangeDoesNotExposeDuplicateActiveRefs(t *testi
 	}
 
 	updated, err := manager.UpdateDefinition(context.Background(), caller, definition.Definition.ID, DefinitionUpsert{
-		ProviderName:     "remote",
+		ProviderName:  "remote",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: "github",
-			Operation:  "issues.triage",
+			AppName:   "github",
+			Operation: "issues.triage",
 		}},
 	})
 	if err != nil {
@@ -1071,7 +1071,7 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 		},
 	})
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"events.handle"},
 	}, {
 		App: "simple",
@@ -1085,8 +1085,8 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 	})
 
 	managed, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
@@ -1097,8 +1097,8 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 			},
 			OutputDelivery: &coreworkflow.OutputDelivery{
 				Target: coreworkflow.AppTarget{
-					AppName: "github",
-					Operation:  "bot.commentFinal",
+					AppName:   "github",
+					Operation: "bot.commentFinal",
 				},
 				InputBindings: []coreworkflow.OutputBinding{
 					{InputField: "body", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
@@ -1106,8 +1106,8 @@ func TestSignalOrStartRunExecutionRefInheritsDeclaredAgentToolInvokes(t *testing
 			},
 			SessionReadyDelivery: &coreworkflow.OutputDelivery{
 				Target: coreworkflow.AppTarget{
-					AppName: "github",
-					Operation:  "bot.commentStarted",
+					AppName:   "github",
+					Operation: "bot.commentStarted",
 				},
 				InputBindings: []coreworkflow.OutputBinding{
 					{InputField: "session_id", Value: coreworkflow.OutputValueSource{AgentSession: "id"}},
@@ -1208,7 +1208,7 @@ func TestSignalOrStartRunRejectsOutputDeliveryTargetCredentialMode(t *testing.T)
 		},
 	})
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"events.handle", "bot.commentFinal"},
 	}, {
 		App: "simple",
@@ -1222,15 +1222,15 @@ func TestSignalOrStartRunRejectsOutputDeliveryTargetCredentialMode(t *testing.T)
 	})
 
 	_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
 			Prompt:       "Handle the webhook.",
 			OutputDelivery: &coreworkflow.OutputDelivery{
 				Target: coreworkflow.AppTarget{
-					AppName:     "github",
+					AppName:        "github",
 					Operation:      "bot.commentFinal",
 					CredentialMode: core.ConnectionModeNone,
 				},
@@ -1272,7 +1272,7 @@ func TestSignalOrStartRunAppTargetCredentialModeUsesDeclaredInvoke(t *testing.T)
 		},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"events.handle", "reviewPullRequest"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -1283,11 +1283,11 @@ func TestSignalOrStartRunAppTargetCredentialModeUsesDeclaredInvoke(t *testing.T)
 	})
 
 	managed, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7:policy:pr-review",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7:policy:pr-review",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName:     "github",
+			AppName:        "github",
 			Operation:      "reviewPullRequest",
 			CredentialMode: core.ConnectionModeNone,
 		}},
@@ -1330,7 +1330,7 @@ func TestSignalOrStartRunAppTargetCredentialModeKeepsBlankModeBlank(t *testing.T
 		},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"events.handle", "reviewPullRequest"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -1340,12 +1340,12 @@ func TestSignalOrStartRunAppTargetCredentialModeKeepsBlankModeBlank(t *testing.T
 	})
 
 	managed, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7:policy:pr-review",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7:policy:pr-review",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName: "github",
-			Operation:  "reviewPullRequest",
+			AppName:   "github",
+			Operation: "reviewPullRequest",
 		}},
 		Signal: coreworkflow.Signal{Name: "github.app.webhook"},
 	})
@@ -1361,11 +1361,11 @@ func TestSignalOrStartRunAppTargetCredentialModeKeepsBlankModeBlank(t *testing.T
 	blankRefID := managed.ExecutionRef.ID
 
 	explicit, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7:policy:pr-review",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7:policy:pr-review",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName:     "github",
+			AppName:        "github",
 			Operation:      "reviewPullRequest",
 			CredentialMode: core.ConnectionModeNone,
 		}},
@@ -1394,7 +1394,7 @@ func TestCreateScheduleRejectsAppTargetCredentialModeWithoutCaller(t *testing.T)
 		Workflow: testWorkflowControl{provider: provider},
 	})
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"reviewPullRequest"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -1407,7 +1407,7 @@ func TestCreateScheduleRejectsAppTargetCredentialModeWithoutCaller(t *testing.T)
 		ProviderName: "local",
 		Cron:         "*/5 * * * *",
 		Target: coreworkflow.Target{App: &coreworkflow.AppTarget{
-			AppName:     "github",
+			AppName:        "github",
 			Operation:      "reviewPullRequest",
 			CredentialMode: core.ConnectionModeNone,
 		}},
@@ -1430,8 +1430,8 @@ func TestSignalOrStartRunReusesExecutionRefForSameWorkflowKeyAndTarget(t *testin
 		SubjectID: "system:http_binding:github:event",
 	})
 	req := RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
@@ -1472,8 +1472,8 @@ func TestSignalOrStartRunRejectsDeniedExecutionRefPermissionsBeforeEnqueue(t *te
 		SubjectID: "system:http_binding:github:event",
 	})
 	req := RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
@@ -1514,8 +1514,8 @@ func TestSignalOrStartRunFailureDoesNotRevokeStableExecutionRef(t *testing.T) {
 		SubjectID: "system:http_binding:github:event",
 	})
 	req := RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
@@ -1560,8 +1560,8 @@ func TestSignalOrStartRunFirstFailureKeepsStableExecutionRef(t *testing.T) {
 		SubjectID: "system:http_binding:github:event",
 	})
 	req := RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
@@ -1600,8 +1600,8 @@ func TestSignalOrStartRunCreatesExecutionRefAfterGRPCNotFound(t *testing.T) {
 	})
 
 	managed, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
@@ -1630,7 +1630,7 @@ func TestSignalOrStartRunDoesNotRewriteExecutionRefForDifferentPermissions(t *te
 		AgentManager: testAgentManager{},
 	})
 	initialPermissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"events.handle"},
 	}, {
 		App: "simple",
@@ -1641,8 +1641,8 @@ func TestSignalOrStartRunDoesNotRewriteExecutionRefForDifferentPermissions(t *te
 		Scopes:           principal.PermissionApps(initialPermissions),
 	})
 	req := RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
@@ -1663,7 +1663,7 @@ func TestSignalOrStartRunDoesNotRewriteExecutionRefForDifferentPermissions(t *te
 	putCalls := provider.putExecutionReferenceCalls
 
 	broaderPermissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"events.handle", "bot.admin"},
 	}, {
 		App: "simple",
@@ -1721,7 +1721,7 @@ func TestSignalOrStartRunExecutionRefDoesNotInheritSurfaceInvokes(t *testing.T) 
 		},
 	})
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"events.handle"},
 	}, {
 		App: "simple",
@@ -1735,8 +1735,8 @@ func TestSignalOrStartRunExecutionRefDoesNotInheritSurfaceInvokes(t *testing.T) 
 	})
 
 	_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
@@ -1762,7 +1762,7 @@ func TestSignalOrStartRunRejectsUnauthorizedAgentProvider(t *testing.T) {
 		AgentManager: testAgentManager{},
 	})
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"events.handle"},
 	}})
 	caller := principal.Canonicalize(&principal.Principal{
@@ -1772,8 +1772,8 @@ func TestSignalOrStartRunRejectsUnauthorizedAgentProvider(t *testing.T) {
 	})
 
 	_, err := manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
@@ -1809,7 +1809,7 @@ func TestSignalOrStartRunRejectsRuntimeDeniedAgentProvider(t *testing.T) {
 		Authorizer:   authz,
 	})
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"events.handle"},
 	}, {
 		App: "simple",
@@ -1823,8 +1823,8 @@ func TestSignalOrStartRunRejectsRuntimeDeniedAgentProvider(t *testing.T) {
 	})
 
 	_, err = manager.SignalOrStartRun(context.Background(), caller, RunSignalOrStart{
-		ProviderName:     "local",
-		WorkflowKey:      "github:99:acme/widgets:7",
+		ProviderName:  "local",
+		WorkflowKey:   "github:99:acme/widgets:7",
 		CallerAppName: "github",
 		Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{
 			ProviderName: "simple",
@@ -1862,7 +1862,7 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 		Target:       target,
 		SubjectID:    "system:http_binding:github:event",
 		Permissions: []core.AccessPermission{{
-			App:     "github",
+			App:        "github",
 			Operations: []string{"events.handle"},
 		}, {
 			App: "simple",
@@ -1877,7 +1877,7 @@ func TestSignalRunUsesCurrentPrincipalForTargetValidation(t *testing.T) {
 		ExecutionRef: ref.ID,
 	}
 	callerPermissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     "github",
+		App:        "github",
 		Operations: []string{"events.handle", "bot.openPullRequest"},
 	}, {
 		App: "simple",

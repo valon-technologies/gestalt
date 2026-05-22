@@ -20,11 +20,11 @@ import (
 )
 
 type providerBackedRoleState struct {
-	modelID            string
-	policyStaticRoles  map[string][]string
-	appStaticRoles  map[string][]string
-	appDynamicRoles map[string][]string
-	adminDynamicRoles  []string
+	modelID           string
+	policyStaticRoles map[string][]string
+	appStaticRoles    map[string][]string
+	appDynamicRoles   map[string][]string
+	adminDynamicRoles []string
 }
 
 type ProviderBackedAuthorizer struct {
@@ -70,9 +70,9 @@ func NewProviderBacked(base *Authorizer, provider core.AuthorizationProvider, op
 		base:     base,
 		provider: provider,
 		state: providerBackedRoleState{
-			policyStaticRoles:  map[string][]string{},
-			appStaticRoles:  map[string][]string{},
-			appDynamicRoles: map[string][]string{},
+			policyStaticRoles: map[string][]string{},
+			appStaticRoles:    map[string][]string{},
+			appDynamicRoles:   map[string][]string{},
 		},
 	}
 	for _, opt := range opts {
@@ -633,9 +633,9 @@ type dynamicFragmentRelationship struct {
 func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string]*core.Relationship, fragmentRelationships []dynamicFragmentRelationship) (map[string]*core.Relationship, providerBackedRoleState, error) {
 	desired := map[string]*core.Relationship{}
 	state := providerBackedRoleState{
-		policyStaticRoles:  map[string][]string{},
-		appStaticRoles:  map[string][]string{},
-		appDynamicRoles: map[string][]string{},
+		policyStaticRoles: map[string][]string{},
+		appStaticRoles:    map[string][]string{},
+		appDynamicRoles:   map[string][]string{},
 	}
 	policyStaticRoles := map[string]map[string]struct{}{}
 	appStaticRoles := map[string]map[string]struct{}{}

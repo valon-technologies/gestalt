@@ -15,7 +15,7 @@ import (
 
 func (s *Server) httpBindingPrincipal(binding MountedHTTPBinding, verified *verifiedHTTPBindingSender) *principal.Principal {
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		App:     binding.AppName,
+		App:        binding.AppName,
 		Operations: []string{binding.Target},
 	}})
 	displayName := binding.AppName + "/" + binding.Name
@@ -33,7 +33,7 @@ func (s *Server) httpBindingPrincipal(binding MountedHTTPBinding, verified *veri
 func httpBindingContextValue(binding MountedHTTPBinding, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) map[string]any {
 	value := map[string]any{
 		"name":   binding.Name,
-		"app": binding.AppName,
+		"app":    binding.AppName,
 		"path":   binding.Path,
 		"method": binding.Method,
 		"target": binding.Target,

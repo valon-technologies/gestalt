@@ -16,9 +16,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/services/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/services/apps/mcp"
 	"github.com/valon-technologies/gestalt/server/services/apps/source"
+	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -78,9 +78,9 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		Agent:                result.AgentControl,
 		AgentManager:         result.AgentManager,
 		Workflow:             result.WorkflowControl,
-		AppRuntimes:       result.AppRuntimes,
+		AppRuntimes:          result.AppRuntimes,
 		Invoker:              httpInvoker,
-		AppInvoker:        result.AppInvoker,
+		AppInvoker:           result.AppInvoker,
 		DefaultConnection:    connMaps.DefaultConnection,
 		// HTTP routes expose REST-visible operations, so unqualified session-catalog
 		// resolution should follow the API surface by default. The MCP server keeps
@@ -88,7 +88,7 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		CatalogConnection:     httpCatalogConnectionMap(connMaps),
 		ConnectionAuth:        result.ConnectionAuth,
 		ManualConnectionAuth:  result.ManualConnectionAuth,
-		AppDefs:            cfg.Apps,
+		AppDefs:               cfg.Apps,
 		AgentDefs:             cfg.Providers.Agent,
 		Authorizer:            result.Authorizer,
 		AuthorizationProvider: result.AuthorizationProvider,
