@@ -807,20 +807,5 @@ func cloneStartupWorkflowValues(values map[string]coreworkflow.Value) map[string
 }
 
 func cloneStartupWorkflowValue(value coreworkflow.Value) coreworkflow.Value {
-	value.Object = cloneStartupWorkflowValues(value.Object)
-	if value.Array != nil {
-		value.Array = slices.Clone(value.Array)
-		for i := range value.Array {
-			value.Array[i] = cloneStartupWorkflowValue(value.Array[i])
-		}
-	}
-	if value.Template != nil {
-		text := *value.Template
-		value.Template = &text
-	}
-	if value.StepOutput != nil {
-		stepOutput := *value.StepOutput
-		value.StepOutput = &stepOutput
-	}
-	return value
+	return coreworkflow.CloneValue(value)
 }

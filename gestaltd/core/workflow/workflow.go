@@ -451,6 +451,17 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 		step := &out.Steps[i]
 		if len(step.Inputs) == 0 {
 			step.Inputs = nil
+		} else {
+			inputs := make(map[string]Value, len(step.Inputs))
+			for key, value := range step.Inputs {
+				inputs[key] = normalizedWorkflowValue(value)
+			}
+			step.Inputs = inputs
+		}
+		if step.When != nil {
+			when := *step.When
+			when.Value = normalizedWorkflowValue(when.Value)
+			step.When = &when
 		}
 		if step.Plugin != nil {
 			plugin := *step.Plugin
@@ -482,11 +493,27 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 }
 
 func normalizedWorkflowValue(value Value) Value {
-	if len(value.Object) == 0 {
-		value.Object = nil
+	if value.Object != nil {
+		if len(value.Object) == 0 {
+			value.Object = nil
+		} else {
+			object := make(map[string]Value, len(value.Object))
+			for key, item := range value.Object {
+				object[key] = normalizedWorkflowValue(item)
+			}
+			value.Object = object
+		}
 	}
-	if len(value.Array) == 0 {
-		value.Array = nil
+	if value.Array != nil {
+		if len(value.Array) == 0 {
+			value.Array = nil
+		} else {
+			array := make([]Value, len(value.Array))
+			for i, item := range value.Array {
+				array[i] = normalizedWorkflowValue(item)
+			}
+			value.Array = array
+		}
 	}
 	return value
 }

@@ -47,7 +47,7 @@ import {
   bunTarget,
   parseBuildArgs,
 } from "../src/build.ts";
-import { Cache, cacheSocketEnv } from "../src/cache.ts";
+import { Cache } from "../src/cache.ts";
 import { ENV_HOST_SERVICE_SOCKET } from "../src/host-service.ts";
 import { boundWorkflowTargetToProto } from "../src/workflow.ts";
 import {

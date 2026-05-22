@@ -1044,11 +1044,15 @@ func workflowSystemToolTargetFromValue(value any) (coreworkflow.Target, error) {
 }
 
 func workflowSystemToolStepsFromValue(value any) ([]coreworkflow.Step, error) {
+	if value == nil {
+		return nil, nil
+	}
 	items, ok := value.([]any)
 	if !ok {
 		return nil, fmt.Errorf("%w: target.steps must be an array", invocation.ErrInvalidInvocation)
 	}
 	out := make([]coreworkflow.Step, 0, len(items))
+	previousSteps := map[string]struct{}{}
 	for i, item := range items {
 		stepMap, ok := workflowSystemToolMap(item)
 		if !ok {
@@ -1101,9 +1105,82 @@ func workflowSystemToolStepsFromValue(value any) ([]coreworkflow.Step, error) {
 			}
 			step.Agent = agent
 		}
+		stepID := strings.TrimSpace(step.ID)
+		if stepID != "" {
+			if _, ok := previousSteps[stepID]; ok {
+				return nil, fmt.Errorf("%w: %s.id %q is duplicated", invocation.ErrInvalidInvocation, path, stepID)
+			}
+		}
+		if err := workflowSystemToolValidateStepOutputRefs(path, step, previousSteps); err != nil {
+			return nil, err
+		}
 		out = append(out, step)
+		if stepID != "" {
+			previousSteps[stepID] = struct{}{}
+		}
 	}
 	return out, nil
+}
+
+func workflowSystemToolValidateStepOutputRefs(path string, step coreworkflow.Step, previousSteps map[string]struct{}) error {
+	for key, value := range step.Inputs {
+		if err := workflowSystemToolValidateValueStepOutputRefs(path+".inputs."+key, value, previousSteps); err != nil {
+			return err
+		}
+	}
+	if step.When != nil {
+		if err := workflowSystemToolValidateValueStepOutputRefs(path+".when.value", step.When.Value, previousSteps); err != nil {
+			return err
+		}
+	}
+	if step.Plugin != nil {
+		if err := workflowSystemToolValidateValueStepOutputRefs(path+".plugin.input", step.Plugin.Input, previousSteps); err != nil {
+			return err
+		}
+	}
+	if step.OutputDelivery != nil && step.OutputDelivery.Plugin != nil {
+		deliverySteps := workflowSystemToolStepRefsWithCurrent(previousSteps, step.ID)
+		if err := workflowSystemToolValidateValueStepOutputRefs(path+".outputDelivery.plugin.input", step.OutputDelivery.Plugin.Input, deliverySteps); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func workflowSystemToolStepRefsWithCurrent(previousSteps map[string]struct{}, stepID string) map[string]struct{} {
+	stepID = strings.TrimSpace(stepID)
+	if stepID == "" {
+		return previousSteps
+	}
+	out := make(map[string]struct{}, len(previousSteps)+1)
+	for key := range previousSteps {
+		out[key] = struct{}{}
+	}
+	out[stepID] = struct{}{}
+	return out
+}
+
+func workflowSystemToolValidateValueStepOutputRefs(path string, value coreworkflow.Value, previousSteps map[string]struct{}) error {
+	if value.StepOutput != nil {
+		stepID := strings.TrimSpace(value.StepOutput.StepID)
+		if stepID == "" {
+			return fmt.Errorf("%w: %s.stepOutput.stepId is required", invocation.ErrInvalidInvocation, path)
+		}
+		if _, ok := previousSteps[stepID]; !ok {
+			return fmt.Errorf("%w: %s.stepOutput.stepId %q must reference an earlier step", invocation.ErrInvalidInvocation, path, stepID)
+		}
+	}
+	for key, item := range value.Object {
+		if err := workflowSystemToolValidateValueStepOutputRefs(path+"."+key, item, previousSteps); err != nil {
+			return err
+		}
+	}
+	for i, item := range value.Array {
+		if err := workflowSystemToolValidateValueStepOutputRefs(fmt.Sprintf("%s[%d]", path, i), item, previousSteps); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func workflowSystemToolPluginCallFromValue(value any, path string) (*coreworkflow.PluginCall, error) {

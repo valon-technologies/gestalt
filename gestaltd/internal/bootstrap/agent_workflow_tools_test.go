@@ -512,6 +512,145 @@ func TestAgentRuntimeWorkflowSystemToolRejectsInheritedOutputDeliveryForFinalPlu
 	}
 }
 
+func TestAgentRuntimeWorkflowSystemToolRejectsForwardStepOutputRefs(t *testing.T) {
+	t.Parallel()
+
+	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
+	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
+		CallerPluginName: "slack",
+		Permissions: []core.AccessPermission{
+			{Plugin: "github", Operations: []string{"createIssue"}},
+			{Plugin: "notification", Operations: []string{"reply"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
+			{Plugin: "github", Operation: "createIssue"},
+			{Plugin: "notification", Operation: "reply"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	})
+
+	_, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "call-run-forward-step-output",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"workflowKey": "slack-child-run-forward-step-output",
+			"target": workflowSystemToolTestTarget(
+				map[string]any{
+					"id": "create_issue",
+					"plugin": map[string]any{
+						"name":      "github",
+						"operation": "createIssue",
+						"input": map[string]any{
+							"object": map[string]any{
+								"title": map[string]any{
+									"stepOutput": map[string]any{
+										"stepId": "notify",
+										"path":   "plugin.body.text",
+									},
+								},
+							},
+						},
+					},
+				},
+				map[string]any{
+					"id": "notify",
+					"plugin": map[string]any{
+						"name":      "notification",
+						"operation": "reply",
+						"input": map[string]any{
+							"literal": map[string]any{"text": "created"},
+						},
+					},
+				},
+			),
+		},
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool succeeded, want invalid invocation")
+	}
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
+	}
+	if !strings.Contains(err.Error(), `target.steps[0].plugin.input.title.stepOutput.stepId "notify" must reference an earlier step`) {
+		t.Fatalf("ExecuteTool error = %v, want forward step output message", err)
+	}
+	if len(workflowProvider.startedRuns) != 0 {
+		t.Fatalf("started runs = %d, want none", len(workflowProvider.startedRuns))
+	}
+}
+
+func TestAgentRuntimeWorkflowSystemToolRejectsDuplicateStepIDs(t *testing.T) {
+	t.Parallel()
+
+	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
+	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
+	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
+		CallerPluginName: "slack",
+		Permissions: []core.AccessPermission{
+			{Plugin: "github", Operations: []string{"createIssue"}},
+			{Plugin: "notification", Operations: []string{"reply"}},
+		},
+		ToolRefs: []coreagent.ToolRef{
+			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
+			{Plugin: "github", Operation: "createIssue"},
+			{Plugin: "notification", Operation: "reply"},
+		},
+		Tools: []coreagent.Tool{workflowTool},
+	})
+
+	_, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+		ProviderName: "managed",
+		SessionID:    "session-1",
+		TurnID:       "turn-1",
+		ToolCallID:   "call-run-duplicate-step-ids",
+		ToolID:       workflowTool.ID,
+		RunGrant:     runGrant,
+		Arguments: map[string]any{
+			"workflowKey": "slack-child-run-duplicate-step-ids",
+			"target": workflowSystemToolTestTarget(
+				map[string]any{
+					"id": "duplicate",
+					"plugin": map[string]any{
+						"name":      "github",
+						"operation": "createIssue",
+						"input": map[string]any{
+							"literal": map[string]any{"title": "create"},
+						},
+					},
+				},
+				map[string]any{
+					"id": "duplicate",
+					"plugin": map[string]any{
+						"name":      "notification",
+						"operation": "reply",
+						"input": map[string]any{
+							"literal": map[string]any{"text": "created"},
+						},
+					},
+				},
+			),
+		},
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool succeeded, want invalid invocation")
+	}
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
+	}
+	if !strings.Contains(err.Error(), `target.steps[1].id "duplicate" is duplicated`) {
+		t.Fatalf("ExecuteTool error = %v, want duplicate step id message", err)
+	}
+	if len(workflowProvider.startedRuns) != 0 {
+		t.Fatalf("started runs = %d, want none", len(workflowProvider.startedRuns))
+	}
+}
+
 func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithStepOutputDelivery(t *testing.T) {
 	t.Parallel()
 
