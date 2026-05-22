@@ -6,7 +6,7 @@ import {
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
-  AgentManagerHost as AgentManagerHostService,
+  AgentProvider as AgentProviderService,
   type AgentInteraction as ProtoAgentInteraction,
   type AgentSession as ProtoAgentSession,
   type AgentTurn as ProtoAgentTurn,
@@ -43,7 +43,7 @@ import {
 } from "./protocol-internal.ts";
 
 /** Environment variable containing the agent-manager host-service target. */
-export const ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_MANAGER_SOCKET";
+export const ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_PROVIDER_SOCKET";
 /** Environment variable containing the optional agent-manager relay token. */
 export const ENV_AGENT_MANAGER_SOCKET_TOKEN =
   `${ENV_AGENT_MANAGER_SOCKET}_TOKEN`;
@@ -151,7 +151,7 @@ export interface AgentManagerResolveInteraction {
  * manager call forwards that token to the host service.
  */
 export class AgentManager {
-  private readonly client: Client<typeof AgentManagerHostService>;
+  private readonly client: Client<typeof AgentProviderService>;
   private readonly invocationToken: string;
 
   constructor(request: Request);
@@ -172,7 +172,7 @@ export class AgentManager {
         ? [agentManagerRelayTokenInterceptor(relayToken)]
         : [],
     });
-    this.client = createClient(AgentManagerHostService, transport);
+    this.client = createClient(AgentProviderService, transport);
   }
 
   /** Creates an agent session. */

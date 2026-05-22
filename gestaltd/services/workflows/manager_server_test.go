@@ -40,8 +40,8 @@ func TestManagerServerEmptyWorkflowGrantsDenyWorkflowManagerMethods(t *testing.T
 		t.Fatalf("MintRootTokenWithWorkflowGrants: %v", err)
 	}
 
-	server := NewManagerServer("caller", nil, tokens)
-	_, err = server.CreateSchedule(context.Background(), &proto.WorkflowManagerCreateScheduleRequest{
+	server := NewProviderServer("caller", nil, tokens)
+	_, err = server.UpsertSchedule(context.Background(), &proto.UpsertWorkflowProviderScheduleRequest{
 		InvocationToken: token,
 	})
 	if status.Code(err) != codes.PermissionDenied {
@@ -78,7 +78,7 @@ func TestManagerServerPublishEventThreadsCallerPluginToSelectedProvider(t *testi
 		t.Fatalf("NewInvocationTokenManager: %v", err)
 	}
 	token := mintPublishEventToken(t, tokens, "valonSats")
-	selected := &recordingWorkflowProvider{}
+	selected := &recordingWorkflowProvider{publishedID: "provider-event"}
 	other := &recordingWorkflowProvider{}
 	var auditBuf bytes.Buffer
 	manager := workflowmanager.New(workflowmanager.Config{
@@ -92,15 +92,18 @@ func TestManagerServerPublishEventThreadsCallerPluginToSelectedProvider(t *testi
 		},
 		Audit: invocation.NewSlogAuditSink(&auditBuf),
 	})
-	server := NewManagerServer("valonSats", manager, tokens)
+	server := NewProviderServer("valonSats", manager, tokens)
 
-	_, err = server.PublishEvent(context.Background(), &proto.WorkflowManagerPublishEventRequest{
+	published, err := server.PublishEvent(context.Background(), &proto.PublishWorkflowProviderEventRequest{
 		ProviderName:    "selected",
 		InvocationToken: token,
 		Event:           &proto.WorkflowEvent{Type: "valon_sats.attempt.submitted"},
 	})
 	if err != nil {
 		t.Fatalf("PublishEvent: %v", err)
+	}
+	if got := published.GetId(); got != "provider-event" {
+		t.Fatalf("published event id = %q, want provider-event", got)
 	}
 	if len(selected.publishReqs) != 1 {
 		t.Fatalf("selected publish requests = %d, want 1", len(selected.publishReqs))
@@ -149,9 +152,9 @@ func TestManagerServerPublishEventThreadsCallerPluginToFanoutProviders(t *testin
 		},
 		Audit: invocation.NewSlogAuditSink(&auditBuf),
 	})
-	server := NewManagerServer(" valonSats ", manager, tokens)
+	server := NewProviderServer(" valonSats ", manager, tokens)
 
-	_, err = server.PublishEvent(context.Background(), &proto.WorkflowManagerPublishEventRequest{
+	_, err = server.PublishEvent(context.Background(), &proto.PublishWorkflowProviderEventRequest{
 		InvocationToken: token,
 		Event:           &proto.WorkflowEvent{Type: "valon_sats.attempt.submitted"},
 	})
@@ -313,9 +316,14 @@ func (c managerServerWorkflowControl) ProviderNames() []string {
 type recordingWorkflowProvider struct {
 	coreworkflow.Provider
 	publishReqs []coreworkflow.PublishEventRequest
+	publishedID string
 }
 
-func (p *recordingWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) error {
+func (p *recordingWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
 	p.publishReqs = append(p.publishReqs, req)
-	return nil
+	event := req.Event
+	if p.publishedID != "" {
+		event.ID = p.publishedID
+	}
+	return &event, nil
 }

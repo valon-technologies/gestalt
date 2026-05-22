@@ -14,11 +14,11 @@ import {
   AgentInteractionSchema,
   AgentInteractionState,
   AgentInteractionType,
-  AgentManagerHost as AgentManagerHostService,
-  AgentManagerListInteractionsResponseSchema,
-  AgentManagerListSessionsResponseSchema,
-  AgentManagerListTurnEventsResponseSchema,
-  AgentManagerListTurnsResponseSchema,
+  AgentProvider as AgentProviderService,
+  ListAgentProviderInteractionsResponseSchema,
+  ListAgentProviderSessionsResponseSchema,
+  ListAgentProviderTurnEventsResponseSchema,
+  ListAgentProviderTurnsResponseSchema,
   AgentSessionSchema,
   AgentSessionState,
   AgentTurnEventSchema,
@@ -51,7 +51,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
     grpcWeb: false,
     connect: false,
     routes(router) {
-      router.service(AgentManagerHostService, {
+      router.service(AgentProviderService, {
         async createSession(input) {
           calls.push({
             method: "createSession",
@@ -90,7 +90,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
             invocationToken: input.invocationToken,
             providerName: input.providerName,
           });
-          return create(AgentManagerListSessionsResponseSchema, {
+          return create(ListAgentProviderSessionsResponseSchema, {
             sessions: [
               create(AgentSessionSchema, {
                 id: "session-1",
@@ -156,7 +156,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
             invocationToken: input.invocationToken,
             sessionId: input.sessionId,
           });
-          return create(AgentManagerListTurnsResponseSchema, {
+          return create(ListAgentProviderTurnsResponseSchema, {
             turns: [
               create(AgentTurnSchema, {
                 id: "turn-1",
@@ -193,7 +193,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
             invocationToken: input.invocationToken,
             turnId: input.turnId,
           });
-          return create(AgentManagerListTurnEventsResponseSchema, {
+          return create(ListAgentProviderTurnEventsResponseSchema, {
             events: [
               create(AgentTurnEventSchema, {
                 id: "event-1",
@@ -212,7 +212,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
             invocationToken: input.invocationToken,
             turnId: input.turnId,
           });
-          return create(AgentManagerListInteractionsResponseSchema, {
+          return create(ListAgentProviderInteractionsResponseSchema, {
             interactions: [
               create(AgentInteractionSchema, {
                 id: "interaction-1",
@@ -242,7 +242,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
             resolution: input.resolution ?? {},
           });
         },
-      } satisfies Partial<ServiceImpl<typeof AgentManagerHostService>>);
+      } satisfies Partial<ServiceImpl<typeof AgentProviderService>>);
     },
   });
   const server = createServer(handler);
@@ -461,7 +461,7 @@ test("AgentManager honors tcp target env and relay token env", async () => {
     grpcWeb: false,
     connect: false,
     routes(router) {
-      router.service(AgentManagerHostService, {
+      router.service(AgentProviderService, {
         async createSession(input) {
           return create(AgentSessionSchema, {
             id: "session-1",
@@ -470,7 +470,7 @@ test("AgentManager honors tcp target env and relay token env", async () => {
             state: AgentSessionState.ACTIVE,
           });
         },
-      } satisfies Partial<ServiceImpl<typeof AgentManagerHostService>>);
+      } satisfies Partial<ServiceImpl<typeof AgentProviderService>>);
     },
   });
   const server = createServer((req, res) => {

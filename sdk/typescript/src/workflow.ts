@@ -51,9 +51,12 @@ import {
   type BoundWorkflowSchedule as ProtoBoundWorkflowSchedule,
   type BoundWorkflowTarget as ProtoBoundWorkflowTarget,
   type CancelWorkflowProviderRunRequest as ProtoCancelWorkflowProviderRunRequest,
+  type CreateWorkflowProviderDefinitionRequest as ProtoCreateWorkflowProviderDefinitionRequest,
+  type DeleteWorkflowProviderDefinitionRequest as ProtoDeleteWorkflowProviderDefinitionRequest,
   type DeleteWorkflowProviderEventTriggerRequest as ProtoDeleteWorkflowProviderEventTriggerRequest,
   type DeleteWorkflowProviderScheduleRequest as ProtoDeleteWorkflowProviderScheduleRequest,
   type GetWorkflowExecutionReferenceRequest as ProtoGetWorkflowExecutionReferenceRequest,
+  type GetWorkflowProviderDefinitionRequest as ProtoGetWorkflowProviderDefinitionRequest,
   type GetWorkflowProviderEventTriggerRequest as ProtoGetWorkflowProviderEventTriggerRequest,
   type GetWorkflowProviderRunRequest as ProtoGetWorkflowProviderRunRequest,
   type GetWorkflowProviderScheduleRequest as ProtoGetWorkflowProviderScheduleRequest,
@@ -71,6 +74,7 @@ import {
   type SignalWorkflowProviderRunRequest as ProtoSignalWorkflowProviderRunRequest,
   type SignalWorkflowRunResponse as ProtoSignalWorkflowRunResponse,
   type StartWorkflowProviderRunRequest as ProtoStartWorkflowProviderRunRequest,
+  type UpdateWorkflowProviderDefinitionRequest as ProtoUpdateWorkflowProviderDefinitionRequest,
   type UpsertWorkflowProviderEventTriggerRequest as ProtoUpsertWorkflowProviderEventTriggerRequest,
   type UpsertWorkflowProviderScheduleRequest as ProtoUpsertWorkflowProviderScheduleRequest,
   type WorkflowAccessPermission as ProtoWorkflowAccessPermission,
@@ -304,6 +308,7 @@ export interface BoundWorkflowRun {
   createdBy?: WorkflowActor | undefined;
   executionRef?: string | undefined;
   workflowKey?: string | undefined;
+  providerName?: string | undefined;
 }
 
 export interface BoundWorkflowSchedule {
@@ -317,6 +322,7 @@ export interface BoundWorkflowSchedule {
   nextRunAt?: Date | undefined;
   createdBy?: WorkflowActor | undefined;
   executionRef?: string | undefined;
+  providerName?: string | undefined;
 }
 
 export interface BoundWorkflowEventTrigger {
@@ -328,6 +334,7 @@ export interface BoundWorkflowEventTrigger {
   updatedAt?: Date | undefined;
   createdBy?: WorkflowActor | undefined;
   executionRef?: string | undefined;
+  providerName?: string | undefined;
 }
 
 export interface BoundWorkflowDefinition {
@@ -335,6 +342,7 @@ export interface BoundWorkflowDefinition {
   target?: BoundWorkflowTarget | undefined;
   createdBy?: WorkflowActor | undefined;
   createdAt?: Date | undefined;
+  providerName?: string | undefined;
 }
 
 export interface WorkflowExecutionReference {
@@ -360,6 +368,7 @@ export interface StartWorkflowProviderRunRequest {
   createdBy?: WorkflowActor | undefined;
   executionRef: string;
   workflowKey: string;
+  definitionId?: string | undefined;
 }
 
 export interface GetWorkflowProviderRunRequest {
@@ -370,6 +379,7 @@ export interface ListWorkflowProviderRunsRequest {
   pageSize?: number | undefined;
   pageToken?: string | undefined;
   status?: WorkflowRunStatus | undefined;
+  targetPlugin?: string | undefined;
 }
 
 export interface ListWorkflowProviderRunsResponse {
@@ -394,6 +404,7 @@ export interface SignalOrStartWorkflowProviderRunRequest {
   createdBy?: WorkflowActor | undefined;
   executionRef: string;
   signal?: WorkflowSignal | undefined;
+  definitionId?: string | undefined;
 }
 
 export interface SignalWorkflowRunResponse {
@@ -401,6 +412,24 @@ export interface SignalWorkflowRunResponse {
   signal?: WorkflowSignal | undefined;
   startedRun: boolean;
   workflowKey: string;
+}
+
+export interface CreateWorkflowProviderDefinitionRequest {
+  target?: BoundWorkflowTarget | undefined;
+  idempotencyKey: string;
+}
+
+export interface GetWorkflowProviderDefinitionRequest {
+  definitionId: string;
+}
+
+export interface UpdateWorkflowProviderDefinitionRequest {
+  definitionId: string;
+  target?: BoundWorkflowTarget | undefined;
+}
+
+export interface DeleteWorkflowProviderDefinitionRequest {
+  definitionId: string;
 }
 
 export interface UpsertWorkflowProviderScheduleRequest {
@@ -411,6 +440,8 @@ export interface UpsertWorkflowProviderScheduleRequest {
   paused: boolean;
   requestedBy?: WorkflowActor | undefined;
   executionRef: string;
+  idempotencyKey?: string | undefined;
+  definitionId?: string | undefined;
 }
 
 export interface GetWorkflowProviderScheduleRequest {
@@ -438,6 +469,8 @@ export interface UpsertWorkflowProviderEventTriggerRequest {
   paused: boolean;
   requestedBy?: WorkflowActor | undefined;
   executionRef: string;
+  idempotencyKey?: string | undefined;
+  definitionId?: string | undefined;
 }
 
 export interface GetWorkflowProviderEventTriggerRequest {
@@ -478,9 +511,9 @@ export interface PublishWorkflowProviderEventRequest {
 
 /** Native input for invoking a workflow operation through the host service. */
 export interface InvokeWorkflowOperationInput {
-  target?: BoundWorkflowTarget | BoundWorkflowTarget | undefined;
+  target?: BoundWorkflowTarget | undefined;
   runId?: string | undefined;
-  trigger?: WorkflowRunTrigger | WorkflowRunTrigger | undefined;
+  trigger?: WorkflowRunTrigger | undefined;
   input?: JsonObjectInput | undefined;
   metadata?: JsonObjectInput | undefined;
   createdBy?: WorkflowActor | undefined;
@@ -494,27 +527,27 @@ export interface InvokeWorkflowOperationResponse {
   body: string;
 }
 
-export interface ManagedWorkflowSchedule {
+export interface WorkflowManagerSchedule {
   providerName?: string | undefined;
   schedule?: BoundWorkflowSchedule | undefined;
 }
 
-export interface ManagedWorkflowEventTrigger {
+export interface WorkflowManagerEventTrigger {
   providerName?: string | undefined;
   trigger?: BoundWorkflowEventTrigger | undefined;
 }
 
-export interface ManagedWorkflowDefinition {
+export interface WorkflowManagerDefinition {
   providerName?: string | undefined;
   definition?: BoundWorkflowDefinition | undefined;
 }
 
-export interface ManagedWorkflowRun {
+export interface WorkflowManagerRun {
   providerName?: string | undefined;
   run?: BoundWorkflowRun | undefined;
 }
 
-export interface ManagedWorkflowRunSignal {
+export interface WorkflowManagerRunSignal {
   providerName?: string | undefined;
   run?: BoundWorkflowRun | undefined;
   signal?: WorkflowSignal | undefined;
@@ -596,7 +629,7 @@ export function workflowEventMatchInputFromMatch(
 
 /** Creates a workflow output value source from native input. */
 export function workflowOutputValueSource(
-  input: WorkflowOutputValueSource | WorkflowOutputValueSource = {},
+  input: WorkflowOutputValueSource = {},
 ): WorkflowOutputValueSource {
   if ("kind" in input && input.kind !== undefined) {
     return { kind: cloneWorkflowOutputValueSourceKind(input.kind) };
@@ -838,7 +871,7 @@ export function workflowAgentStepWhenInputFromWhen(
 
 /** Creates a bound workflow target from native input. */
 export function boundWorkflowTarget(
-  input: BoundWorkflowTarget | BoundWorkflowTarget = {},
+  input: BoundWorkflowTarget = {},
 ): BoundWorkflowTarget {
   if ("kind" in input && input.kind !== undefined) {
     return boundWorkflowTargetFromTarget({ kind: input.kind });
@@ -975,7 +1008,7 @@ export function workflowEventTriggerInvocation(
 
 /** Creates a workflow run trigger from native input. */
 export function workflowRunTrigger(
-  input: WorkflowRunTrigger | WorkflowRunTrigger = {},
+  input: WorkflowRunTrigger = {},
 ): WorkflowRunTrigger {
   if ("kind" in input && input.kind !== undefined) {
     return workflowRunTriggerFromTrigger({ kind: input.kind });
@@ -1047,6 +1080,7 @@ export function boundWorkflowRun(input: BoundWorkflowRun = {}): BoundWorkflowRun
     createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
     executionRef: input.executionRef ?? "",
     workflowKey: input.workflowKey ?? "",
+    providerName: input.providerName ?? "",
   };
 }
 
@@ -1072,6 +1106,40 @@ export function boundWorkflowRunFromRun(input: BoundWorkflowRun): BoundWorkflowR
   return boundWorkflowRun(boundWorkflowRunInputFromRun(input) ?? {});
 }
 
+/** Creates a workflow-provider definition from native input. */
+export function boundWorkflowDefinition(
+  input: BoundWorkflowDefinition = {},
+): BoundWorkflowDefinition {
+  return {
+    id: input.id ?? "",
+    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
+    createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
+    createdAt: input.createdAt,
+    providerName: input.providerName ?? "",
+  };
+}
+
+/** Returns native input copied from a workflow-provider definition. */
+export function boundWorkflowDefinitionInputFromDefinition(
+  input?: BoundWorkflowDefinition,
+): BoundWorkflowDefinition | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  return {
+    ...input,
+    target: input.target === undefined ? undefined : boundWorkflowTarget(input.target),
+    createdBy: workflowActorInputFromActor(input.createdBy),
+  };
+}
+
+/** Returns a deep copy of a workflow-provider definition. */
+export function boundWorkflowDefinitionFromDefinition(
+  input: BoundWorkflowDefinition,
+): BoundWorkflowDefinition {
+  return boundWorkflowDefinition(boundWorkflowDefinitionInputFromDefinition(input) ?? {});
+}
+
 /** Creates a workflow-provider schedule from native input. */
 export function boundWorkflowSchedule(
   input: BoundWorkflowSchedule = {},
@@ -1087,6 +1155,7 @@ export function boundWorkflowSchedule(
     nextRunAt: input.nextRunAt,
     createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
     executionRef: input.executionRef ?? "",
+    providerName: input.providerName ?? "",
   };
 }
 
@@ -1124,6 +1193,7 @@ export function boundWorkflowEventTrigger(
     updatedAt: input.updatedAt,
     createdBy: input.createdBy === undefined ? undefined : workflowActor(input.createdBy),
     executionRef: input.executionRef ?? "",
+    providerName: input.providerName ?? "",
   };
 }
 
@@ -1195,6 +1265,18 @@ export function workflowExecutionReferenceFromReference(
 
 /** Handlers and runtime metadata for a workflow provider. */
 export interface WorkflowProviderOptions extends ProviderBaseOptions {
+  createDefinition: (
+    request: CreateWorkflowProviderDefinitionRequest,
+  ) => MaybePromise<BoundWorkflowDefinition>;
+  getDefinition: (
+    request: GetWorkflowProviderDefinitionRequest,
+  ) => MaybePromise<BoundWorkflowDefinition>;
+  updateDefinition: (
+    request: UpdateWorkflowProviderDefinitionRequest,
+  ) => MaybePromise<BoundWorkflowDefinition>;
+  deleteDefinition: (
+    request: DeleteWorkflowProviderDefinitionRequest,
+  ) => MaybePromise<void>;
   startRun: (
     request: StartWorkflowProviderRunRequest,
   ) => MaybePromise<BoundWorkflowRun>;
@@ -1263,13 +1345,17 @@ export interface WorkflowProviderOptions extends ProviderBaseOptions {
   ) => MaybePromise<readonly WorkflowExecutionReference[]>;
   publishEvent: (
     request: PublishWorkflowProviderEventRequest,
-  ) => MaybePromise<void>;
+  ) => MaybePromise<WorkflowEvent>;
 }
 
 /** Runtime provider implementation for the Gestalt workflow host contract. */
 export class WorkflowProvider extends ProviderBase {
   readonly kind = "workflow" as const;
 
+  private readonly createDefinitionHandler: WorkflowProviderOptions["createDefinition"];
+  private readonly getDefinitionHandler: WorkflowProviderOptions["getDefinition"];
+  private readonly updateDefinitionHandler: WorkflowProviderOptions["updateDefinition"];
+  private readonly deleteDefinitionHandler: WorkflowProviderOptions["deleteDefinition"];
   private readonly startRunHandler: WorkflowProviderOptions["startRun"];
   private readonly getRunHandler: WorkflowProviderOptions["getRun"];
   private readonly listRunsHandler: WorkflowProviderOptions["listRuns"];
@@ -1295,6 +1381,10 @@ export class WorkflowProvider extends ProviderBase {
 
   constructor(options: WorkflowProviderOptions) {
     super(options);
+    this.createDefinitionHandler = options.createDefinition;
+    this.getDefinitionHandler = options.getDefinition;
+    this.updateDefinitionHandler = options.updateDefinition;
+    this.deleteDefinitionHandler = options.deleteDefinition;
     this.startRunHandler = options.startRun;
     this.getRunHandler = options.getRun;
     this.listRunsHandler = options.listRuns;
@@ -1317,6 +1407,28 @@ export class WorkflowProvider extends ProviderBase {
     this.getExecutionReferenceHandler = options.getExecutionReference;
     this.listExecutionReferencesHandler = options.listExecutionReferences;
     this.publishEventHandler = options.publishEvent;
+  }
+
+  async createDefinition(
+    request: CreateWorkflowProviderDefinitionRequest,
+  ): Promise<BoundWorkflowDefinition> {
+    return await this.createDefinitionHandler(request);
+  }
+
+  async getDefinition(
+    request: GetWorkflowProviderDefinitionRequest,
+  ): Promise<BoundWorkflowDefinition> {
+    return await this.getDefinitionHandler(request);
+  }
+
+  async updateDefinition(
+    request: UpdateWorkflowProviderDefinitionRequest,
+  ): Promise<BoundWorkflowDefinition> {
+    return await this.updateDefinitionHandler(request);
+  }
+
+  async deleteDefinition(request: DeleteWorkflowProviderDefinitionRequest): Promise<void> {
+    await this.deleteDefinitionHandler(request);
   }
 
   async startRun(request: StartWorkflowProviderRunRequest): Promise<BoundWorkflowRun> {
@@ -1440,8 +1552,8 @@ export class WorkflowProvider extends ProviderBase {
     );
   }
 
-  async publishEvent(request: PublishWorkflowProviderEventRequest): Promise<void> {
-    await this.publishEventHandler(request);
+  async publishEvent(request: PublishWorkflowProviderEventRequest): Promise<WorkflowEvent> {
+    return await this.publishEventHandler(request);
   }
 }
 
@@ -1460,6 +1572,10 @@ export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
       value !== null &&
       "kind" in value &&
       (value as { kind?: unknown }).kind === "workflow" &&
+      "createDefinition" in value &&
+      "getDefinition" in value &&
+      "updateDefinition" in value &&
+      "deleteDefinition" in value &&
       "startRun" in value &&
       "getRun" in value &&
       "listRuns" in value &&
@@ -1515,6 +1631,42 @@ export function createWorkflowProviderService(
   provider: WorkflowProvider,
 ): WorkflowProviderServiceImpl {
   return {
+    async createDefinition(request) {
+      return create(
+        BoundWorkflowDefinitionSchema,
+        boundWorkflowDefinitionToProto(
+          await invokeWorkflowProvider("create definition", () =>
+            provider.createDefinition(createWorkflowProviderDefinitionRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async getDefinition(request) {
+      return create(
+        BoundWorkflowDefinitionSchema,
+        boundWorkflowDefinitionToProto(
+          await invokeWorkflowProvider("get definition", () =>
+            provider.getDefinition(getWorkflowProviderDefinitionRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async updateDefinition(request) {
+      return create(
+        BoundWorkflowDefinitionSchema,
+        boundWorkflowDefinitionToProto(
+          await invokeWorkflowProvider("update definition", () =>
+            provider.updateDefinition(updateWorkflowProviderDefinitionRequestFromProto(request)),
+          ),
+        ),
+      );
+    },
+    async deleteDefinition(request) {
+      await invokeWorkflowProvider("delete definition", () =>
+        provider.deleteDefinition(deleteWorkflowProviderDefinitionRequestFromProto(request)),
+      );
+      return create(EmptySchema, {});
+    },
     async startRun(request) {
       return create(
         BoundWorkflowRunSchema,
@@ -1715,10 +1867,11 @@ export function createWorkflowProviderService(
       });
     },
     async publishEvent(request) {
-      await invokeWorkflowProvider("publish event", () =>
-        provider.publishEvent(publishWorkflowProviderEventRequestFromProto(request)),
-      );
-      return create(EmptySchema, {});
+      return workflowEventToProto(
+        await invokeWorkflowProvider("publish event", () =>
+          provider.publishEvent(publishWorkflowProviderEventRequestFromProto(request)),
+        ),
+      ) ?? create(WorkflowEventSchema, {});
     },
   };
 }
@@ -1818,7 +1971,7 @@ export function workflowEventMatchFromProto(
 }
 
 export function workflowOutputValueSourceToProto(
-  input?: WorkflowOutputValueSource | WorkflowOutputValueSource | undefined,
+  input?: WorkflowOutputValueSource | undefined,
 ): ProtoWorkflowOutputValueSource | undefined {
   if (input === undefined) {
     return undefined;
@@ -2048,7 +2201,7 @@ export function workflowAgentStepWhenFromProto(
 }
 
 export function boundWorkflowTargetToProto(
-  input?: BoundWorkflowTarget | BoundWorkflowTarget | undefined,
+  input?: BoundWorkflowTarget | undefined,
 ): ProtoBoundWorkflowTarget | undefined {
   if (input === undefined) {
     return undefined;
@@ -2204,7 +2357,7 @@ export function workflowEventTriggerInvocationFromProto(
 }
 
 export function workflowRunTriggerToProto(
-  input?: WorkflowRunTrigger | WorkflowRunTrigger | undefined,
+  input?: WorkflowRunTrigger | undefined,
 ): ProtoWorkflowRunTrigger | undefined {
   if (input === undefined) {
     return undefined;
@@ -2261,6 +2414,7 @@ export function boundWorkflowRunToProto(input: BoundWorkflowRun): ProtoBoundWork
     createdBy: workflowActorToProto(input.createdBy),
     executionRef: input.executionRef ?? "",
     workflowKey: input.workflowKey ?? "",
+    providerName: input.providerName ?? "",
   });
 }
 
@@ -2281,6 +2435,7 @@ export function boundWorkflowRunFromProto(input?: ProtoBoundWorkflowRun | undefi
     createdBy: workflowActorFromProto(input.createdBy),
     executionRef: input.executionRef,
     workflowKey: input.workflowKey,
+    providerName: input.providerName,
   };
 }
 
@@ -2307,6 +2462,7 @@ export function boundWorkflowScheduleToProto(input: BoundWorkflowSchedule): Prot
     nextRunAt: optionalTimestamp(input.nextRunAt),
     createdBy: workflowActorToProto(input.createdBy),
     executionRef: input.executionRef ?? "",
+    providerName: input.providerName ?? "",
   });
 }
 
@@ -2327,6 +2483,7 @@ export function boundWorkflowScheduleFromProto(
     nextRunAt: optionalDate(input.nextRunAt),
     createdBy: workflowActorFromProto(input.createdBy),
     executionRef: input.executionRef,
+    providerName: input.providerName,
   };
 }
 
@@ -2342,6 +2499,7 @@ export function boundWorkflowEventTriggerToProto(
     updatedAt: optionalTimestamp(input.updatedAt),
     createdBy: workflowActorToProto(input.createdBy),
     executionRef: input.executionRef ?? "",
+    providerName: input.providerName ?? "",
   });
 }
 
@@ -2360,6 +2518,7 @@ export function boundWorkflowEventTriggerFromProto(
     updatedAt: optionalDate(input.updatedAt),
     createdBy: workflowActorFromProto(input.createdBy),
     executionRef: input.executionRef,
+    providerName: input.providerName,
   };
 }
 
@@ -2369,6 +2528,7 @@ export function boundWorkflowDefinitionToProto(input: BoundWorkflowDefinition) {
     target: boundWorkflowTargetToProto(input.target),
     createdBy: workflowActorToProto(input.createdBy),
     createdAt: optionalTimestamp(input.createdAt),
+    providerName: input.providerName ?? "",
   });
 }
 
@@ -2383,6 +2543,7 @@ export function boundWorkflowDefinitionFromProto(
     target: boundWorkflowTargetFromProto(input.target),
     createdBy: workflowActorFromProto(input.createdBy),
     createdAt: optionalDate(input.createdAt),
+    providerName: input.providerName,
   };
 }
 
@@ -2453,6 +2614,7 @@ function startWorkflowProviderRunRequestFromProto(
     createdBy: workflowActorFromProto(input.createdBy),
     executionRef: input.executionRef,
     workflowKey: input.workflowKey,
+    definitionId: input.definitionId,
   };
 }
 
@@ -2469,6 +2631,7 @@ function listWorkflowProviderRunsRequestFromProto(
     pageSize: input.pageSize,
     pageToken: input.pageToken,
     status: input.status as WorkflowRunStatus,
+    targetPlugin: input.targetPlugin,
   };
 }
 
@@ -2497,7 +2660,38 @@ function signalOrStartWorkflowProviderRunRequestFromProto(
     createdBy: workflowActorFromProto(input.createdBy),
     executionRef: input.executionRef,
     signal: workflowSignalFromProto(input.signal),
+    definitionId: input.definitionId,
   };
+}
+
+function createWorkflowProviderDefinitionRequestFromProto(
+  input: ProtoCreateWorkflowProviderDefinitionRequest,
+): CreateWorkflowProviderDefinitionRequest {
+  return {
+    target: boundWorkflowTargetFromProto(input.target),
+    idempotencyKey: input.idempotencyKey,
+  };
+}
+
+function getWorkflowProviderDefinitionRequestFromProto(
+  input: ProtoGetWorkflowProviderDefinitionRequest,
+): GetWorkflowProviderDefinitionRequest {
+  return { definitionId: input.definitionId };
+}
+
+function updateWorkflowProviderDefinitionRequestFromProto(
+  input: ProtoUpdateWorkflowProviderDefinitionRequest,
+): UpdateWorkflowProviderDefinitionRequest {
+  return {
+    definitionId: input.definitionId,
+    target: boundWorkflowTargetFromProto(input.target),
+  };
+}
+
+function deleteWorkflowProviderDefinitionRequestFromProto(
+  input: ProtoDeleteWorkflowProviderDefinitionRequest,
+): DeleteWorkflowProviderDefinitionRequest {
+  return { definitionId: input.definitionId };
 }
 
 function upsertWorkflowProviderScheduleRequestFromProto(
@@ -2511,6 +2705,8 @@ function upsertWorkflowProviderScheduleRequestFromProto(
     paused: input.paused,
     requestedBy: workflowActorFromProto(input.requestedBy),
     executionRef: input.executionRef,
+    idempotencyKey: input.idempotencyKey,
+    definitionId: input.definitionId,
   };
 }
 
@@ -2554,6 +2750,8 @@ function upsertWorkflowProviderEventTriggerRequestFromProto(
     paused: input.paused,
     requestedBy: workflowActorFromProto(input.requestedBy),
     executionRef: input.executionRef,
+    idempotencyKey: input.idempotencyKey,
+    definitionId: input.definitionId,
   };
 }
 
@@ -2615,55 +2813,47 @@ function publishWorkflowProviderEventRequestFromProto(
   };
 }
 
-export function managedWorkflowScheduleFromProto(input: {
-  providerName: string;
-  schedule?: ProtoBoundWorkflowSchedule | undefined;
-}): ManagedWorkflowSchedule {
+export function workflowManagerScheduleFromProto(
+  input: ProtoBoundWorkflowSchedule,
+): WorkflowManagerSchedule {
   return {
     providerName: input.providerName,
-    schedule: boundWorkflowScheduleFromProto(input.schedule),
+    schedule: boundWorkflowScheduleFromProto(input),
   };
 }
 
-export function managedWorkflowEventTriggerFromProto(input: {
-  providerName: string;
-  trigger?: ProtoBoundWorkflowEventTrigger | undefined;
-}): ManagedWorkflowEventTrigger {
+export function workflowManagerEventTriggerFromProto(
+  input: ProtoBoundWorkflowEventTrigger,
+): WorkflowManagerEventTrigger {
   return {
     providerName: input.providerName,
-    trigger: boundWorkflowEventTriggerFromProto(input.trigger),
+    trigger: boundWorkflowEventTriggerFromProto(input),
   };
 }
 
-export function managedWorkflowDefinitionFromProto(input: {
-  providerName: string;
-  definition?: ProtoBoundWorkflowDefinition | undefined;
-}): ManagedWorkflowDefinition {
+export function workflowManagerDefinitionFromProto(
+  input: ProtoBoundWorkflowDefinition,
+): WorkflowManagerDefinition {
   return {
     providerName: input.providerName,
-    definition: boundWorkflowDefinitionFromProto(input.definition),
+    definition: boundWorkflowDefinitionFromProto(input),
   };
 }
 
-export function managedWorkflowRunFromProto(input: {
-  providerName: string;
-  run?: ProtoBoundWorkflowRun | undefined;
-}): ManagedWorkflowRun {
+export function workflowManagerRunFromProto(
+  input: ProtoBoundWorkflowRun,
+): WorkflowManagerRun {
   return {
     providerName: input.providerName,
-    run: boundWorkflowRunFromProto(input.run),
+    run: boundWorkflowRunFromProto(input),
   };
 }
 
-export function managedWorkflowRunSignalFromProto(input: {
-  providerName: string;
-  run?: ProtoBoundWorkflowRun | undefined;
-  signal?: ProtoWorkflowSignal | undefined;
-  startedRun: boolean;
-  workflowKey: string;
-}): ManagedWorkflowRunSignal {
+export function workflowManagerRunSignalFromProto(
+  input: ProtoSignalWorkflowRunResponse,
+): WorkflowManagerRunSignal {
   return {
-    providerName: input.providerName,
+    providerName: input.run?.providerName,
     run: boundWorkflowRunFromProto(input.run),
     signal: workflowSignalFromProto(input.signal),
     startedRun: input.startedRun,

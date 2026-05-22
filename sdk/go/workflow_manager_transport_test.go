@@ -16,48 +16,46 @@ import (
 )
 
 type workflowManagerTransportHarness struct {
-	proto.UnimplementedWorkflowManagerHostServer
+	proto.UnimplementedWorkflowProviderServer
 
 	mu       sync.Mutex
-	requests []*proto.WorkflowManagerCreateScheduleRequest
-	signals  []*proto.WorkflowManagerSignalOrStartRunRequest
+	requests []*proto.UpsertWorkflowProviderScheduleRequest
+	signals  []*proto.SignalOrStartWorkflowProviderRunRequest
 	tokens   []string
 }
 
-func (h *workflowManagerTransportHarness) CreateSchedule(ctx context.Context, req *proto.WorkflowManagerCreateScheduleRequest) (*proto.ManagedWorkflowSchedule, error) {
+func (h *workflowManagerTransportHarness) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.requests = append(h.requests, gproto.Clone(req).(*proto.WorkflowManagerCreateScheduleRequest))
+	h.requests = append(h.requests, gproto.Clone(req).(*proto.UpsertWorkflowProviderScheduleRequest))
 	h.mu.Unlock()
 
-	return &proto.ManagedWorkflowSchedule{
+	return &proto.BoundWorkflowSchedule{
 		ProviderName: req.GetProviderName(),
-		Schedule: &proto.BoundWorkflowSchedule{
-			Id:   "sched-1",
-			Cron: req.GetCron(),
-		},
+		Id:           "sched-1",
+		Cron:         req.GetCron(),
 	}, nil
 }
 
-func (h *workflowManagerTransportHarness) SignalOrStartRun(ctx context.Context, req *proto.WorkflowManagerSignalOrStartRunRequest) (*proto.ManagedWorkflowRunSignal, error) {
+func (h *workflowManagerTransportHarness) SignalOrStartRun(ctx context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.signals = append(h.signals, gproto.Clone(req).(*proto.WorkflowManagerSignalOrStartRunRequest))
+	h.signals = append(h.signals, gproto.Clone(req).(*proto.SignalOrStartWorkflowProviderRunRequest))
 	h.mu.Unlock()
 
-	return &proto.ManagedWorkflowRunSignal{
-		ProviderName: req.GetProviderName(),
+	return &proto.SignalWorkflowRunResponse{
 		Run: &proto.BoundWorkflowRun{
-			Id:          "run-1",
-			WorkflowKey: req.GetWorkflowKey(),
+			ProviderName: req.GetProviderName(),
+			Id:           "run-1",
+			WorkflowKey:  req.GetWorkflowKey(),
 		},
 		Signal:      req.GetSignal(),
 		StartedRun:  true,
@@ -75,7 +73,7 @@ func TestTransport_WorkflowManagerTCPTargetTokenEnv(t *testing.T) {
 
 	harness := &workflowManagerTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterWorkflowManagerHostServer(srv, harness)
+	proto.RegisterWorkflowProviderServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -134,7 +132,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 
 	harness := &workflowManagerTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterWorkflowManagerHostServer(srv, harness)
+	proto.RegisterWorkflowProviderServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -216,7 +214,7 @@ func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
 
 	harness := &workflowManagerTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterWorkflowManagerHostServer(srv, harness)
+	proto.RegisterWorkflowProviderServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()

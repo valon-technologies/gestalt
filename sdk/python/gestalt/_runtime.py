@@ -1083,6 +1083,66 @@ def _workflow_provider_servicer(provider: PluginProvider) -> Any:
         def __init__(self, inner: PluginProvider) -> None:
             self._provider = inner
 
+        @_grpc_handler("workflow create definition")
+        def CreateDefinition(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "create_definition",
+                "CreateDefinition",
+                _workflow_native.create_workflow_provider_definition_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_definition(result)
+
+        @_grpc_handler("workflow get definition")
+        def GetDefinition(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "get_definition",
+                "GetDefinition",
+                _workflow_native.get_workflow_provider_definition_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_definition(result)
+
+        @_grpc_handler("workflow update definition")
+        def UpdateDefinition(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "update_definition",
+                "UpdateDefinition",
+                _workflow_native.update_workflow_provider_definition_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _workflow_native.bound_workflow_definition(result)
+
+        @_grpc_handler("workflow delete definition")
+        def DeleteDefinition(self, request: Any, context: Any) -> Any:
+            result = _call_native_provider_handler(
+                self._provider,
+                WorkflowProvider,
+                "delete_definition",
+                "DeleteDefinition",
+                _workflow_native.delete_workflow_provider_definition_request_from_proto(
+                    request
+                ),
+                request,
+                context,
+            )
+            return _empty_response(result)
+
         @_grpc_handler("workflow start run")
         def StartRun(self, request: Any, context: Any) -> Any:
             result = _call_native_provider_handler(
@@ -1419,7 +1479,7 @@ def _workflow_provider_servicer(provider: PluginProvider) -> Any:
                 request,
                 context,
             )
-            return _empty_response(result)
+            return _workflow_native.workflow_event(result)
 
     return WorkflowProviderServicer(provider)
 

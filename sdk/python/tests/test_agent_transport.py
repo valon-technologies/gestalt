@@ -368,7 +368,7 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
         )
 
 
-class _AgentManagerServicer(agent_pb2_grpc.AgentManagerHostServicer):
+class _AgentManagerServicer(agent_pb2_grpc.AgentProviderServicer):
     def CreateSession(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_relay_tokens(context)
         _manager_requests.append(
@@ -424,7 +424,7 @@ class _AgentManagerServicer(agent_pb2_grpc.AgentManagerHostServicer):
                 "reason": "",
             }
         )
-        return agent_pb2.AgentManagerListSessionsResponse(
+        return agent_pb2.ListAgentProviderSessionsResponse(
             sessions=[
                 agent_pb2.AgentSession(
                     id="session-managed-1",
@@ -522,7 +522,7 @@ class _AgentManagerServicer(agent_pb2_grpc.AgentManagerHostServicer):
                 "reason": "",
             }
         )
-        return agent_pb2.AgentManagerListTurnsResponse(
+        return agent_pb2.ListAgentProviderTurnsResponse(
             turns=[
                 agent_pb2.AgentTurn(
                     id="turn-managed-1",
@@ -570,7 +570,7 @@ class _AgentManagerServicer(agent_pb2_grpc.AgentManagerHostServicer):
                 "reason": "",
             }
         )
-        return agent_pb2.AgentManagerListTurnEventsResponse(
+        return agent_pb2.ListAgentProviderTurnEventsResponse(
             events=[
                 agent_pb2.AgentTurnEvent(
                     id=f"{request.turn_id}-event-1",
@@ -596,7 +596,7 @@ class _AgentManagerServicer(agent_pb2_grpc.AgentManagerHostServicer):
                 "reason": "",
             }
         )
-        return agent_pb2.AgentManagerListInteractionsResponse(
+        return agent_pb2.ListAgentProviderInteractionsResponse(
             interactions=[
                 agent_pb2.AgentInteraction(
                     id="interaction-1",
@@ -679,7 +679,7 @@ def setUpModule() -> None:
     _host_server.start()
 
     _manager_server = grpc.server(futures.ThreadPoolExecutor(max_workers=2))
-    agent_pb2_grpc.add_AgentManagerHostServicer_to_server(
+    agent_pb2_grpc.add_AgentProviderServicer_to_server(
         _AgentManagerServicer(),
         _manager_server,
     )
@@ -1159,27 +1159,27 @@ class AgentTransportTests(unittest.TestCase):
     def test_agent_manager_roundtrip(self) -> None:
         with AgentManager("token-123") as manager:
             created_session = manager.create_session(
-                agent_pb2.AgentManagerCreateSessionRequest(
+                agent_pb2.CreateAgentProviderSessionRequest(
                     provider_name="openai",
                     model="gpt-5.1",
                     client_ref="cli-session-1",
                 )
             )
             fetched_session = manager.get_session(
-                agent_pb2.AgentManagerGetSessionRequest(session_id="session-managed-1")
+                agent_pb2.GetAgentProviderSessionRequest(session_id="session-managed-1")
             )
             listed_sessions = manager.list_sessions(
-                agent_pb2.AgentManagerListSessionsRequest(provider_name="openai")
+                agent_pb2.ListAgentProviderSessionsRequest(provider_name="openai")
             )
             updated_session = manager.update_session(
-                agent_pb2.AgentManagerUpdateSessionRequest(
+                agent_pb2.UpdateAgentProviderSessionRequest(
                     session_id="session-managed-1",
                     client_ref="cli-session-2",
                     state=agent_pb2.AGENT_SESSION_STATE_ARCHIVED,
                 )
             )
             created_turn = manager.create_turn(
-                agent_pb2.AgentManagerCreateTurnRequest(
+                agent_pb2.CreateAgentProviderTurnRequest(
                     session_id="session-managed-1",
                     model="gpt-5.1",
                     messages=[
@@ -1199,28 +1199,28 @@ class AgentTransportTests(unittest.TestCase):
                 )
             )
             fetched_turn = manager.get_turn(
-                agent_pb2.AgentManagerGetTurnRequest(turn_id="turn-managed-1")
+                agent_pb2.GetAgentProviderTurnRequest(turn_id="turn-managed-1")
             )
             listed_turns = manager.list_turns(
-                agent_pb2.AgentManagerListTurnsRequest(session_id="session-managed-1")
+                agent_pb2.ListAgentProviderTurnsRequest(session_id="session-managed-1")
             )
             canceled_turn = manager.cancel_turn(
-                agent_pb2.AgentManagerCancelTurnRequest(
+                agent_pb2.CancelAgentProviderTurnRequest(
                     turn_id="turn-managed-1",
                     reason="user canceled",
                 )
             )
             turn_events = manager.list_turn_events(
-                agent_pb2.AgentManagerListTurnEventsRequest(
+                agent_pb2.ListAgentProviderTurnEventsRequest(
                     turn_id="turn-managed-1",
                     after_seq=0,
                     limit=10,
                 )
             )
             interactions = manager.list_interactions(
-                agent_pb2.AgentManagerListInteractionsRequest(turn_id="turn-managed-1")
+                agent_pb2.ListAgentProviderInteractionsRequest(turn_id="turn-managed-1")
             )
-            resolve_request = agent_pb2.AgentManagerResolveInteractionRequest(
+            resolve_request = agent_pb2.ResolveAgentProviderInteractionRequest(
                 turn_id="turn-managed-1",
                 interaction_id="interaction-1",
             )
@@ -1357,7 +1357,7 @@ class AgentTransportTests(unittest.TestCase):
 
         with request.agent_manager() as manager:
             fetched = manager.get_session(
-                agent_pb2.AgentManagerGetSessionRequest(session_id="session-managed-1")
+                agent_pb2.GetAgentProviderSessionRequest(session_id="session-managed-1")
             )
 
         self.assertEqual(fetched.id, "session-managed-1")

@@ -38,7 +38,7 @@ pb_grpc: Any = _pb_grpc
 
 ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET"
 ENV_AGENT_HOST_SOCKET_TOKEN = f"{ENV_AGENT_HOST_SOCKET}_TOKEN"
-ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_MANAGER_SOCKET"
+ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_PROVIDER_SOCKET"
 ENV_AGENT_MANAGER_SOCKET_TOKEN = f"{ENV_AGENT_MANAGER_SOCKET}_TOKEN"
 
 AGENT_EXECUTION_STATUS_UNSPECIFIED = pb.AGENT_EXECUTION_STATUS_UNSPECIFIED
@@ -1917,10 +1917,10 @@ def _agent_workspace_value(value: Any | None) -> Any | None:
 def _agent_manager_create_session_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.AgentManagerCreateSessionRequest):
+    if isinstance(value, pb.CreateAgentProviderSessionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    request = pb.AgentManagerCreateSessionRequest(
+    request = pb.CreateAgentProviderSessionRequest(
         provider_name=data.get("provider_name", ""),
         model=data.get("model", ""),
         client_ref=data.get("client_ref", ""),
@@ -1933,19 +1933,19 @@ def _agent_manager_create_session_request(
 
 
 def _agent_manager_get_session_request(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.AgentManagerGetSessionRequest):
+    if isinstance(value, pb.GetAgentProviderSessionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.AgentManagerGetSessionRequest(session_id=data.get("session_id", ""))
+    return pb.GetAgentProviderSessionRequest(session_id=data.get("session_id", ""))
 
 
 def _agent_manager_list_sessions_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.AgentManagerListSessionsRequest):
+    if isinstance(value, pb.ListAgentProviderSessionsRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.AgentManagerListSessionsRequest(
+    return pb.ListAgentProviderSessionsRequest(
         provider_name=data.get("provider_name", ""),
         state=data.get("state", AGENT_SESSION_STATE_UNSPECIFIED),
         limit=data.get("limit", 0),
@@ -1956,10 +1956,10 @@ def _agent_manager_list_sessions_request(
 def _agent_manager_update_session_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.AgentManagerUpdateSessionRequest):
+    if isinstance(value, pb.UpdateAgentProviderSessionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    request = pb.AgentManagerUpdateSessionRequest(
+    request = pb.UpdateAgentProviderSessionRequest(
         session_id=data.get("session_id", ""),
         client_ref=data.get("client_ref", ""),
         state=data.get("state", AGENT_SESSION_STATE_UNSPECIFIED),
@@ -1970,10 +1970,10 @@ def _agent_manager_update_session_request(
 
 
 def _agent_manager_create_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.AgentManagerCreateTurnRequest):
+    if isinstance(value, pb.CreateAgentProviderTurnRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    request = pb.AgentManagerCreateTurnRequest(
+    request = pb.CreateAgentProviderTurnRequest(
         session_id=data.get("session_id", ""),
         model=data.get("model", ""),
         messages=[_agent_message_value(item) for item in (data.get("messages") or [])],
@@ -1996,17 +1996,17 @@ def _agent_manager_create_turn_request(value: Any | None = None, **kwargs: Any) 
 
 
 def _agent_manager_get_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.AgentManagerGetTurnRequest):
+    if isinstance(value, pb.GetAgentProviderTurnRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.AgentManagerGetTurnRequest(turn_id=data.get("turn_id", ""))
+    return pb.GetAgentProviderTurnRequest(turn_id=data.get("turn_id", ""))
 
 
 def _agent_manager_list_turns_request(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.AgentManagerListTurnsRequest):
+    if isinstance(value, pb.ListAgentProviderTurnsRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.AgentManagerListTurnsRequest(
+    return pb.ListAgentProviderTurnsRequest(
         session_id=data.get("session_id", ""),
         status=data.get("status", AGENT_EXECUTION_STATUS_UNSPECIFIED),
         limit=data.get("limit", 0),
@@ -2015,10 +2015,10 @@ def _agent_manager_list_turns_request(value: Any | None = None, **kwargs: Any) -
 
 
 def _agent_manager_cancel_turn_request(value: Any | None = None, **kwargs: Any) -> Any:
-    if isinstance(value, pb.AgentManagerCancelTurnRequest):
+    if isinstance(value, pb.CancelAgentProviderTurnRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.AgentManagerCancelTurnRequest(
+    return pb.CancelAgentProviderTurnRequest(
         turn_id=data.get("turn_id", ""),
         reason=data.get("reason", ""),
     )
@@ -2027,10 +2027,10 @@ def _agent_manager_cancel_turn_request(value: Any | None = None, **kwargs: Any) 
 def _agent_manager_list_turn_events_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.AgentManagerListTurnEventsRequest):
+    if isinstance(value, pb.ListAgentProviderTurnEventsRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.AgentManagerListTurnEventsRequest(
+    return pb.ListAgentProviderTurnEventsRequest(
         turn_id=data.get("turn_id", ""),
         after_seq=data.get("after_seq", 0),
         limit=data.get("limit", 0),
@@ -2040,19 +2040,19 @@ def _agent_manager_list_turn_events_request(
 def _agent_manager_list_interactions_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.AgentManagerListInteractionsRequest):
+    if isinstance(value, pb.ListAgentProviderInteractionsRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    return pb.AgentManagerListInteractionsRequest(turn_id=data.get("turn_id", ""))
+    return pb.ListAgentProviderInteractionsRequest(turn_id=data.get("turn_id", ""))
 
 
 def _agent_manager_resolve_interaction_request(
     value: Any | None = None, **kwargs: Any
 ) -> Any:
-    if isinstance(value, pb.AgentManagerResolveInteractionRequest):
+    if isinstance(value, pb.ResolveAgentProviderInteractionRequest):
         return _copy(value)
     data = _data(value, kwargs)
-    request = pb.AgentManagerResolveInteractionRequest(
+    request = pb.ResolveAgentProviderInteractionRequest(
         turn_id=data.get("turn_id", ""),
         interaction_id=data.get("interaction_id", ""),
     )
@@ -2080,7 +2080,7 @@ class AgentManager:
         relay_token = os.environ.get(ENV_AGENT_MANAGER_SOCKET_TOKEN, "")
 
         self._channel = host_service_channel("agent manager", target, token=relay_token)
-        self._stub = pb_grpc.AgentManagerHostStub(self._channel)
+        self._stub = pb_grpc.AgentProviderStub(self._channel)
         self._invocation_token = trimmed_token
 
     def close(self) -> None:

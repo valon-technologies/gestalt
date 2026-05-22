@@ -1737,10 +1737,10 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		}
 		hostServices = append(hostServices, services...)
 	}
-	includeWorkflowManager := deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders())
-	includeAgentManager := deps.AgentManager != nil || deps.AgentRuntime != nil
+	includeWorkflowProvider := deps.WorkflowManager != nil || (deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasConfiguredProviders())
+	includeAgentProvider := deps.AgentManager != nil || deps.AgentRuntime != nil
 	needInvocationTokens := len(entry.Invokes) > 0
-	if includeWorkflowManager || includeAgentManager {
+	if includeWorkflowProvider || includeAgentProvider {
 		needInvocationTokens = true
 	}
 	if needInvocationTokens {
@@ -1749,11 +1749,11 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 			return fail(err)
 		}
 	}
-	if includeWorkflowManager {
-		hostServices = append(hostServices, buildPluginWorkflowManagerHostService(name, deps, invTokens))
+	if includeWorkflowProvider {
+		hostServices = append(hostServices, buildPluginWorkflowProviderHostService(name, deps, invTokens))
 	}
-	if includeAgentManager {
-		hostServices = append(hostServices, buildPluginAgentManagerHostService(name, deps, invTokens))
+	if includeAgentProvider {
+		hostServices = append(hostServices, buildPluginAgentProviderHostService(name, deps, invTokens))
 	}
 	if deps.AuthorizationProvider != nil && len(entry.EffectiveHTTPBindings()) > 0 {
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
@@ -1856,10 +1856,10 @@ func buildHostedRuntimeHostServiceEnv(providerName, sessionID string, hostServic
 		serviceKey = "s3"
 		serviceLabel = "S3"
 		methodPrefix = "/" + proto.S3_ServiceDesc.ServiceName + "/"
-	case hostService.EnvVar == workflowservice.DefaultManagerSocketEnv:
-		serviceKey = "workflow_manager"
-		serviceLabel = "workflow manager"
-		methodPrefix = "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/"
+	case hostService.EnvVar == workflowservice.DefaultProviderSocketEnv:
+		serviceKey = "workflow_provider"
+		serviceLabel = "workflow provider"
+		methodPrefix = "/" + proto.WorkflowProvider_ServiceDesc.ServiceName + "/"
 	case hostService.EnvVar == workflowservice.DefaultHostSocketEnv:
 		serviceKey = "workflow_host"
 		serviceLabel = "workflow host"
@@ -1868,10 +1868,10 @@ func buildHostedRuntimeHostServiceEnv(providerName, sessionID string, hostServic
 		serviceKey = "agent_host"
 		serviceLabel = "agent host"
 		methodPrefix = "/" + proto.AgentHost_ServiceDesc.ServiceName + "/"
-	case hostService.EnvVar == agentservice.DefaultManagerSocketEnv:
-		serviceKey = "agent_manager"
-		serviceLabel = "agent manager"
-		methodPrefix = "/" + proto.AgentManagerHost_ServiceDesc.ServiceName + "/"
+	case hostService.EnvVar == agentservice.DefaultProviderSocketEnv:
+		serviceKey = "agent_provider"
+		serviceLabel = "agent provider"
+		methodPrefix = "/" + proto.AgentProvider_ServiceDesc.ServiceName + "/"
 	case hostService.EnvVar == authorizationservice.DefaultSocketEnv:
 		serviceKey = "authorization"
 		serviceLabel = "authorization"
@@ -2347,30 +2347,30 @@ func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHost
 	}, nil
 }
 
-func buildPluginWorkflowManagerHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
+func buildPluginWorkflowProviderHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
 	}
 	return runtimehost.HostService{
-		Name:   "workflow_manager",
-		EnvVar: workflowservice.DefaultManagerSocketEnv,
+		Name:   "workflow_provider",
+		EnvVar: workflowservice.DefaultProviderSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowManagerHostServer(srv, workflowservice.NewManagerServer(pluginName, manager, tokens))
+			proto.RegisterWorkflowProviderServer(srv, workflowservice.NewProviderServer(pluginName, manager, tokens))
 		},
 	}
 }
 
-func buildPluginAgentManagerHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
+func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.AgentManager
 	if manager == nil {
 		manager = unavailableAgentManager{}
 	}
 	return runtimehost.HostService{
-		Name:   "agent_manager",
-		EnvVar: agentservice.DefaultManagerSocketEnv,
+		Name:   "agent_provider",
+		EnvVar: agentservice.DefaultProviderSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterAgentManagerHostServer(srv, agentservice.NewManagerServer(pluginName, manager, tokens))
+			proto.RegisterAgentProviderServer(srv, agentservice.NewProviderServer(pluginName, manager, tokens))
 		},
 	}
 }

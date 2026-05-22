@@ -21,6 +21,37 @@ type workflowProviderServer struct {
 	provider WorkflowProvider
 }
 
+func (s workflowProviderServer) CreateDefinition(ctx context.Context, req *proto.CreateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+	definition, err := s.provider.CreateDefinition(ctx, createWorkflowProviderDefinitionRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("workflow create definition", err)
+	}
+	out, err := workflowDefinitionInputToProto(definition)
+	return out, providerRPCError("workflow create definition", err)
+}
+
+func (s workflowProviderServer) GetDefinition(ctx context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+	definition, err := s.provider.GetDefinition(ctx, &GetWorkflowProviderDefinitionRequest{DefinitionID: req.GetDefinitionId()})
+	if err != nil {
+		return nil, providerRPCError("workflow get definition", err)
+	}
+	out, err := workflowDefinitionInputToProto(definition)
+	return out, providerRPCError("workflow get definition", err)
+}
+
+func (s workflowProviderServer) UpdateDefinition(ctx context.Context, req *proto.UpdateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
+	definition, err := s.provider.UpdateDefinition(ctx, updateWorkflowProviderDefinitionRequestFromProto(req))
+	if err != nil {
+		return nil, providerRPCError("workflow update definition", err)
+	}
+	out, err := workflowDefinitionInputToProto(definition)
+	return out, providerRPCError("workflow update definition", err)
+}
+
+func (s workflowProviderServer) DeleteDefinition(ctx context.Context, req *proto.DeleteWorkflowProviderDefinitionRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, providerRPCError("workflow delete definition", s.provider.DeleteDefinition(ctx, &DeleteWorkflowProviderDefinitionRequest{DefinitionID: req.GetDefinitionId()}))
+}
+
 func (s workflowProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
 	run, err := s.provider.StartRun(ctx, startWorkflowProviderRunRequestFromProto(req))
 	if err != nil {
@@ -41,9 +72,10 @@ func (s workflowProviderServer) GetRun(ctx context.Context, req *proto.GetWorkfl
 
 func (s workflowProviderServer) ListRuns(ctx context.Context, req *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
 	resp, err := s.provider.ListRuns(ctx, &ListWorkflowProviderRunsRequest{
-		PageSize:  int(req.GetPageSize()),
-		PageToken: req.GetPageToken(),
-		Status:    WorkflowRunStatus(req.GetStatus()),
+		PageSize:     int(req.GetPageSize()),
+		PageToken:    req.GetPageToken(),
+		Status:       WorkflowRunStatus(req.GetStatus()),
+		TargetPlugin: req.GetTargetPlugin(),
 	})
 	if err != nil {
 		return nil, providerRPCError("workflow list runs", err)
@@ -223,8 +255,40 @@ func (s workflowProviderServer) ListExecutionReferences(ctx context.Context, req
 	return &proto.ListWorkflowExecutionReferencesResponse{References: refs}, nil
 }
 
-func (s workflowProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWorkflowProviderEventRequest) (*emptypb.Empty, error) {
-	return &emptypb.Empty{}, providerRPCError("workflow publish event", s.provider.PublishEvent(ctx, publishWorkflowProviderEventRequestFromProto(req)))
+func (s workflowProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
+	input := publishWorkflowProviderEventRequestFromProto(req)
+	eventInput, err := s.provider.PublishEvent(ctx, input)
+	if err != nil {
+		return nil, providerRPCError("workflow publish event", err)
+	}
+	if eventInput == nil {
+		eventInput = input.Event
+	}
+	if eventInput == nil {
+		eventInput = &WorkflowEvent{}
+	}
+	event, err := workflowEventToProto(*eventInput)
+	return event, providerRPCError("workflow publish event", err)
+}
+
+func createWorkflowProviderDefinitionRequestFromProto(req *proto.CreateWorkflowProviderDefinitionRequest) *CreateWorkflowProviderDefinitionRequest {
+	if req == nil {
+		return &CreateWorkflowProviderDefinitionRequest{}
+	}
+	return &CreateWorkflowProviderDefinitionRequest{
+		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
+		IdempotencyKey: req.GetIdempotencyKey(),
+	}
+}
+
+func updateWorkflowProviderDefinitionRequestFromProto(req *proto.UpdateWorkflowProviderDefinitionRequest) *UpdateWorkflowProviderDefinitionRequest {
+	if req == nil {
+		return &UpdateWorkflowProviderDefinitionRequest{}
+	}
+	return &UpdateWorkflowProviderDefinitionRequest{
+		DefinitionID: req.GetDefinitionId(),
+		Target:       workflowTargetInputPtrFromTarget(req.GetTarget()),
+	}
 }
 
 func startWorkflowProviderRunRequestFromProto(req *proto.StartWorkflowProviderRunRequest) *StartWorkflowProviderRunRequest {
@@ -237,6 +301,7 @@ func startWorkflowProviderRunRequestFromProto(req *proto.StartWorkflowProviderRu
 		CreatedBy:      workflowActorInputPtrFromActor(req.GetCreatedBy()),
 		ExecutionRef:   req.GetExecutionRef(),
 		WorkflowKey:    req.GetWorkflowKey(),
+		DefinitionID:   req.GetDefinitionId(),
 	}
 }
 
@@ -271,6 +336,7 @@ func signalOrStartWorkflowProviderRunRequestFromProto(req *proto.SignalOrStartWo
 		CreatedBy:      workflowActorInputPtrFromActor(req.GetCreatedBy()),
 		ExecutionRef:   req.GetExecutionRef(),
 		Signal:         signal,
+		DefinitionID:   req.GetDefinitionId(),
 	}
 }
 
@@ -279,13 +345,15 @@ func upsertWorkflowProviderScheduleRequestFromProto(req *proto.UpsertWorkflowPro
 		return &UpsertWorkflowProviderScheduleRequest{}
 	}
 	return &UpsertWorkflowProviderScheduleRequest{
-		ScheduleID:   req.GetScheduleId(),
-		Cron:         req.GetCron(),
-		Timezone:     req.GetTimezone(),
-		Target:       workflowTargetInputPtrFromTarget(req.GetTarget()),
-		Paused:       req.GetPaused(),
-		RequestedBy:  workflowActorInputPtrFromActor(req.GetRequestedBy()),
-		ExecutionRef: req.GetExecutionRef(),
+		ScheduleID:     req.GetScheduleId(),
+		Cron:           req.GetCron(),
+		Timezone:       req.GetTimezone(),
+		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
+		Paused:         req.GetPaused(),
+		RequestedBy:    workflowActorInputPtrFromActor(req.GetRequestedBy()),
+		ExecutionRef:   req.GetExecutionRef(),
+		IdempotencyKey: req.GetIdempotencyKey(),
+		DefinitionID:   req.GetDefinitionId(),
 	}
 }
 
@@ -294,12 +362,14 @@ func upsertWorkflowProviderEventTriggerRequestFromProto(req *proto.UpsertWorkflo
 		return &UpsertWorkflowProviderEventTriggerRequest{}
 	}
 	return &UpsertWorkflowProviderEventTriggerRequest{
-		TriggerID:    req.GetTriggerId(),
-		Match:        workflowEventMatchInputPtrFromMatch(req.GetMatch()),
-		Target:       workflowTargetInputPtrFromTarget(req.GetTarget()),
-		Paused:       req.GetPaused(),
-		RequestedBy:  workflowActorInputPtrFromActor(req.GetRequestedBy()),
-		ExecutionRef: req.GetExecutionRef(),
+		TriggerID:      req.GetTriggerId(),
+		Match:          workflowEventMatchInputPtrFromMatch(req.GetMatch()),
+		Target:         workflowTargetInputPtrFromTarget(req.GetTarget()),
+		Paused:         req.GetPaused(),
+		RequestedBy:    workflowActorInputPtrFromActor(req.GetRequestedBy()),
+		ExecutionRef:   req.GetExecutionRef(),
+		IdempotencyKey: req.GetIdempotencyKey(),
+		DefinitionID:   req.GetDefinitionId(),
 	}
 }
 
@@ -324,6 +394,13 @@ func workflowRunInputToProto(input *BoundWorkflowRun) (*proto.BoundWorkflowRun, 
 		return nil, nil
 	}
 	return boundWorkflowRunToProto(*input)
+}
+
+func workflowDefinitionInputToProto(input *BoundWorkflowDefinition) (*proto.BoundWorkflowDefinition, error) {
+	if input == nil {
+		return nil, nil
+	}
+	return boundWorkflowDefinitionToProto(*input)
 }
 
 func workflowRunInputsToProto(values []BoundWorkflowRun) ([]*proto.BoundWorkflowRun, error) {

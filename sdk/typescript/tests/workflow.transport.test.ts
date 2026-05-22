@@ -50,6 +50,22 @@ test("WorkflowProvider service converts transport messages to native callbacks",
   const calls: Array<{ method: string; detail: string }> = [];
   const provider = defineWorkflowProvider({
     displayName: "Workflow transport fixture",
+    async createDefinition(request) {
+      return {
+        id: request.idempotencyKey,
+        target: request.target,
+      };
+    },
+    async getDefinition(request) {
+      return { id: request.definitionId };
+    },
+    async updateDefinition(request) {
+      return {
+        id: request.definitionId,
+        target: request.target,
+      };
+    },
+    async deleteDefinition() {},
     async startRun(request) {
       const detail =
         request.target?.kind?.case === "plugin"
@@ -165,6 +181,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     },
     async publishEvent(request) {
       calls.push({ method: "publish-event", detail: request.event?.type ?? "" });
+      return { id: "published-ts", type: request.event?.type ?? "" };
     },
   });
 
@@ -203,10 +220,22 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     expect(run.id).toBe("run-native-ts");
     expect(run.status).toBe(WorkflowRunStatus.PENDING);
 
-    await client.publishEvent(create(PublishWorkflowProviderEventRequestSchema, {
+    const definition = await client.createDefinition({
+      idempotencyKey: "definition-native-ts",
+      target: {
+        kind: {
+          case: "plugin",
+          value: { pluginName: "demo", operation: "define" },
+        },
+      },
+    });
+    expect(definition.id).toBe("definition-native-ts");
+
+    const published = await client.publishEvent(create(PublishWorkflowProviderEventRequestSchema, {
       pluginName: "demo",
       event: { type: "demo.synced" },
     }));
+    expect(published.id).toBe("published-ts");
     expect(calls).toEqual([
       { method: "start-run", detail: "sync" },
       { method: "publish-event", detail: "demo.synced" },

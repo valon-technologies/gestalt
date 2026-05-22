@@ -667,6 +667,7 @@ type BoundWorkflowRun struct {
 	CreatedBy     *WorkflowActor
 	ExecutionRef  string
 	WorkflowKey   string
+	ProviderName  string
 }
 
 // boundWorkflowRunToProto creates a bound workflow run.
@@ -692,6 +693,7 @@ func boundWorkflowRunToProto(input BoundWorkflowRun) (*proto.BoundWorkflowRun, e
 		CreatedBy:     workflowActorFromInput(input.CreatedBy),
 		ExecutionRef:  input.ExecutionRef,
 		WorkflowKey:   input.WorkflowKey,
+		ProviderName:  input.ProviderName,
 	}, nil
 }
 
@@ -725,7 +727,58 @@ func boundWorkflowRunFromProto(value *proto.BoundWorkflowRun) (BoundWorkflowRun,
 		CreatedBy:     workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		ExecutionRef:  value.GetExecutionRef(),
 		WorkflowKey:   value.GetWorkflowKey(),
+		ProviderName:  value.GetProviderName(),
 	}, nil
+}
+
+// BoundWorkflowDefinition contains fields for constructing a
+// BoundWorkflowDefinition.
+type BoundWorkflowDefinition struct {
+	ID           string
+	Target       *BoundWorkflowTarget
+	CreatedBy    *WorkflowActor
+	CreatedAt    time.Time
+	ProviderName string
+}
+
+// boundWorkflowDefinitionToProto creates a bound workflow definition.
+func boundWorkflowDefinitionToProto(input BoundWorkflowDefinition) (*proto.BoundWorkflowDefinition, error) {
+	target, err := newOptionalBoundWorkflowTarget(input.Target)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.BoundWorkflowDefinition{
+		Id:           input.ID,
+		Target:       target,
+		CreatedBy:    workflowActorFromInput(input.CreatedBy),
+		CreatedAt:    timestampFromNonZeroTime(input.CreatedAt),
+		ProviderName: input.ProviderName,
+	}, nil
+}
+
+// boundWorkflowDefinitionFromProto converts an existing definition into
+// builder input.
+func boundWorkflowDefinitionFromProto(value *proto.BoundWorkflowDefinition) (BoundWorkflowDefinition, error) {
+	if value == nil {
+		return BoundWorkflowDefinition{}, nil
+	}
+	return BoundWorkflowDefinition{
+		ID:           value.GetId(),
+		Target:       workflowTargetInputPtrFromTarget(value.GetTarget()),
+		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
+		CreatedAt:    timeFromTimestamp(value.GetCreatedAt()),
+		ProviderName: value.GetProviderName(),
+	}, nil
+}
+
+// cloneBoundWorkflowDefinitionProto creates a copy of an existing definition
+// through the definition input builder.
+func cloneBoundWorkflowDefinitionProto(value *proto.BoundWorkflowDefinition) (*proto.BoundWorkflowDefinition, error) {
+	input, err := boundWorkflowDefinitionFromProto(value)
+	if err != nil || value == nil {
+		return nil, err
+	}
+	return boundWorkflowDefinitionToProto(input)
 }
 
 // cloneBoundWorkflowRunProto creates a copy of an existing bound workflow run
@@ -751,6 +804,7 @@ type BoundWorkflowSchedule struct {
 	NextRunAt    *time.Time
 	CreatedBy    *WorkflowActor
 	ExecutionRef string
+	ProviderName string
 }
 
 // boundWorkflowScheduleToProto creates a bound workflow schedule.
@@ -770,6 +824,7 @@ func boundWorkflowScheduleToProto(input BoundWorkflowSchedule) (*proto.BoundWork
 		NextRunAt:    timestampFromOptionalTime(input.NextRunAt),
 		CreatedBy:    workflowActorFromInput(input.CreatedBy),
 		ExecutionRef: input.ExecutionRef,
+		ProviderName: input.ProviderName,
 	}, nil
 }
 
@@ -794,6 +849,7 @@ func boundWorkflowScheduleFromProto(value *proto.BoundWorkflowSchedule) (BoundWo
 		NextRunAt:    nextRunAt,
 		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		ExecutionRef: value.GetExecutionRef(),
+		ProviderName: value.GetProviderName(),
 	}, nil
 }
 
@@ -818,6 +874,7 @@ type BoundWorkflowEventTrigger struct {
 	UpdatedAt    time.Time
 	CreatedBy    *WorkflowActor
 	ExecutionRef string
+	ProviderName string
 }
 
 // WorkflowEventMatch contains fields for matching workflow
@@ -843,6 +900,7 @@ func boundWorkflowEventTriggerToProto(input BoundWorkflowEventTrigger) (*proto.B
 		UpdatedAt:    timestampFromNonZeroTime(input.UpdatedAt),
 		CreatedBy:    workflowActorFromInput(input.CreatedBy),
 		ExecutionRef: input.ExecutionRef,
+		ProviderName: input.ProviderName,
 	}, nil
 }
 
@@ -861,6 +919,7 @@ func boundWorkflowEventTriggerFromProto(value *proto.BoundWorkflowEventTrigger) 
 		UpdatedAt:    timeFromTimestamp(value.GetUpdatedAt()),
 		CreatedBy:    workflowActorInputPtrFromActor(value.GetCreatedBy()),
 		ExecutionRef: value.GetExecutionRef(),
+		ProviderName: value.GetProviderName(),
 	}, nil
 }
 

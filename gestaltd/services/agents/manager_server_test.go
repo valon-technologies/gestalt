@@ -92,13 +92,13 @@ func TestManagerServerMapsSessionStartUnsupportedToFailedPrecondition(t *testing
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
-	server := NewManagerServer("caller-plugin", &recordingManagerService{
+	server := NewProviderServer("caller-plugin", &recordingManagerService{
 		createSession: func(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 			return nil, agentmanager.ErrAgentSessionStartUnsupported
 		},
 	}, tokens)
 
-	_, err = server.CreateSession(context.Background(), &proto.AgentManagerCreateSessionRequest{
+	_, err = server.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
 		InvocationToken: token,
 		ProviderName:    "managed",
 	})
@@ -122,13 +122,13 @@ func TestManagerServerMapsInvalidSessionMetadataToInvalidArgument(t *testing.T) 
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
-	server := NewManagerServer("caller-plugin", &recordingManagerService{
+	server := NewProviderServer("caller-plugin", &recordingManagerService{
 		createSession: func(context.Context, *principal.Principal, coreagent.ManagerCreateSessionRequest) (*coreagent.Session, error) {
 			return nil, agentmanager.ErrAgentSessionMetadataInvalid
 		},
 	}, tokens)
 
-	_, err = server.CreateSession(context.Background(), &proto.AgentManagerCreateSessionRequest{
+	_, err = server.CreateSession(context.Background(), &proto.CreateAgentProviderSessionRequest{
 		InvocationToken: token,
 		ProviderName:    "managed",
 	})
@@ -152,7 +152,7 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
-	server := NewManagerServer("caller-plugin", &recordingManagerService{
+	server := NewProviderServer("caller-plugin", &recordingManagerService{
 		createTurn: func(_ context.Context, p *principal.Principal, req coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
 			if p == nil || p.SubjectID != "user-1" {
 				t.Fatalf("principal = %#v, want subject user-1", p)
@@ -178,7 +178,7 @@ func TestManagerServerCreateTurnForwardsStructuredOutputInputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStruct: %v", err)
 	}
-	_, err = server.CreateTurn(context.Background(), &proto.AgentManagerCreateTurnRequest{
+	_, err = server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
 		SessionId:       "session-1",
 		InvocationToken: token,
 		ToolSource:      proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_NONE,
@@ -204,13 +204,13 @@ func TestManagerServerMapsStructuredOutputUnsupportedToFailedPrecondition(t *tes
 	if err != nil {
 		t.Fatalf("MintRootToken: %v", err)
 	}
-	server := NewManagerServer("caller-plugin", &recordingManagerService{
+	server := NewProviderServer("caller-plugin", &recordingManagerService{
 		createTurn: func(context.Context, *principal.Principal, coreagent.ManagerCreateTurnRequest) (*coreagent.Turn, error) {
 			return nil, agentmanager.ErrAgentStructuredOutputUnsupported
 		},
 	}, tokens)
 
-	_, err = server.CreateTurn(context.Background(), &proto.AgentManagerCreateTurnRequest{
+	_, err = server.CreateTurn(context.Background(), &proto.CreateAgentProviderTurnRequest{
 		SessionId:       "session-1",
 		InvocationToken: token,
 	})
@@ -266,9 +266,9 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 			}}, nil
 		},
 	}
-	server := NewManagerServer("caller-plugin", service, tokens)
+	server := NewProviderServer("caller-plugin", service, tokens)
 
-	if _, err := server.ListSessions(context.Background(), &proto.AgentManagerListSessionsRequest{
+	if _, err := server.ListSessions(context.Background(), &proto.ListAgentProviderSessionsRequest{
 		InvocationToken: token,
 		Limit:           -1,
 		SummaryOnly:     true,
@@ -276,7 +276,7 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 		t.Fatalf("ListSessions negative limit code = %v, want %v", status.Code(err), codes.InvalidArgument)
 	}
 
-	sessions, err := server.ListSessions(context.Background(), &proto.AgentManagerListSessionsRequest{
+	sessions, err := server.ListSessions(context.Background(), &proto.ListAgentProviderSessionsRequest{
 		ProviderName:    " managed ",
 		InvocationToken: token,
 		State:           proto.AgentSessionState_AGENT_SESSION_STATE_ACTIVE,
@@ -292,7 +292,7 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 		t.Fatalf("summary session metadata = %#v, want manager result preserved", got[0].GetMetadata())
 	}
 
-	if _, err := server.ListTurns(context.Background(), &proto.AgentManagerListTurnsRequest{
+	if _, err := server.ListTurns(context.Background(), &proto.ListAgentProviderTurnsRequest{
 		SessionId:       "session-1",
 		InvocationToken: token,
 		Limit:           -1,
@@ -301,7 +301,7 @@ func TestManagerServerForwardsBoundedListRequests(t *testing.T) {
 		t.Fatalf("ListTurns negative limit code = %v, want %v", status.Code(err), codes.InvalidArgument)
 	}
 
-	turns, err := server.ListTurns(context.Background(), &proto.AgentManagerListTurnsRequest{
+	turns, err := server.ListTurns(context.Background(), &proto.ListAgentProviderTurnsRequest{
 		SessionId:       "session-1",
 		InvocationToken: token,
 		Status:          proto.AgentExecutionStatus_AGENT_EXECUTION_STATUS_SUCCEEDED,

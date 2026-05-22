@@ -20,6 +20,7 @@ from gestalt import (
     AgentProvider,
     AuthenticationProvider,
     BeginLoginRequest,
+    BoundWorkflowDefinition,
     BoundWorkflowEventTrigger,
     BoundWorkflowRun,
     BoundWorkflowSchedule,
@@ -29,8 +30,10 @@ from gestalt import (
     CatalogOperation,
     CompleteLoginRequest,
     ConnectedToken,
+    CreateWorkflowProviderDefinitionRequest,
     ExternalTokenValidator,
     GetPluginRuntimeSupportRequest,
+    GetWorkflowProviderDefinitionRequest,
     HealthChecker,
     ListWorkflowProviderRunsRequest,
     ListWorkflowProviderRunsResponse,
@@ -49,7 +52,9 @@ from gestalt import (
     S3Provider,
     SessionTTLProvider,
     StartWorkflowProviderRunRequest,
+    UpdateWorkflowProviderDefinitionRequest,
     WarningsProvider,
+    WorkflowEvent,
     WorkflowProvider,
     _bootstrap,
     _runtime,
@@ -1445,6 +1450,108 @@ class WorkflowRuntimeTests(unittest.TestCase):
         self.assertIsInstance(provider.request, StartWorkflowProviderRunRequest)
         self.assertEqual(provider.request.workflow_key, "sync")
         self.assertEqual(response.id, "run-native")
+
+    def test_workflow_wrapper_maps_definition_crud(self) -> None:
+        class Provider(WorkflowProvider):
+            def create_definition(self, request: Any) -> Any:
+                self.create_request = request
+                return BoundWorkflowDefinition(
+                    id=request.idempotency_key,
+                    target=request.target,
+                )
+
+            def get_definition(self, request: Any) -> Any:
+                self.get_request = request
+                return BoundWorkflowDefinition(id=request.definition_id)
+
+            def update_definition(self, request: Any) -> Any:
+                self.update_request = request
+                return BoundWorkflowDefinition(
+                    id=request.definition_id,
+                    target=request.target,
+                )
+
+            def delete_definition(self, request: Any) -> None:
+                self.delete_request = request
+
+        provider = Provider()
+        wrapped = _runtime._workflow_provider_servicer(provider)
+        target = workflow_pb2.BoundWorkflowTarget(
+            plugin=workflow_pb2.BoundWorkflowPluginTarget(
+                plugin_name="demo",
+                operation="sync",
+            )
+        )
+
+        created = wrapped.CreateDefinition(
+            workflow_pb2.CreateWorkflowProviderDefinitionRequest(
+                idempotency_key="definition-1",
+                target=target,
+            ),
+            object(),
+        )
+        fetched = wrapped.GetDefinition(
+            workflow_pb2.GetWorkflowProviderDefinitionRequest(
+                definition_id="definition-1"
+            ),
+            object(),
+        )
+        updated = wrapped.UpdateDefinition(
+            workflow_pb2.UpdateWorkflowProviderDefinitionRequest(
+                definition_id="definition-1",
+                target=target,
+            ),
+            object(),
+        )
+        deleted = wrapped.DeleteDefinition(
+            workflow_pb2.DeleteWorkflowProviderDefinitionRequest(
+                definition_id="definition-1"
+            ),
+            object(),
+        )
+
+        self.assertIsInstance(
+            provider.create_request,
+            CreateWorkflowProviderDefinitionRequest,
+        )
+        self.assertIsInstance(provider.get_request, GetWorkflowProviderDefinitionRequest)
+        self.assertIsInstance(
+            provider.update_request,
+            UpdateWorkflowProviderDefinitionRequest,
+        )
+        self.assertEqual(provider.delete_request.definition_id, "definition-1")
+        self.assertEqual(created.id, "definition-1")
+        self.assertEqual(fetched.id, "definition-1")
+        self.assertEqual(updated.id, "definition-1")
+        self.assertIsInstance(deleted, empty_pb2.Empty)
+
+    def test_workflow_wrapper_returns_published_event(self) -> None:
+        class Provider(WorkflowProvider):
+            def publish_event(self, request: Any) -> Any:
+                self.request = request
+                return WorkflowEvent(
+                    id="published-py",
+                    source=request.event.source,
+                    type=request.event.type,
+                )
+
+        provider = Provider()
+        wrapped = _runtime._workflow_provider_servicer(provider)
+
+        response = wrapped.PublishEvent(
+            workflow_pb2.PublishWorkflowProviderEventRequest(
+                plugin_name="github",
+                event=workflow_pb2.WorkflowEvent(
+                    source="github",
+                    type="github.app.webhook",
+                ),
+            ),
+            object(),
+        )
+
+        self.assertEqual(provider.request.plugin_name, "github")
+        self.assertEqual(response.id, "published-py")
+        self.assertEqual(response.source, "github")
 
     def test_workflow_wrapper_maps_list_runs_pagination(self) -> None:
         class Provider(WorkflowProvider):

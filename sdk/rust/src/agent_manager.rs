@@ -8,7 +8,7 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
 use crate::generated::v1::{
-    self as pb, agent_manager_host_client::AgentManagerHostClient as ProtoAgentManagerHostClient,
+    self as pb, agent_provider_client::AgentProviderClient as ProtoAgentProviderClient,
 };
 use crate::{
     agent::{
@@ -23,9 +23,9 @@ use crate::{
 type AgentManagerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
 /// Environment variable containing the agent-manager host-service target.
-pub const ENV_AGENT_MANAGER_SOCKET: &str = "GESTALT_AGENT_MANAGER_SOCKET";
+pub const ENV_AGENT_MANAGER_SOCKET: &str = "GESTALT_AGENT_PROVIDER_SOCKET";
 /// Environment variable containing the optional agent-manager relay token.
-pub const ENV_AGENT_MANAGER_SOCKET_TOKEN: &str = "GESTALT_AGENT_MANAGER_SOCKET_TOKEN";
+pub const ENV_AGENT_MANAGER_SOCKET_TOKEN: &str = "GESTALT_AGENT_PROVIDER_SOCKET_TOKEN";
 const AGENT_MANAGER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
@@ -217,8 +217,8 @@ pub struct AgentManagerListInteractionsResponse {
 /// Creates a protocol create-session request.
 pub(crate) fn new_agent_manager_create_session_request(
     input: AgentManagerCreateSession,
-) -> crate::Result<pb::AgentManagerCreateSessionRequest> {
-    Ok(pb::AgentManagerCreateSessionRequest {
+) -> crate::Result<pb::CreateAgentProviderSessionRequest> {
+    Ok(pb::CreateAgentProviderSessionRequest {
         provider_name: input.provider_name,
         model: input.model,
         client_ref: input.client_ref,
@@ -226,46 +226,50 @@ pub(crate) fn new_agent_manager_create_session_request(
         idempotency_key: input.idempotency_key,
         invocation_token: String::new(),
         workspace: input.workspace.map(new_agent_workspace),
+        ..Default::default()
     })
 }
 
 pub(crate) fn new_agent_manager_get_session_request(
     input: AgentManagerGetSession,
-) -> pb::AgentManagerGetSessionRequest {
-    pb::AgentManagerGetSessionRequest {
+) -> pb::GetAgentProviderSessionRequest {
+    pb::GetAgentProviderSessionRequest {
         session_id: input.session_id,
         invocation_token: String::new(),
+        ..Default::default()
     }
 }
 
 pub(crate) fn new_agent_manager_list_sessions_request(
     input: AgentManagerListSessions,
-) -> pb::AgentManagerListSessionsRequest {
-    pb::AgentManagerListSessionsRequest {
+) -> pb::ListAgentProviderSessionsRequest {
+    pb::ListAgentProviderSessionsRequest {
         provider_name: input.provider_name,
         invocation_token: String::new(),
         state: input.state.as_i32(),
         limit: input.limit,
         summary_only: input.summary_only,
+        ..Default::default()
     }
 }
 
 pub(crate) fn new_agent_manager_update_session_request(
     input: AgentManagerUpdateSession,
-) -> crate::Result<pb::AgentManagerUpdateSessionRequest> {
-    Ok(pb::AgentManagerUpdateSessionRequest {
+) -> crate::Result<pb::UpdateAgentProviderSessionRequest> {
+    Ok(pb::UpdateAgentProviderSessionRequest {
         session_id: input.session_id,
         client_ref: input.client_ref,
         state: input.state.as_i32(),
         metadata: input.metadata.map(protocol::struct_from_json).transpose()?,
         invocation_token: String::new(),
+        ..Default::default()
     })
 }
 
 pub(crate) fn new_agent_manager_create_turn_request(
     input: AgentManagerCreateTurn,
-) -> crate::Result<pb::AgentManagerCreateTurnRequest> {
-    Ok(pb::AgentManagerCreateTurnRequest {
+) -> crate::Result<pb::CreateAgentProviderTurnRequest> {
+    Ok(pb::CreateAgentProviderTurnRequest {
         session_id: input.session_id,
         model: input.model,
         messages: new_agent_messages(input.messages)?,
@@ -284,64 +288,70 @@ pub(crate) fn new_agent_manager_create_turn_request(
             .map(protocol::struct_from_json)
             .transpose()?,
         timeout_seconds: input.timeout_seconds,
+        ..Default::default()
     })
 }
 
 pub(crate) fn new_agent_manager_get_turn_request(
     input: AgentManagerGetTurn,
-) -> pb::AgentManagerGetTurnRequest {
-    pb::AgentManagerGetTurnRequest {
+) -> pb::GetAgentProviderTurnRequest {
+    pb::GetAgentProviderTurnRequest {
         turn_id: input.turn_id,
         invocation_token: String::new(),
+        ..Default::default()
     }
 }
 
 pub(crate) fn new_agent_manager_list_turns_request(
     input: AgentManagerListTurns,
-) -> pb::AgentManagerListTurnsRequest {
-    pb::AgentManagerListTurnsRequest {
+) -> pb::ListAgentProviderTurnsRequest {
+    pb::ListAgentProviderTurnsRequest {
         session_id: input.session_id,
         invocation_token: String::new(),
         status: input.status.as_i32(),
         limit: input.limit,
         summary_only: input.summary_only,
+        ..Default::default()
     }
 }
 
 pub(crate) fn new_agent_manager_cancel_turn_request(
     input: AgentManagerCancelTurn,
-) -> pb::AgentManagerCancelTurnRequest {
-    pb::AgentManagerCancelTurnRequest {
+) -> pb::CancelAgentProviderTurnRequest {
+    pb::CancelAgentProviderTurnRequest {
         turn_id: input.turn_id,
         reason: input.reason,
         invocation_token: String::new(),
+        ..Default::default()
     }
 }
 
 pub(crate) fn new_agent_manager_list_turn_events_request(
     input: AgentManagerListTurnEvents,
-) -> pb::AgentManagerListTurnEventsRequest {
-    pb::AgentManagerListTurnEventsRequest {
+) -> pb::ListAgentProviderTurnEventsRequest {
+    pb::ListAgentProviderTurnEventsRequest {
         turn_id: input.turn_id,
         after_seq: input.after_seq,
         limit: input.limit,
         invocation_token: String::new(),
+        ..Default::default()
     }
 }
 
 pub(crate) fn new_agent_manager_list_interactions_request(
     input: AgentManagerListInteractions,
-) -> pb::AgentManagerListInteractionsRequest {
-    pb::AgentManagerListInteractionsRequest {
+) -> pb::ListAgentProviderInteractionsRequest {
+    pb::ListAgentProviderInteractionsRequest {
         turn_id: input.turn_id,
         invocation_token: String::new(),
+        ..Default::default()
     }
 }
 
 pub(crate) fn new_agent_manager_resolve_interaction_request(
     input: AgentManagerResolveInteraction,
-) -> crate::Result<pb::AgentManagerResolveInteractionRequest> {
-    Ok(pb::AgentManagerResolveInteractionRequest {
+) -> crate::Result<pb::ResolveAgentProviderInteractionRequest> {
+    Ok(pb::ResolveAgentProviderInteractionRequest {
         turn_id: input.turn_id,
         interaction_id: input.interaction_id,
         resolution: input
@@ -349,12 +359,13 @@ pub(crate) fn new_agent_manager_resolve_interaction_request(
             .map(protocol::struct_from_json)
             .transpose()?,
         invocation_token: String::new(),
+        ..Default::default()
     })
 }
 
 /// Client for managing agent sessions, turns, events, and interactions.
 pub struct AgentManager {
-    client: ProtoAgentManagerHostClient<AgentManagerTransport>,
+    client: ProtoAgentProviderClient<AgentManagerTransport>,
     invocation_token: String,
 }
 
@@ -395,7 +406,7 @@ impl AgentManager {
         };
 
         Ok(Self {
-            client: ProtoAgentManagerHostClient::with_interceptor(
+            client: ProtoAgentProviderClient::with_interceptor(
                 channel,
                 relay_token_interceptor(relay_token.trim())?,
             ),

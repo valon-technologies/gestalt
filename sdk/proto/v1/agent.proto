@@ -181,6 +181,9 @@ message CreateAgentProviderSessionRequest {
   SubjectContext subject = 8;
   AgentSessionStartConfig session_start = 9;
   PreparedAgentWorkspace prepared_workspace = 10;
+  string provider_name = 11;
+  string invocation_token = 12;
+  AgentWorkspace workspace = 13;
 }
 
 message AgentSessionStartConfig {
@@ -205,6 +208,7 @@ message AgentSessionStartHookOutput {
 message GetAgentProviderSessionRequest {
   string session_id = 1;
   SubjectContext subject = 2;
+  string invocation_token = 3;
 }
 
 message ListAgentProviderSessionsRequest {
@@ -217,6 +221,8 @@ message ListAgentProviderSessionsRequest {
   // When true and bounded_list_hydration is supported, omit heavy fields such as
   // metadata unless exact session_ids require direct lookup.
   bool summary_only = 5;
+  string provider_name = 6;
+  string invocation_token = 7;
 }
 
 message ListAgentProviderSessionsResponse {
@@ -229,6 +235,7 @@ message UpdateAgentProviderSessionRequest {
   AgentSessionState state = 3;
   google.protobuf.Struct metadata = 4;
   SubjectContext subject = 5;
+  string invocation_token = 6;
 }
 
 message AgentTurn {
@@ -283,11 +290,14 @@ message CreateAgentProviderTurnRequest {
   google.protobuf.Struct model_options = 16;
   string run_grant = 17;
   int32 timeout_seconds = 18;
+  string invocation_token = 19;
+  bool tool_refs_set = 20;
 }
 
 message GetAgentProviderTurnRequest {
   string turn_id = 1;
   SubjectContext subject = 2;
+  string invocation_token = 3;
 }
 
 message ListAgentProviderTurnsRequest {
@@ -302,6 +312,7 @@ message ListAgentProviderTurnsRequest {
   // messages, output text, and structured output unless exact turn_ids require
   // direct lookup.
   bool summary_only = 6;
+  string invocation_token = 7;
 }
 
 message ListAgentProviderTurnsResponse {
@@ -312,6 +323,7 @@ message CancelAgentProviderTurnRequest {
   string turn_id = 1;
   string reason = 2;
   SubjectContext subject = 3;
+  string invocation_token = 4;
 }
 
 message AgentTurnEvent {
@@ -331,6 +343,7 @@ message ListAgentProviderTurnEventsRequest {
   int64 after_seq = 2;
   int32 limit = 3;
   SubjectContext subject = 4;
+  string invocation_token = 5;
 }
 
 message ListAgentProviderTurnEventsResponse {
@@ -340,11 +353,13 @@ message ListAgentProviderTurnEventsResponse {
 message GetAgentProviderInteractionRequest {
   string interaction_id = 1;
   SubjectContext subject = 2;
+  string invocation_token = 3;
 }
 
 message ListAgentProviderInteractionsRequest {
   string turn_id = 1;
   SubjectContext subject = 2;
+  string invocation_token = 3;
 }
 
 message ListAgentProviderInteractionsResponse {
@@ -355,6 +370,8 @@ message ResolveAgentProviderInteractionRequest {
   string interaction_id = 1;
   google.protobuf.Struct resolution = 2;
   SubjectContext subject = 3;
+  string invocation_token = 4;
+  string turn_id = 5;
 }
 
 message ExecuteAgentToolRequest {
@@ -423,130 +440,6 @@ message ResolvedAgentConnection {
   google.protobuf.Timestamp expires_at = 7;
 }
 
-message AgentManagerCreateSessionRequest {
-  reserved 1, 6;
-  reserved "request_handle", "provider_options";
-  string provider_name = 2;
-  string model = 3;
-  string client_ref = 4;
-  google.protobuf.Struct metadata = 5;
-  string idempotency_key = 7;
-  string invocation_token = 8;
-  AgentWorkspace workspace = 9;
-}
-
-message AgentManagerGetSessionRequest {
-  reserved 1;
-  reserved "request_handle";
-  string session_id = 2;
-  string invocation_token = 3;
-}
-
-message AgentManagerListSessionsRequest {
-  reserved 1;
-  reserved "request_handle";
-  string provider_name = 2;
-  string invocation_token = 3;
-  AgentSessionState state = 4;
-  // Manager response cap after provider responses are normalized and globally
-  // sorted by session recency.
-  int32 limit = 5;
-  bool summary_only = 6;
-}
-
-message AgentManagerListSessionsResponse {
-  repeated AgentSession sessions = 1;
-}
-
-message AgentManagerUpdateSessionRequest {
-  reserved 1;
-  reserved "request_handle";
-  string session_id = 2;
-  string client_ref = 3;
-  AgentSessionState state = 4;
-  google.protobuf.Struct metadata = 5;
-  string invocation_token = 6;
-}
-
-message AgentManagerCreateTurnRequest {
-  reserved 1, 9;
-  reserved "request_handle", "provider_options";
-  string session_id = 2;
-  string model = 3;
-  repeated AgentMessage messages = 4;
-  repeated AgentToolRef tool_refs = 5;
-  AgentToolSourceMode tool_source = 6;
-  google.protobuf.Struct response_schema = 7;
-  google.protobuf.Struct metadata = 8;
-  string idempotency_key = 10;
-  string invocation_token = 11;
-  google.protobuf.Struct model_options = 12;
-  int32 timeout_seconds = 13;
-  bool tool_refs_set = 14;
-}
-
-message AgentManagerGetTurnRequest {
-  reserved 1;
-  reserved "request_handle";
-  string turn_id = 2;
-  string invocation_token = 3;
-}
-
-message AgentManagerListTurnsRequest {
-  reserved 1;
-  reserved "request_handle";
-  string session_id = 2;
-  string invocation_token = 3;
-  AgentExecutionStatus status = 4;
-  int32 limit = 5;
-  bool summary_only = 6;
-}
-
-message AgentManagerListTurnsResponse {
-  repeated AgentTurn turns = 1;
-}
-
-message AgentManagerCancelTurnRequest {
-  reserved 1;
-  reserved "request_handle";
-  string turn_id = 2;
-  string reason = 3;
-  string invocation_token = 4;
-}
-
-message AgentManagerListTurnEventsRequest {
-  reserved 1;
-  reserved "request_handle";
-  string turn_id = 2;
-  int64 after_seq = 3;
-  int32 limit = 4;
-  string invocation_token = 5;
-}
-
-message AgentManagerListTurnEventsResponse {
-  repeated AgentTurnEvent events = 1;
-}
-
-message AgentManagerListInteractionsRequest {
-  reserved 1;
-  reserved "request_handle";
-  string turn_id = 2;
-  string invocation_token = 3;
-}
-
-message AgentManagerListInteractionsResponse {
-  repeated AgentInteraction interactions = 1;
-}
-
-message AgentManagerResolveInteractionRequest {
-  reserved 1;
-  reserved "request_handle";
-  string turn_id = 2;
-  string interaction_id = 3;
-  google.protobuf.Struct resolution = 4;
-  string invocation_token = 5;
-}
-
 // AgentProvider is the authoritative agent data boundary. Read RPCs for
 // sessions, turns, turn events, and interactions should use provider-owned
 // control-plane state and should not require a live execution sandbox,
@@ -574,18 +467,4 @@ service AgentHost {
   rpc ListTools(ListAgentToolsRequest) returns (ListAgentToolsResponse);
   rpc ExecuteTool(ExecuteAgentToolRequest) returns (ExecuteAgentToolResponse);
   rpc ResolveConnection(ResolveAgentConnectionRequest) returns (ResolvedAgentConnection);
-}
-
-service AgentManagerHost {
-  rpc CreateSession(AgentManagerCreateSessionRequest) returns (AgentSession);
-  rpc GetSession(AgentManagerGetSessionRequest) returns (AgentSession);
-  rpc ListSessions(AgentManagerListSessionsRequest) returns (AgentManagerListSessionsResponse);
-  rpc UpdateSession(AgentManagerUpdateSessionRequest) returns (AgentSession);
-  rpc CreateTurn(AgentManagerCreateTurnRequest) returns (AgentTurn);
-  rpc GetTurn(AgentManagerGetTurnRequest) returns (AgentTurn);
-  rpc ListTurns(AgentManagerListTurnsRequest) returns (AgentManagerListTurnsResponse);
-  rpc CancelTurn(AgentManagerCancelTurnRequest) returns (AgentTurn);
-  rpc ListTurnEvents(AgentManagerListTurnEventsRequest) returns (AgentManagerListTurnEventsResponse);
-  rpc ListInteractions(AgentManagerListInteractionsRequest) returns (AgentManagerListInteractionsResponse);
-  rpc ResolveInteraction(AgentManagerResolveInteractionRequest) returns (AgentInteraction);
 }

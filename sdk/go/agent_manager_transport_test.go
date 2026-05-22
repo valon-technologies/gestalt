@@ -14,22 +14,22 @@ import (
 )
 
 type agentManagerTransportHarness struct {
-	proto.UnimplementedAgentManagerHostServer
+	proto.UnimplementedAgentProviderServer
 
 	mu              sync.Mutex
-	sessionRequests []*proto.AgentManagerCreateSessionRequest
-	turnRequests    []*proto.AgentManagerCreateTurnRequest
+	sessionRequests []*proto.CreateAgentProviderSessionRequest
+	turnRequests    []*proto.CreateAgentProviderTurnRequest
 	tokens          []string
 }
 
-func (h *agentManagerTransportHarness) CreateSession(ctx context.Context, req *proto.AgentManagerCreateSessionRequest) (*proto.AgentSession, error) {
+func (h *agentManagerTransportHarness) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.sessionRequests = append(h.sessionRequests, gproto.Clone(req).(*proto.AgentManagerCreateSessionRequest))
+	h.sessionRequests = append(h.sessionRequests, gproto.Clone(req).(*proto.CreateAgentProviderSessionRequest))
 	h.mu.Unlock()
 
 	return &proto.AgentSession{
@@ -41,14 +41,14 @@ func (h *agentManagerTransportHarness) CreateSession(ctx context.Context, req *p
 	}, nil
 }
 
-func (h *agentManagerTransportHarness) CreateTurn(ctx context.Context, req *proto.AgentManagerCreateTurnRequest) (*proto.AgentTurn, error) {
+func (h *agentManagerTransportHarness) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 
 	h.mu.Lock()
 	if values := md.Get("x-gestalt-host-service-relay-token"); len(values) > 0 {
 		h.tokens = append(h.tokens, values...)
 	}
-	h.turnRequests = append(h.turnRequests, gproto.Clone(req).(*proto.AgentManagerCreateTurnRequest))
+	h.turnRequests = append(h.turnRequests, gproto.Clone(req).(*proto.CreateAgentProviderTurnRequest))
 	h.mu.Unlock()
 
 	return &proto.AgentTurn{
@@ -69,7 +69,7 @@ func TestTransport_AgentManagerTCPTargetTokenEnv(t *testing.T) {
 
 	harness := &agentManagerTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterAgentManagerHostServer(srv, harness)
+	proto.RegisterAgentProviderServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -151,7 +151,7 @@ func TestTransport_AgentManagerCreateTurnNativeValues(t *testing.T) {
 
 	harness := &agentManagerTransportHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterAgentManagerHostServer(srv, harness)
+	proto.RegisterAgentProviderServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()

@@ -15,13 +15,9 @@ import {
   BoundWorkflowEventTriggerSchema,
   BoundWorkflowRunSchema,
   BoundWorkflowScheduleSchema,
-  ManagedWorkflowDefinitionSchema,
-  ManagedWorkflowEventTriggerSchema,
-  ManagedWorkflowRunSchema,
-  ManagedWorkflowRunSignalSchema,
-  ManagedWorkflowScheduleSchema,
+  SignalWorkflowRunResponseSchema,
   WorkflowEventSchema,
-  WorkflowManagerHost as WorkflowManagerHostService,
+  WorkflowProvider as WorkflowProviderService,
 } from "../src/internal/gen/v1/workflow_pb.ts";
 import {
   ENV_WORKFLOW_MANAGER_SOCKET,
@@ -66,7 +62,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     grpcWeb: false,
     connect: false,
     routes(router) {
-      router.service(WorkflowManagerHostService, {
+      router.service(WorkflowProviderService, {
         async startRun(input) {
           calls.push({
             method: "start-run",
@@ -75,12 +71,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             providerName: input.providerName,
             workflowKey: input.workflowKey,
           });
-          return create(ManagedWorkflowRunSchema, {
+          return create(BoundWorkflowRunSchema, {
             providerName: input.providerName || "basic",
-            run: create(BoundWorkflowRunSchema, {
-              id: "run-1",
-              ...(input.target ? { target: input.target } : {}),
-            }),
+            id: "run-1",
+            ...(input.target ? { target: input.target } : {}),
           });
         },
         async signalRun(input) {
@@ -90,9 +84,11 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             runId: input.runId,
             signalName: input.signal?.name,
           });
-          return create(ManagedWorkflowRunSignalSchema, {
-            providerName: "basic",
-            run: create(BoundWorkflowRunSchema, { id: input.runId }),
+          return create(SignalWorkflowRunResponseSchema, {
+            run: create(BoundWorkflowRunSchema, {
+              id: input.runId,
+              providerName: "basic",
+            }),
             signal: input.signal,
           });
         },
@@ -105,10 +101,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             signalName: input.signal?.name,
             workflowKey: input.workflowKey,
           });
-          return create(ManagedWorkflowRunSignalSchema, {
-            providerName: input.providerName || "basic",
+          return create(SignalWorkflowRunResponseSchema, {
             run: create(BoundWorkflowRunSchema, {
               id: "run-2",
+              providerName: input.providerName || "basic",
               ...(input.target ? { target: input.target } : {}),
             }),
             signal: input.signal,
@@ -123,12 +119,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             idempotencyKey: input.idempotencyKey,
             providerName: input.providerName,
           });
-          return create(ManagedWorkflowDefinitionSchema, {
+          return create(BoundWorkflowDefinitionSchema, {
             providerName: input.providerName || "basic",
-            definition: create(BoundWorkflowDefinitionSchema, {
-              id: "def-1",
-              ...(input.target ? { target: input.target } : {}),
-            }),
+            id: "def-1",
+            ...(input.target ? { target: input.target } : {}),
           });
         },
         async getDefinition(input) {
@@ -137,11 +131,9 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             invocationToken: input.invocationToken,
             definitionId: input.definitionId,
           });
-          return create(ManagedWorkflowDefinitionSchema, {
+          return create(BoundWorkflowDefinitionSchema, {
             providerName: "basic",
-            definition: create(BoundWorkflowDefinitionSchema, {
-              id: input.definitionId,
-            }),
+            id: input.definitionId,
           });
         },
         async updateDefinition(input) {
@@ -151,12 +143,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             definitionId: input.definitionId,
             providerName: input.providerName,
           });
-          return create(ManagedWorkflowDefinitionSchema, {
+          return create(BoundWorkflowDefinitionSchema, {
             providerName: input.providerName || "basic",
-            definition: create(BoundWorkflowDefinitionSchema, {
-              id: input.definitionId,
-              ...(input.target ? { target: input.target } : {}),
-            }),
+            id: input.definitionId,
+            ...(input.target ? { target: input.target } : {}),
           });
         },
         async deleteDefinition(input) {
@@ -167,21 +157,22 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
           });
           return create(EmptySchema, {});
         },
-        async createSchedule(input) {
+        async upsertSchedule(input) {
           calls.push({
-            method: "create",
+            method: input.scheduleId ? "update" : "create",
             invocationToken: input.invocationToken,
-            idempotencyKey: input.idempotencyKey,
+            ...(input.idempotencyKey
+              ? { idempotencyKey: input.idempotencyKey }
+              : {}),
+            ...(input.scheduleId ? { scheduleId: input.scheduleId } : {}),
           });
-          return create(ManagedWorkflowScheduleSchema, {
+          return create(BoundWorkflowScheduleSchema, {
             providerName: input.providerName || "basic",
-            schedule: create(BoundWorkflowScheduleSchema, {
-              id: "sched-1",
-              cron: input.cron,
-              timezone: input.timezone,
-              paused: input.paused,
-              ...(input.target ? { target: input.target } : {}),
-            }),
+            id: input.scheduleId || "sched-1",
+            cron: input.cron,
+            timezone: input.timezone,
+            paused: input.paused,
+            ...(input.target ? { target: input.target } : {}),
           });
         },
         async getSchedule(input) {
@@ -190,28 +181,9 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             invocationToken: input.invocationToken,
             scheduleId: input.scheduleId,
           });
-          return create(ManagedWorkflowScheduleSchema, {
+          return create(BoundWorkflowScheduleSchema, {
             providerName: "basic",
-            schedule: create(BoundWorkflowScheduleSchema, {
-              id: input.scheduleId,
-            }),
-          });
-        },
-        async updateSchedule(input) {
-          calls.push({
-            method: "update",
-            invocationToken: input.invocationToken,
-            scheduleId: input.scheduleId,
-          });
-          return create(ManagedWorkflowScheduleSchema, {
-            providerName: input.providerName || "basic",
-            schedule: create(BoundWorkflowScheduleSchema, {
-              id: input.scheduleId,
-              cron: input.cron,
-              timezone: input.timezone,
-              paused: input.paused,
-              ...(input.target ? { target: input.target } : {}),
-            }),
+            id: input.scheduleId,
           });
         },
         async deleteSchedule(input) {
@@ -228,12 +200,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             invocationToken: input.invocationToken,
             scheduleId: input.scheduleId,
           });
-          return create(ManagedWorkflowScheduleSchema, {
+          return create(BoundWorkflowScheduleSchema, {
             providerName: "basic",
-            schedule: create(BoundWorkflowScheduleSchema, {
-              id: input.scheduleId,
-              paused: true,
-            }),
+            id: input.scheduleId,
+            paused: true,
           });
         },
         async resumeSchedule(input) {
@@ -242,28 +212,27 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             invocationToken: input.invocationToken,
             scheduleId: input.scheduleId,
           });
-          return create(ManagedWorkflowScheduleSchema, {
+          return create(BoundWorkflowScheduleSchema, {
             providerName: "basic",
-            schedule: create(BoundWorkflowScheduleSchema, {
-              id: input.scheduleId,
-              paused: false,
-            }),
+            id: input.scheduleId,
+            paused: false,
           });
         },
-        async createEventTrigger(input) {
+        async upsertEventTrigger(input) {
           calls.push({
-            method: "create-trigger",
+            method: input.triggerId ? "update-trigger" : "create-trigger",
             invocationToken: input.invocationToken,
-            idempotencyKey: input.idempotencyKey,
+            ...(input.idempotencyKey
+              ? { idempotencyKey: input.idempotencyKey }
+              : {}),
+            ...(input.triggerId ? { triggerId: input.triggerId } : {}),
           });
-          return create(ManagedWorkflowEventTriggerSchema, {
+          return create(BoundWorkflowEventTriggerSchema, {
             providerName: input.providerName || "basic",
-            trigger: create(BoundWorkflowEventTriggerSchema, {
-              id: "trg-1",
-              paused: input.paused,
-              ...(input.match ? { match: input.match } : {}),
-              ...(input.target ? { target: input.target } : {}),
-            }),
+            id: input.triggerId || "trg-1",
+            paused: input.paused,
+            ...(input.match ? { match: input.match } : {}),
+            ...(input.target ? { target: input.target } : {}),
           });
         },
         async getEventTrigger(input) {
@@ -272,27 +241,9 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             invocationToken: input.invocationToken,
             triggerId: input.triggerId,
           });
-          return create(ManagedWorkflowEventTriggerSchema, {
+          return create(BoundWorkflowEventTriggerSchema, {
             providerName: "basic",
-            trigger: create(BoundWorkflowEventTriggerSchema, {
-              id: input.triggerId,
-            }),
-          });
-        },
-        async updateEventTrigger(input) {
-          calls.push({
-            method: "update-trigger",
-            invocationToken: input.invocationToken,
-            triggerId: input.triggerId,
-          });
-          return create(ManagedWorkflowEventTriggerSchema, {
-            providerName: input.providerName || "basic",
-            trigger: create(BoundWorkflowEventTriggerSchema, {
-              id: input.triggerId,
-              paused: input.paused,
-              ...(input.match ? { match: input.match } : {}),
-              ...(input.target ? { target: input.target } : {}),
-            }),
+            id: input.triggerId,
           });
         },
         async deleteEventTrigger(input) {
@@ -309,12 +260,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             invocationToken: input.invocationToken,
             triggerId: input.triggerId,
           });
-          return create(ManagedWorkflowEventTriggerSchema, {
+          return create(BoundWorkflowEventTriggerSchema, {
             providerName: "basic",
-            trigger: create(BoundWorkflowEventTriggerSchema, {
-              id: input.triggerId,
-              paused: true,
-            }),
+            id: input.triggerId,
+            paused: true,
           });
         },
         async resumeEventTrigger(input) {
@@ -323,12 +272,10 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             invocationToken: input.invocationToken,
             triggerId: input.triggerId,
           });
-          return create(ManagedWorkflowEventTriggerSchema, {
+          return create(BoundWorkflowEventTriggerSchema, {
             providerName: "basic",
-            trigger: create(BoundWorkflowEventTriggerSchema, {
-              id: input.triggerId,
-              paused: false,
-            }),
+            id: input.triggerId,
+            paused: false,
           });
         },
         async publishEvent(input) {
@@ -345,7 +292,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
             subject: input.event?.subject || "subject",
           });
         },
-      } satisfies Partial<ServiceImpl<typeof WorkflowManagerHostService>>);
+      } satisfies Partial<ServiceImpl<typeof WorkflowProviderService>>);
     },
   });
   const server = createServer(handler);
@@ -660,17 +607,15 @@ test("WorkflowManager honors tcp target env and relay token env", async () => {
     grpcWeb: false,
     connect: false,
     routes(router) {
-      router.service(WorkflowManagerHostService, {
-        async createSchedule(input) {
-          return create(ManagedWorkflowScheduleSchema, {
+      router.service(WorkflowProviderService, {
+        async upsertSchedule(input) {
+          return create(BoundWorkflowScheduleSchema, {
             providerName: input.providerName || "basic",
-            schedule: create(BoundWorkflowScheduleSchema, {
-              id: "sched-1",
-              cron: input.cron,
-            }),
+            id: "sched-1",
+            cron: input.cron,
           });
         },
-      } satisfies Partial<ServiceImpl<typeof WorkflowManagerHostService>>);
+      } satisfies Partial<ServiceImpl<typeof WorkflowProviderService>>);
     },
   });
   const server = createServer((req, res) => {

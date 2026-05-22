@@ -365,7 +365,7 @@ type Provider interface {
 	DeleteEventTrigger(ctx context.Context, req DeleteEventTriggerRequest) error
 	PauseEventTrigger(ctx context.Context, req PauseEventTriggerRequest) (*EventTrigger, error)
 	ResumeEventTrigger(ctx context.Context, req ResumeEventTriggerRequest) (*EventTrigger, error)
-	PublishEvent(ctx context.Context, req PublishEventRequest) error
+	PublishEvent(ctx context.Context, req PublishEventRequest) (*Event, error)
 	Ping(ctx context.Context) error
 	Close() error
 }

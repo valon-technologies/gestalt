@@ -13,16 +13,21 @@ use generated::v1::workflow_host_server::{
 use generated::v1::workflow_provider_client::WorkflowProviderClient;
 use generated::v1::{
     self as pb, BoundWorkflowPluginTarget as ProtoBoundWorkflowPluginTarget,
-    BoundWorkflowTarget as ProtoBoundWorkflowTarget, ConfigureProviderRequest, ProviderKind,
+    BoundWorkflowTarget as ProtoBoundWorkflowTarget, ConfigureProviderRequest,
+    ListWorkflowProviderRunsRequest as ProtoListWorkflowProviderRunsRequest, ProviderKind,
     PublishWorkflowProviderEventRequest as ProtoPublishWorkflowProviderEventRequest,
     StartWorkflowProviderRunRequest as ProtoStartWorkflowProviderRunRequest,
+    UpsertWorkflowProviderEventTriggerRequest as ProtoUpsertWorkflowProviderEventTriggerRequest,
+    UpsertWorkflowProviderScheduleRequest as ProtoUpsertWorkflowProviderScheduleRequest,
     WorkflowEvent as ProtoWorkflowEvent, WorkflowRunStatus as ProtoWorkflowRunStatus,
     bound_workflow_target,
 };
 use gestalt::{
-    BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowTarget, InvokeWorkflowOperationInput,
-    PublishWorkflowProviderEventRequest, RuntimeMetadata, StartWorkflowProviderRunRequest,
-    WorkflowHost, WorkflowProvider, WorkflowRunStatus,
+    BoundWorkflowEventTrigger, BoundWorkflowPluginTarget, BoundWorkflowRun, BoundWorkflowSchedule,
+    BoundWorkflowTarget, InvokeWorkflowOperationInput, ListWorkflowProviderRunsRequest,
+    ListWorkflowProviderRunsResponse, PublishWorkflowProviderEventRequest, RuntimeMetadata,
+    StartWorkflowProviderRunRequest, UpsertWorkflowProviderEventTriggerRequest,
+    UpsertWorkflowProviderScheduleRequest, WorkflowHost, WorkflowProvider, WorkflowRunStatus,
 };
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::{TcpListener, UnixListener, UnixStream};
@@ -37,6 +42,9 @@ const ENV_WORKFLOW_HOST_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_HOST_SOCKET_TOKEN
 struct TestWorkflowProvider {
     configured_name: Mutex<String>,
     published_events: Mutex<Vec<(String, String)>>,
+    list_run_target_plugins: Mutex<Vec<String>>,
+    schedule_bindings: Mutex<Vec<(String, String)>>,
+    trigger_bindings: Mutex<Vec<(String, String)>>,
 }
 
 #[derive(Default, Clone)]
@@ -72,6 +80,9 @@ impl WorkflowProvider for TestWorkflowProvider {
         &self,
         request: StartWorkflowProviderRunRequest,
     ) -> gestalt::Result<BoundWorkflowRun> {
+        if request.definition_id != "definition-42" {
+            return Err(gestalt::Error::bad_request("missing definition id"));
+        }
         let target = request
             .target
             .ok_or_else(|| gestalt::Error::bad_request("missing target"))?;
@@ -83,18 +94,63 @@ impl WorkflowProvider for TestWorkflowProvider {
         })
     }
 
+    async fn list_runs(
+        &self,
+        request: ListWorkflowProviderRunsRequest,
+    ) -> gestalt::Result<ListWorkflowProviderRunsResponse> {
+        self.list_run_target_plugins
+            .lock()
+            .expect("list_run_target_plugins lock")
+            .push(request.target_plugin);
+        Ok(ListWorkflowProviderRunsResponse::default())
+    }
+
+    async fn upsert_schedule(
+        &self,
+        request: UpsertWorkflowProviderScheduleRequest,
+    ) -> gestalt::Result<BoundWorkflowSchedule> {
+        self.schedule_bindings
+            .lock()
+            .expect("schedule_bindings lock")
+            .push((
+                request.idempotency_key.clone(),
+                request.definition_id.clone(),
+            ));
+        Ok(BoundWorkflowSchedule {
+            id: request.schedule_id,
+            ..Default::default()
+        })
+    }
+
+    async fn upsert_event_trigger(
+        &self,
+        request: UpsertWorkflowProviderEventTriggerRequest,
+    ) -> gestalt::Result<BoundWorkflowEventTrigger> {
+        self.trigger_bindings
+            .lock()
+            .expect("trigger_bindings lock")
+            .push((
+                request.idempotency_key.clone(),
+                request.definition_id.clone(),
+            ));
+        Ok(BoundWorkflowEventTrigger {
+            id: request.trigger_id,
+            ..Default::default()
+        })
+    }
+
     async fn publish_event(
         &self,
         request: PublishWorkflowProviderEventRequest,
-    ) -> gestalt::Result<()> {
+    ) -> gestalt::Result<gestalt::WorkflowEvent> {
         let event = request
             .event
             .ok_or_else(|| gestalt::Error::bad_request("missing event"))?;
         self.published_events
             .lock()
             .expect("published_events lock")
-            .push((request.plugin_name, event.event_type));
-        Ok(())
+            .push((request.plugin_name, event.event_type.clone()));
+        Ok(event)
     }
 }
 
@@ -193,6 +249,7 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
                 )),
             }),
             idempotency_key: "run-42".to_string(),
+            definition_id: "definition-42".to_string(),
             ..Default::default()
         })
         .await
@@ -222,6 +279,34 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
     );
 
     client
+        .list_runs(ProtoListWorkflowProviderRunsRequest {
+            target_plugin: "demo".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("list runs");
+
+    client
+        .upsert_schedule(ProtoUpsertWorkflowProviderScheduleRequest {
+            schedule_id: "schedule-1".to_string(),
+            idempotency_key: "schedule-key".to_string(),
+            definition_id: "definition-42".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("upsert schedule");
+
+    client
+        .upsert_event_trigger(ProtoUpsertWorkflowProviderEventTriggerRequest {
+            trigger_id: "trigger-1".to_string(),
+            idempotency_key: "trigger-key".to_string(),
+            definition_id: "definition-42".to_string(),
+            ..Default::default()
+        })
+        .await
+        .expect("upsert event trigger");
+
+    let published = client
         .publish_event(ProtoPublishWorkflowProviderEventRequest {
             plugin_name: "demo".to_string(),
             event: Some(ProtoWorkflowEvent {
@@ -232,9 +317,13 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
                 ..Default::default()
             }),
             published_by: None,
+            invocation_token: String::new(),
+            provider_name: String::new(),
         })
         .await
-        .expect("publish event");
+        .expect("publish event")
+        .into_inner();
+    assert_eq!(published.id, "evt_1");
 
     assert_eq!(
         *provider
@@ -250,6 +339,30 @@ async fn workflow_runtime_and_server_round_trip_over_unix_socket() {
             .expect("published_events lock")
             .clone(),
         vec![("demo".to_string(), "demo.refresh.requested".to_string())]
+    );
+    assert_eq!(
+        provider
+            .list_run_target_plugins
+            .lock()
+            .expect("list_run_target_plugins lock")
+            .clone(),
+        vec!["demo".to_string()]
+    );
+    assert_eq!(
+        provider
+            .schedule_bindings
+            .lock()
+            .expect("schedule_bindings lock")
+            .clone(),
+        vec![("schedule-key".to_string(), "definition-42".to_string())]
+    );
+    assert_eq!(
+        provider
+            .trigger_bindings
+            .lock()
+            .expect("trigger_bindings lock")
+            .clone(),
+        vec![("trigger-key".to_string(), "definition-42".to_string())]
     );
 
     serve_task.abort();

@@ -9,20 +9,22 @@ mod helpers;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use generated::v1::agent_manager_host_server::{
-    AgentManagerHost as ProtoAgentManagerHost, AgentManagerHostServer,
+use generated::v1::agent_provider_server::{
+    AgentProvider as ProtoAgentProvider, AgentProviderServer,
 };
 use generated::v1::{
     AgentExecutionStatus, AgentInteraction, AgentInteractionState as ProtoAgentInteractionState,
-    AgentInteractionType, AgentManagerCancelTurnRequest, AgentManagerCreateSessionRequest,
-    AgentManagerCreateTurnRequest, AgentManagerGetSessionRequest, AgentManagerGetTurnRequest,
-    AgentManagerListInteractionsRequest, AgentManagerListInteractionsResponse,
-    AgentManagerListSessionsRequest, AgentManagerListSessionsResponse,
-    AgentManagerListTurnEventsRequest, AgentManagerListTurnEventsResponse,
-    AgentManagerListTurnsRequest, AgentManagerListTurnsResponse,
-    AgentManagerResolveInteractionRequest, AgentManagerUpdateSessionRequest, AgentMessagePartType,
-    AgentSession, AgentSessionState as ProtoAgentSessionState,
-    AgentToolSourceMode as ProtoAgentToolSourceMode, AgentTurn, AgentTurnEvent,
+    AgentInteractionType, AgentMessagePartType, AgentProviderCapabilities, AgentSession,
+    AgentSessionState as ProtoAgentSessionState, AgentToolSourceMode as ProtoAgentToolSourceMode,
+    AgentTurn, AgentTurnEvent, CancelAgentProviderTurnRequest, CreateAgentProviderSessionRequest,
+    CreateAgentProviderTurnRequest, GetAgentProviderCapabilitiesRequest,
+    GetAgentProviderInteractionRequest, GetAgentProviderSessionRequest,
+    GetAgentProviderTurnRequest, ListAgentProviderInteractionsRequest,
+    ListAgentProviderInteractionsResponse, ListAgentProviderSessionsRequest,
+    ListAgentProviderSessionsResponse, ListAgentProviderTurnEventsRequest,
+    ListAgentProviderTurnEventsResponse, ListAgentProviderTurnsRequest,
+    ListAgentProviderTurnsResponse, ResolveAgentProviderInteractionRequest,
+    UpdateAgentProviderSessionRequest,
 };
 use gestalt::{
     AgentInteractionState, AgentManager, AgentManagerCancelTurn, AgentManagerCreateSession,
@@ -39,7 +41,7 @@ use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-const ENV_AGENT_MANAGER_SOCKET_TOKEN: &str = "GESTALT_AGENT_MANAGER_SOCKET_TOKEN";
+const ENV_AGENT_MANAGER_SOCKET_TOKEN: &str = "GESTALT_AGENT_PROVIDER_SOCKET_TOKEN";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
@@ -56,14 +58,14 @@ struct SeenRequest {
 struct TestAgentManagerServer {
     seen: Arc<Mutex<Vec<SeenRequest>>>,
     relay_tokens: Arc<Mutex<Vec<String>>>,
-    create_turn_requests: Arc<Mutex<Vec<AgentManagerCreateTurnRequest>>>,
+    create_turn_requests: Arc<Mutex<Vec<CreateAgentProviderTurnRequest>>>,
 }
 
 #[async_trait]
-impl ProtoAgentManagerHost for TestAgentManagerServer {
+impl ProtoAgentProvider for TestAgentManagerServer {
     async fn create_session(
         &self,
-        request: GrpcRequest<AgentManagerCreateSessionRequest>,
+        request: GrpcRequest<CreateAgentProviderSessionRequest>,
     ) -> std::result::Result<GrpcResponse<AgentSession>, Status> {
         maybe_record_relay_token(&self.relay_tokens, &request);
         let request = request.into_inner();
@@ -91,7 +93,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
 
     async fn get_session(
         &self,
-        request: GrpcRequest<AgentManagerGetSessionRequest>,
+        request: GrpcRequest<GetAgentProviderSessionRequest>,
     ) -> std::result::Result<GrpcResponse<AgentSession>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
@@ -117,8 +119,8 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
 
     async fn list_sessions(
         &self,
-        request: GrpcRequest<AgentManagerListSessionsRequest>,
-    ) -> std::result::Result<GrpcResponse<AgentManagerListSessionsResponse>, Status> {
+        request: GrpcRequest<ListAgentProviderSessionsRequest>,
+    ) -> std::result::Result<GrpcResponse<ListAgentProviderSessionsResponse>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "list_sessions".to_string(),
@@ -129,7 +131,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
             interaction_id: String::new(),
             reason: String::new(),
         });
-        Ok(GrpcResponse::new(AgentManagerListSessionsResponse {
+        Ok(GrpcResponse::new(ListAgentProviderSessionsResponse {
             sessions: vec![AgentSession {
                 id: "session-managed-1".to_string(),
                 provider_name: "openai".to_string(),
@@ -145,7 +147,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
 
     async fn update_session(
         &self,
-        request: GrpcRequest<AgentManagerUpdateSessionRequest>,
+        request: GrpcRequest<UpdateAgentProviderSessionRequest>,
     ) -> std::result::Result<GrpcResponse<AgentSession>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
@@ -172,7 +174,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
 
     async fn create_turn(
         &self,
-        request: GrpcRequest<AgentManagerCreateTurnRequest>,
+        request: GrpcRequest<CreateAgentProviderTurnRequest>,
     ) -> std::result::Result<GrpcResponse<AgentTurn>, Status> {
         let request = request.into_inner();
         self.create_turn_requests
@@ -205,7 +207,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
 
     async fn get_turn(
         &self,
-        request: GrpcRequest<AgentManagerGetTurnRequest>,
+        request: GrpcRequest<GetAgentProviderTurnRequest>,
     ) -> std::result::Result<GrpcResponse<AgentTurn>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
@@ -234,8 +236,8 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
 
     async fn list_turns(
         &self,
-        request: GrpcRequest<AgentManagerListTurnsRequest>,
-    ) -> std::result::Result<GrpcResponse<AgentManagerListTurnsResponse>, Status> {
+        request: GrpcRequest<ListAgentProviderTurnsRequest>,
+    ) -> std::result::Result<GrpcResponse<ListAgentProviderTurnsResponse>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "list_turns".to_string(),
@@ -246,7 +248,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
             interaction_id: String::new(),
             reason: String::new(),
         });
-        Ok(GrpcResponse::new(AgentManagerListTurnsResponse {
+        Ok(GrpcResponse::new(ListAgentProviderTurnsResponse {
             turns: vec![AgentTurn {
                 id: "turn-managed-1".to_string(),
                 session_id: request.session_id,
@@ -263,7 +265,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
 
     async fn cancel_turn(
         &self,
-        request: GrpcRequest<AgentManagerCancelTurnRequest>,
+        request: GrpcRequest<CancelAgentProviderTurnRequest>,
     ) -> std::result::Result<GrpcResponse<AgentTurn>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
@@ -291,8 +293,8 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
 
     async fn list_turn_events(
         &self,
-        request: GrpcRequest<AgentManagerListTurnEventsRequest>,
-    ) -> std::result::Result<GrpcResponse<AgentManagerListTurnEventsResponse>, Status> {
+        request: GrpcRequest<ListAgentProviderTurnEventsRequest>,
+    ) -> std::result::Result<GrpcResponse<ListAgentProviderTurnEventsResponse>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "list_turn_events".to_string(),
@@ -303,7 +305,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
             interaction_id: String::new(),
             reason: String::new(),
         });
-        Ok(GrpcResponse::new(AgentManagerListTurnEventsResponse {
+        Ok(GrpcResponse::new(ListAgentProviderTurnEventsResponse {
             events: vec![AgentTurnEvent {
                 id: format!("{}-event-1", request.turn_id.clone()),
                 turn_id: request.turn_id,
@@ -319,8 +321,8 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
 
     async fn list_interactions(
         &self,
-        request: GrpcRequest<AgentManagerListInteractionsRequest>,
-    ) -> std::result::Result<GrpcResponse<AgentManagerListInteractionsResponse>, Status> {
+        request: GrpcRequest<ListAgentProviderInteractionsRequest>,
+    ) -> std::result::Result<GrpcResponse<ListAgentProviderInteractionsResponse>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "list_interactions".to_string(),
@@ -331,7 +333,7 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
             interaction_id: String::new(),
             reason: String::new(),
         });
-        Ok(GrpcResponse::new(AgentManagerListInteractionsResponse {
+        Ok(GrpcResponse::new(ListAgentProviderInteractionsResponse {
             interactions: vec![AgentInteraction {
                 id: "interaction-1".to_string(),
                 turn_id: request.turn_id,
@@ -346,9 +348,27 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
         }))
     }
 
+    async fn get_interaction(
+        &self,
+        request: GrpcRequest<GetAgentProviderInteractionRequest>,
+    ) -> std::result::Result<GrpcResponse<AgentInteraction>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(AgentInteraction {
+            id: request.interaction_id,
+            turn_id: "turn-managed-1".to_string(),
+            session_id: "session-managed-1".to_string(),
+            r#type: AgentInteractionType::Approval as i32,
+            state: ProtoAgentInteractionState::Pending as i32,
+            title: "Approve command".to_string(),
+            prompt: "Run git status?".to_string(),
+            created_at: Some(helpers::timestamp_now()),
+            ..Default::default()
+        }))
+    }
+
     async fn resolve_interaction(
         &self,
-        request: GrpcRequest<AgentManagerResolveInteractionRequest>,
+        request: GrpcRequest<ResolveAgentProviderInteractionRequest>,
     ) -> std::result::Result<GrpcResponse<AgentInteraction>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
@@ -373,6 +393,13 @@ impl ProtoAgentManagerHost for TestAgentManagerServer {
             resolved_at: Some(helpers::timestamp_now()),
             ..Default::default()
         }))
+    }
+
+    async fn get_capabilities(
+        &self,
+        _request: GrpcRequest<GetAgentProviderCapabilitiesRequest>,
+    ) -> std::result::Result<GrpcResponse<AgentProviderCapabilities>, Status> {
+        Ok(GrpcResponse::new(AgentProviderCapabilities::default()))
     }
 }
 
@@ -835,7 +862,7 @@ async fn serve_agent_manager(
     let listener = UnixListener::bind(socket).expect("bind unix listener");
 
     Server::builder()
-        .add_service(AgentManagerHostServer::new(server))
+        .add_service(AgentProviderServer::new(server))
         .serve_with_incoming(UnixListenerStream::new(listener))
         .await
 }
@@ -845,14 +872,14 @@ async fn serve_agent_manager_tcp(
     listener: TcpListener,
 ) -> std::result::Result<(), tonic::transport::Error> {
     Server::builder()
-        .add_service(AgentManagerHostServer::new(server))
+        .add_service(AgentProviderServer::new(server))
         .serve_with_incoming(TcpListenerStream::new(listener))
         .await
 }
 
 fn maybe_record_relay_token(
     relay_tokens: &Arc<Mutex<Vec<String>>>,
-    request: &GrpcRequest<AgentManagerCreateSessionRequest>,
+    request: &GrpcRequest<CreateAgentProviderSessionRequest>,
 ) {
     if let Some(token) = request.metadata().get("x-gestalt-host-service-relay-token") {
         relay_tokens

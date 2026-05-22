@@ -967,13 +967,13 @@ func fakeHostedS3RoundTrip(bucket, key, value, binding string, env map[string]st
 }
 
 func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]string) (map[string]any, error) {
-	target := strings.TrimSpace(env[workflowservice.DefaultManagerSocketEnv])
+	target := strings.TrimSpace(env[workflowservice.DefaultProviderSocketEnv])
 	if target == "" {
-		return nil, fmt.Errorf("missing workflow manager relay target in %s", workflowservice.DefaultManagerSocketEnv)
+		return nil, fmt.Errorf("missing workflow manager relay target in %s", workflowservice.DefaultProviderSocketEnv)
 	}
-	token := strings.TrimSpace(env[workflowservice.ManagerSocketTokenEnv()])
+	token := strings.TrimSpace(env[workflowservice.ProviderSocketTokenEnv()])
 	if token == "" {
-		return nil, fmt.Errorf("missing workflow manager relay token in %s", workflowservice.ManagerSocketTokenEnv())
+		return nil, fmt.Errorf("missing workflow manager relay token in %s", workflowservice.ProviderSocketTokenEnv())
 	}
 	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
 	if address == "" || address == target {
@@ -997,8 +997,8 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
-	client := proto.NewWorkflowManagerHostClient(conn)
-	created, err := client.CreateSchedule(ctx, &proto.WorkflowManagerCreateScheduleRequest{
+	client := proto.NewWorkflowProviderClient(conn)
+	created, err := client.UpsertSchedule(ctx, &proto.UpsertWorkflowProviderScheduleRequest{
 		InvocationToken: invocationToken,
 		ProviderName:    "managed",
 		Cron:            "*/5 * * * *",
@@ -1016,11 +1016,11 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 	if err != nil {
 		return nil, fmt.Errorf("create workflow schedule: %w", err)
 	}
-	scheduleID := strings.TrimSpace(created.GetSchedule().GetId())
+	scheduleID := strings.TrimSpace(created.GetId())
 	if scheduleID == "" {
 		return nil, fmt.Errorf("workflow manager create did not return a schedule id")
 	}
-	fetched, err := client.GetSchedule(ctx, &proto.WorkflowManagerGetScheduleRequest{
+	fetched, err := client.GetSchedule(ctx, &proto.GetWorkflowProviderScheduleRequest{
 		InvocationToken: invocationToken,
 		ScheduleId:      scheduleID,
 	})
@@ -1031,8 +1031,8 @@ func fakeHostedWorkflowManagerRoundTrip(invocationToken string, env map[string]s
 	return map[string]any{
 		"provider_name": created.GetProviderName(),
 		"schedule_id":   scheduleID,
-		"cron":          fetched.GetSchedule().GetCron(),
-		"operation":     fetched.GetSchedule().GetTarget().GetPlugin().GetOperation(),
+		"cron":          fetched.GetCron(),
+		"operation":     fetched.GetTarget().GetPlugin().GetOperation(),
 	}, nil
 }
 
@@ -1097,13 +1097,13 @@ func fakeHostedAuthorizationRoundTrip(env map[string]string) (map[string]any, er
 }
 
 func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]string) (map[string]any, error) {
-	target := strings.TrimSpace(env[agentservice.DefaultManagerSocketEnv])
+	target := strings.TrimSpace(env[agentservice.DefaultProviderSocketEnv])
 	if target == "" {
-		return nil, fmt.Errorf("missing agent manager relay target in %s", agentservice.DefaultManagerSocketEnv)
+		return nil, fmt.Errorf("missing agent manager relay target in %s", agentservice.DefaultProviderSocketEnv)
 	}
-	token := strings.TrimSpace(env[agentservice.ManagerSocketTokenEnv()])
+	token := strings.TrimSpace(env[agentservice.ProviderSocketTokenEnv()])
 	if token == "" {
-		return nil, fmt.Errorf("missing agent manager relay token in %s", agentservice.ManagerSocketTokenEnv())
+		return nil, fmt.Errorf("missing agent manager relay token in %s", agentservice.ProviderSocketTokenEnv())
 	}
 	address := strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
 	if address == "" || address == target {
@@ -1127,8 +1127,8 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, token))
 
-	client := proto.NewAgentManagerHostClient(conn)
-	session, err := client.CreateSession(ctx, &proto.AgentManagerCreateSessionRequest{
+	client := proto.NewAgentProviderClient(conn)
+	session, err := client.CreateSession(ctx, &proto.CreateAgentProviderSessionRequest{
 		InvocationToken: invocationToken,
 		ProviderName:    "managed",
 		Model:           "gpt-test",
@@ -1150,7 +1150,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 		return nil, fmt.Errorf("build agent turn metadata: %w", err)
 	}
 
-	turn, err := client.CreateTurn(ctx, &proto.AgentManagerCreateTurnRequest{
+	turn, err := client.CreateTurn(ctx, &proto.CreateAgentProviderTurnRequest{
 		InvocationToken: invocationToken,
 		SessionId:       sessionID,
 		Model:           "gpt-test",
@@ -1174,7 +1174,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 		return nil, fmt.Errorf("agent manager create turn did not return a turn id")
 	}
 
-	interactions, err := client.ListInteractions(ctx, &proto.AgentManagerListInteractionsRequest{
+	interactions, err := client.ListInteractions(ctx, &proto.ListAgentProviderInteractionsRequest{
 		InvocationToken: invocationToken,
 		TurnId:          turnID,
 	})
@@ -1195,7 +1195,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 	if err != nil {
 		return nil, fmt.Errorf("build interaction resolution: %w", err)
 	}
-	resolved, err := client.ResolveInteraction(ctx, &proto.AgentManagerResolveInteractionRequest{
+	resolved, err := client.ResolveInteraction(ctx, &proto.ResolveAgentProviderInteractionRequest{
 		InvocationToken: invocationToken,
 		TurnId:          turnID,
 		InteractionId:   interactionID,
@@ -1205,7 +1205,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 		return nil, fmt.Errorf("resolve agent interaction: %w", err)
 	}
 
-	fetched, err := client.GetTurn(ctx, &proto.AgentManagerGetTurnRequest{
+	fetched, err := client.GetTurn(ctx, &proto.GetAgentProviderTurnRequest{
 		InvocationToken: invocationToken,
 		TurnId:          turnID,
 	})
@@ -1213,7 +1213,7 @@ func fakeHostedAgentManagerRoundTrip(invocationToken string, env map[string]stri
 		return nil, fmt.Errorf("get agent turn: %w", err)
 	}
 
-	events, err := client.ListTurnEvents(ctx, &proto.AgentManagerListTurnEventsRequest{
+	events, err := client.ListTurnEvents(ctx, &proto.ListAgentProviderTurnEventsRequest{
 		InvocationToken: invocationToken,
 		TurnId:          turnID,
 		AfterSeq:        0,
@@ -3987,7 +3987,7 @@ func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": workflowservice.DefaultManagerSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": workflowservice.DefaultProviderSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -4000,7 +4000,7 @@ func TestPluginWorkflowManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("workflow manager env %q should be set for executable plugins", workflowservice.DefaultManagerSocketEnv)
+		t.Fatalf("workflow manager env %q should be set for executable plugins", workflowservice.DefaultProviderSocketEnv)
 	}
 }
 
@@ -4040,7 +4040,7 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("providers.Get(echo): %v", err)
 	}
 
-	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": agentservice.DefaultManagerSocketEnv}, "")
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": agentservice.DefaultProviderSocketEnv}, "")
 	if err != nil {
 		t.Fatalf("Execute read_env: %v", err)
 	}
@@ -4053,7 +4053,7 @@ func TestPluginAgentManagerExposeHostSocketEnv(t *testing.T) {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	if !env.Found || env.Value == "" {
-		t.Fatalf("agent manager env %q should be set for executable plugins", agentservice.DefaultManagerSocketEnv)
+		t.Fatalf("agent manager env %q should be set for executable plugins", agentservice.DefaultProviderSocketEnv)
 	}
 }
 
@@ -4172,7 +4172,7 @@ func TestPluginAgentManagerTurnUsesInheritedInvokesAndRequestContext(t *testing.
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	defer func() { _ = CloseProviders(providers) }()
-	assertPublicHostServicesVerified(t, publicHostServices, "agent_manager", agentservice.DefaultManagerSocketEnv)
+	assertPublicHostServicesVerified(t, publicHostServices, "agent_provider", agentservice.DefaultProviderSocketEnv)
 
 	prov, err := providers.Get("echoext")
 	if err != nil {
@@ -7439,18 +7439,18 @@ func TestPluginRuntimeConfigUsesPublicWorkflowManagerRelayWithoutHostServiceTunn
 		return env.Value, env.Found
 	}
 
-	if got, found := checkEnv(workflowservice.DefaultManagerSocketEnv); !found || got != "tls://gestalt.example.test:443" {
-		t.Fatalf("plugin workflow manager env %s = (%q, %v), want (%q, true)", workflowservice.DefaultManagerSocketEnv, got, found, "tls://gestalt.example.test:443")
+	if got, found := checkEnv(workflowservice.DefaultProviderSocketEnv); !found || got != "tls://gestalt.example.test:443" {
+		t.Fatalf("plugin workflow manager env %s = (%q, %v), want (%q, true)", workflowservice.DefaultProviderSocketEnv, got, found, "tls://gestalt.example.test:443")
 	}
-	if got, found := checkEnv(workflowservice.ManagerSocketTokenEnv()); !found || got == "" {
-		t.Fatalf("plugin workflow manager token env %s = (%q, %v), want non-empty token", workflowservice.ManagerSocketTokenEnv(), got, found)
+	if got, found := checkEnv(workflowservice.ProviderSocketTokenEnv()); !found || got == "" {
+		t.Fatalf("plugin workflow manager token env %s = (%q, %v), want non-empty token", workflowservice.ProviderSocketTokenEnv(), got, found)
 	}
 
 	startRequests := runtimeProvider.startPluginRequestsCopy()
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], workflowservice.DefaultManagerSocketEnv)
+	assertStartPluginRelayEnv(t, startRequests[0], workflowservice.DefaultProviderSocketEnv)
 	if allowedHosts := slices.Clone(startRequests[0].Egress.AllowedHosts); !slices.Contains(allowedHosts, "gestalt.example.test") {
 		t.Fatalf("StartPlugin allowed hosts = %#v, want relay host gestalt.example.test", allowedHosts)
 	}
@@ -8016,7 +8016,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 		t.Fatalf("buildProvidersStrict: %v", err)
 	}
 	t.Cleanup(func() { _ = CloseProviders(providers) })
-	assertPublicHostServicesVerified(t, publicHostServices, "workflow_manager", workflowservice.DefaultManagerSocketEnv)
+	assertPublicHostServicesVerified(t, publicHostServices, "workflow_provider", workflowservice.DefaultProviderSocketEnv)
 
 	prov, err := providers.Get("echoext")
 	if err != nil {
@@ -8084,7 +8084,7 @@ func TestPluginRuntimePublicWorkflowManagerRelayRoundTripsThroughHostedPlugin(t 
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], workflowservice.DefaultManagerSocketEnv)
+	assertStartPluginRelayEnv(t, startRequests[0], workflowservice.DefaultProviderSocketEnv)
 }
 
 func TestPluginRuntimePublicAuthorizationRelayRoundTripsThroughHostedPlugin(t *testing.T) {

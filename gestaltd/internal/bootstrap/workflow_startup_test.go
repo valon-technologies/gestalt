@@ -125,8 +125,8 @@ func (p startupTestWorkflowProvider) ResumeEventTrigger(context.Context, corewor
 	return &coreworkflow.EventTrigger{}, nil
 }
 
-func (p startupTestWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
-	return nil
+func (p startupTestWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
+	return &req.Event, nil
 }
 
 func (p startupTestWorkflowProvider) Ping(context.Context) error { return nil }

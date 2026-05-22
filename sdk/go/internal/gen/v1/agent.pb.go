@@ -1390,6 +1390,9 @@ type CreateAgentProviderSessionRequest struct {
 	Subject           *SubjectContext          `protobuf:"bytes,8,opt,name=subject,proto3" json:"subject,omitempty"`
 	SessionStart      *AgentSessionStartConfig `protobuf:"bytes,9,opt,name=session_start,json=sessionStart,proto3" json:"session_start,omitempty"`
 	PreparedWorkspace *PreparedAgentWorkspace  `protobuf:"bytes,10,opt,name=prepared_workspace,json=preparedWorkspace,proto3" json:"prepared_workspace,omitempty"`
+	ProviderName      string                   `protobuf:"bytes,11,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	InvocationToken   string                   `protobuf:"bytes,12,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	Workspace         *AgentWorkspace          `protobuf:"bytes,13,opt,name=workspace,proto3" json:"workspace,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1483,6 +1486,27 @@ func (x *CreateAgentProviderSessionRequest) GetSessionStart() *AgentSessionStart
 func (x *CreateAgentProviderSessionRequest) GetPreparedWorkspace() *PreparedAgentWorkspace {
 	if x != nil {
 		return x.PreparedWorkspace
+	}
+	return nil
+}
+
+func (x *CreateAgentProviderSessionRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
+func (x *CreateAgentProviderSessionRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
+func (x *CreateAgentProviderSessionRequest) GetWorkspace() *AgentWorkspace {
+	if x != nil {
+		return x.Workspace
 	}
 	return nil
 }
@@ -1676,11 +1700,12 @@ func (x *AgentSessionStartHookOutput) GetMetadata() bool {
 }
 
 type GetAgentProviderSessionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Subject       *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	SessionId       string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Subject         *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetAgentProviderSessionRequest) Reset() {
@@ -1727,6 +1752,13 @@ func (x *GetAgentProviderSessionRequest) GetSubject() *SubjectContext {
 	return nil
 }
 
+func (x *GetAgentProviderSessionRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type ListAgentProviderSessionsRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Subject    *SubjectContext        `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
@@ -1737,9 +1769,11 @@ type ListAgentProviderSessionsRequest struct {
 	Limit int32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	// When true and bounded_list_hydration is supported, omit heavy fields such as
 	// metadata unless exact session_ids require direct lookup.
-	SummaryOnly   bool `protobuf:"varint,5,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SummaryOnly     bool   `protobuf:"varint,5,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
+	ProviderName    string `protobuf:"bytes,6,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	InvocationToken string `protobuf:"bytes,7,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListAgentProviderSessionsRequest) Reset() {
@@ -1807,6 +1841,20 @@ func (x *ListAgentProviderSessionsRequest) GetSummaryOnly() bool {
 	return false
 }
 
+func (x *ListAgentProviderSessionsRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
+func (x *ListAgentProviderSessionsRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type ListAgentProviderSessionsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Sessions      []*AgentSession        `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
@@ -1852,14 +1900,15 @@ func (x *ListAgentProviderSessionsResponse) GetSessions() []*AgentSession {
 }
 
 type UpdateAgentProviderSessionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	ClientRef     string                 `protobuf:"bytes,2,opt,name=client_ref,json=clientRef,proto3" json:"client_ref,omitempty"`
-	State         AgentSessionState      `protobuf:"varint,3,opt,name=state,proto3,enum=gestalt.provider.v1.AgentSessionState" json:"state,omitempty"`
-	Metadata      *structpb.Struct       `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	Subject       *SubjectContext        `protobuf:"bytes,5,opt,name=subject,proto3" json:"subject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	SessionId       string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	ClientRef       string                 `protobuf:"bytes,2,opt,name=client_ref,json=clientRef,proto3" json:"client_ref,omitempty"`
+	State           AgentSessionState      `protobuf:"varint,3,opt,name=state,proto3,enum=gestalt.provider.v1.AgentSessionState" json:"state,omitempty"`
+	Metadata        *structpb.Struct       `protobuf:"bytes,4,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	Subject         *SubjectContext        `protobuf:"bytes,5,opt,name=subject,proto3" json:"subject,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,6,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UpdateAgentProviderSessionRequest) Reset() {
@@ -1925,6 +1974,13 @@ func (x *UpdateAgentProviderSessionRequest) GetSubject() *SubjectContext {
 		return x.Subject
 	}
 	return nil
+}
+
+func (x *UpdateAgentProviderSessionRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
 }
 
 type AgentTurn struct {
@@ -2208,25 +2264,27 @@ func (x *AgentTurnDisplay) GetLanguage() string {
 }
 
 type CreateAgentProviderTurnRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	TurnId         string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	SessionId      string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	IdempotencyKey string                 `protobuf:"bytes,3,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	Model          string                 `protobuf:"bytes,4,opt,name=model,proto3" json:"model,omitempty"`
-	Messages       []*AgentMessage        `protobuf:"bytes,5,rep,name=messages,proto3" json:"messages,omitempty"`
-	Tools          []*ResolvedAgentTool   `protobuf:"bytes,6,rep,name=tools,proto3" json:"tools,omitempty"`
-	ResponseSchema *structpb.Struct       `protobuf:"bytes,7,opt,name=response_schema,json=responseSchema,proto3" json:"response_schema,omitempty"`
-	Metadata       *structpb.Struct       `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	CreatedBy      *AgentActor            `protobuf:"bytes,10,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
-	ExecutionRef   string                 `protobuf:"bytes,11,opt,name=execution_ref,json=executionRef,proto3" json:"execution_ref,omitempty"`
-	ToolRefs       []*AgentToolRef        `protobuf:"bytes,12,rep,name=tool_refs,json=toolRefs,proto3" json:"tool_refs,omitempty"`
-	ToolSource     AgentToolSourceMode    `protobuf:"varint,13,opt,name=tool_source,json=toolSource,proto3,enum=gestalt.provider.v1.AgentToolSourceMode" json:"tool_source,omitempty"`
-	Subject        *SubjectContext        `protobuf:"bytes,14,opt,name=subject,proto3" json:"subject,omitempty"`
-	ModelOptions   *structpb.Struct       `protobuf:"bytes,16,opt,name=model_options,json=modelOptions,proto3" json:"model_options,omitempty"`
-	RunGrant       string                 `protobuf:"bytes,17,opt,name=run_grant,json=runGrant,proto3" json:"run_grant,omitempty"`
-	TimeoutSeconds int32                  `protobuf:"varint,18,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TurnId          string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	IdempotencyKey  string                 `protobuf:"bytes,3,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	Model           string                 `protobuf:"bytes,4,opt,name=model,proto3" json:"model,omitempty"`
+	Messages        []*AgentMessage        `protobuf:"bytes,5,rep,name=messages,proto3" json:"messages,omitempty"`
+	Tools           []*ResolvedAgentTool   `protobuf:"bytes,6,rep,name=tools,proto3" json:"tools,omitempty"`
+	ResponseSchema  *structpb.Struct       `protobuf:"bytes,7,opt,name=response_schema,json=responseSchema,proto3" json:"response_schema,omitempty"`
+	Metadata        *structpb.Struct       `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	CreatedBy       *AgentActor            `protobuf:"bytes,10,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	ExecutionRef    string                 `protobuf:"bytes,11,opt,name=execution_ref,json=executionRef,proto3" json:"execution_ref,omitempty"`
+	ToolRefs        []*AgentToolRef        `protobuf:"bytes,12,rep,name=tool_refs,json=toolRefs,proto3" json:"tool_refs,omitempty"`
+	ToolSource      AgentToolSourceMode    `protobuf:"varint,13,opt,name=tool_source,json=toolSource,proto3,enum=gestalt.provider.v1.AgentToolSourceMode" json:"tool_source,omitempty"`
+	Subject         *SubjectContext        `protobuf:"bytes,14,opt,name=subject,proto3" json:"subject,omitempty"`
+	ModelOptions    *structpb.Struct       `protobuf:"bytes,16,opt,name=model_options,json=modelOptions,proto3" json:"model_options,omitempty"`
+	RunGrant        string                 `protobuf:"bytes,17,opt,name=run_grant,json=runGrant,proto3" json:"run_grant,omitempty"`
+	TimeoutSeconds  int32                  `protobuf:"varint,18,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,19,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	ToolRefsSet     bool                   `protobuf:"varint,20,opt,name=tool_refs_set,json=toolRefsSet,proto3" json:"tool_refs_set,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CreateAgentProviderTurnRequest) Reset() {
@@ -2371,12 +2429,27 @@ func (x *CreateAgentProviderTurnRequest) GetTimeoutSeconds() int32 {
 	return 0
 }
 
+func (x *CreateAgentProviderTurnRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
+func (x *CreateAgentProviderTurnRequest) GetToolRefsSet() bool {
+	if x != nil {
+		return x.ToolRefsSet
+	}
+	return false
+}
+
 type GetAgentProviderTurnRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	Subject       *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TurnId          string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	Subject         *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetAgentProviderTurnRequest) Reset() {
@@ -2423,6 +2496,13 @@ func (x *GetAgentProviderTurnRequest) GetSubject() *SubjectContext {
 	return nil
 }
 
+func (x *GetAgentProviderTurnRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type ListAgentProviderTurnsRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	SessionId string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -2435,9 +2515,10 @@ type ListAgentProviderTurnsRequest struct {
 	// When true and bounded_list_hydration is supported, omit heavy fields such as
 	// messages, output text, and structured output unless exact turn_ids require
 	// direct lookup.
-	SummaryOnly   bool `protobuf:"varint,6,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SummaryOnly     bool   `protobuf:"varint,6,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
+	InvocationToken string `protobuf:"bytes,7,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListAgentProviderTurnsRequest) Reset() {
@@ -2512,6 +2593,13 @@ func (x *ListAgentProviderTurnsRequest) GetSummaryOnly() bool {
 	return false
 }
 
+func (x *ListAgentProviderTurnsRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type ListAgentProviderTurnsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Turns         []*AgentTurn           `protobuf:"bytes,1,rep,name=turns,proto3" json:"turns,omitempty"`
@@ -2557,12 +2645,13 @@ func (x *ListAgentProviderTurnsResponse) GetTurns() []*AgentTurn {
 }
 
 type CancelAgentProviderTurnRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
-	Subject       *SubjectContext        `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TurnId          string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	Reason          string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	Subject         *SubjectContext        `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,4,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CancelAgentProviderTurnRequest) Reset() {
@@ -2614,6 +2703,13 @@ func (x *CancelAgentProviderTurnRequest) GetSubject() *SubjectContext {
 		return x.Subject
 	}
 	return nil
+}
+
+func (x *CancelAgentProviderTurnRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
 }
 
 type AgentTurnEvent struct {
@@ -2725,13 +2821,14 @@ func (x *AgentTurnEvent) GetDisplay() *AgentTurnDisplay {
 }
 
 type ListAgentProviderTurnEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	AfterSeq      int64                  `protobuf:"varint,2,opt,name=after_seq,json=afterSeq,proto3" json:"after_seq,omitempty"`
-	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
-	Subject       *SubjectContext        `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TurnId          string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	AfterSeq        int64                  `protobuf:"varint,2,opt,name=after_seq,json=afterSeq,proto3" json:"after_seq,omitempty"`
+	Limit           int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	Subject         *SubjectContext        `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,5,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListAgentProviderTurnEventsRequest) Reset() {
@@ -2792,6 +2889,13 @@ func (x *ListAgentProviderTurnEventsRequest) GetSubject() *SubjectContext {
 	return nil
 }
 
+func (x *ListAgentProviderTurnEventsRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type ListAgentProviderTurnEventsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Events        []*AgentTurnEvent      `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
@@ -2837,11 +2941,12 @@ func (x *ListAgentProviderTurnEventsResponse) GetEvents() []*AgentTurnEvent {
 }
 
 type GetAgentProviderInteractionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InteractionId string                 `protobuf:"bytes,1,opt,name=interaction_id,json=interactionId,proto3" json:"interaction_id,omitempty"`
-	Subject       *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	InteractionId   string                 `protobuf:"bytes,1,opt,name=interaction_id,json=interactionId,proto3" json:"interaction_id,omitempty"`
+	Subject         *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetAgentProviderInteractionRequest) Reset() {
@@ -2888,12 +2993,20 @@ func (x *GetAgentProviderInteractionRequest) GetSubject() *SubjectContext {
 	return nil
 }
 
+func (x *GetAgentProviderInteractionRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
 type ListAgentProviderInteractionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TurnId        string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	Subject       *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	TurnId          string                 `protobuf:"bytes,1,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	Subject         *SubjectContext        `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListAgentProviderInteractionsRequest) Reset() {
@@ -2938,6 +3051,13 @@ func (x *ListAgentProviderInteractionsRequest) GetSubject() *SubjectContext {
 		return x.Subject
 	}
 	return nil
+}
+
+func (x *ListAgentProviderInteractionsRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
 }
 
 type ListAgentProviderInteractionsResponse struct {
@@ -2985,12 +3105,14 @@ func (x *ListAgentProviderInteractionsResponse) GetInteractions() []*AgentIntera
 }
 
 type ResolveAgentProviderInteractionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InteractionId string                 `protobuf:"bytes,1,opt,name=interaction_id,json=interactionId,proto3" json:"interaction_id,omitempty"`
-	Resolution    *structpb.Struct       `protobuf:"bytes,2,opt,name=resolution,proto3" json:"resolution,omitempty"`
-	Subject       *SubjectContext        `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	InteractionId   string                 `protobuf:"bytes,1,opt,name=interaction_id,json=interactionId,proto3" json:"interaction_id,omitempty"`
+	Resolution      *structpb.Struct       `protobuf:"bytes,2,opt,name=resolution,proto3" json:"resolution,omitempty"`
+	Subject         *SubjectContext        `protobuf:"bytes,3,opt,name=subject,proto3" json:"subject,omitempty"`
+	InvocationToken string                 `protobuf:"bytes,4,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
+	TurnId          string                 `protobuf:"bytes,5,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ResolveAgentProviderInteractionRequest) Reset() {
@@ -3042,6 +3164,20 @@ func (x *ResolveAgentProviderInteractionRequest) GetSubject() *SubjectContext {
 		return x.Subject
 	}
 	return nil
+}
+
+func (x *ResolveAgentProviderInteractionRequest) GetInvocationToken() string {
+	if x != nil {
+		return x.InvocationToken
+	}
+	return ""
+}
+
+func (x *ResolveAgentProviderInteractionRequest) GetTurnId() string {
+	if x != nil {
+		return x.TurnId
+	}
+	return ""
 }
 
 type ExecuteAgentToolRequest struct {
@@ -3608,988 +3744,6 @@ func (x *ResolvedAgentConnection) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
-type AgentManagerCreateSessionRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	ProviderName    string                 `protobuf:"bytes,2,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
-	Model           string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
-	ClientRef       string                 `protobuf:"bytes,4,opt,name=client_ref,json=clientRef,proto3" json:"client_ref,omitempty"`
-	Metadata        *structpb.Struct       `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	IdempotencyKey  string                 `protobuf:"bytes,7,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,8,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	Workspace       *AgentWorkspace        `protobuf:"bytes,9,opt,name=workspace,proto3" json:"workspace,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *AgentManagerCreateSessionRequest) Reset() {
-	*x = AgentManagerCreateSessionRequest{}
-	mi := &file_v1_agent_proto_msgTypes[43]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerCreateSessionRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerCreateSessionRequest) ProtoMessage() {}
-
-func (x *AgentManagerCreateSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[43]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerCreateSessionRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerCreateSessionRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{43}
-}
-
-func (x *AgentManagerCreateSessionRequest) GetProviderName() string {
-	if x != nil {
-		return x.ProviderName
-	}
-	return ""
-}
-
-func (x *AgentManagerCreateSessionRequest) GetModel() string {
-	if x != nil {
-		return x.Model
-	}
-	return ""
-}
-
-func (x *AgentManagerCreateSessionRequest) GetClientRef() string {
-	if x != nil {
-		return x.ClientRef
-	}
-	return ""
-}
-
-func (x *AgentManagerCreateSessionRequest) GetMetadata() *structpb.Struct {
-	if x != nil {
-		return x.Metadata
-	}
-	return nil
-}
-
-func (x *AgentManagerCreateSessionRequest) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
-	}
-	return ""
-}
-
-func (x *AgentManagerCreateSessionRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
-func (x *AgentManagerCreateSessionRequest) GetWorkspace() *AgentWorkspace {
-	if x != nil {
-		return x.Workspace
-	}
-	return nil
-}
-
-type AgentManagerGetSessionRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *AgentManagerGetSessionRequest) Reset() {
-	*x = AgentManagerGetSessionRequest{}
-	mi := &file_v1_agent_proto_msgTypes[44]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerGetSessionRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerGetSessionRequest) ProtoMessage() {}
-
-func (x *AgentManagerGetSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[44]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerGetSessionRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerGetSessionRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{44}
-}
-
-func (x *AgentManagerGetSessionRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *AgentManagerGetSessionRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
-type AgentManagerListSessionsRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	ProviderName    string                 `protobuf:"bytes,2,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	State           AgentSessionState      `protobuf:"varint,4,opt,name=state,proto3,enum=gestalt.provider.v1.AgentSessionState" json:"state,omitempty"`
-	// Manager response cap after provider responses are normalized and globally
-	// sorted by session recency.
-	Limit         int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
-	SummaryOnly   bool  `protobuf:"varint,6,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AgentManagerListSessionsRequest) Reset() {
-	*x = AgentManagerListSessionsRequest{}
-	mi := &file_v1_agent_proto_msgTypes[45]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerListSessionsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerListSessionsRequest) ProtoMessage() {}
-
-func (x *AgentManagerListSessionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[45]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerListSessionsRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerListSessionsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{45}
-}
-
-func (x *AgentManagerListSessionsRequest) GetProviderName() string {
-	if x != nil {
-		return x.ProviderName
-	}
-	return ""
-}
-
-func (x *AgentManagerListSessionsRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
-func (x *AgentManagerListSessionsRequest) GetState() AgentSessionState {
-	if x != nil {
-		return x.State
-	}
-	return AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED
-}
-
-func (x *AgentManagerListSessionsRequest) GetLimit() int32 {
-	if x != nil {
-		return x.Limit
-	}
-	return 0
-}
-
-func (x *AgentManagerListSessionsRequest) GetSummaryOnly() bool {
-	if x != nil {
-		return x.SummaryOnly
-	}
-	return false
-}
-
-type AgentManagerListSessionsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sessions      []*AgentSession        `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AgentManagerListSessionsResponse) Reset() {
-	*x = AgentManagerListSessionsResponse{}
-	mi := &file_v1_agent_proto_msgTypes[46]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerListSessionsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerListSessionsResponse) ProtoMessage() {}
-
-func (x *AgentManagerListSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[46]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerListSessionsResponse.ProtoReflect.Descriptor instead.
-func (*AgentManagerListSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{46}
-}
-
-func (x *AgentManagerListSessionsResponse) GetSessions() []*AgentSession {
-	if x != nil {
-		return x.Sessions
-	}
-	return nil
-}
-
-type AgentManagerUpdateSessionRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	ClientRef       string                 `protobuf:"bytes,3,opt,name=client_ref,json=clientRef,proto3" json:"client_ref,omitempty"`
-	State           AgentSessionState      `protobuf:"varint,4,opt,name=state,proto3,enum=gestalt.provider.v1.AgentSessionState" json:"state,omitempty"`
-	Metadata        *structpb.Struct       `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,6,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *AgentManagerUpdateSessionRequest) Reset() {
-	*x = AgentManagerUpdateSessionRequest{}
-	mi := &file_v1_agent_proto_msgTypes[47]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerUpdateSessionRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerUpdateSessionRequest) ProtoMessage() {}
-
-func (x *AgentManagerUpdateSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[47]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerUpdateSessionRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerUpdateSessionRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{47}
-}
-
-func (x *AgentManagerUpdateSessionRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *AgentManagerUpdateSessionRequest) GetClientRef() string {
-	if x != nil {
-		return x.ClientRef
-	}
-	return ""
-}
-
-func (x *AgentManagerUpdateSessionRequest) GetState() AgentSessionState {
-	if x != nil {
-		return x.State
-	}
-	return AgentSessionState_AGENT_SESSION_STATE_UNSPECIFIED
-}
-
-func (x *AgentManagerUpdateSessionRequest) GetMetadata() *structpb.Struct {
-	if x != nil {
-		return x.Metadata
-	}
-	return nil
-}
-
-func (x *AgentManagerUpdateSessionRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
-type AgentManagerCreateTurnRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Model           string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
-	Messages        []*AgentMessage        `protobuf:"bytes,4,rep,name=messages,proto3" json:"messages,omitempty"`
-	ToolRefs        []*AgentToolRef        `protobuf:"bytes,5,rep,name=tool_refs,json=toolRefs,proto3" json:"tool_refs,omitempty"`
-	ToolSource      AgentToolSourceMode    `protobuf:"varint,6,opt,name=tool_source,json=toolSource,proto3,enum=gestalt.provider.v1.AgentToolSourceMode" json:"tool_source,omitempty"`
-	ResponseSchema  *structpb.Struct       `protobuf:"bytes,7,opt,name=response_schema,json=responseSchema,proto3" json:"response_schema,omitempty"`
-	Metadata        *structpb.Struct       `protobuf:"bytes,8,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	IdempotencyKey  string                 `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,11,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	ModelOptions    *structpb.Struct       `protobuf:"bytes,12,opt,name=model_options,json=modelOptions,proto3" json:"model_options,omitempty"`
-	TimeoutSeconds  int32                  `protobuf:"varint,13,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
-	ToolRefsSet     bool                   `protobuf:"varint,14,opt,name=tool_refs_set,json=toolRefsSet,proto3" json:"tool_refs_set,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *AgentManagerCreateTurnRequest) Reset() {
-	*x = AgentManagerCreateTurnRequest{}
-	mi := &file_v1_agent_proto_msgTypes[48]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerCreateTurnRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerCreateTurnRequest) ProtoMessage() {}
-
-func (x *AgentManagerCreateTurnRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[48]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerCreateTurnRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerCreateTurnRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{48}
-}
-
-func (x *AgentManagerCreateTurnRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *AgentManagerCreateTurnRequest) GetModel() string {
-	if x != nil {
-		return x.Model
-	}
-	return ""
-}
-
-func (x *AgentManagerCreateTurnRequest) GetMessages() []*AgentMessage {
-	if x != nil {
-		return x.Messages
-	}
-	return nil
-}
-
-func (x *AgentManagerCreateTurnRequest) GetToolRefs() []*AgentToolRef {
-	if x != nil {
-		return x.ToolRefs
-	}
-	return nil
-}
-
-func (x *AgentManagerCreateTurnRequest) GetToolSource() AgentToolSourceMode {
-	if x != nil {
-		return x.ToolSource
-	}
-	return AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_UNSPECIFIED
-}
-
-func (x *AgentManagerCreateTurnRequest) GetResponseSchema() *structpb.Struct {
-	if x != nil {
-		return x.ResponseSchema
-	}
-	return nil
-}
-
-func (x *AgentManagerCreateTurnRequest) GetMetadata() *structpb.Struct {
-	if x != nil {
-		return x.Metadata
-	}
-	return nil
-}
-
-func (x *AgentManagerCreateTurnRequest) GetIdempotencyKey() string {
-	if x != nil {
-		return x.IdempotencyKey
-	}
-	return ""
-}
-
-func (x *AgentManagerCreateTurnRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
-func (x *AgentManagerCreateTurnRequest) GetModelOptions() *structpb.Struct {
-	if x != nil {
-		return x.ModelOptions
-	}
-	return nil
-}
-
-func (x *AgentManagerCreateTurnRequest) GetTimeoutSeconds() int32 {
-	if x != nil {
-		return x.TimeoutSeconds
-	}
-	return 0
-}
-
-func (x *AgentManagerCreateTurnRequest) GetToolRefsSet() bool {
-	if x != nil {
-		return x.ToolRefsSet
-	}
-	return false
-}
-
-type AgentManagerGetTurnRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	TurnId          string                 `protobuf:"bytes,2,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *AgentManagerGetTurnRequest) Reset() {
-	*x = AgentManagerGetTurnRequest{}
-	mi := &file_v1_agent_proto_msgTypes[49]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerGetTurnRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerGetTurnRequest) ProtoMessage() {}
-
-func (x *AgentManagerGetTurnRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[49]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerGetTurnRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerGetTurnRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{49}
-}
-
-func (x *AgentManagerGetTurnRequest) GetTurnId() string {
-	if x != nil {
-		return x.TurnId
-	}
-	return ""
-}
-
-func (x *AgentManagerGetTurnRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
-type AgentManagerListTurnsRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	SessionId       string                 `protobuf:"bytes,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	Status          AgentExecutionStatus   `protobuf:"varint,4,opt,name=status,proto3,enum=gestalt.provider.v1.AgentExecutionStatus" json:"status,omitempty"`
-	Limit           int32                  `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
-	SummaryOnly     bool                   `protobuf:"varint,6,opt,name=summary_only,json=summaryOnly,proto3" json:"summary_only,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *AgentManagerListTurnsRequest) Reset() {
-	*x = AgentManagerListTurnsRequest{}
-	mi := &file_v1_agent_proto_msgTypes[50]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerListTurnsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerListTurnsRequest) ProtoMessage() {}
-
-func (x *AgentManagerListTurnsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[50]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerListTurnsRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerListTurnsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{50}
-}
-
-func (x *AgentManagerListTurnsRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *AgentManagerListTurnsRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
-func (x *AgentManagerListTurnsRequest) GetStatus() AgentExecutionStatus {
-	if x != nil {
-		return x.Status
-	}
-	return AgentExecutionStatus_AGENT_EXECUTION_STATUS_UNSPECIFIED
-}
-
-func (x *AgentManagerListTurnsRequest) GetLimit() int32 {
-	if x != nil {
-		return x.Limit
-	}
-	return 0
-}
-
-func (x *AgentManagerListTurnsRequest) GetSummaryOnly() bool {
-	if x != nil {
-		return x.SummaryOnly
-	}
-	return false
-}
-
-type AgentManagerListTurnsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Turns         []*AgentTurn           `protobuf:"bytes,1,rep,name=turns,proto3" json:"turns,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AgentManagerListTurnsResponse) Reset() {
-	*x = AgentManagerListTurnsResponse{}
-	mi := &file_v1_agent_proto_msgTypes[51]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerListTurnsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerListTurnsResponse) ProtoMessage() {}
-
-func (x *AgentManagerListTurnsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[51]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerListTurnsResponse.ProtoReflect.Descriptor instead.
-func (*AgentManagerListTurnsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{51}
-}
-
-func (x *AgentManagerListTurnsResponse) GetTurns() []*AgentTurn {
-	if x != nil {
-		return x.Turns
-	}
-	return nil
-}
-
-type AgentManagerCancelTurnRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	TurnId          string                 `protobuf:"bytes,2,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	Reason          string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,4,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *AgentManagerCancelTurnRequest) Reset() {
-	*x = AgentManagerCancelTurnRequest{}
-	mi := &file_v1_agent_proto_msgTypes[52]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerCancelTurnRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerCancelTurnRequest) ProtoMessage() {}
-
-func (x *AgentManagerCancelTurnRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[52]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerCancelTurnRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerCancelTurnRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{52}
-}
-
-func (x *AgentManagerCancelTurnRequest) GetTurnId() string {
-	if x != nil {
-		return x.TurnId
-	}
-	return ""
-}
-
-func (x *AgentManagerCancelTurnRequest) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
-}
-
-func (x *AgentManagerCancelTurnRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
-type AgentManagerListTurnEventsRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	TurnId          string                 `protobuf:"bytes,2,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	AfterSeq        int64                  `protobuf:"varint,3,opt,name=after_seq,json=afterSeq,proto3" json:"after_seq,omitempty"`
-	Limit           int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,5,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *AgentManagerListTurnEventsRequest) Reset() {
-	*x = AgentManagerListTurnEventsRequest{}
-	mi := &file_v1_agent_proto_msgTypes[53]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerListTurnEventsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerListTurnEventsRequest) ProtoMessage() {}
-
-func (x *AgentManagerListTurnEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[53]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerListTurnEventsRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerListTurnEventsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{53}
-}
-
-func (x *AgentManagerListTurnEventsRequest) GetTurnId() string {
-	if x != nil {
-		return x.TurnId
-	}
-	return ""
-}
-
-func (x *AgentManagerListTurnEventsRequest) GetAfterSeq() int64 {
-	if x != nil {
-		return x.AfterSeq
-	}
-	return 0
-}
-
-func (x *AgentManagerListTurnEventsRequest) GetLimit() int32 {
-	if x != nil {
-		return x.Limit
-	}
-	return 0
-}
-
-func (x *AgentManagerListTurnEventsRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
-type AgentManagerListTurnEventsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []*AgentTurnEvent      `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AgentManagerListTurnEventsResponse) Reset() {
-	*x = AgentManagerListTurnEventsResponse{}
-	mi := &file_v1_agent_proto_msgTypes[54]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerListTurnEventsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerListTurnEventsResponse) ProtoMessage() {}
-
-func (x *AgentManagerListTurnEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[54]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerListTurnEventsResponse.ProtoReflect.Descriptor instead.
-func (*AgentManagerListTurnEventsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{54}
-}
-
-func (x *AgentManagerListTurnEventsResponse) GetEvents() []*AgentTurnEvent {
-	if x != nil {
-		return x.Events
-	}
-	return nil
-}
-
-type AgentManagerListInteractionsRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	TurnId          string                 `protobuf:"bytes,2,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,3,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *AgentManagerListInteractionsRequest) Reset() {
-	*x = AgentManagerListInteractionsRequest{}
-	mi := &file_v1_agent_proto_msgTypes[55]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerListInteractionsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerListInteractionsRequest) ProtoMessage() {}
-
-func (x *AgentManagerListInteractionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[55]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerListInteractionsRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerListInteractionsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{55}
-}
-
-func (x *AgentManagerListInteractionsRequest) GetTurnId() string {
-	if x != nil {
-		return x.TurnId
-	}
-	return ""
-}
-
-func (x *AgentManagerListInteractionsRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
-type AgentManagerListInteractionsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Interactions  []*AgentInteraction    `protobuf:"bytes,1,rep,name=interactions,proto3" json:"interactions,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AgentManagerListInteractionsResponse) Reset() {
-	*x = AgentManagerListInteractionsResponse{}
-	mi := &file_v1_agent_proto_msgTypes[56]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerListInteractionsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerListInteractionsResponse) ProtoMessage() {}
-
-func (x *AgentManagerListInteractionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[56]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerListInteractionsResponse.ProtoReflect.Descriptor instead.
-func (*AgentManagerListInteractionsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{56}
-}
-
-func (x *AgentManagerListInteractionsResponse) GetInteractions() []*AgentInteraction {
-	if x != nil {
-		return x.Interactions
-	}
-	return nil
-}
-
-type AgentManagerResolveInteractionRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	TurnId          string                 `protobuf:"bytes,2,opt,name=turn_id,json=turnId,proto3" json:"turn_id,omitempty"`
-	InteractionId   string                 `protobuf:"bytes,3,opt,name=interaction_id,json=interactionId,proto3" json:"interaction_id,omitempty"`
-	Resolution      *structpb.Struct       `protobuf:"bytes,4,opt,name=resolution,proto3" json:"resolution,omitempty"`
-	InvocationToken string                 `protobuf:"bytes,5,opt,name=invocation_token,json=invocationToken,proto3" json:"invocation_token,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *AgentManagerResolveInteractionRequest) Reset() {
-	*x = AgentManagerResolveInteractionRequest{}
-	mi := &file_v1_agent_proto_msgTypes[57]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AgentManagerResolveInteractionRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AgentManagerResolveInteractionRequest) ProtoMessage() {}
-
-func (x *AgentManagerResolveInteractionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_agent_proto_msgTypes[57]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AgentManagerResolveInteractionRequest.ProtoReflect.Descriptor instead.
-func (*AgentManagerResolveInteractionRequest) Descriptor() ([]byte, []int) {
-	return file_v1_agent_proto_rawDescGZIP(), []int{57}
-}
-
-func (x *AgentManagerResolveInteractionRequest) GetTurnId() string {
-	if x != nil {
-		return x.TurnId
-	}
-	return ""
-}
-
-func (x *AgentManagerResolveInteractionRequest) GetInteractionId() string {
-	if x != nil {
-		return x.InteractionId
-	}
-	return ""
-}
-
-func (x *AgentManagerResolveInteractionRequest) GetResolution() *structpb.Struct {
-	if x != nil {
-		return x.Resolution
-	}
-	return nil
-}
-
-func (x *AgentManagerResolveInteractionRequest) GetInvocationToken() string {
-	if x != nil {
-		return x.InvocationToken
-	}
-	return ""
-}
-
 var File_v1_agent_proto protoreflect.FileDescriptor
 
 const file_v1_agent_proto_rawDesc = "" +
@@ -4693,7 +3847,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12<\n" +
 	"\flast_turn_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastTurnAt\"\x9b\x04\n" +
+	"lastTurnAt\"\xae\x05\n" +
 	"!CreateAgentProviderSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12'\n" +
@@ -4707,7 +3861,10 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\asubject\x18\b \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12Q\n" +
 	"\rsession_start\x18\t \x01(\v2,.gestalt.provider.v1.AgentSessionStartConfigR\fsessionStart\x12Z\n" +
 	"\x12prepared_workspace\x18\n" +
-	" \x01(\v2+.gestalt.provider.v1.PreparedAgentWorkspaceR\x11preparedWorkspaceJ\x04\b\x06\x10\aR\x10provider_options\"[\n" +
+	" \x01(\v2+.gestalt.provider.v1.PreparedAgentWorkspaceR\x11preparedWorkspace\x12#\n" +
+	"\rprovider_name\x18\v \x01(\tR\fproviderName\x12)\n" +
+	"\x10invocation_token\x18\f \x01(\tR\x0finvocationToken\x12A\n" +
+	"\tworkspace\x18\r \x01(\v2#.gestalt.provider.v1.AgentWorkspaceR\tworkspaceJ\x04\b\x06\x10\aR\x10provider_options\"[\n" +
 	"\x17AgentSessionStartConfig\x12@\n" +
 	"\x05hooks\x18\x01 \x03(\v2*.gestalt.provider.v1.AgentSessionStartHookR\x05hooks\"\xca\x02\n" +
 	"\x15AgentSessionStartHook\x12\x0e\n" +
@@ -4723,20 +3880,23 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"h\n" +
 	"\x1bAgentSessionStartHookOutput\x12-\n" +
 	"\x12additional_context\x18\x01 \x01(\bR\x11additionalContext\x12\x1a\n" +
-	"\bmetadata\x18\x02 \x01(\bR\bmetadata\"~\n" +
+	"\bmetadata\x18\x02 \x01(\bR\bmetadata\"\xa9\x01\n" +
 	"\x1eGetAgentProviderSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12=\n" +
-	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\"\xf9\x01\n" +
+	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12)\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\"\xc9\x02\n" +
 	" ListAgentProviderSessionsRequest\x12=\n" +
 	"\asubject\x18\x01 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12\x1f\n" +
 	"\vsession_ids\x18\x02 \x03(\tR\n" +
 	"sessionIds\x12<\n" +
 	"\x05state\x18\x03 \x01(\x0e2&.gestalt.provider.v1.AgentSessionStateR\x05state\x12\x14\n" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12!\n" +
-	"\fsummary_only\x18\x05 \x01(\bR\vsummaryOnly\"b\n" +
+	"\fsummary_only\x18\x05 \x01(\bR\vsummaryOnly\x12#\n" +
+	"\rprovider_name\x18\x06 \x01(\tR\fproviderName\x12)\n" +
+	"\x10invocation_token\x18\a \x01(\tR\x0finvocationToken\"b\n" +
 	"!ListAgentProviderSessionsResponse\x12=\n" +
-	"\bsessions\x18\x01 \x03(\v2!.gestalt.provider.v1.AgentSessionR\bsessions\"\x93\x02\n" +
+	"\bsessions\x18\x01 \x03(\v2!.gestalt.provider.v1.AgentSessionR\bsessions\"\xbe\x02\n" +
 	"!UpdateAgentProviderSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1d\n" +
@@ -4744,7 +3904,8 @@ const file_v1_agent_proto_rawDesc = "" +
 	"client_ref\x18\x02 \x01(\tR\tclientRef\x12<\n" +
 	"\x05state\x18\x03 \x01(\x0e2&.gestalt.provider.v1.AgentSessionStateR\x05state\x123\n" +
 	"\bmetadata\x18\x04 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12=\n" +
-	"\asubject\x18\x05 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\"\x9f\x05\n" +
+	"\asubject\x18\x05 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12)\n" +
+	"\x10invocation_token\x18\x06 \x01(\tR\x0finvocationToken\"\x9f\x05\n" +
 	"\tAgentTurn\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -4780,7 +3941,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x06action\x18\n" +
 	" \x01(\tR\x06action\x12\x16\n" +
 	"\x06format\x18\v \x01(\tR\x06format\x12\x1a\n" +
-	"\blanguage\x18\f \x01(\tR\blanguage\"\xe8\x06\n" +
+	"\blanguage\x18\f \x01(\tR\blanguage\"\xb7\a\n" +
 	"\x1eCreateAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x1d\n" +
 	"\n" +
@@ -4801,12 +3962,15 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\asubject\x18\x0e \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12<\n" +
 	"\rmodel_options\x18\x10 \x01(\v2\x17.google.protobuf.StructR\fmodelOptions\x12\x1b\n" +
 	"\trun_grant\x18\x11 \x01(\tR\brunGrant\x12'\n" +
-	"\x0ftimeout_seconds\x18\x12 \x01(\x05R\x0etimeoutSecondsJ\x04\b\t\x10\n" +
+	"\x0ftimeout_seconds\x18\x12 \x01(\x05R\x0etimeoutSeconds\x12)\n" +
+	"\x10invocation_token\x18\x13 \x01(\tR\x0finvocationToken\x12\"\n" +
+	"\rtool_refs_set\x18\x14 \x01(\bR\vtoolRefsSetJ\x04\b\t\x10\n" +
 	"J\x04\b\x0f\x10\x10R\x10provider_optionsR\n" +
-	"tool_grant\"u\n" +
+	"tool_grant\"\xa0\x01\n" +
 	"\x1bGetAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12=\n" +
-	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\"\x94\x02\n" +
+	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12)\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\"\xbf\x02\n" +
 	"\x1dListAgentProviderTurnsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12=\n" +
@@ -4814,13 +3978,15 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\bturn_ids\x18\x03 \x03(\tR\aturnIds\x12A\n" +
 	"\x06status\x18\x04 \x01(\x0e2).gestalt.provider.v1.AgentExecutionStatusR\x06status\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12!\n" +
-	"\fsummary_only\x18\x06 \x01(\bR\vsummaryOnly\"V\n" +
+	"\fsummary_only\x18\x06 \x01(\bR\vsummaryOnly\x12)\n" +
+	"\x10invocation_token\x18\a \x01(\tR\x0finvocationToken\"V\n" +
 	"\x1eListAgentProviderTurnsResponse\x124\n" +
-	"\x05turns\x18\x01 \x03(\v2\x1e.gestalt.provider.v1.AgentTurnR\x05turns\"\x90\x01\n" +
+	"\x05turns\x18\x01 \x03(\v2\x1e.gestalt.provider.v1.AgentTurnR\x05turns\"\xbb\x01\n" +
 	"\x1eCancelAgentProviderTurnRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12=\n" +
-	"\asubject\x18\x03 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\"\xc0\x02\n" +
+	"\asubject\x18\x03 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12)\n" +
+	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationToken\"\xc0\x02\n" +
 	"\x0eAgentTurnEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\aturn_id\x18\x02 \x01(\tR\x06turnId\x12\x10\n" +
@@ -4833,28 +3999,33 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x04data\x18\a \x01(\v2\x17.google.protobuf.StructR\x04data\x129\n" +
 	"\n" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12?\n" +
-	"\adisplay\x18\t \x01(\v2%.gestalt.provider.v1.AgentTurnDisplayR\adisplay\"\xaf\x01\n" +
+	"\adisplay\x18\t \x01(\v2%.gestalt.provider.v1.AgentTurnDisplayR\adisplay\"\xda\x01\n" +
 	"\"ListAgentProviderTurnEventsRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12\x1b\n" +
 	"\tafter_seq\x18\x02 \x01(\x03R\bafterSeq\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12=\n" +
-	"\asubject\x18\x04 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\"b\n" +
+	"\asubject\x18\x04 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12)\n" +
+	"\x10invocation_token\x18\x05 \x01(\tR\x0finvocationToken\"b\n" +
 	"#ListAgentProviderTurnEventsResponse\x12;\n" +
-	"\x06events\x18\x01 \x03(\v2#.gestalt.provider.v1.AgentTurnEventR\x06events\"\x8a\x01\n" +
+	"\x06events\x18\x01 \x03(\v2#.gestalt.provider.v1.AgentTurnEventR\x06events\"\xb5\x01\n" +
 	"\"GetAgentProviderInteractionRequest\x12%\n" +
 	"\x0einteraction_id\x18\x01 \x01(\tR\rinteractionId\x12=\n" +
-	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\"~\n" +
+	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12)\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\"\xa9\x01\n" +
 	"$ListAgentProviderInteractionsRequest\x12\x17\n" +
 	"\aturn_id\x18\x01 \x01(\tR\x06turnId\x12=\n" +
-	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\"r\n" +
+	"\asubject\x18\x02 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12)\n" +
+	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\"r\n" +
 	"%ListAgentProviderInteractionsResponse\x12I\n" +
-	"\finteractions\x18\x01 \x03(\v2%.gestalt.provider.v1.AgentInteractionR\finteractions\"\xc7\x01\n" +
+	"\finteractions\x18\x01 \x03(\v2%.gestalt.provider.v1.AgentInteractionR\finteractions\"\x8b\x02\n" +
 	"&ResolveAgentProviderInteractionRequest\x12%\n" +
 	"\x0einteraction_id\x18\x01 \x01(\tR\rinteractionId\x127\n" +
 	"\n" +
 	"resolution\x18\x02 \x01(\v2\x17.google.protobuf.StructR\n" +
 	"resolution\x12=\n" +
-	"\asubject\x18\x03 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\"\x9b\x02\n" +
+	"\asubject\x18\x03 \x01(\v2#.gestalt.provider.v1.SubjectContextR\asubject\x12)\n" +
+	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationToken\x12\x17\n" +
+	"\aturn_id\x18\x05 \x01(\tR\x06turnId\"\x9b\x02\n" +
 	"\x17ExecuteAgentToolRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -4920,88 +4091,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf6\x02\n" +
-	" AgentManagerCreateSessionRequest\x12#\n" +
-	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12\x14\n" +
-	"\x05model\x18\x03 \x01(\tR\x05model\x12\x1d\n" +
-	"\n" +
-	"client_ref\x18\x04 \x01(\tR\tclientRef\x123\n" +
-	"\bmetadata\x18\x05 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12'\n" +
-	"\x0fidempotency_key\x18\a \x01(\tR\x0eidempotencyKey\x12)\n" +
-	"\x10invocation_token\x18\b \x01(\tR\x0finvocationToken\x12A\n" +
-	"\tworkspace\x18\t \x01(\v2#.gestalt.provider.v1.AgentWorkspaceR\tworkspaceJ\x04\b\x01\x10\x02J\x04\b\x06\x10\aR\x0erequest_handleR\x10provider_options\"\x7f\n" +
-	"\x1dAgentManagerGetSessionRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\xfe\x01\n" +
-	"\x1fAgentManagerListSessionsRequest\x12#\n" +
-	"\rprovider_name\x18\x02 \x01(\tR\fproviderName\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\x12<\n" +
-	"\x05state\x18\x04 \x01(\x0e2&.gestalt.provider.v1.AgentSessionStateR\x05state\x12\x14\n" +
-	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12!\n" +
-	"\fsummary_only\x18\x06 \x01(\bR\vsummaryOnlyJ\x04\b\x01\x10\x02R\x0erequest_handle\"a\n" +
-	" AgentManagerListSessionsResponse\x12=\n" +
-	"\bsessions\x18\x01 \x03(\v2!.gestalt.provider.v1.AgentSessionR\bsessions\"\x94\x02\n" +
-	" AgentManagerUpdateSessionRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x1d\n" +
-	"\n" +
-	"client_ref\x18\x03 \x01(\tR\tclientRef\x12<\n" +
-	"\x05state\x18\x04 \x01(\x0e2&.gestalt.provider.v1.AgentSessionStateR\x05state\x123\n" +
-	"\bmetadata\x18\x05 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12)\n" +
-	"\x10invocation_token\x18\x06 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\xa2\x05\n" +
-	"\x1dAgentManagerCreateTurnRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\x12\x14\n" +
-	"\x05model\x18\x03 \x01(\tR\x05model\x12=\n" +
-	"\bmessages\x18\x04 \x03(\v2!.gestalt.provider.v1.AgentMessageR\bmessages\x12>\n" +
-	"\ttool_refs\x18\x05 \x03(\v2!.gestalt.provider.v1.AgentToolRefR\btoolRefs\x12I\n" +
-	"\vtool_source\x18\x06 \x01(\x0e2(.gestalt.provider.v1.AgentToolSourceModeR\n" +
-	"toolSource\x12@\n" +
-	"\x0fresponse_schema\x18\a \x01(\v2\x17.google.protobuf.StructR\x0eresponseSchema\x123\n" +
-	"\bmetadata\x18\b \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12'\n" +
-	"\x0fidempotency_key\x18\n" +
-	" \x01(\tR\x0eidempotencyKey\x12)\n" +
-	"\x10invocation_token\x18\v \x01(\tR\x0finvocationToken\x12<\n" +
-	"\rmodel_options\x18\f \x01(\v2\x17.google.protobuf.StructR\fmodelOptions\x12'\n" +
-	"\x0ftimeout_seconds\x18\r \x01(\x05R\x0etimeoutSeconds\x12\"\n" +
-	"\rtool_refs_set\x18\x0e \x01(\bR\vtoolRefsSetJ\x04\b\x01\x10\x02J\x04\b\t\x10\n" +
-	"R\x0erequest_handleR\x10provider_options\"v\n" +
-	"\x1aAgentManagerGetTurnRequest\x12\x17\n" +
-	"\aturn_id\x18\x02 \x01(\tR\x06turnId\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\xfa\x01\n" +
-	"\x1cAgentManagerListTurnsRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x02 \x01(\tR\tsessionId\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationToken\x12A\n" +
-	"\x06status\x18\x04 \x01(\x0e2).gestalt.provider.v1.AgentExecutionStatusR\x06status\x12\x14\n" +
-	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12!\n" +
-	"\fsummary_only\x18\x06 \x01(\bR\vsummaryOnlyJ\x04\b\x01\x10\x02R\x0erequest_handle\"U\n" +
-	"\x1dAgentManagerListTurnsResponse\x124\n" +
-	"\x05turns\x18\x01 \x03(\v2\x1e.gestalt.provider.v1.AgentTurnR\x05turns\"\x91\x01\n" +
-	"\x1dAgentManagerCancelTurnRequest\x12\x17\n" +
-	"\aturn_id\x18\x02 \x01(\tR\x06turnId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\x12)\n" +
-	"\x10invocation_token\x18\x04 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"\xb0\x01\n" +
-	"!AgentManagerListTurnEventsRequest\x12\x17\n" +
-	"\aturn_id\x18\x02 \x01(\tR\x06turnId\x12\x1b\n" +
-	"\tafter_seq\x18\x03 \x01(\x03R\bafterSeq\x12\x14\n" +
-	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12)\n" +
-	"\x10invocation_token\x18\x05 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"a\n" +
-	"\"AgentManagerListTurnEventsResponse\x12;\n" +
-	"\x06events\x18\x01 \x03(\v2#.gestalt.provider.v1.AgentTurnEventR\x06events\"\x7f\n" +
-	"#AgentManagerListInteractionsRequest\x12\x17\n" +
-	"\aturn_id\x18\x02 \x01(\tR\x06turnId\x12)\n" +
-	"\x10invocation_token\x18\x03 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle\"q\n" +
-	"$AgentManagerListInteractionsResponse\x12I\n" +
-	"\finteractions\x18\x01 \x03(\v2%.gestalt.provider.v1.AgentInteractionR\finteractions\"\xe1\x01\n" +
-	"%AgentManagerResolveInteractionRequest\x12\x17\n" +
-	"\aturn_id\x18\x02 \x01(\tR\x06turnId\x12%\n" +
-	"\x0einteraction_id\x18\x03 \x01(\tR\rinteractionId\x127\n" +
-	"\n" +
-	"resolution\x18\x04 \x01(\v2\x17.google.protobuf.StructR\n" +
-	"resolution\x12)\n" +
-	"\x10invocation_token\x18\x05 \x01(\tR\x0finvocationTokenJ\x04\b\x01\x10\x02R\x0erequest_handle*\xfa\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\xfa\x01\n" +
 	"\x14AgentMessagePartType\x12'\n" +
 	"#AGENT_MESSAGE_PART_TYPE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cAGENT_MESSAGE_PART_TYPE_TEXT\x10\x01\x12 \n" +
@@ -5055,22 +4145,7 @@ const file_v1_agent_proto_rawDesc = "" +
 	"\tAgentHost\x12d\n" +
 	"\tListTools\x12*.gestalt.provider.v1.ListAgentToolsRequest\x1a+.gestalt.provider.v1.ListAgentToolsResponse\x12j\n" +
 	"\vExecuteTool\x12,.gestalt.provider.v1.ExecuteAgentToolRequest\x1a-.gestalt.provider.v1.ExecuteAgentToolResponse\x12u\n" +
-	"\x11ResolveConnection\x122.gestalt.provider.v1.ResolveAgentConnectionRequest\x1a,.gestalt.provider.v1.ResolvedAgentConnection2\xe5\t\n" +
-	"\x10AgentManagerHost\x12i\n" +
-	"\rCreateSession\x125.gestalt.provider.v1.AgentManagerCreateSessionRequest\x1a!.gestalt.provider.v1.AgentSession\x12c\n" +
-	"\n" +
-	"GetSession\x122.gestalt.provider.v1.AgentManagerGetSessionRequest\x1a!.gestalt.provider.v1.AgentSession\x12{\n" +
-	"\fListSessions\x124.gestalt.provider.v1.AgentManagerListSessionsRequest\x1a5.gestalt.provider.v1.AgentManagerListSessionsResponse\x12i\n" +
-	"\rUpdateSession\x125.gestalt.provider.v1.AgentManagerUpdateSessionRequest\x1a!.gestalt.provider.v1.AgentSession\x12`\n" +
-	"\n" +
-	"CreateTurn\x122.gestalt.provider.v1.AgentManagerCreateTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\x12Z\n" +
-	"\aGetTurn\x12/.gestalt.provider.v1.AgentManagerGetTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\x12r\n" +
-	"\tListTurns\x121.gestalt.provider.v1.AgentManagerListTurnsRequest\x1a2.gestalt.provider.v1.AgentManagerListTurnsResponse\x12`\n" +
-	"\n" +
-	"CancelTurn\x122.gestalt.provider.v1.AgentManagerCancelTurnRequest\x1a\x1e.gestalt.provider.v1.AgentTurn\x12\x81\x01\n" +
-	"\x0eListTurnEvents\x126.gestalt.provider.v1.AgentManagerListTurnEventsRequest\x1a7.gestalt.provider.v1.AgentManagerListTurnEventsResponse\x12\x87\x01\n" +
-	"\x10ListInteractions\x128.gestalt.provider.v1.AgentManagerListInteractionsRequest\x1a9.gestalt.provider.v1.AgentManagerListInteractionsResponse\x12w\n" +
-	"\x12ResolveInteraction\x12:.gestalt.provider.v1.AgentManagerResolveInteractionRequest\x1a%.gestalt.provider.v1.AgentInteractionB\xd7\x01\n" +
+	"\x11ResolveConnection\x122.gestalt.provider.v1.ResolveAgentConnectionRequest\x1a,.gestalt.provider.v1.ResolvedAgentConnectionB\xd7\x01\n" +
 	"\x17com.gestalt.provider.v1B\n" +
 	"AgentProtoP\x01ZBgithub.com/valon-technologies/gestalt/sdk/go/internal/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
@@ -5087,7 +4162,7 @@ func file_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 61)
+var file_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_v1_agent_proto_goTypes = []any{
 	(AgentMessagePartType)(0),                      // 0: gestalt.provider.v1.AgentMessagePartType
 	(AgentToolSourceMode)(0),                       // 1: gestalt.provider.v1.AgentToolSourceMode
@@ -5138,188 +4213,135 @@ var file_v1_agent_proto_goTypes = []any{
 	(*ListAgentToolsResponse)(nil),                 // 46: gestalt.provider.v1.ListAgentToolsResponse
 	(*ResolveAgentConnectionRequest)(nil),          // 47: gestalt.provider.v1.ResolveAgentConnectionRequest
 	(*ResolvedAgentConnection)(nil),                // 48: gestalt.provider.v1.ResolvedAgentConnection
-	(*AgentManagerCreateSessionRequest)(nil),       // 49: gestalt.provider.v1.AgentManagerCreateSessionRequest
-	(*AgentManagerGetSessionRequest)(nil),          // 50: gestalt.provider.v1.AgentManagerGetSessionRequest
-	(*AgentManagerListSessionsRequest)(nil),        // 51: gestalt.provider.v1.AgentManagerListSessionsRequest
-	(*AgentManagerListSessionsResponse)(nil),       // 52: gestalt.provider.v1.AgentManagerListSessionsResponse
-	(*AgentManagerUpdateSessionRequest)(nil),       // 53: gestalt.provider.v1.AgentManagerUpdateSessionRequest
-	(*AgentManagerCreateTurnRequest)(nil),          // 54: gestalt.provider.v1.AgentManagerCreateTurnRequest
-	(*AgentManagerGetTurnRequest)(nil),             // 55: gestalt.provider.v1.AgentManagerGetTurnRequest
-	(*AgentManagerListTurnsRequest)(nil),           // 56: gestalt.provider.v1.AgentManagerListTurnsRequest
-	(*AgentManagerListTurnsResponse)(nil),          // 57: gestalt.provider.v1.AgentManagerListTurnsResponse
-	(*AgentManagerCancelTurnRequest)(nil),          // 58: gestalt.provider.v1.AgentManagerCancelTurnRequest
-	(*AgentManagerListTurnEventsRequest)(nil),      // 59: gestalt.provider.v1.AgentManagerListTurnEventsRequest
-	(*AgentManagerListTurnEventsResponse)(nil),     // 60: gestalt.provider.v1.AgentManagerListTurnEventsResponse
-	(*AgentManagerListInteractionsRequest)(nil),    // 61: gestalt.provider.v1.AgentManagerListInteractionsRequest
-	(*AgentManagerListInteractionsResponse)(nil),   // 62: gestalt.provider.v1.AgentManagerListInteractionsResponse
-	(*AgentManagerResolveInteractionRequest)(nil),  // 63: gestalt.provider.v1.AgentManagerResolveInteractionRequest
-	nil,                           // 64: gestalt.provider.v1.AgentSessionStartHook.EnvEntry
-	nil,                           // 65: gestalt.provider.v1.ResolvedAgentConnection.HeadersEntry
-	nil,                           // 66: gestalt.provider.v1.ResolvedAgentConnection.ParamsEntry
-	(*structpb.Struct)(nil),       // 67: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil), // 68: google.protobuf.Timestamp
-	(*SubjectContext)(nil),        // 69: gestalt.provider.v1.SubjectContext
-	(*structpb.Value)(nil),        // 70: google.protobuf.Value
-	(*AgentToolRef)(nil),          // 71: gestalt.provider.v1.AgentToolRef
-	(*OperationAnnotations)(nil),  // 72: gestalt.provider.v1.OperationAnnotations
+	nil,                                            // 49: gestalt.provider.v1.AgentSessionStartHook.EnvEntry
+	nil,                                            // 50: gestalt.provider.v1.ResolvedAgentConnection.HeadersEntry
+	nil,                                            // 51: gestalt.provider.v1.ResolvedAgentConnection.ParamsEntry
+	(*structpb.Struct)(nil),                        // 52: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),                  // 53: google.protobuf.Timestamp
+	(*SubjectContext)(nil),                         // 54: gestalt.provider.v1.SubjectContext
+	(*structpb.Value)(nil),                         // 55: google.protobuf.Value
+	(*AgentToolRef)(nil),                           // 56: gestalt.provider.v1.AgentToolRef
+	(*OperationAnnotations)(nil),                   // 57: gestalt.provider.v1.OperationAnnotations
 }
 var file_v1_agent_proto_depIdxs = []int32{
-	10,  // 0: gestalt.provider.v1.AgentMessage.parts:type_name -> gestalt.provider.v1.AgentMessagePart
-	67,  // 1: gestalt.provider.v1.AgentMessage.metadata:type_name -> google.protobuf.Struct
-	67,  // 2: gestalt.provider.v1.AgentMessagePartToolCall.arguments:type_name -> google.protobuf.Struct
-	67,  // 3: gestalt.provider.v1.AgentMessagePartToolResult.output:type_name -> google.protobuf.Struct
-	0,   // 4: gestalt.provider.v1.AgentMessagePart.type:type_name -> gestalt.provider.v1.AgentMessagePartType
-	67,  // 5: gestalt.provider.v1.AgentMessagePart.json:type_name -> google.protobuf.Struct
-	7,   // 6: gestalt.provider.v1.AgentMessagePart.tool_call:type_name -> gestalt.provider.v1.AgentMessagePartToolCall
-	8,   // 7: gestalt.provider.v1.AgentMessagePart.tool_result:type_name -> gestalt.provider.v1.AgentMessagePartToolResult
-	9,   // 8: gestalt.provider.v1.AgentMessagePart.image_ref:type_name -> gestalt.provider.v1.AgentMessagePartImageRef
-	13,  // 9: gestalt.provider.v1.AgentWorkspace.checkouts:type_name -> gestalt.provider.v1.AgentWorkspaceGitCheckout
-	67,  // 10: gestalt.provider.v1.ResolvedAgentTool.parameters_schema:type_name -> google.protobuf.Struct
-	1,   // 11: gestalt.provider.v1.AgentProviderCapabilities.supported_tool_sources:type_name -> gestalt.provider.v1.AgentToolSourceMode
-	4,   // 12: gestalt.provider.v1.AgentInteraction.type:type_name -> gestalt.provider.v1.AgentInteractionType
-	5,   // 13: gestalt.provider.v1.AgentInteraction.state:type_name -> gestalt.provider.v1.AgentInteractionState
-	67,  // 14: gestalt.provider.v1.AgentInteraction.request:type_name -> google.protobuf.Struct
-	67,  // 15: gestalt.provider.v1.AgentInteraction.resolution:type_name -> google.protobuf.Struct
-	68,  // 16: gestalt.provider.v1.AgentInteraction.created_at:type_name -> google.protobuf.Timestamp
-	68,  // 17: gestalt.provider.v1.AgentInteraction.resolved_at:type_name -> google.protobuf.Timestamp
-	3,   // 18: gestalt.provider.v1.AgentSession.state:type_name -> gestalt.provider.v1.AgentSessionState
-	67,  // 19: gestalt.provider.v1.AgentSession.metadata:type_name -> google.protobuf.Struct
-	11,  // 20: gestalt.provider.v1.AgentSession.created_by:type_name -> gestalt.provider.v1.AgentActor
-	68,  // 21: gestalt.provider.v1.AgentSession.created_at:type_name -> google.protobuf.Timestamp
-	68,  // 22: gestalt.provider.v1.AgentSession.updated_at:type_name -> google.protobuf.Timestamp
-	68,  // 23: gestalt.provider.v1.AgentSession.last_turn_at:type_name -> google.protobuf.Timestamp
-	67,  // 24: gestalt.provider.v1.CreateAgentProviderSessionRequest.metadata:type_name -> google.protobuf.Struct
-	11,  // 25: gestalt.provider.v1.CreateAgentProviderSessionRequest.created_by:type_name -> gestalt.provider.v1.AgentActor
-	69,  // 26: gestalt.provider.v1.CreateAgentProviderSessionRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	21,  // 27: gestalt.provider.v1.CreateAgentProviderSessionRequest.session_start:type_name -> gestalt.provider.v1.AgentSessionStartConfig
-	14,  // 28: gestalt.provider.v1.CreateAgentProviderSessionRequest.prepared_workspace:type_name -> gestalt.provider.v1.PreparedAgentWorkspace
-	22,  // 29: gestalt.provider.v1.AgentSessionStartConfig.hooks:type_name -> gestalt.provider.v1.AgentSessionStartHook
-	64,  // 30: gestalt.provider.v1.AgentSessionStartHook.env:type_name -> gestalt.provider.v1.AgentSessionStartHook.EnvEntry
-	23,  // 31: gestalt.provider.v1.AgentSessionStartHook.output:type_name -> gestalt.provider.v1.AgentSessionStartHookOutput
-	69,  // 32: gestalt.provider.v1.GetAgentProviderSessionRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	69,  // 33: gestalt.provider.v1.ListAgentProviderSessionsRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	3,   // 34: gestalt.provider.v1.ListAgentProviderSessionsRequest.state:type_name -> gestalt.provider.v1.AgentSessionState
-	19,  // 35: gestalt.provider.v1.ListAgentProviderSessionsResponse.sessions:type_name -> gestalt.provider.v1.AgentSession
-	3,   // 36: gestalt.provider.v1.UpdateAgentProviderSessionRequest.state:type_name -> gestalt.provider.v1.AgentSessionState
-	67,  // 37: gestalt.provider.v1.UpdateAgentProviderSessionRequest.metadata:type_name -> google.protobuf.Struct
-	69,  // 38: gestalt.provider.v1.UpdateAgentProviderSessionRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	2,   // 39: gestalt.provider.v1.AgentTurn.status:type_name -> gestalt.provider.v1.AgentExecutionStatus
-	6,   // 40: gestalt.provider.v1.AgentTurn.messages:type_name -> gestalt.provider.v1.AgentMessage
-	67,  // 41: gestalt.provider.v1.AgentTurn.structured_output:type_name -> google.protobuf.Struct
-	11,  // 42: gestalt.provider.v1.AgentTurn.created_by:type_name -> gestalt.provider.v1.AgentActor
-	68,  // 43: gestalt.provider.v1.AgentTurn.created_at:type_name -> google.protobuf.Timestamp
-	68,  // 44: gestalt.provider.v1.AgentTurn.started_at:type_name -> google.protobuf.Timestamp
-	68,  // 45: gestalt.provider.v1.AgentTurn.completed_at:type_name -> google.protobuf.Timestamp
-	70,  // 46: gestalt.provider.v1.AgentTurnDisplay.input:type_name -> google.protobuf.Value
-	70,  // 47: gestalt.provider.v1.AgentTurnDisplay.output:type_name -> google.protobuf.Value
-	70,  // 48: gestalt.provider.v1.AgentTurnDisplay.error:type_name -> google.protobuf.Value
-	6,   // 49: gestalt.provider.v1.CreateAgentProviderTurnRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
-	15,  // 50: gestalt.provider.v1.CreateAgentProviderTurnRequest.tools:type_name -> gestalt.provider.v1.ResolvedAgentTool
-	67,  // 51: gestalt.provider.v1.CreateAgentProviderTurnRequest.response_schema:type_name -> google.protobuf.Struct
-	67,  // 52: gestalt.provider.v1.CreateAgentProviderTurnRequest.metadata:type_name -> google.protobuf.Struct
-	11,  // 53: gestalt.provider.v1.CreateAgentProviderTurnRequest.created_by:type_name -> gestalt.provider.v1.AgentActor
-	71,  // 54: gestalt.provider.v1.CreateAgentProviderTurnRequest.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
-	1,   // 55: gestalt.provider.v1.CreateAgentProviderTurnRequest.tool_source:type_name -> gestalt.provider.v1.AgentToolSourceMode
-	69,  // 56: gestalt.provider.v1.CreateAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	67,  // 57: gestalt.provider.v1.CreateAgentProviderTurnRequest.model_options:type_name -> google.protobuf.Struct
-	69,  // 58: gestalt.provider.v1.GetAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	69,  // 59: gestalt.provider.v1.ListAgentProviderTurnsRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	2,   // 60: gestalt.provider.v1.ListAgentProviderTurnsRequest.status:type_name -> gestalt.provider.v1.AgentExecutionStatus
-	28,  // 61: gestalt.provider.v1.ListAgentProviderTurnsResponse.turns:type_name -> gestalt.provider.v1.AgentTurn
-	69,  // 62: gestalt.provider.v1.CancelAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	67,  // 63: gestalt.provider.v1.AgentTurnEvent.data:type_name -> google.protobuf.Struct
-	68,  // 64: gestalt.provider.v1.AgentTurnEvent.created_at:type_name -> google.protobuf.Timestamp
-	29,  // 65: gestalt.provider.v1.AgentTurnEvent.display:type_name -> gestalt.provider.v1.AgentTurnDisplay
-	69,  // 66: gestalt.provider.v1.ListAgentProviderTurnEventsRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	35,  // 67: gestalt.provider.v1.ListAgentProviderTurnEventsResponse.events:type_name -> gestalt.provider.v1.AgentTurnEvent
-	69,  // 68: gestalt.provider.v1.GetAgentProviderInteractionRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	69,  // 69: gestalt.provider.v1.ListAgentProviderInteractionsRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	18,  // 70: gestalt.provider.v1.ListAgentProviderInteractionsResponse.interactions:type_name -> gestalt.provider.v1.AgentInteraction
-	67,  // 71: gestalt.provider.v1.ResolveAgentProviderInteractionRequest.resolution:type_name -> google.protobuf.Struct
-	69,  // 72: gestalt.provider.v1.ResolveAgentProviderInteractionRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
-	67,  // 73: gestalt.provider.v1.ExecuteAgentToolRequest.arguments:type_name -> google.protobuf.Struct
-	72,  // 74: gestalt.provider.v1.ListedAgentTool.annotations:type_name -> gestalt.provider.v1.OperationAnnotations
-	71,  // 75: gestalt.provider.v1.ListedAgentTool.ref:type_name -> gestalt.provider.v1.AgentToolRef
-	44,  // 76: gestalt.provider.v1.ListAgentToolsResponse.tools:type_name -> gestalt.provider.v1.ListedAgentTool
-	65,  // 77: gestalt.provider.v1.ResolvedAgentConnection.headers:type_name -> gestalt.provider.v1.ResolvedAgentConnection.HeadersEntry
-	66,  // 78: gestalt.provider.v1.ResolvedAgentConnection.params:type_name -> gestalt.provider.v1.ResolvedAgentConnection.ParamsEntry
-	68,  // 79: gestalt.provider.v1.ResolvedAgentConnection.expires_at:type_name -> google.protobuf.Timestamp
-	67,  // 80: gestalt.provider.v1.AgentManagerCreateSessionRequest.metadata:type_name -> google.protobuf.Struct
-	12,  // 81: gestalt.provider.v1.AgentManagerCreateSessionRequest.workspace:type_name -> gestalt.provider.v1.AgentWorkspace
-	3,   // 82: gestalt.provider.v1.AgentManagerListSessionsRequest.state:type_name -> gestalt.provider.v1.AgentSessionState
-	19,  // 83: gestalt.provider.v1.AgentManagerListSessionsResponse.sessions:type_name -> gestalt.provider.v1.AgentSession
-	3,   // 84: gestalt.provider.v1.AgentManagerUpdateSessionRequest.state:type_name -> gestalt.provider.v1.AgentSessionState
-	67,  // 85: gestalt.provider.v1.AgentManagerUpdateSessionRequest.metadata:type_name -> google.protobuf.Struct
-	6,   // 86: gestalt.provider.v1.AgentManagerCreateTurnRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
-	71,  // 87: gestalt.provider.v1.AgentManagerCreateTurnRequest.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
-	1,   // 88: gestalt.provider.v1.AgentManagerCreateTurnRequest.tool_source:type_name -> gestalt.provider.v1.AgentToolSourceMode
-	67,  // 89: gestalt.provider.v1.AgentManagerCreateTurnRequest.response_schema:type_name -> google.protobuf.Struct
-	67,  // 90: gestalt.provider.v1.AgentManagerCreateTurnRequest.metadata:type_name -> google.protobuf.Struct
-	67,  // 91: gestalt.provider.v1.AgentManagerCreateTurnRequest.model_options:type_name -> google.protobuf.Struct
-	2,   // 92: gestalt.provider.v1.AgentManagerListTurnsRequest.status:type_name -> gestalt.provider.v1.AgentExecutionStatus
-	28,  // 93: gestalt.provider.v1.AgentManagerListTurnsResponse.turns:type_name -> gestalt.provider.v1.AgentTurn
-	35,  // 94: gestalt.provider.v1.AgentManagerListTurnEventsResponse.events:type_name -> gestalt.provider.v1.AgentTurnEvent
-	18,  // 95: gestalt.provider.v1.AgentManagerListInteractionsResponse.interactions:type_name -> gestalt.provider.v1.AgentInteraction
-	67,  // 96: gestalt.provider.v1.AgentManagerResolveInteractionRequest.resolution:type_name -> google.protobuf.Struct
-	20,  // 97: gestalt.provider.v1.AgentProvider.CreateSession:input_type -> gestalt.provider.v1.CreateAgentProviderSessionRequest
-	24,  // 98: gestalt.provider.v1.AgentProvider.GetSession:input_type -> gestalt.provider.v1.GetAgentProviderSessionRequest
-	25,  // 99: gestalt.provider.v1.AgentProvider.ListSessions:input_type -> gestalt.provider.v1.ListAgentProviderSessionsRequest
-	27,  // 100: gestalt.provider.v1.AgentProvider.UpdateSession:input_type -> gestalt.provider.v1.UpdateAgentProviderSessionRequest
-	30,  // 101: gestalt.provider.v1.AgentProvider.CreateTurn:input_type -> gestalt.provider.v1.CreateAgentProviderTurnRequest
-	31,  // 102: gestalt.provider.v1.AgentProvider.GetTurn:input_type -> gestalt.provider.v1.GetAgentProviderTurnRequest
-	32,  // 103: gestalt.provider.v1.AgentProvider.ListTurns:input_type -> gestalt.provider.v1.ListAgentProviderTurnsRequest
-	34,  // 104: gestalt.provider.v1.AgentProvider.CancelTurn:input_type -> gestalt.provider.v1.CancelAgentProviderTurnRequest
-	36,  // 105: gestalt.provider.v1.AgentProvider.ListTurnEvents:input_type -> gestalt.provider.v1.ListAgentProviderTurnEventsRequest
-	38,  // 106: gestalt.provider.v1.AgentProvider.GetInteraction:input_type -> gestalt.provider.v1.GetAgentProviderInteractionRequest
-	39,  // 107: gestalt.provider.v1.AgentProvider.ListInteractions:input_type -> gestalt.provider.v1.ListAgentProviderInteractionsRequest
-	41,  // 108: gestalt.provider.v1.AgentProvider.ResolveInteraction:input_type -> gestalt.provider.v1.ResolveAgentProviderInteractionRequest
-	17,  // 109: gestalt.provider.v1.AgentProvider.GetCapabilities:input_type -> gestalt.provider.v1.GetAgentProviderCapabilitiesRequest
-	45,  // 110: gestalt.provider.v1.AgentHost.ListTools:input_type -> gestalt.provider.v1.ListAgentToolsRequest
-	42,  // 111: gestalt.provider.v1.AgentHost.ExecuteTool:input_type -> gestalt.provider.v1.ExecuteAgentToolRequest
-	47,  // 112: gestalt.provider.v1.AgentHost.ResolveConnection:input_type -> gestalt.provider.v1.ResolveAgentConnectionRequest
-	49,  // 113: gestalt.provider.v1.AgentManagerHost.CreateSession:input_type -> gestalt.provider.v1.AgentManagerCreateSessionRequest
-	50,  // 114: gestalt.provider.v1.AgentManagerHost.GetSession:input_type -> gestalt.provider.v1.AgentManagerGetSessionRequest
-	51,  // 115: gestalt.provider.v1.AgentManagerHost.ListSessions:input_type -> gestalt.provider.v1.AgentManagerListSessionsRequest
-	53,  // 116: gestalt.provider.v1.AgentManagerHost.UpdateSession:input_type -> gestalt.provider.v1.AgentManagerUpdateSessionRequest
-	54,  // 117: gestalt.provider.v1.AgentManagerHost.CreateTurn:input_type -> gestalt.provider.v1.AgentManagerCreateTurnRequest
-	55,  // 118: gestalt.provider.v1.AgentManagerHost.GetTurn:input_type -> gestalt.provider.v1.AgentManagerGetTurnRequest
-	56,  // 119: gestalt.provider.v1.AgentManagerHost.ListTurns:input_type -> gestalt.provider.v1.AgentManagerListTurnsRequest
-	58,  // 120: gestalt.provider.v1.AgentManagerHost.CancelTurn:input_type -> gestalt.provider.v1.AgentManagerCancelTurnRequest
-	59,  // 121: gestalt.provider.v1.AgentManagerHost.ListTurnEvents:input_type -> gestalt.provider.v1.AgentManagerListTurnEventsRequest
-	61,  // 122: gestalt.provider.v1.AgentManagerHost.ListInteractions:input_type -> gestalt.provider.v1.AgentManagerListInteractionsRequest
-	63,  // 123: gestalt.provider.v1.AgentManagerHost.ResolveInteraction:input_type -> gestalt.provider.v1.AgentManagerResolveInteractionRequest
-	19,  // 124: gestalt.provider.v1.AgentProvider.CreateSession:output_type -> gestalt.provider.v1.AgentSession
-	19,  // 125: gestalt.provider.v1.AgentProvider.GetSession:output_type -> gestalt.provider.v1.AgentSession
-	26,  // 126: gestalt.provider.v1.AgentProvider.ListSessions:output_type -> gestalt.provider.v1.ListAgentProviderSessionsResponse
-	19,  // 127: gestalt.provider.v1.AgentProvider.UpdateSession:output_type -> gestalt.provider.v1.AgentSession
-	28,  // 128: gestalt.provider.v1.AgentProvider.CreateTurn:output_type -> gestalt.provider.v1.AgentTurn
-	28,  // 129: gestalt.provider.v1.AgentProvider.GetTurn:output_type -> gestalt.provider.v1.AgentTurn
-	33,  // 130: gestalt.provider.v1.AgentProvider.ListTurns:output_type -> gestalt.provider.v1.ListAgentProviderTurnsResponse
-	28,  // 131: gestalt.provider.v1.AgentProvider.CancelTurn:output_type -> gestalt.provider.v1.AgentTurn
-	37,  // 132: gestalt.provider.v1.AgentProvider.ListTurnEvents:output_type -> gestalt.provider.v1.ListAgentProviderTurnEventsResponse
-	18,  // 133: gestalt.provider.v1.AgentProvider.GetInteraction:output_type -> gestalt.provider.v1.AgentInteraction
-	40,  // 134: gestalt.provider.v1.AgentProvider.ListInteractions:output_type -> gestalt.provider.v1.ListAgentProviderInteractionsResponse
-	18,  // 135: gestalt.provider.v1.AgentProvider.ResolveInteraction:output_type -> gestalt.provider.v1.AgentInteraction
-	16,  // 136: gestalt.provider.v1.AgentProvider.GetCapabilities:output_type -> gestalt.provider.v1.AgentProviderCapabilities
-	46,  // 137: gestalt.provider.v1.AgentHost.ListTools:output_type -> gestalt.provider.v1.ListAgentToolsResponse
-	43,  // 138: gestalt.provider.v1.AgentHost.ExecuteTool:output_type -> gestalt.provider.v1.ExecuteAgentToolResponse
-	48,  // 139: gestalt.provider.v1.AgentHost.ResolveConnection:output_type -> gestalt.provider.v1.ResolvedAgentConnection
-	19,  // 140: gestalt.provider.v1.AgentManagerHost.CreateSession:output_type -> gestalt.provider.v1.AgentSession
-	19,  // 141: gestalt.provider.v1.AgentManagerHost.GetSession:output_type -> gestalt.provider.v1.AgentSession
-	52,  // 142: gestalt.provider.v1.AgentManagerHost.ListSessions:output_type -> gestalt.provider.v1.AgentManagerListSessionsResponse
-	19,  // 143: gestalt.provider.v1.AgentManagerHost.UpdateSession:output_type -> gestalt.provider.v1.AgentSession
-	28,  // 144: gestalt.provider.v1.AgentManagerHost.CreateTurn:output_type -> gestalt.provider.v1.AgentTurn
-	28,  // 145: gestalt.provider.v1.AgentManagerHost.GetTurn:output_type -> gestalt.provider.v1.AgentTurn
-	57,  // 146: gestalt.provider.v1.AgentManagerHost.ListTurns:output_type -> gestalt.provider.v1.AgentManagerListTurnsResponse
-	28,  // 147: gestalt.provider.v1.AgentManagerHost.CancelTurn:output_type -> gestalt.provider.v1.AgentTurn
-	60,  // 148: gestalt.provider.v1.AgentManagerHost.ListTurnEvents:output_type -> gestalt.provider.v1.AgentManagerListTurnEventsResponse
-	62,  // 149: gestalt.provider.v1.AgentManagerHost.ListInteractions:output_type -> gestalt.provider.v1.AgentManagerListInteractionsResponse
-	18,  // 150: gestalt.provider.v1.AgentManagerHost.ResolveInteraction:output_type -> gestalt.provider.v1.AgentInteraction
-	124, // [124:151] is the sub-list for method output_type
-	97,  // [97:124] is the sub-list for method input_type
-	97,  // [97:97] is the sub-list for extension type_name
-	97,  // [97:97] is the sub-list for extension extendee
-	0,   // [0:97] is the sub-list for field type_name
+	10, // 0: gestalt.provider.v1.AgentMessage.parts:type_name -> gestalt.provider.v1.AgentMessagePart
+	52, // 1: gestalt.provider.v1.AgentMessage.metadata:type_name -> google.protobuf.Struct
+	52, // 2: gestalt.provider.v1.AgentMessagePartToolCall.arguments:type_name -> google.protobuf.Struct
+	52, // 3: gestalt.provider.v1.AgentMessagePartToolResult.output:type_name -> google.protobuf.Struct
+	0,  // 4: gestalt.provider.v1.AgentMessagePart.type:type_name -> gestalt.provider.v1.AgentMessagePartType
+	52, // 5: gestalt.provider.v1.AgentMessagePart.json:type_name -> google.protobuf.Struct
+	7,  // 6: gestalt.provider.v1.AgentMessagePart.tool_call:type_name -> gestalt.provider.v1.AgentMessagePartToolCall
+	8,  // 7: gestalt.provider.v1.AgentMessagePart.tool_result:type_name -> gestalt.provider.v1.AgentMessagePartToolResult
+	9,  // 8: gestalt.provider.v1.AgentMessagePart.image_ref:type_name -> gestalt.provider.v1.AgentMessagePartImageRef
+	13, // 9: gestalt.provider.v1.AgentWorkspace.checkouts:type_name -> gestalt.provider.v1.AgentWorkspaceGitCheckout
+	52, // 10: gestalt.provider.v1.ResolvedAgentTool.parameters_schema:type_name -> google.protobuf.Struct
+	1,  // 11: gestalt.provider.v1.AgentProviderCapabilities.supported_tool_sources:type_name -> gestalt.provider.v1.AgentToolSourceMode
+	4,  // 12: gestalt.provider.v1.AgentInteraction.type:type_name -> gestalt.provider.v1.AgentInteractionType
+	5,  // 13: gestalt.provider.v1.AgentInteraction.state:type_name -> gestalt.provider.v1.AgentInteractionState
+	52, // 14: gestalt.provider.v1.AgentInteraction.request:type_name -> google.protobuf.Struct
+	52, // 15: gestalt.provider.v1.AgentInteraction.resolution:type_name -> google.protobuf.Struct
+	53, // 16: gestalt.provider.v1.AgentInteraction.created_at:type_name -> google.protobuf.Timestamp
+	53, // 17: gestalt.provider.v1.AgentInteraction.resolved_at:type_name -> google.protobuf.Timestamp
+	3,  // 18: gestalt.provider.v1.AgentSession.state:type_name -> gestalt.provider.v1.AgentSessionState
+	52, // 19: gestalt.provider.v1.AgentSession.metadata:type_name -> google.protobuf.Struct
+	11, // 20: gestalt.provider.v1.AgentSession.created_by:type_name -> gestalt.provider.v1.AgentActor
+	53, // 21: gestalt.provider.v1.AgentSession.created_at:type_name -> google.protobuf.Timestamp
+	53, // 22: gestalt.provider.v1.AgentSession.updated_at:type_name -> google.protobuf.Timestamp
+	53, // 23: gestalt.provider.v1.AgentSession.last_turn_at:type_name -> google.protobuf.Timestamp
+	52, // 24: gestalt.provider.v1.CreateAgentProviderSessionRequest.metadata:type_name -> google.protobuf.Struct
+	11, // 25: gestalt.provider.v1.CreateAgentProviderSessionRequest.created_by:type_name -> gestalt.provider.v1.AgentActor
+	54, // 26: gestalt.provider.v1.CreateAgentProviderSessionRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	21, // 27: gestalt.provider.v1.CreateAgentProviderSessionRequest.session_start:type_name -> gestalt.provider.v1.AgentSessionStartConfig
+	14, // 28: gestalt.provider.v1.CreateAgentProviderSessionRequest.prepared_workspace:type_name -> gestalt.provider.v1.PreparedAgentWorkspace
+	12, // 29: gestalt.provider.v1.CreateAgentProviderSessionRequest.workspace:type_name -> gestalt.provider.v1.AgentWorkspace
+	22, // 30: gestalt.provider.v1.AgentSessionStartConfig.hooks:type_name -> gestalt.provider.v1.AgentSessionStartHook
+	49, // 31: gestalt.provider.v1.AgentSessionStartHook.env:type_name -> gestalt.provider.v1.AgentSessionStartHook.EnvEntry
+	23, // 32: gestalt.provider.v1.AgentSessionStartHook.output:type_name -> gestalt.provider.v1.AgentSessionStartHookOutput
+	54, // 33: gestalt.provider.v1.GetAgentProviderSessionRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	54, // 34: gestalt.provider.v1.ListAgentProviderSessionsRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	3,  // 35: gestalt.provider.v1.ListAgentProviderSessionsRequest.state:type_name -> gestalt.provider.v1.AgentSessionState
+	19, // 36: gestalt.provider.v1.ListAgentProviderSessionsResponse.sessions:type_name -> gestalt.provider.v1.AgentSession
+	3,  // 37: gestalt.provider.v1.UpdateAgentProviderSessionRequest.state:type_name -> gestalt.provider.v1.AgentSessionState
+	52, // 38: gestalt.provider.v1.UpdateAgentProviderSessionRequest.metadata:type_name -> google.protobuf.Struct
+	54, // 39: gestalt.provider.v1.UpdateAgentProviderSessionRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	2,  // 40: gestalt.provider.v1.AgentTurn.status:type_name -> gestalt.provider.v1.AgentExecutionStatus
+	6,  // 41: gestalt.provider.v1.AgentTurn.messages:type_name -> gestalt.provider.v1.AgentMessage
+	52, // 42: gestalt.provider.v1.AgentTurn.structured_output:type_name -> google.protobuf.Struct
+	11, // 43: gestalt.provider.v1.AgentTurn.created_by:type_name -> gestalt.provider.v1.AgentActor
+	53, // 44: gestalt.provider.v1.AgentTurn.created_at:type_name -> google.protobuf.Timestamp
+	53, // 45: gestalt.provider.v1.AgentTurn.started_at:type_name -> google.protobuf.Timestamp
+	53, // 46: gestalt.provider.v1.AgentTurn.completed_at:type_name -> google.protobuf.Timestamp
+	55, // 47: gestalt.provider.v1.AgentTurnDisplay.input:type_name -> google.protobuf.Value
+	55, // 48: gestalt.provider.v1.AgentTurnDisplay.output:type_name -> google.protobuf.Value
+	55, // 49: gestalt.provider.v1.AgentTurnDisplay.error:type_name -> google.protobuf.Value
+	6,  // 50: gestalt.provider.v1.CreateAgentProviderTurnRequest.messages:type_name -> gestalt.provider.v1.AgentMessage
+	15, // 51: gestalt.provider.v1.CreateAgentProviderTurnRequest.tools:type_name -> gestalt.provider.v1.ResolvedAgentTool
+	52, // 52: gestalt.provider.v1.CreateAgentProviderTurnRequest.response_schema:type_name -> google.protobuf.Struct
+	52, // 53: gestalt.provider.v1.CreateAgentProviderTurnRequest.metadata:type_name -> google.protobuf.Struct
+	11, // 54: gestalt.provider.v1.CreateAgentProviderTurnRequest.created_by:type_name -> gestalt.provider.v1.AgentActor
+	56, // 55: gestalt.provider.v1.CreateAgentProviderTurnRequest.tool_refs:type_name -> gestalt.provider.v1.AgentToolRef
+	1,  // 56: gestalt.provider.v1.CreateAgentProviderTurnRequest.tool_source:type_name -> gestalt.provider.v1.AgentToolSourceMode
+	54, // 57: gestalt.provider.v1.CreateAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	52, // 58: gestalt.provider.v1.CreateAgentProviderTurnRequest.model_options:type_name -> google.protobuf.Struct
+	54, // 59: gestalt.provider.v1.GetAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	54, // 60: gestalt.provider.v1.ListAgentProviderTurnsRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	2,  // 61: gestalt.provider.v1.ListAgentProviderTurnsRequest.status:type_name -> gestalt.provider.v1.AgentExecutionStatus
+	28, // 62: gestalt.provider.v1.ListAgentProviderTurnsResponse.turns:type_name -> gestalt.provider.v1.AgentTurn
+	54, // 63: gestalt.provider.v1.CancelAgentProviderTurnRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	52, // 64: gestalt.provider.v1.AgentTurnEvent.data:type_name -> google.protobuf.Struct
+	53, // 65: gestalt.provider.v1.AgentTurnEvent.created_at:type_name -> google.protobuf.Timestamp
+	29, // 66: gestalt.provider.v1.AgentTurnEvent.display:type_name -> gestalt.provider.v1.AgentTurnDisplay
+	54, // 67: gestalt.provider.v1.ListAgentProviderTurnEventsRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	35, // 68: gestalt.provider.v1.ListAgentProviderTurnEventsResponse.events:type_name -> gestalt.provider.v1.AgentTurnEvent
+	54, // 69: gestalt.provider.v1.GetAgentProviderInteractionRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	54, // 70: gestalt.provider.v1.ListAgentProviderInteractionsRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	18, // 71: gestalt.provider.v1.ListAgentProviderInteractionsResponse.interactions:type_name -> gestalt.provider.v1.AgentInteraction
+	52, // 72: gestalt.provider.v1.ResolveAgentProviderInteractionRequest.resolution:type_name -> google.protobuf.Struct
+	54, // 73: gestalt.provider.v1.ResolveAgentProviderInteractionRequest.subject:type_name -> gestalt.provider.v1.SubjectContext
+	52, // 74: gestalt.provider.v1.ExecuteAgentToolRequest.arguments:type_name -> google.protobuf.Struct
+	57, // 75: gestalt.provider.v1.ListedAgentTool.annotations:type_name -> gestalt.provider.v1.OperationAnnotations
+	56, // 76: gestalt.provider.v1.ListedAgentTool.ref:type_name -> gestalt.provider.v1.AgentToolRef
+	44, // 77: gestalt.provider.v1.ListAgentToolsResponse.tools:type_name -> gestalt.provider.v1.ListedAgentTool
+	50, // 78: gestalt.provider.v1.ResolvedAgentConnection.headers:type_name -> gestalt.provider.v1.ResolvedAgentConnection.HeadersEntry
+	51, // 79: gestalt.provider.v1.ResolvedAgentConnection.params:type_name -> gestalt.provider.v1.ResolvedAgentConnection.ParamsEntry
+	53, // 80: gestalt.provider.v1.ResolvedAgentConnection.expires_at:type_name -> google.protobuf.Timestamp
+	20, // 81: gestalt.provider.v1.AgentProvider.CreateSession:input_type -> gestalt.provider.v1.CreateAgentProviderSessionRequest
+	24, // 82: gestalt.provider.v1.AgentProvider.GetSession:input_type -> gestalt.provider.v1.GetAgentProviderSessionRequest
+	25, // 83: gestalt.provider.v1.AgentProvider.ListSessions:input_type -> gestalt.provider.v1.ListAgentProviderSessionsRequest
+	27, // 84: gestalt.provider.v1.AgentProvider.UpdateSession:input_type -> gestalt.provider.v1.UpdateAgentProviderSessionRequest
+	30, // 85: gestalt.provider.v1.AgentProvider.CreateTurn:input_type -> gestalt.provider.v1.CreateAgentProviderTurnRequest
+	31, // 86: gestalt.provider.v1.AgentProvider.GetTurn:input_type -> gestalt.provider.v1.GetAgentProviderTurnRequest
+	32, // 87: gestalt.provider.v1.AgentProvider.ListTurns:input_type -> gestalt.provider.v1.ListAgentProviderTurnsRequest
+	34, // 88: gestalt.provider.v1.AgentProvider.CancelTurn:input_type -> gestalt.provider.v1.CancelAgentProviderTurnRequest
+	36, // 89: gestalt.provider.v1.AgentProvider.ListTurnEvents:input_type -> gestalt.provider.v1.ListAgentProviderTurnEventsRequest
+	38, // 90: gestalt.provider.v1.AgentProvider.GetInteraction:input_type -> gestalt.provider.v1.GetAgentProviderInteractionRequest
+	39, // 91: gestalt.provider.v1.AgentProvider.ListInteractions:input_type -> gestalt.provider.v1.ListAgentProviderInteractionsRequest
+	41, // 92: gestalt.provider.v1.AgentProvider.ResolveInteraction:input_type -> gestalt.provider.v1.ResolveAgentProviderInteractionRequest
+	17, // 93: gestalt.provider.v1.AgentProvider.GetCapabilities:input_type -> gestalt.provider.v1.GetAgentProviderCapabilitiesRequest
+	45, // 94: gestalt.provider.v1.AgentHost.ListTools:input_type -> gestalt.provider.v1.ListAgentToolsRequest
+	42, // 95: gestalt.provider.v1.AgentHost.ExecuteTool:input_type -> gestalt.provider.v1.ExecuteAgentToolRequest
+	47, // 96: gestalt.provider.v1.AgentHost.ResolveConnection:input_type -> gestalt.provider.v1.ResolveAgentConnectionRequest
+	19, // 97: gestalt.provider.v1.AgentProvider.CreateSession:output_type -> gestalt.provider.v1.AgentSession
+	19, // 98: gestalt.provider.v1.AgentProvider.GetSession:output_type -> gestalt.provider.v1.AgentSession
+	26, // 99: gestalt.provider.v1.AgentProvider.ListSessions:output_type -> gestalt.provider.v1.ListAgentProviderSessionsResponse
+	19, // 100: gestalt.provider.v1.AgentProvider.UpdateSession:output_type -> gestalt.provider.v1.AgentSession
+	28, // 101: gestalt.provider.v1.AgentProvider.CreateTurn:output_type -> gestalt.provider.v1.AgentTurn
+	28, // 102: gestalt.provider.v1.AgentProvider.GetTurn:output_type -> gestalt.provider.v1.AgentTurn
+	33, // 103: gestalt.provider.v1.AgentProvider.ListTurns:output_type -> gestalt.provider.v1.ListAgentProviderTurnsResponse
+	28, // 104: gestalt.provider.v1.AgentProvider.CancelTurn:output_type -> gestalt.provider.v1.AgentTurn
+	37, // 105: gestalt.provider.v1.AgentProvider.ListTurnEvents:output_type -> gestalt.provider.v1.ListAgentProviderTurnEventsResponse
+	18, // 106: gestalt.provider.v1.AgentProvider.GetInteraction:output_type -> gestalt.provider.v1.AgentInteraction
+	40, // 107: gestalt.provider.v1.AgentProvider.ListInteractions:output_type -> gestalt.provider.v1.ListAgentProviderInteractionsResponse
+	18, // 108: gestalt.provider.v1.AgentProvider.ResolveInteraction:output_type -> gestalt.provider.v1.AgentInteraction
+	16, // 109: gestalt.provider.v1.AgentProvider.GetCapabilities:output_type -> gestalt.provider.v1.AgentProviderCapabilities
+	46, // 110: gestalt.provider.v1.AgentHost.ListTools:output_type -> gestalt.provider.v1.ListAgentToolsResponse
+	43, // 111: gestalt.provider.v1.AgentHost.ExecuteTool:output_type -> gestalt.provider.v1.ExecuteAgentToolResponse
+	48, // 112: gestalt.provider.v1.AgentHost.ResolveConnection:output_type -> gestalt.provider.v1.ResolvedAgentConnection
+	97, // [97:113] is the sub-list for method output_type
+	81, // [81:97] is the sub-list for method input_type
+	81, // [81:81] is the sub-list for extension type_name
+	81, // [81:81] is the sub-list for extension extendee
+	0,  // [0:81] is the sub-list for field type_name
 }
 
 func init() { file_v1_agent_proto_init() }
@@ -5334,9 +4356,9 @@ func file_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_agent_proto_rawDesc), len(file_v1_agent_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   61,
+			NumMessages:   46,
 			NumExtensions: 0,
-			NumServices:   3,
+			NumServices:   2,
 		},
 		GoTypes:           file_v1_agent_proto_goTypes,
 		DependencyIndexes: file_v1_agent_proto_depIdxs,

@@ -2105,8 +2105,8 @@ func (p *workflowSystemToolRecordingProvider) PauseEventTrigger(context.Context,
 func (p *workflowSystemToolRecordingProvider) ResumeEventTrigger(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
 	return &coreworkflow.EventTrigger{}, nil
 }
-func (p *workflowSystemToolRecordingProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
-	return nil
+func (p *workflowSystemToolRecordingProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
+	return &req.Event, nil
 }
 func (p *workflowSystemToolRecordingProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
 	if p.executionRefs == nil {

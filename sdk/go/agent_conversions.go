@@ -493,7 +493,7 @@ func agentSessionsFromProto(values []*proto.AgentSession) []AgentSession {
 	return out
 }
 
-func listAgentManagerSessionsResponseFromProto(value *proto.AgentManagerListSessionsResponse) *ListAgentManagerSessionsResponse {
+func listAgentManagerSessionsResponseFromProto(value *proto.ListAgentProviderSessionsResponse) *ListAgentManagerSessionsResponse {
 	if value == nil {
 		return nil
 	}
@@ -682,7 +682,7 @@ func agentTurnsFromProto(values []*proto.AgentTurn) []AgentTurn {
 	return out
 }
 
-func listAgentManagerTurnsResponseFromProto(value *proto.AgentManagerListTurnsResponse) *ListAgentManagerTurnsResponse {
+func listAgentManagerTurnsResponseFromProto(value *proto.ListAgentProviderTurnsResponse) *ListAgentManagerTurnsResponse {
 	if value == nil {
 		return nil
 	}
@@ -848,7 +848,7 @@ func agentTurnEventsFromProto(values []*proto.AgentTurnEvent) []AgentTurnEvent {
 	return out
 }
 
-func listAgentManagerTurnEventsResponseFromProto(value *proto.AgentManagerListTurnEventsResponse) *ListAgentManagerTurnEventsResponse {
+func listAgentManagerTurnEventsResponseFromProto(value *proto.ListAgentProviderTurnEventsResponse) *ListAgentManagerTurnEventsResponse {
 	if value == nil {
 		return nil
 	}
@@ -1006,7 +1006,7 @@ func agentInteractionsFromProto(values []*proto.AgentInteraction) []AgentInterac
 	return out
 }
 
-func listAgentManagerInteractionsResponseFromProto(value *proto.AgentManagerListInteractionsResponse) *ListAgentManagerInteractionsResponse {
+func listAgentManagerInteractionsResponseFromProto(value *proto.ListAgentProviderInteractionsResponse) *ListAgentManagerInteractionsResponse {
 	if value == nil {
 		return nil
 	}

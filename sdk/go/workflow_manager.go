@@ -10,9 +10,10 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
 
-// EnvWorkflowManagerSocket names the environment variable containing the
-// workflow-manager service target.
-const EnvWorkflowManagerSocket = proto.EnvWorkflowManagerSocket
+// EnvWorkflowManagerSocket names the gestaltd workflow-provider facade target.
+// Manager clients call this facade; provider runtimes listen on
+// GESTALT_PLUGIN_SOCKET.
+const EnvWorkflowManagerSocket = proto.EnvWorkflowProviderSocket
 
 // EnvWorkflowManagerSocketToken names the optional workflow-manager relay-token
 // variable.
@@ -20,12 +21,12 @@ const EnvWorkflowManagerSocketToken = EnvWorkflowManagerSocket + "_TOKEN"
 
 // WorkflowManagerClient starts runs and manages workflow schedules or triggers.
 type WorkflowManagerClient struct {
-	client          proto.WorkflowManagerHostClient
+	client          proto.WorkflowProviderClient
 	invocationToken string
 	idempotencyKey  string
 }
 
-var sharedWorkflowManagerTransport sharedManagerTransport[proto.WorkflowManagerHostClient]
+var sharedWorkflowManagerTransport sharedManagerTransport[proto.WorkflowProviderClient]
 
 // WorkflowManager returns a client that attaches invocationToken to every request.
 func WorkflowManager(invocationToken string) (*WorkflowManagerClient, error) {
@@ -41,7 +42,7 @@ func WorkflowManager(invocationToken string) (*WorkflowManagerClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "workflow manager", target, token, &sharedWorkflowManagerTransport, proto.NewWorkflowManagerHostClient)
+	client, err := managerTransportClient(ctx, "workflow manager", target, token, &sharedWorkflowManagerTransport, proto.NewWorkflowProviderClient)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +139,7 @@ func (c *WorkflowManagerClient) CreateDefinition(ctx context.Context, input Work
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerDefinitionFromProto(resp), nil
+	return workflowManagerDefinitionFromProto(resp)
 }
 
 // GetDefinition fetches one workflow definition.
@@ -152,7 +153,7 @@ func (c *WorkflowManagerClient) GetDefinition(ctx context.Context, input Workflo
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerDefinitionFromProto(resp), nil
+	return workflowManagerDefinitionFromProto(resp)
 }
 
 // UpdateDefinition updates a workflow definition.
@@ -169,7 +170,7 @@ func (c *WorkflowManagerClient) UpdateDefinition(ctx context.Context, input Work
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerDefinitionFromProto(resp), nil
+	return workflowManagerDefinitionFromProto(resp)
 }
 
 // DeleteDefinition deletes a workflow definition.
@@ -196,7 +197,7 @@ func (c *WorkflowManagerClient) CreateSchedule(ctx context.Context, input Workfl
 	if req.IdempotencyKey == "" {
 		req.IdempotencyKey = c.idempotencyKey
 	}
-	resp, err := c.client.CreateSchedule(ctx, req)
+	resp, err := c.client.UpsertSchedule(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +228,7 @@ func (c *WorkflowManagerClient) UpdateSchedule(ctx context.Context, input Workfl
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
-	resp, err := c.client.UpdateSchedule(ctx, req)
+	resp, err := c.client.UpsertSchedule(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -286,11 +287,11 @@ func (c *WorkflowManagerClient) CreateTrigger(ctx context.Context, input Workflo
 	if req.IdempotencyKey == "" {
 		req.IdempotencyKey = c.idempotencyKey
 	}
-	resp, err := c.client.CreateEventTrigger(ctx, req)
+	resp, err := c.client.UpsertEventTrigger(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerEventTriggerFromProto(resp), nil
+	return workflowManagerEventTriggerFromProto(resp)
 }
 
 // GetTrigger fetches one event trigger.
@@ -304,7 +305,7 @@ func (c *WorkflowManagerClient) GetTrigger(ctx context.Context, input WorkflowMa
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerEventTriggerFromProto(resp), nil
+	return workflowManagerEventTriggerFromProto(resp)
 }
 
 // UpdateTrigger updates an event trigger.
@@ -317,11 +318,11 @@ func (c *WorkflowManagerClient) UpdateTrigger(ctx context.Context, input Workflo
 		return nil, err
 	}
 	req.InvocationToken = c.invocationToken
-	resp, err := c.client.UpdateEventTrigger(ctx, req)
+	resp, err := c.client.UpsertEventTrigger(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerEventTriggerFromProto(resp), nil
+	return workflowManagerEventTriggerFromProto(resp)
 }
 
 // DeleteTrigger deletes an event trigger.
@@ -346,7 +347,7 @@ func (c *WorkflowManagerClient) PauseTrigger(ctx context.Context, input Workflow
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerEventTriggerFromProto(resp), nil
+	return workflowManagerEventTriggerFromProto(resp)
 }
 
 // ResumeTrigger resumes an event trigger.
@@ -360,7 +361,7 @@ func (c *WorkflowManagerClient) ResumeTrigger(ctx context.Context, input Workflo
 	if err != nil {
 		return nil, err
 	}
-	return workflowManagerEventTriggerFromProto(resp), nil
+	return workflowManagerEventTriggerFromProto(resp)
 }
 
 // PublishEvent publishes an event into the workflow manager.

@@ -345,13 +345,13 @@ func (p *memoryWorkflowProvider) ResumeEventTrigger(_ context.Context, req corew
 	return cloneWorkflowEventTrigger(trigger), nil
 }
 
-func (p *memoryWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) error {
+func (p *memoryWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
 	if p.publishEventErr != nil {
-		return p.publishEventErr
+		return nil, p.publishEventErr
 	}
 	req.Event = cloneWorkflowEvent(req.Event)
 	p.publishEventReqs = append(p.publishEventReqs, req)
-	return nil
+	return &req.Event, nil
 }
 
 func (p *memoryWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {

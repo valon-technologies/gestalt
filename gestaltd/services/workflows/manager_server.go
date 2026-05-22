@@ -26,23 +26,23 @@ func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
 	return plugininvokerservice.NewInvocationTokenManager(secret)
 }
 
-type ManagerServer struct {
-	proto.UnimplementedWorkflowManagerHostServer
+type ProviderServer struct {
+	proto.UnimplementedWorkflowProviderServer
 
 	pluginName string
 	manager    ManagerService
 	tokens     *InvocationTokenManager
 }
 
-func NewManagerServer(pluginName string, manager ManagerService, tokens *InvocationTokenManager) *ManagerServer {
-	return &ManagerServer{
+func NewProviderServer(pluginName string, manager ManagerService, tokens *InvocationTokenManager) *ProviderServer {
+	return &ProviderServer{
 		pluginName: pluginName,
 		manager:    manager,
 		tokens:     tokens,
 	}
 }
 
-func (s *ManagerServer) CreateDefinition(ctx context.Context, req *proto.WorkflowManagerCreateDefinitionRequest) (*proto.ManagedWorkflowDefinition, error) {
+func (s *ProviderServer) CreateDefinition(ctx context.Context, req *proto.CreateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -73,7 +73,7 @@ func (s *ManagerServer) CreateDefinition(ctx context.Context, req *proto.Workflo
 	return resp, nil
 }
 
-func (s *ManagerServer) GetDefinition(ctx context.Context, req *proto.WorkflowManagerGetDefinitionRequest) (*proto.ManagedWorkflowDefinition, error) {
+func (s *ProviderServer) GetDefinition(ctx context.Context, req *proto.GetWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -99,7 +99,7 @@ func (s *ManagerServer) GetDefinition(ctx context.Context, req *proto.WorkflowMa
 	return resp, nil
 }
 
-func (s *ManagerServer) UpdateDefinition(ctx context.Context, req *proto.WorkflowManagerUpdateDefinitionRequest) (*proto.ManagedWorkflowDefinition, error) {
+func (s *ProviderServer) UpdateDefinition(ctx context.Context, req *proto.UpdateWorkflowProviderDefinitionRequest) (*proto.BoundWorkflowDefinition, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -133,7 +133,7 @@ func (s *ManagerServer) UpdateDefinition(ctx context.Context, req *proto.Workflo
 	return resp, nil
 }
 
-func (s *ManagerServer) DeleteDefinition(ctx context.Context, req *proto.WorkflowManagerDeleteDefinitionRequest) (*emptypb.Empty, error) {
+func (s *ProviderServer) DeleteDefinition(ctx context.Context, req *proto.DeleteWorkflowProviderDefinitionRequest) (*emptypb.Empty, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -154,7 +154,7 @@ func (s *ManagerServer) DeleteDefinition(ctx context.Context, req *proto.Workflo
 	return &emptypb.Empty{}, nil
 }
 
-func (s *ManagerServer) CreateSchedule(ctx context.Context, req *proto.WorkflowManagerCreateScheduleRequest) (*proto.ManagedWorkflowSchedule, error) {
+func (s *ProviderServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -162,7 +162,12 @@ func (s *ManagerServer) CreateSchedule(ctx context.Context, req *proto.WorkflowM
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesCreate); err != nil {
+	scheduleID := strings.TrimSpace(req.GetScheduleId())
+	if scheduleID == "" {
+		if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesCreate); err != nil {
+			return nil, err
+		}
+	} else if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesUpdate); err != nil {
 		return nil, err
 	}
 	upsert, err := workflowManagerScheduleUpsert(
@@ -179,7 +184,12 @@ func (s *ManagerServer) CreateSchedule(ctx context.Context, req *proto.WorkflowM
 	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
 	upsert.IdempotencyKey = strings.TrimSpace(req.GetIdempotencyKey())
 	upsert.DefinitionID = strings.TrimSpace(req.GetDefinitionId())
-	managed, err := s.manager.CreateSchedule(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), upsert)
+	var managed *workflowmanager.ManagedSchedule
+	if scheduleID == "" {
+		managed, err = s.manager.CreateSchedule(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), upsert)
+	} else {
+		managed, err = s.manager.UpdateSchedule(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID, upsert)
+	}
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -190,7 +200,7 @@ func (s *ManagerServer) CreateSchedule(ctx context.Context, req *proto.WorkflowM
 	return resp, nil
 }
 
-func (s *ManagerServer) StartRun(ctx context.Context, req *proto.WorkflowManagerStartRunRequest) (*proto.ManagedWorkflowRun, error) {
+func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -223,7 +233,7 @@ func (s *ManagerServer) StartRun(ctx context.Context, req *proto.WorkflowManager
 	return resp, nil
 }
 
-func (s *ManagerServer) SignalRun(ctx context.Context, req *proto.WorkflowManagerSignalRunRequest) (*proto.ManagedWorkflowRunSignal, error) {
+func (s *ProviderServer) SignalRun(ctx context.Context, req *proto.SignalWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -252,7 +262,7 @@ func (s *ManagerServer) SignalRun(ctx context.Context, req *proto.WorkflowManage
 	return resp, nil
 }
 
-func (s *ManagerServer) SignalOrStartRun(ctx context.Context, req *proto.WorkflowManagerSignalOrStartRunRequest) (out *proto.ManagedWorkflowRunSignal, err error) {
+func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (out *proto.SignalWorkflowRunResponse, err error) {
 	startedAt := time.Now()
 	var managed *workflowmanager.ManagedRunSignal
 	dims := workflowManagerSignalOrStartMetricDims(req, nil)
@@ -296,7 +306,7 @@ func (s *ManagerServer) SignalOrStartRun(ctx context.Context, req *proto.Workflo
 	return resp, nil
 }
 
-func (s *ManagerServer) GetSchedule(ctx context.Context, req *proto.WorkflowManagerGetScheduleRequest) (*proto.ManagedWorkflowSchedule, error) {
+func (s *ProviderServer) GetSchedule(ctx context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -322,46 +332,7 @@ func (s *ManagerServer) GetSchedule(ctx context.Context, req *proto.WorkflowMana
 	return resp, nil
 }
 
-func (s *ManagerServer) UpdateSchedule(ctx context.Context, req *proto.WorkflowManagerUpdateScheduleRequest) (*proto.ManagedWorkflowSchedule, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
-	if err != nil {
-		return nil, err
-	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationSchedulesUpdate); err != nil {
-		return nil, err
-	}
-	scheduleID := strings.TrimSpace(req.GetScheduleId())
-	if scheduleID == "" {
-		return nil, status.Error(codes.InvalidArgument, "schedule_id is required")
-	}
-	upsert, err := workflowManagerScheduleUpsert(
-		req.GetProviderName(),
-		req.GetCron(),
-		req.GetTimezone(),
-		req.GetTarget(),
-		req.GetDefinitionId(),
-		req.GetPaused(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
-	upsert.DefinitionID = strings.TrimSpace(req.GetDefinitionId())
-	managed, err := s.manager.UpdateSchedule(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), scheduleID, upsert)
-	if err != nil {
-		return nil, workflowManagerStatusError(err)
-	}
-	resp, err := managedWorkflowScheduleToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow schedule: %v", err)
-	}
-	return resp, nil
-}
-
-func (s *ManagerServer) DeleteSchedule(ctx context.Context, req *proto.WorkflowManagerDeleteScheduleRequest) (*emptypb.Empty, error) {
+func (s *ProviderServer) DeleteSchedule(ctx context.Context, req *proto.DeleteWorkflowProviderScheduleRequest) (*emptypb.Empty, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -382,7 +353,7 @@ func (s *ManagerServer) DeleteSchedule(ctx context.Context, req *proto.WorkflowM
 	return &emptypb.Empty{}, nil
 }
 
-func (s *ManagerServer) PauseSchedule(ctx context.Context, req *proto.WorkflowManagerPauseScheduleRequest) (*proto.ManagedWorkflowSchedule, error) {
+func (s *ProviderServer) PauseSchedule(ctx context.Context, req *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -408,7 +379,7 @@ func (s *ManagerServer) PauseSchedule(ctx context.Context, req *proto.WorkflowMa
 	return resp, nil
 }
 
-func (s *ManagerServer) ResumeSchedule(ctx context.Context, req *proto.WorkflowManagerResumeScheduleRequest) (*proto.ManagedWorkflowSchedule, error) {
+func (s *ProviderServer) ResumeSchedule(ctx context.Context, req *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -434,7 +405,7 @@ func (s *ManagerServer) ResumeSchedule(ctx context.Context, req *proto.WorkflowM
 	return resp, nil
 }
 
-func (s *ManagerServer) CreateEventTrigger(ctx context.Context, req *proto.WorkflowManagerCreateEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+func (s *ProviderServer) UpsertEventTrigger(ctx context.Context, req *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -442,7 +413,12 @@ func (s *ManagerServer) CreateEventTrigger(ctx context.Context, req *proto.Workf
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersCreate); err != nil {
+	triggerID := strings.TrimSpace(req.GetTriggerId())
+	if triggerID == "" {
+		if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersCreate); err != nil {
+			return nil, err
+		}
+	} else if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersUpdate); err != nil {
 		return nil, err
 	}
 	upsert, err := workflowManagerEventTriggerUpsert(
@@ -458,7 +434,12 @@ func (s *ManagerServer) CreateEventTrigger(ctx context.Context, req *proto.Workf
 	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
 	upsert.IdempotencyKey = strings.TrimSpace(req.GetIdempotencyKey())
 	upsert.DefinitionID = strings.TrimSpace(req.GetDefinitionId())
-	managed, err := s.manager.CreateEventTrigger(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), upsert)
+	var managed *workflowmanager.ManagedEventTrigger
+	if triggerID == "" {
+		managed, err = s.manager.CreateEventTrigger(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), upsert)
+	} else {
+		managed, err = s.manager.UpdateEventTrigger(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID, upsert)
+	}
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
@@ -469,7 +450,7 @@ func (s *ManagerServer) CreateEventTrigger(ctx context.Context, req *proto.Workf
 	return resp, nil
 }
 
-func (s *ManagerServer) GetEventTrigger(ctx context.Context, req *proto.WorkflowManagerGetEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+func (s *ProviderServer) GetEventTrigger(ctx context.Context, req *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -495,45 +476,7 @@ func (s *ManagerServer) GetEventTrigger(ctx context.Context, req *proto.Workflow
 	return resp, nil
 }
 
-func (s *ManagerServer) UpdateEventTrigger(ctx context.Context, req *proto.WorkflowManagerUpdateEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
-	if req == nil {
-		return nil, status.Error(codes.InvalidArgument, "request is required")
-	}
-	tokenCtx, err := s.tokenContext(req.GetInvocationToken())
-	if err != nil {
-		return nil, err
-	}
-	if err := s.requireWorkflowGrant(tokenCtx, workflowgrants.OperationEventTriggersUpdate); err != nil {
-		return nil, err
-	}
-	triggerID := strings.TrimSpace(req.GetTriggerId())
-	if triggerID == "" {
-		return nil, status.Error(codes.InvalidArgument, "trigger_id is required")
-	}
-	upsert, err := workflowManagerEventTriggerUpsert(
-		req.GetProviderName(),
-		req.GetMatch(),
-		req.GetTarget(),
-		req.GetDefinitionId(),
-		req.GetPaused(),
-	)
-	if err != nil {
-		return nil, err
-	}
-	upsert.CallerPluginName = strings.TrimSpace(s.pluginName)
-	upsert.DefinitionID = strings.TrimSpace(req.GetDefinitionId())
-	managed, err := s.manager.UpdateEventTrigger(plugininvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), triggerID, upsert)
-	if err != nil {
-		return nil, workflowManagerStatusError(err)
-	}
-	resp, err := managedWorkflowEventTriggerToProto(managed)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode workflow trigger: %v", err)
-	}
-	return resp, nil
-}
-
-func (s *ManagerServer) DeleteEventTrigger(ctx context.Context, req *proto.WorkflowManagerDeleteEventTriggerRequest) (*emptypb.Empty, error) {
+func (s *ProviderServer) DeleteEventTrigger(ctx context.Context, req *proto.DeleteWorkflowProviderEventTriggerRequest) (*emptypb.Empty, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -554,7 +497,7 @@ func (s *ManagerServer) DeleteEventTrigger(ctx context.Context, req *proto.Workf
 	return &emptypb.Empty{}, nil
 }
 
-func (s *ManagerServer) PauseEventTrigger(ctx context.Context, req *proto.WorkflowManagerPauseEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+func (s *ProviderServer) PauseEventTrigger(ctx context.Context, req *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -580,7 +523,7 @@ func (s *ManagerServer) PauseEventTrigger(ctx context.Context, req *proto.Workfl
 	return resp, nil
 }
 
-func (s *ManagerServer) ResumeEventTrigger(ctx context.Context, req *proto.WorkflowManagerResumeEventTriggerRequest) (*proto.ManagedWorkflowEventTrigger, error) {
+func (s *ProviderServer) ResumeEventTrigger(ctx context.Context, req *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -606,7 +549,7 @@ func (s *ManagerServer) ResumeEventTrigger(ctx context.Context, req *proto.Workf
 	return resp, nil
 }
 
-func (s *ManagerServer) PublishEvent(ctx context.Context, req *proto.WorkflowManagerPublishEventRequest) (*proto.WorkflowEvent, error) {
+func (s *ProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -629,14 +572,14 @@ func (s *ManagerServer) PublishEvent(ctx context.Context, req *proto.WorkflowMan
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
 	}
-	resp, err := workflowEventToProto(published)
+	out, err := workflowEventToProto(published)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "encode workflow event: %v", err)
 	}
-	return resp, nil
+	return out, nil
 }
 
-func (s *ManagerServer) tokenContext(token string) (plugininvokerservice.TokenContext, error) {
+func (s *ProviderServer) tokenContext(token string) (plugininvokerservice.TokenContext, error) {
 	tokenCtx, err := s.tokens.ResolveToken(token, s.pluginName)
 	if err != nil {
 		return plugininvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
@@ -644,14 +587,14 @@ func (s *ManagerServer) tokenContext(token string) (plugininvokerservice.TokenCo
 	return tokenCtx, nil
 }
 
-func (s *ManagerServer) requireWorkflowGrant(tokenCtx plugininvokerservice.TokenContext, operation string) error {
+func (s *ProviderServer) requireWorkflowGrant(tokenCtx plugininvokerservice.TokenContext, operation string) error {
 	if tokenCtx.AllowsWorkflowManagerOperation(operation) {
 		return nil
 	}
 	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for plugin %q", operation, strings.TrimSpace(s.pluginName))
 }
 
-func workflowManagerSignalOrStartMetricDims(req *proto.WorkflowManagerSignalOrStartRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {
+func workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProviderRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {
 	providerName := ""
 	targetKind := observability.WorkflowTargetKindUnknown
 	runStatus := observability.WorkflowRunStatusUnknown
@@ -779,4 +722,4 @@ func workflowManagerStatusError(err error) error {
 	}
 }
 
-var _ proto.WorkflowManagerHostServer = (*ManagerServer)(nil)
+var _ proto.WorkflowProviderServer = (*ProviderServer)(nil)

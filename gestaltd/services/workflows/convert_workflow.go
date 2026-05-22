@@ -926,7 +926,7 @@ func workflowInvokeResponseToProto(resp *coreworkflow.InvokeOperationResponse) *
 	}
 }
 
-func managedWorkflowScheduleToProto(managed *workflowmanager.ManagedSchedule) (*proto.ManagedWorkflowSchedule, error) {
+func managedWorkflowScheduleToProto(managed *workflowmanager.ManagedSchedule) (*proto.BoundWorkflowSchedule, error) {
 	if managed == nil {
 		return nil, nil
 	}
@@ -934,13 +934,11 @@ func managedWorkflowScheduleToProto(managed *workflowmanager.ManagedSchedule) (*
 	if err != nil {
 		return nil, err
 	}
-	return &proto.ManagedWorkflowSchedule{
-		ProviderName: managed.ProviderName,
-		Schedule:     schedule,
-	}, nil
+	schedule.ProviderName = managed.ProviderName
+	return schedule, nil
 }
 
-func managedWorkflowEventTriggerToProto(managed *workflowmanager.ManagedEventTrigger) (*proto.ManagedWorkflowEventTrigger, error) {
+func managedWorkflowEventTriggerToProto(managed *workflowmanager.ManagedEventTrigger) (*proto.BoundWorkflowEventTrigger, error) {
 	if managed == nil {
 		return nil, nil
 	}
@@ -948,13 +946,11 @@ func managedWorkflowEventTriggerToProto(managed *workflowmanager.ManagedEventTri
 	if err != nil {
 		return nil, err
 	}
-	return &proto.ManagedWorkflowEventTrigger{
-		ProviderName: managed.ProviderName,
-		Trigger:      trigger,
-	}, nil
+	trigger.ProviderName = managed.ProviderName
+	return trigger, nil
 }
 
-func managedWorkflowDefinitionToProto(managed *workflowmanager.ManagedDefinition) (*proto.ManagedWorkflowDefinition, error) {
+func managedWorkflowDefinitionToProto(managed *workflowmanager.ManagedDefinition) (*proto.BoundWorkflowDefinition, error) {
 	if managed == nil {
 		return nil, nil
 	}
@@ -962,13 +958,11 @@ func managedWorkflowDefinitionToProto(managed *workflowmanager.ManagedDefinition
 	if err != nil {
 		return nil, err
 	}
-	return &proto.ManagedWorkflowDefinition{
-		ProviderName: managed.ProviderName,
-		Definition:   definition,
-	}, nil
+	definition.ProviderName = managed.ProviderName
+	return definition, nil
 }
 
-func managedWorkflowRunToProto(managed *workflowmanager.ManagedRun) (*proto.ManagedWorkflowRun, error) {
+func managedWorkflowRunToProto(managed *workflowmanager.ManagedRun) (*proto.BoundWorkflowRun, error) {
 	if managed == nil {
 		return nil, nil
 	}
@@ -976,13 +970,11 @@ func managedWorkflowRunToProto(managed *workflowmanager.ManagedRun) (*proto.Mana
 	if err != nil {
 		return nil, err
 	}
-	return &proto.ManagedWorkflowRun{
-		ProviderName: managed.ProviderName,
-		Run:          run,
-	}, nil
+	run.ProviderName = managed.ProviderName
+	return run, nil
 }
 
-func managedWorkflowRunSignalToProto(managed *workflowmanager.ManagedRunSignal) (*proto.ManagedWorkflowRunSignal, error) {
+func managedWorkflowRunSignalToProto(managed *workflowmanager.ManagedRunSignal) (*proto.SignalWorkflowRunResponse, error) {
 	if managed == nil {
 		return nil, nil
 	}
@@ -990,16 +982,16 @@ func managedWorkflowRunSignalToProto(managed *workflowmanager.ManagedRunSignal) 
 	if err != nil {
 		return nil, err
 	}
+	run.ProviderName = managed.ProviderName
 	signal, err := workflowSignalToProto(managed.Signal)
 	if err != nil {
 		return nil, err
 	}
-	return &proto.ManagedWorkflowRunSignal{
-		ProviderName: managed.ProviderName,
-		Run:          run,
-		Signal:       signal,
-		StartedRun:   managed.StartedRun,
-		WorkflowKey:  managed.WorkflowKey,
+	return &proto.SignalWorkflowRunResponse{
+		Run:         run,
+		Signal:      signal,
+		StartedRun:  managed.StartedRun,
+		WorkflowKey: managed.WorkflowKey,
 	}, nil
 }
 

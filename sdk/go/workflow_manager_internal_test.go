@@ -12,39 +12,37 @@ import (
 )
 
 type workflowManagerIdempotencyHarness struct {
-	proto.UnimplementedWorkflowManagerHostServer
+	proto.UnimplementedWorkflowProviderServer
 
 	mu      sync.Mutex
-	starts  []*proto.WorkflowManagerStartRunRequest
-	signals []*proto.WorkflowManagerSignalOrStartRunRequest
+	starts  []*proto.StartWorkflowProviderRunRequest
+	signals []*proto.SignalOrStartWorkflowProviderRunRequest
 }
 
-func (h *workflowManagerIdempotencyHarness) StartRun(_ context.Context, req *proto.WorkflowManagerStartRunRequest) (*proto.ManagedWorkflowRun, error) {
+func (h *workflowManagerIdempotencyHarness) StartRun(_ context.Context, req *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
 	h.mu.Lock()
-	h.starts = append(h.starts, gproto.Clone(req).(*proto.WorkflowManagerStartRunRequest))
+	h.starts = append(h.starts, gproto.Clone(req).(*proto.StartWorkflowProviderRunRequest))
 	h.mu.Unlock()
 
-	return &proto.ManagedWorkflowRun{
+	return &proto.BoundWorkflowRun{
 		ProviderName: req.GetProviderName(),
-		Run: &proto.BoundWorkflowRun{
-			Id:          "run-1",
-			Status:      proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
-			WorkflowKey: req.GetWorkflowKey(),
-		},
+		Id:           "run-1",
+		Status:       proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
+		WorkflowKey:  req.GetWorkflowKey(),
 	}, nil
 }
 
-func (h *workflowManagerIdempotencyHarness) SignalOrStartRun(_ context.Context, req *proto.WorkflowManagerSignalOrStartRunRequest) (*proto.ManagedWorkflowRunSignal, error) {
+func (h *workflowManagerIdempotencyHarness) SignalOrStartRun(_ context.Context, req *proto.SignalOrStartWorkflowProviderRunRequest) (*proto.SignalWorkflowRunResponse, error) {
 	h.mu.Lock()
-	h.signals = append(h.signals, gproto.Clone(req).(*proto.WorkflowManagerSignalOrStartRunRequest))
+	h.signals = append(h.signals, gproto.Clone(req).(*proto.SignalOrStartWorkflowProviderRunRequest))
 	h.mu.Unlock()
 
-	return &proto.ManagedWorkflowRunSignal{
-		ProviderName: req.GetProviderName(),
+	return &proto.SignalWorkflowRunResponse{
 		Run: &proto.BoundWorkflowRun{
-			Id:          "run-2",
-			Status:      proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
-			WorkflowKey: req.GetWorkflowKey(),
+			ProviderName: req.GetProviderName(),
+			Id:           "run-2",
+			Status:       proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING,
+			WorkflowKey:  req.GetWorkflowKey(),
 		},
 		StartedRun:  true,
 		WorkflowKey: req.GetWorkflowKey(),
@@ -60,7 +58,7 @@ func TestWorkflowManagerFromContextDefaultsRunIdempotencyKey(t *testing.T) {
 
 	harness := &workflowManagerIdempotencyHarness{}
 	srv := grpc.NewServer()
-	proto.RegisterWorkflowManagerHostServer(srv, harness)
+	proto.RegisterWorkflowProviderServer(srv, harness)
 	go func() {
 		_ = srv.Serve(lis)
 	}()

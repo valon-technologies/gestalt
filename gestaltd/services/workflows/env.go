@@ -1,14 +1,14 @@
 package workflows
 
 const (
-	DefaultHostSocketEnv    = "GESTALT_WORKFLOW_HOST_SOCKET"
-	DefaultManagerSocketEnv = "GESTALT_WORKFLOW_MANAGER_SOCKET"
+	DefaultHostSocketEnv     = "GESTALT_WORKFLOW_HOST_SOCKET"
+	DefaultProviderSocketEnv = "GESTALT_WORKFLOW_PROVIDER_SOCKET"
 )
 
 func HostSocketTokenEnv() string {
 	return DefaultHostSocketEnv + "_TOKEN"
 }
 
-func ManagerSocketTokenEnv() string {
-	return DefaultManagerSocketEnv + "_TOKEN"
+func ProviderSocketTokenEnv() string {
+	return DefaultProviderSocketEnv + "_TOKEN"
 }

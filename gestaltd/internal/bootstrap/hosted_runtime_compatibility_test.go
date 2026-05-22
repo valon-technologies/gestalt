@@ -141,8 +141,8 @@ func (p *noopWorkflowProvider) PauseEventTrigger(context.Context, coreworkflow.P
 func (p *noopWorkflowProvider) ResumeEventTrigger(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
 	return nil, nil
 }
-func (p *noopWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
-	return nil
+func (p *noopWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
+	return &req.Event, nil
 }
 func (p *noopWorkflowProvider) Ping(context.Context) error { return nil }
 func (p *noopWorkflowProvider) Close() error               { return nil }
