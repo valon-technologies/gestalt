@@ -142,7 +142,7 @@ export type WorkflowRunStatus =
   (typeof WorkflowRunStatus)[keyof typeof WorkflowRunStatus];
 
 export interface BoundWorkflowAppTarget {
-  pluginName?: string | undefined;
+  appName?: string | undefined;
   operation?: string | undefined;
   input?: JsonObjectInput | undefined;
   connection?: string | undefined;
@@ -218,7 +218,7 @@ export type BoundWorkflowTargetKind =
   | { case: undefined; value?: undefined };
 
 export interface BoundWorkflowTarget {
-  plugin?: BoundWorkflowAppTarget | undefined;
+  app?: BoundWorkflowAppTarget | undefined;
   agent?: BoundWorkflowAgentTarget | undefined;
   kind?: BoundWorkflowTargetKind | undefined;
 }
@@ -238,7 +238,7 @@ export interface WorkflowRunAsSubject {
 }
 
 export interface WorkflowAccessPermission {
-  plugin?: string | undefined;
+  app?: string | undefined;
   operations?: readonly string[] | undefined;
 }
 
@@ -378,7 +378,7 @@ export interface ListWorkflowProviderRunsRequest {
   pageSize?: number | undefined;
   pageToken?: string | undefined;
   status?: WorkflowRunStatus | undefined;
-  targetPlugin?: string | undefined;
+  targetApp?: string | undefined;
 }
 
 export interface ListWorkflowProviderRunsResponse {
@@ -503,7 +503,7 @@ export interface ListWorkflowExecutionReferencesRequest {
 }
 
 export interface PublishWorkflowProviderEventRequest {
-  pluginName: string;
+  appName: string;
   event?: WorkflowEvent | undefined;
   publishedBy?: WorkflowActor | undefined;
 }
@@ -593,7 +593,7 @@ export function workflowAccessPermission(
   input: WorkflowAccessPermission = {},
 ): WorkflowAccessPermission {
   return {
-    plugin: input.plugin ?? "",
+    app: input.app ?? "",
     operations: [...(input.operations ?? [])],
   };
 }
@@ -603,7 +603,7 @@ export function workflowAccessPermissionInputFromPermission(
   input: WorkflowAccessPermission,
 ): WorkflowAccessPermission {
   return {
-    plugin: input.plugin,
+    app: input.app,
     operations: [...(input.operations ?? [])],
   };
 }
@@ -737,7 +737,7 @@ export function boundWorkflowPluginTarget(
   input: BoundWorkflowAppTarget = {},
 ): BoundWorkflowAppTarget {
   return {
-    pluginName: input.pluginName ?? "",
+    appName: input.appName ?? "",
     operation: input.operation ?? "",
     input: input.input === undefined ? undefined : structFromObject(input.input),
     connection: input.connection ?? "",
@@ -754,7 +754,7 @@ export function boundWorkflowPluginTargetInputFromTarget(
     return undefined;
   }
   return {
-    pluginName: input.pluginName,
+    appName: input.appName,
     operation: input.operation,
     input: input.input === undefined ? undefined : jsonObjectClone(input.input),
     connection: input.connection,
@@ -876,11 +876,11 @@ export function boundWorkflowTarget(
     return boundWorkflowTargetFromTarget({ kind: input.kind });
   }
   const targetInput = input as BoundWorkflowTarget;
-  if (targetInput.plugin !== undefined && targetInput.agent !== undefined) {
+  if (targetInput.app !== undefined && targetInput.agent !== undefined) {
     throw new Error("bound workflow target must set either app or agent");
   }
-  if (targetInput.plugin !== undefined) {
-    return { kind: { case: "app", value: boundWorkflowPluginTarget(targetInput.plugin) } };
+  if (targetInput.app !== undefined) {
+    return { kind: { case: "app", value: boundWorkflowPluginTarget(targetInput.app) } };
   }
   if (targetInput.agent !== undefined) {
     return { kind: { case: "agent", value: boundWorkflowAgentTarget(targetInput.agent) } };
@@ -898,7 +898,7 @@ export function boundWorkflowTargetInputFromTarget(
   const kind = input.kind;
   switch (kind?.case) {
     case "app":
-      return { plugin: boundWorkflowPluginTargetInputFromTarget(kind.value) };
+      return { app: boundWorkflowPluginTargetInputFromTarget(kind.value) };
     case "agent":
       return { agent: boundWorkflowAgentTargetInputFromTarget(kind.value) };
     default:
@@ -1927,7 +1927,7 @@ export function workflowRunAsSubjectFromProto(
 
 export function workflowAccessPermissionToProto(input: WorkflowAccessPermission) {
   return create(WorkflowAccessPermissionSchema, {
-    plugin: input.plugin ?? "",
+    app: input.app ?? "",
     operations: [...(input.operations ?? [])],
   });
 }
@@ -1936,7 +1936,7 @@ export function workflowAccessPermissionFromProto(
   input: ProtoWorkflowAccessPermission,
 ): WorkflowAccessPermission {
   return {
-    plugin: input.plugin,
+    app: input.app,
     operations: [...input.operations],
   };
 }
@@ -2072,7 +2072,7 @@ export function boundWorkflowPluginTargetToProto(
     return undefined;
   }
   return create(BoundWorkflowAppTargetSchema, {
-    pluginName: input.pluginName ?? "",
+    appName: input.appName ?? "",
     operation: input.operation ?? "",
     input: optionalStruct(input.input),
     connection: input.connection ?? "",
@@ -2088,7 +2088,7 @@ export function boundWorkflowPluginTargetFromProto(
     return undefined;
   }
   return {
-    pluginName: input.pluginName,
+    appName: input.appName,
     operation: input.operation,
     input: optionalObjectFromStruct(input.input),
     connection: input.connection,
@@ -2628,7 +2628,7 @@ function listWorkflowProviderRunsRequestFromProto(
     pageSize: input.pageSize,
     pageToken: input.pageToken,
     status: input.status as WorkflowRunStatus,
-    targetPlugin: input.targetPlugin,
+    targetApp: input.targetApp,
   };
 }
 
@@ -2804,7 +2804,7 @@ function publishWorkflowProviderEventRequestFromProto(
   input: ProtoPublishWorkflowProviderEventRequest,
 ): PublishWorkflowProviderEventRequest {
   return {
-    pluginName: input.pluginName,
+    appName: input.appName,
     event: workflowEventFromProto(input.event),
     publishedBy: workflowActorFromProto(input.publishedBy),
   };

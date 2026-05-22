@@ -192,7 +192,7 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
 > = {
   integration: {
     isProvider: isAppProvider as (value: unknown) => value is LoadedProvider,
-    protoKind: ProtoProviderKind.INTEGRATION,
+    protoKind: ProtoProviderKind.APP,
     registerService(router, provider) {
       router.service(
         AppProviderService,

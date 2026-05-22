@@ -60,5 +60,5 @@ test("schema builders are exported from the package entrypoint", () => {
       },
     ],
   });
-  expect(plugin).toBeInstanceOf(AppProvider);
+  expect(app).toBeInstanceOf(AppProvider);
 });

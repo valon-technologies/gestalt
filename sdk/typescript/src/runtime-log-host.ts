@@ -211,11 +211,11 @@ function runtimeLogStream(
 ): ProtoAppRuntimeLogStream {
   switch (stream.trim().toLowerCase()) {
     case "stdout":
-      return ProtoAppRuntimeLogStream.STDOUT;
+      return ProtoAppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_STDOUT;
     case "stderr":
-      return ProtoAppRuntimeLogStream.STDERR;
+      return ProtoAppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_STDERR;
     case "runtime":
-      return ProtoAppRuntimeLogStream.RUNTIME;
+      return ProtoAppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME;
     default:
       throw new Error(`unsupported runtime log stream ${JSON.stringify(stream)}`);
   }

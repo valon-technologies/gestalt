@@ -4,7 +4,7 @@
   "gestalt": {
     "provider": {
       "kind": "app",
-      "target": "./provider.ts#plugin"
+      "target": "./provider.ts#app"
     }
   }
 }

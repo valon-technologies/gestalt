@@ -14,7 +14,7 @@ import { fixturePath } from "./helpers.ts";
 test("module target parsing validates relative module paths", () => {
   expect(parseModuleTarget("./provider.ts#plugin")).toEqual({
     modulePath: "./provider.ts",
-    exportName: "app",
+    exportName: "plugin",
   });
   expect(parseModuleTarget("./provider.ts")).toEqual({
     modulePath: "./provider.ts",
@@ -32,17 +32,17 @@ test("provider target parsing supports app defaults and kind prefixes", () => {
   expect(parseProviderTarget("./provider.ts#plugin")).toEqual({
     kind: "integration",
     modulePath: "./provider.ts",
-    exportName: "app",
+    exportName: "plugin",
   });
-  expect(parseProviderTarget("plugin:./provider.ts#plugin")).toEqual({
+  expect(parseProviderTarget("app:./provider.ts#plugin")).toEqual({
     kind: "integration",
     modulePath: "./provider.ts",
-    exportName: "app",
+    exportName: "plugin",
   });
   expect(parseProviderTarget({ target: "./provider.ts#plugin" })).toEqual({
     kind: "integration",
     modulePath: "./provider.ts",
-    exportName: "app",
+    exportName: "plugin",
   });
   expect(parseProviderTarget("authentication:./auth.ts#provider")).toEqual({
     kind: "authentication",
@@ -83,7 +83,7 @@ test("package config reads provider targets", () => {
     },
   });
   expect(formatProviderTarget(readPackageProviderTarget(pluginRoot))).toBe(
-    "plugin:./provider.ts#plugin",
+    "app:./provider.ts#app",
   );
   expect(defaultProviderName(pluginRoot)).toBe("basic-provider");
   expect(

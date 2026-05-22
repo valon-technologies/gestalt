@@ -217,7 +217,7 @@ fn test_disconnect_normalizes_plugin_connection_name() {
     let mock = authed_json_mock!(
         server,
         Method::DELETE,
-        "/api/v1/apps/acme_crm?_connection=_plugin",
+        "/api/v1/apps/acme_crm?_connection=_app",
         StatusCode::OK
     )
     .with_body(r#"{"status":"disconnected"}"#)
@@ -460,7 +460,7 @@ fn test_connect_unknown_connection_lists_normalized_available_names() {
                 r#"[{
                     "name":"manual-svc",
                     "connections":[
-                        {"name":"_plugin","displayName":"App OAuth","authTypes":["oauth"]},
+                        {"name":"_app","displayName":"App OAuth","authTypes":["oauth"]},
                         {"name":"workspace","displayName":"Workspace OAuth","authTypes":["manual"]}
                     ]
                 }]"#,
@@ -474,7 +474,7 @@ fn test_connect_unknown_connection_lists_normalized_available_names() {
         .failure()
         .stderr(predicate::str::contains("unknown connection 'bogus'"))
         .stderr(predicate::str::contains(
-            "available connections: plugin, workspace",
+            "available connections: app, workspace",
         ));
 }
 
@@ -615,7 +615,7 @@ fn test_cli_plugins_list_table_output() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("acme_crm"), "stdout: {stdout}");
-    assert!(stdout.contains("Acme CRM plugin"), "stdout: {stdout}");
+    assert!(stdout.contains("Acme CRM app"), "stdout: {stdout}");
     assert!(stdout.contains("Status"), "stdout: {stdout}");
     assert!(stdout.contains("Connection"), "stdout: {stdout}");
     assert!(stdout.contains("Instance"), "stdout: {stdout}");
@@ -652,7 +652,7 @@ fn test_cli_plugins_list_table_output() {
         .create();
 
     let mut cmd = cli_command(home.path());
-    cmd.args(["plugins", "list"]);
+    cmd.args(["apps", "list"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("acme_crm"));

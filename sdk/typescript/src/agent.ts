@@ -205,7 +205,7 @@ export interface AgentActor {
 }
 
 export interface AgentToolRef {
-  plugin?: string | undefined;
+  app?: string | undefined;
   operation?: string | undefined;
   connection?: string | undefined;
   instance?: string | undefined;

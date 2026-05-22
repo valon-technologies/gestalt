@@ -213,7 +213,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       target: {
         kind: {
           case: "app",
-          value: { pluginName: "demo", operation: "sync" },
+          value: { appName: "demo", operation: "sync" },
         },
       },
     }));
@@ -225,14 +225,14 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       target: {
         kind: {
           case: "app",
-          value: { pluginName: "demo", operation: "define" },
+          value: { appName: "demo", operation: "define" },
         },
       },
     });
     expect(definition.id).toBe("definition-native-ts");
 
     const published = await client.publishEvent(create(PublishWorkflowProviderEventRequestSchema, {
-      pluginName: "demo",
+      appName: "demo",
       event: { type: "demo.synced" },
     }));
     expect(published.id).toBe("published-ts");

@@ -185,7 +185,7 @@ export function agentActorToProto(
 
 export function agentToolRefFromProto(ref: ProtoAgentToolRef): AgentToolRef {
   return {
-    plugin: ref.plugin,
+    app: ref.app,
     operation: ref.operation,
     connection: ref.connection,
     instance: ref.instance,
@@ -199,7 +199,7 @@ export function agentToolRefFromProto(ref: ProtoAgentToolRef): AgentToolRef {
 
 export function agentToolRefToProto(ref: AgentToolRef): ProtoAgentToolRef {
   return create(AgentToolRefSchema, {
-    plugin: ref.plugin ?? "",
+    app: ref.app ?? "",
     operation: ref.operation ?? "",
     connection: ref.connection ?? "",
     instance: ref.instance ?? "",

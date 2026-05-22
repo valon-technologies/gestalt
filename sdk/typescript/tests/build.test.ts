@@ -91,11 +91,11 @@ async function waitForSocket(
   }
 }
 
-function workflowPluginTarget(pluginName: string, operation: string) {
+function workflowPluginTarget(appName: string, operation: string) {
   return {
     kind: {
       case: "app" as const,
-      value: { pluginName, operation },
+      value: { appName, operation },
     },
   };
 }
@@ -214,7 +214,7 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
     try {
       buildProviderBinary({
         root: fixturePath("basic-provider"),
-        target: "plugin:./provider.ts#plugin",
+        target: "app:./provider.ts#app",
         outputPath,
         providerName: `fixture-${label}`,
         goos,
@@ -244,7 +244,7 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
       const identity = await runtime.getProviderIdentity(
         create(EmptySchema, {}),
       );
-      expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
+      expect(identity.kind).toBe(ProtoProviderKind.APP);
       expect(identity.name).toBe(`fixture-${label}`);
       expect(identity.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
       expect(identity.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
@@ -435,7 +435,7 @@ test("buildProviderBinary compiles a app provider executable without an explicit
   try {
     buildProviderBinary({
       root: fixturePath("basic-provider-default-export"),
-      target: "plugin:./provider.ts",
+      target: "app:./provider.ts",
       outputPath,
       providerName: "fixture-fallback",
       goos,
@@ -463,7 +463,7 @@ test("buildProviderBinary compiles a app provider executable without an explicit
     );
 
     const identity = await runtime.getProviderIdentity(create(EmptySchema, {}));
-    expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
+    expect(identity.kind).toBe(ProtoProviderKind.APP);
     expect(identity.name).toBe("fixture-fallback");
 
     const metadata = await provider.getMetadata(create(EmptySchema, {}));
@@ -502,7 +502,7 @@ test("buildProviderBinary falls through null exports to the next app candidate",
   try {
     buildProviderBinary({
       root: fixturePath("basic-provider-null-export"),
-      target: "plugin:./provider.ts",
+      target: "app:./provider.ts",
       outputPath,
       providerName: "fixture-null-export",
       goos,
@@ -530,7 +530,7 @@ test("buildProviderBinary falls through null exports to the next app candidate",
     );
 
     const identity = await runtime.getProviderIdentity(create(EmptySchema, {}));
-    expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
+    expect(identity.kind).toBe(ProtoProviderKind.APP);
     expect(identity.name).toBe("fixture-null-export");
 
     const result = await provider.execute(
@@ -904,7 +904,7 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
     if (run.target?.kind.case !== "app") {
       throw new Error("workflow run target is not a app target");
     }
-    expect(run.target.kind.value.pluginName).toBe("roadmap");
+    expect(run.target.kind.value.appName).toBe("roadmap");
     expect(run.id).toBe("roadmap:sync:1");
   } finally {
     if (child) {

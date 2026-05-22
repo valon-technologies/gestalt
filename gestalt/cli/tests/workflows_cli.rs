@@ -141,7 +141,7 @@ fn test_cli_list_schedules_filters_by_app() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["workflow", "schedules", "list", "--plugin", "beta"])
+        .args(["workflow", "schedules", "list", "--app", "beta"])
         .assert()
         .success()
         .stdout(predicate::str::contains("sched-b"))
@@ -201,7 +201,7 @@ fn test_cli_creates_schedule() {
             "0 */5 * * *",
             "--timezone",
             "UTC",
-            "--plugin",
+            "--app",
             "dummy",
             "--operation",
             "doit",
@@ -388,7 +388,7 @@ fn test_cli_list_event_triggers_filters() {
             "workflow",
             "triggers",
             "list",
-            "--plugin",
+            "--app",
             "beta",
             "--type",
             "beta.failed",
@@ -453,7 +453,7 @@ fn test_cli_creates_event_trigger() {
             "dummy",
             "--subject",
             "item",
-            "--plugin",
+            "--app",
             "dummy",
             "--operation",
             "doit",
@@ -678,7 +678,7 @@ fn test_cli_list_runs_filters() {
             "workflow",
             "runs",
             "list",
-            "--plugin",
+            "--app",
             "beta",
             "--status",
             "failed",

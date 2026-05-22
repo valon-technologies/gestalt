@@ -10,7 +10,7 @@ pub use connect::{
     connect_with_browser_opener,
 };
 
-const APP_CONNECTION_NAME: &str = "_plugin";
+const APP_CONNECTION_NAME: &str = "_app";
 const APP_CONNECTION_ALIAS: &str = "app";
 const APP_GROUP_DIVIDER: char = '┄';
 const APP_GROUP_DIVIDER_SENTINEL: &str = "\u{E000}";

@@ -23,7 +23,7 @@ export interface PluginInvokeOptions {
 /** Grant included when exchanging an invocation token for a child token. */
 export interface AppInvocationGrant {
   /** App name that the child token may invoke. */
-  plugin: string;
+  app: string;
   /** Specific operation ids allowed by the child token. */
   operations?: string[];
   /** Surface names allowed by the child token. */
@@ -63,14 +63,14 @@ export class AppInvoker {
 
   /** Invokes one operation on another app. */
   async invoke(
-    plugin: string,
+    app: string,
     operation: string,
     params: JsonObjectInput = {},
     options?: PluginInvokeOptions,
   ): Promise<OperationResult> {
     const response = await this.client.invoke({
       invocationToken: this.invocationToken,
-      plugin,
+      app,
       operation,
       params: structFromObject(params),
       connection: options?.connection ?? "",
@@ -85,7 +85,7 @@ export class AppInvoker {
 
   /** Invokes another plugin's GraphQL surface. */
   async invokeGraphQL(
-    plugin: string,
+    app: string,
     document: string,
     options?: PluginGraphQLInvokeOptions,
   ): Promise<OperationResult> {
@@ -96,7 +96,7 @@ export class AppInvoker {
 
     const response = await this.client.invokeGraphQL({
       invocationToken: this.invocationToken,
-      plugin,
+      app,
       document: trimmedDocument,
       ...(options?.variables !== undefined
         ? { variables: structFromObject(options.variables) }
@@ -122,7 +122,7 @@ export class AppInvoker {
       parentInvocationToken: this.invocationToken,
       grants: (options?.grants ?? [])
         .map((grant) => ({
-          plugin: grant.app.trim(),
+          app: grant.app.trim(),
           operations: (grant.operations ?? [])
             .map((operation) => operation.trim())
             .filter(Boolean),

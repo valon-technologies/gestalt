@@ -273,7 +273,7 @@ fn test_cli_authorization_plugins_members_set_uses_management_api() {
             "--format",
             "json",
             "authorization",
-            "plugins",
+            "apps",
             "members",
             "set",
             "github",

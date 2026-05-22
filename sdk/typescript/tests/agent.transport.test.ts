@@ -256,7 +256,7 @@ test("AgentHost executes tools through the configured unix socket", async () => 
                 description: "Send a direct message",
                 inputSchema: "{\"type\":\"object\"}",
                 ref: {
-                  plugin: "slack",
+                  app: "slack",
                   operation: "chat.postMessage",
                 },
               },

@@ -117,19 +117,19 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
       "runtime-session-1",
       "runtime-session-1",
     ]);
-    expect(calls[0]?.logs[0]?.stream).toBe(AppRuntimeLogStream.RUNTIME);
+    expect(calls[0]?.logs[0]?.stream).toBe(AppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME);
     expect(calls[0]?.logs[0]?.message).toBe("runtime boot\n");
     expect(calls[0]?.logs[0]?.sourceSeq).toBe(7n);
     expect(calls[0]?.logs[0]?.observedAt?.seconds).toBe(1777550400n);
-    expect(calls[1]?.logs[0]?.stream).toBe(AppRuntimeLogStream.STDOUT);
+    expect(calls[1]?.logs[0]?.stream).toBe(AppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_STDOUT);
     expect(calls[1]?.logs[0]?.message).toBe("batch line\n");
     expect(calls[1]?.logs[0]?.sourceSeq).toBe(10n);
-    expect(calls[2]?.logs[0]?.stream).toBe(AppRuntimeLogStream.RUNTIME);
+    expect(calls[2]?.logs[0]?.stream).toBe(AppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME);
     expect(calls[2]?.logs[0]?.message).toBe("pre-epoch\n");
     expect(calls[2]?.logs[0]?.sourceSeq).toBe(8n);
     expect(calls[2]?.logs[0]?.observedAt?.seconds).toBe(-1n);
     expect(calls[2]?.logs[0]?.observedAt?.nanos).toBe(999_000_000);
-    expect(calls[3]?.logs[0]?.stream).toBe(AppRuntimeLogStream.STDERR);
+    expect(calls[3]?.logs[0]?.stream).toBe(AppRuntimeLogStream.PLUGIN_RUNTIME_LOG_STREAM_STDERR);
     expect(calls[3]?.logs[0]?.message).toBe("stderr line\n");
     expect(calls[3]?.logs[0]?.sourceSeq).toBe(11n);
   } finally {

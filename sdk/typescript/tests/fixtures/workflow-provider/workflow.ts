@@ -33,8 +33,8 @@ const triggers = new Map<string, ReturnType<typeof createTrigger>>();
 const definitions = new Map<string, BoundWorkflowDefinition>();
 let publishCount = 0;
 
-function pluginTarget(pluginName: string, operation: string): BoundWorkflowTarget {
-  return boundWorkflowTarget({ plugin: { pluginName, operation } });
+function pluginTarget(appName: string, operation: string): BoundWorkflowTarget {
+  return boundWorkflowTarget({ app: { appName, operation } });
 }
 
 export const provider = defineWorkflowProvider({
@@ -78,7 +78,7 @@ export const provider = defineWorkflowProvider({
         ? request.target.kind.value
         : undefined;
     const run = createRun(
-      `${plugin?.pluginName ?? "app"}:${plugin?.operation ?? "operation"}:${runs.size + 1}`,
+      `${app?.appName ?? "app"}:${app?.operation ?? "operation"}:${runs.size + 1}`,
       request,
       WorkflowRunStatus.PENDING,
       request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",
@@ -182,12 +182,12 @@ export const provider = defineWorkflowProvider({
   },
   async publishEvent(request: PublishWorkflowProviderEventRequest) {
     publishCount += 1;
-    const triggerId = publishedTriggerID(request.pluginName);
+    const triggerId = publishedTriggerID(request.appName);
     const existing = triggers.get(triggerId);
     const trigger = boundWorkflowEventTrigger({
       id: triggerId,
       ...(existing?.match ? { match: existing.match } : {}),
-      target: existing?.target ?? pluginTarget(request.pluginName, "published"),
+      target: existing?.target ?? pluginTarget(request.appName, "published"),
       paused: false,
     });
     triggers.set(triggerId, trigger);
@@ -288,8 +288,8 @@ function triggerKey(request: UpsertWorkflowProviderEventTriggerRequest): string 
   return request.triggerId;
 }
 
-function publishedTriggerID(pluginName: string): string {
-  return `published:${pluginName}`;
+function publishedTriggerID(appName: string): string {
+  return `published:${appName}`;
 }
 
 function requireRunByID(runId: string) {

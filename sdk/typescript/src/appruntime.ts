@@ -43,7 +43,7 @@ export type AppRuntimeEgressMode =
   (typeof AppRuntimeEgressMode)[keyof typeof AppRuntimeEgressMode];
 
 export interface AppRuntimeSupport {
-  canHostPlugins?: boolean | undefined;
+  canHostApps?: boolean | undefined;
   egressMode?: AppRuntimeEgressMode | undefined;
   supportsPrepareWorkspace?: boolean | undefined;
 }
@@ -68,7 +68,7 @@ export interface AppRuntimeImagePullAuth {
 }
 
 export interface StartAppRuntimeSessionRequest {
-  pluginName: string;
+  appName: string;
   template?: string | undefined;
   image?: string | undefined;
   metadata?: Record<string, string> | undefined;
@@ -118,7 +118,7 @@ export interface RemoveAppRuntimeWorkspaceRequest {
 
 export interface StartHostedAppRequest {
   sessionId: string;
-  pluginName: string;
+  appName: string;
   command?: string | undefined;
   args?: readonly string[] | undefined;
   env?: Record<string, string> | undefined;
@@ -131,7 +131,7 @@ export interface StartHostedAppRequest {
 export interface HostedApp {
   id?: string | undefined;
   sessionId?: string | undefined;
-  pluginName?: string | undefined;
+  appName?: string | undefined;
   dialTarget?: string | undefined;
 }
 
@@ -153,7 +153,7 @@ export interface AppRuntimeProviderOptions extends ProviderBaseOptions {
   removeWorkspace?: (
     request: RemoveAppRuntimeWorkspaceRequest,
   ) => MaybePromise<void>;
-  startPlugin: (
+  startApp: (
     request: StartHostedAppRequest,
   ) => MaybePromise<HostedApp>;
 }
@@ -168,7 +168,7 @@ export class AppRuntimeProvider extends ProviderBase {
   private readonly stopSessionHandler: AppRuntimeProviderOptions["stopSession"];
   private readonly prepareWorkspaceHandler: AppRuntimeProviderOptions["prepareWorkspace"];
   private readonly removeWorkspaceHandler: AppRuntimeProviderOptions["removeWorkspace"];
-  private readonly startPluginHandler: AppRuntimeProviderOptions["startPlugin"];
+  private readonly startAppHandler: AppRuntimeProviderOptions["startApp"];
 
   constructor(options: AppRuntimeProviderOptions) {
     super(options);
@@ -179,7 +179,7 @@ export class AppRuntimeProvider extends ProviderBase {
     this.stopSessionHandler = options.stopSession;
     this.prepareWorkspaceHandler = options.prepareWorkspace;
     this.removeWorkspaceHandler = options.removeWorkspace;
-    this.startPluginHandler = options.startPlugin;
+    this.startAppHandler = options.startApp;
   }
 
   async getSupport(): Promise<AppRuntimeSupport> {
@@ -232,10 +232,10 @@ export class AppRuntimeProvider extends ProviderBase {
     await this.removeWorkspaceHandler(request);
   }
 
-  async startPlugin(
+  async startApp(
     request: StartHostedAppRequest,
   ): Promise<HostedApp> {
-    return await this.startPluginHandler(request);
+    return await this.startAppHandler(request);
   }
 }
 
@@ -256,7 +256,7 @@ export function isAppRuntimeProvider(
       (value as { kind?: unknown }).kind === "runtime" &&
       "getSupport" in value &&
       "startSession" in value &&
-      "startPlugin" in value)
+      "startApp" in value)
   );
 }
 
@@ -325,12 +325,12 @@ export function createAppRuntimeProviderService(
       );
       return create(EmptySchema);
     },
-    async startPlugin(request) {
+    async startApp(request) {
       return create(
         HostedAppSchema,
-        hostedPluginToProto(
-          await invokeAppRuntimeProvider("start plugin", () =>
-            provider.startPlugin(startHostedAppRequestFromProto(request)),
+        hostedAppToProto(
+          await invokeAppRuntimeProvider("start app", () =>
+            provider.startApp(startHostedAppRequestFromProto(request)),
           ),
         ),
       );
@@ -342,7 +342,7 @@ function startSessionRequestFromProto(
   request: ProtoStartAppRuntimeSessionRequest,
 ): StartAppRuntimeSessionRequest {
   return {
-    pluginName: request.pluginName,
+    appName: request.appName,
     template: request.template,
     image: request.image,
     metadata: { ...request.metadata },
@@ -403,7 +403,7 @@ function startHostedAppRequestFromProto(
 ): StartHostedAppRequest {
   return {
     sessionId: request.sessionId,
-    pluginName: request.pluginName,
+    appName: request.appName,
     command: request.command,
     args: [...request.args],
     env: { ...request.env },
@@ -458,11 +458,11 @@ function prepareWorkspaceResponseToProto(
   };
 }
 
-function hostedPluginToProto(plugin: HostedApp) {
+function hostedAppToProto(app: HostedApp) {
   return {
     id: app.id ?? "",
     sessionId: app.sessionId ?? "",
-    pluginName: app.pluginName ?? "",
+    appName: app.appName ?? "",
     dialTarget: app.dialTarget ?? "",
   };
 }

@@ -27,9 +27,9 @@ import {
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
 
-function workflowPluginTarget(pluginName: string, operation: string) {
+function workflowAppTarget(appName: string, operation: string) {
   return {
-    plugin: { pluginName, operation },
+    app: { appName, operation },
   };
 }
 
@@ -313,7 +313,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       providerName: "basic",
       cron: "*/5 * * * *",
       timezone: "UTC",
-      target: workflowPluginTarget("roadmap", "sync"),
+      target: workflowAppTarget("roadmap", "sync"),
       paused: false,
       idempotencyKey: "workflow-schedule-key-ts",
     });
@@ -354,7 +354,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     });
     const createdDefinition = await fromRequest.createDefinition({
       providerName: "basic",
-      target: workflowPluginTarget("roadmap", "sync"),
+      target: workflowAppTarget("roadmap", "sync"),
     });
     const fetchedDefinition = await fromRequest.getDefinition({
       definitionId: "def-1",
@@ -362,7 +362,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
     const updatedDefinition = await fromRequest.updateDefinition({
       definitionId: "def-1",
       providerName: "secondary",
-      target: workflowPluginTarget("roadmap", "status"),
+      target: workflowAppTarget("roadmap", "status"),
     });
     await fromRequest.deleteDefinition({ definitionId: "def-1" });
     const fetched = await fromRequest.getSchedule({ scheduleId: "sched-1" });
@@ -371,7 +371,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       providerName: "secondary",
       cron: "0 * * * *",
       timezone: "America/New_York",
-      target: workflowPluginTarget("roadmap", "status"),
+      target: workflowAppTarget("roadmap", "status"),
       paused: true,
     });
     const paused = await fromRequest.pauseSchedule({ scheduleId: "sched-1" });
@@ -383,7 +383,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
         type: "roadmap.item.updated",
         source: "roadmap",
       },
-      target: workflowPluginTarget("slack", "chat.postMessage"),
+      target: workflowAppTarget("slack", "chat.postMessage"),
       paused: false,
     });
     const fetchedTrigger = await fromRequest.getTrigger({ triggerId: "trg-1" });
@@ -393,7 +393,7 @@ test("WorkflowManager forwards invocation tokens from strings and Request object
       match: {
         type: "roadmap.item.synced",
       },
-      target: workflowPluginTarget("slack", "chat.postMessage"),
+      target: workflowAppTarget("slack", "chat.postMessage"),
       paused: true,
     });
     const pausedTrigger = await fromRequest.pauseTrigger({

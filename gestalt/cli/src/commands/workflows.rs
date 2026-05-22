@@ -462,7 +462,7 @@ fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<V
         Some(value) => value.to_string(),
         None => target_app(existing)
             .ok_or_else(|| {
-                anyhow!("existing schedule is missing target.app.name; pass --plugin")
+                anyhow!("existing schedule is missing target.app.name; pass --app")
             })?
             .to_string(),
     };
@@ -524,7 +524,7 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
         Some(value) => value.to_string(),
         None => target_app(existing)
             .ok_or_else(|| {
-                anyhow!("existing trigger is missing target.app.name; pass --plugin")
+                anyhow!("existing trigger is missing target.app.name; pass --app")
             })?
             .to_string(),
     };
