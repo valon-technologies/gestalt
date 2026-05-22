@@ -13,25 +13,28 @@ import {
   TransactionDurabilityHint as ProtoTransactionDurabilityHint,
 } from "./internal/gen/v1/datastore_pb";
 import { dateFromTimestamp, timestampFromDate } from "./protocol.ts";
+import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_BINDING_HEADER,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 
-const ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET";
-const INDEXEDDB_SOCKET_TOKEN_SUFFIX = "_TOKEN";
-const INDEXEDDB_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
+const ENV_INDEXEDDB_SOCKET = ENV_HOST_SERVICE_SOCKET;
+const ENV_INDEXEDDB_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN;
 
 /**
  * Returns the environment variable name used to discover an IndexedDB socket.
  */
-export function indexedDBSocketEnv(name?: string): string {
-  const trimmed = name?.trim() ?? "";
-  if (!trimmed) return ENV_INDEXEDDB_SOCKET;
-  return `${ENV_INDEXEDDB_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
+export function indexedDBSocketEnv(_name?: string): string {
+  return ENV_INDEXEDDB_SOCKET;
 }
 
 /**
  * Returns the environment variable name used to discover an IndexedDB relay token.
  */
-export function indexedDBSocketTokenEnv(name?: string): string {
-  return `${indexedDBSocketEnv(name)}${INDEXEDDB_SOCKET_TOKEN_SUFFIX}`;
+export function indexedDBSocketTokenEnv(_name?: string): string {
+  return ENV_INDEXEDDB_SOCKET_TOKEN;
 }
 
 function indexedDBTransportOptions(rawTarget: string): {
@@ -859,6 +862,7 @@ export class IndexedDB {
       throw new Error(`${envName} is not set`);
     }
     const token = process.env[indexedDBSocketTokenEnv(name)]?.trim() ?? "";
+    const binding = name?.trim() ?? "";
     const transportOptions = indexedDBTransportOptions(target);
     const transport = createGrpcTransport({
       ...transportOptions,
@@ -870,7 +874,7 @@ export class IndexedDB {
             },
           }
         : {}),
-      interceptors: token ? [indexedDBRelayTokenInterceptor(token)] : [],
+      interceptors: [indexedDBHostServiceInterceptor(token, binding)],
     });
     this.client = createClient(IndexedDBService, transport);
   }
@@ -927,9 +931,14 @@ export class IndexedDB {
   }
 }
 
-function indexedDBRelayTokenInterceptor(token: string): Interceptor {
+function indexedDBHostServiceInterceptor(token: string, binding: string): Interceptor {
   return (next) => async (req) => {
-    req.header.set(INDEXEDDB_RELAY_TOKEN_HEADER, token);
+    if (token) {
+      req.header.set(HOST_SERVICE_RELAY_TOKEN_HEADER, token);
+    }
+    if (binding) {
+      req.header.set(HOST_SERVICE_BINDING_HEADER, binding);
+    }
     return next(req);
   };
 }

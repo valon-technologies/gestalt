@@ -98,6 +98,11 @@ import {
 } from "./protocol-internal.ts";
 import type { MaybePromise } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
+import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 
 type AuthorizationProviderServiceImpl = Partial<
   ServiceImpl<typeof AuthorizationProviderService>
@@ -107,9 +112,8 @@ type AuthorizationProviderServiceImpl = Partial<
  * Environment variable containing the Unix socket path or relay target for the
  * host authorization client exposed to plugins.
  */
-export const ENV_AUTHORIZATION_SOCKET = "GESTALT_AUTHORIZATION_SOCKET";
-export const ENV_AUTHORIZATION_SOCKET_TOKEN = `${ENV_AUTHORIZATION_SOCKET}_TOKEN`;
-const AUTHORIZATION_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
+export const ENV_AUTHORIZATION_SOCKET = ENV_HOST_SERVICE_SOCKET;
+export const ENV_AUTHORIZATION_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN;
 
 /** Subject type used for canonical Gestalt subject ids in managed grants. */
 export const AUTHORIZATION_SUBJECT_TYPE_SUBJECT = "subject";
@@ -1783,7 +1787,7 @@ function authorizationTransportOptions(rawTarget: string): {
 
 function authorizationRelayTokenInterceptor(token: string): Interceptor {
   return (next) => async (req) => {
-    req.header.set(AUTHORIZATION_RELAY_TOKEN_HEADER, token);
+    req.header.set(HOST_SERVICE_RELAY_TOKEN_HEADER, token);
     return next(req);
   };
 }

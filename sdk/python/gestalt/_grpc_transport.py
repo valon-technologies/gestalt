@@ -19,18 +19,49 @@ _INTERNAL_CHANNEL_OPTIONS = (
     *INTERNAL_GRPC_MESSAGE_OPTIONS,
 )
 _HOST_SERVICE_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
+ENV_HOST_SERVICE_SOCKET = "GESTALT_HOST_SERVICE_SOCKET"
+ENV_HOST_SERVICE_TOKEN = "GESTALT_HOST_SERVICE_TOKEN"
+HOST_SERVICE_BINDING_HEADER = "x-gestalt-host-binding"
 
 
-class RelayTokenInterceptor(grpc.UnaryUnaryClientInterceptor):
-    def __init__(self, token: str) -> None:
+class HostServiceMetadataInterceptor(
+    grpc.UnaryUnaryClientInterceptor,
+    grpc.UnaryStreamClientInterceptor,
+    grpc.StreamUnaryClientInterceptor,
+    grpc.StreamStreamClientInterceptor,
+):
+    def __init__(self, token: str = "", binding: str = "") -> None:
         self._token = token
+        self._binding = binding
 
     def intercept_unary_unary(
         self, continuation: Any, client_call_details: Any, request: Any
     ) -> Any:
+        details = self._with_metadata(client_call_details)
+        return continuation(details, request)
+
+    def intercept_unary_stream(
+        self, continuation: Any, client_call_details: Any, request: Any
+    ) -> Any:
+        return continuation(self._with_metadata(client_call_details), request)
+
+    def intercept_stream_unary(
+        self, continuation: Any, client_call_details: Any, request_iterator: Any
+    ) -> Any:
+        return continuation(self._with_metadata(client_call_details), request_iterator)
+
+    def intercept_stream_stream(
+        self, continuation: Any, client_call_details: Any, request_iterator: Any
+    ) -> Any:
+        return continuation(self._with_metadata(client_call_details), request_iterator)
+
+    def _with_metadata(self, client_call_details: Any) -> Any:
         metadata = list(client_call_details.metadata or [])
-        metadata.append((_HOST_SERVICE_RELAY_TOKEN_HEADER, self._token))
-        details = _ClientCallDetails(
+        if self._token:
+            metadata.append((_HOST_SERVICE_RELAY_TOKEN_HEADER, self._token))
+        if self._binding:
+            metadata.append((HOST_SERVICE_BINDING_HEADER, self._binding))
+        return _ClientCallDetails(
             method=client_call_details.method,
             timeout=client_call_details.timeout,
             metadata=metadata,
@@ -38,7 +69,6 @@ class RelayTokenInterceptor(grpc.UnaryUnaryClientInterceptor):
             wait_for_ready=client_call_details.wait_for_ready,
             compression=client_call_details.compression,
         )
-        return continuation(details, request)
 
 
 class _ClientCallDetails(grpc.ClientCallDetails):
@@ -95,7 +125,7 @@ def secure_internal_channel(
 
 
 def host_service_channel(
-    service_name: str, target: str, *, token: str = ""
+    service_name: str, target: str, *, token: str = "", binding: str = ""
 ) -> grpc.Channel:
     scheme, address = parse_host_service_target(service_name, target)
     if scheme == "unix":
@@ -106,8 +136,10 @@ def host_service_channel(
         channel = secure_internal_channel(internal_channel_target("tls", address))
     else:
         raise RuntimeError(f"unsupported {service_name} transport scheme {scheme!r}")
-    if token:
-        channel = grpc.intercept_channel(channel, RelayTokenInterceptor(token))
+    if token or binding:
+        channel = grpc.intercept_channel(
+            channel, HostServiceMetadataInterceptor(token, binding)
+        )
     return channel
 
 

@@ -21,7 +21,11 @@ from ._gen.v1 import agent_pb2 as _agent_pb
 from ._gen.v1 import plugin_pb2 as _plugin_pb
 from ._gen.v1 import workflow_pb2 as _pb
 from ._gen.v1 import workflow_pb2_grpc as _pb_grpc
-from ._grpc_transport import host_service_channel
+from ._grpc_transport import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
+    host_service_channel,
+)
 from ._protocol import (
     coerce_model as _coerce,
 )
@@ -54,12 +58,12 @@ from ._protocol import (
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 
-ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET"
-ENV_WORKFLOW_HOST_SOCKET_TOKEN = f"{ENV_WORKFLOW_HOST_SOCKET}_TOKEN"
+ENV_WORKFLOW_HOST_SOCKET = ENV_HOST_SERVICE_SOCKET
+ENV_WORKFLOW_HOST_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN
 # Workflow manager clients call the gestaltd workflow-provider facade. Provider
 # runtimes still listen on GESTALT_PLUGIN_SOCKET.
-ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_PROVIDER_SOCKET"
-ENV_WORKFLOW_MANAGER_SOCKET_TOKEN = f"{ENV_WORKFLOW_MANAGER_SOCKET}_TOKEN"
+ENV_WORKFLOW_MANAGER_SOCKET = ENV_HOST_SERVICE_SOCKET
+ENV_WORKFLOW_MANAGER_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN
 
 WORKFLOW_RUN_STATUS_UNSPECIFIED = pb.WORKFLOW_RUN_STATUS_UNSPECIFIED
 WORKFLOW_RUN_STATUS_PENDING = pb.WORKFLOW_RUN_STATUS_PENDING

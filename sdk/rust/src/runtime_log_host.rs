@@ -17,9 +17,9 @@ use crate::generated::v1::{
 type RuntimeLogHostTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
 /// Environment variable containing the runtime-log host-service target.
-pub const ENV_RUNTIME_LOG_HOST_SOCKET: &str = "GESTALT_RUNTIME_LOG_SOCKET";
+pub const ENV_RUNTIME_LOG_HOST_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
 /// Environment variable containing the optional runtime-log relay token.
-pub const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN: &str = "GESTALT_RUNTIME_LOG_SOCKET_TOKEN";
+pub const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 /// Environment variable containing the current plugin-runtime session id.
 pub const ENV_RUNTIME_SESSION_ID: &str = "GESTALT_RUNTIME_SESSION_ID";
 const RUNTIME_LOG_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";

@@ -41,13 +41,16 @@ import {
   optionalObjectFromStruct,
   optionalStruct,
 } from "./protocol-internal.ts";
+import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 
 /** Environment variable containing the agent-manager host-service target. */
-export const ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_PROVIDER_SOCKET";
+export const ENV_AGENT_MANAGER_SOCKET = ENV_HOST_SERVICE_SOCKET;
 /** Environment variable containing the optional agent-manager relay token. */
-export const ENV_AGENT_MANAGER_SOCKET_TOKEN =
-  `${ENV_AGENT_MANAGER_SOCKET}_TOKEN`;
-const AGENT_MANAGER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
+export const ENV_AGENT_MANAGER_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN;
 
 export interface AgentManagerWorkspaceGitCheckout {
   url?: string | undefined;
@@ -465,7 +468,7 @@ function agentManagerTransportOptions(rawTarget: string): {
 
 function agentManagerRelayTokenInterceptor(token: string): Interceptor {
   return (next) => async (req) => {
-    req.header.set(AGENT_MANAGER_RELAY_TOKEN_HEADER, token);
+    req.header.set(HOST_SERVICE_RELAY_TOKEN_HEADER, token);
     return next(req);
   };
 }

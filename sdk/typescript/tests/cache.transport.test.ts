@@ -54,8 +54,7 @@ beforeAll(async () => {
   }
   reader.releaseLock();
 
-  process.env.GESTALT_CACHE_SOCKET = socketPath;
-  process.env[cacheSocketEnv("named")] = `unix://${socketPath}`;
+  process.env[cacheSocketEnv()] = socketPath;
 }, 60_000);
 
 async function reserveTCPAddress(): Promise<string> {
@@ -107,8 +106,7 @@ async function startTCPHarness(expectToken?: string): Promise<{ proc: Subprocess
 
 afterAll(() => {
   proc?.kill();
-  delete process.env.GESTALT_CACHE_SOCKET;
-  delete process.env[cacheSocketEnv("named")];
+  delete process.env[cacheSocketEnv()];
   delete process.env[cacheSocketTokenEnv()];
   if (tmpDir) {
     rmSync(tmpDir, { recursive: true, force: true });
@@ -130,23 +128,32 @@ describe("Cache transport", () => {
 
   test("tcp target env selects the requested binding", async () => {
     const { proc: tcpProc, target } = await startTCPHarness();
-    process.env.GESTALT_CACHE_SOCKET = target;
+    const envName = cacheSocketEnv("tcp");
+    const previousTarget = process.env[envName];
+    process.env[envName] = target;
     try {
       const cache = new Cache();
       await cache.set("tcp-key", encoder.encode("tcp-value"));
       expect(decoder.decode((await cache.get("tcp-key"))!)).toBe("tcp-value");
     } finally {
       tcpProc.kill();
-      delete process.env.GESTALT_CACHE_SOCKET;
-      process.env.GESTALT_CACHE_SOCKET = socketPath;
+      if (previousTarget === undefined) {
+        delete process.env[envName];
+      } else {
+        process.env[envName] = previousTarget;
+      }
     }
   });
 
   test("tcp target token env selects the requested binding", async () => {
     const token = "relay-token-typescript";
     const { proc: tcpProc, target } = await startTCPHarness(token);
-    process.env.GESTALT_CACHE_SOCKET = target;
-    process.env[cacheSocketTokenEnv()] = token;
+    const envName = cacheSocketEnv("tcp-token");
+    const tokenEnvName = cacheSocketTokenEnv("tcp-token");
+    const previousTarget = process.env[envName];
+    const previousToken = process.env[tokenEnvName];
+    process.env[envName] = target;
+    process.env[tokenEnvName] = token;
     try {
       const cache = new Cache();
       await cache.set("tcp-token-key", encoder.encode("tcp-token-value"));
@@ -155,9 +162,16 @@ describe("Cache transport", () => {
       );
     } finally {
       tcpProc.kill();
-      delete process.env.GESTALT_CACHE_SOCKET;
-      delete process.env[cacheSocketTokenEnv()];
-      process.env.GESTALT_CACHE_SOCKET = socketPath;
+      if (previousTarget === undefined) {
+        delete process.env[envName];
+      } else {
+        process.env[envName] = previousTarget;
+      }
+      if (previousToken === undefined) {
+        delete process.env[tokenEnvName];
+      } else {
+        process.env[tokenEnvName] = previousToken;
+      }
     }
   });
 });

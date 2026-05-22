@@ -128,8 +128,8 @@ class CacheTransportTests(unittest.TestCase):
         client.close()
 
     def test_unicode_binding_name_uses_host_normalization(self) -> None:
-        self.assertEqual(cache_socket_env("café"), "GESTALT_CACHE_SOCKET_CAF_")
-        client = Cache("café")
+        self.assertEqual(cache_socket_env("café"), "GESTALT_HOST_SERVICE_SOCKET")
+        client = Cache("named")
         client.set("unicode-key", b"unicode-value")
         self.assertEqual(client.get("unicode-key"), b"unicode-value")
         client.close()

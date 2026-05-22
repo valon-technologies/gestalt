@@ -17,6 +17,8 @@ from google.protobuf import json_format
 from ._gen.v1 import authorization_pb2 as _authorization_pb2
 from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
 from ._grpc_transport import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
     insecure_internal_channel,
     internal_channel_target,
     secure_internal_channel,
@@ -27,8 +29,8 @@ empty_pb2: Any = _empty_pb2
 authorization_pb2: Any = _authorization_pb2
 authorization_pb2_grpc: Any = _authorization_pb2_grpc
 
-ENV_AUTHORIZATION_SOCKET = "GESTALT_AUTHORIZATION_SOCKET"
-ENV_AUTHORIZATION_SOCKET_TOKEN = f"{ENV_AUTHORIZATION_SOCKET}_TOKEN"
+ENV_AUTHORIZATION_SOCKET = ENV_HOST_SERVICE_SOCKET
+ENV_AUTHORIZATION_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN
 _AUTHORIZATION_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 AUTHORIZATION_SUBJECT_TYPE_SUBJECT = "subject"
 

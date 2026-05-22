@@ -11,6 +11,8 @@ from ._api import Response
 from ._gen.v1 import plugin_pb2 as _pb
 from ._gen.v1 import plugin_pb2_grpc as _pb_grpc
 from ._grpc_transport import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
     insecure_internal_channel,
     internal_channel_target,
     secure_internal_channel,
@@ -25,8 +27,8 @@ pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 
 # Matches the host-side socket name exposed by gestaltd.
-ENV_PLUGIN_INVOKER_SOCKET = "GESTALT_PLUGIN_INVOKER_SOCKET"
-ENV_PLUGIN_INVOKER_SOCKET_TOKEN = f"{ENV_PLUGIN_INVOKER_SOCKET}_TOKEN"
+ENV_PLUGIN_INVOKER_SOCKET = ENV_HOST_SERVICE_SOCKET
+ENV_PLUGIN_INVOKER_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN
 _PLUGIN_INVOKER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 
 

@@ -10,14 +10,18 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from ._gen.v1 import pluginruntime_pb2 as _pb
 from ._gen.v1 import pluginruntime_pb2_grpc as _pb_grpc
-from ._grpc_transport import host_service_channel
+from ._grpc_transport import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
+    host_service_channel,
+)
 
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 timestamp_pb2: Any = cast(Any, _timestamp_pb2)
 
-ENV_RUNTIME_LOG_HOST_SOCKET = "GESTALT_RUNTIME_LOG_SOCKET"
-ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN = f"{ENV_RUNTIME_LOG_HOST_SOCKET}_TOKEN"
+ENV_RUNTIME_LOG_HOST_SOCKET = ENV_HOST_SERVICE_SOCKET
+ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN
 ENV_RUNTIME_SESSION_ID = "GESTALT_RUNTIME_SESSION_ID"
 
 _STREAMS = {

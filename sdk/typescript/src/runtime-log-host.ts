@@ -7,6 +7,11 @@ import {
   type Interceptor,
 } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
+import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 
 import {
   PluginRuntimeLogHost as PluginRuntimeLogHostService,
@@ -15,14 +20,11 @@ import {
 import { timestampFromDate } from "./protocol.ts";
 
 /** Environment variable containing the runtime-log host-service target. */
-export const ENV_RUNTIME_LOG_HOST_SOCKET = "GESTALT_RUNTIME_LOG_SOCKET";
+export const ENV_RUNTIME_LOG_HOST_SOCKET = ENV_HOST_SERVICE_SOCKET;
 /** Environment variable containing the optional runtime-log relay token. */
-export const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN =
-  `${ENV_RUNTIME_LOG_HOST_SOCKET}_TOKEN`;
+export const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN;
 /** Environment variable containing the current plugin-runtime session id. */
 export const ENV_RUNTIME_SESSION_ID = "GESTALT_RUNTIME_SESSION_ID";
-
-const RUNTIME_LOG_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
 /** Named runtime log streams accepted by the authored SDK. */
 export type RuntimeLogStreamName = "stdout" | "stderr" | "runtime";
@@ -260,7 +262,7 @@ function runtimeLogTransportOptions(rawTarget: string): {
 
 function runtimeLogRelayTokenInterceptor(token: string): Interceptor {
   return (next) => async (req) => {
-    req.header.set(RUNTIME_LOG_RELAY_TOKEN_HEADER, token);
+    req.header.set(HOST_SERVICE_RELAY_TOKEN_HEADER, token);
     return await next(req);
   };
 }

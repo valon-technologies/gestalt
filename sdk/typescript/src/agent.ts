@@ -11,6 +11,11 @@ import {
   type ServiceImpl,
 } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
+import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 
 import {
   AgentHost as AgentHostService,
@@ -96,10 +101,9 @@ import {
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 
 /** Environment variable containing the agent-host service target. */
-export const ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET";
+export const ENV_AGENT_HOST_SOCKET = ENV_HOST_SERVICE_SOCKET;
 /** Environment variable containing the optional agent-host relay token. */
-export const ENV_AGENT_HOST_SOCKET_TOKEN = `${ENV_AGENT_HOST_SOCKET}_TOKEN`;
-const AGENT_HOST_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
+export const ENV_AGENT_HOST_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN;
 
 /** Native message-part type constants for authored agent messages. */
 export const AgentMessagePartType = {
@@ -1275,7 +1279,7 @@ function agentHostTransportOptions(rawTarget: string): {
 
 function agentHostRelayTokenInterceptor(token: string): Interceptor {
   return (next) => async (req) => {
-    req.header.set(AGENT_HOST_RELAY_TOKEN_HEADER, token);
+    req.header.set(HOST_SERVICE_RELAY_TOKEN_HEADER, token);
     return next(req);
   };
 }

@@ -12,7 +12,11 @@ from ._api import ExternalIdentity, Subject
 from ._gen.v1 import agent_pb2 as _pb
 from ._gen.v1 import agent_pb2_grpc as _pb_grpc
 from ._gen.v1 import plugin_pb2 as _plugin_pb
-from ._grpc_transport import host_service_channel
+from ._grpc_transport import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
+    host_service_channel,
+)
 from ._protocol import (
     JsonObjectInput,
     datetime_from_timestamp,
@@ -36,10 +40,10 @@ from ._protocol import (
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 
-ENV_AGENT_HOST_SOCKET = "GESTALT_AGENT_HOST_SOCKET"
-ENV_AGENT_HOST_SOCKET_TOKEN = f"{ENV_AGENT_HOST_SOCKET}_TOKEN"
-ENV_AGENT_MANAGER_SOCKET = "GESTALT_AGENT_PROVIDER_SOCKET"
-ENV_AGENT_MANAGER_SOCKET_TOKEN = f"{ENV_AGENT_MANAGER_SOCKET}_TOKEN"
+ENV_AGENT_HOST_SOCKET = ENV_HOST_SERVICE_SOCKET
+ENV_AGENT_HOST_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN
+ENV_AGENT_MANAGER_SOCKET = ENV_HOST_SERVICE_SOCKET
+ENV_AGENT_MANAGER_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN
 
 AGENT_EXECUTION_STATUS_UNSPECIFIED = pb.AGENT_EXECUTION_STATUS_UNSPECIFIED
 AGENT_EXECUTION_STATUS_PENDING = pb.AGENT_EXECUTION_STATUS_PENDING

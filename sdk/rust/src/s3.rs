@@ -83,12 +83,11 @@ impl S3WriteObjectStream {
 }
 
 /// Default Unix-socket environment variable used by [`S3::connect`].
-pub const ENV_S3_SOCKET: &str = "GESTALT_S3_SOCKET";
-/// Suffix added to named S3 socket variables for relay-token variables.
-const ENV_S3_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
+pub const ENV_S3_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
 /// Default relay-token environment variable used by [`S3::connect`].
-const ENV_S3_SOCKET_TOKEN: &str = "GESTALT_S3_SOCKET_TOKEN";
+const ENV_S3_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const S3_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
+const HOST_SERVICE_BINDING_HEADER: &str = "x-gestalt-host-binding";
 const WRITE_CHUNK_SIZE: usize = 64 * 1024;
 
 #[derive(Debug, thiserror::Error)]
@@ -641,7 +640,7 @@ impl S3 {
             }
         };
 
-        let interceptor = relay_token_interceptor(token.trim())?;
+        let interceptor = relay_token_interceptor(token.trim(), name)?;
         Ok(Self {
             client: ProtoS3Client::with_interceptor(channel.clone(), interceptor.clone()),
             object_access_client: ProtoS3ObjectAccessClient::with_interceptor(channel, interceptor),
@@ -1172,29 +1171,13 @@ impl ObjectReader {
 }
 
 /// Returns the environment variable used for a named S3 socket.
-pub fn s3_socket_env(name: &str) -> String {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return ENV_S3_SOCKET.to_string();
-    }
-    let mut env = String::from(ENV_S3_SOCKET);
-    env.push('_');
-    for ch in trimmed.chars() {
-        if ch.is_ascii_alphanumeric() {
-            env.push(ch.to_ascii_uppercase());
-        } else {
-            env.push('_');
-        }
-    }
-    env
+pub fn s3_socket_env(_name: &str) -> String {
+    ENV_S3_SOCKET.to_string()
 }
 
 /// Returns the environment variable used for a named S3 relay token.
-pub fn s3_socket_token_env(name: &str) -> String {
-    if name.trim().is_empty() {
-        return ENV_S3_SOCKET_TOKEN.to_string();
-    }
-    format!("{}{}", s3_socket_env(name), ENV_S3_SOCKET_TOKEN_SUFFIX)
+pub fn s3_socket_token_env(_name: &str) -> String {
+    ENV_S3_SOCKET_TOKEN.to_string()
 }
 
 enum S3Target {
@@ -1244,8 +1227,8 @@ fn parse_s3_target(raw_target: &str) -> Result<S3Target, S3Error> {
     Ok(S3Target::Unix(target.to_string()))
 }
 
-fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, S3Error> {
-    let header = if token.trim().is_empty() {
+fn relay_token_interceptor(token: &str, binding: &str) -> Result<RelayTokenInterceptor, S3Error> {
+    let relay_token = if token.trim().is_empty() {
         None
     } else {
         Some(
@@ -1253,12 +1236,23 @@ fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, S3Error
                 .map_err(|err| S3Error::Env(format!("invalid S3 relay token metadata: {err}")))?,
         )
     };
-    Ok(RelayTokenInterceptor { header })
+    let binding = if binding.trim().is_empty() {
+        None
+    } else {
+        Some(MetadataValue::try_from(binding.trim().to_string()).map_err(|err| {
+            S3Error::Env(format!("invalid S3 binding metadata: {err}"))
+        })?)
+    };
+    Ok(RelayTokenInterceptor {
+        relay_token,
+        binding,
+    })
 }
 
 #[derive(Clone)]
 struct RelayTokenInterceptor {
-    header: Option<MetadataValue<tonic::metadata::Ascii>>,
+    relay_token: Option<MetadataValue<tonic::metadata::Ascii>>,
+    binding: Option<MetadataValue<tonic::metadata::Ascii>>,
 }
 
 impl Interceptor for RelayTokenInterceptor {
@@ -1266,8 +1260,13 @@ impl Interceptor for RelayTokenInterceptor {
         &mut self,
         mut request: tonic::Request<()>,
     ) -> std::result::Result<tonic::Request<()>, tonic::Status> {
-        if let Some(header) = self.header.clone() {
+        if let Some(header) = self.relay_token.clone() {
             request.metadata_mut().insert(S3_RELAY_TOKEN_HEADER, header);
+        }
+        if let Some(header) = self.binding.clone() {
+            request
+                .metadata_mut()
+                .insert(HOST_SERVICE_BINDING_HEADER, header);
         }
         Ok(request)
     }

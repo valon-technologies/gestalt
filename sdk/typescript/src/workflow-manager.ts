@@ -8,6 +8,11 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 import {
   WorkflowProvider as WorkflowProviderService,
 } from "./internal/gen/v1/workflow_pb.ts";
+import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 import type { Request } from "./api.ts";
 import {
   boundWorkflowTargetToProto,
@@ -37,12 +42,9 @@ import {
  * Manager clients call the facade. Provider runtimes still listen on
  * GESTALT_PLUGIN_SOCKET.
  */
-export const ENV_WORKFLOW_MANAGER_SOCKET = "GESTALT_WORKFLOW_PROVIDER_SOCKET";
+export const ENV_WORKFLOW_MANAGER_SOCKET = ENV_HOST_SERVICE_SOCKET;
 /** Environment variable containing the optional workflow-manager relay token. */
-export const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN =
-  `${ENV_WORKFLOW_MANAGER_SOCKET}_TOKEN`;
-const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER =
-  "x-gestalt-host-service-relay-token";
+export const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN;
 
 /** Shape accepted when starting a workflow run. */
 export interface WorkflowManagerStartRun {
@@ -559,7 +561,7 @@ function workflowManagerTransportOptions(rawTarget: string): {
 
 function workflowManagerRelayTokenInterceptor(token: string): Interceptor {
   return (next) => async (req) => {
-    req.header.set(WORKFLOW_MANAGER_RELAY_TOKEN_HEADER, token);
+    req.header.set(HOST_SERVICE_RELAY_TOKEN_HEADER, token);
     return next(req);
   };
 }

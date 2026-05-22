@@ -4,13 +4,16 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 import { PluginInvoker as PluginInvokerService } from "./internal/gen/v1/plugin_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
 import { structFromObject, type JsonObjectInput } from "./protocol.ts";
+import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 
 /** Environment variable containing the plugin-invoker host-service target. */
-export const ENV_PLUGIN_INVOKER_SOCKET = "GESTALT_PLUGIN_INVOKER_SOCKET";
+export const ENV_PLUGIN_INVOKER_SOCKET = ENV_HOST_SERVICE_SOCKET;
 /** Environment variable containing the optional plugin-invoker relay token. */
-export const ENV_PLUGIN_INVOKER_SOCKET_TOKEN =
-  `${ENV_PLUGIN_INVOKER_SOCKET}_TOKEN`;
-const PLUGIN_INVOKER_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
+export const ENV_PLUGIN_INVOKER_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN;
 
 /** Options that select the target connection for an operation invocation. */
 export interface PluginInvokeOptions {
@@ -183,7 +186,7 @@ function pluginInvokerTransportOptions(rawTarget: string): {
 
 function pluginInvokerRelayTokenInterceptor(token: string): Interceptor {
   return (next) => async (req) => {
-    req.header.set(PLUGIN_INVOKER_RELAY_TOKEN_HEADER, token);
+    req.header.set(HOST_SERVICE_RELAY_TOKEN_HEADER, token);
     return next(req);
   };
 }

@@ -6,14 +6,17 @@ import { createGrpcTransport } from "@connectrpc/connect-node";
 import { Cache as CacheService } from "./internal/gen/v1/cache_pb.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import type { MaybePromise } from "./api.ts";
+import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_BINDING_HEADER,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 
 /** Base environment variable for discovering cache runtime sockets. */
-export const ENV_CACHE_SOCKET = "GESTALT_CACHE_SOCKET";
-const CACHE_SOCKET_TOKEN_SUFFIX = "_TOKEN";
-const CACHE_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
+export const ENV_CACHE_SOCKET = ENV_HOST_SERVICE_SOCKET;
 /** Base environment variable for the default cache relay token. */
-export const ENV_CACHE_SOCKET_TOKEN =
-  `${ENV_CACHE_SOCKET}${CACHE_SOCKET_TOKEN_SUFFIX}`;
+export const ENV_CACHE_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN;
 
 /**
  * Single cache entry used by batch cache APIs.
@@ -53,19 +56,15 @@ export interface CacheProviderOptions extends ProviderBaseOptions {
 /**
  * Returns the environment variable name used to discover a cache socket.
  */
-export function cacheSocketEnv(name?: string): string {
-  const trimmed = name?.trim() ?? "";
-  if (!trimmed) {
-    return ENV_CACHE_SOCKET;
-  }
-  return `${ENV_CACHE_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/gu, "_").toUpperCase()}`;
+export function cacheSocketEnv(_name?: string): string {
+  return ENV_CACHE_SOCKET;
 }
 
 /**
  * Returns the environment variable name used to discover a cache relay token.
  */
-export function cacheSocketTokenEnv(name?: string): string {
-  return `${cacheSocketEnv(name)}${CACHE_SOCKET_TOKEN_SUFFIX}`;
+export function cacheSocketTokenEnv(_name?: string): string {
+  return ENV_CACHE_SOCKET_TOKEN;
 }
 
 function cacheTransportOptions(rawTarget: string): {
@@ -126,14 +125,18 @@ export class Cache {
     }
     const token = process.env[cacheSocketTokenEnv(name)]?.trim() ?? "";
     const transportOptions = cacheTransportOptions(target);
-    const interceptors: Interceptor[] = token
-      ? [
-          (next) => async (req) => {
-            req.header.set(CACHE_RELAY_TOKEN_HEADER, token);
-            return await next(req);
-          },
-        ]
-      : [];
+    const binding = name?.trim() ?? "";
+    const interceptors: Interceptor[] = [
+      (next) => async (req) => {
+        if (token) {
+          req.header.set(HOST_SERVICE_RELAY_TOKEN_HEADER, token);
+        }
+        if (binding) {
+          req.header.set(HOST_SERVICE_BINDING_HEADER, binding);
+        }
+        return await next(req);
+      },
+    ];
     const transport = createGrpcTransport({
       ...transportOptions,
       ...(transportOptions.nodeOptions

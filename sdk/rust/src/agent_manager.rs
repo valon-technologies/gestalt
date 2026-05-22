@@ -23,9 +23,9 @@ use crate::{
 type AgentManagerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
 /// Environment variable containing the agent-manager host-service target.
-pub const ENV_AGENT_MANAGER_SOCKET: &str = "GESTALT_AGENT_PROVIDER_SOCKET";
+pub const ENV_AGENT_MANAGER_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
 /// Environment variable containing the optional agent-manager relay token.
-pub const ENV_AGENT_MANAGER_SOCKET_TOKEN: &str = "GESTALT_AGENT_PROVIDER_SOCKET_TOKEN";
+pub const ENV_AGENT_MANAGER_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const AGENT_MANAGER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]

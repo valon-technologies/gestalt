@@ -9,6 +9,11 @@ import {
   type ServiceImpl,
 } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
+import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 
 import {
   BoundWorkflowAgentTargetSchema,
@@ -125,10 +130,9 @@ type WorkflowProviderServiceImpl = Partial<
 >;
 
 /** Environment variable containing the workflow-host service target. */
-export const ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET";
+export const ENV_WORKFLOW_HOST_SOCKET = ENV_HOST_SERVICE_SOCKET;
 /** Environment variable containing the optional workflow-host relay token. */
-export const ENV_WORKFLOW_HOST_SOCKET_TOKEN = `${ENV_WORKFLOW_HOST_SOCKET}_TOKEN`;
-const WORKFLOW_HOST_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
+export const ENV_WORKFLOW_HOST_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN;
 
 /** Native workflow-run status constants for authored workflow providers. */
 export const WorkflowRunStatus = {
@@ -2939,7 +2943,7 @@ function workflowHostTransportOptions(rawTarget: string): {
 
 function workflowHostRelayTokenInterceptor(token: string): Interceptor {
   return (next) => async (req) => {
-    req.header.set(WORKFLOW_HOST_RELAY_TOKEN_HEADER, token);
+    req.header.set(HOST_SERVICE_RELAY_TOKEN_HEADER, token);
     return next(req);
   };
 }

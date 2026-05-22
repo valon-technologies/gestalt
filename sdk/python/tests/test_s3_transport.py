@@ -119,7 +119,7 @@ class TestNamedSocketEnv(unittest.TestCase):
         client.close()
 
     def test_named_socket_env_matches_host_ascii_normalization(self) -> None:
-        self.assertEqual(s3_socket_env("sø3"), "GESTALT_S3_SOCKET_S_3")
+        self.assertEqual(s3_socket_env("sø3"), "GESTALT_HOST_SERVICE_SOCKET")
 
 
 class TestTCPTargetEnv(unittest.TestCase):

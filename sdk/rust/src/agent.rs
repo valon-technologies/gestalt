@@ -24,9 +24,9 @@ use crate::rpc_status::rpc_status;
 type AgentHostTransport = InterceptedService<Channel, AgentHostRelayTokenInterceptor>;
 
 /// Environment variable containing the agent-host service target.
-pub const ENV_AGENT_HOST_SOCKET: &str = "GESTALT_AGENT_HOST_SOCKET";
+pub const ENV_AGENT_HOST_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
 /// Environment variable containing the optional agent-host relay token.
-pub const ENV_AGENT_HOST_SOCKET_TOKEN: &str = "GESTALT_AGENT_HOST_SOCKET_TOKEN";
+pub const ENV_AGENT_HOST_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const AGENT_HOST_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]

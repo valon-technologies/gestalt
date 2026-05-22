@@ -30,31 +30,32 @@ import {
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import { dateFromTimestamp, timestampFromDate } from "./protocol.ts";
+import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+  HOST_SERVICE_BINDING_HEADER,
+  HOST_SERVICE_RELAY_TOKEN_HEADER,
+} from "./host-service.ts";
 
 /** Base environment variable for discovering S3 runtime sockets. */
-export const ENV_S3_SOCKET = "GESTALT_S3_SOCKET";
-const S3_SOCKET_TOKEN_SUFFIX = "_TOKEN";
-const S3_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
+export const ENV_S3_SOCKET = ENV_HOST_SERVICE_SOCKET;
 /** Base environment variable for the default S3 relay token. */
-export const ENV_S3_SOCKET_TOKEN =
-  `${ENV_S3_SOCKET}${S3_SOCKET_TOKEN_SUFFIX}`;
+export const ENV_S3_SOCKET_TOKEN = ENV_HOST_SERVICE_TOKEN;
 const WRITE_CHUNK_SIZE = 64 * 1024;
 const textEncoder = new TextEncoder();
 
 /**
  * Returns the environment variable name used to discover an S3 socket.
  */
-export function s3SocketEnv(name?: string): string {
-  const trimmed = name?.trim() ?? "";
-  if (!trimmed) return ENV_S3_SOCKET;
-  return `${ENV_S3_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
+export function s3SocketEnv(_name?: string): string {
+  return ENV_S3_SOCKET;
 }
 
 /**
  * Returns the environment variable name used to discover an S3 relay token.
  */
-export function s3SocketTokenEnv(name?: string): string {
-  return `${s3SocketEnv(name)}${S3_SOCKET_TOKEN_SUFFIX}`;
+export function s3SocketTokenEnv(_name?: string): string {
+  return ENV_S3_SOCKET_TOKEN;
 }
 
 /**
@@ -549,14 +550,18 @@ export class S3 {
     }
     const relayToken = process.env[s3SocketTokenEnv(name)]?.trim() ?? "";
     const transportOptions = s3TransportOptions(target);
-    const interceptors: Interceptor[] = relayToken
-      ? [
-          (next) => async (req) => {
-            req.header.set(S3_RELAY_TOKEN_HEADER, relayToken);
-            return await next(req);
-          },
-        ]
-      : [];
+    const binding = name?.trim() ?? "";
+    const interceptors: Interceptor[] = [
+      (next) => async (req) => {
+        if (relayToken) {
+          req.header.set(HOST_SERVICE_RELAY_TOKEN_HEADER, relayToken);
+        }
+        if (binding) {
+          req.header.set(HOST_SERVICE_BINDING_HEADER, binding);
+        }
+        return await next(req);
+      },
+    ];
     const transport = createGrpcTransport({
       ...transportOptions,
       ...(transportOptions.nodeOptions
