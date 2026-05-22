@@ -3,18 +3,13 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -96,50 +91,7 @@ func sharedPluginInvokerClient(ctx context.Context, target, token string) (proto
 	}
 	sharedInvokerTransport.mu.Unlock()
 
-	network, address, err := parsePluginInvokerTarget(target)
-	if err != nil {
-		return nil, err
-	}
-	opts := pluginInvokerDialOptions(token)
-	var conn *grpc.ClientConn
-	switch network {
-	case "unix":
-		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-					var d net.Dialer
-					return d.DialContext(ctx, "unix", address)
-				}),
-				grpc.WithAuthority("localhost"),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tcp":
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tls":
-		host, _, splitErr := net.SplitHostPort(address)
-		if splitErr != nil {
-			return nil, fmt.Errorf("plugin invoker: parse tls target %q: %w", address, splitErr)
-		}
-		tlsConfig, tlsErr := hostServiceTLSConfig("plugin invoker", host)
-		if tlsErr != nil {
-			return nil, tlsErr
-		}
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	default:
-		return nil, fmt.Errorf("plugin invoker: unsupported transport network %q", network)
-	}
+	conn, err := dialHostServiceRelay(ctx, "plugin invoker", target, token)
 	if err != nil {
 		return nil, fmt.Errorf("plugin invoker: connect to host: %w", err)
 	}
@@ -162,61 +114,6 @@ func sharedPluginInvokerClient(ctx context.Context, target, token string) (proto
 	sharedInvokerTransport.conn = conn
 	sharedInvokerTransport.client = client
 	return client, nil
-}
-
-func pluginInvokerDialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil
-	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(pluginInvokerRelayPerRPCCredentials{token: token})}
-}
-
-type pluginInvokerRelayPerRPCCredentials struct {
-	token string
-}
-
-func (c pluginInvokerRelayPerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{
-		"x-gestalt-host-service-relay-token": c.token,
-	}, nil
-}
-
-func (pluginInvokerRelayPerRPCCredentials) RequireTransportSecurity() bool { return false }
-
-func parsePluginInvokerTarget(raw string) (network string, address string, err error) {
-	target := strings.TrimSpace(raw)
-	if target == "" {
-		return "", "", fmt.Errorf("plugin invoker: transport target is required")
-	}
-	switch {
-	case strings.HasPrefix(target, "tcp://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tcp://"))
-		if address == "" {
-			return "", "", fmt.Errorf("plugin invoker: tcp target %q is missing host:port", raw)
-		}
-		return "tcp", address, nil
-	case strings.HasPrefix(target, "tls://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-		if address == "" {
-			return "", "", fmt.Errorf("plugin invoker: tls target %q is missing host:port", raw)
-		}
-		return "tls", address, nil
-	case strings.HasPrefix(target, "unix://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "unix://"))
-		if address == "" {
-			return "", "", fmt.Errorf("plugin invoker: unix target %q is missing a socket path", raw)
-		}
-		return "unix", address, nil
-	case strings.Contains(target, "://"):
-		parsed, parseErr := url.Parse(target)
-		if parseErr != nil {
-			return "", "", fmt.Errorf("plugin invoker: parse target %q: %w", raw, parseErr)
-		}
-		return "", "", fmt.Errorf("plugin invoker: unsupported target scheme %q", parsed.Scheme)
-	default:
-		return "unix", filepath.Clean(target), nil
-	}
 }
 
 // InvokerFromContext returns an Invoker using the context invocation token.

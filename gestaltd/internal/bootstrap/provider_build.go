@@ -1715,7 +1715,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		return fail(err)
 	}
 	if effectiveIndexedDB.Enabled {
-		services, indexedDBCleanup, err := buildPluginIndexedDBHostServices(name, effectiveIndexedDB, deps)
+		services, indexedDBCleanup, err := buildIndexedDBHostServices(name, effectiveIndexedDB.ProviderName, effectiveIndexedDB, deps)
 		if err != nil {
 			return fail(err)
 		}
@@ -2179,28 +2179,34 @@ func isLoopbackAllowedHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-func buildPluginIndexedDBHostServices(pluginName string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
+func buildIndexedDBHostServices(serverLabel, metricsName string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
 	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
 		return nil, nil, fmt.Errorf("indexeddb host services are not available")
 	}
 
-	ds, err := buildPluginScopedIndexedDB(pluginName, effective, deps)
+	ds, err := buildHostScopedIndexedDB(metricsName, effective, deps)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	hostServices := []runtimehost.HostService{{
-		Name:   "indexeddb",
-		EnvVar: indexeddbservice.DefaultSocketEnv,
-		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, pluginName, indexeddbservice.ServerOptions{
-				AllowedStores: effective.ObjectStores,
-			}))
-		},
-	}}
+	hostServices := []runtimehost.HostService{
+		newIndexedDBHostService(indexeddbservice.DefaultSocketEnv, serverLabel, ds, effective.ObjectStores),
+	}
 	return hostServices, func() {
 		_ = closeIndexedDBs(ds)
 	}, nil
+}
+
+func newIndexedDBHostService(envVar, serverLabel string, ds indexeddb.IndexedDB, allowedStores []string) runtimehost.HostService {
+	return runtimehost.HostService{
+		Name:   "indexeddb",
+		EnvVar: envVar,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, serverLabel, indexeddbservice.ServerOptions{
+				AllowedStores: allowedStores,
+			}))
+		},
+	}
 }
 
 func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, func(), error) {
@@ -2297,54 +2303,6 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		})
 	}
 	return hostServices, nil
-}
-
-func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
-	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
-		return nil, nil, fmt.Errorf("indexeddb host services are not available")
-	}
-
-	ds, err := buildWorkflowScopedIndexedDB(name, effective, deps)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	hostServices := []runtimehost.HostService{{
-		Name:   "indexeddb",
-		EnvVar: indexeddbservice.DefaultSocketEnv,
-		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{
-				AllowedStores: effective.ObjectStores,
-			}))
-		},
-	}}
-	return hostServices, func() {
-		_ = closeIndexedDBs(ds)
-	}, nil
-}
-
-func buildAgentIndexedDBHostServices(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) ([]runtimehost.HostService, func(), error) {
-	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
-		return nil, nil, fmt.Errorf("indexeddb host services are not available")
-	}
-
-	ds, err := buildAgentScopedIndexedDB(name, effective, deps)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	hostServices := []runtimehost.HostService{{
-		Name:   "indexeddb",
-		EnvVar: indexeddbservice.DefaultSocketEnv,
-		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{
-				AllowedStores: effective.ObjectStores,
-			}))
-		},
-	}}
-	return hostServices, func() {
-		_ = closeIndexedDBs(ds)
-	}, nil
 }
 
 func buildPluginWorkflowProviderHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
@@ -2578,27 +2536,9 @@ func (unavailableAgentManager) ResolveInteraction(context.Context, *principal.Pr
 	return nil, fmt.Errorf("agent manager is not available")
 }
 
-func buildPluginScopedIndexedDB(_ string, effective config.EffectiveHostIndexedDBBinding, deps Deps) (indexeddb.IndexedDB, error) {
+func buildHostScopedIndexedDB(metricsName string, effective config.EffectiveHostIndexedDBBinding, deps Deps) (indexeddb.IndexedDB, error) {
 	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
-		MetricsName:   effective.ProviderName,
-		ProviderName:  effective.ProviderName,
-		DB:            effective.DB,
-		AllowedStores: effective.ObjectStores,
-	}, deps)
-}
-
-func buildWorkflowScopedIndexedDB(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) (indexeddb.IndexedDB, error) {
-	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
-		MetricsName:   name,
-		ProviderName:  effective.ProviderName,
-		DB:            effective.DB,
-		AllowedStores: effective.ObjectStores,
-	}, deps)
-}
-
-func buildAgentScopedIndexedDB(name string, effective config.EffectiveHostIndexedDBBinding, deps Deps) (indexeddb.IndexedDB, error) {
-	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
-		MetricsName:   name,
+		MetricsName:   metricsName,
 		ProviderName:  effective.ProviderName,
 		DB:            effective.DB,
 		AllowedStores: effective.ObjectStores,

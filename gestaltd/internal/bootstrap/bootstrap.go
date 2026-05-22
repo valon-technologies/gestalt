@@ -1649,15 +1649,7 @@ func buildExternalCredentialsHostServices(name string, deps Deps) ([]runtimehost
 }
 
 func externalCredentialsIndexedDBHostService(envVar, providerName string, ds indexeddb.IndexedDB) runtimehost.HostService {
-	return runtimehost.HostService{
-		Name:   "indexeddb",
-		EnvVar: envVar,
-		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, providerName, indexeddbservice.ServerOptions{
-				AllowedStores: []string{"external_credentials"},
-			}))
-		},
-	}
+	return newIndexedDBHostService(envVar, providerName, ds, []string{"external_credentials"})
 }
 
 func closeAuth(provider core.AuthenticationProvider) error {
@@ -1835,13 +1827,7 @@ func buildHostIndexedDBHostServices(selectedName string, indexeddbs map[string]i
 }
 
 func indexedDBHostService(envVar, name string, ds indexeddb.IndexedDB) runtimehost.HostService {
-	return runtimehost.HostService{
-		Name:   "indexeddb",
-		EnvVar: envVar,
-		Register: func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, indexeddbservice.NewServer(ds, name, indexeddbservice.ServerOptions{}))
-		},
-	}
+	return newIndexedDBHostService(envVar, name, ds, nil)
 }
 
 func buildCache(entry *config.ProviderEntry, factories *FactoryRegistry) (corecache.Cache, error) {
@@ -1918,7 +1904,7 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 		return nil, fmt.Errorf("workflow provider: %w", err)
 	}
 	if effectiveIndexedDB.Enabled {
-		indexedDBHostServices, indexedDBCleanup, err := buildWorkflowIndexedDBHostServices(name, effectiveIndexedDB, deps)
+		indexedDBHostServices, indexedDBCleanup, err := buildIndexedDBHostServices(name, name, effectiveIndexedDB, deps)
 		if err != nil {
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
@@ -1995,7 +1981,7 @@ func buildAgent(ctx context.Context, name string, entry *config.ProviderEntry, f
 		return nil, fmt.Errorf("agent provider: %w", err)
 	}
 	if effectiveIndexedDB.Enabled {
-		indexedDBHostServices, indexedDBCleanup, err := buildAgentIndexedDBHostServices(name, effectiveIndexedDB, deps)
+		indexedDBHostServices, indexedDBCleanup, err := buildIndexedDBHostServices(name, name, effectiveIndexedDB, deps)
 		if err != nil {
 			return nil, fmt.Errorf("agent provider: %w", err)
 		}

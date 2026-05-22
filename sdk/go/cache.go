@@ -3,17 +3,12 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -80,53 +75,10 @@ func Cache(name ...string) (*CacheClient, error) {
 	if target == "" {
 		return nil, fmt.Errorf("cache: %s is not set", envName)
 	}
-	network, address, err := parseCacheTarget(target)
-	if err != nil {
-		return nil, err
-	}
 	token := os.Getenv(CacheSocketTokenEnv(firstCacheName(name)))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	var conn *grpc.ClientConn
-	opts := cacheDialOptions(token)
-	switch network {
-	case "unix":
-		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-					var d net.Dialer
-					return d.DialContext(ctx, "unix", address)
-				}),
-				grpc.WithAuthority("localhost"),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tcp":
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tls":
-		host, _, splitErr := net.SplitHostPort(address)
-		if splitErr != nil {
-			return nil, fmt.Errorf("cache: parse tls target %q: %w", address, splitErr)
-		}
-		tlsConfig, tlsErr := hostServiceTLSConfig("cache", host)
-		if tlsErr != nil {
-			return nil, tlsErr
-		}
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	default:
-		return nil, fmt.Errorf("cache: unsupported transport network %q", network)
-	}
+	conn, err := dialHostServiceRelay(ctx, "cache", target, token)
 	if err != nil {
 		return nil, fmt.Errorf("cache: connect to host: %w", err)
 	}
@@ -232,64 +184,9 @@ func cacheTTLToProto(ttl time.Duration) *durationpb.Duration {
 	return durationpb.New(ttl)
 }
 
-func cacheDialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil
-	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(cacheRelayPerRPCCredentials{token: token})}
-}
-
 func firstCacheName(name []string) string {
 	if len(name) == 0 {
 		return ""
 	}
 	return name[0]
-}
-
-type cacheRelayPerRPCCredentials struct {
-	token string
-}
-
-func (c cacheRelayPerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{
-		"x-gestalt-host-service-relay-token": c.token,
-	}, nil
-}
-
-func (cacheRelayPerRPCCredentials) RequireTransportSecurity() bool { return false }
-
-func parseCacheTarget(raw string) (network string, address string, err error) {
-	target := strings.TrimSpace(raw)
-	if target == "" {
-		return "", "", fmt.Errorf("cache: transport target is required")
-	}
-	switch {
-	case strings.HasPrefix(target, "tcp://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tcp://"))
-		if address == "" {
-			return "", "", fmt.Errorf("cache: tcp target %q is missing host:port", raw)
-		}
-		return "tcp", address, nil
-	case strings.HasPrefix(target, "tls://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-		if address == "" {
-			return "", "", fmt.Errorf("cache: tls target %q is missing host:port", raw)
-		}
-		return "tls", address, nil
-	case strings.HasPrefix(target, "unix://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "unix://"))
-		if address == "" {
-			return "", "", fmt.Errorf("cache: unix target %q is missing a socket path", raw)
-		}
-		return "unix", address, nil
-	case strings.Contains(target, "://"):
-		parsed, parseErr := url.Parse(target)
-		if parseErr != nil {
-			return "", "", fmt.Errorf("cache: parse target %q: %w", raw, parseErr)
-		}
-		return "", "", fmt.Errorf("cache: unsupported target scheme %q", parsed.Scheme)
-	default:
-		return "unix", filepath.Clean(target), nil
-	}
 }

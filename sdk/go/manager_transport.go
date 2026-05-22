@@ -36,7 +36,7 @@ func managerTransportClient[C any](ctx context.Context, serviceName, target, tok
 	}
 	transport.mu.Unlock()
 
-	conn, err := dialManagerTransport(ctx, serviceName, target, token)
+	conn, err := dialHostServiceRelay(ctx, serviceName, target, token)
 	if err != nil {
 		return zero, err
 	}
@@ -60,12 +60,15 @@ func managerTransportClient[C any](ctx context.Context, serviceName, target, tok
 	return client, nil
 }
 
-func dialManagerTransport(ctx context.Context, serviceName, target, token string) (*grpc.ClientConn, error) {
+func dialHostServiceRelay(ctx context.Context, serviceName, target, token string) (*grpc.ClientConn, error) {
+	return dialManagerTransport(ctx, serviceName, target, managerRelayDialOptions(token)...)
+}
+
+func dialManagerTransport(ctx context.Context, serviceName, target string, extraOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	network, address, err := parseManagerTransportTarget(serviceName, target)
 	if err != nil {
 		return nil, err
 	}
-	opts := managerRelayDialOptions(token)
 	switch network {
 	case "unix":
 		return grpc.DialContext(ctx, "passthrough:///localhost",
@@ -77,14 +80,14 @@ func dialManagerTransport(ctx context.Context, serviceName, target, token string
 				}),
 				grpc.WithAuthority("localhost"),
 				grpc.WithBlock(),
-			), opts...)...,
+			), extraOpts...)...,
 		)
 	case "tcp":
 		return grpc.DialContext(ctx, address,
 			append(internalHostServiceBaseDialOptions(
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock(),
-			), opts...)...,
+			), extraOpts...)...,
 		)
 	case "tls":
 		host, _, err := net.SplitHostPort(address)
@@ -99,7 +102,7 @@ func dialManagerTransport(ctx context.Context, serviceName, target, token string
 			append(internalHostServiceBaseDialOptions(
 				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 				grpc.WithBlock(),
-			), opts...)...,
+			), extraOpts...)...,
 		)
 	default:
 		return nil, fmt.Errorf("%s: unsupported transport network %q", serviceName, network)

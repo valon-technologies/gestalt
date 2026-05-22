@@ -3,18 +3,12 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/url"
 	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -68,50 +62,7 @@ func sharedAuthorizationClient(ctx context.Context, target, token string) (proto
 	}
 	sharedAuthorizationTransport.mu.Unlock()
 
-	network, address, err := parseAuthorizationTarget(target)
-	if err != nil {
-		return nil, err
-	}
-	opts := authorizationDialOptions(token)
-	var conn *grpc.ClientConn
-	switch network {
-	case "unix":
-		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-					var d net.Dialer
-					return d.DialContext(ctx, "unix", address)
-				}),
-				grpc.WithAuthority("localhost"),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tcp":
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tls":
-		host, _, splitErr := net.SplitHostPort(address)
-		if splitErr != nil {
-			return nil, fmt.Errorf("authorization: parse tls target %q: %w", address, splitErr)
-		}
-		tlsConfig, tlsErr := hostServiceTLSConfig("authorization", host)
-		if tlsErr != nil {
-			return nil, tlsErr
-		}
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	default:
-		return nil, fmt.Errorf("authorization: unsupported transport network %q", network)
-	}
+	conn, err := dialHostServiceRelay(ctx, "authorization", target, token)
 	if err != nil {
 		return nil, fmt.Errorf("authorization: connect to host: %w", err)
 	}
@@ -134,61 +85,6 @@ func sharedAuthorizationClient(ctx context.Context, target, token string) (proto
 	sharedAuthorizationTransport.conn = conn
 	sharedAuthorizationTransport.client = client
 	return client, nil
-}
-
-func authorizationDialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil
-	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(authorizationRelayPerRPCCredentials{token: token})}
-}
-
-type authorizationRelayPerRPCCredentials struct {
-	token string
-}
-
-func (c authorizationRelayPerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{
-		"x-gestalt-host-service-relay-token": c.token,
-	}, nil
-}
-
-func (authorizationRelayPerRPCCredentials) RequireTransportSecurity() bool { return false }
-
-func parseAuthorizationTarget(raw string) (network string, address string, err error) {
-	target := strings.TrimSpace(raw)
-	if target == "" {
-		return "", "", fmt.Errorf("authorization: transport target is required")
-	}
-	switch {
-	case strings.HasPrefix(target, "tcp://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tcp://"))
-		if address == "" {
-			return "", "", fmt.Errorf("authorization: tcp target %q is missing host:port", raw)
-		}
-		return "tcp", address, nil
-	case strings.HasPrefix(target, "tls://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-		if address == "" {
-			return "", "", fmt.Errorf("authorization: tls target %q is missing host:port", raw)
-		}
-		return "tls", address, nil
-	case strings.HasPrefix(target, "unix://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "unix://"))
-		if address == "" {
-			return "", "", fmt.Errorf("authorization: unix target %q is missing a socket path", raw)
-		}
-		return "unix", address, nil
-	case strings.Contains(target, "://"):
-		parsed, parseErr := url.Parse(target)
-		if parseErr != nil {
-			return "", "", fmt.Errorf("authorization: parse target %q: %w", raw, parseErr)
-		}
-		return "", "", fmt.Errorf("authorization: unsupported target scheme %q", parsed.Scheme)
-	default:
-		return "unix", filepath.Clean(target), nil
-	}
 }
 
 // Close is a no-op compatibility method because this client uses shared transport.
