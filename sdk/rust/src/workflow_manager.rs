@@ -7,6 +7,7 @@ use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
+use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN};
 use crate::generated::v1::{
     self as pb, workflow_provider_client::WorkflowProviderClient as ProtoWorkflowProviderClient,
 };
@@ -23,13 +24,6 @@ use crate::workflow::{
 
 type WorkflowManagerTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
-/// Environment variable containing the gestaltd workflow-provider facade target.
-///
-/// Manager clients call this facade. Provider runtimes listen on
-/// `GESTALT_PLUGIN_SOCKET`.
-pub const ENV_WORKFLOW_MANAGER_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
-/// Environment variable containing the optional workflow-manager relay token.
-pub const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
 const WORKFLOW_MANAGER_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
 
 #[derive(Debug, thiserror::Error)]
@@ -500,10 +494,10 @@ impl WorkflowManager {
             return Err(WorkflowManagerError::MissingInvocationToken);
         }
 
-        let socket_path = std::env::var(ENV_WORKFLOW_MANAGER_SOCKET).map_err(|_| {
-            WorkflowManagerError::Env(format!("{ENV_WORKFLOW_MANAGER_SOCKET} is not set"))
+        let socket_path = std::env::var(ENV_HOST_SERVICE_SOCKET).map_err(|_| {
+            WorkflowManagerError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set"))
         })?;
-        let relay_token = std::env::var(ENV_WORKFLOW_MANAGER_SOCKET_TOKEN).unwrap_or_default();
+        let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
         let channel = match parse_workflow_manager_target(&socket_path)? {
             WorkflowManagerTarget::Unix(path) => {
                 Endpoint::try_from("http://[::]:50051")?
