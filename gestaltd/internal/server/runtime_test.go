@@ -106,11 +106,10 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 
 	secret := []byte("relay-test-secret-0123456789abcd")
 	cacheSrv := &runtimeTestCacheServer{}
-	const envVar = "GESTALT_TEST_CACHE_SOCKET"
 	publicHostServices := runtimehost.NewPublicHostServiceRegistry()
 	publicHostServices.RegisterVerified("relay-plugin", allowHostServiceSessionVerifier{}, runtimehost.HostService{
-		Name:   "cache",
-		EnvVar: envVar,
+		Name:           "cache",
+		MethodPrefixes: []string{"/gestalt.provider.v1.Cache/"},
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, cacheSrv)
 		},
@@ -161,7 +160,6 @@ func TestNewHTTPServerSupportsH2CHostServiceRelay(t *testing.T) {
 		PluginName:   "relay-plugin",
 		SessionID:    "session-1",
 		Service:      "cache",
-		EnvVar:       envVar,
 		MethodPrefix: "/" + proto.Cache_ServiceDesc.ServiceName + "/",
 		TTL:          time.Minute,
 	})

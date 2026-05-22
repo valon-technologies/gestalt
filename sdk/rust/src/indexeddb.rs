@@ -11,16 +11,12 @@ use tonic::service::interceptor::InterceptedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
+use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, HOST_SERVICE_BINDING_HEADER};
 use crate::generated::v1::{self as pb, indexed_db_client::IndexedDbClient};
 
 type IndexedDbTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
-/// Default Unix-socket environment variable used by [`IndexedDB::connect`].
-pub const ENV_INDEXEDDB_SOCKET: &str = "GESTALT_INDEXEDDB_SOCKET";
-/// Suffix added to named IndexedDB socket variables for relay-token variables.
-const ENV_INDEXEDDB_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
 const INDEXEDDB_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
-
 const CURSOR_CHANNEL_BUFFER: usize = 1;
 const TRANSACTION_CHANNEL_BUFFER: usize = 1;
 
@@ -879,10 +875,9 @@ impl IndexedDB {
 
     /// Connects to a named IndexedDB transport socket.
     pub async fn connect_named(name: &str) -> Result<Self, IndexedDBError> {
-        let env_name = indexeddb_socket_env(name);
-        let target = std::env::var(&env_name)
-            .map_err(|_| IndexedDBError::Env(format!("{env_name} is not set")))?;
-        let token = std::env::var(indexeddb_socket_token_env(name)).unwrap_or_default();
+        let target = std::env::var(ENV_HOST_SERVICE_SOCKET)
+            .map_err(|_| IndexedDBError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
+        let token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
         let channel = match parse_indexeddb_target(&target)? {
             IndexedDBTarget::Unix(path) => {
                 Endpoint::try_from("http://[::]:50051")?
@@ -909,8 +904,10 @@ impl IndexedDB {
             }
         };
 
-        let client =
-            IndexedDbClient::with_interceptor(channel, relay_token_interceptor(token.trim())?);
+        let client = IndexedDbClient::with_interceptor(
+            channel,
+            relay_token_interceptor(token.trim(), name)?,
+        );
 
         Ok(Self { client })
     }
@@ -2062,55 +2059,49 @@ fn key_range_to_pb(kr: KeyRange) -> pb::KeyRange {
         upper_open: kr.upper_open,
     }
 }
-/// Returns the environment variable used for a named IndexedDB socket.
-pub fn indexeddb_socket_env(name: &str) -> String {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return ENV_INDEXEDDB_SOCKET.to_string();
-    }
-    let mut env = String::from(ENV_INDEXEDDB_SOCKET);
-    env.push('_');
-    for ch in trimmed.chars() {
-        if ch.is_ascii_alphanumeric() {
-            env.push(ch.to_ascii_uppercase());
-        } else {
-            env.push('_');
-        }
-    }
-    env
-}
-
-/// Returns the environment variable used for a named IndexedDB relay token.
-pub fn indexeddb_socket_token_env(name: &str) -> String {
-    format!(
-        "{}{}",
-        indexeddb_socket_env(name),
-        ENV_INDEXEDDB_SOCKET_TOKEN_SUFFIX
-    )
-}
-
-fn relay_token_interceptor(token: &str) -> Result<RelayTokenInterceptor, IndexedDBError> {
-    let header = if token.trim().is_empty() {
+fn relay_token_interceptor(
+    token: &str,
+    binding: &str,
+) -> Result<RelayTokenInterceptor, IndexedDBError> {
+    let relay_token = if token.trim().is_empty() {
         None
     } else {
         Some(MetadataValue::try_from(token.to_string()).map_err(|err| {
             IndexedDBError::Env(format!("invalid IndexedDB relay token metadata: {err}"))
         })?)
     };
-    Ok(RelayTokenInterceptor { header })
+    let binding = if binding.trim().is_empty() {
+        None
+    } else {
+        Some(
+            MetadataValue::try_from(binding.trim().to_string()).map_err(|err| {
+                IndexedDBError::Env(format!("invalid IndexedDB binding metadata: {err}"))
+            })?,
+        )
+    };
+    Ok(RelayTokenInterceptor {
+        relay_token,
+        binding,
+    })
 }
 
 #[derive(Clone)]
 struct RelayTokenInterceptor {
-    header: Option<MetadataValue<tonic::metadata::Ascii>>,
+    relay_token: Option<MetadataValue<tonic::metadata::Ascii>>,
+    binding: Option<MetadataValue<tonic::metadata::Ascii>>,
 }
 
 impl Interceptor for RelayTokenInterceptor {
     fn call(&mut self, mut request: Request<()>) -> Result<Request<()>, tonic::Status> {
-        if let Some(header) = self.header.clone() {
+        if let Some(header) = self.relay_token.clone() {
             request
                 .metadata_mut()
                 .insert(INDEXEDDB_RELAY_TOKEN_HEADER, header);
+        }
+        if let Some(header) = self.binding.clone() {
+            request
+                .metadata_mut()
+                .insert(HOST_SERVICE_BINDING_HEADER, header);
         }
         Ok(request)
     }

@@ -24,8 +24,8 @@ import {
 import {
   Authorization,
   AuthorizationClient,
-  ENV_AUTHORIZATION_SOCKET,
-  ENV_AUTHORIZATION_SOCKET_TOKEN,
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
   authorizationAction,
   authorizationRelationshipWithTarget,
   authorizationResource,
@@ -35,17 +35,17 @@ import {
 import { removeTempDir } from "./helpers.ts";
 
 test("Authorization() and AuthorizationClient fail fast when the host socket is unset", () => {
-  const previousSocket = process.env[ENV_AUTHORIZATION_SOCKET];
-  delete process.env[ENV_AUTHORIZATION_SOCKET];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
+  delete process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
-    expect(() => Authorization()).toThrow(ENV_AUTHORIZATION_SOCKET);
-    expect(() => new AuthorizationClient()).toThrow(ENV_AUTHORIZATION_SOCKET);
+    expect(() => Authorization()).toThrow(ENV_HOST_SERVICE_SOCKET);
+    expect(() => new AuthorizationClient()).toThrow(ENV_HOST_SERVICE_SOCKET);
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_AUTHORIZATION_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_AUTHORIZATION_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
   }
 });
@@ -53,7 +53,7 @@ test("Authorization() and AuthorizationClient fail fast when the host socket is 
 test("Authorization() forwards authorization requests to the host socket", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-authorization-"));
   const socketPath = join(tempDir, "authorization.sock");
-  const previousSocket = process.env[ENV_AUTHORIZATION_SOCKET];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const searchCalls: Array<{
     resourceType: string;
     resourceId: string;
@@ -225,7 +225,7 @@ test("Authorization() forwards authorization requests to the host socket", async
       });
     });
 
-    process.env[ENV_AUTHORIZATION_SOCKET] = socketPath;
+    process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 
     const metadata = await Authorization().getMetadata();
     expect(metadata.capabilities).toEqual([
@@ -326,9 +326,9 @@ test("Authorization() forwards authorization requests to the host socket", async
   } finally {
     server.close();
     if (previousSocket === undefined) {
-      delete process.env[ENV_AUTHORIZATION_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_AUTHORIZATION_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
     removeTempDir(tempDir);
   }
@@ -358,8 +358,8 @@ async function reserveTCPAddress(): Promise<string> {
 }
 
 test("Authorization honors tcp target env and relay token env", async () => {
-  const previousSocket = process.env[ENV_AUTHORIZATION_SOCKET];
-  const previousToken = process.env[ENV_AUTHORIZATION_SOCKET_TOKEN];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
+  const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const seenTokens: string[] = [];
   const address = await reserveTCPAddress();
 
@@ -403,8 +403,8 @@ test("Authorization honors tcp target env and relay token env", async () => {
       });
     });
 
-    process.env[ENV_AUTHORIZATION_SOCKET] = `tcp://${address}`;
-    process.env[ENV_AUTHORIZATION_SOCKET_TOKEN] = "relay-token-typescript";
+    process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
+    process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
     const response = await Authorization().searchSubjects({
       resource: authorizationResource(
@@ -422,14 +422,14 @@ test("Authorization honors tcp target env and relay token env", async () => {
     expect(seenTokens).toEqual(["relay-token-typescript"]);
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_AUTHORIZATION_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_AUTHORIZATION_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
     if (previousToken === undefined) {
-      delete process.env[ENV_AUTHORIZATION_SOCKET_TOKEN];
+      delete process.env[ENV_HOST_SERVICE_TOKEN];
     } else {
-      process.env[ENV_AUTHORIZATION_SOCKET_TOKEN] = previousToken;
+      process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
     }
     if (server.listening) {
       await new Promise<void>((resolve) => {

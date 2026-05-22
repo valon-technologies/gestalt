@@ -36,20 +36,18 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/indexeddbcodec"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/services/observability/drivers/noop"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
 	graphqlschema "github.com/valon-technologies/gestalt/server/services/plugins/graphql"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	gproto "google.golang.org/protobuf/proto"
@@ -954,14 +952,8 @@ func newCallbackAgentProvider(started *runtimehost.StartedHostServices) (*callba
 	if started == nil {
 		return nil, fmt.Errorf("started host services are required")
 	}
-	var socketPath string
-	for _, binding := range started.Bindings() {
-		if binding.EnvVar == agentservice.DefaultHostSocketEnv {
-			socketPath = binding.SocketPath
-			break
-		}
-	}
-	if strings.TrimSpace(socketPath) == "" {
+	socketPath := strings.TrimSpace(started.SocketBinding().SocketPath)
+	if socketPath == "" {
 		return nil, fmt.Errorf("agent host socket binding is missing")
 	}
 	return &callbackAgentProvider{
@@ -2392,7 +2384,7 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 		if len(hostServices) != 1 {
 			return nil, fmt.Errorf("workflow host services = %d, want 1", len(hostServices))
 		}
-		hostSockets[name] = hostServices[0].EnvVar
+		hostSockets[name] = hostServices[0].Name
 		return &stubWorkflowProvider{}, nil
 	}
 
@@ -2410,8 +2402,8 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 		if _, ok := seen[name]; !ok {
 			t.Fatalf("missing workflow runtime name %q in %v", name, seen)
 		}
-		if got := hostSockets[name]; got != workflowservice.DefaultHostSocketEnv {
-			t.Fatalf("workflow host env for %q = %q, want %q", name, got, workflowservice.DefaultHostSocketEnv)
+		if got := hostSockets[name]; got != "workflow_host" {
+			t.Fatalf("workflow host env for %q = %q, want %q", name, got, "workflow_host")
 		}
 	}
 }
@@ -2442,7 +2434,7 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 		if len(hostServices) != 1 {
 			return nil, fmt.Errorf("agent host services = %d, want 1", len(hostServices))
 		}
-		hostSockets[name] = hostServices[0].EnvVar
+		hostSockets[name] = hostServices[0].Name
 		return newRecordingAgentProvider(), nil
 	}
 
@@ -2460,8 +2452,8 @@ func TestBootstrapPassesConfiguredAgentResourceNamesToProviders(t *testing.T) {
 		if _, ok := seen[name]; !ok {
 			t.Fatalf("missing agent runtime name %q in %v", name, seen)
 		}
-		if got := hostSockets[name]; got != agentservice.DefaultHostSocketEnv {
-			t.Fatalf("agent host env for %q = %q, want %q", name, got, agentservice.DefaultHostSocketEnv)
+		if got := hostSockets[name]; got != "agent_host" {
+			t.Fatalf("agent host env for %q = %q, want %q", name, got, "agent_host")
 		}
 	}
 	if got := result.AgentControl.ProviderNames(); !reflect.DeepEqual(got, []string{"cleanup", "reviewer"}) {
@@ -4224,7 +4216,7 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 		}
 		envs := make([]string, 0, len(hostServices))
 		for _, hostService := range hostServices {
-			envs = append(envs, hostService.EnvVar)
+			envs = append(envs, hostService.Name)
 		}
 		hostEnvs[name] = envs
 		return &stubWorkflowProvider{}, nil
@@ -4241,11 +4233,11 @@ func TestBootstrapPassesIndexedDBHostSocketToWorkflowProviders(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("workflow host services = %v, want 2 entries", got)
 	}
-	if got[0] != workflowservice.DefaultHostSocketEnv {
-		t.Fatalf("workflow host env = %q, want %q", got[0], workflowservice.DefaultHostSocketEnv)
+	if got[0] != "workflow_host" {
+		t.Fatalf("workflow host env = %q, want %q", got[0], "workflow_host")
 	}
-	if got[1] != indexeddbservice.DefaultSocketEnv {
-		t.Fatalf("workflow indexeddb env = %q, want %q", got[1], indexeddbservice.DefaultSocketEnv)
+	if got[1] != "indexeddb" {
+		t.Fatalf("workflow indexeddb env = %q, want %q", got[1], "indexeddb")
 	}
 }
 
@@ -4299,11 +4291,11 @@ func TestBootstrapPassesIndexedDBHostSocketToAgentProviders(t *testing.T) {
 	if len(hostServices) != 2 {
 		t.Fatalf("agent host services = %d, want 2", len(hostServices))
 	}
-	if hostServices[0].EnvVar != agentservice.DefaultHostSocketEnv {
-		t.Fatalf("agent host env = %q, want %q", hostServices[0].EnvVar, agentservice.DefaultHostSocketEnv)
+	if hostServices[0].Name != "agent_host" {
+		t.Fatalf("agent host env = %q, want %q", hostServices[0].Name, "agent_host")
 	}
-	if hostServices[1].EnvVar != indexeddbservice.DefaultSocketEnv {
-		t.Fatalf("agent indexeddb env = %q, want %q", hostServices[1].EnvVar, indexeddbservice.DefaultSocketEnv)
+	if hostServices[1].Name != "indexeddb" {
+		t.Fatalf("agent indexeddb env = %q, want %q", hostServices[1].Name, "indexeddb")
 	}
 
 	withIndexedDBHostClient(t, hostServices[1], func(client proto.IndexedDBClient) {
@@ -4380,20 +4372,11 @@ func TestBootstrapPassesIndexedDBHostSocketsToAuthorizationProviders(t *testing.
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	if len(hostServices) != 3 {
-		t.Fatalf("authorization host services = %d, want 3", len(hostServices))
+	if len(hostServices) != 1 {
+		t.Fatalf("authorization host services = %d, want 1", len(hostServices))
 	}
-	if hostServices[0].EnvVar != indexeddbservice.DefaultSocketEnv {
-		t.Fatalf("authorization default indexeddb env = %q, want %q", hostServices[0].EnvVar, indexeddbservice.DefaultSocketEnv)
-	}
-	wantNamed := []string{
-		indexeddbservice.SocketEnv("archive"),
-		indexeddbservice.SocketEnv("test"),
-	}
-	for i, want := range wantNamed {
-		if got := hostServices[i+1].EnvVar; got != want {
-			t.Fatalf("authorization indexeddb env[%d] = %q, want %q", i, got, want)
-		}
+	if hostServices[0].Name != "indexeddb" {
+		t.Fatalf("authorization default indexeddb env = %q, want %q", hostServices[0].Name, "indexeddb")
 	}
 }
 
@@ -4505,20 +4488,11 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
 
-	if len(hostServices) != 3 {
-		t.Fatalf("external credentials host services = %d, want 3", len(hostServices))
+	if len(hostServices) != 1 {
+		t.Fatalf("external credentials host services = %d, want 1", len(hostServices))
 	}
-	if hostServices[0].EnvVar != indexeddbservice.DefaultSocketEnv {
-		t.Fatalf("external credentials default indexeddb env = %q, want %q", hostServices[0].EnvVar, indexeddbservice.DefaultSocketEnv)
-	}
-	wantNamed := []string{
-		indexeddbservice.SocketEnv("archive"),
-		indexeddbservice.SocketEnv("test"),
-	}
-	for i, want := range wantNamed {
-		if got := hostServices[i+1].EnvVar; got != want {
-			t.Fatalf("external credentials indexeddb env[%d] = %q, want %q", i, got, want)
-		}
+	if hostServices[0].Name != "indexeddb" {
+		t.Fatalf("external credentials default indexeddb env = %q, want %q", hostServices[0].Name, "indexeddb")
 	}
 
 	withIndexedDBHostClient(t, hostServices[0], func(client proto.IndexedDBClient) {
@@ -4533,6 +4507,13 @@ func TestBootstrapRoutesExternalCredentialsIndexedDBHostServices(t *testing.T) {
 			Schema: &proto.ObjectStoreSchema{},
 		}); err == nil {
 			t.Fatal("CreateObjectStore(plugin_credentials) succeeded, want allowlist failure")
+		}
+		archiveCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(runtimehost.HostServiceBindingHeader, "archive"))
+		if _, err := client.CreateObjectStore(archiveCtx, &proto.CreateObjectStoreRequest{
+			Name:   "external_credentials",
+			Schema: &proto.ObjectStoreSchema{},
+		}); err != nil {
+			t.Fatalf("CreateObjectStore(external_credentials archive binding): %v", err)
 		}
 	})
 }
@@ -4588,12 +4569,12 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 
 	var indexedDBHost runtimehost.HostService
 	for _, hostService := range hostEnv {
-		if hostService.EnvVar == indexeddbservice.DefaultSocketEnv {
+		if hostService.Name == "indexeddb" {
 			indexedDBHost = hostService
 			break
 		}
 	}
-	if indexedDBHost.EnvVar == "" {
+	if indexedDBHost.Name == "" {
 		t.Fatal("missing workflow indexeddb host service")
 	}
 

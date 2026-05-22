@@ -151,8 +151,8 @@ func TestTransport_AuthorizationTCPTargetTokenEnv(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvAuthorizationSocket, "tcp://"+address)
-	t.Setenv(gestalt.EnvAuthorizationSocketToken, "relay-token-go")
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
 	client, err := gestalt.Authorization()
 	if err != nil {

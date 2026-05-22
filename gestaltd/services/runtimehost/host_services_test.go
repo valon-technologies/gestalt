@@ -58,8 +58,7 @@ func TestStartHostServicesRecordsRPCServerDurationWithTelemetryAttrs(t *testing.
 	const providerName = "metrics-plugin"
 
 	hostServices, err := StartHostServices([]HostService{{
-		Name:   "cache",
-		EnvVar: "GESTALT_TEST_CACHE_SOCKET",
+		Name: "cache",
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, metricsCacheServer{})
 		},
@@ -101,7 +100,7 @@ func TestStartHostServicesRecordsRPCServerDurationWithTelemetryAttrs(t *testing.
 	attrs := map[string]string{
 		"gestaltd.rpc.role":          "host_service_server",
 		"gestaltd.provider.name":     providerName,
-		"gestaltd.host_service.name": "cache",
+		"gestaltd.host_service.name": "host_service",
 	}
 	rm := metrictest.CollectMetricsUntilFloat64Histogram(t, metrics.Reader, "rpc.server.call.duration", attrs)
 	metrictest.RequireFloat64Histogram(t, rm, "rpc.server.call.duration", attrs)
@@ -117,8 +116,7 @@ func TestStartedHostServicesCloseWaitsForInflightRPC(t *testing.T) {
 	release := make(chan struct{})
 
 	hostServices, err := StartHostServices([]HostService{{
-		Name:   "cache",
-		EnvVar: "GESTALT_TEST_CACHE_SOCKET",
+		Name: "cache",
 		Register: func(srv *grpc.Server) {
 			proto.RegisterCacheServer(srv, blockingCacheServer{
 				started: started,

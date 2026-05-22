@@ -36,8 +36,6 @@ use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
-const ENV_WORKFLOW_HOST_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_HOST_SOCKET_TOKEN";
-
 #[derive(Default)]
 struct TestWorkflowProvider {
     configured_name: Mutex<String>,
@@ -374,7 +372,7 @@ async fn workflow_host_client_round_trip_over_unix_socket() {
     let _env_lock = helpers::env_lock().lock().await;
     let host_socket = helpers::temp_socket("gestalt-rust-workflow-host.sock");
     let _workflow_host_env =
-        helpers::EnvGuard::set(gestalt::ENV_WORKFLOW_HOST_SOCKET, host_socket.as_os_str());
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, host_socket.as_os_str());
     let host_service = TestWorkflowHostService::default();
 
     let host_socket_for_task = host_socket.clone();
@@ -419,11 +417,9 @@ async fn workflow_host_client_round_trip_over_tcp_and_sends_relay_token() {
         .await
         .expect("bind tcp listener");
     let address = listener.local_addr().expect("local addr");
-    let _workflow_host_env = helpers::EnvGuard::set(
-        gestalt::ENV_WORKFLOW_HOST_SOCKET,
-        format!("tcp://{address}"),
-    );
-    let _token_guard = helpers::EnvGuard::set(ENV_WORKFLOW_HOST_SOCKET_TOKEN, "relay-token-rust");
+    let _workflow_host_env =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
+    let _token_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
     let host_service = TestWorkflowHostService::default();
     let served_service = host_service.clone();

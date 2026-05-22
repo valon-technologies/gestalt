@@ -15,8 +15,8 @@ import {
   PluginInvoker as PluginInvokerService,
 } from "../src/internal/gen/v1/plugin_pb.ts";
 import {
-  ENV_PLUGIN_INVOKER_SOCKET,
-  ENV_PLUGIN_INVOKER_SOCKET_TOKEN,
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
   PluginInvoker,
   request,
 } from "../src/index.ts";
@@ -29,7 +29,7 @@ interface IssueLookupParams {
 test("PluginInvoker forwards invocation tokens from strings and Request objects", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-plugin-invoker-"));
   const socketPath = join(tempDir, "plugin-invoker.sock");
-  const previousSocket = process.env[ENV_PLUGIN_INVOKER_SOCKET];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const calls: Array<{
     invocationToken: string;
     plugin: string;
@@ -145,7 +145,7 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
       });
     });
 
-    process.env[ENV_PLUGIN_INVOKER_SOCKET] = socketPath;
+    process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 
     const fromHandle = new PluginInvoker("invocation-token-123");
     const childToken = await fromHandle.exchangeInvocationToken({
@@ -314,9 +314,9 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
     ]);
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_PLUGIN_INVOKER_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_PLUGIN_INVOKER_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
     if (server.listening) {
       await new Promise<void>((resolve) => {
@@ -328,18 +328,18 @@ test("PluginInvoker forwards invocation tokens from strings and Request objects"
 });
 
 test("PluginInvoker prioritizes invocation-token validation over socket configuration", () => {
-  const previousSocket = process.env[ENV_PLUGIN_INVOKER_SOCKET];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
-    delete process.env[ENV_PLUGIN_INVOKER_SOCKET];
+    delete process.env[ENV_HOST_SERVICE_SOCKET];
     expect(() => new PluginInvoker("   ")).toThrow(
       "plugin invoker: invocation token is not available",
     );
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_PLUGIN_INVOKER_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_PLUGIN_INVOKER_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
   }
 });
@@ -368,8 +368,8 @@ async function reserveTCPAddress(): Promise<string> {
 }
 
 test("PluginInvoker honors tcp target env and relay token env", async () => {
-  const previousSocket = process.env[ENV_PLUGIN_INVOKER_SOCKET];
-  const previousToken = process.env[ENV_PLUGIN_INVOKER_SOCKET_TOKEN];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
+  const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const seenTokens: string[] = [];
   const address = await reserveTCPAddress();
 
@@ -409,8 +409,8 @@ test("PluginInvoker honors tcp target env and relay token env", async () => {
       });
     });
 
-    process.env[ENV_PLUGIN_INVOKER_SOCKET] = `tcp://${address}`;
-    process.env[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = "relay-token-typescript";
+    process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
+    process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
     const invoker = new PluginInvoker("invoke-token");
     const response = await invoker.invoke("github", "get_issue");
@@ -424,14 +424,14 @@ test("PluginInvoker honors tcp target env and relay token env", async () => {
     expect(seenTokens).toEqual(["relay-token-typescript"]);
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_PLUGIN_INVOKER_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_PLUGIN_INVOKER_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
     if (previousToken === undefined) {
-      delete process.env[ENV_PLUGIN_INVOKER_SOCKET_TOKEN];
+      delete process.env[ENV_HOST_SERVICE_TOKEN];
     } else {
-      process.env[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = previousToken;
+      process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
     }
     if (server.listening) {
       await new Promise<void>((resolve) => {

@@ -16,7 +16,7 @@ use generated::v1::{
     ExchangeInvocationTokenRequest, ExchangeInvocationTokenResponse, OperationResult,
     PluginInvocationGrant, PluginInvokeGraphQlRequest, PluginInvokeRequest,
 };
-use gestalt::{ENV_PLUGIN_INVOKER_SOCKET, InvocationGrant, InvokeOptions, PluginInvoker, Request};
+use gestalt::{InvocationGrant, InvokeOptions, PluginInvoker, Request};
 use prost_types::Struct;
 use serde::Serialize;
 use tokio::net::{TcpListener, UnixListener};
@@ -24,8 +24,6 @@ use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
-
-const ENV_PLUGIN_INVOKER_SOCKET_TOKEN: &str = "GESTALT_PLUGIN_INVOKER_SOCKET_TOKEN";
 
 #[derive(Serialize)]
 struct IssueParams {
@@ -178,7 +176,8 @@ impl ProtoPluginInvoker for TestPluginInvokerServer {
 async fn plugin_invoker_connects_over_unix_socket_and_sends_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-plugin-invoker.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let server = TestPluginInvokerServer::default();
     let serve_server = server.clone();
@@ -283,7 +282,8 @@ async fn plugin_invoker_connects_over_unix_socket_and_sends_invocation_token() {
 async fn request_invoker_uses_embedded_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-request-invoker.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let server = TestPluginInvokerServer::default();
     let serve_server = server.clone();
@@ -332,8 +332,8 @@ async fn plugin_invoker_connects_over_tcp_and_forwards_relay_token() {
         .expect("bind tcp listener");
     let address = listener.local_addr().expect("local addr");
     let _socket_guard =
-        helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET, format!("tcp://{address}"));
-    let _token_guard = helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET_TOKEN, "relay-token-rust");
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
+    let _token_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
     let server = TestPluginInvokerServer::default();
     let serve_server = server.clone();
@@ -369,7 +369,8 @@ async fn plugin_invoker_connects_over_tcp_and_forwards_relay_token() {
 async fn plugin_invoker_invokes_graphql_surface() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-graphql-invoker.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let server = TestPluginInvokerServer::default();
     let serve_server = server.clone();
@@ -442,7 +443,8 @@ async fn plugin_invoker_invokes_graphql_surface() {
 async fn plugin_invoker_exchanges_invocation_tokens_with_grants_and_ttl() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-exchange-invoker.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_PLUGIN_INVOKER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let server = TestPluginInvokerServer::default();
     let serve_server = server.clone();

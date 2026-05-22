@@ -13,8 +13,8 @@ from typing import Any
 import grpc
 
 from gestalt import (
-    ENV_RUNTIME_LOG_HOST_SOCKET,
-    ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN,
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
     ENV_RUNTIME_SESSION_ID,
     RuntimeLogHandler,
     RuntimeLogHost,
@@ -58,8 +58,8 @@ def setUpModule() -> None:
     _server.add_insecure_port(f"unix:{_socket_path}")
     _server.start()
 
-    os.environ[ENV_RUNTIME_LOG_HOST_SOCKET] = _socket_path
-    os.environ[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN] = "relay-token-py"
+    os.environ[ENV_HOST_SERVICE_SOCKET] = _socket_path
+    os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-py"
     os.environ[ENV_RUNTIME_SESSION_ID] = "runtime-session-1"
 
 

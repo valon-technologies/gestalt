@@ -1,19 +1,14 @@
-import { connect } from "node:net";
-
-import { createClient, type Client, type Interceptor } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
+import { createClient, type Client } from "@connectrpc/connect";
 
 import { Cache as CacheService } from "./internal/gen/v1/cache_pb.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import type { MaybePromise } from "./api.ts";
-
-/** Base environment variable for discovering cache runtime sockets. */
-export const ENV_CACHE_SOCKET = "GESTALT_CACHE_SOCKET";
-const CACHE_SOCKET_TOKEN_SUFFIX = "_TOKEN";
-const CACHE_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
-/** Base environment variable for the default cache relay token. */
-export const ENV_CACHE_SOCKET_TOKEN =
-  `${ENV_CACHE_SOCKET}${CACHE_SOCKET_TOKEN_SUFFIX}`;
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  requireHostServiceTarget,
+} from "./host-service.ts";
 
 /**
  * Single cache entry used by batch cache APIs.
@@ -51,60 +46,6 @@ export interface CacheProviderOptions extends ProviderBaseOptions {
 }
 
 /**
- * Returns the environment variable name used to discover a cache socket.
- */
-export function cacheSocketEnv(name?: string): string {
-  const trimmed = name?.trim() ?? "";
-  if (!trimmed) {
-    return ENV_CACHE_SOCKET;
-  }
-  return `${ENV_CACHE_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/gu, "_").toUpperCase()}`;
-}
-
-/**
- * Returns the environment variable name used to discover a cache relay token.
- */
-export function cacheSocketTokenEnv(name?: string): string {
-  return `${cacheSocketEnv(name)}${CACHE_SOCKET_TOKEN_SUFFIX}`;
-}
-
-function cacheTransportOptions(rawTarget: string): {
-  baseUrl: string;
-  nodeOptions?: { path: string };
-} {
-  const target = rawTarget.trim();
-  if (!target) {
-    throw new Error("cache transport target is required");
-  }
-  if (target.startsWith("tcp://")) {
-    const address = target.slice("tcp://".length).trim();
-    if (!address) {
-      throw new Error(`cache tcp target ${JSON.stringify(rawTarget)} is missing host:port`);
-    }
-    return { baseUrl: `http://${address}` };
-  }
-  if (target.startsWith("tls://")) {
-    const address = target.slice("tls://".length).trim();
-    if (!address) {
-      throw new Error(`cache tls target ${JSON.stringify(rawTarget)} is missing host:port`);
-    }
-    return { baseUrl: `https://${address}` };
-  }
-  if (target.startsWith("unix://")) {
-    const socketPath = target.slice("unix://".length).trim();
-    if (!socketPath) {
-      throw new Error(`cache unix target ${JSON.stringify(rawTarget)} is missing a socket path`);
-    }
-    return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
-  }
-  if (target.includes("://")) {
-    const parsed = new URL(target);
-    throw new Error(`Unsupported cache target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`);
-  }
-  return { baseUrl: "http://localhost", nodeOptions: { path: target } };
-}
-
-/**
  * Client for invoking a host-provided cache over the Gestalt transport.
  *
  * @example
@@ -119,33 +60,11 @@ export class Cache {
   private readonly client: Client<typeof CacheService>;
 
   constructor(name?: string) {
-    const envName = cacheSocketEnv(name);
-    const target = process.env[envName];
-    if (!target) {
-      throw new Error(`cache: ${envName} is not set`);
-    }
-    const token = process.env[cacheSocketTokenEnv(name)]?.trim() ?? "";
-    const transportOptions = cacheTransportOptions(target);
-    const interceptors: Interceptor[] = token
-      ? [
-          (next) => async (req) => {
-            req.header.set(CACHE_RELAY_TOKEN_HEADER, token);
-            return await next(req);
-          },
-        ]
-      : [];
-    const transport = createGrpcTransport({
-      ...transportOptions,
-      ...(transportOptions.nodeOptions
-        ? {
-            nodeOptions: {
-              createConnection: () =>
-                connect({ path: transportOptions.nodeOptions!.path }),
-            },
-          }
-        : {}),
-      interceptors,
-    });
+    const { target, token } = requireHostServiceTarget("cache");
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("cache", target),
+      hostServiceMetadataInterceptors(token, name?.trim() ?? ""),
+    );
     this.client = createClient(CacheService, transport);
   }
 

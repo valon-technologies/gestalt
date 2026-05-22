@@ -1,12 +1,16 @@
-import { connect } from "node:net";
 import { Writable } from "node:stream";
 
 import {
   createClient,
   type Client,
-  type Interceptor,
 } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+} from "./host-service.ts";
 
 import {
   PluginRuntimeLogHost as PluginRuntimeLogHostService,
@@ -14,15 +18,8 @@ import {
 } from "./internal/gen/v1/pluginruntime_pb.ts";
 import { timestampFromDate } from "./protocol.ts";
 
-/** Environment variable containing the runtime-log host-service target. */
-export const ENV_RUNTIME_LOG_HOST_SOCKET = "GESTALT_RUNTIME_LOG_SOCKET";
-/** Environment variable containing the optional runtime-log relay token. */
-export const ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN =
-  `${ENV_RUNTIME_LOG_HOST_SOCKET}_TOKEN`;
 /** Environment variable containing the current plugin-runtime session id. */
 export const ENV_RUNTIME_SESSION_ID = "GESTALT_RUNTIME_SESSION_ID";
-
-const RUNTIME_LOG_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
 
 /** Named runtime log streams accepted by the authored SDK. */
 export type RuntimeLogStreamName = "stdout" | "stderr" | "runtime";
@@ -78,29 +75,18 @@ export class RuntimeLogHost {
   private sourceSeq = 0n;
 
   constructor() {
-    const target = process.env[ENV_RUNTIME_LOG_HOST_SOCKET];
+    const target = process.env[ENV_HOST_SERVICE_SOCKET]?.trim();
     if (!target) {
       throw new Error(
-        `runtime log host: ${ENV_RUNTIME_LOG_HOST_SOCKET} is not set`,
+        `runtime log host: ${ENV_HOST_SERVICE_SOCKET} is not set`,
       );
     }
     const relayToken =
-      process.env[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN]?.trim() ?? "";
-    const transportOptions = runtimeLogTransportOptions(target);
-    const transport = createGrpcTransport({
-      ...transportOptions,
-      ...(transportOptions.nodeOptions
-        ? {
-            nodeOptions: {
-              createConnection: () =>
-                connect({ path: transportOptions.nodeOptions!.path }),
-            },
-          }
-        : {}),
-      interceptors: relayToken
-        ? [runtimeLogRelayTokenInterceptor(relayToken)]
-        : [],
-    });
+      process.env[ENV_HOST_SERVICE_TOKEN]?.trim() ?? "";
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("runtime log host", target),
+      hostServiceMetadataInterceptors(relayToken, ""),
+    );
     this.client = createClient(PluginRuntimeLogHostService, transport);
   }
 
@@ -212,57 +198,6 @@ function addRuntimeLogSessionId(values: Set<string>, sessionId?: string): void {
   if (value) {
     values.add(value);
   }
-}
-
-function runtimeLogTransportOptions(rawTarget: string): {
-  baseUrl: string;
-  nodeOptions?: { path: string };
-} {
-  const target = rawTarget.trim();
-  if (!target) {
-    throw new Error("runtime log host: transport target is required");
-  }
-  if (target.startsWith("tcp://")) {
-    const address = target.slice("tcp://".length).trim();
-    if (!address) {
-      throw new Error(
-        `runtime log host: tcp target ${JSON.stringify(rawTarget)} is missing host:port`,
-      );
-    }
-    return { baseUrl: `http://${address}` };
-  }
-  if (target.startsWith("tls://")) {
-    const address = target.slice("tls://".length).trim();
-    if (!address) {
-      throw new Error(
-        `runtime log host: tls target ${JSON.stringify(rawTarget)} is missing host:port`,
-      );
-    }
-    return { baseUrl: `https://${address}` };
-  }
-  if (target.startsWith("unix://")) {
-    const socketPath = target.slice("unix://".length).trim();
-    if (!socketPath) {
-      throw new Error(
-        `runtime log host: unix target ${JSON.stringify(rawTarget)} is missing a socket path`,
-      );
-    }
-    return { baseUrl: "http://localhost", nodeOptions: { path: socketPath } };
-  }
-  if (target.includes("://")) {
-    const parsed = new URL(target);
-    throw new Error(
-      `runtime log host: unsupported target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`,
-    );
-  }
-  return { baseUrl: "http://localhost", nodeOptions: { path: target } };
-}
-
-function runtimeLogRelayTokenInterceptor(token: string): Interceptor {
-  return (next) => async (req) => {
-    req.header.set(RUNTIME_LOG_RELAY_TOKEN_HEADER, token);
-    return await next(req);
-  };
 }
 
 function runtimeLogAppendResponseFromProto(

@@ -13,15 +13,15 @@ import {
   PluginRuntimeLogStream,
 } from "../src/internal/gen/v1/pluginruntime_pb.ts";
 import {
-  ENV_RUNTIME_LOG_HOST_SOCKET,
-  ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN,
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
   ENV_RUNTIME_SESSION_ID,
   RuntimeLogHost,
 } from "../src/index.ts";
 
 test("RuntimeLogHost appends logs and forwards relay token env", async () => {
-  const previousSocket = process.env[ENV_RUNTIME_LOG_HOST_SOCKET];
-  const previousToken = process.env[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
+  const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const previousSession = process.env[ENV_RUNTIME_SESSION_ID];
   const calls: AppendPluginRuntimeLogsRequest[] = [];
   const seenTokens: string[] = [];
@@ -59,8 +59,8 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
     });
     const address = server.address() as AddressInfo;
 
-    process.env[ENV_RUNTIME_LOG_HOST_SOCKET] = `tcp://127.0.0.1:${address.port}`;
-    process.env[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN] =
+    process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://127.0.0.1:${address.port}`;
+    process.env[ENV_HOST_SERVICE_TOKEN] =
       "relay-token-typescript";
     process.env[ENV_RUNTIME_SESSION_ID] = "runtime-session-1";
 
@@ -134,14 +134,14 @@ test("RuntimeLogHost appends logs and forwards relay token env", async () => {
     expect(calls[3]?.logs[0]?.sourceSeq).toBe(11n);
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_RUNTIME_LOG_HOST_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_RUNTIME_LOG_HOST_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
     if (previousToken === undefined) {
-      delete process.env[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN];
+      delete process.env[ENV_HOST_SERVICE_TOKEN];
     } else {
-      process.env[ENV_RUNTIME_LOG_HOST_SOCKET_TOKEN] = previousToken;
+      process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
     }
     if (previousSession === undefined) {
       delete process.env[ENV_RUNTIME_SESSION_ID];

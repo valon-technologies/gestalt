@@ -6,6 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	"github.com/valon-technologies/gestalt/server/services/internal/protoutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -61,7 +62,7 @@ func httpSubjectRequestProto(req *core.HTTPSubjectResolveRequest) (*proto.HTTPSu
 		return nil, nil
 	}
 
-	params, err := structFromMap(req.Params)
+	params, err := protoutil.StructFromMap(req.Params)
 	if err != nil {
 		return nil, err
 	}

@@ -26,8 +26,8 @@ import {
 } from "../src/internal/gen/v1/agent_pb.ts";
 import {
   AgentManager,
-  ENV_AGENT_MANAGER_SOCKET,
-  ENV_AGENT_MANAGER_SOCKET_TOKEN,
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
   request,
 } from "../src/index.ts";
 import { removeTempDir } from "./helpers.ts";
@@ -35,7 +35,7 @@ import { removeTempDir } from "./helpers.ts";
 test("AgentManager forwards invocation tokens across session, turn, and interaction calls", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "gts-agent-manager-"));
   const socketPath = join(tempDir, "agent-manager.sock");
-  const previousSocket = process.env[ENV_AGENT_MANAGER_SOCKET];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
   const calls: Array<{
     method: string;
     invocationToken: string;
@@ -256,7 +256,7 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
       });
     });
 
-    process.env[ENV_AGENT_MANAGER_SOCKET] = socketPath;
+    process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 
     const fromHandle = new AgentManager("invocation-token-123");
     const session = await fromHandle.createSession({
@@ -397,9 +397,9 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
     ]);
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_AGENT_MANAGER_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_AGENT_MANAGER_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
     if (server.listening) {
       await new Promise<void>((resolve) => {
@@ -411,18 +411,18 @@ test("AgentManager forwards invocation tokens across session, turn, and interact
 });
 
 test("AgentManager prioritizes invocation-token validation over socket configuration", () => {
-  const previousSocket = process.env[ENV_AGENT_MANAGER_SOCKET];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
 
   try {
-    delete process.env[ENV_AGENT_MANAGER_SOCKET];
+    delete process.env[ENV_HOST_SERVICE_SOCKET];
     expect(() => new AgentManager("   ")).toThrow(
       "agent manager: invocation token is not available",
     );
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_AGENT_MANAGER_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_AGENT_MANAGER_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
   }
 });
@@ -451,8 +451,8 @@ async function reserveTCPAddress(): Promise<string> {
 }
 
 test("AgentManager honors tcp target env and relay token env", async () => {
-  const previousSocket = process.env[ENV_AGENT_MANAGER_SOCKET];
-  const previousToken = process.env[ENV_AGENT_MANAGER_SOCKET_TOKEN];
+  const previousSocket = process.env[ENV_HOST_SERVICE_SOCKET];
+  const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
   const seenTokens: string[] = [];
   const address = await reserveTCPAddress();
 
@@ -490,8 +490,8 @@ test("AgentManager honors tcp target env and relay token env", async () => {
       });
     });
 
-    process.env[ENV_AGENT_MANAGER_SOCKET] = `tcp://${address}`;
-    process.env[ENV_AGENT_MANAGER_SOCKET_TOKEN] = "relay-token-typescript";
+    process.env[ENV_HOST_SERVICE_SOCKET] = `tcp://${address}`;
+    process.env[ENV_HOST_SERVICE_TOKEN] = "relay-token-typescript";
 
     const manager = new AgentManager("invoke-token");
     const session = await manager.createSession({
@@ -504,14 +504,14 @@ test("AgentManager honors tcp target env and relay token env", async () => {
     expect(seenTokens).toEqual(["relay-token-typescript"]);
   } finally {
     if (previousSocket === undefined) {
-      delete process.env[ENV_AGENT_MANAGER_SOCKET];
+      delete process.env[ENV_HOST_SERVICE_SOCKET];
     } else {
-      process.env[ENV_AGENT_MANAGER_SOCKET] = previousSocket;
+      process.env[ENV_HOST_SERVICE_SOCKET] = previousSocket;
     }
     if (previousToken === undefined) {
-      delete process.env[ENV_AGENT_MANAGER_SOCKET_TOKEN];
+      delete process.env[ENV_HOST_SERVICE_TOKEN];
     } else {
-      process.env[ENV_AGENT_MANAGER_SOCKET_TOKEN] = previousToken;
+      process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
     }
     if (server.listening) {
       await new Promise<void>((resolve) => {

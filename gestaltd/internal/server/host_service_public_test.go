@@ -21,13 +21,44 @@ func TestHostServiceHandlerReturnsVerifierError(t *testing.T) {
 		PluginName: "support",
 		SessionID:  "session-1",
 		Service:    "cache",
-		EnvVar:     "GESTALT_TEST_CACHE_SOCKET",
-	})
+	}, "/gestalt.provider.v1.Cache/Get")
 	if err == nil || !strings.Contains(err.Error(), `runtime session "session-1" is not active`) {
 		t.Fatalf("hostServiceHandler err = %v, want verifier failure", err)
 	}
 	if handler != nil {
 		t.Fatalf("handler = %v, want no handler", handler)
+	}
+}
+
+func TestUnifiedHostServiceHandlerRoutesByGRPCMethod(t *testing.T) {
+	t.Parallel()
+
+	registry := runtimehost.NewPublicHostServiceRegistry()
+	registry.RegisterVerified("support", allowHostServiceSessionVerifier{}, testHostService())
+	s := &Server{publicHostServices: registry}
+
+	handler, err := s.hostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
+		PluginName: "support",
+		SessionID:  "session-1",
+		Service:    "host_service",
+	}, "/gestalt.provider.v1.Cache/Get")
+	if err != nil {
+		t.Fatalf("hostServiceHandler: %v", err)
+	}
+	if handler == nil {
+		t.Fatal("handler = nil, want cache handler")
+	}
+
+	handler, err = s.hostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
+		PluginName: "support",
+		SessionID:  "session-1",
+		Service:    "host_service",
+	}, "/gestalt.provider.v1.S3/ListObjects")
+	if err != nil {
+		t.Fatalf("hostServiceHandler unregistered method: %v", err)
+	}
+	if handler != nil {
+		t.Fatal("handler for unregistered method is non-nil")
 	}
 }
 
@@ -37,7 +68,7 @@ func TestValidatePublicHostServicesRejectsProviderWideServiceWithoutVerifier(t *
 	err := validatePublicHostServices([]runtimehost.PublicHostService{
 		testPublicHostService("support", nil),
 	})
-	if err == nil || !strings.Contains(err.Error(), "public host service support/cache/GESTALT_TEST_CACHE_SOCKET requires a session verifier") {
+	if err == nil || !strings.Contains(err.Error(), "public host service support requires a session verifier") {
 		t.Fatalf("validatePublicHostServices err = %v, want missing verifier failure", err)
 	}
 }
@@ -64,9 +95,9 @@ func testPublicHostService(pluginName string, verifier runtimehost.PublicHostSer
 
 func testHostService() runtimehost.HostService {
 	return runtimehost.HostService{
-		Name:     "cache",
-		EnvVar:   "GESTALT_TEST_CACHE_SOCKET",
-		Register: func(*grpc.Server) {},
+		Name:           "cache",
+		MethodPrefixes: []string{"/gestalt.provider.v1.Cache/"},
+		Register:       func(*grpc.Server) {},
 	}
 }
 

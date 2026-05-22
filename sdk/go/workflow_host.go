@@ -2,19 +2,10 @@ package gestalt
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
-
-// EnvWorkflowHostSocket names the environment variable containing the workflow-host
-// service target.
-const EnvWorkflowHostSocket = "GESTALT_WORKFLOW_HOST_SOCKET"
-
-// EnvWorkflowHostSocketToken names the optional workflow-host relay-token variable.
-const EnvWorkflowHostSocketToken = EnvWorkflowHostSocket + "_TOKEN"
 
 // WorkflowHostClient invokes operations from workflow provider code.
 type WorkflowHostClient struct {
@@ -60,11 +51,10 @@ func (r *InvokeWorkflowOperationResponse) GetBody() string {
 
 // WorkflowHost returns a shared client for the workflow host service.
 func WorkflowHost() (*WorkflowHostClient, error) {
-	target := os.Getenv(EnvWorkflowHostSocket)
-	if target == "" {
-		return nil, fmt.Errorf("workflow host: %s is not set", EnvWorkflowHostSocket)
+	target, token, err := hostServiceTarget("workflow host")
+	if err != nil {
+		return nil, err
 	}
-	token := os.Getenv(EnvWorkflowHostSocketToken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -6,11 +6,11 @@ import { spawn, type Subprocess } from "bun";
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
+import { Cache } from "../src/cache.ts";
 import {
-  Cache,
-  cacheSocketEnv,
-  cacheSocketTokenEnv,
-} from "../src/cache.ts";
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
+} from "../src/host-service.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 const GESTALTD_DIR = join(REPO_ROOT, "gestaltd");
@@ -54,8 +54,7 @@ beforeAll(async () => {
   }
   reader.releaseLock();
 
-  process.env.GESTALT_CACHE_SOCKET = socketPath;
-  process.env[cacheSocketEnv("named")] = `unix://${socketPath}`;
+  process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 }, 60_000);
 
 async function reserveTCPAddress(): Promise<string> {
@@ -107,9 +106,8 @@ async function startTCPHarness(expectToken?: string): Promise<{ proc: Subprocess
 
 afterAll(() => {
   proc?.kill();
-  delete process.env.GESTALT_CACHE_SOCKET;
-  delete process.env[cacheSocketEnv("named")];
-  delete process.env[cacheSocketTokenEnv()];
+  delete process.env[ENV_HOST_SERVICE_SOCKET];
+  delete process.env[ENV_HOST_SERVICE_TOKEN];
   if (tmpDir) {
     rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -122,42 +120,55 @@ describe("Cache transport", () => {
     expect(decoder.decode((await cache.get("unix-key"))!)).toBe("unix-value");
   });
 
-  test("named socket env selects the requested binding", async () => {
+  test("named binding round-trip", async () => {
     const cache = new Cache("named");
     await cache.set("named-key", encoder.encode("named-value"));
     expect(decoder.decode((await cache.get("named-key"))!)).toBe("named-value");
   });
 
-  test("tcp target env selects the requested binding", async () => {
+  test("tcp target round-trip", async () => {
     const { proc: tcpProc, target } = await startTCPHarness();
-    process.env.GESTALT_CACHE_SOCKET = target;
+    const previousTarget = process.env[ENV_HOST_SERVICE_SOCKET];
+    process.env[ENV_HOST_SERVICE_SOCKET] = target;
     try {
-      const cache = new Cache();
+      const cache = new Cache("tcp");
       await cache.set("tcp-key", encoder.encode("tcp-value"));
       expect(decoder.decode((await cache.get("tcp-key"))!)).toBe("tcp-value");
     } finally {
       tcpProc.kill();
-      delete process.env.GESTALT_CACHE_SOCKET;
-      process.env.GESTALT_CACHE_SOCKET = socketPath;
+      if (previousTarget === undefined) {
+        delete process.env[ENV_HOST_SERVICE_SOCKET];
+      } else {
+        process.env[ENV_HOST_SERVICE_SOCKET] = previousTarget;
+      }
     }
   });
 
-  test("tcp target token env selects the requested binding", async () => {
+  test("tcp target token round-trip", async () => {
     const token = "relay-token-typescript";
     const { proc: tcpProc, target } = await startTCPHarness(token);
-    process.env.GESTALT_CACHE_SOCKET = target;
-    process.env[cacheSocketTokenEnv()] = token;
+    const previousTarget = process.env[ENV_HOST_SERVICE_SOCKET];
+    const previousToken = process.env[ENV_HOST_SERVICE_TOKEN];
+    process.env[ENV_HOST_SERVICE_SOCKET] = target;
+    process.env[ENV_HOST_SERVICE_TOKEN] = token;
     try {
-      const cache = new Cache();
+      const cache = new Cache("tcp-token");
       await cache.set("tcp-token-key", encoder.encode("tcp-token-value"));
       expect(decoder.decode((await cache.get("tcp-token-key"))!)).toBe(
         "tcp-token-value",
       );
     } finally {
       tcpProc.kill();
-      delete process.env.GESTALT_CACHE_SOCKET;
-      delete process.env[cacheSocketTokenEnv()];
-      process.env.GESTALT_CACHE_SOCKET = socketPath;
+      if (previousTarget === undefined) {
+        delete process.env[ENV_HOST_SERVICE_SOCKET];
+      } else {
+        process.env[ENV_HOST_SERVICE_SOCKET] = previousTarget;
+      }
+      if (previousToken === undefined) {
+        delete process.env[ENV_HOST_SERVICE_TOKEN];
+      } else {
+        process.env[ENV_HOST_SERVICE_TOKEN] = previousToken;
+      }
     }
   });
 });

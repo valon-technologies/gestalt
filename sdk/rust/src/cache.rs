@@ -12,18 +12,13 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Uri};
 use tower::service_fn;
 
 use crate::api::RuntimeMetadata;
+use crate::env::{ENV_HOST_SERVICE_SOCKET, ENV_HOST_SERVICE_TOKEN, HOST_SERVICE_BINDING_HEADER};
 use crate::error::Result;
 use crate::generated::v1::{self as pb, cache_client::CacheClient};
 
 type CacheTransport = InterceptedService<Channel, RelayTokenInterceptor>;
 
-/// Default Unix-socket environment variable used by [`Cache::connect`].
-pub const ENV_CACHE_SOCKET: &str = "GESTALT_CACHE_SOCKET";
-/// Default relay-token environment variable used by [`Cache::connect`].
-pub const ENV_CACHE_SOCKET_TOKEN: &str = "GESTALT_CACHE_SOCKET_TOKEN";
-const ENV_CACHE_SOCKET_TOKEN_SUFFIX: &str = "_TOKEN";
 const CACHE_RELAY_TOKEN_HEADER: &str = "x-gestalt-host-service-relay-token";
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// One cache entry written through [`Cache::set_many`].
 pub struct CacheEntry {
@@ -154,11 +149,9 @@ impl Cache {
 
     /// Connects to a named cache transport socket.
     pub async fn connect_named(name: &str) -> std::result::Result<Self, CacheError> {
-        let env_name = cache_socket_env(name);
-        let target = std::env::var(&env_name)
-            .map_err(|_| CacheError::Env(format!("{env_name} is not set")))?;
-        let relay_token =
-            std::env::var(cache_socket_token_env(name)).unwrap_or_else(|_| String::new());
+        let target = std::env::var(ENV_HOST_SERVICE_SOCKET)
+            .map_err(|_| CacheError::Env(format!("{ENV_HOST_SERVICE_SOCKET} is not set")))?;
+        let relay_token = std::env::var(ENV_HOST_SERVICE_TOKEN).unwrap_or_default();
 
         let channel = match parse_cache_target(&target)? {
             CacheTarget::Unix(path) => {
@@ -185,7 +178,7 @@ impl Cache {
         Ok(Self {
             client: CacheClient::with_interceptor(
                 channel,
-                relay_token_interceptor(relay_token.trim())?,
+                relay_token_interceptor(relay_token.trim(), name)?,
             ),
         })
     }
@@ -311,36 +304,6 @@ impl Cache {
     }
 }
 
-/// Returns the environment variable used for a named cache socket.
-pub fn cache_socket_env(name: &str) -> String {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return ENV_CACHE_SOCKET.to_string();
-    }
-    let mut env = String::from(ENV_CACHE_SOCKET);
-    env.push('_');
-    for ch in trimmed.chars() {
-        if ch.is_ascii_alphanumeric() {
-            env.push(ch.to_ascii_uppercase());
-        } else {
-            env.push('_');
-        }
-    }
-    env
-}
-
-/// Returns the environment variable used for a named cache relay token.
-pub fn cache_socket_token_env(name: &str) -> String {
-    if name.trim().is_empty() {
-        return ENV_CACHE_SOCKET_TOKEN.to_string();
-    }
-    format!(
-        "{env}{}",
-        ENV_CACHE_SOCKET_TOKEN_SUFFIX,
-        env = cache_socket_env(name)
-    )
-}
-
 enum CacheTarget {
     Unix(String),
     Tcp(String),
@@ -390,8 +353,11 @@ fn parse_cache_target(raw_target: &str) -> std::result::Result<CacheTarget, Cach
     Ok(CacheTarget::Unix(target.to_string()))
 }
 
-fn relay_token_interceptor(token: &str) -> std::result::Result<RelayTokenInterceptor, CacheError> {
-    let header =
+fn relay_token_interceptor(
+    token: &str,
+    binding: &str,
+) -> std::result::Result<RelayTokenInterceptor, CacheError> {
+    let relay_token =
         if token.trim().is_empty() {
             None
         } else {
@@ -399,12 +365,24 @@ fn relay_token_interceptor(token: &str) -> std::result::Result<RelayTokenInterce
                 CacheError::Env(format!("invalid cache relay token metadata: {err}"))
             })?)
         };
-    Ok(RelayTokenInterceptor { header })
+    let binding = if binding.trim().is_empty() {
+        None
+    } else {
+        Some(
+            MetadataValue::try_from(binding.trim().to_string())
+                .map_err(|err| CacheError::Env(format!("invalid cache binding metadata: {err}")))?,
+        )
+    };
+    Ok(RelayTokenInterceptor {
+        relay_token,
+        binding,
+    })
 }
 
 #[derive(Clone)]
 struct RelayTokenInterceptor {
-    header: Option<MetadataValue<tonic::metadata::Ascii>>,
+    relay_token: Option<MetadataValue<tonic::metadata::Ascii>>,
+    binding: Option<MetadataValue<tonic::metadata::Ascii>>,
 }
 
 impl Interceptor for RelayTokenInterceptor {
@@ -412,10 +390,15 @@ impl Interceptor for RelayTokenInterceptor {
         &mut self,
         mut request: Request<()>,
     ) -> std::result::Result<Request<()>, tonic::Status> {
-        if let Some(header) = self.header.clone() {
+        if let Some(header) = self.relay_token.clone() {
             request
                 .metadata_mut()
                 .insert(CACHE_RELAY_TOKEN_HEADER, header);
+        }
+        if let Some(header) = self.binding.clone() {
+            request
+                .metadata_mut()
+                .insert(HOST_SERVICE_BINDING_HEADER, header);
         }
         Ok(request)
     }

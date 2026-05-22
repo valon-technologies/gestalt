@@ -5,10 +5,10 @@ use std::io::{BufRead, BufReader};
 use std::net::TcpListener;
 use std::process::{Command, Stdio};
 
+use gestalt::ENV_HOST_SERVICE_SOCKET;
 use gestalt::indexeddb::{
-    CursorDirection, ENV_INDEXEDDB_SOCKET, IndexSchema, IndexedDB, IndexedDBError, KeyRange,
-    ObjectStoreSchema, Record, TransactionMode, TransactionOptions, indexeddb_socket_env,
-    indexeddb_socket_token_env,
+    CursorDirection, IndexSchema, IndexedDB, IndexedDBError, KeyRange, ObjectStoreSchema, Record,
+    TransactionMode, TransactionOptions,
 };
 
 struct Harness {
@@ -66,7 +66,7 @@ async fn start_harness(socket_name: &str) -> Harness {
         line.trim()
     );
 
-    let env_guard = helpers::EnvGuard::set(ENV_INDEXEDDB_SOCKET, socket.as_os_str());
+    let env_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
     Harness {
         child,
         _env_guard: env_guard,
@@ -122,7 +122,8 @@ async fn start_tcp_harness(expect_token: Option<&str>) -> Harness {
         line.trim()
     );
 
-    let env_guard = helpers::EnvGuard::set(ENV_INDEXEDDB_SOCKET, format!("tcp://{address}"));
+    let env_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
     Harness {
         child,
         _env_guard: env_guard,
@@ -174,10 +175,10 @@ async fn named_unix_target_round_trip() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_harness("idb-named.sock").await;
     let _named_env = helpers::EnvGuard::set(
-        indexeddb_socket_env("named"),
+        ENV_HOST_SERVICE_SOCKET,
         format!(
             "unix://{}",
-            std::env::var(ENV_INDEXEDDB_SOCKET).expect("default socket")
+            std::env::var(gestalt::ENV_HOST_SERVICE_SOCKET).expect("default socket")
         ),
     );
 
@@ -203,7 +204,7 @@ async fn named_unix_target_round_trip() {
 async fn tcp_target_with_token_round_trip() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_tcp_harness(Some("relay-token-rust")).await;
-    let _token_env = helpers::EnvGuard::set(indexeddb_socket_token_env(""), "relay-token-rust");
+    let _token_env = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
     let mut db = IndexedDB::connect().await.expect("connect");
     db.create_object_store(

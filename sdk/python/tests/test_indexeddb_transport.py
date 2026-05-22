@@ -13,6 +13,8 @@ import grpc
 
 from gestalt import (
     CURSOR_NEXT,
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
     AlreadyExistsError,
     IndexedDB,
     IndexSchema,
@@ -20,8 +22,6 @@ from gestalt import (
     NotFoundError,
     ObjectStoreSchema,
     TransactionError,
-    indexeddb_socket_env,
-    indexeddb_socket_token_env,
 )
 
 
@@ -121,8 +121,7 @@ def setUpModule() -> None:
     if line != "READY":
         _harness_proc.kill()
         raise RuntimeError(f"harness did not print READY, got: {line!r}")
-    os.environ["GESTALT_INDEXEDDB_SOCKET"] = _socket_path
-    os.environ[indexeddb_socket_env("named")] = f"unix://{_socket_path}"
+    os.environ[ENV_HOST_SERVICE_SOCKET] = _socket_path
 
 
 def tearDownModule() -> None:
@@ -358,9 +357,9 @@ class TestTCPTarget(unittest.TestCase):
         proc, target = _start_tcp_harness()
         self.addCleanup(proc.wait)
         self.addCleanup(proc.kill)
-        _set_env(self, "GESTALT_INDEXEDDB_SOCKET", target)
+        _set_env(self, ENV_HOST_SERVICE_SOCKET, target)
 
-        c = _client()
+        c = IndexedDB("tcp")
         c.create_object_store("tcp_target_env")
         s = c.object_store("tcp_target_env")
         s.put({"id": "row-1", "value": "tcp"})
@@ -373,10 +372,10 @@ class TestTCPTarget(unittest.TestCase):
         proc, target = _start_tcp_harness(expect_token=token)
         self.addCleanup(proc.wait)
         self.addCleanup(proc.kill)
-        _set_env(self, "GESTALT_INDEXEDDB_SOCKET", target)
-        _set_env(self, indexeddb_socket_token_env(), token)
+        _set_env(self, ENV_HOST_SERVICE_SOCKET, target)
+        _set_env(self, ENV_HOST_SERVICE_TOKEN, token)
 
-        c = _client()
+        c = IndexedDB("tcp-token")
         c.create_object_store("tcp_target_token_env")
         s = c.object_store("tcp_target_token_env")
         s.put({"id": "row-1", "value": "token"})
@@ -390,8 +389,8 @@ class TestTCPTarget(unittest.TestCase):
         self.addCleanup(proc.wait)
         self.addCleanup(proc.kill)
 
-        target_env = "GESTALT_INDEXEDDB_SOCKET"
-        token_env = indexeddb_socket_token_env()
+        target_env = ENV_HOST_SERVICE_SOCKET
+        token_env = ENV_HOST_SERVICE_TOKEN
         previous_target = os.environ.get(target_env)
         previous_token = os.environ.get(token_env)
         previous_http_proxy = os.environ.get("http_proxy")
@@ -421,7 +420,7 @@ class TestTCPTarget(unittest.TestCase):
         os.environ["https_proxy"] = "http://127.0.0.1:1"
         self.addCleanup(restore_env)
 
-        c = _client()
+        c = IndexedDB("tcp-token")
         c.create_object_store("tcp_target_proxy_env")
         s = c.object_store("tcp_target_proxy_env")
         s.put({"id": "row-1", "value": "proxy-bypass"})
@@ -441,8 +440,8 @@ class TestTLSRelayTarget(unittest.TestCase):
         self.addCleanup(shutil.rmtree, temp_dir, True)
 
         restore_names = [
-            "GESTALT_INDEXEDDB_SOCKET",
-            indexeddb_socket_token_env(),
+            ENV_HOST_SERVICE_SOCKET,
+            ENV_HOST_SERVICE_TOKEN,
             "GRPC_DEFAULT_SSL_ROOTS_FILE_PATH",
             "http_proxy",
             "https_proxy",
@@ -458,8 +457,8 @@ class TestTLSRelayTarget(unittest.TestCase):
                 else:
                     os.environ[name] = value
 
-        os.environ["GESTALT_INDEXEDDB_SOCKET"] = target
-        os.environ[indexeddb_socket_token_env()] = token
+        os.environ[ENV_HOST_SERVICE_SOCKET] = target
+        os.environ[ENV_HOST_SERVICE_TOKEN] = token
         os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = cert_path
         os.environ["http_proxy"] = "http://127.0.0.1:1"
         os.environ["https_proxy"] = "http://127.0.0.1:1"
@@ -467,7 +466,7 @@ class TestTLSRelayTarget(unittest.TestCase):
         os.environ["HTTPS_PROXY"] = "http://127.0.0.1:1"
         self.addCleanup(restore_env)
 
-        c = _client()
+        c = IndexedDB("tls-relay")
         c.create_object_store("tls_relay_target_env")
         s = c.object_store("tls_relay_target_env")
         s.put({"id": "row-1", "value": "tls-relay"})

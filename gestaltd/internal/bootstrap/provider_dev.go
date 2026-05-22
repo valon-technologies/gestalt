@@ -168,13 +168,11 @@ func providerDevEntryIsLocal(entry *config.ProviderEntry) bool {
 func buildProviderDevRuntimeEnv(name string, entry *config.ProviderEntry, deps Deps, sessionID string, hostServices []hostServiceBindingDescriptor) (providerdev.RuntimeEnv, error) {
 	env := withRuntimeSessionEnv(map[string]string{}, sessionID)
 	env = withHostServiceTLSCAEnv(env, deps)
-	for _, hostService := range hostServices {
-		bindingEnv, _, err := buildHostedRuntimeHostServiceEnv(name, sessionID, hostService, deps)
-		if err != nil {
-			return providerdev.RuntimeEnv{}, err
-		}
-		maps.Copy(env, bindingEnv)
+	bindingEnv, _, err := mergeHostedRuntimeHostServiceRelayEnv(name, sessionID, hostServices, deps)
+	if err != nil {
+		return providerdev.RuntimeEnv{}, err
 	}
+	maps.Copy(env, bindingEnv)
 	if deps.Egress.DefaultAction == egress.PolicyDeny {
 		proxyEnv, err := buildHostedRuntimePublicEgressProxy(name, sessionID, entry.EffectiveAllowedHosts(), deps.Egress.DefaultAction, deps)
 		if err != nil {

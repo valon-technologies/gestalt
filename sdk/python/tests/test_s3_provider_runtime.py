@@ -13,6 +13,7 @@ from typing import Any, Iterable, cast
 import grpc
 
 from gestalt import (
+    ENV_HOST_SERVICE_SOCKET,
     S3,
     ByteRange,
     CopyOptions,
@@ -34,7 +35,6 @@ from gestalt import (
     WriteOptions,
     _grpc_transport,
     _runtime,
-    s3_socket_env,
 )
 from gestalt._gen.v1 import s3_pb2, s3_pb2_grpc
 
@@ -252,15 +252,15 @@ class S3AuthoredProviderRuntimeTests(unittest.TestCase):
     def setUp(self) -> None:
         self.provider = _AuthoredS3Provider()
         self.running = _RunningProvider(self.provider)
-        self.previous_socket = os.environ.get(s3_socket_env())
-        os.environ[s3_socket_env()] = self.running.socket_path
+        self.previous_socket = os.environ.get(ENV_HOST_SERVICE_SOCKET)
+        os.environ[ENV_HOST_SERVICE_SOCKET] = self.running.socket_path
         self.stub = s3_pb2_grpc.S3Stub(self.running.channel)
 
     def tearDown(self) -> None:
         if self.previous_socket is None:
-            os.environ.pop(s3_socket_env(), None)
+            os.environ.pop(ENV_HOST_SERVICE_SOCKET, None)
         else:
-            os.environ[s3_socket_env()] = self.previous_socket
+            os.environ[ENV_HOST_SERVICE_SOCKET] = self.previous_socket
         self.running.close()
 
     def test_client_round_trips_against_authored_provider(self) -> None:

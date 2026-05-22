@@ -26,6 +26,9 @@ var (
 	testClient      *gestalt.IndexedDBClient
 	testCacheClient *gestalt.CacheClient
 	testS3Client    *gestalt.S3Client
+	testIDBSocket   string
+	testCacheSocket string
+	testS3Socket    string
 )
 
 func TestMain(m *testing.M) {
@@ -36,9 +39,11 @@ func TestMain(m *testing.M) {
 	idbBin, idbSock, idbCmd := buildAndStartHarness("indexeddbtransportd", "go-sdk-idb-test.sock")
 	cacheBin, cacheSock, cacheCmd := buildAndStartHarness("cachetransportd", "go-sdk-cache-test.sock")
 	s3Bin, s3Sock, s3Cmd := buildAndStartHarness("s3transportd", "go-sdk-s3-test.sock")
+	testIDBSocket = idbSock
+	testCacheSocket = cacheSock
+	testS3Socket = s3Sock
 
-	os.Setenv(gestalt.EnvIndexedDBSocket, idbSock)
-	os.Setenv(gestalt.IndexedDBSocketEnv("test"), "unix://"+idbSock)
+	os.Setenv(gestalt.EnvHostServiceSocket, idbSock)
 	client, err := gestalt.IndexedDB()
 	if err != nil {
 		_ = idbCmd.Process.Kill()
@@ -48,8 +53,7 @@ func TestMain(m *testing.M) {
 	}
 	testClient = client
 
-	os.Setenv(gestalt.EnvCacheSocket, cacheSock)
-	os.Setenv(gestalt.CacheSocketEnv("test"), cacheSock)
+	os.Setenv(gestalt.EnvHostServiceSocket, cacheSock)
 	cacheClient, err := gestalt.Cache()
 	if err != nil {
 		_ = client.Close()
@@ -60,8 +64,7 @@ func TestMain(m *testing.M) {
 	}
 	testCacheClient = cacheClient
 
-	os.Setenv(gestalt.EnvS3Socket, s3Sock)
-	os.Setenv(gestalt.S3SocketEnv("test"), s3Sock)
+	os.Setenv(gestalt.EnvHostServiceSocket, s3Sock)
 	s3Client, err := gestalt.S3()
 	if err != nil {
 		_ = client.Close()
@@ -161,6 +164,7 @@ func reserveTCPAddress() string {
 }
 
 func TestTransport_NamedSocketEnv(t *testing.T) {
+	t.Setenv(gestalt.EnvHostServiceSocket, "unix://"+testIDBSocket)
 	client, err := gestalt.IndexedDB("test")
 	if err != nil {
 		t.Fatalf("connect named indexeddb: %v", err)
@@ -193,8 +197,8 @@ func TestTransport_TCPTargetEnv(t *testing.T) {
 		_ = os.Remove(bin)
 	})
 
-	t.Setenv(gestalt.EnvIndexedDBSocket, target)
-	client, err := gestalt.IndexedDB()
+	t.Setenv(gestalt.EnvHostServiceSocket, target)
+	client, err := gestalt.IndexedDB("tcp")
 	if err != nil {
 		t.Fatalf("connect tcp indexeddb: %v", err)
 	}
@@ -226,13 +230,13 @@ func TestTransport_TCPTargetTokenEnv(t *testing.T) {
 		_ = os.Remove(bin)
 	})
 
-	t.Setenv(gestalt.EnvIndexedDBSocket, target)
-	t.Setenv(gestalt.IndexedDBSocketTokenEnv(""), token)
+	t.Setenv(gestalt.EnvHostServiceSocket, target)
+	t.Setenv(gestalt.EnvHostServiceToken, token)
 	t.Setenv("http_proxy", "http://127.0.0.1:1")
 	t.Setenv("https_proxy", "http://127.0.0.1:1")
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
-	client, err := gestalt.IndexedDB()
+	client, err := gestalt.IndexedDB("tcp-token")
 	if err != nil {
 		t.Fatalf("connect tcp indexeddb with token: %v", err)
 	}
@@ -285,8 +289,8 @@ func TestTransport_CreateObjectStorePreservesColumns(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvIndexedDBSocket, "tcp://"+address)
-	client, err := gestalt.IndexedDB()
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	client, err := gestalt.IndexedDB("schema")
 	if err != nil {
 		t.Fatalf("IndexedDB: %v", err)
 	}

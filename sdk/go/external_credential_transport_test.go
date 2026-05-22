@@ -287,8 +287,8 @@ func TestTransport_ExternalCredentialTCPTargetTokenEnv(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvExternalCredentialSocket, "tcp://"+address)
-	t.Setenv(gestalt.EnvExternalCredentialSocketToken, "relay-token-go")
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
 	client, err := gestalt.ExternalCredentials()
 	if err != nil {

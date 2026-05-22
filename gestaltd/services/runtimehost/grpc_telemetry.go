@@ -24,14 +24,5 @@ func grpcTelemetryOptions(role, providerName, hostService string, telemetry metr
 }
 
 func hostServiceMetricName(service HostService) string {
-	if service.Name != "" {
-		return strings.TrimSpace(service.Name)
-	}
-	envVar := strings.TrimSpace(service.EnvVar)
-	if envVar == "" {
-		return ""
-	}
-	envVar = strings.TrimPrefix(envVar, "GESTALT_")
-	envVar = strings.TrimSuffix(envVar, "_SOCKET")
-	return strings.ToLower(envVar)
+	return strings.TrimSpace(service.Name)
 }

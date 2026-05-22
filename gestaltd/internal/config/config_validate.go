@@ -21,7 +21,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
-	"github.com/valon-technologies/gestalt/server/services/s3"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowgrants"
 )
 
@@ -1997,7 +1996,6 @@ func validatePluginS3Bindings(cfg *Config, name string, entry *ProviderEntry) er
 		return nil
 	}
 	seen := make(map[string]struct{}, len(entry.S3))
-	envNames := make(map[string]string, len(entry.S3))
 	for i, binding := range entry.S3 {
 		binding = strings.TrimSpace(binding)
 		if binding == "" {
@@ -2010,12 +2008,7 @@ func validatePluginS3Bindings(cfg *Config, name string, entry *ProviderEntry) er
 		if !ok || boundEntry == nil {
 			return fmt.Errorf("config validation: plugin %q s3[%d] references unknown s3 %q", name, i, binding)
 		}
-		envName := s3.SocketEnv(binding)
-		if otherBinding, exists := envNames[envName]; exists {
-			return fmt.Errorf("config validation: plugin %q s3[%d] %q conflicts with %q after S3 env normalization (%s)", name, i, binding, otherBinding, envName)
-		}
 		seen[binding] = struct{}{}
-		envNames[envName] = binding
 		entry.S3[i] = binding
 	}
 	return nil
@@ -2534,7 +2527,6 @@ func validatePluginCacheBindings(cfg *Config, name string, entry *ProviderEntry)
 		return nil
 	}
 	seen := make(map[string]struct{}, len(entry.Cache))
-	envNames := make(map[string]string, len(entry.Cache))
 	for i, binding := range entry.Cache {
 		binding = strings.TrimSpace(binding)
 		if binding == "" {
@@ -2547,36 +2539,10 @@ func validatePluginCacheBindings(cfg *Config, name string, entry *ProviderEntry)
 		if !ok || boundEntry == nil {
 			return fmt.Errorf("config validation: plugin %q cache[%d] references unknown cache %q", name, i, binding)
 		}
-		envName := cacheSocketEnv(binding)
-		if otherBinding, exists := envNames[envName]; exists {
-			return fmt.Errorf("config validation: plugin %q cache[%d] %q conflicts with %q after cache env normalization (%s)", name, i, binding, otherBinding, envName)
-		}
 		entry.Cache[i] = binding
 		seen[binding] = struct{}{}
-		envNames[envName] = binding
 	}
 	return nil
-}
-
-func cacheSocketEnv(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return "GESTALT_CACHE_SOCKET"
-	}
-	var b strings.Builder
-	b.WriteString("GESTALT_CACHE_SOCKET")
-	b.WriteByte('_')
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r - ('a' - 'A'))
-		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
 }
 func normalizeMountedUIPaths(cfg *Config, pluginOwnedUIBindings map[string]struct{}) error {
 	for name, entry := range cfg.Providers.UI {

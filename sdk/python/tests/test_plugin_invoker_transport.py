@@ -15,8 +15,8 @@ import grpc
 from google.protobuf import json_format
 
 from gestalt import (
-    ENV_PLUGIN_INVOKER_SOCKET,
-    ENV_PLUGIN_INVOKER_SOCKET_TOKEN,
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
     PluginInvoker,
     Request,
 )
@@ -151,15 +151,15 @@ def setUpModule() -> None:
     )
     _server.add_insecure_port(f"unix:{_socket_path}")
     _server.start()
-    _previous_socket_env = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET)
-    os.environ[ENV_PLUGIN_INVOKER_SOCKET] = _socket_path
+    _previous_socket_env = os.environ.get(ENV_HOST_SERVICE_SOCKET)
+    os.environ[ENV_HOST_SERVICE_SOCKET] = _socket_path
 
 
 def tearDownModule() -> None:
     if _previous_socket_env is None:
-        os.environ.pop(ENV_PLUGIN_INVOKER_SOCKET, None)
+        os.environ.pop(ENV_HOST_SERVICE_SOCKET, None)
     else:
-        os.environ[ENV_PLUGIN_INVOKER_SOCKET] = _previous_socket_env
+        os.environ[ENV_HOST_SERVICE_SOCKET] = _previous_socket_env
     if _server is not None:
         _server.stop(grace=0).wait()
     if _socket_path and os.path.exists(_socket_path):
@@ -351,10 +351,10 @@ class PluginInvokerTransportTests(unittest.TestCase):
         )
         port = tcp_server.add_insecure_port("127.0.0.1:0")
         tcp_server.start()
-        previous_socket = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET)
-        previous_token = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET_TOKEN)
-        os.environ[ENV_PLUGIN_INVOKER_SOCKET] = f"tcp://127.0.0.1:{port}"
-        os.environ[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = "relay-token-python"
+        previous_socket = os.environ.get(ENV_HOST_SERVICE_SOCKET)
+        previous_token = os.environ.get(ENV_HOST_SERVICE_TOKEN)
+        os.environ[ENV_HOST_SERVICE_SOCKET] = f"tcp://127.0.0.1:{port}"
+        os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-python"
         try:
             with PluginInvoker("invoke-tcp") as client:
                 response = client.invoke("github", "plain_text")
@@ -364,13 +364,13 @@ class PluginInvokerTransportTests(unittest.TestCase):
             self.assertEqual(_relay_tokens, ["relay-token-python"])
         finally:
             if previous_socket is None:
-                os.environ.pop(ENV_PLUGIN_INVOKER_SOCKET, None)
+                os.environ.pop(ENV_HOST_SERVICE_SOCKET, None)
             else:
-                os.environ[ENV_PLUGIN_INVOKER_SOCKET] = previous_socket
+                os.environ[ENV_HOST_SERVICE_SOCKET] = previous_socket
             if previous_token is None:
-                os.environ.pop(ENV_PLUGIN_INVOKER_SOCKET_TOKEN, None)
+                os.environ.pop(ENV_HOST_SERVICE_TOKEN, None)
             else:
-                os.environ[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = previous_token
+                os.environ[ENV_HOST_SERVICE_TOKEN] = previous_token
             tcp_server.stop(grace=0).wait()
 
     def test_tcp_target_ignores_proxy_env(self) -> None:
@@ -381,12 +381,12 @@ class PluginInvokerTransportTests(unittest.TestCase):
         )
         port = tcp_server.add_insecure_port("127.0.0.1:0")
         tcp_server.start()
-        previous_socket = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET)
-        previous_token = os.environ.get(ENV_PLUGIN_INVOKER_SOCKET_TOKEN)
+        previous_socket = os.environ.get(ENV_HOST_SERVICE_SOCKET)
+        previous_token = os.environ.get(ENV_HOST_SERVICE_TOKEN)
         previous_http_proxy = os.environ.get("http_proxy")
         previous_https_proxy = os.environ.get("https_proxy")
-        os.environ[ENV_PLUGIN_INVOKER_SOCKET] = f"tcp://127.0.0.1:{port}"
-        os.environ[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = "relay-token-python"
+        os.environ[ENV_HOST_SERVICE_SOCKET] = f"tcp://127.0.0.1:{port}"
+        os.environ[ENV_HOST_SERVICE_TOKEN] = "relay-token-python"
         os.environ["http_proxy"] = "http://127.0.0.1:1"
         os.environ["https_proxy"] = "http://127.0.0.1:1"
         try:
@@ -398,13 +398,13 @@ class PluginInvokerTransportTests(unittest.TestCase):
             self.assertEqual(_relay_tokens, ["relay-token-python"])
         finally:
             if previous_socket is None:
-                os.environ.pop(ENV_PLUGIN_INVOKER_SOCKET, None)
+                os.environ.pop(ENV_HOST_SERVICE_SOCKET, None)
             else:
-                os.environ[ENV_PLUGIN_INVOKER_SOCKET] = previous_socket
+                os.environ[ENV_HOST_SERVICE_SOCKET] = previous_socket
             if previous_token is None:
-                os.environ.pop(ENV_PLUGIN_INVOKER_SOCKET_TOKEN, None)
+                os.environ.pop(ENV_HOST_SERVICE_TOKEN, None)
             else:
-                os.environ[ENV_PLUGIN_INVOKER_SOCKET_TOKEN] = previous_token
+                os.environ[ENV_HOST_SERVICE_TOKEN] = previous_token
             if previous_http_proxy is None:
                 os.environ.pop("http_proxy", None)
             else:

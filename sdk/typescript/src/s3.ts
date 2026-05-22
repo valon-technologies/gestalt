@@ -1,5 +1,3 @@
-import { connect } from "node:net";
-
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import {
@@ -7,10 +5,9 @@ import {
   ConnectError,
   createClient,
   type Client,
-  type Interceptor,
   type ServiceImpl,
+  type Transport,
 } from "@connectrpc/connect";
-import { createGrpcTransport } from "@connectrpc/connect-node";
 
 import {
   CopyObjectResponseSchema,
@@ -30,32 +27,15 @@ import {
 import { errorMessage, type MaybePromise } from "./api.ts";
 import { ProviderBase, type ProviderBaseOptions } from "./provider.ts";
 import { dateFromTimestamp, timestampFromDate } from "./protocol.ts";
+import {
+  createHostServiceGrpcTransport,
+  hostServiceMetadataInterceptors,
+  parseHostServiceTarget,
+  requireHostServiceTarget,
+} from "./host-service.ts";
 
-/** Base environment variable for discovering S3 runtime sockets. */
-export const ENV_S3_SOCKET = "GESTALT_S3_SOCKET";
-const S3_SOCKET_TOKEN_SUFFIX = "_TOKEN";
-const S3_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token";
-/** Base environment variable for the default S3 relay token. */
-export const ENV_S3_SOCKET_TOKEN =
-  `${ENV_S3_SOCKET}${S3_SOCKET_TOKEN_SUFFIX}`;
 const WRITE_CHUNK_SIZE = 64 * 1024;
 const textEncoder = new TextEncoder();
-
-/**
- * Returns the environment variable name used to discover an S3 socket.
- */
-export function s3SocketEnv(name?: string): string {
-  const trimmed = name?.trim() ?? "";
-  if (!trimmed) return ENV_S3_SOCKET;
-  return `${ENV_S3_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
-}
-
-/**
- * Returns the environment variable name used to discover an S3 relay token.
- */
-export function s3SocketTokenEnv(name?: string): string {
-  return `${s3SocketEnv(name)}${S3_SOCKET_TOKEN_SUFFIX}`;
-}
 
 /**
  * Error returned when an object reference does not exist.
@@ -537,38 +517,16 @@ export function createS3Service(
  * ```
  */
 export class S3 {
-  private readonly transport: ReturnType<typeof createGrpcTransport>;
+  private readonly transport: Transport;
   private readonly client: Client<typeof S3Service>;
   private objectAccessClient?: Client<typeof S3ObjectAccessService>;
 
   constructor(name?: string) {
-    const envName = s3SocketEnv(name);
-    const target = process.env[envName];
-    if (!target) {
-      throw new Error(`${envName} is not set`);
-    }
-    const relayToken = process.env[s3SocketTokenEnv(name)]?.trim() ?? "";
-    const transportOptions = s3TransportOptions(target);
-    const interceptors: Interceptor[] = relayToken
-      ? [
-          (next) => async (req) => {
-            req.header.set(S3_RELAY_TOKEN_HEADER, relayToken);
-            return await next(req);
-          },
-        ]
-      : [];
-    const transport = createGrpcTransport({
-      ...transportOptions,
-      ...(transportOptions.nodeOptions
-        ? {
-            nodeOptions: {
-              createConnection: () =>
-                connect({ path: transportOptions.nodeOptions!.path }),
-            },
-          }
-        : {}),
-      interceptors,
-    });
+    const { target, token } = requireHostServiceTarget("s3");
+    const transport = createHostServiceGrpcTransport(
+      parseHostServiceTarget("s3", target),
+      hostServiceMetadataInterceptors(token, name?.trim() ?? ""),
+    );
     this.transport = transport;
     this.client = createClient(S3Service, transport);
   }
@@ -886,48 +844,6 @@ export class S3Object {
   ): Promise<ObjectAccessURL> {
     return await this.createAccessURL(options);
   }
-}
-
-function s3TransportOptions(rawTarget: string): {
-  baseUrl: string;
-  nodeOptions?: { path: string };
-} {
-  const target = rawTarget.trim();
-  if (!target) {
-    throw new Error("s3 transport target is required");
-  }
-  if (target.startsWith("tcp://")) {
-    const address = target.slice("tcp://".length).trim();
-    if (!address) {
-      throw new Error(`s3 tcp target ${JSON.stringify(rawTarget)} is missing host:port`);
-    }
-    return { baseUrl: `http://${address}` };
-  }
-  if (target.startsWith("tls://")) {
-    const address = target.slice("tls://".length).trim();
-    if (!address) {
-      throw new Error(`s3 tls target ${JSON.stringify(rawTarget)} is missing host:port`);
-    }
-    return { baseUrl: `https://${address}` };
-  }
-  if (target.startsWith("unix://")) {
-    const socketPath = target.slice("unix://".length).trim();
-    if (!socketPath) {
-      throw new Error(`s3 unix target ${JSON.stringify(rawTarget)} is missing a socket path`);
-    }
-    return {
-      baseUrl: "http://localhost",
-      nodeOptions: { path: socketPath },
-    };
-  }
-  if (target.includes("://")) {
-    const parsed = new URL(target);
-    throw new Error(`Unsupported s3 target scheme ${JSON.stringify(parsed.protocol.replace(/:$/, ""))}`);
-  }
-  return {
-    baseUrl: "http://localhost",
-    nodeOptions: { path: target },
-  };
 }
 
 async function invokeS3Provider<T>(label: string, fn: () => Promise<T>): Promise<T> {

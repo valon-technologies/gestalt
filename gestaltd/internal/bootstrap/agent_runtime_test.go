@@ -25,7 +25,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	agentservice "github.com/valon-technologies/gestalt/server/services/agents"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -2218,17 +2217,11 @@ func TestAgentRuntimeConfigUsesPublicAgentHostBinding(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[agentservice.DefaultHostSocketEnv]; got != wantRelayTarget {
+	if got := startRequests[0].Env[runtimehost.DefaultHostServiceSocketEnv]; got != wantRelayTarget {
 		t.Fatalf("agent host relay target = %q, want %q", got, wantRelayTarget)
 	}
-	if got := startRequests[0].Env[agentservice.HostSocketTokenEnv()]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartPlugin env missing %s", agentservice.HostSocketTokenEnv())
-	}
-	if got := startRequests[0].Env[runtimehost.DefaultRuntimeLogHostSocketEnv]; got != wantRelayTarget {
-		t.Fatalf("runtime log host relay target = %q, want %q", got, wantRelayTarget)
-	}
-	if got := startRequests[0].Env[runtimehost.DefaultRuntimeLogHostSocketEnv+"_TOKEN"]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartPlugin env missing %s_TOKEN", runtimehost.DefaultRuntimeLogHostSocketEnv)
+	if got := startRequests[0].Env[runtimehost.DefaultHostServiceTokenEnv]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartPlugin env missing %s", runtimehost.DefaultHostServiceTokenEnv)
 	}
 
 	pausedTurn, err := agents[0].CreateTurn(context.Background(), coreagent.CreateTurnRequest{
@@ -3424,11 +3417,11 @@ func TestAgentRuntimeConfigUsesPublicAgentHostRelayBinding(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("start plugin requests = %d, want 1", len(startRequests))
 	}
-	if got := startRequests[0].Env[agentservice.DefaultHostSocketEnv]; got != "tls://"+relaySrv.Listener.Addr().String() {
-		t.Fatalf("StartPlugin env %s = %q, want tls relay target", agentservice.DefaultHostSocketEnv, got)
+	if got := startRequests[0].Env[runtimehost.DefaultHostServiceSocketEnv]; got != "tls://"+relaySrv.Listener.Addr().String() {
+		t.Fatalf("StartPlugin env %s = %q, want tls relay target", runtimehost.DefaultHostServiceSocketEnv, got)
 	}
-	if got := startRequests[0].Env[agentservice.HostSocketTokenEnv()]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartPlugin env missing %s_TOKEN: %#v", agentservice.DefaultHostSocketEnv, startRequests[0].Env)
+	if got := startRequests[0].Env[runtimehost.DefaultHostServiceTokenEnv]; strings.TrimSpace(got) == "" {
+		t.Fatalf("StartPlugin env missing %s: %#v", runtimehost.DefaultHostServiceTokenEnv, startRequests[0].Env)
 	}
 }
 

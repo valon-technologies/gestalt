@@ -17,6 +17,8 @@ from google.protobuf import json_format
 from ._gen.v1 import authorization_pb2 as _authorization_pb2
 from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
 from ._grpc_transport import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
     insecure_internal_channel,
     internal_channel_target,
     secure_internal_channel,
@@ -27,8 +29,6 @@ empty_pb2: Any = _empty_pb2
 authorization_pb2: Any = _authorization_pb2
 authorization_pb2_grpc: Any = _authorization_pb2_grpc
 
-ENV_AUTHORIZATION_SOCKET = "GESTALT_AUTHORIZATION_SOCKET"
-ENV_AUTHORIZATION_SOCKET_TOKEN = f"{ENV_AUTHORIZATION_SOCKET}_TOKEN"
 _AUTHORIZATION_RELAY_TOKEN_HEADER = "x-gestalt-host-service-relay-token"
 AUTHORIZATION_SUBJECT_TYPE_SUBJECT = "subject"
 
@@ -602,7 +602,7 @@ class AuthorizationClient:
         token = (
             relay_token
             if relay_token is not None
-            else os.environ.get(ENV_AUTHORIZATION_SOCKET_TOKEN, "")
+            else os.environ.get(ENV_HOST_SERVICE_TOKEN, "")
         ).strip()
         self._channel = _authorization_channel(target, token=token)
         self._stub = authorization_pb2_grpc.AuthorizationProviderStub(self._channel)
@@ -763,7 +763,7 @@ def Authorization() -> AuthorizationClient:
     """Return a cached client for the host authorization provider."""
 
     target = _resolve_authorization_socket_target()
-    token = os.environ.get(ENV_AUTHORIZATION_SOCKET_TOKEN, "").strip()
+    token = os.environ.get(ENV_HOST_SERVICE_TOKEN, "").strip()
     shared = _shared_authorization_transport
     with _shared_authorization_lock:
         client = shared.get("client")
@@ -790,10 +790,10 @@ def _resolve_authorization_socket_target(
     target = (
         socket_target
         if socket_target is not None
-        else os.environ.get(ENV_AUTHORIZATION_SOCKET, "")
+        else os.environ.get(ENV_HOST_SERVICE_SOCKET, "")
     ).strip()
     if not target:
-        raise RuntimeError(f"authorization: {ENV_AUTHORIZATION_SOCKET} is not set")
+        raise RuntimeError(f"authorization: {ENV_HOST_SERVICE_SOCKET} is not set")
     return target
 
 

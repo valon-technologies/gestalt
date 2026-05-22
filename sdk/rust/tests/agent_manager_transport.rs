@@ -32,16 +32,13 @@ use gestalt::{
     AgentManagerListInteractions, AgentManagerListSessions, AgentManagerListTurnEvents,
     AgentManagerListTurns, AgentManagerResolveInteraction, AgentManagerUpdateSession, AgentMessage,
     AgentMessagePart, AgentMessagePartType as NativeAgentMessagePartType, AgentSessionState,
-    AgentToolRef, AgentToolSourceMode, ENV_AGENT_MANAGER_SOCKET, ExternalIdentity, Request,
-    Subject,
+    AgentToolRef, AgentToolSourceMode, ExternalIdentity, Request, Subject,
 };
 use tokio::net::{TcpListener, UnixListener};
 use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
-
-const ENV_AGENT_MANAGER_SOCKET_TOKEN: &str = "GESTALT_AGENT_PROVIDER_SOCKET_TOKEN";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
@@ -412,8 +409,8 @@ async fn agent_manager_connects_over_tcp_and_sends_relay_token() {
         .expect("bind tcp listener");
     let address = listener.local_addr().expect("local addr");
     let _socket_guard =
-        helpers::EnvGuard::set(ENV_AGENT_MANAGER_SOCKET, format!("tcp://{address}"));
-    let _token_guard = helpers::EnvGuard::set(ENV_AGENT_MANAGER_SOCKET_TOKEN, "relay-token-rust");
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
+    let _token_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
     let server = TestAgentManagerServer::default();
     let serve_server = server.clone();
@@ -454,7 +451,8 @@ async fn agent_manager_connects_over_tcp_and_sends_relay_token() {
 async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-agent-manager.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_AGENT_MANAGER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let server = TestAgentManagerServer::default();
     let serve_server = server.clone();
@@ -693,7 +691,8 @@ async fn agent_manager_connects_over_unix_socket_and_sends_invocation_token() {
 async fn agent_manager_create_turn_accepts_native_values() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-agent-manager-native.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_AGENT_MANAGER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let server = TestAgentManagerServer::default();
     let serve_server = server.clone();
@@ -815,7 +814,8 @@ async fn agent_manager_create_turn_accepts_native_values() {
 async fn request_agent_manager_uses_embedded_invocation_token() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("g-rust-req-agent-manager.sock");
-    let _socket_guard = helpers::EnvGuard::set(ENV_AGENT_MANAGER_SOCKET, socket.as_os_str());
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, socket.as_os_str());
 
     let server = TestAgentManagerServer::default();
     let serve_server = server.clone();

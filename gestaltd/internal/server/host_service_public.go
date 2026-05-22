@@ -12,8 +12,6 @@ import (
 
 type hostServiceHandlerKey struct {
 	pluginName string
-	service    string
-	envVar     string
 }
 
 type hostServiceHandlerEntry struct {
@@ -63,69 +61,54 @@ func checkHostServiceHandlerDuplicate(key hostServiceHandlerKey, entries []hostS
 func publicHostServiceHandlerKey(service runtimehost.PublicHostService) (hostServiceHandlerKey, bool) {
 	key := hostServiceHandlerKey{
 		pluginName: strings.TrimSpace(service.PluginName),
-		service:    strings.TrimSpace(service.Service.Name),
-		envVar:     strings.TrimSpace(service.Service.EnvVar),
 	}
-	if key.pluginName == "" || key.service == "" || key.envVar == "" || service.Service.Register == nil {
+	if key.pluginName == "" || service.Service.Register == nil {
 		return hostServiceHandlerKey{}, false
 	}
 	return key, true
 }
 
 func (k hostServiceHandlerKey) String() string {
-	return strings.Join([]string{k.pluginName, k.service, k.envVar}, "/")
+	return k.pluginName
 }
 
-func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget) (http.Handler, error) {
-	if s == nil {
-		return nil, nil
-	}
-	key := hostServiceHandlerKey{
-		pluginName: strings.TrimSpace(target.PluginName),
-		service:    strings.TrimSpace(target.Service),
-		envVar:     strings.TrimSpace(target.EnvVar),
-	}
-
-	entry, _, ok, err := s.hostServiceHandlerEntry(ctx, key, target.SessionID)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, nil
-	}
-	return entry.handler, nil
+func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget, methodPath string) (http.Handler, error) {
+	return s.unifiedHostServiceHandler(ctx, target, methodPath)
 }
 
-func (s *Server) hostServiceHandlerEntry(ctx context.Context, key hostServiceHandlerKey, sessionID string) (hostServiceHandlerEntry, bool, bool, error) {
-	if s == nil || key.pluginName == "" || key.service == "" || key.envVar == "" {
-		return hostServiceHandlerEntry{}, false, false, nil
+func (s *Server) unifiedHostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget, methodPath string) (http.Handler, error) {
+	pluginName := strings.TrimSpace(target.PluginName)
+	if s == nil || pluginName == "" {
+		return nil, nil
 	}
-
 	var entries []hostServiceHandlerEntry
 	services := s.publicHostServices.Snapshot()
 	s.prunePublicHostServiceHandlerCache(services)
 	for _, service := range services {
-		serviceKey, ok := publicHostServiceHandlerKey(service)
-		if !ok || serviceKey != key {
+		key, ok := publicHostServiceHandlerKey(service)
+		if !ok || key.pluginName != pluginName || !service.Service.AllowsMethod(methodPath) {
 			continue
 		}
 		if service.SessionVerifier == nil {
-			return hostServiceHandlerEntry{}, true, false, fmt.Errorf("public host service %s requires a session verifier", key.String())
+			return nil, fmt.Errorf("public host service %s requires a session verifier", key.String())
 		}
 		entry, ok := s.publicHostServiceHandlerEntry(service)
 		if !ok {
 			continue
 		}
 		if err := checkHostServiceHandlerDuplicate(key, entries, entry); err != nil {
-			return hostServiceHandlerEntry{}, true, false, err
+			return nil, err
 		}
 		entries = append(entries, entry)
 	}
 	if len(entries) == 0 {
-		return hostServiceHandlerEntry{}, false, false, nil
+		return nil, nil
 	}
-	entry, ok, err := selectHostServiceHandlerEntry(ctx, key, sessionID, entries)
-	return entry, true, ok, err
+	entry, ok, err := selectHostServiceHandlerEntry(ctx, hostServiceHandlerKey{pluginName: pluginName}, target.SessionID, entries)
+	if err != nil || !ok {
+		return nil, err
+	}
+	return entry.handler, nil
 }
 
 func (s *Server) publicHostServiceHandlerEntry(service runtimehost.PublicHostService) (hostServiceHandlerEntry, bool) {

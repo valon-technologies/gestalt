@@ -1,11 +1,15 @@
 package cache
 
+//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/cache_grpc.pb.go -service CacheServer -receiver routingCacheServer -binding cache -package cache -server-type proto.CacheServer -output routing_cache_gen.go
+
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -19,6 +23,34 @@ type cacheServer struct {
 
 func NewServer(cache corecache.Cache, pluginName string) proto.CacheServer {
 	return &cacheServer{cache: cache, plugin: pluginName}
+}
+
+type routingCacheServer struct {
+	proto.UnimplementedCacheServer
+	servers        map[string]proto.CacheServer
+	defaultBinding string
+}
+
+func NewRoutingServer(bindings map[string]corecache.Cache, defaultBinding string, pluginName string) proto.CacheServer {
+	servers := make(map[string]proto.CacheServer, len(bindings))
+	for name, cache := range bindings {
+		name = strings.TrimSpace(name)
+		if name == "" || cache == nil {
+			continue
+		}
+		servers[name] = NewServer(cache, pluginName)
+	}
+	defaultBinding = strings.TrimSpace(defaultBinding)
+	if defaultBinding == "" && len(servers) == 1 {
+		for name := range servers {
+			defaultBinding = name
+		}
+	}
+	return &routingCacheServer{servers: servers, defaultBinding: defaultBinding}
+}
+
+func (s *routingCacheServer) server(ctx context.Context) (proto.CacheServer, error) {
+	return runtimehost.ResolveBinding(ctx, "cache", s.defaultBinding, s.servers)
 }
 
 func (s *cacheServer) Get(ctx context.Context, req *proto.CacheGetRequest) (*proto.CacheGetResponse, error) {

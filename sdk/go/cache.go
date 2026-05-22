@@ -3,24 +3,12 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
+	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
-
-// EnvCacheSocket is the default Unix-socket environment variable used by
-// [Cache].
-const EnvCacheSocket = "GESTALT_CACHE_SOCKET"
-const cacheSocketTokenSuffix = "_TOKEN"
 
 // CacheEntry is one key/value pair written through [CacheClient.SetMany].
 type CacheEntry struct {
@@ -33,116 +21,37 @@ type CacheSetOptions struct {
 	TTL time.Duration
 }
 
-// CacheClient speaks to a running cache provider over a Unix socket.
+// CacheClient speaks to a running cache provider over the unified host-service socket.
 type CacheClient struct {
 	client proto.CacheClient
-	conn   *grpc.ClientConn
 }
 
-// CacheSocketEnv returns the environment variable name used for a named cache
-// transport socket.
-func CacheSocketEnv(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return EnvCacheSocket
-	}
-	var b strings.Builder
-	b.WriteString(EnvCacheSocket)
-	b.WriteByte('_')
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r - ('a' - 'A'))
-		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
-}
+var sharedCacheTransports sync.Map
 
-// CacheSocketTokenEnv returns the environment variable name used for a named
-// cache relay token.
-func CacheSocketTokenEnv(name string) string {
-	return CacheSocketEnv(name) + cacheSocketTokenSuffix
-}
-
-// Cache connects to the cache provider exposed by gestaltd. The target can be
-// a plain Unix socket path, a unix:///path URI, or a tcp://host:port or
-// tls://host:port URI.
+// Cache connects to the cache provider exposed by gestaltd.
 func Cache(name ...string) (*CacheClient, error) {
-	envName := EnvCacheSocket
-	if len(name) > 0 {
-		envName = CacheSocketEnv(name[0])
-	}
-	target := os.Getenv(envName)
-	if target == "" {
-		return nil, fmt.Errorf("cache: %s is not set", envName)
-	}
-	network, address, err := parseCacheTarget(target)
+	target, token, err := hostServiceTarget("cache")
 	if err != nil {
 		return nil, err
 	}
-	token := os.Getenv(CacheSocketTokenEnv(firstCacheName(name)))
+	binding := firstCacheName(name)
+	transport := getSharedCacheTransport(binding)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	var conn *grpc.ClientConn
-	opts := cacheDialOptions(token)
-	switch network {
-	case "unix":
-		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-					var d net.Dialer
-					return d.DialContext(ctx, "unix", address)
-				}),
-				grpc.WithAuthority("localhost"),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tcp":
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(insecure.NewCredentials()),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	case "tls":
-		host, _, splitErr := net.SplitHostPort(address)
-		if splitErr != nil {
-			return nil, fmt.Errorf("cache: parse tls target %q: %w", address, splitErr)
-		}
-		tlsConfig, tlsErr := hostServiceTLSConfig("cache", host)
-		if tlsErr != nil {
-			return nil, tlsErr
-		}
-		conn, err = grpc.DialContext(ctx, address,
-			append(internalHostServiceBaseDialOptions(
-				grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
-				grpc.WithBlock(),
-			), opts...)...,
-		)
-	default:
-		return nil, fmt.Errorf("cache: unsupported transport network %q", network)
-	}
+	client, err := hostServiceTransportClient(ctx, "cache", target, token, binding, transport, proto.NewCacheClient)
 	if err != nil {
 		return nil, fmt.Errorf("cache: connect to host: %w", err)
 	}
-	return &CacheClient{
-		client: proto.NewCacheClient(conn),
-		conn:   conn,
-	}, nil
+	return &CacheClient{client: client}, nil
 }
 
-// Close closes the underlying gRPC transport.
-func (c *CacheClient) Close() error {
-	if c == nil || c.conn == nil {
-		return nil
-	}
-	return c.conn.Close()
+func getSharedCacheTransport(binding string) *sharedManagerTransport[proto.CacheClient] {
+	val, _ := sharedCacheTransports.LoadOrStore(binding, &sharedManagerTransport[proto.CacheClient]{})
+	return val.(*sharedManagerTransport[proto.CacheClient])
 }
+
+// Close is a no-op because this client uses shared transport.
+func (c *CacheClient) Close() error { return nil }
 
 // Get loads one cached value.
 func (c *CacheClient) Get(ctx context.Context, key string) ([]byte, bool, error) {
@@ -232,64 +141,9 @@ func cacheTTLToProto(ttl time.Duration) *durationpb.Duration {
 	return durationpb.New(ttl)
 }
 
-func cacheDialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil
-	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(cacheRelayPerRPCCredentials{token: token})}
-}
-
 func firstCacheName(name []string) string {
 	if len(name) == 0 {
 		return ""
 	}
 	return name[0]
-}
-
-type cacheRelayPerRPCCredentials struct {
-	token string
-}
-
-func (c cacheRelayPerRPCCredentials) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
-	return map[string]string{
-		"x-gestalt-host-service-relay-token": c.token,
-	}, nil
-}
-
-func (cacheRelayPerRPCCredentials) RequireTransportSecurity() bool { return false }
-
-func parseCacheTarget(raw string) (network string, address string, err error) {
-	target := strings.TrimSpace(raw)
-	if target == "" {
-		return "", "", fmt.Errorf("cache: transport target is required")
-	}
-	switch {
-	case strings.HasPrefix(target, "tcp://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tcp://"))
-		if address == "" {
-			return "", "", fmt.Errorf("cache: tcp target %q is missing host:port", raw)
-		}
-		return "tcp", address, nil
-	case strings.HasPrefix(target, "tls://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "tls://"))
-		if address == "" {
-			return "", "", fmt.Errorf("cache: tls target %q is missing host:port", raw)
-		}
-		return "tls", address, nil
-	case strings.HasPrefix(target, "unix://"):
-		address = strings.TrimSpace(strings.TrimPrefix(target, "unix://"))
-		if address == "" {
-			return "", "", fmt.Errorf("cache: unix target %q is missing a socket path", raw)
-		}
-		return "unix", address, nil
-	case strings.Contains(target, "://"):
-		parsed, parseErr := url.Parse(target)
-		if parseErr != nil {
-			return "", "", fmt.Errorf("cache: parse target %q: %w", raw, parseErr)
-		}
-		return "", "", fmt.Errorf("cache: unsupported target scheme %q", parsed.Scheme)
-	default:
-		return "unix", filepath.Clean(target), nil
-	}
 }

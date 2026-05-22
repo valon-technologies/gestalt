@@ -38,8 +38,6 @@ use tokio_stream::wrappers::{TcpListenerStream, UnixListenerStream};
 use tonic::transport::{Endpoint, Server};
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-const ENV_AGENT_HOST_SOCKET_TOKEN: &str = "GESTALT_AGENT_HOST_SOCKET_TOKEN";
-
 #[derive(Serialize)]
 struct LookupArguments {
     query: String,
@@ -729,7 +727,7 @@ async fn agent_host_client_round_trip_over_unix_socket() {
     let _env_lock = helpers::env_lock().lock().await;
     let host_socket = helpers::temp_socket("gestalt-rust-agent-host.sock");
     let _agent_host_env =
-        helpers::EnvGuard::set(gestalt::ENV_AGENT_HOST_SOCKET, host_socket.as_os_str());
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, host_socket.as_os_str());
     let host_service = TestAgentHostService::default();
 
     let host_socket_for_task = host_socket.clone();
@@ -871,8 +869,8 @@ async fn agent_host_client_round_trip_over_tcp_and_sends_relay_token() {
         .expect("bind tcp listener");
     let address = listener.local_addr().expect("local addr");
     let _agent_host_env =
-        helpers::EnvGuard::set(gestalt::ENV_AGENT_HOST_SOCKET, format!("tcp://{address}"));
-    let _token_guard = helpers::EnvGuard::set(ENV_AGENT_HOST_SOCKET_TOKEN, "relay-token-rust");
+        helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_SOCKET, format!("tcp://{address}"));
+    let _token_guard = helpers::EnvGuard::set(gestalt::ENV_HOST_SERVICE_TOKEN, "relay-token-rust");
 
     let host_service = TestAgentHostService::default();
     let served_service = host_service.clone();

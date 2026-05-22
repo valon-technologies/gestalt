@@ -2,14 +2,19 @@ package gestalt_test
 
 import (
 	"context"
+	"net"
 	"os"
 	"testing"
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestTransportCacheNamedSocketEnv(t *testing.T) {
+	t.Setenv(gestalt.EnvHostServiceSocket, "unix://"+testCacheSocket)
 	client, err := gestalt.Cache("test")
 	if err != nil {
 		t.Fatalf("connect named cache: %v", err)
@@ -29,6 +34,42 @@ func TestTransportCacheNamedSocketEnv(t *testing.T) {
 	}
 }
 
+func TestTransportCacheNamedBindingMetadata(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	harness := &cacheBindingMetadataHarness{binding: make(chan string, 1)}
+	srv := grpc.NewServer()
+	proto.RegisterCacheServer(srv, harness)
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+lis.Addr().String())
+	client, err := gestalt.Cache("archive")
+	if err != nil {
+		t.Fatalf("connect cache: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	if err := client.Set(context.Background(), "key", []byte("value"), gestalt.CacheSetOptions{}); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	if got := <-harness.binding; got != "archive" {
+		t.Fatalf("binding metadata = %q, want archive", got)
+	}
+}
+
+type cacheBindingMetadataHarness struct {
+	proto.UnimplementedCacheServer
+	binding chan string
+}
+
+func (h *cacheBindingMetadataHarness) Set(ctx context.Context, _ *proto.CacheSetRequest) (*emptypb.Empty, error) {
+	h.binding <- firstMetadataValue(ctx, gestalt.HostServiceBindingMetadata)
+	return &emptypb.Empty{}, nil
+}
+
 func TestTransportCacheTCPTargetEnv(t *testing.T) {
 	bin, target, cmd := buildAndStartTCPHarness("cachetransportd", "")
 	t.Cleanup(func() {
@@ -37,8 +78,8 @@ func TestTransportCacheTCPTargetEnv(t *testing.T) {
 		_ = os.Remove(bin)
 	})
 
-	t.Setenv(gestalt.EnvCacheSocket, target)
-	client, err := gestalt.Cache()
+	t.Setenv(gestalt.EnvHostServiceSocket, target)
+	client, err := gestalt.Cache("tcp")
 	if err != nil {
 		t.Fatalf("connect tcp cache: %v", err)
 	}
@@ -66,9 +107,9 @@ func TestTransportCacheTCPTargetTokenEnv(t *testing.T) {
 		_ = os.Remove(bin)
 	})
 
-	t.Setenv(gestalt.EnvCacheSocket, target)
-	t.Setenv(gestalt.CacheSocketTokenEnv(""), token)
-	client, err := gestalt.Cache()
+	t.Setenv(gestalt.EnvHostServiceSocket, target)
+	t.Setenv(gestalt.EnvHostServiceToken, token)
+	client, err := gestalt.Cache("tcp-token")
 	if err != nil {
 		t.Fatalf("connect tcp cache with token: %v", err)
 	}

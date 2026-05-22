@@ -1,3 +1,9 @@
+/// Unified host-service socket env var for plugin-side clients.
+pub const ENV_HOST_SERVICE_SOCKET: &str = "GESTALT_HOST_SERVICE_SOCKET";
+/// Unified host-service relay token env var for plugin-side clients.
+pub const ENV_HOST_SERVICE_TOKEN: &str = "GESTALT_HOST_SERVICE_TOKEN";
+/// gRPC metadata header naming the host binding for routed services.
+pub const HOST_SERVICE_BINDING_HEADER: &str = "x-gestalt-host-binding";
 /// Unix socket path exposed by `gestaltd` for the main integration-provider
 /// surface.
 pub const ENV_PROVIDER_SOCKET: &str = "GESTALT_PLUGIN_SOCKET";

@@ -8,7 +8,12 @@ import subprocess
 import tempfile
 import unittest
 
-from gestalt import Cache, CacheEntry, cache_socket_env, cache_socket_token_env
+from gestalt import (
+    ENV_HOST_SERVICE_SOCKET,
+    ENV_HOST_SERVICE_TOKEN,
+    Cache,
+    CacheEntry,
+)
 
 
 def _build_harness() -> str:
@@ -54,9 +59,7 @@ def setUpModule() -> None:
     if line != "READY":
         _harness_proc.kill()
         raise RuntimeError(f"harness did not print READY, got: {line!r}")
-    os.environ["GESTALT_CACHE_SOCKET"] = _socket_path
-    os.environ[cache_socket_env("named")] = _socket_path
-    os.environ[cache_socket_env("café")] = _socket_path
+    os.environ[ENV_HOST_SERVICE_SOCKET] = _socket_path
 
 
 def tearDownModule() -> None:
@@ -121,17 +124,16 @@ class CacheTransportTests(unittest.TestCase):
         self.assertFalse(client.delete("b"))
         client.close()
 
-    def test_named_socket_env_roundtrip(self) -> None:
+    def test_named_binding_roundtrip(self) -> None:
         client = Cache("named")
         client.set("named-key", b"named-value")
         self.assertEqual(client.get("named-key"), b"named-value")
         client.close()
 
-    def test_unicode_binding_name_uses_host_normalization(self) -> None:
-        self.assertEqual(cache_socket_env("café"), "GESTALT_CACHE_SOCKET_CAF_")
-        client = Cache("café")
-        client.set("unicode-key", b"unicode-value")
-        self.assertEqual(client.get("unicode-key"), b"unicode-value")
+    def test_archive_binding_roundtrip(self) -> None:
+        client = Cache("archive")
+        client.set("archive-key", b"archive-value")
+        self.assertEqual(client.get("archive-key"), b"archive-value")
         client.close()
 
 
@@ -141,19 +143,18 @@ class CacheTransportTCPTests(unittest.TestCase):
         self.addCleanup(proc.wait)
         self.addCleanup(proc.kill)
 
-        env_name = cache_socket_env()
-        previous_target = os.environ.get(env_name)
+        previous_target = os.environ.get(ENV_HOST_SERVICE_SOCKET)
 
         def restore_target() -> None:
             if previous_target is None:
-                os.environ.pop(env_name, None)
+                os.environ.pop(ENV_HOST_SERVICE_SOCKET, None)
             else:
-                os.environ[env_name] = previous_target
+                os.environ[ENV_HOST_SERVICE_SOCKET] = previous_target
 
-        os.environ[env_name] = target
+        os.environ[ENV_HOST_SERVICE_SOCKET] = target
         self.addCleanup(restore_target)
 
-        client = Cache()
+        client = Cache("tcp")
         client.set("tcp-key", b"tcp-value")
         self.assertEqual(client.get("tcp-key"), b"tcp-value")
         client.close()
@@ -164,26 +165,24 @@ class CacheTransportTCPTests(unittest.TestCase):
         self.addCleanup(proc.wait)
         self.addCleanup(proc.kill)
 
-        target_env = cache_socket_env()
-        token_env = cache_socket_token_env()
-        previous_target = os.environ.get(target_env)
-        previous_token = os.environ.get(token_env)
+        previous_target = os.environ.get(ENV_HOST_SERVICE_SOCKET)
+        previous_token = os.environ.get(ENV_HOST_SERVICE_TOKEN)
 
         def restore_env() -> None:
             if previous_target is None:
-                os.environ.pop(target_env, None)
+                os.environ.pop(ENV_HOST_SERVICE_SOCKET, None)
             else:
-                os.environ[target_env] = previous_target
+                os.environ[ENV_HOST_SERVICE_SOCKET] = previous_target
             if previous_token is None:
-                os.environ.pop(token_env, None)
+                os.environ.pop(ENV_HOST_SERVICE_TOKEN, None)
             else:
-                os.environ[token_env] = previous_token
+                os.environ[ENV_HOST_SERVICE_TOKEN] = previous_token
 
-        os.environ[target_env] = target
-        os.environ[token_env] = token
+        os.environ[ENV_HOST_SERVICE_SOCKET] = target
+        os.environ[ENV_HOST_SERVICE_TOKEN] = token
         self.addCleanup(restore_env)
 
-        client = Cache()
+        client = Cache("tcp-token")
         client.set("tcp-token-key", b"tcp-token-value")
         self.assertEqual(client.get("tcp-token-key"), b"tcp-token-value")
         client.close()

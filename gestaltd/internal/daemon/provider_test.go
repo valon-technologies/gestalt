@@ -1040,8 +1040,7 @@ func TestRun_ProviderReleaseBuildsGoSourceExternalCredentialsPlugin(t *testing.T
 		Command: filepath.Join(extractDir, binaryName),
 		Name:    externalCredentialReleasePluginName,
 		HostServices: []runtimehost.HostService{{
-			Name:   "external-credentials",
-			EnvVar: externalcredentialsservice.DefaultSocketEnv,
+			Name: "external-credentials",
 			Register: func(srv *grpc.Server) {
 				proto.RegisterExternalCredentialProviderServer(srv, externalcredentialsservice.NewProviderServer(services.ExternalCredentials))
 			},

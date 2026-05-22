@@ -7,14 +7,14 @@ import { spawn, type Subprocess } from "bun";
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 
 import {
+  ENV_HOST_SERVICE_SOCKET,
+  ENV_HOST_SERVICE_TOKEN,
   IndexedDB,
   NotFoundError,
   AlreadyExistsError,
   TransactionError,
   ColumnType,
-  indexedDBSocketEnv,
-  indexedDBSocketTokenEnv,
-} from "../src/indexeddb.ts";
+} from "../src/index.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 const GESTALTD_DIR = join(REPO_ROOT, "gestaltd");
@@ -57,8 +57,7 @@ beforeAll(async () => {
   }
   reader.releaseLock();
 
-  process.env.GESTALT_INDEXEDDB_SOCKET = socketPath;
-  process.env[indexedDBSocketEnv("named")] = `unix://${socketPath}`;
+  process.env[ENV_HOST_SERVICE_SOCKET] = socketPath;
 }, 60_000);
 
 beforeEach(() => {
@@ -114,8 +113,7 @@ async function startTCPHarness(expectToken?: string): Promise<{ proc: Subprocess
 
 afterAll(() => {
   proc?.kill();
-  delete process.env.GESTALT_INDEXEDDB_SOCKET;
-  delete process.env[indexedDBSocketEnv("named")];
+  delete process.env[ENV_HOST_SERVICE_SOCKET];
   if (tmpDir) {
     rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -123,7 +121,8 @@ afterAll(() => {
 
 describe("IndexedDB transport", () => {
   test("createObjectStore forwards declared columns", async () => {
-    const envName = indexedDBSocketEnv("schema");
+    const envName = ENV_HOST_SERVICE_SOCKET;
+    const previousTarget = process.env[envName];
     process.env[envName] = "/tmp/fake-indexeddb.sock";
     try {
       const local = new IndexedDB("schema");
@@ -159,7 +158,11 @@ describe("IndexedDB transport", () => {
         },
       });
     } finally {
-      delete process.env[envName];
+      if (previousTarget === undefined) {
+        delete process.env[envName];
+      } else {
+        process.env[envName] = previousTarget;
+      }
     }
   });
 
@@ -291,7 +294,8 @@ describe("IndexedDB transport", () => {
 
   test("tcp target env selects the requested binding", async () => {
     const { proc: tcpProc, target } = await startTCPHarness();
-    const envName = indexedDBSocketEnv("tcp");
+    const envName = ENV_HOST_SERVICE_SOCKET;
+    const previousTarget = process.env[envName];
     process.env[envName] = target;
     try {
       const tcpDb = new IndexedDB("tcp");
@@ -302,15 +306,21 @@ describe("IndexedDB transport", () => {
       expect(got.value).toBe("tcp");
     } finally {
       tcpProc.kill();
-      delete process.env[envName];
+      if (previousTarget === undefined) {
+        delete process.env[envName];
+      } else {
+        process.env[envName] = previousTarget;
+      }
     }
   });
 
   test("tcp target token env selects the requested binding", async () => {
     const token = "relay-token-typescript";
     const { proc: tcpProc, target } = await startTCPHarness(token);
-    const envName = indexedDBSocketEnv("tcp-token");
-    const tokenEnvName = indexedDBSocketTokenEnv("tcp-token");
+    const envName = ENV_HOST_SERVICE_SOCKET;
+    const tokenEnvName = ENV_HOST_SERVICE_TOKEN;
+    const previousTarget = process.env[envName];
+    const previousToken = process.env[tokenEnvName];
     process.env[envName] = target;
     process.env[tokenEnvName] = token;
     try {
@@ -322,8 +332,16 @@ describe("IndexedDB transport", () => {
       expect(got.value).toBe("token");
     } finally {
       tcpProc.kill();
-      delete process.env[envName];
-      delete process.env[tokenEnvName];
+      if (previousTarget === undefined) {
+        delete process.env[envName];
+      } else {
+        process.env[envName] = previousTarget;
+      }
+      if (previousToken === undefined) {
+        delete process.env[tokenEnvName];
+      } else {
+        process.env[tokenEnvName] = previousToken;
+      }
     }
   });
 

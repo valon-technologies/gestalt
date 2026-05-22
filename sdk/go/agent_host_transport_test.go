@@ -94,8 +94,8 @@ func TestTransport_AgentHostUnixSocket(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvAgentHostSocket, socketPath)
-	t.Setenv(gestalt.EnvAgentHostSocketToken, "relay-token-go")
+	t.Setenv(gestalt.EnvHostServiceSocket, socketPath)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
 	client, err := gestalt.AgentHost()
 	if err != nil {

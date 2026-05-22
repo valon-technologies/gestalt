@@ -53,8 +53,8 @@ func TestTransport_WorkflowHostTCPTargetTokenEnv(t *testing.T) {
 	}()
 	t.Cleanup(srv.Stop)
 
-	t.Setenv(gestalt.EnvWorkflowHostSocket, "tcp://"+address)
-	t.Setenv(gestalt.EnvWorkflowHostSocketToken, "relay-token-go")
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+address)
+	t.Setenv(gestalt.EnvHostServiceToken, "relay-token-go")
 
 	client, err := gestalt.WorkflowHost()
 	if err != nil {
