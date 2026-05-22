@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -20,38 +19,21 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// EnvIndexedDBSocket is the default Unix-socket environment variable used by
-// [IndexedDB].
-const EnvIndexedDBSocket = "GESTALT_INDEXEDDB_SOCKET"
+// EnvIndexedDBSocket is deprecated. Host-service clients now read
+// [EnvHostServiceSocket].
+const EnvIndexedDBSocket = EnvHostServiceSocket
 const indexedDBSocketTokenSuffix = "_TOKEN"
 
 // IndexedDBSocketEnv returns the environment variable name used for a named
 // IndexedDB transport socket.
 func IndexedDBSocketEnv(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return EnvIndexedDBSocket
-	}
-	var b strings.Builder
-	b.WriteString(EnvIndexedDBSocket)
-	b.WriteByte('_')
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z':
-			b.WriteRune(r - ('a' - 'A'))
-		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
+	return EnvHostServiceSocket
 }
 
 // IndexedDBSocketTokenEnv returns the companion environment variable name used
 // to discover a host-service relay token for an IndexedDB binding.
 func IndexedDBSocketTokenEnv(name string) string {
-	return IndexedDBSocketEnv(name) + indexedDBSocketTokenSuffix
+	return EnvHostServiceToken
 }
 
 var (
@@ -173,23 +155,19 @@ type IndexedDBClient struct {
 // can be a plain Unix socket path, a unix:///path URI, or a tcp://host:port or
 // tls://host:port URI.
 func IndexedDB(name ...string) (*IndexedDBClient, error) {
-	envName := EnvIndexedDBSocket
-	if len(name) > 0 {
-		envName = IndexedDBSocketEnv(name[0])
-	}
-	target := os.Getenv(envName)
-	if target == "" {
-		return nil, fmt.Errorf("indexeddb: %s is not set", envName)
+	target, token, err := hostServiceTarget("indexeddb")
+	if err != nil {
+		return nil, err
 	}
 	network, address, err := parseIndexedDBTarget(target)
 	if err != nil {
 		return nil, err
 	}
-	token := os.Getenv(IndexedDBSocketTokenEnv(firstIndex(name)))
+	binding := firstIndex(name)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var conn *grpc.ClientConn
-	opts := indexedDBDialOptions(token)
+	opts := indexedDBDialOptions(token, binding)
 	switch network {
 	case "unix":
 		conn, err = grpc.DialContext(ctx, "passthrough:///localhost",
@@ -237,12 +215,8 @@ func IndexedDB(name ...string) (*IndexedDBClient, error) {
 	}, nil
 }
 
-func indexedDBDialOptions(token string) []grpc.DialOption {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil
-	}
-	return []grpc.DialOption{grpc.WithPerRPCCredentials(indexedDBRelayPerRPCCredentials{token: token})}
+func indexedDBDialOptions(token string, binding string) []grpc.DialOption {
+	return hostServiceDialOptions(token, binding)
 }
 
 func firstIndex(name []string) string {

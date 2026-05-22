@@ -1902,7 +1902,7 @@ func buildHostedRuntimeHostServiceEnv(providerName, sessionID string, hostServic
 	if !ok {
 		return nil, "", fmt.Errorf("provider %q requires server.baseURL and server.encryptionKey to relay %s through the public host service relay", providerName, serviceLabel)
 	}
-	relayEnv[hostService.EnvVar] = relayDialTarget
+	relayEnv[runtimehost.DefaultHostServiceSocketEnv] = relayDialTarget
 	return relayEnv, relayHost, nil
 }
 
@@ -2052,16 +2052,16 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, ho
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
 		PluginName:   providerName,
 		SessionID:    sessionID,
-		Service:      serviceKey,
-		EnvVar:       hostService.EnvVar,
-		MethodPrefix: methodPrefix,
+		Service:      "host_service",
+		EnvVar:       runtimehost.DefaultHostServiceSocketEnv,
+		MethodPrefix: "/",
 		TTL:          pluginRuntimeHostServiceRelayTokenTTL,
 	})
 	if err != nil {
 		return "", nil, "", false, fmt.Errorf("mint %s host service relay token: %w", serviceLabel, err)
 	}
 	return dialTarget, map[string]string{
-		hostService.EnvVar + "_TOKEN": token,
+		runtimehost.DefaultHostServiceTokenEnv: token,
 	}, relayHost, true, nil
 }
 
@@ -2208,7 +2208,7 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 		return nil, nil, fmt.Errorf("cache host services are not available")
 	}
 
-	hostServices := make([]runtimehost.HostService, 0, len(entry.Cache)+1)
+	bindings := make(map[string]corecache.Cache, len(entry.Cache))
 	boundCaches := make([]corecache.Cache, 0, len(entry.Cache))
 	for _, bindingName := range entry.Cache {
 		def, ok := deps.CacheDefs[bindingName]
@@ -2222,26 +2222,19 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 			return nil, nil, fmt.Errorf("cache %q: %w", bindingName, err)
 		}
 		boundCaches = append(boundCaches, value)
-		hostServices = append(hostServices, runtimehost.HostService{
-			Name:   "cache",
-			EnvVar: cacheservice.SocketEnv(bindingName),
-			Register: func(cacheValue corecache.Cache) func(*grpc.Server) {
-				return func(srv *grpc.Server) {
-					proto.RegisterCacheServer(srv, cacheservice.NewServer(cacheValue, pluginName))
-				}
-			}(value),
-		})
+		bindings[bindingName] = value
 	}
+	defaultBinding := ""
 	if len(boundCaches) == 1 {
-		value := boundCaches[0]
-		hostServices = append(hostServices, runtimehost.HostService{
-			Name:   "cache",
-			EnvVar: cacheservice.DefaultSocketEnv,
-			Register: func(srv *grpc.Server) {
-				proto.RegisterCacheServer(srv, cacheservice.NewServer(value, pluginName))
-			},
-		})
+		defaultBinding = entry.Cache[0]
 	}
+	hostServices := []runtimehost.HostService{{
+		Name:   "cache",
+		EnvVar: cacheservice.DefaultSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterCacheServer(srv, cacheservice.NewRoutingServer(bindings, defaultBinding, pluginName))
+		},
+	}}
 	return hostServices, func() {
 		_ = closeCaches(boundCaches...)
 	}, nil
@@ -2261,41 +2254,27 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		}
 	}
 
-	hostServices := make([]runtimehost.HostService, 0, len(entry.S3)+1)
+	bindings := make(map[string]s3store.Client, len(entry.S3))
 	for _, binding := range entry.S3 {
 		client, ok := deps.S3[binding]
 		if !ok || client == nil {
 			return nil, fmt.Errorf("s3 %q is not available", binding)
 		}
-		hostServices = append(hostServices, runtimehost.HostService{
-			Name:   "s3",
-			EnvVar: s3.SocketEnv(binding),
-			Register: func(client s3store.Client, binding string) func(*grpc.Server) {
-				return func(srv *grpc.Server) {
-					proto.RegisterS3Server(srv, s3.NewServerWithOptions(client, pluginName, s3.ServerOptions{
-						BindingName: binding,
-						AccessURLs:  accessURLs,
-					}))
-					proto.RegisterS3ObjectAccessServer(srv, s3.NewObjectAccessServer(accessURLs, pluginName, binding))
-				}
-			}(client, binding),
-		})
+		bindings[binding] = client
 	}
+	defaultBinding := ""
 	if len(entry.S3) == 1 {
-		binding := entry.S3[0]
-		client := deps.S3[binding]
-		hostServices = append(hostServices, runtimehost.HostService{
-			Name:   "s3",
-			EnvVar: s3.DefaultSocketEnv,
-			Register: func(srv *grpc.Server) {
-				proto.RegisterS3Server(srv, s3.NewServerWithOptions(client, pluginName, s3.ServerOptions{
-					BindingName: binding,
-					AccessURLs:  accessURLs,
-				}))
-				proto.RegisterS3ObjectAccessServer(srv, s3.NewObjectAccessServer(accessURLs, pluginName, binding))
-			},
-		})
+		defaultBinding = entry.S3[0]
 	}
+	hostServices := []runtimehost.HostService{{
+		Name:   "s3",
+		EnvVar: s3.DefaultSocketEnv,
+		Register: func(srv *grpc.Server) {
+			s3Server, objectAccessServer := s3.NewRoutingServers(bindings, defaultBinding, pluginName, accessURLs)
+			proto.RegisterS3Server(srv, s3Server)
+			proto.RegisterS3ObjectAccessServer(srv, objectAccessServer)
+		},
+	}}
 	return hostServices, nil
 }
 

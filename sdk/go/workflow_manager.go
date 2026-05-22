@@ -3,21 +3,19 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
 
-// EnvWorkflowManagerSocket names the gestaltd workflow-provider facade target.
-// Manager clients call this facade; provider runtimes listen on
-// GESTALT_PLUGIN_SOCKET.
-const EnvWorkflowManagerSocket = proto.EnvWorkflowProviderSocket
+// EnvWorkflowManagerSocket is deprecated. Host-service clients now read
+// [EnvHostServiceSocket].
+const EnvWorkflowManagerSocket = EnvHostServiceSocket
 
-// EnvWorkflowManagerSocketToken names the optional workflow-manager relay-token
-// variable.
-const EnvWorkflowManagerSocketToken = EnvWorkflowManagerSocket + "_TOKEN"
+// EnvWorkflowManagerSocketToken is deprecated. Host-service clients now read
+// [EnvHostServiceToken].
+const EnvWorkflowManagerSocketToken = EnvHostServiceToken
 
 // WorkflowManagerClient starts runs and manages workflow schedules or triggers.
 type WorkflowManagerClient struct {
@@ -33,11 +31,10 @@ func WorkflowManager(invocationToken string) (*WorkflowManagerClient, error) {
 	if strings.TrimSpace(invocationToken) == "" {
 		return nil, fmt.Errorf("workflow manager: invocation token is not available")
 	}
-	target := os.Getenv(EnvWorkflowManagerSocket)
-	if target == "" {
-		return nil, fmt.Errorf("workflow manager: %s is not set", EnvWorkflowManagerSocket)
+	target, token, err := hostServiceTarget("workflow manager")
+	if err != nil {
+		return nil, err
 	}
-	token := os.Getenv(EnvWorkflowManagerSocketToken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

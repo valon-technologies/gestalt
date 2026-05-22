@@ -22,12 +22,46 @@ func TestHostServiceHandlerReturnsVerifierError(t *testing.T) {
 		SessionID:  "session-1",
 		Service:    "cache",
 		EnvVar:     "GESTALT_TEST_CACHE_SOCKET",
-	})
+	}, "/gestalt.provider.v1.Cache/Get")
 	if err == nil || !strings.Contains(err.Error(), `runtime session "session-1" is not active`) {
 		t.Fatalf("hostServiceHandler err = %v, want verifier failure", err)
 	}
 	if handler != nil {
 		t.Fatalf("handler = %v, want no handler", handler)
+	}
+}
+
+func TestUnifiedHostServiceHandlerRoutesByGRPCMethod(t *testing.T) {
+	t.Parallel()
+
+	registry := runtimehost.NewPublicHostServiceRegistry()
+	registry.RegisterVerified("support", allowHostServiceSessionVerifier{}, testHostService())
+	s := &Server{publicHostServices: registry}
+
+	handler, err := s.hostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
+		PluginName: "support",
+		SessionID:  "session-1",
+		Service:    "host_service",
+		EnvVar:     runtimehost.DefaultHostServiceSocketEnv,
+	}, "/gestalt.provider.v1.Cache/Get")
+	if err != nil {
+		t.Fatalf("hostServiceHandler: %v", err)
+	}
+	if handler == nil {
+		t.Fatal("handler = nil, want cache handler")
+	}
+
+	handler, err = s.hostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
+		PluginName: "support",
+		SessionID:  "session-1",
+		Service:    "host_service",
+		EnvVar:     runtimehost.DefaultHostServiceSocketEnv,
+	}, "/gestalt.provider.v1.S3/ListObjects")
+	if err != nil {
+		t.Fatalf("hostServiceHandler unregistered method: %v", err)
+	}
+	if handler != nil {
+		t.Fatal("handler for unregistered method is non-nil")
 	}
 }
 

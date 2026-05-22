@@ -3,20 +3,19 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
 
-// EnvAgentManagerSocket names the environment variable containing the
-// agent-manager service target.
-const EnvAgentManagerSocket = proto.EnvAgentProviderSocket
+// EnvAgentManagerSocket is deprecated. Host-service clients now read
+// [EnvHostServiceSocket].
+const EnvAgentManagerSocket = EnvHostServiceSocket
 
-// EnvAgentManagerSocketToken names the optional agent-manager relay-token
-// variable.
-const EnvAgentManagerSocketToken = EnvAgentManagerSocket + "_TOKEN"
+// EnvAgentManagerSocketToken is deprecated. Host-service clients now read
+// [EnvHostServiceToken].
+const EnvAgentManagerSocketToken = EnvHostServiceToken
 
 // AgentManagerClient manages agent sessions, turns, events, and interactions.
 type AgentManagerClient struct {
@@ -31,11 +30,10 @@ func AgentManager(invocationToken string) (*AgentManagerClient, error) {
 	if strings.TrimSpace(invocationToken) == "" {
 		return nil, fmt.Errorf("agent manager: invocation token is not available")
 	}
-	target := os.Getenv(EnvAgentManagerSocket)
-	if target == "" {
-		return nil, fmt.Errorf("agent manager: %s is not set", EnvAgentManagerSocket)
+	target, token, err := hostServiceTarget("agent manager")
+	if err != nil {
+		return nil, err
 	}
-	token := os.Getenv(EnvAgentManagerSocketToken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

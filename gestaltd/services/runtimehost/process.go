@@ -158,11 +158,9 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 
 	proc := &providerProcess{dir: dir}
 	proc.cleanup = cfg.Cleanup
-	for i, hostService := range cfg.HostServices {
-		if hostService.Register == nil || hostService.EnvVar == "" {
-			continue
-		}
-		hostSocket := filepath.Join(dir, fmt.Sprintf("host-%d.sock", i))
+	activeHostServices := activeHostServices(cfg.HostServices)
+	if len(activeHostServices) > 0 {
+		hostSocket := filepath.Join(dir, "host.sock")
 		lis, err := net.Listen("unix", hostSocket)
 		if err != nil {
 			cleanupStartupHostServices(proc)
@@ -177,14 +175,16 @@ func startProviderProcess(ctx context.Context, cfg ProcessConfig) (*providerProc
 			}
 			return nil, fmt.Errorf("listen on host socket: %w", err)
 		}
-		srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.ProviderName, hostService, cfg.Telemetry)...)))
-		hostService.Register(srv)
+		srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.ProviderName, unifiedHostService(), cfg.Telemetry)...)))
+		for _, hostService := range activeHostServices {
+			hostService.Register(srv)
+		}
 		proc.hostLiss = append(proc.hostLiss, lis)
 		proc.hostSrvs = append(proc.hostSrvs, srv)
 		go func() {
 			_ = srv.Serve(lis)
 		}()
-		env[hostService.EnvVar] = hostSocket
+		env[DefaultHostServiceSocketEnv] = hostSocket
 	}
 
 	if sandboxActive {

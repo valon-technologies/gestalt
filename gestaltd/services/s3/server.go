@@ -12,6 +12,7 @@ import (
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -27,6 +28,7 @@ type s3Server struct {
 }
 
 const s3ContinuationTokenPrefix = "gestalt_s3_ct_"
+const hostServiceBindingHeader = "x-gestalt-host-binding"
 
 type ServerOptions struct {
 	BindingName string
@@ -45,6 +47,148 @@ func NewServerWithOptions(client s3store.Client, pluginName string, opts ServerO
 		bindingName: strings.TrimSpace(opts.BindingName),
 		accessURLs:  opts.AccessURLs,
 	}
+}
+
+type routingS3Server struct {
+	proto.UnimplementedS3Server
+	servers        map[string]proto.S3Server
+	defaultBinding string
+}
+
+type routingS3ObjectAccessServer struct {
+	proto.UnimplementedS3ObjectAccessServer
+	servers        map[string]proto.S3ObjectAccessServer
+	defaultBinding string
+}
+
+func NewRoutingServers(clients map[string]s3store.Client, defaultBinding string, pluginName string, accessURLs *ObjectAccessURLManager) (proto.S3Server, proto.S3ObjectAccessServer) {
+	s3Servers := make(map[string]proto.S3Server, len(clients))
+	accessServers := make(map[string]proto.S3ObjectAccessServer, len(clients))
+	for binding, client := range clients {
+		binding = strings.TrimSpace(binding)
+		if binding == "" || client == nil {
+			continue
+		}
+		s3Servers[binding] = NewServerWithOptions(client, pluginName, ServerOptions{
+			BindingName: binding,
+			AccessURLs:  accessURLs,
+		})
+		accessServers[binding] = NewObjectAccessServer(accessURLs, pluginName, binding)
+	}
+	defaultBinding = strings.TrimSpace(defaultBinding)
+	if defaultBinding == "" && len(s3Servers) == 1 {
+		for binding := range s3Servers {
+			defaultBinding = binding
+		}
+	}
+	return &routingS3Server{servers: s3Servers, defaultBinding: defaultBinding}, &routingS3ObjectAccessServer{servers: accessServers, defaultBinding: defaultBinding}
+}
+
+func (s *routingS3Server) server(ctx context.Context) (proto.S3Server, error) {
+	binding := bindingFromContext(ctx)
+	if binding == "" {
+		binding = s.defaultBinding
+	}
+	if binding == "" {
+		return nil, status.Error(codes.InvalidArgument, "s3 binding is required")
+	}
+	server := s.servers[binding]
+	if server == nil {
+		return nil, status.Errorf(codes.NotFound, "s3 binding %q is not available", binding)
+	}
+	return server, nil
+}
+
+func (s *routingS3Server) HeadObject(ctx context.Context, req *proto.HeadObjectRequest) (*proto.HeadObjectResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.HeadObject(ctx, req)
+}
+
+func (s *routingS3Server) ReadObject(req *proto.ReadObjectRequest, stream proto.S3_ReadObjectServer) error {
+	server, err := s.server(stream.Context())
+	if err != nil {
+		return err
+	}
+	return server.ReadObject(req, stream)
+}
+
+func (s *routingS3Server) WriteObject(stream proto.S3_WriteObjectServer) error {
+	server, err := s.server(stream.Context())
+	if err != nil {
+		return err
+	}
+	return server.WriteObject(stream)
+}
+
+func (s *routingS3Server) DeleteObject(ctx context.Context, req *proto.DeleteObjectRequest) (*emptypb.Empty, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.DeleteObject(ctx, req)
+}
+
+func (s *routingS3Server) ListObjects(ctx context.Context, req *proto.ListObjectsRequest) (*proto.ListObjectsResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.ListObjects(ctx, req)
+}
+
+func (s *routingS3Server) CopyObject(ctx context.Context, req *proto.CopyObjectRequest) (*proto.CopyObjectResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.CopyObject(ctx, req)
+}
+
+func (s *routingS3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRequest) (*proto.PresignObjectResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.PresignObject(ctx, req)
+}
+
+func (s *routingS3ObjectAccessServer) server(ctx context.Context) (proto.S3ObjectAccessServer, error) {
+	binding := bindingFromContext(ctx)
+	if binding == "" {
+		binding = s.defaultBinding
+	}
+	if binding == "" {
+		return nil, status.Error(codes.InvalidArgument, "s3 binding is required")
+	}
+	server := s.servers[binding]
+	if server == nil {
+		return nil, status.Errorf(codes.NotFound, "s3 binding %q is not available", binding)
+	}
+	return server, nil
+}
+
+func (s *routingS3ObjectAccessServer) CreateObjectAccessURL(ctx context.Context, req *proto.CreateObjectAccessURLRequest) (*proto.CreateObjectAccessURLResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.CreateObjectAccessURL(ctx, req)
+}
+
+func bindingFromContext(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	for _, value := range md.Get(hostServiceBindingHeader) {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func (s *s3Server) HeadObject(ctx context.Context, req *proto.HeadObjectRequest) (*proto.HeadObjectResponse, error) {

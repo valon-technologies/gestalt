@@ -76,9 +76,12 @@ func (k hostServiceHandlerKey) String() string {
 	return strings.Join([]string{k.pluginName, k.service, k.envVar}, "/")
 }
 
-func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget) (http.Handler, error) {
+func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget, methodPath string) (http.Handler, error) {
 	if s == nil {
 		return nil, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(target.EnvVar), runtimehost.DefaultHostServiceSocketEnv) {
+		return s.unifiedHostServiceHandler(ctx, target, methodPath)
 	}
 	key := hostServiceHandlerKey{
 		pluginName: strings.TrimSpace(target.PluginName),
@@ -92,6 +95,41 @@ func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.Host
 	}
 	if !ok {
 		return nil, nil
+	}
+	return entry.handler, nil
+}
+
+func (s *Server) unifiedHostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget, methodPath string) (http.Handler, error) {
+	pluginName := strings.TrimSpace(target.PluginName)
+	if s == nil || pluginName == "" {
+		return nil, nil
+	}
+	var entries []hostServiceHandlerEntry
+	services := s.publicHostServices.Snapshot()
+	s.prunePublicHostServiceHandlerCache(services)
+	for _, service := range services {
+		key, ok := publicHostServiceHandlerKey(service)
+		if !ok || key.pluginName != pluginName || !publicHostServiceAllowsMethod(service.Service, methodPath) {
+			continue
+		}
+		if service.SessionVerifier == nil {
+			return nil, fmt.Errorf("public host service %s requires a session verifier", key.String())
+		}
+		entry, ok := s.publicHostServiceHandlerEntry(service)
+		if !ok {
+			continue
+		}
+		if err := checkHostServiceHandlerDuplicate(key, entries, entry); err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	entry, ok, err := selectHostServiceHandlerEntry(ctx, hostServiceHandlerKey{pluginName: pluginName, service: "host_service", envVar: runtimehost.DefaultHostServiceSocketEnv}, target.SessionID, entries)
+	if err != nil || !ok {
+		return nil, err
 	}
 	return entry.handler, nil
 }
@@ -194,6 +232,40 @@ func (s *Server) prunePublicHostServiceHandlerCache(services []runtimehost.Publi
 		}
 	}
 	s.hostServiceMu.Unlock()
+}
+
+func publicHostServiceAllowsMethod(service runtimehost.HostService, methodPath string) bool {
+	methodPath = strings.TrimSpace(methodPath)
+	if methodPath == "" {
+		return false
+	}
+	switch strings.TrimSpace(service.Name) {
+	case "agent_host":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.AgentHost/")
+	case "agent_provider":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.AgentProvider/")
+	case "authorization":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.AuthorizationProvider/")
+	case "cache":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.Cache/")
+	case "external_credentials":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.ExternalCredentialProvider/")
+	case "indexeddb":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.IndexedDB/")
+	case "plugin_invoker":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.PluginInvoker/")
+	case "runtime_log_host":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.PluginRuntimeLogHost/")
+	case "s3":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.S3/") ||
+			strings.HasPrefix(methodPath, "/gestalt.provider.v1.S3ObjectAccess/")
+	case "workflow_host":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.WorkflowHost/")
+	case "workflow_provider":
+		return strings.HasPrefix(methodPath, "/gestalt.provider.v1.WorkflowProvider/")
+	default:
+		return false
+	}
 }
 
 func selectHostServiceHandlerEntry(ctx context.Context, key hostServiceHandlerKey, sessionID string, entries []hostServiceHandlerEntry) (hostServiceHandlerEntry, bool, error) {

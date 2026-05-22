@@ -3,19 +3,18 @@ package gestalt
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 )
 
-// EnvExternalCredentialSocket names the environment variable containing the
-// external-credential service target.
-const EnvExternalCredentialSocket = "GESTALT_EXTERNAL_CREDENTIAL_SOCKET"
+// EnvExternalCredentialSocket is deprecated. Host-service clients now read
+// [EnvHostServiceSocket].
+const EnvExternalCredentialSocket = EnvHostServiceSocket
 
-// EnvExternalCredentialSocketToken names the optional external-credential
-// relay-token variable.
-const EnvExternalCredentialSocketToken = EnvExternalCredentialSocket + "_TOKEN"
+// EnvExternalCredentialSocketToken is deprecated. Host-service clients now read
+// [EnvHostServiceToken].
+const EnvExternalCredentialSocketToken = EnvHostServiceToken
 
 // ExternalCredentialClient calls the host-managed external credential provider.
 type ExternalCredentialClient struct {
@@ -27,11 +26,10 @@ var sharedExternalCredentialTransport sharedManagerTransport[proto.ExternalCrede
 // ExternalCredentials connects to the ExternalCredentialProvider exposed by
 // gestaltd.
 func ExternalCredentials() (*ExternalCredentialClient, error) {
-	target := os.Getenv(EnvExternalCredentialSocket)
-	if target == "" {
-		return nil, fmt.Errorf("external credentials: %s is not set", EnvExternalCredentialSocket)
+	target, token, err := hostServiceTarget("external credentials")
+	if err != nil {
+		return nil, err
 	}
-	token := os.Getenv(EnvExternalCredentialSocketToken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

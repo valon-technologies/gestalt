@@ -55,13 +55,7 @@ func StartHostServices(services []HostService, opts ...HostServicesOption) (*Sta
 		}
 	}
 
-	active := make([]HostService, 0, len(services))
-	for _, service := range services {
-		if service.Register == nil || service.EnvVar == "" {
-			continue
-		}
-		active = append(active, service)
-	}
+	active := activeHostServices(services)
 	if len(active) == 0 {
 		return nil, nil
 	}
@@ -71,33 +65,51 @@ func StartHostServices(services []HostService, opts ...HostServicesOption) (*Sta
 		return nil, err
 	}
 	started := &StartedHostServices{dir: dir}
-	for i, service := range active {
-		hostSocket := filepath.Join(dir, fmt.Sprintf("host-%d.sock", i))
-		lis, err := net.Listen("unix", hostSocket)
-		if err != nil {
-			_ = started.Close()
-			if cleanupErr := os.Remove(hostSocket); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
-				return nil, errors.Join(
-					fmt.Errorf("listen on host socket: %w", err),
-					fmt.Errorf("cleanup failed host socket %q: %w", hostSocket, cleanupErr),
-				)
-			}
-			return nil, fmt.Errorf("listen on host socket: %w", err)
+	hostSocket := filepath.Join(dir, "host.sock")
+	lis, err := net.Listen("unix", hostSocket)
+	if err != nil {
+		_ = started.Close()
+		if cleanupErr := os.Remove(hostSocket); cleanupErr != nil && !os.IsNotExist(cleanupErr) {
+			return nil, errors.Join(
+				fmt.Errorf("listen on host socket: %w", err),
+				fmt.Errorf("cleanup failed host socket %q: %w", hostSocket, cleanupErr),
+			)
 		}
-		srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.providerName, service, cfg.telemetry)...)))
+		return nil, fmt.Errorf("listen on host socket: %w", err)
+	}
+	srv := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler(hostServiceServerGRPCOptions(cfg.providerName, unifiedHostService(), cfg.telemetry)...)))
+	for _, service := range active {
 		service.Register(srv)
-		started.hostLiss = append(started.hostLiss, lis)
-		started.hostSrvs = append(started.hostSrvs, srv)
 		started.services = append(started.services, StartedHostService{
 			Name:       hostServiceMetricName(service),
 			EnvVar:     service.EnvVar,
 			SocketPath: hostSocket,
 		})
-		go func() {
-			_ = srv.Serve(lis)
-		}()
 	}
+	started.hostLiss = append(started.hostLiss, lis)
+	started.hostSrvs = append(started.hostSrvs, srv)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
 	return started, nil
+}
+
+func activeHostServices(services []HostService) []HostService {
+	active := make([]HostService, 0, len(services))
+	for _, service := range services {
+		if service.Register == nil {
+			continue
+		}
+		active = append(active, service)
+	}
+	return active
+}
+
+func unifiedHostService() HostService {
+	return HostService{
+		Name:   "host_service",
+		EnvVar: DefaultHostServiceSocketEnv,
+	}
 }
 
 func (s *StartedHostServices) Bindings() []StartedHostService {

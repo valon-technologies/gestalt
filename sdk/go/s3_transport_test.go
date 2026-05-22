@@ -4,15 +4,20 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestS3Transport_NamedSocketEnv(t *testing.T) {
+	t.Setenv(gestalt.EnvHostServiceSocket, "unix://"+testS3Socket)
 	client, err := gestalt.S3("test")
 	if err != nil {
 		t.Fatalf("connect named s3: %v", err)
@@ -30,6 +35,65 @@ func TestS3Transport_NamedSocketEnv(t *testing.T) {
 	}
 	if got != "ok" {
 		t.Fatalf("Text = %q, want ok", got)
+	}
+}
+
+func TestS3TransportNamedBindingMetadata(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen: %v", err)
+	}
+	harness := &s3BindingMetadataHarness{bindings: make(chan string, 2)}
+	srv := grpc.NewServer()
+	proto.RegisterS3Server(srv, harness)
+	go func() { _ = srv.Serve(lis) }()
+	t.Cleanup(srv.Stop)
+
+	t.Setenv(gestalt.EnvHostServiceSocket, "tcp://"+lis.Addr().String())
+	client, err := gestalt.S3("archive")
+	if err != nil {
+		t.Fatalf("connect s3: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	if err := client.DeleteObject(ctx, gestalt.ObjectRef{Bucket: "docs", Key: "old.txt"}); err != nil {
+		t.Fatalf("DeleteObject: %v", err)
+	}
+	if _, err := client.Object("docs", "new.txt").WriteString(ctx, "body", nil); err != nil {
+		t.Fatalf("WriteString: %v", err)
+	}
+	if got := <-harness.bindings; got != "archive" {
+		t.Fatalf("unary binding metadata = %q, want archive", got)
+	}
+	if got := <-harness.bindings; got != "archive" {
+		t.Fatalf("stream binding metadata = %q, want archive", got)
+	}
+}
+
+type s3BindingMetadataHarness struct {
+	proto.UnimplementedS3Server
+	bindings chan string
+}
+
+func (h *s3BindingMetadataHarness) DeleteObject(ctx context.Context, _ *proto.DeleteObjectRequest) (*emptypb.Empty, error) {
+	h.bindings <- firstMetadataValue(ctx, gestalt.HostServiceBindingMetadata)
+	return &emptypb.Empty{}, nil
+}
+
+func (h *s3BindingMetadataHarness) WriteObject(stream proto.S3_WriteObjectServer) error {
+	h.bindings <- firstMetadataValue(stream.Context(), gestalt.HostServiceBindingMetadata)
+	for {
+		if _, err := stream.Recv(); errors.Is(err, io.EOF) {
+			return stream.SendAndClose(&proto.WriteObjectResponse{
+				Meta: &proto.S3ObjectMeta{
+					Ref:  &proto.S3ObjectRef{Bucket: "docs", Key: "new.txt"},
+					Size: 4,
+				},
+			})
+		} else if err != nil {
+			return err
+		}
 	}
 }
 

@@ -2,20 +2,19 @@ package gestalt
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// EnvAgentHostSocket names the environment variable containing the agent-host
-// service target.
-const EnvAgentHostSocket = "GESTALT_AGENT_HOST_SOCKET"
+// EnvAgentHostSocket is deprecated. Host-service clients now read
+// [EnvHostServiceSocket].
+const EnvAgentHostSocket = EnvHostServiceSocket
 
-// EnvAgentHostSocketToken names the optional agent-host relay-token variable.
-const EnvAgentHostSocketToken = EnvAgentHostSocket + "_TOKEN"
+// EnvAgentHostSocketToken is deprecated. Host-service clients now read
+// [EnvHostServiceToken].
+const EnvAgentHostSocketToken = EnvHostServiceToken
 
 // AgentHostClient calls host tool APIs from an agent provider.
 type AgentHostClient struct {
@@ -59,11 +58,10 @@ var sharedAgentHostTransport sharedManagerTransport[proto.AgentHostClient]
 
 // AgentHost returns a shared client for the host agent service.
 func AgentHost() (*AgentHostClient, error) {
-	target := os.Getenv(EnvAgentHostSocket)
-	if target == "" {
-		return nil, fmt.Errorf("agent host: %s is not set", EnvAgentHostSocket)
+	target, token, err := hostServiceTarget("agent host")
+	if err != nil {
+		return nil, err
 	}
-	token := os.Getenv(EnvAgentHostSocketToken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

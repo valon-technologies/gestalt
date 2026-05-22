@@ -3,13 +3,17 @@ package cache
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
+
+const hostServiceBindingHeader = "x-gestalt-host-binding"
 
 type cacheServer struct {
 	proto.UnimplementedCacheServer
@@ -19,6 +23,114 @@ type cacheServer struct {
 
 func NewServer(cache corecache.Cache, pluginName string) proto.CacheServer {
 	return &cacheServer{cache: cache, plugin: pluginName}
+}
+
+type routingCacheServer struct {
+	proto.UnimplementedCacheServer
+	servers        map[string]proto.CacheServer
+	defaultBinding string
+}
+
+func NewRoutingServer(bindings map[string]corecache.Cache, defaultBinding string, pluginName string) proto.CacheServer {
+	servers := make(map[string]proto.CacheServer, len(bindings))
+	for name, cache := range bindings {
+		name = strings.TrimSpace(name)
+		if name == "" || cache == nil {
+			continue
+		}
+		servers[name] = NewServer(cache, pluginName)
+	}
+	defaultBinding = strings.TrimSpace(defaultBinding)
+	if defaultBinding == "" && len(servers) == 1 {
+		for name := range servers {
+			defaultBinding = name
+		}
+	}
+	return &routingCacheServer{servers: servers, defaultBinding: defaultBinding}
+}
+
+func (s *routingCacheServer) server(ctx context.Context) (proto.CacheServer, error) {
+	binding := bindingFromContext(ctx)
+	if binding == "" {
+		binding = s.defaultBinding
+	}
+	if binding == "" {
+		return nil, status.Error(codes.InvalidArgument, "cache binding is required")
+	}
+	server := s.servers[binding]
+	if server == nil {
+		return nil, status.Errorf(codes.NotFound, "cache binding %q is not available", binding)
+	}
+	return server, nil
+}
+
+func (s *routingCacheServer) Get(ctx context.Context, req *proto.CacheGetRequest) (*proto.CacheGetResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.Get(ctx, req)
+}
+
+func (s *routingCacheServer) GetMany(ctx context.Context, req *proto.CacheGetManyRequest) (*proto.CacheGetManyResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.GetMany(ctx, req)
+}
+
+func (s *routingCacheServer) Set(ctx context.Context, req *proto.CacheSetRequest) (*emptypb.Empty, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.Set(ctx, req)
+}
+
+func (s *routingCacheServer) SetMany(ctx context.Context, req *proto.CacheSetManyRequest) (*emptypb.Empty, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.SetMany(ctx, req)
+}
+
+func (s *routingCacheServer) Delete(ctx context.Context, req *proto.CacheDeleteRequest) (*proto.CacheDeleteResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.Delete(ctx, req)
+}
+
+func (s *routingCacheServer) DeleteMany(ctx context.Context, req *proto.CacheDeleteManyRequest) (*proto.CacheDeleteManyResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.DeleteMany(ctx, req)
+}
+
+func (s *routingCacheServer) Touch(ctx context.Context, req *proto.CacheTouchRequest) (*proto.CacheTouchResponse, error) {
+	server, err := s.server(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return server.Touch(ctx, req)
+}
+
+func bindingFromContext(ctx context.Context) string {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return ""
+	}
+	for _, value := range md.Get(hostServiceBindingHeader) {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func (s *cacheServer) Get(ctx context.Context, req *proto.CacheGetRequest) (*proto.CacheGetResponse, error) {

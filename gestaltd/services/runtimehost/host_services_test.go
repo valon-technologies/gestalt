@@ -101,7 +101,7 @@ func TestStartHostServicesRecordsRPCServerDurationWithTelemetryAttrs(t *testing.
 	attrs := map[string]string{
 		"gestaltd.rpc.role":          "host_service_server",
 		"gestaltd.provider.name":     providerName,
-		"gestaltd.host_service.name": "cache",
+		"gestaltd.host_service.name": "host_service",
 	}
 	rm := metrictest.CollectMetricsUntilFloat64Histogram(t, metrics.Reader, "rpc.server.call.duration", attrs)
 	metrictest.RequireFloat64Histogram(t, rm, "rpc.server.call.duration", attrs)

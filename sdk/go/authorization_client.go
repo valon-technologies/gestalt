@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -18,12 +17,13 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// EnvAuthorizationSocket names the environment variable containing the
-// authorization service target.
-const EnvAuthorizationSocket = "GESTALT_AUTHORIZATION_SOCKET"
+// EnvAuthorizationSocket is deprecated. Host-service clients now read
+// [EnvHostServiceSocket].
+const EnvAuthorizationSocket = EnvHostServiceSocket
 
-// EnvAuthorizationSocketToken names the optional authorization relay-token variable.
-const EnvAuthorizationSocketToken = EnvAuthorizationSocket + "_TOKEN"
+// EnvAuthorizationSocketToken is deprecated. Host-service clients now read
+// [EnvHostServiceToken].
+const EnvAuthorizationSocketToken = EnvHostServiceToken
 
 // AuthorizationClient calls the host authorization provider.
 //
@@ -43,11 +43,10 @@ var sharedAuthorizationTransport struct {
 
 // Authorization returns a shared authorization client.
 func Authorization() (*AuthorizationClient, error) {
-	target := os.Getenv(EnvAuthorizationSocket)
-	if target == "" {
-		return nil, fmt.Errorf("authorization: %s is not set", EnvAuthorizationSocket)
+	target, token, err := hostServiceTarget("authorization")
+	if err != nil {
+		return nil, err
 	}
-	token := os.Getenv(EnvAuthorizationSocketToken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

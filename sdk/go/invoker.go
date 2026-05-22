@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -18,13 +17,13 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// EnvPluginInvokerSocket names the environment variable containing the
-// plugin-invoker service target.
-const EnvPluginInvokerSocket = proto.EnvPluginInvokerSocket
+// EnvPluginInvokerSocket is deprecated. Host-service clients now read
+// [EnvHostServiceSocket].
+const EnvPluginInvokerSocket = EnvHostServiceSocket
 
-// EnvPluginInvokerSocketToken names the optional plugin-invoker relay-token
-// variable.
-const EnvPluginInvokerSocketToken = EnvPluginInvokerSocket + "_TOKEN"
+// EnvPluginInvokerSocketToken is deprecated. Host-service clients now read
+// [EnvHostServiceToken].
+const EnvPluginInvokerSocketToken = EnvHostServiceToken
 
 // InvokeOptions selects a target connection for a plugin invocation.
 type InvokeOptions struct {
@@ -67,11 +66,10 @@ func Invoker(invocationToken string) (*InvokerClient, error) {
 	if strings.TrimSpace(invocationToken) == "" {
 		return nil, fmt.Errorf("plugin invoker: invocation token is not available")
 	}
-	target := os.Getenv(EnvPluginInvokerSocket)
-	if target == "" {
-		return nil, fmt.Errorf("plugin invoker: %s is not set", EnvPluginInvokerSocket)
+	target, token, err := hostServiceTarget("plugin invoker")
+	if err != nil {
+		return nil, err
 	}
-	token := os.Getenv(EnvPluginInvokerSocketToken)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
