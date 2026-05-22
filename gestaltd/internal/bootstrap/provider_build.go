@@ -2627,9 +2627,6 @@ func buildScopedIndexedDB(opts scopedIndexedDBBuildOptions, deps Deps) (indexedd
 	if err != nil {
 		return nil, fmt.Errorf("indexeddb %q: %w", opts.ProviderName, err)
 	}
-	ds = newIndexedDBStoreAllowlist(ds, indexedDBStoreAllowlistOptions{
-		AllowedStores: opts.AllowedStores,
-	})
 	return metricutil.InstrumentIndexedDB(ds, opts.MetricsName), nil
 }
 

@@ -195,6 +195,42 @@ func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
 	}
 }
 
+func TestIndexedDBServerTransactionAbortsOnDisallowedStoreMidTransaction(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	ctx := context.Background()
+	if err := db.CreateObjectStore(ctx, "tasks", indexeddb.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore tasks: %v", err)
+	}
+	if err := db.CreateObjectStore(ctx, "notes", indexeddb.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore notes: %v", err)
+	}
+
+	srv := NewServer(db, "roadmap", ServerOptions{AllowedStores: []string{"tasks"}})
+	conn := newBufconnConn(t, func(server *grpc.Server) {
+		proto.RegisterIndexedDBServer(server, srv)
+	})
+	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+
+	tx, err := remote.Transaction(ctx, []string{"tasks"}, indexeddb.TransactionReadwrite, indexeddb.TransactionOptions{})
+	if err != nil {
+		t.Fatalf("Transaction: %v", err)
+	}
+	if err := tx.ObjectStore("tasks").Put(ctx, indexeddb.Record{"id": "task-1"}); err != nil {
+		t.Fatalf("Put allowed task: %v", err)
+	}
+	if err := tx.ObjectStore("notes").Put(ctx, indexeddb.Record{"id": "note-1"}); !errors.Is(err, indexeddb.ErrNotFound) {
+		t.Fatalf("Put disallowed store error = %v, want indexeddb.ErrNotFound", err)
+	}
+	if err := tx.Commit(ctx); err == nil {
+		t.Fatal("Commit should fail after disallowed store operation")
+	}
+	if _, err := db.ObjectStore("tasks").Get(ctx, "task-1"); !errors.Is(err, indexeddb.ErrNotFound) {
+		t.Fatalf("task-1 after aborted transaction error = %v, want indexeddb.ErrNotFound", err)
+	}
+}
+
 func TestIndexedDBServerPutRejectsUniqueIndexConflict(t *testing.T) {
 	t.Parallel()
 
