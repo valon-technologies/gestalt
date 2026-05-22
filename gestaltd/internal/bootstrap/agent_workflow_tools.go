@@ -130,7 +130,7 @@ var workflowSystemToolDescriptors = map[string]workflowSystemToolDescriptor{
 	workflowSystemToolRunsStart: {
 		Operation:        workflowSystemToolRunsStart,
 		Name:             "workflow_runs_start",
-		Description:      "Start a one-off workflow run for a delegated agent target or an existing workflow definition.",
+		Description:      "Start a one-off workflow run for a delegated workflow target or an existing workflow definition.",
 		ParametersSchema: workflowSystemToolStartRunSchema(),
 	},
 	workflowSystemToolRunsList: {
@@ -969,10 +969,10 @@ func workflowSystemToolValidateCreateScope(req agentSystemToolExecutionRequest, 
 				return fmt.Errorf("%w: %s.agent.tools[%d] must be an exact app operation", invocation.ErrInvalidInvocation, stepPath, i)
 			}
 			if ref.CredentialMode != "" {
-				return fmt.Errorf("%w: %s.agent.tools[%d] credentialMode is not supported for scheduled agent targets", invocation.ErrInvalidInvocation, stepPath, i)
+				return fmt.Errorf("%w: %s.agent.tools[%d] credentialMode is not supported for workflow agent tools", invocation.ErrInvalidInvocation, stepPath, i)
 			}
 			if ref.RunAs != nil || ref.RunAsExternalIdentity != nil {
-				return fmt.Errorf("%w: %s.agent.tools[%d] runAs is not supported for scheduled agent targets", invocation.ErrInvalidInvocation, stepPath, i)
+				return fmt.Errorf("%w: %s.agent.tools[%d] runAs is not supported for workflow agent tools", invocation.ErrInvalidInvocation, stepPath, i)
 			}
 			if !workflowSystemToolAgentAppRefAllowed(ref, req.ToolRefs, req.Tools) {
 				return fmt.Errorf("%w: %s.agent.tools[%d] %s.%s is outside the current agent tool scope", invocation.ErrScopeDenied, stepPath, i, ref.App, ref.Operation)

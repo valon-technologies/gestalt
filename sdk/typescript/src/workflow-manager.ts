@@ -183,9 +183,9 @@ export interface WorkflowManagerPublishEvent {
  * Client for creating and controlling workflow schedules and event triggers.
  *
  * The constructor accepts either a Gestalt request or an invocation token. Each
- * manager call forwards that token to the host service. When constructed from a
- * request, create operations reuse the request idempotency key unless the call
- * provides one explicitly.
+ * manager call forwards that token to the workflow-provider facade. When
+ * constructed from a request, create operations reuse the request idempotency
+ * key unless the call provides one explicitly.
  */
 export class WorkflowManager {
   private readonly client: Client<typeof WorkflowProviderService>;
