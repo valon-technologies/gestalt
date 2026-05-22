@@ -72,10 +72,6 @@ func (k hostServiceHandlerKey) String() string {
 	return k.pluginName
 }
 
-func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget, methodPath string) (http.Handler, error) {
-	return s.unifiedHostServiceHandler(ctx, target, methodPath)
-}
-
 func (s *Server) unifiedHostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget, methodPath string) (http.Handler, error) {
 	pluginName := strings.TrimSpace(target.PluginName)
 	if s == nil || pluginName == "" {

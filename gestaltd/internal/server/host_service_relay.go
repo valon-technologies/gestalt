@@ -31,7 +31,7 @@ func (s *Server) hostServiceRelayMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		handler, err := s.hostServiceHandler(r.Context(), target, r.URL.Path)
+		handler, err := s.unifiedHostServiceHandler(r.Context(), target, r.URL.Path)
 		if err != nil {
 			writeGRPCTrailersOnly(w, codes.Unauthenticated, "invalid-host-service-relay-session")
 			return
