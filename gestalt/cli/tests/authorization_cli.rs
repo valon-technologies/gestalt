@@ -157,7 +157,7 @@ fn test_cli_authorization_subjects_tokens_create_groups_native_permissions() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"name":"deploy","permissions":[{"actions":["provider_dev.attach"],"operations":["issues.create"],"plugin":"github"},{"operations":["chat.postMessage"],"plugin":"slack"}]}"#.to_string(),
+        r#"{"name":"deploy","permissions":[{"actions":["provider_dev.attach"],"operations":["issues.create"],"app":"github"},{"operations":["chat.postMessage"],"app":"slack"}]}"#.to_string(),
     ))
     .with_body(r#"{"id":"tok-1","name":"deploy","token":"plain-secret"}"#)
     .create();
@@ -198,7 +198,7 @@ fn test_cli_authorization_subjects_grants_set_surfaces_pending_reload() {
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(r#"{"role":"viewer"}"#.to_string()))
     .with_body(
-        r#"{"status":"persisted_pending_reload","grant":{"plugin":"github","role":"viewer","source":"dynamic","mutable":true},"reloaded":false}"#,
+        r#"{"status":"persisted_pending_reload","grant":{"app":"github","role":"viewer","source":"dynamic","mutable":true},"reloaded":false}"#,
     )
     .create();
 
@@ -233,7 +233,7 @@ fn test_cli_authorization_subjects_tokens_list_table_shows_permissions() {
         StatusCode::OK
     )
     .with_body(
-        r#"[{"id":"tok-1","name":"deploy","scopes":"","permissions":[{"plugin":"github","operations":["issues.list"],"actions":["provider_dev.attach"]}],"createdAt":"2026-05-12T00:00:00Z"}]"#,
+        r#"[{"id":"tok-1","name":"deploy","scopes":"","permissions":[{"app":"github","operations":["issues.list"],"actions":["provider_dev.attach"]}],"createdAt":"2026-05-12T00:00:00Z"}]"#,
     )
     .create();
 
@@ -255,7 +255,7 @@ fn test_cli_authorization_plugins_members_set_uses_management_api() {
     let mock = authed_json_mock!(
         server,
         Method::PUT,
-        "/admin/api/v1/authorization/plugins/github/members",
+        "/admin/api/v1/authorization/apps/github/members",
         StatusCode::OK
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
@@ -295,11 +295,11 @@ fn test_cli_authorization_relationships_list_maps_debug_filters() {
     let mock = authed_json_mock!(
         server,
         Method::GET,
-        "/admin/api/v1/authorization/relationships?pageSize=10&pageToken=next&subjectType=subject&subjectId=user%3Aalice&relation=viewer&resourceType=plugin_dynamic&resourceId=github&modelId=model-1",
+        "/admin/api/v1/authorization/relationships?pageSize=10&pageToken=next&subjectType=subject&subjectId=user%3Aalice&relation=viewer&resourceType=app_dynamic&resourceId=github&modelId=model-1",
         StatusCode::OK
     )
     .with_body(
-        r#"{"modelId":"model-1","relationships":[{"subject":{"type":"subject","id":"user:alice"},"relation":"viewer","resource":{"type":"plugin_dynamic","id":"github"},"managed":true}]}"#,
+        r#"{"modelId":"model-1","relationships":[{"subject":{"type":"subject","id":"user:alice"},"relation":"viewer","resource":{"type":"app_dynamic","id":"github"},"managed":true}]}"#,
     )
     .create();
 
@@ -322,7 +322,7 @@ fn test_cli_authorization_relationships_list_maps_debug_filters() {
             "--relation",
             "viewer",
             "--resource-type",
-            "plugin_dynamic",
+            "app_dynamic",
             "--resource-id",
             "github",
             "--model-id",
@@ -330,7 +330,7 @@ fn test_cli_authorization_relationships_list_maps_debug_filters() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("plugin_dynamic"));
+        .stdout(predicate::str::contains("app_dynamic"));
 
     mock.assert();
 }
@@ -341,7 +341,7 @@ fn test_cli_authorization_subjects_integrations_manual_pending_selection_uses_re
     let _integrations = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/authorization/subjects/service_account%3Arelease-bot/integrations",
+        "/api/v1/authorization/subjects/service_account%3Arelease-bot/apps",
         StatusCode::OK
     )
     .with_body(

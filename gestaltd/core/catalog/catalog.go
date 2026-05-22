@@ -14,7 +14,7 @@ var validSegment = regexp.MustCompile(`^[a-zA-Z0-9_]([a-zA-Z0-9_-]*[a-zA-Z0-9_])
 const (
 	TransportMCPPassthrough = "mcp-passthrough"
 	TransportREST           = "rest"
-	TransportPlugin         = "plugin"
+	TransportApp         = "app"
 )
 
 // Catalog is the normalized on-disk representation for a provider's tool

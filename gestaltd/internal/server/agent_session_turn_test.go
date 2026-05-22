@@ -107,14 +107,14 @@ func TestAgentSessionRejectsUnauthorizedProvider(t *testing.T) {
 		}
 		cfg.Services = services
 		cfg.Agent = agentControl
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			"managed": {AuthorizationPolicy: "agent_policy"},
 		}
 		authz := mustAuthorizer(t, config.AuthorizationConfig{
 			Policies: map[string]config.SubjectPolicyDef{
 				"agent_policy": {Default: "deny"},
 			},
-		}, cfg.PluginDefs)
+		}, cfg.AppDefs)
 		cfg.Authorizer = authz
 		cfg.AgentManager = agentmanager.New(agentmanager.Config{
 			Agent:      agentControl,
@@ -393,7 +393,7 @@ func TestAgentRequestsRejectMissingProviderTokenPermission(t *testing.T) {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 	user := seedAPITokenWithPermissions(t, services, plaintext, hashed, "agent-user", []core.AccessPermission{{
-		Plugin:     "roadmap",
+		App:     "roadmap",
 		Operations: []string{"sync"},
 	}})
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -1093,7 +1093,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 		t.Fatalf("supported tool sources = %#v, want mcp_catalog", got)
 	}
 
-	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"plugin":"docs","operation":"search"}]}`))
+	turnReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/agent/sessions/"+sessionID+"/turns", bytes.NewBufferString(`{"messages":[{"role":"user","text":"hello"}],"toolSource":"mcp_catalog","toolRefs":[{"app":"docs","operation":"search"}]}`))
 	turnReq.AddCookie(&http.Cookie{Name: "session_token", Value: "ada-session"})
 	turnResp, err := http.DefaultClient.Do(turnReq)
 	if err != nil {
@@ -1118,7 +1118,7 @@ func TestAgentSessionsAndTurnsRoundTrip(t *testing.T) {
 	if turnRequests[0].ToolSource != coreagent.ToolSourceModeMCPCatalog {
 		t.Fatalf("provider turn tool source = %q, want mcp_catalog", turnRequests[0].ToolSource)
 	}
-	if got := turnRequests[0].ToolRefs; len(got) != 1 || got[0].Plugin != "docs" || got[0].Operation != "search" {
+	if got := turnRequests[0].ToolRefs; len(got) != 1 || got[0].App != "docs" || got[0].Operation != "search" {
 		t.Fatalf("provider turn tool refs = %#v, want docs.search", got)
 	}
 
@@ -1436,22 +1436,22 @@ func TestAgentTurnToolRefsDefaultBroadAndExplicitEmptyNone(t *testing.T) {
 
 	createTurn("omitted", `{"messages":[{"role":"user","text":"hello"}]}`, http.StatusCreated)
 	createTurn("explicit empty", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":[]}`, http.StatusCreated)
-	createTurn("plugin broad", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"plugin":"docs"}]}`, http.StatusCreated)
+	createTurn("plugin broad", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"docs"}]}`, http.StatusCreated)
 	createTurn("null", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":null}`, http.StatusBadRequest)
-	createTurn("global credential mode", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"plugin":"*","credentialMode":"none"}]}`, http.StatusBadRequest)
+	createTurn("global credential mode", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"app":"*","credentialMode":"none"}]}`, http.StatusBadRequest)
 	createTurn("system title", `{"messages":[{"role":"user","text":"hello"}],"toolRefs":[{"system":"workflow","operation":"schedules.list","title":"Schedules"}]}`, http.StatusBadRequest)
 
 	turnRequests := provider.capturedTurnRequests()
 	if len(turnRequests) != 3 {
 		t.Fatalf("provider turn requests len = %d, want 3", len(turnRequests))
 	}
-	if got := turnRequests[0].ToolRefs; len(got) != 1 || got[0].Plugin != "*" || got[0].Operation != "" {
+	if got := turnRequests[0].ToolRefs; len(got) != 1 || got[0].App != "*" || got[0].Operation != "" {
 		t.Fatalf("omitted toolRefs provider refs = %#v, want global broad ref", got)
 	}
 	if got := turnRequests[1].ToolRefs; len(got) != 0 {
 		t.Fatalf("explicit empty toolRefs provider refs = %#v, want none", got)
 	}
-	if got := turnRequests[2].ToolRefs; len(got) != 1 || got[0].Plugin != "docs" || got[0].Operation != "" {
+	if got := turnRequests[2].ToolRefs; len(got) != 1 || got[0].App != "docs" || got[0].Operation != "" {
 		t.Fatalf("plugin broad provider refs = %#v, want docs broad ref", got)
 	}
 }
@@ -1522,7 +1522,7 @@ func TestAgentCreateTurnAcceptsNoneToolSourceWithStructuredOutput(t *testing.T) 
 	createTurn("structured none", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","responseSchema":{"type":"object","properties":{"score":{"type":"number"}}}}`, http.StatusCreated)
 	createTurn("null schema", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","responseSchema":null}`, http.StatusBadRequest)
 	createTurn("empty schema", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","responseSchema":{}}`, http.StatusBadRequest)
-	createTurn("none with tools", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","toolRefs":[{"plugin":"docs"}]}`, http.StatusBadRequest)
+	createTurn("none with tools", `{"messages":[{"role":"user","text":"grade"}],"toolSource":"none","toolRefs":[{"app":"docs"}]}`, http.StatusBadRequest)
 
 	turnRequests := provider.capturedTurnRequests()
 	if len(turnRequests) != 1 {

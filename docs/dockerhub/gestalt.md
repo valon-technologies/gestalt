@@ -37,7 +37,7 @@ docker run --rm \
   -e GESTALT_URL=https://gestalt.example.com \
   -e GESTALT_API_KEY=gst_api_... \
   valontechnologies/gestalt:latest \
-  plugin list
+  app list
 ```
 
 ### Invoke an operation
@@ -47,7 +47,7 @@ docker run --rm \
   -e GESTALT_URL=https://gestalt.example.com \
   -e GESTALT_API_KEY=gst_api_... \
   valontechnologies/gestalt:latest \
-  plugin invoke github search_code -p "query=gestalt org:my-org"
+  app invoke github search_code -p "query=gestalt org:my-org"
 ```
 
 ### Use in CI pipelines
@@ -57,7 +57,7 @@ binary is inconvenient:
 
 ```yaml
 jobs:
-  check-plugins:
+  check-apps:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -65,17 +65,17 @@ jobs:
             -e GESTALT_URL="${{ vars.GESTALT_URL }}" \
             -e GESTALT_API_KEY="${{ secrets.GESTALT_API_KEY }}" \
             valontechnologies/gestalt:latest \
-            plugin list --format json
+            app list --format json
 ```
 
 ## Key commands
 
 | Command | Description |
 |---|---|
-| `plugin list` | List available plugins |
-| `plugin connect NAME` | Connect a plugin via OAuth or manual authentication |
-| `plugin disconnect NAME` | Disconnect a plugin |
-| `plugin invoke NAME OP` | Execute a plugin operation |
+| `plugin list` | List available apps |
+| `plugin connect NAME` | Connect a app via OAuth or manual authentication |
+| `plugin disconnect NAME` | Disconnect a app |
+| `plugin invoke NAME OP` | Execute a app operation |
 | `workflow ...` | Manage workflow schedules, triggers, events, and runs |
 | `agent` | Start or resume an interactive agent session |
 | `agent sessions ...` | Create, list, inspect, and update agent sessions |
@@ -99,7 +99,7 @@ to inspect available commands:
 
 ```sh
 docker run --rm valontechnologies/gestalt:latest --help
-docker run --rm valontechnologies/gestalt:latest plugin invoke --help
+docker run --rm valontechnologies/gestalt:latest app invoke --help
 ```
 
 For an interactive shell, use the native binary or Homebrew install instead

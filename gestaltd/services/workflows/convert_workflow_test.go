@@ -12,12 +12,12 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func TestWorkflowTargetToProtoUsesNestedPluginTarget(t *testing.T) {
+func TestWorkflowTargetToProtoUsesNestedAppTarget(t *testing.T) {
 	t.Parallel()
 
 	target, err := workflowTargetToProto(coreworkflow.Target{
-		Plugin: &coreworkflow.PluginTarget{
-			PluginName:     "demo",
+		App: &coreworkflow.AppTarget{
+			AppName:     "demo",
 			Operation:      "refresh",
 			Connection:     "workspace",
 			Instance:       "primary",
@@ -30,16 +30,16 @@ func TestWorkflowTargetToProtoUsesNestedPluginTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("workflowTargetToProto: %v", err)
 	}
-	if target.GetPlugin() == nil {
-		t.Fatal("nested plugin target is nil")
+	if target.GetApp() == nil {
+		t.Fatal("nested app target is nil")
 	}
-	if got := target.GetPlugin().GetPluginName(); got != "demo" {
-		t.Fatalf("nested plugin_name = %q, want %q", got, "demo")
+	if got := target.GetApp().GetAppName(); got != "demo" {
+		t.Fatalf("nested app_name = %q, want %q", got, "demo")
 	}
-	if got := target.GetPlugin().GetCredentialMode(); got != string(core.ConnectionModeNone) {
+	if got := target.GetApp().GetCredentialMode(); got != string(core.ConnectionModeNone) {
 		t.Fatalf("nested credential_mode = %q, want %q", got, core.ConnectionModeNone)
 	}
-	input := mapFromStruct(target.GetPlugin().GetInput())
+	input := mapFromStruct(target.GetApp().GetInput())
 	if got := input["customer_id"]; got != "cust_123" {
 		t.Fatalf("nested input customer_id = %#v, want %q", got, "cust_123")
 	}
@@ -55,9 +55,9 @@ func TestWorkflowTargetFromProtoAcceptsNestedPluginFields(t *testing.T) {
 		t.Fatalf("NewStruct: %v", err)
 	}
 	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
-		Kind: &proto.BoundWorkflowTarget_Plugin{
-			Plugin: &proto.BoundWorkflowPluginTarget{
-				PluginName:     " demo ",
+		Kind: &proto.BoundWorkflowTarget_App{
+			App: &proto.BoundWorkflowAppTarget{
+				AppName:     " demo ",
 				Operation:      " refresh ",
 				Connection:     " workspace ",
 				Instance:       " primary ",
@@ -66,25 +66,25 @@ func TestWorkflowTargetFromProtoAcceptsNestedPluginFields(t *testing.T) {
 			},
 		},
 	})
-	if target.Plugin == nil {
+	if target.App == nil {
 		t.Fatal("plugin target is nil")
 	}
-	if got := target.Plugin.PluginName; got != "demo" {
+	if got := target.App.AppName; got != "demo" {
 		t.Fatalf("plugin name = %q, want %q", got, "demo")
 	}
-	if got := target.Plugin.Operation; got != "refresh" {
+	if got := target.App.Operation; got != "refresh" {
 		t.Fatalf("operation = %q, want %q", got, "refresh")
 	}
-	if got := target.Plugin.Connection; got != "workspace" {
+	if got := target.App.Connection; got != "workspace" {
 		t.Fatalf("connection = %q, want %q", got, "workspace")
 	}
-	if got := target.Plugin.Instance; got != "primary" {
+	if got := target.App.Instance; got != "primary" {
 		t.Fatalf("instance = %q, want %q", got, "primary")
 	}
-	if got := target.Plugin.CredentialMode; got != core.ConnectionModeNone {
+	if got := target.App.CredentialMode; got != core.ConnectionModeNone {
 		t.Fatalf("credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
-	if got := target.Plugin.Input["customer_id"]; got != "cust_123" {
+	if got := target.App.Input["customer_id"]; got != "cust_123" {
 		t.Fatalf("input customer_id = %#v, want %q", got, "cust_123")
 	}
 }
@@ -96,8 +96,8 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 		ProviderName: "managed",
 		Prompt:       "Sync roadmap",
 		OutputDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.PluginTarget{
-				PluginName:     "notification",
+			Target: coreworkflow.AppTarget{
+				AppName:     "notification",
 				Operation:      "reply",
 				CredentialMode: core.ConnectionModeUser,
 				Input:          map[string]any{"format": "plain"},
@@ -110,8 +110,8 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 			},
 		},
 		SessionReadyDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.PluginTarget{
-				PluginName: "notification",
+			Target: coreworkflow.AppTarget{
+				AppName: "notification",
 				Operation:  "started",
 				Input:      map[string]any{"format": "plain"},
 			},
@@ -128,13 +128,13 @@ func TestWorkflowAgentTargetProtoRoundTrips(t *testing.T) {
 	if target.GetAgent() == nil {
 		t.Fatal("nested agent target is nil")
 	}
-	if target.GetAgent().GetOutputDelivery().GetTarget().GetPluginName() != "notification" {
+	if target.GetAgent().GetOutputDelivery().GetTarget().GetAppName() != "notification" {
 		t.Fatalf("output delivery = %#v", target.GetAgent().GetOutputDelivery())
 	}
 	if target.GetAgent().GetOutputDelivery().GetCredentialMode() != string(core.ConnectionModeNone) {
 		t.Fatalf("output delivery credential mode = %q", target.GetAgent().GetOutputDelivery().GetCredentialMode())
 	}
-	if target.GetAgent().GetSessionReadyDelivery().GetTarget().GetPluginName() != "notification" {
+	if target.GetAgent().GetSessionReadyDelivery().GetTarget().GetAppName() != "notification" {
 		t.Fatalf("session ready delivery = %#v", target.GetAgent().GetSessionReadyDelivery())
 	}
 	if target.GetAgent().GetSessionReadyDelivery().GetInputBindings()[0].GetValue().GetAgentSession() != "id" {
@@ -182,7 +182,7 @@ func TestWorkflowAgentTargetStepsProtoRoundTrip(t *testing.T) {
 				ID:       "diagnosis",
 				Prompt:   "Diagnose the alert.",
 				Messages: []coreagent.Message{{Role: "system", Text: "Use concise replies."}},
-				ToolRefs: []coreagent.ToolRef{{Plugin: "datadog", Operation: "queryLogs"}},
+				ToolRefs: []coreagent.ToolRef{{App: "datadog", Operation: "queryLogs"}},
 				ResponseSchema: map[string]any{
 					"type":       "object",
 					"properties": map[string]any{"actionable_for_pr": map[string]any{"type": "boolean"}},
@@ -191,7 +191,7 @@ func TestWorkflowAgentTargetStepsProtoRoundTrip(t *testing.T) {
 				Metadata:       map[string]any{"kind": "diagnosis"},
 				TimeoutSeconds: 45,
 				OutputDelivery: &coreworkflow.OutputDelivery{
-					Target: coreworkflow.PluginTarget{PluginName: "slack", Operation: "reply"},
+					Target: coreworkflow.AppTarget{AppName: "slack", Operation: "reply"},
 					InputBindings: []coreworkflow.OutputBinding{
 						{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
 					},
@@ -200,7 +200,7 @@ func TestWorkflowAgentTargetStepsProtoRoundTrip(t *testing.T) {
 			{
 				ID:       "pr_fix",
 				Prompt:   "Open the PR.",
-				ToolRefs: []coreagent.ToolRef{{Plugin: "github", Operation: "createPullRequest"}},
+				ToolRefs: []coreagent.ToolRef{{App: "github", Operation: "createPullRequest"}},
 				When: &coreworkflow.AgentStepWhen{
 					StepID:     "diagnosis",
 					OutputPath: "structured_output.actionable_for_pr",
@@ -231,10 +231,10 @@ func TestWorkflowAgentTargetStepsProtoRoundTrip(t *testing.T) {
 	if len(diagnosis.Messages) != 1 || diagnosis.Messages[0].Role != "system" {
 		t.Fatalf("round trip diagnosis messages = %#v", diagnosis.Messages)
 	}
-	if len(diagnosis.ToolRefs) != 1 || diagnosis.ToolRefs[0].Plugin != "datadog" || diagnosis.ToolRefs[0].Operation != "queryLogs" {
+	if len(diagnosis.ToolRefs) != 1 || diagnosis.ToolRefs[0].App != "datadog" || diagnosis.ToolRefs[0].Operation != "queryLogs" {
 		t.Fatalf("round trip diagnosis tool refs = %#v", diagnosis.ToolRefs)
 	}
-	if diagnosis.OutputDelivery == nil || diagnosis.OutputDelivery.Target.PluginName != "slack" {
+	if diagnosis.OutputDelivery == nil || diagnosis.OutputDelivery.Target.AppName != "slack" {
 		t.Fatalf("round trip diagnosis output delivery = %#v", diagnosis.OutputDelivery)
 	}
 	prFix := roundTrip.Agent.Steps[1]
@@ -250,8 +250,8 @@ func TestWorkflowAgentTargetSessionReadyDeliveryProtoErrorsUseFieldName(t *testi
 		ProviderName: "managed",
 		Prompt:       "reply",
 		SessionReadyDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.PluginTarget{
-				PluginName: "notification",
+			Target: coreworkflow.AppTarget{
+				AppName: "notification",
 				Operation:  "started",
 			},
 			InputBindings: []coreworkflow.OutputBinding{
@@ -271,9 +271,9 @@ func TestWorkflowTargetFromProtoPreservesEmptyPluginKind(t *testing.T) {
 	t.Parallel()
 
 	target := workflowTargetFromProto(&proto.BoundWorkflowTarget{
-		Kind: &proto.BoundWorkflowTarget_Plugin{Plugin: &proto.BoundWorkflowPluginTarget{}},
+		Kind: &proto.BoundWorkflowTarget_App{App: &proto.BoundWorkflowAppTarget{}},
 	})
-	if target.Plugin == nil {
+	if target.App == nil {
 		t.Fatal("plugin target is nil")
 	}
 }
@@ -284,7 +284,7 @@ func TestWorkflowExecutionReferenceProtoRoundTripsRunAsSubject(t *testing.T) {
 	ref := &coreworkflow.ExecutionReference{
 		ID:                  "workflow_schedule:cfg_123:ref",
 		ProviderName:        "temporal",
-		Target:              coreworkflow.Target{Plugin: &coreworkflow.PluginTarget{PluginName: "brain", Operation: "sources.sync"}},
+		Target:              coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "brain", Operation: "sources.sync"}},
 		SourceDefinitionID:  "workflow_definition:def-123",
 		SubjectID:           "system:config",
 		SubjectKind:         "system",
@@ -297,7 +297,7 @@ func TestWorkflowExecutionReferenceProtoRoundTripsRunAsSubject(t *testing.T) {
 			AuthSource:  "config",
 		},
 		Permissions: []core.AccessPermission{{
-			Plugin:     "brain",
+			App:     "brain",
 			Operations: []string{"sources.sync"},
 		}},
 	}

@@ -1,0 +1,937 @@
+import { Tabs } from "nextra/components";
+
+# Provider Manifests
+
+Gestalt provider packages and release archives are described by a manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`. YAML is the easiest format to author by hand.
+
+Providers are the umbrella concept in Gestalt. Authentication, authorization,
+agent, cache, indexeddb, runtime, S3, secrets, workflow, and app packages all use
+this manifest format. The `plugin` manifest kind is reserved for providers that
+expose callable operations.
+
+## Manifest Kinds
+
+Every manifest defines exactly one provider kind, set by the `kind` field:
+
+| Kind        | Purpose                                              |
+| ----------- | ---------------------------------------------------- |
+| `plugin` | App (REST, OpenAPI, GraphQL, MCP, or executable). |
+| `authentication` | Platform authentication provider. |
+| `authorization` | Human authorization decision and control-plane provider. |
+| `agent` | Global session-and-turn agent provider. |
+| `cache` | Cache backend for plugin-bound cache bindings. |
+| `indexeddb` | Persistence backend. |
+| `runtime` | Hosted execution backend for executable apps. |
+| `s3` | S3-compatible object store backend. |
+| `secrets` | Secret manager for resolving structured secret refs. |
+| `ui` | Static UI package served by `gestaltd`. |
+| `workflow` | Workflow run, schedule, and trigger backend. |
+
+The `kind` field is required. Kind-specific configuration goes under the `spec` block.
+
+## Common Fields
+
+These fields appear at the top level of every manifest regardless of kind.
+
+| Field         | Type       | Required | Purpose                                                                                                                                                                                              |
+| ------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`        | string     | yes      | The provider kind (`plugin`, `authentication`, `authorization`, `agent`, `cache`, `indexeddb`, `runtime`, `s3`, `secrets`, `ui`, `workflow`).                                                                                                                |
+| `source`      | string     | yes      | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
+| `version`     | string     | yes      | Semver version. Pre-release suffixes like `-alpha.1` are allowed.                                                                                                                                    |
+| `displayName` | string     | no       | Human-readable label shown in the UI.                                                                                                                                                                |
+| `description` | string     | no       | Human-readable description.                                                                                                                                                                          |
+| `iconFile`    | string     | no       | Relative path to an SVG icon bundled with the package.                                                                                                                                               |
+| `artifacts`   | Artifact[] | no       | Prepared or released executable artifacts keyed by platform. Source manifests must omit this field.                                                        |
+| `entrypoint`  | Entrypoint | no       | Executable entrypoint metadata for the provider.                                                                                                                                                     |
+| `build`       | SourceBuild | no       | Source-only command that prepares the declared runtime output. Prepared and released manifests strip this field.                                                                                     |
+| `run`         | string[] | no       | Source-only command argv for local source execution. Prepared and released manifests strip this field.                                                                                              |
+| `spec`        | object     | no       | Kind-specific configuration block.                                                                                                                                                                   |
+
+## Entrypoint
+
+The `entrypoint` block declares the executable binary for the provider.
+
+| Field          | Type     | Required | Purpose                                               |
+| -------------- | -------- | -------- | ----------------------------------------------------- |
+| `artifactPath` | string   | yes      | Path to the binary inside the package.                |
+| `args`         | string[] | no       | Additional arguments passed to the binary at startup. |
+
+```yaml
+entrypoint:
+  artifactPath: artifacts/linux/amd64/plugin
+  args: ["--verbose"]
+```
+
+For executable source manifests, `entrypoint.artifactPath` is the packaged
+executable path. When object-form `build.command` is present, Gestalt runs it
+before release packaging and requires the command to produce that file. If a
+source manifest also declares `run`, local source execution uses `run` instead
+of `entrypoint`.
+
+```yaml
+kind: indexeddb
+source: github.com/acme/providers/indexeddb/postgres
+version: 1.0.0
+build:
+  command: ["go", "build", "-o", ".gestalt/build/indexeddb", "./cmd/indexeddb"]
+  inputs: ["go.mod", "go.sum", "cmd", "internal"]
+entrypoint:
+  artifactPath: .gestalt/build/indexeddb
+spec:
+  configSchemaPath: schemas/config.schema.yaml
+```
+
+## Runtime Metadata
+
+Runtime providers use the same common manifest structure as other executable
+providers. Their kind-specific `spec` currently only uses
+`configSchemaPath`:
+
+```yaml
+kind: runtime
+source: github.com/acme/runtime/example
+version: 0.0.1
+entrypoint:
+  artifactPath: artifacts/linux/amd64/runtime
+spec:
+  configSchemaPath: ./schemas/config.schema.yaml
+```
+
+Operators then reference that package under top-level `runtime.providers`, not
+under `providers.*`.
+
+## App Metadata
+
+The `spec` block for a `kind: plugin` manifest describes a app. It supports declarative REST operations, spec-loaded surfaces (OpenAPI, GraphQL, MCP), executable code, or any combination.
+
+### Core Fields
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `configSchemaPath` | string | Path to a JSON/YAML schema that validates `apps.<name>.config` in the server config. |
+| `auth` | RouteAuthRef | Optional app route-auth reference. Use `auth.provider` to bind the plugin’s mounted routes to a named request-auth provider. Upstream auth belongs in `spec.connections.<name>.auth`. |
+| `securitySchemes` | map[string]HTTPSecurityScheme | Named hosted HTTP security schemes referenced by `spec.http.<name>.security`. |
+| `http` | map[string]HTTPBinding | Optional hosted HTTP bindings layered on top of operations. Each binding mounts under the app prefix and targets an operation ID. |
+| `mcp` | bool | When true, the app exposes its operations as MCP tools. |
+| `headers` | map[string]string | Static headers injected into every outbound request. |
+| `surfaces` | Surfaces | Spec-loaded and declarative REST surfaces. See [Surfaces](#surfaces). |
+| `connections` | map[string]ConnectionDef | Canonical upstream auth and connection definitions. Put upstream OAuth/manual/bearer auth here, typically under `connections.default`. |
+| `defaultConnection` | string | Name of the connection to use when none is specified. |
+| `requires` | string[] | Provider source identifiers that this provider depends on. Gestalt ensures the listed providers are available before starting this provider. |
+| `ui` | OwnedUIRef | Optional owned UI reference for apps that publish a mounted UI. |
+
+### Owned UI
+
+Apps that back mounted apps may declare their UI artifact in the app manifest. Deployment config still chooses whether to mount the app, which public path to use, and which authorization policy to bind. The manifest only says which UI bundle belongs to the app.
+
+`spec.ui` supports a path reference:
+
+| Field  | Type   | Purpose                                                                                                                                                                         |
+| ------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path` | string | Relative path to a co-packaged `kind: ui` manifest. Source releases may point at sibling UI packages; `gestaltd provider release` rewrites them into the archive automatically. |
+
+When a deployment sets `apps.<name>.ui.path` and omits `apps.<name>.ui.bundle`, Gestalt synthesizes the mounted UI binding from this block.
+
+Source-manifest example:
+
+```yaml
+kind: plugin
+source: github.com/acme/apps/roadmap-review
+version: 1.0.0
+spec:
+  auth:
+    provider: server
+  connections:
+    default:
+      auth:
+        type: none
+  ui:
+    path: ../ui/manifest.yaml
+```
+
+Released app manifests keep the same `spec.ui.path` shape, but the path is
+rewritten to the co-packaged UI manifest inside the archive.
+
+### Connections
+
+The `connections` map defines named connection profiles. Deployment config can
+override or extend these defaults under `apps.<name>.connections`; see
+[Config File](/reference/config-file#connections) for the config-side schema.
+Put new upstream auth definitions in `connections.default` unless you need a
+surface-specific profile. A surface can select a named connection with
+`spec.surfaces.<surface>.connection`, and `defaultConnection` selects the
+fallback when a surface does not name one. Each connection supports the
+following fields:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `mode` | string | One of `none` or `subject`. |
+| `auth` | ProviderAuth | Authentication configuration for this connection. |
+| `params` | map[string]ConnectionParam | Connection parameters populated during or after connect. |
+| `discovery` | Discovery | Post-connect discovery configuration. |
+
+### Surfaces
+
+Surfaces load operation catalogs from external specifications. They are configured under `spec.surfaces`.
+
+#### `spec.surfaces.openapi`
+
+| Field        | Type   | Purpose                                 |
+| ------------ | ------ | --------------------------------------- |
+| `document`   | string | Path to a bundled OpenAPI document.     |
+| `connection` | string | Connection name used for OpenAPI calls. |
+
+#### `spec.surfaces.graphql`
+
+| Field        | Type   | Purpose                                 |
+| ------------ | ------ | --------------------------------------- |
+| `url`        | string | URL of the upstream GraphQL endpoint.   |
+| `connection` | string | Connection name used for GraphQL calls. |
+| `operationSelections` | object | Legacy per-operation selection overrides for generated GraphQL catalogs. Do not combine with GraphQL `allowedOperations`. |
+
+GraphQL surfaces expose a raw GraphQL passthrough immediately. Generated GraphQL operation catalogs are resolved lazily from the upstream schema when a real request runs under that surface's connection. Gestalt does not introspect GraphQL endpoints during package build, `gestaltd lock`, or config validation.
+
+#### `spec.surfaces.mcp`
+
+| Field        | Type   | Purpose                             |
+| ------------ | ------ | ----------------------------------- |
+| `url`        | string | URL of the upstream MCP server.     |
+| `connection` | string | Connection name used for MCP calls. |
+
+#### `spec.surfaces.rest`
+
+| Field        | Type                | Purpose                                                                           |
+| ------------ | ------------------- | --------------------------------------------------------------------------------- |
+| `connection` | string              | Connection name used for REST calls. Optional.                                    |
+| `baseUrl`    | string              | Base URL for declarative REST operations.                                         |
+| `operations` | ProviderOperation[] | Declarative REST operations. Presence of this field makes the app declarative. |
+
+`surfaces.rest` is the declarative REST form. `surfaces.openapi`, `surfaces.graphql`, and `surfaces.mcp` are passthrough surfaces. You may combine `openapi` and `graphql` on the same plugin, and `mcp` may be added alongside any of them.
+
+### Authentication Types
+
+`spec.auth.provider` selects a route-auth provider for app HTTP routes. Gestalt currently enforces it on `/api/v1/apps/{name}/operations`, `/api/v1/{integration}/{operation}`, and plugin-backed mounted UIs, including browser-login flows whose `next` path resolves into that plugin's mounted UI. Standalone `providers.ui` bundles, the built-in admin UI/admin API, integration OAuth helper routes, and `/mcp` still use the server-wide auth provider. Upstream auth still lives on `spec.connections.<name>.auth`, and the `auth.type` field on a connection accepts these values:
+
+| Type        | Purpose                                                                                                                                                            |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `oauth2`    | Standard OAuth 2.0. Requires `authorizationUrl` and `tokenUrl`.                                                                                                    |
+| `mcp_oauth` | MCP-native OAuth. The app must also declare an MCP surface (via `spec.surfaces.mcp`). A manifest that uses `mcp_oauth` without an MCP surface fails validation. |
+| `bearer`    | Static bearer token. Define `credentials` to prompt the user for the token value.                                                                                  |
+| `manual`    | Custom credential fields. Define `credentials` to describe each field.                                                                                             |
+| `none`      | No authentication.                                                                                                                                                 |
+
+Manual authentication in provider manifests also supports `authMapping`, using the same `value` / `valueFrom.credentialFieldRef.name` shape as deploy config.
+
+```yaml
+spec:
+  connections:
+    default:
+      auth:
+        type: manual
+        credentials:
+          - name: organization_id
+            label: Organization ID
+          - name: api_key
+            label: API Key
+        authMapping:
+          basic:
+            username:
+              valueFrom:
+                credentialFieldRef:
+                  name: organization_id
+            password:
+              valueFrom:
+                credentialFieldRef:
+                  name: api_key
+```
+
+### Hosted HTTP Bindings
+
+Hosted HTTP bindings are optional routes layered on top of operations. They do
+not replace the generic `/api/v1/{plugin}/{operation}` facade; use them when a
+plugin needs a stable custom path, form-encoded request bodies, hosted request
+verification, or an immediate host-managed acknowledgment response.
+
+`spec.http.<name>.path` is plugin-relative. The configured app key determines
+the public prefix: for a deployment entry named `example`, `path: /command`
+mounts at `/api/v1/example/command`.
+
+Each binding must name a security scheme. Use a `type: none` scheme only for
+routes that are intentionally unsigned.
+
+#### `spec.securitySchemes`
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `type` | string | One of `hmac`, `apiKey`, `http`, or `none`. |
+| `description` | string | Optional human-readable description. |
+| `signatureHeader` | string | Header carrying the transmitted HMAC digest for `type: hmac`. |
+| `signaturePrefix` | string | Optional static prefix prepended to the computed digest before comparison. |
+| `payloadTemplate` | string | Template used to build the signed payload for `type: hmac`. Supports `{raw_body}` and `{header:Header-Name}` placeholders. |
+| `timestampHeader` | string | Optional header carrying a Unix-seconds timestamp for freshness and replay checks. |
+| `maxAgeSeconds` | integer | Maximum accepted request age, in seconds, when `timestampHeader` is configured. |
+| `name` | string | Header or query parameter name for `apiKey`. |
+| `in` | string | `header` or `query` for `type: apiKey`. |
+| `scheme` | string | `basic` or `bearer` for `type: http`. |
+| `secret` | HTTPSecretRef | Secret reference for the scheme. |
+
+Every scheme requires `type`. `hmac`, `apiKey`, and `http` schemes also require
+`secret`. HMAC schemes compare the computed digest against `signatureHeader`,
+optionally prefixed by `signaturePrefix`; `payloadTemplate` supports
+`{raw_body}` and `{header:Header-Name}` placeholders.
+
+#### `spec.http.<name>`
+
+| Field | Type | Required | Purpose |
+| --- | --- | --- | --- |
+| `path` | string | yes | Plugin-relative route path. |
+| `method` | string | yes | HTTP method for the hosted route. One of `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`. |
+| `credentialMode` | string | no | Optional credential override for the bound operation. `none` skips Gestalt external-credential resolution for the route; omit it to inherit the provider default. |
+| `security` | string | yes | Name of a scheme from `spec.securitySchemes`. |
+| `target` | string | yes | Canonical operation ID to invoke. |
+| `requestBody` | HTTPRequestBody | no | Allowed request content types. |
+| `ack` | HTTPAck | no | Immediate host-managed response. Omit it for synchronous request/response handlers. |
+
+Example:
+
+```yaml
+spec:
+  securitySchemes:
+    signed:
+      type: hmac
+      secret:
+        env: REQUEST_SIGNING_SECRET
+      signatureHeader: X-Request-Signature
+      signaturePrefix: v0=
+      payloadTemplate: "v0:{header:X-Request-Timestamp}:{raw_body}"
+      timestampHeader: X-Request-Timestamp
+      maxAgeSeconds: 300
+  http:
+    command:
+      path: /command
+      method: POST
+      credentialMode: none
+      security: signed
+      target: handle_command
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded: {}
+      ack:
+        status: 200
+        body:
+          status: accepted
+```
+
+Hosted HTTP routes are declared in the manifest. Source apps written in Go,
+Python, Rust, or TypeScript implement the target operation in code, while
+`spec.securitySchemes` and `spec.http` remain the source of truth for mounted
+HTTP routes during local source execution and `gestaltd provider release`.
+
+Gestalt parses query parameters into the operation input for every hosted HTTP
+binding. For request bodies, `application/json` object fields merge into the
+input, `application/x-www-form-urlencoded` fields become string parameters, and
+other content types are exposed as `rawBody`. If `requestBody.content` is set,
+the request `Content-Type` must match one of the declared media types or `*/*`.
+
+If `ack` is set, Gestalt returns that status, headers, and body immediately and
+dispatches the target operation asynchronously. Without `ack`, the route waits
+for the operation result and returns it to the caller.
+
+Executable providers may optionally implement hosted HTTP subject resolution
+before the target operation runs. The resolver receives the verified binding
+name, method, path, headers, query parameters, decoded params, raw body,
+security scheme, and verified claims. Returning a subject makes normal plugin
+authorization and connection lookup run as that subject; returning nothing uses
+the binding's system subject.
+
+### Pagination
+
+Plugin-level pagination configuration applies to all operations by default. Individual operations can override this through `allowedOperations`.
+
+| Field           | Type   | Purpose                                                         |
+| --------------- | ------ | --------------------------------------------------------------- |
+| `style`         | string | Required. One of `cursor`, `offset`, `page`.                    |
+| `cursorParam`   | string | Query parameter name for the cursor value.                      |
+| `cursor.source` | string | Value source for the next cursor. One of `body`, `header`.      |
+| `cursor.path`   | string | Lookup path for the cursor value in the selected source.        |
+| `limitParam`    | string | Query parameter name for page size.                             |
+| `defaultLimit`  | int    | Default page size when the caller does not specify one.         |
+| `resultsPath`   | string | JSON path to the array of results in the response.              |
+| `maxPages`      | int    | Maximum number of pages to fetch in a single paginated request. |
+
+```yaml
+spec:
+  pagination:
+    style: cursor
+    cursorParam: starting_after
+    cursor:
+      source: body
+      path: next_cursor
+    limitParam: limit
+    defaultLimit: 100
+    maxPages: 10
+```
+
+### Allowed Operations
+
+The `allowedOperations` map selectively exposes and customizes operations from a spec-loaded surface. Keys are the original operation IDs from the OpenAPI or MCP spec. For GraphQL, they apply to the lazily resolved session catalog and use the original upstream field names.
+
+| Field          | Type                     | Purpose                                                                                                                                                                        |
+| -------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `alias`        | string                   | Rename the operation for Gestalt consumers.                                                                                                                                    |
+| `description`  | string                   | Override the operation description.                                                                                                                                            |
+| `allowedRoles` | string[]                 | Restrict the operation to callers whose resolved human role matches one of these values. This only takes effect when the deployment binds the app to `authorizationPolicy`. |
+| `paginate`     | bool                     | Enable automatic pagination for this operation. Uses the plugin-level pagination config.                                                                                       |
+| `pagination`   | ManifestPaginationConfig | Per-operation pagination config that overrides the plugin-level default.                                                                                                       |
+| `graphql.operationType` | `"query"` or `"mutation"` | GraphQL root operation type. Required when the same allowlisted field name exists on both query and mutation roots. |
+| `graphql.selectionSet` | string | GraphQL selection-set body for an allowlisted GraphQL root field. Required for object, interface, and union return types when `allowedOperations` is set on a GraphQL surface. |
+
+```yaml
+spec:
+  allowedOperations:
+    tickets.list:
+      alias: list_tickets
+      allowedRoles: [viewer, admin]
+      paginate: true
+    tickets.get:
+      alias: get_ticket
+      allowedRoles: [admin]
+```
+
+For GraphQL surfaces, `allowedOperations` keys are the upstream schema root
+field names. When a GraphQL surface declares `allowedOperations`, Gestalt treats
+the allowlist as an explicit operation contract and does not generate response
+selections for object-like return types. Provide `graphql.selectionSet` without
+outer braces:
+
+```yaml
+spec:
+  allowedOperations:
+    issues:
+      graphql:
+        selectionSet: |
+          nodes { id identifier title url team { id name key } }
+          pageInfo { hasNextPage endCursor }
+```
+
+Selection sets may include aliases, nested selections, `__typename`, and inline
+fragments. Named fragment spreads, fragment definitions, directives, and field
+arguments in selection sets are not supported; fields that require arguments are
+rejected because Gestalt cannot synthesize nested argument values from a
+selection set. GraphQL manifests that use per-operation `graphql` blocks must
+not also use legacy
+`spec.surfaces.graphql.operationSelections`. For older `gestaltd` compatibility,
+manifests may instead keep selection bodies in `operationSelections` and use
+`allowedOperations` only as the provider-wide exposure allowlist. In the bare
+provider-wide mode, GraphQL catalog generation applies only allowlisted schema
+root fields and selection override names so OpenAPI or MCP-only entries can
+remain in the same allowlist.
+If an upstream schema defines the same root field name on both query and mutation
+roots, set `graphql.operationType` to bind the allowlisted operation to one root.
+For providers that combine GraphQL with another surface, mark each GraphQL entry
+with a `graphql` block; entries without that block are left for the other surface.
+This only controls generated GraphQL catalog operations; raw GraphQL passthrough
+access remains a separate surface permission.
+
+### Response Mapping
+
+The `responseMapping` block extracts a data array and pagination metadata from API responses that wrap results in an envelope.
+
+| Field                       | Type   | Purpose                                                         |
+| --------------------------- | ------ | --------------------------------------------------------------- |
+| `dataPath`                  | string | Required. JSON path to the results array.                       |
+| `pagination.hasMore.source` | string | Value source for the has-more flag. One of `body`, `header`.    |
+| `pagination.hasMore.path`   | string | Lookup path for the has-more flag in the selected source.       |
+| `pagination.cursor.source`  | string | Value source for the next-page cursor. One of `body`, `header`. |
+| `pagination.cursor.path`    | string | Lookup path for the next-page cursor in the selected source.    |
+
+### Managed Parameters
+
+Managed parameters inject fixed values into every request, removing them from the caller-facing operation signature.
+
+| Field   | Type   | Purpose                            |
+| ------- | ------ | ---------------------------------- |
+| `in`    | string | Required. One of `header`, `path`. |
+| `name`  | string | Required. Parameter name.          |
+| `value` | string | Required. Fixed value.             |
+
+### Discovery
+
+The `discovery` block on a connection performs an authenticated lookup immediately after a connection is established. Gestalt calls the configured URL with the new access token, parses the response, and turns each item into a candidate connection.
+
+| Field      | Type              | Purpose                                                                |
+| ---------- | ----------------- | ---------------------------------------------------------------------- |
+| `url`      | string            | Required. Endpoint to call after connect.                              |
+| `idPath`   | string            | JSON path to the item identifier.                                      |
+| `namePath` | string            | JSON path to the item display name.                                    |
+| `metadata` | map[string]string | Maps connection parameter names to JSON paths in each discovered item. |
+
+If discovery returns exactly one item, Gestalt merges its metadata into the stored connection automatically. Multiple items prompt the user to choose. Zero items fails the connection.
+
+### Connection Params
+
+The `params` map on a connection defines parameters that are populated during or after connect rather than from user input.
+
+| Field         | Type   | Purpose                                                                        |
+| ------------- | ------ | ------------------------------------------------------------------------------ |
+| `required`    | bool   | Whether the parameter must be present for a valid connection.                  |
+| `description` | string | Describes the parameter to the user.                                           |
+| `from`        | string | Set to `discovery` to populate the value from post-connect discovery metadata. |
+
+## Authentication Provider Metadata
+
+The `spec` block for a `kind: authentication` manifest describes a platform authentication provider package.
+
+| Field              | Type   | Purpose                                                                                                            |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.authentication.<name>.config` block in the server config. |
+
+Authentication providers require an executable entrypoint. Declare it under `entrypoint`.
+
+```yaml
+kind: authentication
+source: github.com/valon-technologies/gestalt-providers/auth/oidc
+version: 1.0.0
+displayName: OIDC Authentication
+spec:
+  configSchemaPath: schemas/config.schema.json
+entrypoint:
+  artifactPath: artifacts/linux/amd64/auth
+artifacts:
+  - os: linux
+    arch: amd64
+    path: artifacts/linux/amd64/auth
+```
+
+## IndexedDB Provider Metadata
+
+The `spec` block for a `kind: indexeddb` manifest describes a persistence backend package.
+
+| Field              | Type   | Purpose                                                                                                       |
+| ------------------ | ------ | ------------------------------------------------------------------------------------------------------------- |
+| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.indexeddb.<name>.config` block in the server config. |
+
+IndexedDB providers require an executable entrypoint. Declare it under `entrypoint`.
+
+```yaml
+kind: indexeddb
+source: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+version: 1.0.0
+displayName: PostgreSQL
+spec:
+  configSchemaPath: schemas/config.schema.json
+entrypoint:
+  artifactPath: artifacts/linux/amd64/provider
+artifacts:
+  - os: linux
+    arch: amd64
+    path: artifacts/linux/amd64/provider
+```
+
+## UI Metadata
+
+The `spec` block for a `kind: ui` manifest describes a static UI package.
+Source UI manifests must declare top-level `build.command` and `spec.assetRoot`.
+Generated assets should stay out of source control. Released and prepared UI
+manifests always contain `spec.assetRoot` and do not contain top-level `build`.
+
+| Field       | Type         | Required | Purpose                                                                                                                     |
+| ----------- | ------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `assetRoot` | string       | yes      | Directory containing the built static assets. For source manifests this is the directory `build.command` must produce. |
+| `routes`    | UIRoute[] | no       | Optional route-level authorization rules used when a deployment binds this UI to `providers.ui.<name>.authorizationPolicy`. |
+
+Each `spec.routes` entry declares a mounted path and the allowed human roles for that path. Path matching is exact or longest-prefix with a terminal `/*`. When a deployment sets `authorizationPolicy`, route definitions must have non-empty `allowedRoles`, and the manifest must include a route that covers `/`.
+
+| Route field    | Type     | Required | Purpose                                                            |
+| -------------- | -------- | -------- | ------------------------------------------------------------------ |
+| `path`         | string   | yes      | Route path such as `/`, `/reports`, or `/admin/*`.                 |
+| `allowedRoles` | string[] | yes      | Roles permitted to load the route or its associated static assets. |
+
+```yaml
+kind: ui
+source: github.com/acme/apps/gestalt-ui
+version: 1.0.0
+displayName: Custom UI
+build:
+  workdir: ui
+  command:
+    - npm
+    - run
+    - build
+  inputs:
+    - ui/package.json
+    - ui/package-lock.json
+    - ui/src
+spec:
+  assetRoot: ui/out
+  routes:
+    - path: /
+      allowedRoles: [viewer, admin]
+    - path: /admin/*
+      allowedRoles: [admin]
+```
+
+Top-level `build` is source-only and supported for UI and executable source
+manifests. It is the recommended form for new UI packages authored from
+TypeScript, React, Next.js static export, Vite, or similar frontend source.
+For executable source manifests, `build` can be a sequence that prepares local
+source dependencies. As an object, `build.command` must produce the output declared by
+`entrypoint.artifactPath` for executables or `spec.assetRoot` for UI bundles.
+
+| Build field | Type     | Required | Purpose                                                                                           |
+| ----------- | -------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `command`   | string[] | yes      | Command argv to run before preparing the static assets.                                           |
+| `workdir`   | string   | no       | Manifest-relative directory where `command` runs. Defaults to the manifest directory.             |
+| `inputs`    | string[] | no       | Literal manifest-relative files or directories used to fingerprint local source builds. Glob syntax is not supported. |
+
+## Run
+
+Top-level `run` is source-only and starts an executable provider from local
+source. It is an argv array, not a shell string. Gestalt runs it from the
+manifest directory, so project-local executables should usually include `./`.
+
+```yaml
+build: [uv, sync, --frozen, --no-install-project]
+run: [uv, run, --frozen, ./provider.py, --serve]
+```
+
+`run` is never included in prepared or released manifests. Use
+`entrypoint.artifactPath` and `artifacts` for the compiled package command.
+A manifest that only declares `run` is local-only; add SDK-native provider
+metadata or object-form `build.command` with `entrypoint.artifactPath` before
+using it with lock, sync, or release packaging.
+
+## Artifacts
+
+The `artifacts` array lists platform-specific binaries included in the package.
+
+| Field    | Type   | Required | Purpose                                             |
+| -------- | ------ | -------- | --------------------------------------------------- |
+| `os`     | string | yes      | Target operating system (e.g. `linux`, `darwin`).   |
+| `arch`   | string | yes      | Target architecture (e.g. `amd64`, `arm64`).        |
+| `libc`   | string | no       | C library variant. `musl`. Only relevant for Linux. |
+| `path`   | string | yes      | Path to the binary inside the package.              |
+| `sha256` | string | no       | SHA-256 hex digest for integrity verification.      |
+
+Declarative-only app packages do not require `artifacts`. Pure executable source manifests used with `apps.*.provider.source.path` or `gestaltd provider release` may omit them.
+
+## Full Example
+
+This manifest shows a app with an executable entrypoint, multiple connections, OpenAPI and MCP surfaces, pagination, allowed operations, and managed parameters.
+
+<Tabs items={['YAML', 'JSON']}>
+  <Tabs.Tab>
+    ```yaml
+    kind: plugin
+    source: github.com/acme/apps/support
+    version: 1.2.3
+    displayName: Support
+    description: Tickets, knowledge base, and MCP workspace tools
+    iconFile: assets/icon.svg
+    spec:
+      configSchemaPath: schemas/config.schema.yaml
+      headers:
+        X-App-Version: "2026-04-01"
+      managedParameters:
+        - in: path
+          name: workspace_id
+          value: primary
+      connections:
+        default:
+          mode: subject
+          auth:
+            type: oauth2
+            authorizationUrl: https://accounts.support.example.com/oauth/authorize
+            tokenUrl: https://accounts.support.example.com/oauth/token
+            clientId: ${SUPPORT_CLIENT_ID}
+            clientSecret: ${SUPPORT_CLIENT_SECRET}
+            scopes:
+              - tickets.read
+              - tickets.write
+          params:
+            workspace_id:
+              required: true
+              from: discovery
+          discovery:
+            url: https://api.support.example.com/workspaces
+            idPath: id
+            namePath: name
+            metadata:
+              workspace_id: id
+        mcp:
+          mode: subject
+          auth:
+            type: mcp_oauth
+      surfaces:
+        openapi:
+          document: openapi.yaml
+          connection: default
+        mcp:
+          url: https://mcp.support.example.com/mcp
+          connection: mcp
+      pagination:
+        style: cursor
+        cursorParam: starting_after
+        cursor:
+          source: body
+          path: next_cursor
+        limitParam: limit
+        defaultLimit: 50
+        maxPages: 5
+      allowedOperations:
+        tickets.list:
+          alias: list_tickets
+          paginate: true
+        tickets.get:
+          alias: get_ticket
+    entrypoint:
+      artifactPath: artifacts/linux/amd64/plugin
+    artifacts:
+      - os: linux
+        arch: amd64
+        libc: musl
+        path: artifacts/linux/amd64/plugin
+        sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```json
+    {
+      "kind": "app",
+      "source": "github.com/acme/apps/support",
+      "version": "1.2.3",
+      "displayName": "Support",
+      "description": "Tickets, knowledge base, and MCP workspace tools",
+      "iconFile": "assets/icon.svg",
+      "spec": {
+        "configSchemaPath": "schemas/config.schema.yaml",
+        "headers": {
+          "X-App-Version": "2026-04-01"
+        },
+        "managedParameters": [
+          { "in": "path", "name": "workspace_id", "value": "primary" }
+        ],
+        "connections": {
+          "default": {
+            "mode": "subject",
+            "auth": {
+              "type": "oauth2",
+              "authorizationUrl": "https://accounts.support.example.com/oauth/authorize",
+              "tokenUrl": "https://accounts.support.example.com/oauth/token",
+              "clientId": "${SUPPORT_CLIENT_ID}",
+              "clientSecret": "${SUPPORT_CLIENT_SECRET}",
+              "scopes": ["tickets.read", "tickets.write"]
+            },
+            "params": {
+              "workspace_id": { "required": true, "from": "discovery" }
+            },
+            "discovery": {
+              "url": "https://api.support.example.com/workspaces",
+              "idPath": "id",
+              "namePath": "name",
+              "metadata": { "workspace_id": "id" }
+            }
+          },
+          "mcp": {
+            "mode": "subject",
+            "auth": { "type": "mcp_oauth" }
+          }
+        },
+        "surfaces": {
+          "openapi": {
+            "document": "openapi.yaml",
+            "connection": "default"
+          },
+          "mcp": {
+            "url": "https://mcp.support.example.com/mcp",
+            "connection": "mcp"
+          }
+        },
+        "pagination": {
+          "style": "cursor",
+          "cursorParam": "starting_after",
+          "cursor": {
+            "source": "body",
+            "path": "next_cursor"
+          },
+          "limitParam": "limit",
+          "defaultLimit": 50,
+          "maxPages": 5
+        },
+        "allowedOperations": {
+          "tickets.list": { "alias": "list_tickets", "paginate": true },
+          "tickets.get": { "alias": "get_ticket" }
+        }
+      },
+      "entrypoint": {
+        "artifactPath": "artifacts/linux/amd64/plugin"
+      },
+      "artifacts": [
+        {
+          "os": "linux",
+          "arch": "amd64",
+          "libc": "musl",
+          "path": "artifacts/linux/amd64/plugin",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Declarative-Only Example
+
+This app requires no binary. It defines REST operations entirely in the manifest.
+
+```yaml
+kind: plugin
+source: github.com/acme/apps/support-api
+version: 0.0.1-alpha.1
+displayName: Support API
+description: Small ticket API
+iconFile: assets/icon.svg
+spec:
+  connections:
+    default:
+      auth:
+        type: bearer
+        credentials:
+          - name: token
+            label: API Token
+  surfaces:
+    rest:
+      baseUrl: https://api.support.example.com
+      operations:
+        - name: list_tickets
+          description: Return open tickets
+          method: GET
+          path: /tickets
+          allowedRoles: [viewer, admin]
+        - name: get_ticket
+          description: Return one ticket
+          method: GET
+          path: /tickets/{ticket_id}
+          allowedRoles: [admin]
+```
+
+## Authoring Notes
+
+Manifest paths must stay inside the package. `kind`, `source`, and `version`
+are required. A manifest defines exactly one provider kind. The current set is
+`plugin`, `authentication`, `authorization`, `agent`, `cache`, `indexeddb`,
+`runtime`, `s3`, `secrets`, `ui`, and `workflow`.
+
+`configSchemaPath` validates deployment config for the provider and may be
+written in JSON or YAML. For app connections, put `params` and `discovery`
+on the `default` connection unless you have confirmed the named-connection
+behavior you need. OpenAPI and GraphQL may be declared together on one plugin,
+and MCP may be added alongside either or both.
+
+A connection using `mcp_oauth` auth requires the app to declare an MCP surface (via `spec.surfaces.mcp` or an equivalent). Manifests that set `auth.type: mcp_oauth` without an MCP surface fail validation.
+
+Executable source providers may either use the SDK-native Go, Rust, Python, or
+TypeScript source-package metadata, or declare top-level `run` for local source
+execution. Use object-form `build.command` with `entrypoint.artifactPath` when
+the source package needs to produce a compiled release artifact. Source
+manifests must not include `artifacts`; prepared and released manifests include
+`artifacts` and omit `build` and `run`.
+
+```yaml
+kind: indexeddb
+source: github.com/acme/providers/indexeddb/postgres
+version: 1.0.0
+build:
+  command:
+    - go
+    - build
+    - -o
+    - .gestalt/build/indexeddb
+    - ./cmd/indexeddb
+  inputs:
+    - go.mod
+    - go.sum
+    - cmd
+    - internal
+entrypoint:
+  artifactPath: .gestalt/build/indexeddb
+spec:
+  configSchemaPath: schemas/config.schema.yaml
+```
+
+For local-only source execution, `run` can start the provider directly:
+
+```yaml
+kind: plugin
+source: github.com/acme/apps/slack
+version: 1.0.0
+build: [uv, sync, --frozen, --no-install-project]
+run: [uv, run, --frozen, ./provider.py, --serve]
+spec:
+  connections:
+    default:
+      auth:
+        type: none
+```
+
+Declarative app manifests that only describe hosted HTTP, GraphQL, MCP, or
+spec-loaded surfaces may omit `entrypoint` and `build`. See
+[Plugins](/providers/apps) for the end-to-end authoring flow.
+
+Source UI build steps must be declared with top-level `build`. Gestalt runs
+that command before source-manifest preparation during lock, sync, dev, and
+release packaging. This lets UI packages generate static bundles without
+checking built artifacts into source control.
+
+```yaml
+kind: ui
+source: github.com/acme/apps/gestalt-ui
+version: 1.0.0
+build:
+  workdir: ui
+  command:
+    - npm
+    - run
+    - build
+  inputs:
+    - ui/package.json
+    - ui/package-lock.json
+    - ui/src
+spec:
+  assetRoot: ui/out
+  routes:
+    - path: /
+      allowedRoles: [viewer, admin]
+```
+
+There is no `release.build` field and no separate `build.output` field.
+Executable providers declare their output with `entrypoint.artifactPath`; UI
+providers declare their output with `spec.assetRoot`.
+
+## Release
+
+Build a release from a provider source directory:
+
+```sh
+gestaltd provider release --version 1.2.3
+```
+
+`gestaltd provider release` preserves the source manifest format, so
+`manifest.yaml` stays YAML and `manifest.json` stays JSON in the release archive.
+For source manifests with object-form `build.command`, release runs the command
+before packaging. Executable providers must produce
+`entrypoint.artifactPath`; UI providers must produce `spec.assetRoot`. Released
+manifests strip `build` and `run`, then record the prepared `artifacts`
+metadata. Hosted HTTP/security metadata is read from manifest
+`spec.securitySchemes` / `spec.http` and preserved in the packaged manifest.
+
+Executable source packages that are not SDK-native require `build.command` for
+release packaging and build the host-platform artifact by default.
+Platform-neutral packages, such as UI and declarative providers, produce a
+generic archive by default. Pass `--platform` for an explicit
+`os/arch[/libc]` target list, or `--platform all` in CI to build the full
+supported release matrix. For explicit platforms, Gestalt sets target
+environment variables such as `GOOS`, `GOARCH`, `GESTALT_TARGET_OS`,
+`GESTALT_TARGET_ARCH`, and `GESTALT_TARGET_LIBC` for build scripts that need
+them.

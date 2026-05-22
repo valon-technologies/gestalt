@@ -48,7 +48,7 @@ providers:
   ui:
     <name>: ...
 
-plugins:
+apps:
   <name>: ...
 
 authorization:
@@ -64,7 +64,7 @@ workflows:
 ```
 
 Provider-backed entries accept `source`, provider-specific `config`,
-`egress.allowedHosts`, and optional metadata fields. Plugin entries also
+`egress.allowedHosts`, and optional metadata fields. App entries also
 support plugin-specific fields such as `connections`, `allowedOperations`,
 `ui.path`, `ui.bundle`, and `runtime`.
 
@@ -75,7 +75,7 @@ the field reference:
 
 | Need | Read |
 | --- | --- |
-| Plugin setup, operation filtering, connections, and plugin-backed UIs | [Plugin](/providers/plugins) |
+| App setup, operation filtering, connections, and plugin-backed UIs | [Plugin](/providers/apps) |
 | Platform login | [Authentication](/providers/authentication) |
 | RBAC, policies, and dynamic grants | [Authorization](/providers/authorization) |
 | Service accounts, subject-owned API tokens, and `runAs` | [Service Accounts](/service-accounts) |
@@ -99,7 +99,7 @@ order:
 
 If nothing is found, `gestaltd` generates a default config at
 `~/.gestaltd/config.yaml` with SQLite storage, no authentication, a random
-encryption key, and an HTTPBin test plugin.
+encryption key, and an HTTPBin test app.
 
 When `--config` is repeated, Gestalt loads the files left-to-right and merges
 them with these rules:
@@ -256,11 +256,11 @@ providers:
             provider: default
             name: oidc-client-secret
 
-plugins:
+apps:
   github:
     displayName: GitHub
     source:
-      package: github.com/valon-technologies/gestalt-providers/plugins/github
+      package: github.com/valon-technologies/gestalt-providers/apps/github
       version: 0.0.1-alpha.1
     surfaces:
       openapi:

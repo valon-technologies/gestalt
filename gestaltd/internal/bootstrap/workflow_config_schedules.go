@@ -53,41 +53,41 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		pluginName := workflowConfigTargetLabel(target)
 		providerName, provider, err := runtime.ResolveProviderSelection(schedule.Provider)
 		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		existingExecutionRef := ""
-		providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
+		providerCtx := invocation.WithWorkflowContextString(ctx, "app", pluginName)
 		existing, err := provider.GetSchedule(providerCtx, coreworkflow.GetScheduleRequest{
 			ScheduleID: desiredEntry.ScheduleID,
 		})
 		switch {
 		case err == nil:
 			if !isWorkflowConfigOwnedSchedule(existing, pluginName, desiredEntry.ScheduleID) {
-				return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q conflicts with existing unmanaged schedule id %q", desiredEntry.ScheduleKey, pluginName, desiredEntry.ScheduleID)
+				return fmt.Errorf("bootstrap: workflow schedule %q for app %q conflicts with existing unmanaged schedule id %q", desiredEntry.ScheduleKey, pluginName, desiredEntry.ScheduleID)
 			}
 		case isWorkflowObjectNotFound(err):
 			existing = nil
 		default:
-			return fmt.Errorf("bootstrap: get workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleID, pluginName, err)
+			return fmt.Errorf("bootstrap: get workflow schedule %q for app %q: %w", desiredEntry.ScheduleID, pluginName, err)
 		}
 		if existing != nil {
 			existingExecutionRef = strings.TrimSpace(existing.ExecutionRef)
 		}
 		runAs, err := workflowConfigRunAsSubject("workflows.schedules."+desiredEntry.ScheduleKey+".runAs", schedule.RunAs)
 		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		permissions, err := workflowConfigExecutionPermissions(cfg, "workflows.schedules."+desiredEntry.ScheduleKey, schedule.Invokes, schedule.Permissions)
 		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		desiredExecutionRef, err := workflowConfigExecutionReference(cfg, providerName, target, runAs, permissions)
 		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		executionRefs, err := workflowExecutionReferenceStore(providerName, provider)
 		if err != nil {
-			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		executionRefID, createdExecutionRef, replacedUnreadableExecutionRef, replacedUnreadableExecutionRefErr, err := workflowEnsureConfigExecutionRef(
 			ctx,
@@ -100,7 +100,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			if existingExecutionRef != "" && workflowConfigScheduleDefinitionMatches(existing, target, schedule) {
 				continue
 			}
-			return fmt.Errorf("bootstrap: store workflow execution ref for schedule %q on plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+			return fmt.Errorf("bootstrap: store workflow execution ref for schedule %q on app %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		if _, err := provider.UpsertSchedule(providerCtx, coreworkflow.UpsertScheduleRequest{
 			ScheduleID:   desiredEntry.ScheduleID,
@@ -114,14 +114,14 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			if createdExecutionRef {
 				_ = workflowRevokeExecutionRefByID(ctx, executionRefs, executionRefID)
 			}
-			return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q: %w", desiredEntry.ScheduleKey, pluginName, err)
+			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, pluginName, err)
 		}
 		if replacedUnreadableExecutionRef != "" {
 			workflowLogReplacedUnreadableExecutionRef(ctx, "schedule", desiredEntry.ScheduleKey, desiredEntry.ScheduleID, providerName, pluginName, replacedUnreadableExecutionRef, executionRefID, replacedUnreadableExecutionRefErr)
 		}
 		if existingExecutionRef != executionRefID && replacedUnreadableExecutionRef == "" {
 			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, existingExecutionRef); err != nil {
-				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on plugin %q: %w", existingExecutionRef, desiredEntry.ScheduleID, pluginName, err)
+				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on app %q: %w", existingExecutionRef, desiredEntry.ScheduleID, pluginName, err)
 			}
 		}
 	}
@@ -206,9 +206,9 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 				continue
 			}
 			pluginName := workflowConfigTargetLabel(schedule.Target)
-			providerCtx := invocation.WithWorkflowContextString(ctx, "plugin", pluginName)
+			providerCtx := invocation.WithWorkflowContextString(ctx, "app", pluginName)
 			if err := provider.DeleteSchedule(providerCtx, coreworkflow.DeleteScheduleRequest{ScheduleID: schedule.ID}); err != nil && !isWorkflowObjectNotFound(err) {
-				return fmt.Errorf("bootstrap: delete workflow schedule %q for plugin %q: %w", schedule.ID, pluginName, err)
+				return fmt.Errorf("bootstrap: delete workflow schedule %q for app %q: %w", schedule.ID, pluginName, err)
 			}
 			if executionRefs == nil {
 				executionRefs, err = workflowExecutionReferenceStore(providerName, provider)
@@ -217,7 +217,7 @@ func cleanupRemovedWorkflowConfigSchedules(ctx context.Context, runtime *workflo
 				}
 			}
 			if err := workflowRevokeExecutionRefByID(ctx, executionRefs, schedule.ExecutionRef); err != nil {
-				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on plugin %q: %w", schedule.ExecutionRef, schedule.ID, pluginName, err)
+				return fmt.Errorf("bootstrap: revoke workflow execution ref %q for schedule %q on app %q: %w", schedule.ExecutionRef, schedule.ID, pluginName, err)
 			}
 		}
 	}
@@ -256,10 +256,10 @@ func workflowConfigTargetLabel(target coreworkflow.Target) string {
 		}
 		return "agent:" + providerName
 	}
-	if target.Plugin == nil {
+	if target.App == nil {
 		return ""
 	}
-	return strings.TrimSpace(target.Plugin.PluginName)
+	return strings.TrimSpace(target.App.AppName)
 }
 
 func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Target {
@@ -269,20 +269,20 @@ func workflowConfigTarget(target *config.WorkflowTargetConfig) coreworkflow.Targ
 	if target.Agent != nil {
 		return coreworkflow.Target{Agent: workflowConfigAgentTarget(target.Agent)}
 	}
-	plugin := target.Plugin
-	if plugin == nil {
+	appTarget := target.App
+	if appTarget == nil {
 		return coreworkflow.Target{}
 	}
-	pluginTarget := coreworkflow.PluginTarget{
-		PluginName:     plugin.Name,
-		Operation:      plugin.Operation,
-		Connection:     plugin.Connection,
-		Instance:       plugin.Instance,
-		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(plugin.CredentialMode)),
-		Input:          maps.Clone(plugin.Input),
+	pluginTarget := coreworkflow.AppTarget{
+		AppName:        appTarget.Name,
+		Operation:      appTarget.Operation,
+		Connection:     appTarget.Connection,
+		Instance:       appTarget.Instance,
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(appTarget.CredentialMode)),
+		Input:          maps.Clone(appTarget.Input),
 	}
 	return coreworkflow.Target{
-		Plugin: &pluginTarget,
+		App: &pluginTarget,
 	}
 }
 
@@ -308,7 +308,7 @@ func workflowConfigAgentTarget(agent *config.WorkflowAgentConfig) *coreworkflow.
 	for _, tool := range agent.Tools {
 		tools = append(tools, coreagent.ToolRef{
 			System:      strings.TrimSpace(tool.System),
-			Plugin:      strings.TrimSpace(tool.Plugin),
+			App:      strings.TrimSpace(tool.App),
 			Operation:   strings.TrimSpace(tool.Operation),
 			Connection:  strings.TrimSpace(tool.Connection),
 			Instance:    strings.TrimSpace(tool.Instance),
@@ -357,7 +357,7 @@ func workflowConfigAgentSteps(steps []config.WorkflowAgentStepConfig) []corework
 		for _, tool := range step.Tools {
 			tools = append(tools, coreagent.ToolRef{
 				System:      strings.TrimSpace(tool.System),
-				Plugin:      strings.TrimSpace(tool.Plugin),
+				App:      strings.TrimSpace(tool.App),
 				Operation:   strings.TrimSpace(tool.Operation),
 				Connection:  strings.TrimSpace(tool.Connection),
 				Instance:    strings.TrimSpace(tool.Instance),
@@ -398,8 +398,8 @@ func workflowConfigOutputDelivery(delivery *config.WorkflowOutputDeliveryConfig)
 		return nil
 	}
 	out := &coreworkflow.OutputDelivery{
-		Target: coreworkflow.PluginTarget{
-			PluginName: strings.TrimSpace(delivery.Target.Name),
+		Target: coreworkflow.AppTarget{
+			AppName: strings.TrimSpace(delivery.Target.Name),
 			Operation:  strings.TrimSpace(delivery.Target.Operation),
 			Connection: strings.TrimSpace(delivery.Target.Connection),
 			Instance:   strings.TrimSpace(delivery.Target.Instance),
@@ -458,29 +458,29 @@ func workflowConfigExecutionPermissions(cfg *config.Config, path string, invokes
 	pluginIndexes := make(map[string]int, len(invokes))
 	seenOperations := make(map[string]map[string]struct{}, len(invokes))
 	for i, invoke := range invokes {
-		plugin := strings.TrimSpace(invoke.Plugin)
-		if plugin == "" {
-			return nil, fmt.Errorf("config validation: %s.invokes[%d].plugin is required", path, i)
+		app := strings.TrimSpace(invoke.App)
+		if app == "" {
+			return nil, fmt.Errorf("config validation: %s.invokes[%d].app is required", path, i)
 		}
-		if cfg == nil || cfg.Plugins[plugin] == nil {
-			return nil, fmt.Errorf("config validation: %s.invokes[%d].plugin references unknown plugin %q", path, i, plugin)
+		if cfg == nil || cfg.Apps[app] == nil {
+			return nil, fmt.Errorf("config validation: %s.invokes[%d].app references unknown app %q", path, i, app)
 		}
 		operation := strings.TrimSpace(invoke.Operation)
 		if operation == "" {
 			return nil, fmt.Errorf("config validation: %s.invokes[%d].operation is required", path, i)
 		}
-		if seenOperations[plugin] == nil {
-			seenOperations[plugin] = map[string]struct{}{}
+		if seenOperations[app] == nil {
+			seenOperations[app] = map[string]struct{}{}
 		}
-		if _, exists := seenOperations[plugin][operation]; exists {
+		if _, exists := seenOperations[app][operation]; exists {
 			continue
 		}
-		seenOperations[plugin][operation] = struct{}{}
-		idx, ok := pluginIndexes[plugin]
+		seenOperations[app][operation] = struct{}{}
+		idx, ok := pluginIndexes[app]
 		if !ok {
 			idx = len(out)
-			pluginIndexes[plugin] = idx
-			out = append(out, core.AccessPermission{Plugin: plugin})
+			pluginIndexes[app] = idx
+			out = append(out, core.AccessPermission{App: app})
 		}
 		out[idx].Operations = append(out[idx].Operations, operation)
 	}
@@ -567,32 +567,32 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 		base = make([]core.AccessPermission, 0, len(target.Agent.ToolRefs)+2)
 		for i := range target.Agent.ToolRefs {
 			tool := target.Agent.ToolRefs[i]
-			pluginName := strings.TrimSpace(tool.Plugin)
+			pluginName := strings.TrimSpace(tool.App)
 			operation := strings.TrimSpace(tool.Operation)
 			if pluginName == "" || operation == "" {
 				continue
 			}
 			base = append(base, core.AccessPermission{
-				Plugin:     pluginName,
+				App:     pluginName,
 				Operations: []string{operation},
 			})
 		}
 		if delivery := target.Agent.OutputDelivery; delivery != nil {
-			pluginName := strings.TrimSpace(delivery.Target.PluginName)
+			pluginName := strings.TrimSpace(delivery.Target.AppName)
 			operation := strings.TrimSpace(delivery.Target.Operation)
 			if pluginName != "" && operation != "" {
 				base = append(base, core.AccessPermission{
-					Plugin:     pluginName,
+					App:     pluginName,
 					Operations: []string{operation},
 				})
 			}
 		}
 		if delivery := target.Agent.SessionReadyDelivery; delivery != nil {
-			pluginName := strings.TrimSpace(delivery.Target.PluginName)
+			pluginName := strings.TrimSpace(delivery.Target.AppName)
 			operation := strings.TrimSpace(delivery.Target.Operation)
 			if pluginName != "" && operation != "" {
 				base = append(base, core.AccessPermission{
-					Plugin:     pluginName,
+					App:     pluginName,
 					Operations: []string{operation},
 				})
 			}
@@ -601,22 +601,22 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 			step := target.Agent.Steps[i]
 			for j := range step.ToolRefs {
 				tool := step.ToolRefs[j]
-				pluginName := strings.TrimSpace(tool.Plugin)
+				pluginName := strings.TrimSpace(tool.App)
 				operation := strings.TrimSpace(tool.Operation)
 				if pluginName == "" || operation == "" {
 					continue
 				}
 				base = append(base, core.AccessPermission{
-					Plugin:     pluginName,
+					App:     pluginName,
 					Operations: []string{operation},
 				})
 			}
 			if delivery := step.OutputDelivery; delivery != nil {
-				pluginName := strings.TrimSpace(delivery.Target.PluginName)
+				pluginName := strings.TrimSpace(delivery.Target.AppName)
 				operation := strings.TrimSpace(delivery.Target.Operation)
 				if pluginName != "" && operation != "" {
 					base = append(base, core.AccessPermission{
-						Plugin:     pluginName,
+						App:     pluginName,
 						Operations: []string{operation},
 					})
 				}
@@ -624,15 +624,15 @@ func workflowExecutionRefPermissionsForTarget(target coreworkflow.Target, explic
 		}
 		return workflowMergeExecutionRefPermissions(append([][]core.AccessPermission{base}, explicit...)...)
 	}
-	if target.Plugin == nil {
+	if target.App == nil {
 		return workflowMergeExecutionRefPermissions(explicit...)
 	}
-	pluginTarget := *target.Plugin
-	pluginName := pluginTarget.PluginName
+	pluginTarget := *target.App
+	pluginName := pluginTarget.AppName
 	operation := strings.TrimSpace(pluginTarget.Operation)
 	if pluginName != "" && operation != "" {
 		base = []core.AccessPermission{{
-			Plugin:     pluginName,
+			App:     pluginName,
 			Operations: []string{operation},
 		}}
 	}
@@ -645,8 +645,8 @@ func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []c
 	seenOperations := map[string]map[string]struct{}{}
 	for _, group := range groups {
 		for _, value := range group {
-			plugin := strings.TrimSpace(value.Plugin)
-			if plugin == "" {
+			app := strings.TrimSpace(value.App)
+			if app == "" {
 				continue
 			}
 			operations := make([]string, 0, len(value.Operations))
@@ -659,18 +659,18 @@ func workflowMergeExecutionRefPermissions(groups ...[]core.AccessPermission) []c
 			if len(operations) == 0 {
 				continue
 			}
-			idx, ok := pluginIndexes[plugin]
+			idx, ok := pluginIndexes[app]
 			if !ok {
 				idx = len(out)
-				pluginIndexes[plugin] = idx
-				seenOperations[plugin] = map[string]struct{}{}
-				out = append(out, core.AccessPermission{Plugin: plugin})
+				pluginIndexes[app] = idx
+				seenOperations[app] = map[string]struct{}{}
+				out = append(out, core.AccessPermission{App: app})
 			}
 			for _, operation := range operations {
-				if _, exists := seenOperations[plugin][operation]; exists {
+				if _, exists := seenOperations[app][operation]; exists {
 					continue
 				}
-				seenOperations[plugin][operation] = struct{}{}
+				seenOperations[app][operation] = struct{}{}
 				out[idx].Operations = append(out[idx].Operations, operation)
 			}
 		}
@@ -701,8 +701,8 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 			if strings.TrimSpace(tool.System) != "" {
 				continue
 			}
-			if err := workflowConfigValidateNoUserCredentialTarget(cfg, coreworkflow.PluginTarget{
-				PluginName: strings.TrimSpace(tool.Plugin),
+			if err := workflowConfigValidateNoUserCredentialTarget(cfg, coreworkflow.AppTarget{
+				AppName: strings.TrimSpace(tool.App),
 				Operation:  strings.TrimSpace(tool.Operation),
 				Connection: strings.TrimSpace(tool.Connection),
 				Instance:   strings.TrimSpace(tool.Instance),
@@ -727,8 +727,8 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 				if strings.TrimSpace(tool.System) != "" {
 					continue
 				}
-				if err := workflowConfigValidateNoUserCredentialTarget(cfg, coreworkflow.PluginTarget{
-					PluginName: strings.TrimSpace(tool.Plugin),
+				if err := workflowConfigValidateNoUserCredentialTarget(cfg, coreworkflow.AppTarget{
+					AppName: strings.TrimSpace(tool.App),
 					Operation:  strings.TrimSpace(tool.Operation),
 					Connection: strings.TrimSpace(tool.Connection),
 					Instance:   strings.TrimSpace(tool.Instance),
@@ -744,16 +744,16 @@ func workflowConfigExecutionReference(cfg *config.Config, providerName string, t
 		}
 		return ref, nil
 	}
-	if target.Plugin == nil {
-		return nil, fmt.Errorf("workflow target plugin is required")
+	if target.App == nil {
+		return nil, fmt.Errorf("workflow target app is required")
 	}
-	if err := workflowConfigValidateNoUserCredentialTarget(cfg, *target.Plugin, hasRunAs); err != nil {
+	if err := workflowConfigValidateNoUserCredentialTarget(cfg, *target.App, hasRunAs); err != nil {
 		return nil, err
 	}
 	return ref, nil
 }
 
-func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.PluginTarget, hasRunAs bool) error {
+func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target coreworkflow.AppTarget, hasRunAs bool) error {
 	modeOverride := core.NormalizeOptionalConnectionMode(target.CredentialMode)
 	switch modeOverride {
 	case "":
@@ -763,15 +763,15 @@ func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target cor
 		if hasRunAs {
 			return nil
 		}
-		return fmt.Errorf("config-managed workflows do not support user-credentialed plugin %q", strings.TrimSpace(target.PluginName))
+		return fmt.Errorf("config-managed workflows do not support user-credentialed app %q", strings.TrimSpace(target.AppName))
 	default:
-		return fmt.Errorf("unsupported credential mode %q for config-managed workflow target %q", modeOverride, strings.TrimSpace(target.PluginName))
+		return fmt.Errorf("unsupported credential mode %q for config-managed workflow target %q", modeOverride, strings.TrimSpace(target.AppName))
 	}
 	mode, err := workflowConfigTargetConnectionMode(cfg, target)
 	if err != nil {
 		return err
 	}
-	pluginName := strings.TrimSpace(target.PluginName)
+	pluginName := strings.TrimSpace(target.AppName)
 	switch mode {
 	case core.ConnectionModeNone:
 		return nil
@@ -779,24 +779,24 @@ func workflowConfigValidateNoUserCredentialTarget(cfg *config.Config, target cor
 		if hasRunAs {
 			return nil
 		}
-		return fmt.Errorf("config-managed workflows do not support user-credentialed plugin %q", pluginName)
+		return fmt.Errorf("config-managed workflows do not support user-credentialed app %q", pluginName)
 	default:
 		return fmt.Errorf("unsupported connection mode %q for config-managed workflow target %q", mode, pluginName)
 	}
 }
 
-func workflowConfigTargetConnectionMode(cfg *config.Config, target coreworkflow.PluginTarget) (core.ConnectionMode, error) {
+func workflowConfigTargetConnectionMode(cfg *config.Config, target coreworkflow.AppTarget) (core.ConnectionMode, error) {
 	if cfg == nil {
 		return core.ConnectionModeNone, fmt.Errorf("workflow config is not available")
 	}
-	pluginName := strings.TrimSpace(target.PluginName)
-	entry := cfg.Plugins[pluginName]
+	pluginName := strings.TrimSpace(target.AppName)
+	entry := cfg.Apps[pluginName]
 	if entry == nil {
-		return core.ConnectionModeNone, fmt.Errorf("workflow target plugin %q is not configured", pluginName)
+		return core.ConnectionModeNone, fmt.Errorf("workflow target app %q is not configured", pluginName)
 	}
 	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
 	if err != nil {
-		return core.ConnectionModeNone, fmt.Errorf("workflow target plugin %q connection plan: %w", pluginName, err)
+		return core.ConnectionModeNone, fmt.Errorf("workflow target app %q connection plan: %w", pluginName, err)
 	}
 
 	if connection := strings.TrimSpace(target.Connection); connection != "" {
@@ -805,7 +805,7 @@ func workflowConfigTargetConnectionMode(cfg *config.Config, target coreworkflow.
 	if operation := strings.TrimSpace(target.Operation); operation != "" {
 		mode, ok, err := workflowConfigOperationConnectionMode(plan, entry.ManifestSpec(), target)
 		if err != nil {
-			return core.ConnectionModeNone, fmt.Errorf("workflow target plugin %q operation %q connection plan: %w", pluginName, operation, err)
+			return core.ConnectionModeNone, fmt.Errorf("workflow target app %q operation %q connection plan: %w", pluginName, operation, err)
 		}
 		if ok {
 			return mode, nil
@@ -814,8 +814,8 @@ func workflowConfigTargetConnectionMode(cfg *config.Config, target coreworkflow.
 	return core.NormalizeConnectionMode(core.ConnectionMode(entry.ConnectionMode)), nil
 }
 
-func workflowConfigOperationConnectionMode(plan config.StaticConnectionPlan, manifestPlugin *providermanifestv1.Spec, target coreworkflow.PluginTarget) (core.ConnectionMode, bool, error) {
-	connections, selectors, _, err := plan.RESTOperationConnectionBindings(manifestPlugin)
+func workflowConfigOperationConnectionMode(plan config.StaticConnectionPlan, manifestApp *providermanifestv1.Spec, target coreworkflow.AppTarget) (core.ConnectionMode, bool, error) {
+	connections, selectors, _, err := plan.RESTOperationConnectionBindings(manifestApp)
 	if err != nil {
 		return core.ConnectionModeNone, false, err
 	}
@@ -823,18 +823,18 @@ func workflowConfigOperationConnectionMode(plan config.StaticConnectionPlan, man
 	if selector, ok := selectors[operation]; ok {
 		connectionName, resolved := workflowConfigConnectionSelectorTargetConnection(selector, target.Input)
 		if resolved {
-			mode, err := workflowConfigConnectionModeForName(plan, target.PluginName, connectionName)
+			mode, err := workflowConfigConnectionModeForName(plan, target.AppName, connectionName)
 			return mode, true, err
 		}
 		if connectionName := strings.TrimSpace(connections[operation]); connectionName != "" {
-			mode, err := workflowConfigConnectionModeForName(plan, target.PluginName, connectionName)
+			mode, err := workflowConfigConnectionModeForName(plan, target.AppName, connectionName)
 			return mode, true, err
 		}
-		mode, err := workflowConfigConnectionSelectorMode(plan, target.PluginName, selector)
+		mode, err := workflowConfigConnectionSelectorMode(plan, target.AppName, selector)
 		return mode, true, err
 	}
 	if connectionName := strings.TrimSpace(connections[operation]); connectionName != "" {
-		mode, err := workflowConfigConnectionModeForName(plan, target.PluginName, connectionName)
+		mode, err := workflowConfigConnectionModeForName(plan, target.AppName, connectionName)
 		return mode, true, err
 	}
 	return core.ConnectionModeNone, false, nil
@@ -873,7 +873,7 @@ func workflowConfigConnectionSelectorMode(plan config.StaticConnectionPlan, plug
 func workflowConfigConnectionModeForName(plan config.StaticConnectionPlan, pluginName, connectionName string) (core.ConnectionMode, error) {
 	conn, ok := plan.LookupConnection(connectionName)
 	if !ok {
-		return core.ConnectionModeNone, fmt.Errorf("workflow target plugin %q connection %q is not configured", strings.TrimSpace(pluginName), strings.TrimSpace(connectionName))
+		return core.ConnectionModeNone, fmt.Errorf("workflow target app %q connection %q is not configured", strings.TrimSpace(pluginName), strings.TrimSpace(connectionName))
 	}
 	return config.ConnectionModeForConnection(conn), nil
 }
@@ -939,7 +939,7 @@ func workflowLogReplacedUnreadableExecutionRef(ctx context.Context, objectType, 
 		"workflow_object_key", strings.TrimSpace(objectKey),
 		"workflow_object_id", strings.TrimSpace(objectID),
 		"workflow_provider", strings.TrimSpace(providerName),
-		"plugin", strings.TrimSpace(pluginName),
+		"app", strings.TrimSpace(pluginName),
 		"old_execution_ref", strings.TrimSpace(oldExecutionRef),
 		"new_execution_ref", strings.TrimSpace(newExecutionRef),
 		"error", lookupErr,

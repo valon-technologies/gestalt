@@ -18,7 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -36,7 +36,7 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		PluginRuntime:      runtimeProvider,
+		AppRuntime:      runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -81,8 +81,8 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		SubjectID:    "subject-test",
 		SubjectKind:  "user",
 		Target: workflow.Target{
-			Plugin: &workflow.PluginTarget{
-				PluginName: "roadmap",
+			App: &workflow.AppTarget{
+				AppName: "roadmap",
 				Operation:  "sync_items",
 			},
 		},
@@ -100,8 +100,8 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 	if got := runtimeProvider.startProviderCalls(); got != 0 {
 		t.Fatalf("StartProvider calls before StartWorkflowProviders = %d, want 0", got)
 	}
-	if got := len(runtimeProvider.startPluginRequestsCopy()); got != 0 {
-		t.Fatalf("StartPlugin requests before StartWorkflowProviders = %d, want 0", got)
+	if got := len(runtimeProvider.startAppRequestsCopy()); got != 0 {
+		t.Fatalf("StartApp requests before StartWorkflowProviders = %d, want 0", got)
 	}
 
 	if err := result.Start(ctx); err != nil {
@@ -124,9 +124,9 @@ func TestHostedWorkflowProviderPoolStartsWorkersFromWorkflowProviderStartup(t *t
 		t.Fatalf("StartProvider calls after StartWorkflowProviders = %d, want worker pool size 2", got)
 	}
 
-	startRequests := runtimeProvider.startPluginRequestsCopy()
+	startRequests := runtimeProvider.startAppRequestsCopy()
 	if len(startRequests) != 2 {
-		t.Fatalf("StartPlugin requests after StartWorkflowProviders = %d, want 2 workers", len(startRequests))
+		t.Fatalf("StartApp requests after StartWorkflowProviders = %d, want 2 workers", len(startRequests))
 	}
 	workerReq := startRequests[0]
 	if got := workerReq.Env[runtimehost.DefaultHostServiceSocketEnv]; got != "tcp://127.0.0.1:8080" {
@@ -162,7 +162,7 @@ func TestHostedWorkflowProviderPoolStartupDoesNotBlockWorkflowReadiness(t *testi
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		PluginRuntime:      runtimeProvider,
+		AppRuntime:      runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -221,7 +221,7 @@ func TestWorkflowConfigReconciliationWaitsForRuntimeWorkers(t *testing.T) {
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		PluginRuntime:      runtimeProvider,
+		AppRuntime:      runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -384,7 +384,7 @@ func TestHostedWorkflowProviderPoolRejectsIncompatibleStartupSession(t *testing.
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		PluginRuntime:      runtimeProvider,
+		AppRuntime:      runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -415,8 +415,8 @@ func TestHostedWorkflowProviderPoolRejectsIncompatibleStartupSession(t *testing.
 		t.Fatalf("pool.Start: %v", err)
 	}
 	waitForHostedWorkflowRuntimeStartSessionRequests(t, runtimeProvider.recordingHostedWorkflowRuntime, 1)
-	if got := len(runtimeProvider.startPluginRequestsCopy()); got != 0 {
-		t.Fatalf("StartPlugin requests = %d, want 0 for incompatible runtime session", got)
+	if got := len(runtimeProvider.startAppRequestsCopy()); got != 0 {
+		t.Fatalf("StartApp requests = %d, want 0 for incompatible runtime session", got)
 	}
 	waitCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
 	defer cancel()
@@ -643,7 +643,7 @@ func TestHostedWorkflowProviderKeepsSharedRuntimeOpen(t *testing.T) {
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		PluginRuntime:      runtimeProvider,
+		AppRuntime:      runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -686,7 +686,7 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 	deps := Deps{
 		BaseURL:            "http://127.0.0.1:8080",
 		EncryptionKey:      []byte("0123456789abcdef0123456789abcdef"),
-		PluginRuntime:      runtimeProvider,
+		AppRuntime:      runtimeProvider,
 		PublicHostServices: runtimehost.NewPublicHostServiceRegistry(),
 	}
 	entry := &config.ProviderEntry{
@@ -752,12 +752,12 @@ func TestHostedWorkflowProviderPoolDrainWaitsBeforeClosingWorker(t *testing.T) {
 const providermanifestKindWorkflow = "workflow"
 
 type recordingHostedWorkflowRuntime struct {
-	provider *pluginruntime.LocalProvider
+	provider *appruntime.LocalProvider
 	t        *testing.T
 
 	mu                  sync.Mutex
-	startRequests       []pluginruntime.StartSessionRequest
-	startPluginRequests []pluginruntime.StartPluginRequest
+	startRequests       []appruntime.StartSessionRequest
+	startAppRequests []appruntime.StartAppRequest
 	servers             map[string]*recordingHostedWorkflowServer
 	closeCalls          atomic.Int32
 }
@@ -768,7 +768,7 @@ type blockingStartSessionWorkflowRuntime struct {
 	once    sync.Once
 }
 
-func (r *blockingStartSessionWorkflowRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
+func (r *blockingStartSessionWorkflowRuntime) StartSession(ctx context.Context, req appruntime.StartSessionRequest) (*appruntime.Session, error) {
 	r.once.Do(func() {
 		close(r.started)
 	})
@@ -780,7 +780,7 @@ type staleSessionWorkflowRuntime struct {
 	*recordingHostedWorkflowRuntime
 }
 
-func (r *staleSessionWorkflowRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
+func (r *staleSessionWorkflowRuntime) GetSession(ctx context.Context, req appruntime.GetSessionRequest) (*appruntime.Session, error) {
 	session, err := r.recordingHostedWorkflowRuntime.GetSession(ctx, req)
 	if err != nil {
 		return nil, err
@@ -960,23 +960,23 @@ func cloneWorkflowEventTrigger(trigger *workflow.EventTrigger) *workflow.EventTr
 func newRecordingHostedWorkflowRuntime(t *testing.T) *recordingHostedWorkflowRuntime {
 	t.Helper()
 	return &recordingHostedWorkflowRuntime{
-		provider: pluginruntime.NewLocalProvider(),
+		provider: appruntime.NewLocalProvider(),
 		t:        t,
 		servers:  map[string]*recordingHostedWorkflowServer{},
 	}
 }
 
-func (r *recordingHostedWorkflowRuntime) Support(context.Context) (pluginruntime.Support, error) {
-	return pluginruntime.Support{
-		CanHostPlugins: true,
-		EgressMode:     pluginruntime.EgressModeHostname,
+func (r *recordingHostedWorkflowRuntime) Support(context.Context) (appruntime.Support, error) {
+	return appruntime.Support{
+		CanHostApps: true,
+		EgressMode:     appruntime.EgressModeHostname,
 	}, nil
 }
 
-func (r *recordingHostedWorkflowRuntime) StartSession(ctx context.Context, req pluginruntime.StartSessionRequest) (*pluginruntime.Session, error) {
+func (r *recordingHostedWorkflowRuntime) StartSession(ctx context.Context, req appruntime.StartSessionRequest) (*appruntime.Session, error) {
 	r.mu.Lock()
-	r.startRequests = append(r.startRequests, pluginruntime.StartSessionRequest{
-		PluginName:    req.PluginName,
+	r.startRequests = append(r.startRequests, appruntime.StartSessionRequest{
+		AppName:    req.AppName,
 		Template:      req.Template,
 		Image:         req.Image,
 		ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
@@ -986,24 +986,24 @@ func (r *recordingHostedWorkflowRuntime) StartSession(ctx context.Context, req p
 	return r.provider.StartSession(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) ListSessions(ctx context.Context) ([]pluginruntime.Session, error) {
+func (r *recordingHostedWorkflowRuntime) ListSessions(ctx context.Context) ([]appruntime.Session, error) {
 	return r.provider.ListSessions(ctx)
 }
 
-func (r *recordingHostedWorkflowRuntime) GetSession(ctx context.Context, req pluginruntime.GetSessionRequest) (*pluginruntime.Session, error) {
+func (r *recordingHostedWorkflowRuntime) GetSession(ctx context.Context, req appruntime.GetSessionRequest) (*appruntime.Session, error) {
 	return r.provider.GetSession(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) StopSession(ctx context.Context, req pluginruntime.StopSessionRequest) error {
+func (r *recordingHostedWorkflowRuntime) StopSession(ctx context.Context, req appruntime.StopSessionRequest) error {
 	r.cleanupServer(req.SessionID)
 	return r.provider.StopSession(ctx, req)
 }
 
-func (r *recordingHostedWorkflowRuntime) StartPlugin(_ context.Context, req pluginruntime.StartPluginRequest) (*pluginruntime.HostedPlugin, error) {
+func (r *recordingHostedWorkflowRuntime) StartApp(_ context.Context, req appruntime.StartAppRequest) (*appruntime.HostedApp, error) {
 	r.mu.Lock()
-	r.startPluginRequests = append(r.startPluginRequests, pluginruntime.StartPluginRequest{
+	r.startAppRequests = append(r.startAppRequests, appruntime.StartAppRequest{
 		SessionID:  req.SessionID,
-		PluginName: req.PluginName,
+		AppName: req.AppName,
 		Command:    req.Command,
 		Args:       slices.Clone(req.Args),
 		Env:        cloneRuntimeMetadata(req.Env),
@@ -1038,10 +1038,10 @@ func (r *recordingHostedWorkflowRuntime) StartPlugin(_ context.Context, req plug
 		_ = lis.Close()
 		_ = os.RemoveAll(dir)
 	})
-	return &pluginruntime.HostedPlugin{
+	return &appruntime.HostedApp{
 		ID:         "fake-" + req.SessionID,
 		SessionID:  req.SessionID,
-		PluginName: req.PluginName,
+		AppName: req.AppName,
 		DialTarget: "unix://" + socketPath,
 	}, nil
 }
@@ -1060,13 +1060,13 @@ func (r *recordingHostedWorkflowRuntime) Close() error {
 	return r.provider.Close()
 }
 
-func (r *recordingHostedWorkflowRuntime) startSessionRequestsCopy() []pluginruntime.StartSessionRequest {
+func (r *recordingHostedWorkflowRuntime) startSessionRequestsCopy() []appruntime.StartSessionRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]pluginruntime.StartSessionRequest, len(r.startRequests))
+	out := make([]appruntime.StartSessionRequest, len(r.startRequests))
 	for i, req := range r.startRequests {
-		out[i] = pluginruntime.StartSessionRequest{
-			PluginName:    req.PluginName,
+		out[i] = appruntime.StartSessionRequest{
+			AppName:    req.AppName,
 			Template:      req.Template,
 			Image:         req.Image,
 			ImagePullAuth: cloneImagePullAuth(req.ImagePullAuth),
@@ -1076,14 +1076,14 @@ func (r *recordingHostedWorkflowRuntime) startSessionRequestsCopy() []pluginrunt
 	return out
 }
 
-func (r *recordingHostedWorkflowRuntime) startPluginRequestsCopy() []pluginruntime.StartPluginRequest {
+func (r *recordingHostedWorkflowRuntime) startAppRequestsCopy() []appruntime.StartAppRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	out := make([]pluginruntime.StartPluginRequest, len(r.startPluginRequests))
-	for i, req := range r.startPluginRequests {
-		out[i] = pluginruntime.StartPluginRequest{
+	out := make([]appruntime.StartAppRequest, len(r.startAppRequests))
+	for i, req := range r.startAppRequests {
+		out[i] = appruntime.StartAppRequest{
 			SessionID:  req.SessionID,
-			PluginName: req.PluginName,
+			AppName: req.AppName,
 			Command:    req.Command,
 			Args:       slices.Clone(req.Args),
 			Env:        cloneRuntimeMetadata(req.Env),

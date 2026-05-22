@@ -5,7 +5,7 @@ use crate::params;
 
 #[derive(Parser)]
 #[command(name = "gestalt")]
-#[command(about = "CLI for Gestalt API - authentication, plugin, workflow, agent, and operations")]
+#[command(about = "CLI for Gestalt API - authentication, app, workflow, agent, and operations")]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
@@ -37,19 +37,19 @@ pub enum Commands {
         command: ConfigCommands,
     },
 
-    /// Manage plugins
-    #[command(aliases = ["plugins", "integrations"])]
-    Plugin {
+    /// Manage apps
+    #[command(alias = "apps")]
+    App {
         #[command(subcommand)]
-        command: PluginCommands,
+        command: AppCommands,
     },
 
     #[command(hide = true)]
-    /// Execute a plugin operation
+    /// Execute a app operation
     Invoke(InvokeArgs),
 
     #[command(hide = true)]
-    /// Describe a plugin operation
+    /// Describe a app operation
     Describe(DescribeArgs),
 
     /// Manage API tokens
@@ -109,12 +109,12 @@ pub enum ConfigCommands {
 }
 
 #[derive(Subcommand)]
-pub enum PluginCommands {
+pub enum AppCommands {
     /// List available plugins
     List,
-    /// Connect a plugin via OAuth or interactive manual auth
+    /// Connect a app via OAuth or interactive manual auth
     Connect {
-        /// Plugin name (e.g., github, slack)
+        /// App name (e.g., github, slack)
         name: String,
 
         /// Named connection to connect
@@ -127,7 +127,7 @@ pub enum PluginCommands {
     },
     /// Disconnect a plugin
     Disconnect {
-        /// Plugin name (e.g., github, slack)
+        /// App name (e.g., github, slack)
         name: String,
 
         /// Target a specific named connection
@@ -138,16 +138,16 @@ pub enum PluginCommands {
         #[arg(long)]
         instance: Option<String>,
     },
-    /// Execute a plugin operation
+    /// Execute a app operation
     Invoke(InvokeArgs),
-    /// Describe a plugin operation
+    /// Describe a app operation
     Describe(DescribeArgs),
 }
 
 #[derive(Args)]
 pub struct InvokeArgs {
-    /// Plugin name (e.g., github, slack)
-    pub plugin: String,
+    /// App name (e.g., github, slack)
+    pub app: String,
 
     /// Operation name segments joined by "." (e.g., "chat postMessage" or "chat.postMessage"). Omit to list available operations.
     pub operation: Vec<String>,
@@ -175,8 +175,8 @@ pub struct InvokeArgs {
 
 #[derive(Args)]
 pub struct DescribeArgs {
-    /// Plugin name
-    pub plugin: String,
+    /// App name
+    pub app: String,
     /// Operation name
     pub operation: String,
     /// Select a named connection for this operation catalog
@@ -211,10 +211,10 @@ pub enum AuthorizationCommands {
         #[command(subcommand)]
         command: AuthorizationSubjectCommands,
     },
-    /// Manage plugin authorization memberships
-    Plugins {
+    /// Manage app authorization memberships
+    Apps {
         #[command(subcommand)]
-        command: AuthorizationPluginCommands,
+        command: AuthorizationAppCommands,
     },
     /// Manage built-in admin authorization memberships
     Admins {
@@ -261,7 +261,7 @@ pub enum AuthorizationSubjectCommands {
         #[command(subcommand)]
         command: AuthorizationSubjectMemberCommands,
     },
-    /// Manage subject plugin grants
+    /// Manage subject app grants
     Grants {
         #[command(subcommand)]
         command: AuthorizationSubjectGrantCommands,
@@ -271,7 +271,7 @@ pub enum AuthorizationSubjectCommands {
         #[command(subcommand)]
         command: AuthorizationSubjectExternalIdentityCommands,
     },
-    /// Manage subject-owned plugin credentials
+    /// Manage subject-owned app credentials
     Integrations {
         #[command(subcommand)]
         command: AuthorizationSubjectIntegrationCommands,
@@ -356,27 +356,27 @@ pub struct AuthorizationSubjectMemberSetArgs {
 
 #[derive(Subcommand)]
 pub enum AuthorizationSubjectGrantCommands {
-    /// List plugin grants for a subject
+    /// List app grants for a subject
     List {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
     },
-    /// Grant a plugin role to a subject
+    /// Grant a app role to a subject
     Set {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
-        /// Plugin name
-        plugin: String,
-        /// Plugin role
+        /// App name
+        app: String,
+        /// App role
         #[arg(long)]
         role: String,
     },
-    /// Remove a plugin grant from a subject
+    /// Remove a app grant from a subject
     Remove {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
-        /// Plugin name
-        plugin: String,
+        /// App name
+        app: String,
     },
 }
 
@@ -409,16 +409,16 @@ pub struct AuthorizationSubjectExternalIdentityArgs {
 
 #[derive(Subcommand)]
 pub enum AuthorizationSubjectIntegrationCommands {
-    /// List plugin credential state for a subject
+    /// List app credential state for a subject
     List {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
     },
-    /// Connect a plugin credential for a subject
+    /// Connect a app credential for a subject
     Connect {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
-        /// Plugin name
+        /// App name
         name: String,
         /// Named connection to connect
         #[arg(long)]
@@ -427,11 +427,11 @@ pub enum AuthorizationSubjectIntegrationCommands {
         #[arg(long)]
         instance: Option<String>,
     },
-    /// Disconnect a plugin credential from a subject
+    /// Disconnect a app credential from a subject
     Disconnect {
         /// Service-account slug or canonical service_account:<id>
         subject: String,
-        /// Plugin name
+        /// App name
         name: String,
         /// Target a specific named connection
         #[arg(long)]
@@ -492,10 +492,10 @@ pub struct AuthorizationSubjectTokenCreateArgs {
 }
 
 #[derive(Subcommand)]
-pub enum AuthorizationPluginCommands {
-    /// List plugins that declare authorization policies
+pub enum AuthorizationAppCommands {
+    /// List apps that declare authorization policies
     List,
-    /// Manage plugin members
+    /// Manage app members
     Members {
         #[command(subcommand)]
         command: AuthorizationPluginMemberCommands,
@@ -504,17 +504,17 @@ pub enum AuthorizationPluginCommands {
 
 #[derive(Subcommand)]
 pub enum AuthorizationPluginMemberCommands {
-    /// List plugin members
+    /// List app members
     List {
-        /// Plugin name
-        plugin: String,
+        /// App name
+        app: String,
     },
-    /// Add or update a plugin member
+    /// Add or update a app member
     Set(AuthorizationPluginMemberSetArgs),
-    /// Remove a plugin member
+    /// Remove a app member
     Remove {
-        /// Plugin name
-        plugin: String,
+        /// App name
+        app: String,
         /// Canonical subject ID
         subject_id: String,
     },
@@ -522,8 +522,8 @@ pub enum AuthorizationPluginMemberCommands {
 
 #[derive(Args)]
 pub struct AuthorizationPluginMemberSetArgs {
-    /// Plugin name
-    pub plugin: String,
+    /// App name
+    pub app: String,
 
     /// Canonical subject ID
     #[arg(long = "subject-id", conflicts_with = "email")]
@@ -533,7 +533,7 @@ pub struct AuthorizationPluginMemberSetArgs {
     #[arg(long, conflicts_with = "subject_id")]
     pub email: Option<String>,
 
-    /// Plugin role
+    /// App role
     #[arg(long)]
     pub role: String,
 }
@@ -762,7 +762,7 @@ pub enum WorkflowScheduleCommands {
     List {
         /// Filter schedules by target plugin
         #[arg(long)]
-        plugin: Option<String>,
+        app: Option<String>,
     },
     /// Show a single workflow schedule
     Get {
@@ -796,7 +796,7 @@ pub enum WorkflowTriggerCommands {
     List {
         /// Filter triggers by target plugin
         #[arg(long)]
-        plugin: Option<String>,
+        app: Option<String>,
         /// Filter triggers by event type
         #[arg(long = "type")]
         event_type: Option<String>,
@@ -833,7 +833,7 @@ pub enum WorkflowRunCommands {
     List {
         /// Filter runs by target plugin
         #[arg(long)]
-        plugin: Option<String>,
+        app: Option<String>,
         /// Filter runs by status
         #[arg(long)]
         status: Option<String>,
@@ -944,9 +944,9 @@ pub struct WorkflowScheduleCreateArgs {
     #[arg(long)]
     pub cron: String,
 
-    /// Target plugin (e.g. "slack", "github")
+    /// Target app (e.g. "slack", "github")
     #[arg(long)]
-    pub plugin: String,
+    pub app: String,
 
     /// Target operation (e.g. "chat.postMessage")
     #[arg(long)]
@@ -979,7 +979,7 @@ pub struct WorkflowScheduleCreateArgs {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentToolArg {
-    pub plugin: String,
+    pub app: String,
     pub operation: String,
 }
 
@@ -989,18 +989,18 @@ impl AgentToolArg {
         if trimmed.is_empty() {
             return Err("tool cannot be empty".to_string());
         }
-        let (plugin, operation) = trimmed
+        let (app, operation) = trimmed
             .split_once(':')
-            .ok_or_else(|| format!("tool '{trimmed}' must use plugin:operation"))?;
-        let plugin = plugin.trim();
+            .ok_or_else(|| format!("tool '{trimmed}' must use app:operation"))?;
+        let app = app.trim();
         let operation = operation.trim();
-        if plugin.is_empty() || operation.is_empty() {
+        if app.is_empty() || operation.is_empty() {
             return Err(format!(
-                "tool '{trimmed}' must include both plugin and operation"
+                "tool '{trimmed}' must include both app and operation"
             ));
         }
         Ok(Self {
-            plugin: plugin.to_string(),
+            app: app.to_string(),
             operation: operation.to_string(),
         })
     }
@@ -1123,9 +1123,9 @@ pub struct WorkflowTriggerCreateArgs {
     #[arg(long)]
     pub subject: Option<String>,
 
-    /// Target plugin (e.g. "slack", "github")
+    /// Target app (e.g. "slack", "github")
     #[arg(long)]
-    pub plugin: Option<String>,
+    pub app: Option<String>,
 
     /// Target operation (e.g. "chat.postMessage")
     #[arg(long)]
@@ -1165,9 +1165,9 @@ pub struct WorkflowScheduleUpdateArgs {
     #[arg(long)]
     pub cron: Option<String>,
 
-    /// Target plugin (leave unset to keep existing)
+    /// Target app (leave unset to keep existing)
     #[arg(long)]
-    pub plugin: Option<String>,
+    pub app: Option<String>,
 
     /// Target operation (leave unset to keep existing)
     #[arg(long)]
@@ -1223,9 +1223,9 @@ pub struct WorkflowTriggerUpdateArgs {
     #[arg(long)]
     pub subject: Option<String>,
 
-    /// Target plugin (leave unset to keep existing)
+    /// Target app (leave unset to keep existing)
     #[arg(long)]
-    pub plugin: Option<String>,
+    pub app: Option<String>,
 
     /// Target operation (leave unset to keep existing)
     #[arg(long)]

@@ -32,7 +32,7 @@ from gestalt import (
     ConnectedToken,
     CreateWorkflowProviderDefinitionRequest,
     ExternalTokenValidator,
-    GetPluginRuntimeSupportRequest,
+    GetAppRuntimeSupportRequest,
     GetWorkflowProviderDefinitionRequest,
     HealthChecker,
     ListWorkflowProviderRunsRequest,
@@ -41,9 +41,9 @@ from gestalt import (
     PauseWorkflowProviderEventTriggerRequest,
     PauseWorkflowProviderScheduleRequest,
     Plugin,
-    PluginProviderAdapter,
-    PluginRuntimeProvider,
-    PluginRuntimeSupport,
+    AppProviderAdapter,
+    AppRuntimeProvider,
+    AppRuntimeSupport,
     ProviderKind,
     ProviderMetadata,
     Request,
@@ -62,10 +62,10 @@ from gestalt import (
 from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
 from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
 from gestalt._gen.v1 import cache_pb2 as _cache_pb2
-from gestalt._gen.v1 import plugin_pb2 as _plugin_pb2
-from gestalt._gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
-from gestalt._gen.v1 import pluginruntime_pb2 as _pluginruntime_pb2
-from gestalt._gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
+from gestalt._gen.v1 import app_pb2 as _app_pb2
+from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
+from gestalt._gen.v1 import appruntime_pb2 as _appruntime_pb2
+from gestalt._gen.v1 import appruntime_pb2_grpc as _appruntime_pb2_grpc
 from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
@@ -75,10 +75,10 @@ agent_pb2_grpc: Any = _agent_pb2_grpc
 authentication_pb2: Any = _authentication_pb2
 cache_pb2: Any = _cache_pb2
 empty_pb2: Any = _empty_pb2
-plugin_pb2: Any = _plugin_pb2
-plugin_pb2_grpc: Any = _plugin_pb2_grpc
-pluginruntime_pb2: Any = _pluginruntime_pb2
-pluginruntime_pb2_grpc: Any = _pluginruntime_pb2_grpc
+app_pb2: Any = _app_pb2
+app_pb2_grpc: Any = _app_pb2_grpc
+appruntime_pb2: Any = _appruntime_pb2
+appruntime_pb2_grpc: Any = _appruntime_pb2_grpc
 runtime_pb2: Any = _runtime_pb2
 s3_pb2_grpc: Any = _s3_pb2_grpc
 struct_pb2: Any = _struct_pb2
@@ -138,7 +138,7 @@ class ParseRuntimeArgsTests(unittest.TestCase):
                 json.dumps(
                     {
                         "target": "provider",
-                        "plugin_name": "released-plugin",
+                        "app_name": "released-plugin",
                         "runtime_kind": "secrets",
                     }
                 ),
@@ -154,7 +154,7 @@ class ParseRuntimeArgsTests(unittest.TestCase):
             runtime_args,
             _runtime.RuntimeArgs(
                 target="provider",
-                plugin_name="released-plugin",
+                app_name="released-plugin",
                 runtime_kind="secrets",
             ),
         )
@@ -175,9 +175,9 @@ class ParseRuntimeArgsTests(unittest.TestCase):
 
 class RuntimeServeTransportTests(unittest.TestCase):
     def test_runtime_serve_supports_tcp_provider_sockets(self) -> None:
-        plugin = Plugin("tcp-runtime")
+        app = Plugin("tcp-runtime")
 
-        @plugin.operation
+        @app.operation
         def ping(request: Request) -> dict[str, str]:
             return {"idempotency_key": request.idempotency_key}
 
@@ -219,18 +219,18 @@ class RuntimeServeTransportTests(unittest.TestCase):
             channel = grpc.insecure_channel(address)
             self.addCleanup(channel.close)
             grpc.channel_ready_future(channel).result(timeout=5)
-            stub = plugin_pb2_grpc.IntegrationProviderStub(channel)
+            stub = app_pb2_grpc.AppProviderStub(channel)
 
             metadata = stub.GetMetadata(empty_pb2.Empty(), timeout=5)
             started = stub.StartProvider(
-                plugin_pb2.StartProviderRequest(
+                app_pb2.StartProviderRequest(
                     name="tcp-runtime",
                     protocol_version=_runtime.CURRENT_PROTOCOL_VERSION,
                 ),
                 timeout=5,
             )
             result = stub.Execute(
-                plugin_pb2.ExecuteRequest(
+                app_pb2.ExecuteRequest(
                     operation="ping",
                     idempotency_key=" transport-tool-123 ",
                 ),
@@ -282,7 +282,7 @@ class ManifestNameTests(unittest.TestCase):
                 'display_name: "Released Plugin"\n', encoding="utf-8"
             )
 
-            manifest_dir = temp_root / "plugin.json"
+            manifest_dir = temp_root / "app.json"
             manifest_dir.mkdir()
             (manifest_dir / "manifest.yaml").write_text(
                 'display_name: "Directory Manifest"\n',
@@ -297,7 +297,7 @@ class ManifestNameTests(unittest.TestCase):
 
             tagged_manifest_path = temp_root / "tagged.yaml"
             tagged_manifest_path.write_text(
-                "source: !env github.com/acme/plugins/tagged-provider\n"
+                "source: !env github.com/acme/apps/tagged-provider\n"
                 "display_name: !env ${PLUGIN_NAME}\n",
                 encoding="utf-8",
             )
@@ -310,8 +310,8 @@ class ManifestNameTests(unittest.TestCase):
             ]
             for manifest_input, expected_name in cases:
                 with self.subTest(manifest_input=str(manifest_input)):
-                    plugin = Plugin.from_manifest(manifest_input)
-                    self.assertEqual(plugin.name, expected_name)
+                    app = Plugin.from_manifest(manifest_input)
+                    self.assertEqual(app.name, expected_name)
 
 
 class RequestTests(unittest.TestCase):
@@ -333,9 +333,9 @@ class RequestTests(unittest.TestCase):
 
 class MainEntrypointTests(unittest.TestCase):
     def test_writes_catalog_when_env_is_set(self) -> None:
-        plugin = Plugin("test-plugin")
+        app = Plugin("test-plugin")
 
-        @plugin.operation
+        @app.operation
         def noop() -> str:
             return "ok"
 
@@ -359,14 +359,14 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(result, 2)
 
     def test_provider_servicer_reports_and_serves_session_catalogs(self) -> None:
-        plugin = Plugin("source-name")
+        app = Plugin("source-name")
         configured: list[tuple[str, dict[str, Any]]] = []
 
-        @plugin.configure
+        @app.configure
         def configure(name: str, config: dict[str, Any]) -> None:
             configured.append((name, dict(config)))
 
-        @plugin.operation
+        @app.operation
         def whoami(request: Request) -> dict[str, Any]:
             return {
                 "token": request.token,
@@ -406,7 +406,7 @@ class MainEntrypointTests(unittest.TestCase):
                 else "",
             }
 
-        @plugin.session_catalog
+        @app.session_catalog
         def dynamic_catalog(request: Request) -> Catalog:
             cat = Catalog(
                 name="session-source",
@@ -425,7 +425,7 @@ class MainEntrypointTests(unittest.TestCase):
             cat.operations[0].allowed_roles.extend(["viewer", "admin"])
             return cat
 
-        @plugin.post_connect
+        @app.post_connect
         def dynamic_post_connect(token: ConnectedToken) -> dict[str, str]:
             return {
                 "subject": token.subject_id,
@@ -470,7 +470,7 @@ class MainEntrypointTests(unittest.TestCase):
             "host requested protocol version",
         ):
             servicer.StartProvider(
-                plugin_pb2.StartProviderRequest(
+                app_pb2.StartProviderRequest(
                     name="source-instance",
                     protocol_version=_runtime.CURRENT_PROTOCOL_VERSION + 1,
                 ),
@@ -483,64 +483,64 @@ class MainEntrypointTests(unittest.TestCase):
         )
         self.assertEqual(configured, [])
 
-        start_request = plugin_pb2.StartProviderRequest(
+        start_request = app_pb2.StartProviderRequest(
             name="source-instance",
             protocol_version=_runtime.CURRENT_PROTOCOL_VERSION,
         )
         json_format.ParseDict({"region": "use1"}, start_request.config)
         start_response = servicer.StartProvider(start_request, mock.Mock())
         execute_response = servicer.Execute(
-            plugin_pb2.ExecuteRequest(
+            app_pb2.ExecuteRequest(
                 operation="whoami",
                 token="secret-token",
                 idempotency_key=" tool-call-123 ",
                 invocation_token="opaque-invocation-token",
-                context=plugin_pb2.RequestContext(
-                    subject=plugin_pb2.SubjectContext(
+                context=app_pb2.RequestContext(
+                    subject=app_pb2.SubjectContext(
                         id="user:user-123",
                         kind="user",
                         auth_source="api_token",
                         email="ada@example.com",
                     ),
-                    agent_subject=plugin_pb2.SubjectContext(
+                    agent_subject=app_pb2.SubjectContext(
                         id="user:user-456",
                         kind="user",
                         display_name="Grace Hopper",
                         auth_source="slack",
                         email="grace@example.com",
                     ),
-                    agent_external_identity=plugin_pb2.ExternalIdentityContext(
+                    agent_external_identity=app_pb2.ExternalIdentityContext(
                         type="github_identity",
                         id="user:12345678",
                     ),
-                    external_identity=plugin_pb2.ExternalIdentityContext(
+                    external_identity=app_pb2.ExternalIdentityContext(
                         type="github_app_installation",
                         id="repo:acme/widgets",
                     ),
-                    credential=plugin_pb2.CredentialContext(
+                    credential=app_pb2.CredentialContext(
                         mode="user",
                         subject_id="user:user-123",
                     ),
-                    access=plugin_pb2.AccessContext(
+                    access=app_pb2.AccessContext(
                         policy="sample_policy",
                         role="admin",
                     ),
-                    host=plugin_pb2.HostContext(
+                    host=app_pb2.HostContext(
                         public_base_url="https://gestalt.example.test",
                     ),
                     workflow=execute_workflow,
                     tool_refs=[
-                        plugin_pb2.AgentToolRef(
+                        app_pb2.AgentToolRef(
                             plugin="github",
                             operation="bot.getPullRequest",
-                            run_as=plugin_pb2.SubjectContext(
+                            run_as=app_pb2.SubjectContext(
                                 id="service_account:github-review",
                                 kind="service_account",
                                 credential_subject_id="service_account:github-review",
                                 display_name="GitHub Review",
                                 auth_source="managed_subject",
                             ),
-                            run_as_external_identity=plugin_pb2.ExternalIdentityContext(
+                            run_as_external_identity=app_pb2.ExternalIdentityContext(
                                 type="github_identity",
                                 id="user:12345678",
                             ),
@@ -552,17 +552,17 @@ class MainEntrypointTests(unittest.TestCase):
             mock.Mock(),
         )
         response = servicer.GetSessionCatalog(
-            plugin_pb2.GetSessionCatalogRequest(
+            app_pb2.GetSessionCatalogRequest(
                 token="secret-token",
                 connection_params={"tenant": "acme"},
-                context=plugin_pb2.RequestContext(
-                    subject=plugin_pb2.SubjectContext(id="user:user-123", kind="user"),
-                    credential=plugin_pb2.CredentialContext(mode="user"),
-                    access=plugin_pb2.AccessContext(
+                context=app_pb2.RequestContext(
+                    subject=app_pb2.SubjectContext(id="user:user-123", kind="user"),
+                    credential=app_pb2.CredentialContext(mode="user"),
+                    access=app_pb2.AccessContext(
                         policy="sample_policy",
                         role="viewer",
                     ),
-                    host=plugin_pb2.HostContext(
+                    host=app_pb2.HostContext(
                         public_base_url="https://gestalt.example.test",
                     ),
                     workflow=catalog_workflow,
@@ -571,8 +571,8 @@ class MainEntrypointTests(unittest.TestCase):
             mock.Mock(),
         )
         post_connect_response = servicer.PostConnect(
-            plugin_pb2.PostConnectRequest(
-                token=plugin_pb2.PostConnectCredential(
+            app_pb2.PostConnectRequest(
+                token=app_pb2.PostConnectCredential(
                     subject_id="user:user-123",
                     connection="workspace",
                     instance="default",
@@ -584,8 +584,8 @@ class MainEntrypointTests(unittest.TestCase):
             mock.Mock(),
         )
         empty_timestamp_response = servicer.PostConnect(
-            plugin_pb2.PostConnectRequest(
-                token=plugin_pb2.PostConnectCredential(
+            app_pb2.PostConnectRequest(
+                token=app_pb2.PostConnectCredential(
                     subject_id="user:user-123",
                     connection="workspace",
                     instance="default",
@@ -696,15 +696,15 @@ class MainEntrypointTests(unittest.TestCase):
         )
 
     def test_provider_servicer_sanitizes_unhandled_execute_exceptions(self) -> None:
-        plugin = Plugin("source-name")
+        app = Plugin("source-name")
 
-        @plugin.operation
+        @app.operation
         def broken() -> None:
             raise RuntimeError("sensitive details")
 
         servicer = _runtime._provider_servicer(plugin=plugin)
         execute_response = servicer.Execute(
-            plugin_pb2.ExecuteRequest(operation="broken"),
+            app_pb2.ExecuteRequest(operation="broken"),
             mock.Mock(),
         )
 
@@ -712,11 +712,11 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(json.loads(execute_response.body), {"error": "internal error"})
 
     def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
-        plugin = Plugin("source-name")
+        app = Plugin("source-name")
         servicer = _runtime._provider_servicer(plugin=plugin)
         context = mock.Mock()
 
-        servicer.GetSessionCatalog(plugin_pb2.GetSessionCatalogRequest(), context)
+        servicer.GetSessionCatalog(app_pb2.GetSessionCatalogRequest(), context)
 
         context.abort.assert_called_once_with(
             grpc.StatusCode.UNIMPLEMENTED,
@@ -724,11 +724,11 @@ class MainEntrypointTests(unittest.TestCase):
         )
 
     def test_provider_servicer_rejects_missing_post_connect_support(self) -> None:
-        plugin = Plugin("source-name")
+        app = Plugin("source-name")
         servicer = _runtime._provider_servicer(plugin=plugin)
         context = mock.Mock()
 
-        servicer.PostConnect(plugin_pb2.PostConnectRequest(), context)
+        servicer.PostConnect(app_pb2.PostConnectRequest(), context)
 
         context.abort.assert_called_once_with(
             grpc.StatusCode.UNIMPLEMENTED,
@@ -740,7 +740,7 @@ class MainEntrypointTests(unittest.TestCase):
             def supports_post_connect(self) -> bool:
                 raise RuntimeError("metadata exploded")
 
-        plugin = BrokenMetadataPlugin("source-name")
+        app = BrokenMetadataPlugin("source-name")
         servicer = _runtime._provider_servicer(plugin=plugin)
         context = AbortContext()
 
@@ -1268,15 +1268,15 @@ class S3RuntimeTests(unittest.TestCase):
     def test_servable_target_wraps_s3_provider(self) -> None:
         provider = self.StubS3Provider()
         servable = _runtime._servable_target(provider, runtime_kind=ProviderKind.S3)
-        self.assertIsInstance(servable, PluginProviderAdapter)
-        servable = cast(PluginProviderAdapter, servable)
+        self.assertIsInstance(servable, AppProviderAdapter)
+        servable = cast(AppProviderAdapter, servable)
         self.assertEqual(servable.kind, ProviderKind.S3)
         self.assertIs(servable.provider, provider)
 
 
-class PluginRuntimeRuntimeTests(unittest.TestCase):
-    class StubPluginRuntimeProvider(
-        PluginRuntimeProvider,
+class AppRuntimeRuntimeTests(unittest.TestCase):
+    class StubAppRuntimeProvider(
+        AppRuntimeProvider,
         MetadataProvider,
         WarningsProvider,
         HealthChecker,
@@ -1299,8 +1299,8 @@ class PluginRuntimeRuntimeTests(unittest.TestCase):
         def health_check(self) -> None:
             return None
 
-    def test_runtime_metadata_and_plugin_runtime_registration(self) -> None:
-        provider = self.StubPluginRuntimeProvider()
+    def test_runtime_metadata_and_app_runtime_registration(self) -> None:
+        provider = self.StubAppRuntimeProvider()
 
         runtime_servicer = _runtime._runtime_servicer(
             provider=provider,
@@ -1311,11 +1311,11 @@ class PluginRuntimeRuntimeTests(unittest.TestCase):
         self.assertEqual(meta.name, "stub-runtime")
         self.assertEqual(list(meta.warnings), ["set RUNTIME_ENDPOINT"])
 
-        adapter = _runtime._plugin_runtime_runtime_plugin(provider)
+        adapter = _runtime._app_runtime_runtime_plugin(provider)
         server = mock.Mock()
         with mock.patch.object(
-            pluginruntime_pb2_grpc,
-            "add_PluginRuntimeProviderServicer_to_server",
+            appruntime_pb2_grpc,
+            "add_AppRuntimeProviderServicer_to_server",
         ) as add_runtime:
             adapter.register_services(server, provider)
         add_runtime.assert_called_once()
@@ -1324,42 +1324,42 @@ class PluginRuntimeRuntimeTests(unittest.TestCase):
         self.assertIs(getattr(wrapped, "_provider"), provider)
         self.assertIs(registered_server, server)
 
-    def test_plugin_runtime_registration_accepts_snake_case_handlers(self) -> None:
-        class Provider(PluginRuntimeProvider):
+    def test_app_runtime_registration_accepts_snake_case_handlers(self) -> None:
+        class Provider(AppRuntimeProvider):
             def get_support(self, request: Any) -> Any:
                 self.request = request
-                return PluginRuntimeSupport(
-                    can_host_plugins=True,
+                return AppRuntimeSupport(
+                    can_host_apps=True,
                     supports_prepare_workspace=True,
                 )
 
         provider = Provider()
         server = mock.Mock()
         with mock.patch.object(
-            pluginruntime_pb2_grpc,
-            "add_PluginRuntimeProviderServicer_to_server",
+            appruntime_pb2_grpc,
+            "add_AppRuntimeProviderServicer_to_server",
         ) as add_runtime:
-            _runtime._register_plugin_runtime_services(server, provider)
+            _runtime._register_app_runtime_services(server, provider)
 
         wrapped, _registered_server = add_runtime.call_args.args
         response = wrapped.GetSupport(empty_pb2.Empty(), object())
-        self.assertIsInstance(provider.request, GetPluginRuntimeSupportRequest)
+        self.assertIsInstance(provider.request, GetAppRuntimeSupportRequest)
         self.assertEqual(
             response,
-            pluginruntime_pb2.PluginRuntimeSupport(
-                can_host_plugins=True,
+            appruntime_pb2.AppRuntimeSupport(
+                can_host_apps=True,
                 supports_prepare_workspace=True,
             ),
         )
 
-    def test_servable_target_wraps_plugin_runtime_provider(self) -> None:
-        provider = self.StubPluginRuntimeProvider()
+    def test_servable_target_wraps_app_runtime_provider(self) -> None:
+        provider = self.StubAppRuntimeProvider()
         servable = _runtime._servable_target(
             provider,
             runtime_kind=ProviderKind.RUNTIME,
         )
-        self.assertIsInstance(servable, PluginProviderAdapter)
-        servable = cast(PluginProviderAdapter, servable)
+        self.assertIsInstance(servable, AppProviderAdapter)
+        servable = cast(AppProviderAdapter, servable)
         self.assertEqual(servable.kind, ProviderKind.RUNTIME)
         self.assertIs(servable.provider, provider)
 
@@ -1477,8 +1477,8 @@ class WorkflowRuntimeTests(unittest.TestCase):
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)
         target = workflow_pb2.BoundWorkflowTarget(
-            plugin=workflow_pb2.BoundWorkflowPluginTarget(
-                plugin_name="demo",
+            plugin=workflow_pb2.BoundWorkflowAppTarget(
+                app_name="demo",
                 operation="sync",
             )
         )
@@ -1540,7 +1540,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
 
         response = wrapped.PublishEvent(
             workflow_pb2.PublishWorkflowProviderEventRequest(
-                plugin_name="github",
+                app_name="github",
                 event=workflow_pb2.WorkflowEvent(
                     source="github",
                     type="github.app.webhook",
@@ -1549,7 +1549,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
             object(),
         )
 
-        self.assertEqual(provider.request.plugin_name, "github")
+        self.assertEqual(provider.request.app_name, "github")
         self.assertEqual(response.id, "published-py")
         self.assertEqual(response.source, "github")
 
@@ -1674,8 +1674,8 @@ class WorkflowRuntimeTests(unittest.TestCase):
             provider,
             runtime_kind=ProviderKind.WORKFLOW,
         )
-        self.assertIsInstance(servable, PluginProviderAdapter)
-        servable = cast(PluginProviderAdapter, servable)
+        self.assertIsInstance(servable, AppProviderAdapter)
+        servable = cast(AppProviderAdapter, servable)
         self.assertEqual(servable.kind, ProviderKind.WORKFLOW)
         self.assertIs(servable.provider, provider)
 

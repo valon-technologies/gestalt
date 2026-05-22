@@ -76,20 +76,20 @@ if TYPE_CHECKING:
         WriteModelRequest,
         WriteRelationshipsRequest,
     )
-    from ._pluginruntime import (
-        GetPluginRuntimeSessionRequest,
-        GetPluginRuntimeSupportRequest,
-        HostedPlugin,
-        ListPluginRuntimeSessionsRequest,
-        ListPluginRuntimeSessionsResponse,
-        PluginRuntimeSession,
-        PluginRuntimeSupport,
-        PreparePluginRuntimeWorkspaceRequest,
-        PreparePluginRuntimeWorkspaceResponse,
-        RemovePluginRuntimeWorkspaceRequest,
-        StartHostedPluginRequest,
-        StartPluginRuntimeSessionRequest,
-        StopPluginRuntimeSessionRequest,
+    from ._appruntime import (
+        GetAppRuntimeSessionRequest,
+        GetAppRuntimeSupportRequest,
+        HostedApp,
+        ListAppRuntimeSessionsRequest,
+        ListAppRuntimeSessionsResponse,
+        AppRuntimeSession,
+        AppRuntimeSupport,
+        PrepareAppRuntimeWorkspaceRequest,
+        PrepareAppRuntimeWorkspaceResponse,
+        RemoveAppRuntimeWorkspaceRequest,
+        StartHostedAppRequest,
+        StartAppRuntimeSessionRequest,
+        StopAppRuntimeSessionRequest,
     )
     from ._s3 import (
         CopyOptions,
@@ -182,7 +182,7 @@ class ProviderMetadata:
         self.version = version
 
 
-class PluginProvider:
+class AppProvider:
     """Base interface shared by provider-style runtimes."""
 
     def configure(self, name: str, config: dict[str, Any]) -> None:
@@ -243,10 +243,10 @@ class Closer:
         raise NotImplementedError
 
 
-RegisterServices = Callable[[Any, PluginProvider], None]
+RegisterServices = Callable[[Any, AppProvider], None]
 
 
-class PluginProviderAdapter:
+class AppProviderAdapter:
     """Wrap a provider and registration callback for integration runtimes."""
 
     __slots__ = ("kind", "provider", "register_services")
@@ -254,7 +254,7 @@ class PluginProviderAdapter:
     def __init__(
         self,
         kind: ProviderKind | str,
-        provider: PluginProvider,
+        provider: AppProvider,
         register_services: RegisterServices,
     ) -> None:
         self.kind = kind
@@ -269,7 +269,7 @@ class PluginProviderAdapter:
         _runtime.serve(self)
 
 
-class AuthenticationProvider(PluginProvider):
+class AuthenticationProvider(AppProvider):
     """Base class for authentication providers."""
 
     def begin_login(self, request: BeginLoginRequest) -> BeginLoginResponse:
@@ -290,7 +290,7 @@ class AuthenticationProvider(PluginProvider):
         _runtime.serve(self, runtime_kind=ProviderKind.AUTHENTICATION)
 
 
-class AuthorizationProvider(PluginProvider):
+class AuthorizationProvider(AppProvider):
     """Base class for authorization-provider runtimes."""
 
     def evaluate(self, request: AccessEvaluationRequest) -> AccessDecision:
@@ -371,7 +371,7 @@ class SessionTTLProvider:
         raise NotImplementedError
 
 
-class SecretsProvider(PluginProvider):
+class SecretsProvider(AppProvider):
     """Base class for secret-provider runtimes."""
 
     def get_secret(self, name: str) -> str:
@@ -387,7 +387,7 @@ class SecretsProvider(PluginProvider):
         _runtime.serve(self, runtime_kind=ProviderKind.SECRETS)
 
 
-class CacheProvider(PluginProvider):
+class CacheProvider(AppProvider):
     """Base class for cache-provider runtimes."""
 
     def get(self, key: str) -> bytes | None:
@@ -449,7 +449,7 @@ class CacheProvider(PluginProvider):
         _runtime.serve(self, runtime_kind=ProviderKind.CACHE)
 
 
-class S3Provider(PluginProvider):
+class S3Provider(AppProvider):
     """Base class for S3-compatible object store runtimes."""
 
     def head_object(self, ref: ObjectRef) -> ObjectMeta:
@@ -513,7 +513,7 @@ class S3Provider(PluginProvider):
         _runtime.serve(self, runtime_kind=ProviderKind.S3)
 
 
-class AgentProvider(PluginProvider):
+class AgentProvider(AppProvider):
     """Base class for agent-provider runtimes.
 
     Subclasses implement snake_case handler methods such as
@@ -587,7 +587,7 @@ class AgentProvider(PluginProvider):
         _runtime.serve(self, runtime_kind=ProviderKind.AGENT)
 
 
-class PluginRuntimeProvider(PluginProvider):
+class AppRuntimeProvider(AppProvider):
     """Base class for hosted plugin-runtime providers.
 
     Subclasses implement snake_case handler methods such as
@@ -597,44 +597,44 @@ class PluginRuntimeProvider(PluginProvider):
 
     def get_support(
         self,
-        request: GetPluginRuntimeSupportRequest,
-    ) -> PluginRuntimeSupport:
+        request: GetAppRuntimeSupportRequest,
+    ) -> AppRuntimeSupport:
         self._unimplemented("get_support")
 
     def start_session(
         self,
-        request: StartPluginRuntimeSessionRequest,
-    ) -> PluginRuntimeSession:
+        request: StartAppRuntimeSessionRequest,
+    ) -> AppRuntimeSession:
         self._unimplemented("start_session")
 
     def get_session(
         self,
-        request: GetPluginRuntimeSessionRequest,
-    ) -> PluginRuntimeSession:
+        request: GetAppRuntimeSessionRequest,
+    ) -> AppRuntimeSession:
         self._unimplemented("get_session")
 
     def list_sessions(
         self,
-        request: ListPluginRuntimeSessionsRequest,
-    ) -> ListPluginRuntimeSessionsResponse:
+        request: ListAppRuntimeSessionsRequest,
+    ) -> ListAppRuntimeSessionsResponse:
         self._unimplemented("list_sessions")
 
-    def stop_session(self, request: StopPluginRuntimeSessionRequest) -> None:
+    def stop_session(self, request: StopAppRuntimeSessionRequest) -> None:
         self._unimplemented("stop_session")
 
     def prepare_workspace(
         self,
-        request: PreparePluginRuntimeWorkspaceRequest,
-    ) -> PreparePluginRuntimeWorkspaceResponse:
+        request: PrepareAppRuntimeWorkspaceRequest,
+    ) -> PrepareAppRuntimeWorkspaceResponse:
         self._unimplemented("prepare_workspace")
 
     def remove_workspace(
         self,
-        request: RemovePluginRuntimeWorkspaceRequest,
+        request: RemoveAppRuntimeWorkspaceRequest,
     ) -> None:
         self._unimplemented("remove_workspace")
 
-    def start_plugin(self, request: StartHostedPluginRequest) -> HostedPlugin:
+    def start_plugin(self, request: StartHostedAppRequest) -> HostedApp:
         self._unimplemented("start_plugin")
 
     def serve(self) -> None:
@@ -645,7 +645,7 @@ class PluginRuntimeProvider(PluginProvider):
         _runtime.serve(self, runtime_kind=ProviderKind.RUNTIME)
 
 
-class WorkflowProvider(PluginProvider):
+class WorkflowProvider(AppProvider):
     """Base class for workflow-provider runtimes.
 
     Subclasses implement snake_case handler methods such as

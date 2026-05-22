@@ -3,7 +3,7 @@
   "type": "module",
   "gestalt": {
     "provider": {
-      "kind": "plugin",
+      "kind": "app",
       "target": "./provider.ts#plugin"
     }
   }

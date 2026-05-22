@@ -17,17 +17,17 @@ explicitly names a submodule.
 
 | Section | Start with | Use it for |
 | --- | --- | --- |
-| Provider authoring | `definePlugin`, `operation`, `ok` | Executable plugin providers, typed request handlers, and operation results. |
+| Provider authoring | `defineApp`, `operation`, `ok` | Executable app providers, typed request handlers, and operation results. |
 | Runtime schemas | `s`, `object`, `string` | Runtime validation and generated catalog metadata for operation inputs and outputs. |
 | Provider runtimes | `defineAuthenticationProvider`, `defineAuthorizationProvider`, `defineCacheProvider`, `defineS3Provider`, `defineWorkflowProvider`, `defineAgentProvider` | Host-service backends implemented as TypeScript providers. |
 | Workflow and agent models | `WorkflowProvider`, `WorkflowManager`, `AgentProvider`, `AgentManager` | Native workflow values, agent sessions, turns, messages, tools, and manager clients. |
-| Host-service clients | `Cache`, `IndexedDB`, `S3`, `PluginInvoker`, `AuthorizationClient` | Calling sibling services exposed to a provider process by `gestaltd`. |
+| Host-service clients | `Cache`, `IndexedDB`, `S3`, `AppInvoker`, `AuthorizationClient` | Calling sibling services exposed to a provider process by `gestaltd`. |
 | Telemetry | `withModelOperation`, `withToolExecution`, `withAgentInvocation` | Provider-authored GenAI spans and metrics inside a running provider process. |
 
 ```ts
-import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
+import { defineApp, ok, operation, s } from "@valon-technologies/gestalt";
 
-export const plugin = definePlugin({
+export const app = defineApp({
   displayName: "Search",
   operations: [
     operation({
@@ -65,7 +65,7 @@ property in `package.json`.
   },
   "gestalt": {
     "provider": {
-      "kind": "plugin",
+      "kind": "app",
       "target": "./provider.ts#plugin"
     }
   }
@@ -76,7 +76,7 @@ The target is a relative file path with an optional export suffix. If the suffix
 is omitted, the runtime looks for `provider`, then `plugin`, then the default
 export.
 
-Use `"plugin"` as the kind token for executable plugin providers. Use an object
+Use `"app"` as the kind token for executable app providers. Use an object
 target with an explicit kind for authentication, authorization, cache,
 IndexedDB, S3, secrets, workflow, agent, and hosted-runtime providers.
 
@@ -84,13 +84,13 @@ IndexedDB, S3, secrets, workflow, agent, and hosted-runtime providers.
 
 The root package exports provider definition helpers:
 
-- `definePlugin` for integration operations and session catalogs.
+- `defineApp` for integration operations and session catalogs.
 - `defineAuthenticationProvider` for authentication surfaces.
 - `defineAuthorizationProvider` for custom authorization providers.
 - `defineCacheProvider`, `defineIndexedDBProvider`, `defineS3Provider`, and
   `defineSecretsProvider` for host-service backends.
 - `defineWorkflowProvider`, `defineAgentProvider`, and
-  `definePluginRuntimeProvider` for workflow, agent, and hosted-runtime
+  `defineAppRuntimeProvider` for workflow, agent, and hosted-runtime
   backends.
 - `s` schema builders for operation input, output, and catalog metadata.
 - Host-service clients for cache, IndexedDB, S3, workflows, agents,

@@ -20,7 +20,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -38,13 +38,13 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 			Name: "roadmap",
 			Operations: []*proto.CatalogOperation{{
 				Id:             "echo",
-				Transport:      catalog.TransportPlugin,
+				Transport:      catalog.TransportApp,
 				AllowedRoles:   []string{"viewer"},
 				RequiredScopes: []string{"local.session.scope"},
 			}},
 		},
 	}
-	spec := pluginservice.StaticProviderSpec{
+	spec := appservice.StaticProviderSpec{
 		Name:           "roadmap",
 		DisplayName:    "Roadmap",
 		ConnectionMode: core.ConnectionModeNone,
@@ -52,13 +52,13 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 			Name: "roadmap",
 			Operations: []catalog.CatalogOperation{{
 				ID:             "echo",
-				Transport:      catalog.TransportPlugin,
+				Transport:      catalog.TransportApp,
 				AllowedRoles:   []string{"viewer"},
 				RequiredScopes: []string{"local.scope"},
 			}},
 		},
 	}
-	remoteSpec := pluginservice.StaticProviderSpec{
+	remoteSpec := appservice.StaticProviderSpec{
 		Name:           "roadmap",
 		ConnectionMode: core.ConnectionModeUser,
 		AuthTypes:      []string{"oauth2"},
@@ -66,7 +66,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 			Name: "roadmap",
 			Operations: []catalog.CatalogOperation{{
 				ID:             "echo",
-				Transport:      catalog.TransportPlugin,
+				Transport:      catalog.TransportApp,
 				AllowedRoles:   []string{"admin"},
 				RequiredScopes: []string{"remote.scope"},
 			}},
@@ -117,7 +117,7 @@ func TestHTTPTransportDispatchesProviderRPCs(t *testing.T) {
 	defer dispatchCancel()
 	dispatchDone := make(chan error, 1)
 	go func() {
-		dispatchDone <- client.RunDispatcher(dispatchCtx, session.AttachID, map[string]proto.IntegrationProviderClient{
+		dispatchDone <- client.RunDispatcher(dispatchCtx, session.AttachID, map[string]proto.AppProviderClient{
 			"roadmap": local,
 		}, WithUIHandlers(map[string]http.Handler{"roadmap": localUI}))
 	}()
@@ -257,11 +257,11 @@ func TestAttachProviderSkipsSessionCatalogWhenRemoteMetadataReportsNoSupport(t *
 			Name: "roadmap",
 			Operations: []*proto.CatalogOperation{{
 				Id:        "echo",
-				Transport: catalog.TransportPlugin,
+				Transport: catalog.TransportApp,
 			}},
 		},
 	}
-	spec := pluginservice.StaticProviderSpec{
+	spec := appservice.StaticProviderSpec{
 		Name:           "roadmap",
 		DisplayName:    "Roadmap",
 		ConnectionMode: core.ConnectionModeUser,
@@ -269,11 +269,11 @@ func TestAttachProviderSkipsSessionCatalogWhenRemoteMetadataReportsNoSupport(t *
 			Name: "roadmap",
 			Operations: []catalog.CatalogOperation{{
 				ID:        "echo",
-				Transport: catalog.TransportPlugin,
+				Transport: catalog.TransportApp,
 			}},
 		},
 	}
-	remote, err := pluginservice.NewRemote(context.Background(), local, spec, nil)
+	remote, err := appservice.NewRemote(context.Background(), local, spec, nil)
 	if err != nil {
 		t.Fatalf("NewRemote: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
 	db := &coretesting.StubIndexedDB{}
 	targets := []Target{{
 		Name: "roadmap",
-		Spec: pluginservice.StaticProviderSpec{
+		Spec: appservice.StaticProviderSpec{
 			Name:           "roadmap",
 			DisplayName:    "Roadmap",
 			ConnectionMode: core.ConnectionModeUser,
@@ -350,7 +350,7 @@ func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{{
 					ID:        "echo",
-					Transport: catalog.TransportPlugin,
+					Transport: catalog.TransportApp,
 				}},
 			},
 		},
@@ -375,13 +375,13 @@ func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
 	dispatchClient := Client{BaseURL: dispatchTS.URL, HTTPClient: dispatchTS.Client()}
 	session, err := createClient.CreateSession(context.Background(), CreateSessionRequest{Providers: []AttachProvider{{
 		Name: "roadmap",
-		Spec: pluginservice.StaticProviderSpec{
+		Spec: appservice.StaticProviderSpec{
 			Name: "roadmap",
 			Catalog: &catalog.Catalog{
 				Name: "roadmap",
 				Operations: []catalog.CatalogOperation{{
 					ID:        "echo",
-					Transport: catalog.TransportPlugin,
+					Transport: catalog.TransportApp,
 				}},
 			},
 		},
@@ -421,7 +421,7 @@ func TestIndexedDBAttachmentStateDispatchesAcrossManagers(t *testing.T) {
 	local := &recordingIntegrationClient{}
 	dispatchClient.DispatcherSecret = session.DispatcherSecret
 	go func() {
-		dispatchDone <- dispatchClient.RunDispatcher(dispatchCtx, session.AttachID, map[string]proto.IntegrationProviderClient{
+		dispatchDone <- dispatchClient.RunDispatcher(dispatchCtx, session.AttachID, map[string]proto.AppProviderClient{
 			"roadmap": local,
 		})
 	}()
@@ -822,8 +822,8 @@ func TestCreateSessionMatchesProviderBySource(t *testing.T) {
 
 	manager, err := NewManager([]Target{{
 		Name:   "workplaceHub",
-		Source: "github.com/valon-technologies/valon-tools/plugins/workplace-hub",
-		Spec: pluginservice.StaticProviderSpec{
+		Source: "github.com/valon-technologies/valon-tools/apps/workplace-hub",
+		Spec: appservice.StaticProviderSpec{
 			Name: "workplaceHub",
 		},
 		Config: map[string]any{"remote": true},
@@ -834,8 +834,8 @@ func TestCreateSessionMatchesProviderBySource(t *testing.T) {
 
 	p := &principal.Principal{SubjectID: "user:user-123", UserID: "user-123", Kind: principal.KindUser}
 	resp, err := manager.CreateSession(context.Background(), p, CreateSessionRequest{Providers: []AttachProvider{{
-		Source: "github.com/valon-technologies/valon-tools/plugins/workplace-hub",
-		Spec: pluginservice.StaticProviderSpec{
+		Source: "github.com/valon-technologies/valon-tools/apps/workplace-hub",
+		Spec: appservice.StaticProviderSpec{
 			Name: "local-workplace-hub",
 		},
 	}}})
@@ -850,7 +850,7 @@ func TestCreateSessionMatchesProviderBySource(t *testing.T) {
 	}
 
 	names, err := manager.ResolveAttachProviderNames(CreateSessionRequest{Providers: []AttachProvider{{
-		Source: "github.com/valon-technologies/valon-tools/plugins/workplace-hub",
+		Source: "github.com/valon-technologies/valon-tools/apps/workplace-hub",
 	}}})
 	if err != nil {
 		t.Fatalf("ResolveAttachProviderNames: %v", err)
@@ -989,7 +989,7 @@ func TestHTTPTransportListsRedactedAttachmentMetadata(t *testing.T) {
 
 	manager, err := NewManager([]Target{{
 		Name:   "roadmap",
-		Source: "github.com/acme/plugins/roadmap",
+		Source: "github.com/acme/apps/roadmap",
 		UIPath: "/roadmap",
 		RuntimeEnv: func(string) (RuntimeEnv, error) {
 			return RuntimeEnv{
@@ -1041,7 +1041,7 @@ func TestHTTPTransportListsRedactedAttachmentMetadata(t *testing.T) {
 func TestCreateSessionRejectsAmbiguousProviderSource(t *testing.T) {
 	t.Parallel()
 
-	const source = "github.com/acme/plugins/shared"
+	const source = "github.com/acme/apps/shared"
 	manager, err := NewManager([]Target{{
 		Name:   "first",
 		Source: source,
@@ -1209,7 +1209,7 @@ func TestRunDispatcherRetriesTransientPollError(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
-		done <- client.RunDispatcher(ctx, "session-1", map[string]proto.IntegrationProviderClient{
+		done <- client.RunDispatcher(ctx, "session-1", map[string]proto.AppProviderClient{
 			"roadmap": &recordingIntegrationClient{},
 		}, withDispatcherPollRetryConfig(dispatcherPollRetryConfig{
 			InitialDelay: time.Millisecond,
@@ -1290,7 +1290,7 @@ func TestRunDispatcherRetriesHTTP2StreamCancelPollError(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		client := Client{BaseURL: ts.URL, HTTPClient: httpClient}
-		done <- client.RunDispatcher(ctx, "session-1", map[string]proto.IntegrationProviderClient{
+		done <- client.RunDispatcher(ctx, "session-1", map[string]proto.AppProviderClient{
 			"roadmap": &recordingIntegrationClient{},
 		}, withDispatcherPollRetryConfig(dispatcherPollRetryConfig{
 			InitialDelay: time.Millisecond,
@@ -1460,7 +1460,7 @@ func TestRunDispatcherDoesNotRetryCompleteFailure(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	client := Client{BaseURL: ts.URL, HTTPClient: ts.Client()}
-	err := client.RunDispatcher(context.Background(), "session-1", map[string]proto.IntegrationProviderClient{
+	err := client.RunDispatcher(context.Background(), "session-1", map[string]proto.AppProviderClient{
 		"roadmap": &recordingIntegrationClient{},
 	}, withDispatcherPollRetryConfig(dispatcherPollRetryConfig{
 		InitialDelay: time.Millisecond,

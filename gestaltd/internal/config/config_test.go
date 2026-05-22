@@ -148,7 +148,7 @@ func TestLoadConfigGenericFixture(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   providers:
     authentication: google
@@ -171,7 +171,7 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-plugins:
+apps:
   service-a:
     displayName: Service A
     source:
@@ -189,7 +189,7 @@ plugins:
 	if cfg.Server.EncryptionKey != "server-key" {
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
 	}
-	if got := cfg.Plugins["service-a"].DisplayName; got != "Service A" {
+	if got := cfg.Apps["service-a"].DisplayName; got != "Service A" {
 		t.Fatalf("Integrations[service-a].DisplayName = %q", got)
 	}
 }
@@ -200,7 +200,7 @@ func TestLoadConfigParsesPluginMCPFlag(t *testing.T) {
 	path := mustWriteConfigFile(t, `
 server:
   encryptionKey: server-key
-plugins:
+apps:
   service-a:
     source:
       path: /tmp/manifest.yaml
@@ -211,8 +211,8 @@ plugins:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !cfg.Plugins["service-a"].MCP {
-		t.Fatal("expected plugins.service-a.mcp to be parsed")
+	if !cfg.Apps["service-a"].MCP {
+		t.Fatal("expected apps.service-a.mcp to be parsed")
 	}
 }
 
@@ -284,7 +284,7 @@ func TestLoadConfigParsesPluginHTTPSecuritySchemesAndBindings(t *testing.T) {
 	path := mustWriteConfigFile(t, `
 server:
   encryptionKey: server-key
-plugins:
+apps:
   signed:
     source:
       path: /tmp/manifest.yaml
@@ -317,7 +317,7 @@ plugins:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	entry := cfg.Plugins["signed"]
+	entry := cfg.Apps["signed"]
 	if entry == nil {
 		t.Fatal("Plugins[signed] = nil")
 		return
@@ -481,7 +481,7 @@ func TestLoadConfigSelectsDefaultProvidersFromNamedMaps(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   encryptionKey: server-key
   providers:
@@ -509,7 +509,7 @@ providers:
       default: true
       source:
         path: ./providers/authorization/indexeddb
-plugins:
+apps:
   service-a:
     source:
       path: /tmp/manifest.yaml
@@ -534,7 +534,7 @@ plugins:
 		t.Fatalf("SelectedAuthorizationProvider = (%q, %#v), want indexeddb", authorizationName, authorizationEntry)
 	}
 	wantIndexedDB := &HostIndexedDBBindingConfig{Provider: "archive"}
-	if got := cfg.Plugins["service-a"].IndexedDB; !reflect.DeepEqual(got, wantIndexedDB) {
+	if got := cfg.Apps["service-a"].IndexedDB; !reflect.DeepEqual(got, wantIndexedDB) {
 		t.Fatalf("Plugins[service-a].IndexedDB = %#v, want %#v", got, wantIndexedDB)
 	}
 }
@@ -550,7 +550,7 @@ func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 	}
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   providers:
     authentication: local
@@ -566,7 +566,7 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-plugins:
+apps:
   service-a:
     source:
       path: /tmp/manifest.yaml
@@ -609,7 +609,7 @@ func TestLoadConfigAcceptsAuthenticationConfig(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   providers:
     authentication: local
@@ -954,7 +954,7 @@ authorization:
               relations: [admin]
           dynamic:
             allowAdditionalRelationships: true
-        plugin/github/repository:
+        app/github/repository:
           relations:
             maintainer:
               allowedTargets:
@@ -993,7 +993,7 @@ authorization:
 	if got := team.Actions["view"].Relations; !reflect.DeepEqual(got, []string{"member", "admin"}) {
 		t.Fatalf("team view relations = %#v, want member/admin", got)
 	}
-	repository := cfg.Authorization.Models["default"].ResourceTypes["plugin/github/repository"]
+	repository := cfg.Authorization.Models["default"].ResourceTypes["app/github/repository"]
 	if got := repository.Relations["maintainer"].AllowedTargets[0].SubjectType; got != "subject" {
 		t.Fatalf("repository maintainer allowed target = %q, want subject", got)
 	}
@@ -1519,8 +1519,7 @@ func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-providers:
-plugins:
+apps:
     custom_tool:
       source:
         path: ./manifest.yaml
@@ -1530,8 +1529,8 @@ plugins:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if got := cfg.Plugins["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
-			t.Fatalf("unexpected plugin source path: %q", got)
+		if got := cfg.Apps["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
+			t.Fatalf("unexpected app source path: %q", got)
 		}
 	})
 
@@ -1539,9 +1538,8 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     custom_tool:
       source: ./manifest.yaml
 `)
@@ -1553,8 +1551,8 @@ plugins:
 		if cfg.APIVersion != ConfigAPIVersion {
 			t.Fatalf("APIVersion = %q, want %q", cfg.APIVersion, ConfigAPIVersion)
 		}
-		if got := cfg.Plugins["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
-			t.Fatalf("unexpected plugin source path: %q", got)
+		if got := cfg.Apps["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
+			t.Fatalf("unexpected app source path: %q", got)
 		}
 	})
 
@@ -1562,9 +1560,8 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     custom_tool:
       source: demo:manifest.yaml
 `)
@@ -1573,8 +1570,8 @@ plugins:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if got := cfg.Plugins["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "demo:manifest.yaml") {
-			t.Fatalf("unexpected plugin source path: %q", got)
+		if got := cfg.Apps["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "demo:manifest.yaml") {
+			t.Fatalf("unexpected app source path: %q", got)
 		}
 	})
 
@@ -1582,9 +1579,8 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     custom_tool:
       source: ./dist/provider-release.yaml
 `)
@@ -1596,10 +1592,10 @@ plugins:
 		if cfg.APIVersion != ConfigAPIVersion {
 			t.Fatalf("APIVersion = %q, want %q", cfg.APIVersion, ConfigAPIVersion)
 		}
-		if got := cfg.Plugins["custom_tool"].SourceReleasePath(); got != filepath.Join(filepath.Dir(path), "dist", "provider-release.yaml") {
-			t.Fatalf("unexpected plugin release metadata path: %q", got)
+		if got := cfg.Apps["custom_tool"].SourceReleasePath(); got != filepath.Join(filepath.Dir(path), "dist", "provider-release.yaml") {
+			t.Fatalf("unexpected app release metadata path: %q", got)
 		}
-		if got := cfg.Plugins["custom_tool"].SourcePath(); got != "" {
+		if got := cfg.Apps["custom_tool"].SourcePath(); got != "" {
 			t.Fatalf("SourcePath() = %q, want empty for v5 local release metadata", got)
 		}
 	})
@@ -1608,12 +1604,12 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   workflow:
     demo:
       source: ./providers/workflow/demo/manifest.yaml
-plugins:
+apps:
 `)
 
 		cfg, err := Load(path)
@@ -1629,13 +1625,13 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   ui:
     dashboard:
       path: /dashboard
       source: ./providers/ui/dashboard/manifest.yaml
-plugins:
+apps:
 `)
 
 		cfg, err := Load(path)
@@ -1651,9 +1647,8 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     custom_tool:
       source:
         url: https://example.com/providers/custom_tool/provider-release.yaml?download=1
@@ -1665,7 +1660,7 @@ plugins:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		entry := cfg.Plugins["custom_tool"]
+		entry := cfg.Apps["custom_tool"]
 		if got := entry.SourceMetadataURL(); got != "https://example.com/providers/custom_tool/provider-release.yaml?download=1" {
 			t.Fatalf("SourceMetadataURL = %q", got)
 		}
@@ -1706,17 +1701,17 @@ plugins:
 		if err := yaml.Unmarshal(marshaledConfig, &roundTrippedConfig); err != nil {
 			t.Fatalf("yaml.Unmarshal config: %v", err)
 		}
-		plugins, ok := roundTrippedConfig["plugins"].(map[string]any)
+		apps, ok := roundTrippedConfig["apps"].(map[string]any)
 		if !ok {
-			t.Fatalf("plugins = %#v", roundTrippedConfig["plugins"])
+			t.Fatalf("plugins = %#v", roundTrippedConfig["apps"])
 		}
-		plugin, ok := plugins["custom_tool"].(map[string]any)
+		appEntry, ok := apps["custom_tool"].(map[string]any)
 		if !ok {
-			t.Fatalf("plugins.custom_tool = %#v", plugins["custom_tool"])
+			t.Fatalf("apps.custom_tool = %#v", apps["custom_tool"])
 		}
-		source, ok = plugin["source"].(map[string]any)
+		source, ok = appEntry["source"].(map[string]any)
 		if !ok {
-			t.Fatalf("config round-tripped source = %#v", plugin["source"])
+			t.Fatalf("config round-tripped source = %#v", appEntry["source"])
 		}
 		if source["url"] != "https://example.com/providers/custom_tool/provider-release.yaml?download=1" {
 			t.Fatalf("config round-tripped source.url = %#v", source["url"])
@@ -1725,8 +1720,8 @@ plugins:
 		if !ok || auth["token"] != "test-token" {
 			t.Fatalf("config round-tripped source.auth = %#v", source["auth"])
 		}
-		if _, ok := plugin["auth"]; ok {
-			t.Fatalf("config round-tripped auth = %#v, want absent", plugin["auth"])
+		if _, ok := appEntry["auth"]; ok {
+			t.Fatalf("config round-tripped auth = %#v, want absent", appEntry["auth"])
 		}
 	})
 
@@ -1734,7 +1729,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   providers:
     authentication: corporate
@@ -1742,7 +1737,7 @@ providers:
   authentication:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
-plugins:
+apps:
     custom_tool:
       source:
         url: https://example.com/providers/custom_tool/provider-release.yaml
@@ -1752,7 +1747,7 @@ plugins:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		entry := cfg.Plugins["custom_tool"]
+		entry := cfg.Apps["custom_tool"]
 		if got := entry.SourceMetadataURL(); got != "https://example.com/providers/custom_tool/provider-release.yaml" {
 			t.Fatalf("SourceMetadataURL = %q", got)
 		}
@@ -1786,17 +1781,17 @@ plugins:
 		if err := yaml.Unmarshal(marshaledConfig, &roundTrippedConfig); err != nil {
 			t.Fatalf("yaml.Unmarshal config: %v", err)
 		}
-		plugins, ok := roundTrippedConfig["plugins"].(map[string]any)
+		apps, ok := roundTrippedConfig["apps"].(map[string]any)
 		if !ok {
-			t.Fatalf("plugins = %#v", roundTrippedConfig["plugins"])
+			t.Fatalf("plugins = %#v", roundTrippedConfig["apps"])
 		}
-		plugin, ok := plugins["custom_tool"].(map[string]any)
+		appEntry, ok := apps["custom_tool"].(map[string]any)
 		if !ok {
-			t.Fatalf("plugins.custom_tool = %#v", plugins["custom_tool"])
+			t.Fatalf("apps.custom_tool = %#v", apps["custom_tool"])
 		}
-		source, ok = plugin["source"].(map[string]any)
+		source, ok = appEntry["source"].(map[string]any)
 		if !ok {
-			t.Fatalf("config round-tripped source = %#v", plugin["source"])
+			t.Fatalf("config round-tripped source = %#v", appEntry["source"])
 		}
 		if source["url"] != "https://example.com/providers/custom_tool/provider-release.yaml" {
 			t.Fatalf("config round-tripped source.url = %#v", source["url"])
@@ -1804,16 +1799,16 @@ plugins:
 		if _, ok := source["auth"]; ok {
 			t.Fatalf("config round-tripped source.auth = %#v, want absent", source["auth"])
 		}
-		if _, ok := plugin["auth"]; ok {
-			t.Fatalf("config round-tripped auth = %#v, want absent", plugin["auth"])
+		if _, ok := appEntry["auth"]; ok {
+			t.Fatalf("config round-tripped auth = %#v, want absent", appEntry["auth"])
 		}
 	})
 
-	t.Run("apiVersion preserves nested source auth with plugin route auth overrides", func(t *testing.T) {
+	t.Run("apiVersion preserves nested source auth with app route auth overrides", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   providers:
     authentication: corporate
@@ -1821,7 +1816,7 @@ providers:
   authentication:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
-plugins:
+apps:
     custom_tool:
       source:
         url: https://example.com/providers/custom_tool/provider-release.yaml
@@ -1835,7 +1830,7 @@ plugins:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		entry := cfg.Plugins["custom_tool"]
+		entry := cfg.Apps["custom_tool"]
 		if got := entry.SourceMetadataURL(); got != "https://example.com/providers/custom_tool/provider-release.yaml" {
 			t.Fatalf("SourceMetadataURL = %q", got)
 		}
@@ -1874,14 +1869,13 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     custom_tool:
       source:
         githubRelease:
           repo: valon-technologies/toolshed
-          tag: plugins/custom-tool/v0.0.1-alpha.1
+          tag: apps/custom-tool/v0.0.1-alpha.1
           asset: provider-release.yaml
         auth:
           token: test-token
@@ -1891,13 +1885,13 @@ plugins:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		entry := cfg.Plugins["custom_tool"]
-		wantLocation := "github-release://github.com/valon-technologies/toolshed?asset=provider-release.yaml&tag=plugins%2Fcustom-tool%2Fv0.0.1-alpha.1"
+		entry := cfg.Apps["custom_tool"]
+		wantLocation := "github-release://github.com/valon-technologies/toolshed?asset=provider-release.yaml&tag=apps%2Fcustom-tool%2Fv0.0.1-alpha.1"
 		if got := entry.SourceRemoteLocation(); got != wantLocation {
 			t.Fatalf("SourceRemoteLocation = %q, want %q", got, wantLocation)
 		}
 		release := entry.Source.GitHubReleaseSource()
-		if release == nil || release.Repo != "valon-technologies/toolshed" || release.Tag != "plugins/custom-tool/v0.0.1-alpha.1" || release.Asset != "provider-release.yaml" {
+		if release == nil || release.Repo != "valon-technologies/toolshed" || release.Tag != "apps/custom-tool/v0.0.1-alpha.1" || release.Asset != "provider-release.yaml" {
 			t.Fatalf("Source.GitHubRelease = %#v", release)
 		}
 		if entry.Source.Auth == nil || entry.Source.Auth.Token != "test-token" {
@@ -1916,7 +1910,7 @@ plugins:
 			t.Fatalf("round-tripped source = %#v", roundTripped["source"])
 		}
 		githubRelease, ok := source["githubRelease"].(map[string]any)
-		if !ok || githubRelease["repo"] != "valon-technologies/toolshed" || githubRelease["tag"] != "plugins/custom-tool/v0.0.1-alpha.1" || githubRelease["asset"] != "provider-release.yaml" {
+		if !ok || githubRelease["repo"] != "valon-technologies/toolshed" || githubRelease["tag"] != "apps/custom-tool/v0.0.1-alpha.1" || githubRelease["asset"] != "provider-release.yaml" {
 			t.Fatalf("round-tripped githubRelease = %#v", source["githubRelease"])
 		}
 		auth, ok := source["auth"].(map[string]any)
@@ -1932,15 +1926,14 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     custom_tool:
       source:
         git:
           repo: HTTPS://GitHub.com/Valon-Technologies/Gestalt-Providers
           ref: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-          path: plugins//custom_tool/../custom_tool/manifest.yaml
+          path: apps//custom_tool/../custom_tool/manifest.yaml
           materialization: source
 `)
 
@@ -1948,8 +1941,8 @@ plugins:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		entry := cfg.Plugins["custom_tool"]
-		wantLocation := "git+https://github.com/Valon-Technologies/Gestalt-Providers.git@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#plugins/custom_tool/manifest.yaml"
+		entry := cfg.Apps["custom_tool"]
+		wantLocation := "git+https://github.com/Valon-Technologies/Gestalt-Providers.git@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#apps/custom_tool/manifest.yaml"
 		if got := entry.SourceRemoteLocation(); got != wantLocation {
 			t.Fatalf("SourceRemoteLocation = %q, want %q", got, wantLocation)
 		}
@@ -1963,7 +1956,7 @@ plugins:
 		repo, ref, manifestPath := gitSource.NormalizedLocationParts()
 		if repo != "https://github.com/Valon-Technologies/Gestalt-Providers.git" ||
 			ref != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ||
-			manifestPath != "plugins/custom_tool/manifest.yaml" {
+			manifestPath != "apps/custom_tool/manifest.yaml" {
 			t.Fatalf("NormalizedLocationParts = (%q, %q, %q)", repo, ref, manifestPath)
 		}
 	})
@@ -1972,12 +1965,11 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     custom_tool:
       source:
-        path: ./plugins/custom_tool/dist/provider-release.yaml
+        path: ./apps/custom_tool/dist/provider-release.yaml
         auth:
           token: test-token
 `)
@@ -1986,8 +1978,8 @@ plugins:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		entry := cfg.Plugins["custom_tool"]
-		wantPath := filepath.Join(filepath.Dir(path), "plugins", "custom_tool", "dist", "provider-release.yaml")
+		entry := cfg.Apps["custom_tool"]
+		wantPath := filepath.Join(filepath.Dir(path), "apps", "custom_tool", "dist", "provider-release.yaml")
 		if got := entry.SourceReleasePath(); got != wantPath {
 			t.Fatalf("SourceReleasePath = %q, want %q", got, wantPath)
 		}
@@ -2019,7 +2011,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   secrets:
     default:
@@ -2031,7 +2023,7 @@ providers:
       source: otlp
       config:
         endpoint: otel-collector:4317
-plugins:
+apps:
 `)
 
 		cfg, err := Load(path)
@@ -2056,7 +2048,7 @@ plugins:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   encryptionKey: server-key
 providers:
@@ -2068,7 +2060,7 @@ providers:
         version: 0.0.1-alpha.2
       config:
         project: test-project
-plugins:
+apps:
 `)
 
 		cfg, err := Load(path)
@@ -2236,7 +2228,7 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2271,8 +2263,8 @@ server:
 		if got := entry.AuthorizationPolicy; got != "roadmap_policy" {
 			t.Fatalf(`Providers.UI["roadmap"].AuthorizationPolicy = %q, want %q`, got, "roadmap_policy")
 		}
-		if got := entry.OwnerPlugin; got != "roadmap" {
-			t.Fatalf(`Providers.UI["roadmap"].OwnerPlugin = %q, want %q`, got, "roadmap")
+		if got := entry.OwnerApp; got != "roadmap" {
+			t.Fatalf(`Providers.UI["roadmap"].OwnerApp = %q, want %q`, got, "roadmap")
 		}
 	})
 
@@ -2374,7 +2366,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2399,7 +2391,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugins.roadmap.ui.path "/api" conflicts with reserved path "/api"`) {
+		if !strings.Contains(err.Error(), `apps.roadmap.ui.path "/api" conflicts with reserved path "/api"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2408,7 +2400,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2434,7 +2426,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugins.roadmap.ui.path "/api" conflicts with reserved path "/api"`) {
+		if !strings.Contains(err.Error(), `apps.roadmap.ui.path "/api" conflicts with reserved path "/api"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2453,7 +2445,7 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-plugins:
+apps:
   admin:
     source:
       path: ./plugin/manifest.yaml
@@ -2469,7 +2461,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.docs.path "/tools" conflicts with plugins.admin.ui.path "/tools/admin"`) {
+		if !strings.Contains(err.Error(), `ui.docs.path "/tools" conflicts with apps.admin.ui.path "/tools/admin"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2535,7 +2527,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   externalCredentials:
     default:
@@ -2568,7 +2560,7 @@ func TestLoadConfigPluginIndexedDBBindings(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2601,7 +2593,7 @@ server:
 			DB:           "roadmap_review",
 			ObjectStores: []string{"tasks", "snapshots"},
 		}
-		got := cfg.Plugins["roadmap"].IndexedDB
+		got := cfg.Apps["roadmap"].IndexedDB
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Plugins[roadmap].IndexedDB = %#v, want %#v", got, want)
 		}
@@ -2611,7 +2603,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2631,7 +2623,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		got := cfg.Plugins["roadmap"].IndexedDB
+		got := cfg.Apps["roadmap"].IndexedDB
 		want := &HostIndexedDBBindingConfig{
 			Provider: "sqlite",
 		}
@@ -2666,16 +2658,16 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.root.indexeddb is only supported on plugins.*`) {
+		if !strings.Contains(err.Error(), `ui.root.indexeddb is only supported on apps.*`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("loads plugin surface overrides", func(t *testing.T) {
+	t.Run("loads app surface overrides", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   datadog:
     source:
       path: ./plugin/manifest.yaml
@@ -2697,19 +2689,19 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if cfg.Plugins["datadog"].Surfaces == nil || cfg.Plugins["datadog"].Surfaces.OpenAPI == nil {
+		if cfg.Apps["datadog"].Surfaces == nil || cfg.Apps["datadog"].Surfaces.OpenAPI == nil {
 			t.Fatal("Plugins[datadog].Surfaces.OpenAPI is nil")
 		}
-		if got := cfg.Plugins["datadog"].Surfaces.OpenAPI.BaseURL; got != "https://api.us5.datadoghq.com" {
+		if got := cfg.Apps["datadog"].Surfaces.OpenAPI.BaseURL; got != "https://api.us5.datadoghq.com" {
 			t.Fatalf("Plugins[datadog].Surfaces.OpenAPI.BaseURL = %q, want %q", got, "https://api.us5.datadoghq.com")
 		}
 	})
 
-	t.Run("loads plugin indexeddb db override", func(t *testing.T) {
+	t.Run("loads app indexeddb db override", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   datadog:
     source:
       path: ./plugin/manifest.yaml
@@ -2731,7 +2723,7 @@ server:
 			t.Fatalf("Load: %v", err)
 		}
 		want := &HostIndexedDBBindingConfig{DB: "plugin_data"}
-		if got := cfg.Plugins["datadog"].IndexedDB; !reflect.DeepEqual(got, want) {
+		if got := cfg.Apps["datadog"].IndexedDB; !reflect.DeepEqual(got, want) {
 			t.Fatalf("Plugins[datadog].IndexedDB = %#v, want %#v", got, want)
 		}
 	})
@@ -2763,12 +2755,12 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.root.surfaces is only supported on plugins.*`) {
+		if !strings.Contains(err.Error(), `ui.root.surfaces is only supported on apps.*`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("rejects plugin mount fields outside plugins", func(t *testing.T) {
+	t.Run("rejects app mount fields outside plugins", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -2802,7 +2794,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2823,7 +2815,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugins.roadmap.indexeddb.provider references unknown indexeddb "missing"`) {
+		if !strings.Contains(err.Error(), `apps.roadmap.indexeddb.provider references unknown indexeddb "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2838,7 +2830,7 @@ server:
 			{
 				name: "db override",
 				body: `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2851,7 +2843,7 @@ server:
 			{
 				name: "objectStores only",
 				body: `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2875,7 +2867,7 @@ server:
 				if err == nil {
 					t.Fatal("Load: expected error, got nil")
 				}
-				if !strings.Contains(err.Error(), `plugins.roadmap.indexeddb requires indexeddb.provider or an available selected/default host indexeddb`) {
+				if !strings.Contains(err.Error(), `apps.roadmap.indexeddb requires indexeddb.provider or an available selected/default host indexeddb`) {
 					t.Fatalf("unexpected error: %v", err)
 				}
 			})
@@ -2893,7 +2885,7 @@ server:
 			{
 				name: "empty object with no host indexeddb definitions",
 				body: `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2906,7 +2898,7 @@ server:
 			{
 				name: "omitted indexeddb with no host indexeddb definitions",
 				body: `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2928,7 +2920,7 @@ server:
 				if err != nil {
 					t.Fatalf("Load: %v", err)
 				}
-				if got := cfg.Plugins["roadmap"].IndexedDB != nil; got != tc.wantIndexedDB {
+				if got := cfg.Apps["roadmap"].IndexedDB != nil; got != tc.wantIndexedDB {
 					t.Fatalf("IndexedDB presence = %v, want %v", got, tc.wantIndexedDB)
 				}
 			})
@@ -2939,7 +2931,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -2963,7 +2955,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugins.roadmap.indexeddb.objectStores[1] duplicates "tasks"`) {
+		if !strings.Contains(err.Error(), `apps.roadmap.indexeddb.objectStores[1] duplicates "tasks"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2972,7 +2964,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3006,7 +2998,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3031,7 +3023,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if got := cfg.Plugins["roadmap"].S3; !reflect.DeepEqual(got, []string{"assets"}) {
+		if got := cfg.Apps["roadmap"].S3; !reflect.DeepEqual(got, []string{"assets"}) {
 			t.Fatalf("Plugins[roadmap].S3 = %#v, want %#v", got, []string{"assets"})
 		}
 	})
@@ -3040,7 +3032,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3053,14 +3045,14 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
+        app:
           name: roadmap
           operation: nightly_sync
           credentialMode: none
           input:
             source: yaml
       permissions:
-        - plugin: slack
+        - app: slack
           operations:
             - conversations.list
             - conversations.history
@@ -3071,13 +3063,13 @@ workflows:
         type: roadmap.task.updated
         source: roadmap
       target:
-        plugin:
+        app:
           name: roadmap
           operation: backfill_items
           input:
             source: event
       permissions:
-        - plugin: slack
+        - app: slack
           operations:
             - chat.postMessage
       paused: true
@@ -3103,7 +3095,7 @@ server:
 		wantSchedule := WorkflowScheduleConfig{
 			Provider: "temporal",
 			Target: &WorkflowTargetConfig{
-				Plugin: &WorkflowPluginTargetConfig{
+				App: &WorkflowAppTargetConfig{
 					Name:           "roadmap",
 					Operation:      "nightly_sync",
 					CredentialMode: providermanifestv1.ConnectionModeNone,
@@ -3113,7 +3105,7 @@ server:
 				},
 			},
 			Permissions: []core.AccessPermission{{
-				Plugin: "slack",
+				App: "slack",
 				Operations: []string{
 					"conversations.list",
 					"conversations.history",
@@ -3128,7 +3120,7 @@ server:
 		wantTrigger := WorkflowEventTriggerConfig{
 			Provider: "temporal",
 			Target: &WorkflowTargetConfig{
-				Plugin: &WorkflowPluginTargetConfig{
+				App: &WorkflowAppTargetConfig{
 					Name:      "roadmap",
 					Operation: "backfill_items",
 					Input: map[string]any{
@@ -3137,7 +3129,7 @@ server:
 				},
 			},
 			Permissions: []core.AccessPermission{{
-				Plugin:     "slack",
+				App:     "slack",
 				Operations: []string{"chat.postMessage"},
 			}},
 			Match: WorkflowEventMatch{
@@ -3168,7 +3160,7 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
+        app:
           name: missing
           operation: nightly_sync
 providers:
@@ -3179,12 +3171,12 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.plugin.name references unknown plugin "missing"`,
+				want: `workflows.schedules.nightly.target.app.name references unknown app "missing"`,
 			},
 			{
 				name: "unknown schedule permission plugin",
 				yaml: `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3194,11 +3186,11 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
+        app:
           name: roadmap
           operation: nightly_sync
       permissions:
-        - plugin: missing
+        - app: missing
           operations: [conversations.list]
 providers:
   workflow:
@@ -3208,12 +3200,12 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.permissions[0].plugin references unknown plugin "missing"`,
+				want: `workflows.schedules.nightly.permissions[0].app references unknown app "missing"`,
 			},
 			{
 				name: "schedule permission requires operations",
 				yaml: `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3226,11 +3218,11 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
+        app:
           name: roadmap
           operation: nightly_sync
       permissions:
-        - plugin: slack
+        - app: slack
 providers:
   workflow:
     temporal:
@@ -3242,9 +3234,9 @@ server:
 				want: `workflows.schedules.nightly.permissions[0].operations is required`,
 			},
 			{
-				name: "schedule plugin rejects unsupported credential mode",
+				name: "schedule app rejects unsupported credential mode",
 				yaml: `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3254,7 +3246,7 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
+        app:
           name: roadmap
           operation: nightly_sync
           credentialMode: platform
@@ -3266,12 +3258,12 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.target.plugin.credentialMode "platform" is not supported`,
+				want: `workflows.schedules.nightly.target.app.credentialMode "platform" is not supported`,
 			},
 			{
 				name: "agent output delivery rejects nested target credential mode",
 				yaml: `
-plugins:
+apps:
   slack:
     source:
       path: ./providers/slack/manifest.yaml
@@ -3306,7 +3298,7 @@ server:
 			{
 				name: "agent session ready delivery rejects nested target credential mode",
 				yaml: `
-plugins:
+apps:
   slack:
     source:
       path: ./providers/slack/manifest.yaml
@@ -3341,7 +3333,7 @@ server:
 			{
 				name: "agent session ready delivery rejects agent output source",
 				yaml: `
-plugins:
+apps:
   slack:
     source:
       path: ./providers/slack/manifest.yaml
@@ -3485,7 +3477,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3495,7 +3487,7 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
+        app:
           name: roadmap
           operation: nightly_sync
 providers:
@@ -3570,7 +3562,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3580,7 +3572,7 @@ workflows:
       provider: missing
       cron: "0 2 * * *"
       target:
-        plugin:
+        app:
           name: roadmap
           operation: nightly_sync
 providers:
@@ -3607,11 +3599,11 @@ server:
 		}
 	})
 
-	t.Run("rejects multiple workflow defaults even when plugins bind explicitly", func(t *testing.T) {
+	t.Run("rejects multiple workflow defaults even when apps bind explicitly", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3621,7 +3613,7 @@ workflows:
       provider: temporal
       cron: "0 2 * * *"
       target:
-        plugin:
+        app:
           name: roadmap
           operation: nightly_sync
 providers:
@@ -3657,7 +3649,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3667,7 +3659,7 @@ workflows:
       provider: temporal
       cron: "*/5 * * * *"
       target:
-        plugin:
+        app:
           name: roadmap
           operation: backfill_items
 providers:
@@ -3695,7 +3687,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3706,7 +3698,7 @@ workflows:
       match:
         type: roadmap.task.updated
       target:
-        plugin:
+        app:
           name: roadmap
           operation: backfill_items
 providers:
@@ -3734,7 +3726,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3745,7 +3737,7 @@ workflows:
       match:
         source: roadmap
       target:
-        plugin:
+        app:
           name: roadmap
           operation: nightly_sync
 providers:
@@ -3776,7 +3768,7 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-plugins:
+apps:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
@@ -3787,7 +3779,7 @@ workflows:
       cron: "0 0 0 * * *"
       timezone: Mars/Olympus
       target:
-        plugin:
+        app:
           name: roadmap
           operation: nightly_sync
 providers:
@@ -4466,12 +4458,12 @@ server:
 			want: `providers.agent.simple.runtime.pool.restartPolicy "always" requires providers.agent.simple.indexeddb as the provider persistence hook`,
 		},
 		{
-			name: "rejects lifecycle fields on plugin runtime",
+			name: "rejects lifecycle fields on app runtime",
 			yaml: `
-plugins:
+apps:
   service:
     source:
-      path: ./plugins/service/manifest.yaml
+      path: ./apps/service/manifest.yaml
     runtime:
         provider: hosted
         pool:
@@ -4489,15 +4481,15 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "plugins.service.runtime lifecycle fields are only supported on hosted agent and workflow providers",
+			want: "apps.service.runtime lifecycle fields are only supported on hosted agent and workflow providers",
 		},
 		{
-			name: "rejects lifecycle fields on plugin top-level runtime",
+			name: "rejects lifecycle fields on app top-level runtime",
 			yaml: `
-plugins:
+apps:
   service:
     source:
-      path: ./plugins/service/manifest.yaml
+      path: ./apps/service/manifest.yaml
     runtime:
       provider: hosted
       pool:
@@ -4515,7 +4507,7 @@ runtime:
 server:
   encryptionKey: server-key
 `,
-			want: "plugins.service.runtime lifecycle fields are only supported on hosted agent and workflow providers",
+			want: "apps.service.runtime lifecycle fields are only supported on hosted agent and workflow providers",
 		},
 		{
 			name: "rejects removed local execution mode",
@@ -4865,9 +4857,9 @@ server:
 		{
 			name: "plugin lifecycle",
 			yaml: `
-plugins:
+apps:
   service:
-    source: ./providers/plugin/service
+    source: ./providers/app/service
     lifecycle:
       sessionStart:
         - id: setup
@@ -4875,7 +4867,7 @@ plugins:
 server:
   encryptionKey: server-key
 `,
-			want: `plugins.service.lifecycle is only supported on providers.agent.*`,
+			want: `apps.service.lifecycle is only supported on providers.agent.*`,
 		},
 	}
 	for _, tc := range cases {
@@ -4959,13 +4951,13 @@ func TestLoadPathsProviderRuntimeAndEgressOverride(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   encryptionKey: server-key
-plugins:
+apps:
   service:
     source:
-      path: ./plugins/service/manifest.yaml
+      path: ./apps/service/manifest.yaml
     runtime:
         provider: hosted
     egress:
@@ -4980,8 +4972,8 @@ runtime:
 		t.Fatalf("writing base config: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v5
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
   service:
     runtime: null
     egress:
@@ -4994,7 +4986,7 @@ plugins:
 	if err != nil {
 		t.Fatalf("LoadPaths: %v", err)
 	}
-	entry := cfg.Plugins["service"]
+	entry := cfg.Apps["service"]
 	if entry.UsesRuntimePlacement() {
 		t.Fatal("UsesRuntimePlacement = true, want runtime override removed")
 	}
@@ -5007,11 +4999,11 @@ func TestLoadConfigProviderPackageSources(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteRawConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providerRepositories:
   local:
     url: https://providers.example.test/index.yaml
-plugins:
+apps:
   service:
     source:
       repo: local
@@ -5030,7 +5022,7 @@ plugins:
 	if got := cfg.ProviderRepositories["local"].URL; got != "https://providers.example.test/index.yaml" {
 		t.Fatalf("providerRepositories.local.url = %q", got)
 	}
-	entry := cfg.Plugins["service"]
+	entry := cfg.Apps["service"]
 	if entry == nil {
 		t.Fatal(`Plugins["service"] = nil`)
 	}
@@ -5055,7 +5047,7 @@ func TestLoadConfigProviderPackageSourcesDoNotGetBuiltinDefaults(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteRawConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providerRepositories:
   local:
     url: https://providers.example.test/index.yaml
@@ -5111,8 +5103,8 @@ func TestLoadConfigProviderPackageSourceValidation(t *testing.T) {
 		{
 			name: "package and url are mutually exclusive",
 			yaml: `
-apiVersion: gestaltd.config/v5
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
   service:
     source:
       url: https://example.com/provider-release.yaml
@@ -5148,19 +5140,19 @@ func TestLoadPathsProviderPackageSourceLayering(t *testing.T) {
 		basePath := filepath.Join(dir, "base.yaml")
 		overridePath := filepath.Join(dir, "override.yaml")
 		if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v5
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
   service:
     source: https://example.com/service/provider-release.yaml
 `), 0o644); err != nil {
 			t.Fatalf("write base: %v", err)
 		}
 		if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providerRepositories:
   local:
     url: https://providers.example.test/index.yaml
-plugins:
+apps:
   service:
     source:
       repo: local
@@ -5176,7 +5168,7 @@ plugins:
 		if got := cfg.APIVersion; got != ConfigAPIVersion {
 			t.Fatalf("APIVersion = %q, want %q", got, ConfigAPIVersion)
 		}
-		if !cfg.Plugins["service"].Source.IsPackage() {
+		if !cfg.Apps["service"].Source.IsPackage() {
 			t.Fatal("merged source is not package source")
 		}
 	})
@@ -5247,7 +5239,7 @@ providers:
 		{
 			name: "external provider source",
 			yaml: `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   authentication:
     primary:
@@ -5257,17 +5249,16 @@ providers:
 		{
 			name: "apiVersion scalar local source",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
-      source: ./plugins/dummy/manifest.yaml
+      source: ./apps/dummy/manifest.yaml
 `,
 		},
 		{
-			name: "apiVersion metadata url with plugin route auth",
+			name: "apiVersion metadata url with app route auth",
 			yaml: `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   providers:
     authentication: corporate
@@ -5275,7 +5266,7 @@ providers:
   authentication:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
-plugins:
+apps:
     external:
       source: https://example.com/providers/external/provider-release.yaml
       auth:
@@ -5285,9 +5276,8 @@ plugins:
 		{
 			name: "apiVersion metadata url with nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source:
         url: https://example.com/providers/external/provider-release.yaml
@@ -5298,7 +5288,7 @@ plugins:
 		{
 			name: "provider metadata url with nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   authentication:
     primary:
@@ -5306,7 +5296,7 @@ providers:
         url: https://example.com/providers/test-auth/provider-release.yaml
         auth:
           token: test-token
-plugins:
+apps:
 `,
 		},
 	}
@@ -5334,8 +5324,7 @@ func TestLoadConfigValidation(t *testing.T) {
 		{
 			name: "provider with no source or surfaces",
 			yaml: `
-providers:
-plugins:
+apps:
     service-a:
       displayName: Service A
 `,
@@ -5365,26 +5354,25 @@ providers:
 			name: "unsupported apiVersion is rejected",
 			yaml: `
 apiVersion: gestaltd.config/v99
-providers:
-plugins:
+apps:
     external:
-      source: ./plugins/dummy/manifest.yaml
+      source: ./apps/dummy/manifest.yaml
 `,
 			want: `unsupported apiVersion "gestaltd.config/v99"`,
 		},
 		{
 			name: "provider auth override is rejected outside plugins",
 			yaml: `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   cache:
     shared:
       source: https://example.com/providers/cache/shared/provider-release.yaml
       auth:
         provider: server
-plugins:
+apps:
 `,
-			want: `providers.cache.shared.auth is only supported on plugins.*`,
+			want: `providers.cache.shared.auth is only supported on apps.*`,
 		},
 	}
 
@@ -5413,20 +5401,18 @@ func TestLoadConfigRequiresAPIVersion(t *testing.T) {
 		{
 			name: "missing apiVersion is rejected",
 			yaml: `
-providers:
-plugins:
+apps:
   external:
-    source: ./plugins/dummy/manifest.yaml
+    source: ./apps/dummy/manifest.yaml
 `,
 		},
 		{
 			name: "empty apiVersion is rejected",
 			yaml: `
 apiVersion: ""
-providers:
-plugins:
+apps:
   external:
-    source: ./plugins/dummy/manifest.yaml
+    source: ./apps/dummy/manifest.yaml
 `,
 		},
 	}
@@ -5454,16 +5440,15 @@ func TestLoadPathsRequiresAPIVersionInEveryFile(t *testing.T) {
 	basePath := filepath.Join(dir, "base.yaml")
 	overridePath := filepath.Join(dir, "override.yaml")
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
   external:
-    source: ./plugins/dummy/manifest.yaml
+    source: ./apps/dummy/manifest.yaml
 `), 0o644); err != nil {
 		t.Fatalf("writing base config: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-plugins:
+apps:
   external:
     displayName: External
 `), 0o644); err != nil {
@@ -5514,18 +5499,18 @@ providers:
 			want: `mapping key "indexeddb" already defined`,
 		},
 		{
-			name: "duplicate plugins mapping",
+			name: "duplicate apps mapping",
 			yaml: `
-plugins:
+apps:
   first:
     source:
       path: ./first/manifest.yaml
-plugins:
+apps:
   canonical:
     source:
       path: ./canonical/manifest.yaml
 `,
-			want: `mapping key "plugins" already defined`,
+			want: `mapping key "apps" already defined`,
 		},
 	}
 
@@ -5553,11 +5538,10 @@ func TestValidConfigurations(t *testing.T) {
 		yaml string
 	}{
 		{
-			name: "metadata source plugin only",
+			name: "metadata source app only",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     custom_tool:
       source: https://example.com/providers/custom_tool/provider-release.yaml
 `,
@@ -5565,8 +5549,7 @@ plugins:
 		{
 			name: "plugin with local source",
 			yaml: `
-providers:
-plugins:
+apps:
     service:
       source:
         path: /usr/bin/manifest.yaml
@@ -5595,23 +5578,21 @@ func TestPluginValidation(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "integration plugin source path is valid",
+			name: "integration app source path is valid",
 			yaml: `
-providers:
-plugins:
+apps:
     external:
       source:
-        path: ./plugins/dummy/manifest.yaml
+        path: ./apps/dummy/manifest.yaml
 `,
 		},
 		{
 			name: "plugin env with local source is valid",
 			yaml: `
-providers:
-plugins:
+apps:
     external:
       source:
-        path: ./plugins/dummy/manifest.yaml
+        path: ./apps/dummy/manifest.yaml
       env:
         FOO: bar
 `,
@@ -5619,11 +5600,10 @@ plugins:
 		{
 			name: "plugin config with source is valid",
 			yaml: `
-providers:
-plugins:
+apps:
     external:
       source:
-        path: ./plugins/dummy/manifest.yaml
+        path: ./apps/dummy/manifest.yaml
       config:
         base_url: https://example.com
 `,
@@ -5631,8 +5611,7 @@ plugins:
 		{
 			name: "plugin source is required for external",
 			yaml: `
-providers:
-plugins:
+apps:
     external:
       {}
 `,
@@ -5641,7 +5620,7 @@ plugins:
 		{
 			name: "apiVersion route auth override is valid",
 			yaml: `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   providers:
     authentication: corporate
@@ -5649,7 +5628,7 @@ providers:
   authentication:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
-plugins:
+apps:
     external:
       source: https://example.com/providers/external/provider-release.yaml
       auth:
@@ -5659,14 +5638,13 @@ plugins:
 		{
 			name: "apiVersion github release source with nested source auth is valid",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source:
         githubRelease:
           repo: valon-technologies/toolshed
-          tag: plugins/external/v1.2.3
+          tag: apps/external/v1.2.3
           asset: provider-release.yaml
         auth:
           token: test-token
@@ -5675,13 +5653,12 @@ plugins:
 		{
 			name: "apiVersion github release source requires repo",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source:
         githubRelease:
-          tag: plugins/external/v1.2.3
+          tag: apps/external/v1.2.3
           asset: provider-release.yaml
 `,
 			wantErr: "source.githubRelease.repo is required",
@@ -5689,14 +5666,13 @@ plugins:
 		{
 			name: "apiVersion github release source requires owner slash name",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source:
         githubRelease:
           repo: valon-technologies
-          tag: plugins/external/v1.2.3
+          tag: apps/external/v1.2.3
           asset: provider-release.yaml
 `,
 			wantErr: "source.githubRelease.repo must be owner/name",
@@ -5704,9 +5680,8 @@ plugins:
 		{
 			name: "apiVersion nested source auth is valid",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source:
         url: https://example.com/providers/external/provider-release.yaml
@@ -5717,7 +5692,7 @@ plugins:
 		{
 			name: "plugin auth override is valid alongside nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   providers:
     authentication: corporate
@@ -5725,7 +5700,7 @@ providers:
   authentication:
     corporate:
       source: https://example.com/providers/auth/corporate/provider-release.yaml
-plugins:
+apps:
     external:
       source:
         url: https://example.com/providers/external/provider-release.yaml
@@ -5738,9 +5713,8 @@ plugins:
 		{
 			name: "plugin auth override rejects source auth token mix",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source: https://example.com/providers/external/provider-release.yaml
       auth:
@@ -5752,37 +5726,34 @@ plugins:
 		{
 			name: "plugin auth override rejects unknown auth provider",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source: https://example.com/providers/external/provider-release.yaml
       auth:
         provider: missing
 `,
-			wantErr: `plugins.external.auth.provider references unknown authentication provider "missing"`,
+			wantErr: `apps.external.auth.provider references unknown authentication provider "missing"`,
 		},
 		{
 			name: "plugin auth override rejects server alias without configured auth provider",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source: https://example.com/providers/external/provider-release.yaml
       auth:
         provider: server
 `,
-			wantErr: `plugins.external.auth.provider "server" requires a configured platform authentication provider`,
+			wantErr: `apps.external.auth.provider "server" requires a configured platform authentication provider`,
 		},
 		{
 			name: "apiVersion local source rejects sibling auth",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
-      source: ./plugins/dummy/manifest.yaml
+      source: ./apps/dummy/manifest.yaml
       auth:
         token: test-token
 `,
@@ -5791,19 +5762,17 @@ plugins:
 		{
 			name: "apiVersion v5 local provider-release metadata is valid",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
-      source: ./plugins/dummy/dist/provider-release.yaml
+      source: ./apps/dummy/dist/provider-release.yaml
 `,
 		},
 		{
 			name: "apiVersion v5 local provider-release metadata allows current-directory file",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source: provider-release.yaml
 `,
@@ -5811,12 +5780,11 @@ plugins:
 		{
 			name: "apiVersion v5 local provider-release metadata accepts nested source auth",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source:
-        path: ./plugins/dummy/dist/provider-release.yaml
+        path: ./apps/dummy/dist/provider-release.yaml
         auth:
           token: test-token
 `,
@@ -5824,19 +5792,17 @@ plugins:
 		{
 			name: "apiVersion accepts local source manifests",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
-      source: ./plugins/dummy/manifest.yaml
+      source: ./apps/dummy/manifest.yaml
 `,
 		},
 		{
 			name: "apiVersion accepts absolute http metadata source",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source: https://example.com/providers/external/archive.tar.gz
 `,
@@ -5844,9 +5810,8 @@ plugins:
 		{
 			name: "apiVersion rejects git scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source: git+ssh://git@github.com/example/external.git
 `,
@@ -5855,9 +5820,8 @@ plugins:
 		{
 			name: "apiVersion rejects unsupported ssh scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source: ssh://github.com/example/external
 `,
@@ -5866,9 +5830,8 @@ plugins:
 		{
 			name: "apiVersion rejects unsupported file scalar source",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source: file:/tmp/provider-release.yaml
 `,
@@ -5877,9 +5840,8 @@ plugins:
 		{
 			name: "apiVersion rejects malformed hostless https metadata source",
 			yaml: `
-apiVersion: gestaltd.config/v5
-providers:
-plugins:
+apiVersion: gestaltd.config/v6
+apps:
     external:
       source: https:///provider-release.yaml
 `,
@@ -5888,22 +5850,21 @@ plugins:
 		{
 			name: "apiVersion accepts absolute telemetry metadata source before builtin defaulting",
 			yaml: `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   telemetry:
     default:
       source: https://example.com/providers/telemetry/archive.tar.gz
-plugins:
+apps:
 `,
 		},
 		{
 			name: "plugin source with base_url override is rejected",
 			yaml: `
-providers:
-plugins:
+apps:
     external:
       source:
-        path: ./plugins/dummy/manifest.yaml
+        path: ./apps/dummy/manifest.yaml
       base_url: https://api.example.com
 `,
 			wantErr: "field base_url not found",
@@ -5911,11 +5872,10 @@ plugins:
 		{
 			name: "non-default connection params are accepted",
 			yaml: `
-providers:
-plugins:
+apps:
     external:
       source:
-        path: ./plugins/dummy/manifest.yaml
+        path: ./apps/dummy/manifest.yaml
       connections:
         named:
           mode: subject
@@ -5985,7 +5945,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "local source valid",
 			cfg: &Config{
-				Plugins: map[string]*ProviderEntry{
+				Apps: map[string]*ProviderEntry{
 					"sample": {Source: ProviderSource{Path: "./some-dir/manifest.yaml"}},
 				},
 			},
@@ -5993,7 +5953,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "metadata source valid",
 			cfg: &Config{
-				Plugins: map[string]*ProviderEntry{
+				Apps: map[string]*ProviderEntry{
 					"sample": {Source: ProviderSource{metadataURL: "https://example.com/providers/sample/provider-release.yaml"}},
 				},
 			},
@@ -6001,16 +5961,16 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source path and metadata url rejected",
 			cfg: &Config{
-				Plugins: map[string]*ProviderEntry{
+				Apps: map[string]*ProviderEntry{
 					"sample": {Source: ProviderSource{Path: "./manifest.yaml", metadataURL: "https://example.com/providers/sample/provider-release.yaml"}},
 				},
 			},
 			wantErr: "mutually exclusive",
 		},
 		{
-			name: "nil plugin rejected",
+			name: "nil app rejected",
 			cfg: &Config{
-				Plugins: map[string]*ProviderEntry{
+				Apps: map[string]*ProviderEntry{
 					"sample": {},
 				},
 			},
@@ -6049,19 +6009,19 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "plugin auth rejects mcp oauth early",
 			cfg: &Config{
-				Plugins: map[string]*ProviderEntry{
+				Apps: map[string]*ProviderEntry{
 					"sample": {
 						Source: ProviderSource{Path: "./manifest.yaml"},
 						Auth:   &ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth},
 					},
 				},
 			},
-			wantErr: `plugin auth type "mcp_oauth" requires an MCP surface`,
+			wantErr: `integration "sample" app auth type "mcp_oauth" requires an MCP surface`,
 		},
 		{
 			name: "named connection rejects mcp oauth early",
 			cfg: &Config{
-				Plugins: map[string]*ProviderEntry{
+				Apps: map[string]*ProviderEntry{
 					"sample": {
 						Source: ProviderSource{Path: "./manifest.yaml"},
 						Connections: map[string]*ConnectionDef{
@@ -6111,11 +6071,11 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 				Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeNone},
 			},
 		},
-		Plugins: map[string]*ProviderEntry{
+		Apps: map[string]*ProviderEntry{
 			"sample": {
 				Source: ProviderSource{Path: "./manifest.yaml"},
 				Connections: map[string]*ConnectionDef{
-					core.PluginConnectionAlias: {
+					core.AppConnectionAlias: {
 						Ref: "shared",
 					},
 				},
@@ -6126,13 +6086,13 @@ func TestValidateStructureCanonicalizesConnectionAliasBindings(t *testing.T) {
 	if err := ValidateStructure(cfg); err != nil {
 		t.Fatalf("ValidateStructure() error = %v", err)
 	}
-	connections := cfg.Plugins["sample"].Connections
-	if _, ok := connections[core.PluginConnectionAlias]; ok {
-		t.Fatalf("connections[%q] present, want alias removed after canonicalization", core.PluginConnectionAlias)
+	connections := cfg.Apps["sample"].Connections
+	if _, ok := connections[core.AppConnectionAlias]; ok {
+		t.Fatalf("connections[%q] present, want alias removed after canonicalization", core.AppConnectionAlias)
 	}
-	canonical := connections[core.PluginConnectionName]
+	canonical := connections[core.AppConnectionName]
 	if canonical == nil {
-		t.Fatalf("connections[%q] missing", core.PluginConnectionName)
+		t.Fatalf("connections[%q] missing", core.AppConnectionName)
 	}
 	if canonical.ConnectionID != "shared" || canonical.Ref != "shared" || !canonical.BindingResolved {
 		t.Fatalf("canonical binding = %+v, want resolved shared connection", canonical)
@@ -6157,7 +6117,7 @@ func TestValidateStructureConnectionRefPreservesCredentialRefreshOverride(t *tes
 				},
 			},
 		},
-		Plugins: map[string]*ProviderEntry{
+		Apps: map[string]*ProviderEntry{
 			"sample": {
 				Source: ProviderSource{Path: "./manifest.yaml"},
 				Connections: map[string]*ConnectionDef{
@@ -6176,7 +6136,7 @@ func TestValidateStructureConnectionRefPreservesCredentialRefreshOverride(t *tes
 	if err := ValidateStructure(cfg); err != nil {
 		t.Fatalf("ValidateStructure() error = %v", err)
 	}
-	canonical := cfg.Plugins["sample"].Connections["default"]
+	canonical := cfg.Apps["sample"].Connections["default"]
 	if canonical == nil || canonical.CredentialRefresh == nil {
 		t.Fatalf("resolved credentialRefresh missing: %+v", canonical)
 	}
@@ -6191,19 +6151,19 @@ func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 	applyByDefault := false
 	cfg := &Config{
 		APIVersion: ConfigAPIVersion,
-		Plugins: map[string]*ProviderEntry{
+		Apps: map[string]*ProviderEntry{
 			"slack": {
 				Source: ProviderSource{Path: "./manifest.yaml"},
-				Invokes: []PluginInvocationDependency{{
-					Plugin:         "github",
+				Invokes: []AppInvocationDependency{{
+					App:         "github",
 					Operation:      "bot.createPullRequest",
 					CredentialMode: providermanifestv1.ConnectionModeNone,
-					RunAs: &PluginInvocationRunAsConfig{
-						Subject: &PluginInvocationRunAsSubjectConfig{
+					RunAs: &AppInvocationRunAsConfig{
+						Subject: &AppInvocationRunAsSubjectConfig{
 							ID:          " service_account:github-toolshed ",
 							DisplayName: " Toolshed app ",
 						},
-						ExternalIdentity: &PluginInvocationExternalIdentityConfig{
+						ExternalIdentity: &AppInvocationExternalIdentityConfig{
 							Type: " github_app_installation ",
 							ID:   " repo:{owner}/{repo} ",
 						},
@@ -6217,7 +6177,7 @@ func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 	if err := ValidateStructure(cfg); err != nil {
 		t.Fatalf("ValidateStructure() error = %v", err)
 	}
-	subject := cfg.Plugins["slack"].Invokes[0].RunAsSubject()
+	subject := cfg.Apps["slack"].Invokes[0].RunAsSubject()
 	if subject == nil {
 		t.Fatal("RunAsSubject() = nil, want subject")
 	}
@@ -6227,11 +6187,11 @@ func TestValidateStructureCanonicalizesPluginInvokeRunAs(t *testing.T) {
 	if subject.SubjectKind != "service_account" || subject.CredentialSubjectID != subject.SubjectID || subject.DisplayName != "Toolshed app" {
 		t.Fatalf("RunAsSubject() = %#v, want normalized service account subject", subject)
 	}
-	identity := cfg.Plugins["slack"].Invokes[0].RunAsExternalIdentity()
+	identity := cfg.Apps["slack"].Invokes[0].RunAsExternalIdentity()
 	if identity == nil || identity.Type != "github_app_installation" || identity.ID != "repo:{owner}/{repo}" {
 		t.Fatalf("RunAsExternalIdentity() = %#v, want normalized GitHub app repo identity", identity)
 	}
-	if cfg.Plugins["slack"].Invokes[0].RunAsAppliesByDefault() {
+	if cfg.Apps["slack"].Invokes[0].RunAsAppliesByDefault() {
 		t.Fatal("RunAsAppliesByDefault() = true, want false")
 	}
 }
@@ -6266,14 +6226,14 @@ func TestValidateStructureRejectsPluginInvokeRunAsOnSurface(t *testing.T) {
 
 	cfg := &Config{
 		APIVersion: ConfigAPIVersion,
-		Plugins: map[string]*ProviderEntry{
+		Apps: map[string]*ProviderEntry{
 			"slack": {
 				Source: ProviderSource{Path: "./manifest.yaml"},
-				Invokes: []PluginInvocationDependency{{
-					Plugin:  "github",
+				Invokes: []AppInvocationDependency{{
+					App:  "github",
 					Surface: string(SpecSurfaceGraphQL),
-					RunAs: &PluginInvocationRunAsConfig{
-						Subject: &PluginInvocationRunAsSubjectConfig{
+					RunAs: &AppInvocationRunAsConfig{
+						Subject: &AppInvocationRunAsSubjectConfig{
 							ID:   "service_account:github_app_installation:99:repo:acme/widgets",
 							Kind: "service_account",
 						},
@@ -6298,12 +6258,12 @@ func TestValidateStructureRejectsConnectionAliasConflict(t *testing.T) {
 			"primary":  {Mode: providermanifestv1.ConnectionModeNone},
 			"fallback": {Mode: providermanifestv1.ConnectionModeNone},
 		},
-		Plugins: map[string]*ProviderEntry{
+		Apps: map[string]*ProviderEntry{
 			"sample": {
 				Source: ProviderSource{Path: "./manifest.yaml"},
 				Connections: map[string]*ConnectionDef{
-					core.PluginConnectionAlias: {Ref: "primary"},
-					core.PluginConnectionName:  {Ref: "fallback"},
+					core.AppConnectionAlias: {Ref: "primary"},
+					core.AppConnectionName:  {Ref: "fallback"},
 				},
 			},
 		},
@@ -6323,7 +6283,7 @@ func TestValidateStructureRejectsInlineUserMCPOAuthConnection(t *testing.T) {
 
 	cfg := &Config{
 		APIVersion: ConfigAPIVersion,
-		Plugins: map[string]*ProviderEntry{
+		Apps: map[string]*ProviderEntry{
 			"sample": {
 				Connections: map[string]*ConnectionDef{
 					"mcp": {
@@ -6362,7 +6322,7 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 		t.Fatalf("MkdirAll config dir: %v", err)
 	}
 	if err := os.WriteFile(cfgPath, []byte(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   authentication:
     authentication:
@@ -6372,7 +6332,7 @@ providers:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-plugins:
+apps:
   service-a:
     iconFile: ../assets/service.svg
     source:
@@ -6389,7 +6349,7 @@ server:
 		t.Fatalf("Load: %v", err)
 	}
 
-	if got := cfg.Plugins["service-a"].IconFile; got != iconPath {
+	if got := cfg.Apps["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
 	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuthentication)
@@ -6397,10 +6357,10 @@ server:
 		t.Fatal("SelectedAuthenticationProvider = nil")
 	}
 	if got := auth.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
-		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
+		t.Fatalf("auth app source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
 	}
-	if got := cfg.Plugins["service-a"].SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
-		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "manifest.yaml"))
+	if got := cfg.Apps["service-a"].SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
+		t.Fatalf("integration app source path = %q, want %q", got, filepath.Join(dir, "bin", "manifest.yaml"))
 	}
 }
 
@@ -6413,11 +6373,10 @@ func TestLoadPaths_ResolvesRelativePathsPerFile(t *testing.T) {
 		t.Fatalf("MkdirAll base: %v", err)
 	}
 	if err := os.WriteFile(basePath, []byte(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   artifactsDir: ../base-artifacts
-providers:
-plugins:
+apps:
     sample:
       source: ../base-plugin/manifest.yaml
 `), 0o644); err != nil {
@@ -6429,11 +6388,10 @@ plugins:
 		t.Fatalf("MkdirAll override: %v", err)
 	}
 	if err := os.WriteFile(overridePath, []byte(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   artifactsDir: ./override-artifacts
-providers:
-plugins:
+apps:
     sample:
       source: ./override-plugin/manifest.yaml
 `), 0o644); err != nil {
@@ -6446,7 +6404,7 @@ plugins:
 	}
 
 	wantPath := filepath.Join(filepath.Dir(overridePath), "override-plugin", "manifest.yaml")
-	if got := cfg.Plugins["sample"].SourcePath(); got != wantPath {
+	if got := cfg.Apps["sample"].SourcePath(); got != wantPath {
 		t.Fatalf("SourcePath = %q, want %q", got, wantPath)
 	}
 	if got, want := cfg.Server.ArtifactsDir, filepath.Join(filepath.Dir(overridePath), "override-artifacts"); got != want {
@@ -6458,7 +6416,7 @@ func TestAuthConfigMap(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providers:
   authentication:
     authentication:
@@ -6621,9 +6579,8 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `apiVersion: gestaltd.config/v5
-providers:
-plugins:
+	cfg := `apiVersion: gestaltd.config/v6
+apps:
     sample:
       source:
         path: ./my-plugin/manifest.yaml
@@ -6637,9 +6594,9 @@ plugins:
 		t.Fatalf("Load: %v", err)
 	}
 
-	entry := loaded.Plugins["sample"]
+	entry := loaded.Apps["sample"]
 	if entry == nil {
-		t.Fatal("expected plugin to be loaded")
+		t.Fatal("expected app to be loaded")
 	}
 	if !filepath.IsAbs(entry.SourcePath()) {
 		t.Fatalf("expected absolute path, got: %q", entry.SourcePath())
@@ -6650,7 +6607,7 @@ plugins:
 	}
 }
 
-func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
+func TestApplyAppScopeKeepsPluginClosureAndUI(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
@@ -6663,7 +6620,7 @@ func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
 				Secrets:   "runtime_env",
 			},
 		},
-		Plugins: map[string]*ProviderEntry{
+		Apps: map[string]*ProviderEntry{
 			"alpha": {
 				Source: ProviderSource{
 					Path: "alpha/manifest.yaml",
@@ -6683,15 +6640,15 @@ func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
 				Env: map[string]string{
 					"TOKEN": EncodeSecretRefTransport(SecretRef{Provider: "repo_auth", Name: "plugin-token"}),
 				},
-				Invokes: []PluginInvocationDependency{{
-					Plugin:    "beta",
+				Invokes: []AppInvocationDependency{{
+					App:    "beta",
 					Operation: "ping",
 				}},
 			},
 			"beta": {
 				Source: ProviderSource{Path: "beta/manifest.yaml"},
-				Invokes: []PluginInvocationDependency{{
-					Plugin:    "delta",
+				Invokes: []AppInvocationDependency{{
+					App:    "delta",
 					Operation: "pong",
 				}},
 			},
@@ -6738,8 +6695,8 @@ func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
 			},
 			UI: map[string]*UIEntry{
 				"admin_console": {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/admin.yaml"}}},
-				"alpha_ui":      {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/alpha.yaml"}}, OwnerPlugin: "alpha"},
-				"gamma_ui":      {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/gamma.yaml"}}, OwnerPlugin: "gamma"},
+				"alpha_ui":      {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/alpha.yaml"}}, OwnerApp: "alpha"},
+				"gamma_ui":      {ProviderEntry: ProviderEntry{Source: ProviderSource{Path: "ui/gamma.yaml"}}, OwnerApp: "gamma"},
 			},
 		},
 		Runtime: RuntimeConfig{
@@ -6752,25 +6709,25 @@ func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
 			Schedules: map[string]WorkflowScheduleConfig{
 				"kept": {
 					Provider: "temporal",
-					Target:   &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "alpha"}},
+					Target:   &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "alpha"}},
 				},
 				"dropped": {
-					Target: &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "gamma"}},
+					Target: &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "gamma"}},
 				},
 				"dependency_only": {
-					Target:  &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "gamma"}},
-					Invokes: []WorkflowInvokeConfig{{Plugin: "alpha", Operation: "ping"}},
+					Target:  &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "gamma"}},
+					Invokes: []WorkflowInvokeConfig{{App: "alpha", Operation: "ping"}},
 				},
 			},
 		},
 	}
 
-	if err := ApplyPluginScope(cfg, []string{"alpha"}); err != nil {
-		t.Fatalf("ApplyPluginScope: %v", err)
+	if err := ApplyAppScope(cfg, []string{"alpha"}); err != nil {
+		t.Fatalf("ApplyAppScope: %v", err)
 	}
 
-	if got, want := sortedProviderEntryKeys(cfg.Plugins), []string{"alpha", "beta", "delta"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Plugins = %v, want %v", got, want)
+	if got, want := sortedProviderEntryKeys(cfg.Apps), []string{"alpha", "beta", "delta"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Apps = %v, want %v", got, want)
 	}
 	if got, want := sortedUIEntryKeys(cfg.Providers.UI), []string{"admin_console", "alpha_ui"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Providers.UI = %v, want %v", got, want)
@@ -6801,11 +6758,11 @@ func TestApplyPluginScopeKeepsPluginClosureAndUI(t *testing.T) {
 	}
 }
 
-func TestApplyPluginScopeKeepsSameNameUIBeforeCanonicalization(t *testing.T) {
+func TestApplyAppScopeKeepsSameNameUIBeforeCanonicalization(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
-		Plugins: map[string]*ProviderEntry{
+		Apps: map[string]*ProviderEntry{
 			"alpha": {
 				Source:    ProviderSource{Path: "alpha/manifest.yaml"},
 				MountPath: "/alpha",
@@ -6822,8 +6779,8 @@ func TestApplyPluginScopeKeepsSameNameUIBeforeCanonicalization(t *testing.T) {
 		},
 	}
 
-	if err := ApplyPluginScope(cfg, []string{"alpha"}); err != nil {
-		t.Fatalf("ApplyPluginScope: %v", err)
+	if err := ApplyAppScope(cfg, []string{"alpha"}); err != nil {
+		t.Fatalf("ApplyAppScope: %v", err)
 	}
 
 	if got, want := sortedUIEntryKeys(cfg.Providers.UI), []string{"alpha"}; !reflect.DeepEqual(got, want) {
@@ -6831,7 +6788,7 @@ func TestApplyPluginScopeKeepsSameNameUIBeforeCanonicalization(t *testing.T) {
 	}
 }
 
-func TestApplyPluginScopeNodeKeepsOwnerPluginUI(t *testing.T) {
+func TestApplyAppScopeNodeKeepsOwnerAppUI(t *testing.T) {
 	t.Parallel()
 
 	var root yaml.Node
@@ -6839,14 +6796,14 @@ func TestApplyPluginScopeNodeKeepsOwnerPluginUI(t *testing.T) {
 providers:
   ui:
     alpha_view:
-      ownerPlugin: alpha
+      ownerApp: alpha
       source:
         path: ui/alpha.yaml
     noisy:
-      ownerPlugin: noisy
+      ownerApp: noisy
       source:
         path: ui/noisy.yaml
-plugins:
+apps:
   alpha:
     source:
       path: alpha/manifest.yaml
@@ -6854,20 +6811,20 @@ plugins:
 		t.Fatalf("yaml.Unmarshal: %v", err)
 	}
 
-	if err := applyPluginScopeNode(&root, []string{"alpha"}); err != nil {
-		t.Fatalf("applyPluginScopeNode: %v", err)
+	if err := applyAppScopeNode(&root, []string{"alpha"}); err != nil {
+		t.Fatalf("applyAppScopeNode: %v", err)
 	}
 
 	providersUI := mappingValueNode(mappingValueNode(documentValueNode(&root), "providers"), "ui")
 	if mappingValueNode(providersUI, "alpha_view") == nil {
-		t.Fatal("providers.ui.alpha_view should be retained by ownerPlugin")
+		t.Fatal("providers.ui.alpha_view should be retained by ownerApp")
 	}
 	if mappingValueNode(providersUI, "noisy") != nil {
 		t.Fatal("providers.ui.noisy should be dropped")
 	}
 }
 
-func TestLoadPluginScopePreserveMissingEnvPathsKeepsProjectReposForUnqualifiedPackageSource(t *testing.T) {
+func TestLoadAppScopePreserveMissingEnvPathsKeepsProjectReposForUnqualifiedPackageSource(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -6876,30 +6833,30 @@ providerRepositories:
     url: https://mirror.example.test/provider-index.yaml
   private:
     url: https://private.example.test/provider-index.yaml
-plugins:
+apps:
   alpha:
     source:
-      package: github.com/acme/plugins/alpha
+      package: github.com/acme/apps/alpha
   beta:
     source:
       repo: private
-      package: github.com/acme/plugins/beta
+      package: github.com/acme/apps/beta
 `)
 
-	cfg, err := LoadPluginScopePreserveMissingEnvPaths([]string{path}, []string{"alpha"})
+	cfg, err := LoadAppScopePreserveMissingEnvPaths([]string{path}, []string{"alpha"})
 	if err != nil {
-		t.Fatalf("LoadPluginScopePreserveMissingEnvPaths: %v", err)
+		t.Fatalf("LoadAppScopePreserveMissingEnvPaths: %v", err)
 	}
 
-	if got, want := sortedProviderEntryKeys(cfg.Plugins), []string{"alpha"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Plugins = %v, want %v", got, want)
+	if got, want := sortedProviderEntryKeys(cfg.Apps), []string{"alpha"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Apps = %v, want %v", got, want)
 	}
 	if got, want := sortedProviderRepositoryKeys(cfg.ProviderRepositories), []string{"mirror", "private"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("ProviderRepositories = %v, want %v", got, want)
 	}
 }
 
-func TestLoadPluginScopePreserveMissingEnvPathsFiltersProjectReposForQualifiedPackageSource(t *testing.T) {
+func TestLoadAppScopePreserveMissingEnvPathsFiltersProjectReposForQualifiedPackageSource(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -6908,20 +6865,20 @@ providerRepositories:
     url: https://mirror.example.test/provider-index.yaml
   private:
     url: https://private.example.test/provider-index.yaml
-plugins:
+apps:
   alpha:
     source:
       repo: private
-      package: github.com/acme/plugins/alpha
+      package: github.com/acme/apps/alpha
   beta:
     source:
       repo: mirror
-      package: github.com/acme/plugins/beta
+      package: github.com/acme/apps/beta
 `)
 
-	cfg, err := LoadPluginScopePreserveMissingEnvPaths([]string{path}, []string{"alpha"})
+	cfg, err := LoadAppScopePreserveMissingEnvPaths([]string{path}, []string{"alpha"})
 	if err != nil {
-		t.Fatalf("LoadPluginScopePreserveMissingEnvPaths: %v", err)
+		t.Fatalf("LoadAppScopePreserveMissingEnvPaths: %v", err)
 	}
 
 	if got, want := sortedProviderRepositoryKeys(cfg.ProviderRepositories), []string{"private"}; !reflect.DeepEqual(got, want) {
@@ -6937,9 +6894,9 @@ func TestReferencedProviderRepositoriesKeepsProjectReposForUnqualifiedPackageSou
 			"mirror":  {URL: "https://mirror.example.test/provider-index.yaml"},
 			"private": {URL: "https://private.example.test/provider-index.yaml"},
 		},
-		Plugins: map[string]*ProviderEntry{
+		Apps: map[string]*ProviderEntry{
 			"alpha": {
-				Source: ProviderSource{packageName: "github.com/acme/plugins/alpha"},
+				Source: ProviderSource{packageName: "github.com/acme/apps/alpha"},
 			},
 		},
 	}
@@ -6949,11 +6906,11 @@ func TestReferencedProviderRepositoriesKeepsProjectReposForUnqualifiedPackageSou
 	}
 }
 
-func TestApplyPluginScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
+func TestApplyAppScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Config{
-		Plugins: map[string]*ProviderEntry{
+		Apps: map[string]*ProviderEntry{
 			"alpha": {Source: ProviderSource{Path: "alpha/manifest.yaml"}},
 			"beta":  {Source: ProviderSource{Path: "beta/manifest.yaml"}},
 			"delta": {Source: ProviderSource{Path: "delta/manifest.yaml"}},
@@ -6962,17 +6919,17 @@ func TestApplyPluginScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
 		Workflows: WorkflowsConfig{
 			Schedules: map[string]WorkflowScheduleConfig{
 				"fanout": {
-					Target: &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "alpha"}},
+					Target: &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "alpha"}},
 					Invokes: []WorkflowInvokeConfig{{
-						Plugin:    "beta",
+						App:    "beta",
 						Operation: "ping",
 					}},
-					Permissions: []core.AccessPermission{{Plugin: "gamma"}},
+					Permissions: []core.AccessPermission{{App: "gamma"}},
 				},
 				"dependency_target": {
-					Target: &WorkflowTargetConfig{Plugin: &WorkflowPluginTargetConfig{Name: "beta"}},
+					Target: &WorkflowTargetConfig{App: &WorkflowAppTargetConfig{Name: "beta"}},
 					Invokes: []WorkflowInvokeConfig{{
-						Plugin:    "delta",
+						App:    "delta",
 						Operation: "pong",
 					}},
 				},
@@ -6980,24 +6937,24 @@ func TestApplyPluginScopeRetainedWorkflowAddsReferencedPlugins(t *testing.T) {
 		},
 	}
 
-	if err := ApplyPluginScope(cfg, []string{"alpha"}); err != nil {
-		t.Fatalf("ApplyPluginScope: %v", err)
+	if err := ApplyAppScope(cfg, []string{"alpha"}); err != nil {
+		t.Fatalf("ApplyAppScope: %v", err)
 	}
-	if got, want := sortedProviderEntryKeys(cfg.Plugins), []string{"alpha", "beta", "gamma"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("Plugins = %v, want %v", got, want)
+	if got, want := sortedProviderEntryKeys(cfg.Apps), []string{"alpha", "beta", "gamma"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Apps = %v, want %v", got, want)
 	}
 	if got, want := sortedWorkflowScheduleKeys(cfg.Workflows.Schedules), []string{"fanout"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Workflows.Schedules = %v, want %v", got, want)
 	}
 }
 
-func TestApplyPluginScopeRejectsUnknownPlugin(t *testing.T) {
+func TestApplyAppScopeRejectsUnknownPlugin(t *testing.T) {
 	t.Parallel()
 
-	cfg := &Config{Plugins: map[string]*ProviderEntry{}}
-	err := ApplyPluginScope(cfg, []string{"missing"})
-	if err == nil || !strings.Contains(err.Error(), `unknown plugin "missing"`) {
-		t.Fatalf("ApplyPluginScope error = %v, want unknown plugin", err)
+	cfg := &Config{Apps: map[string]*ProviderEntry{}}
+	err := ApplyAppScope(cfg, []string{"missing"})
+	if err == nil || !strings.Contains(err.Error(), `unknown app "missing"`) {
+		t.Fatalf("ApplyAppScope error = %v, want unknown plugin", err)
 	}
 }
 

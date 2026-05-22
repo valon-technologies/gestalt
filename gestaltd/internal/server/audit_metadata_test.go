@@ -204,7 +204,7 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 		{
 			name:       "missing_http_auth",
 			method:     http.MethodGet,
-			path:       "/api/v1/integrations",
+			path:       "/api/v1/apps",
 			wantSource: "http",
 			wantError:  "missing authorization",
 		},
@@ -266,7 +266,7 @@ func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
 							},
 						},
 					}
-					cfg.PluginDefs = map[string]*config.ProviderEntry{
+					cfg.AppDefs = map[string]*config.ProviderEntry{
 						tc.pluginName: {RouteAuth: &config.RouteAuthDef{Provider: tc.routeAuth}},
 					}
 					cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithOps{

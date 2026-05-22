@@ -206,7 +206,7 @@ export default function ArchitectureLight() {
         {/* Center-to-right connector */}
         <div style={{ backgroundColor: '#2318101A', boxSizing: 'border-box', height: '1.5px', left: 430, position: 'absolute', top: 255.5, width: '79px' }} />
       </div>
-      {/* Right column: Plugins */}
+      {/* Right column: Apps */}
       <div style={{ alignItems: 'center', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', flexShrink: '0', gap: '12px', width: '380px' }}>
         <div style={{ boxSizing: 'border-box', color: '#2318104D', fontFamily: '"Geist Mono", system-ui, sans-serif', fontSize: '10px', letterSpacing: '0.5px', lineHeight: '12px', marginTop: '4px', textAlign: 'center' }}>
           Plugins

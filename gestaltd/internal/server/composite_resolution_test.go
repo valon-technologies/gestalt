@@ -15,7 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/plugins/composite"
+	"github.com/valon-technologies/gestalt/server/services/apps/composite"
 )
 
 func TestExecuteOperation_CompositeStaticRESTBypassesMCPSessionResolution(t *testing.T) {

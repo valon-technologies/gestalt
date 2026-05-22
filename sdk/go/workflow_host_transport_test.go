@@ -33,7 +33,7 @@ func (h *workflowHostTransportHarness) InvokeOperation(ctx context.Context, req 
 
 	return &proto.InvokeWorkflowOperationResponse{
 		Status: 202,
-		Body:   req.GetRunId() + ":" + req.GetTarget().GetPlugin().GetOperation(),
+		Body:   req.GetRunId() + ":" + req.GetTarget().GetApp().GetOperation(),
 	}, nil
 }
 
@@ -65,8 +65,8 @@ func TestTransport_WorkflowHostTCPTargetTokenEnv(t *testing.T) {
 	resp, err := client.InvokeOperation(context.Background(), gestalt.InvokeWorkflowOperationInput{
 		RunID: "run-1",
 		Target: &gestalt.BoundWorkflowTarget{
-			Plugin: &gestalt.BoundWorkflowPluginTarget{
-				PluginName: "roadmap",
+			App: &gestalt.BoundWorkflowAppTarget{
+				AppName: "roadmap",
 				Operation:  "sync_items",
 			},
 		},
@@ -88,7 +88,7 @@ func TestTransport_WorkflowHostTCPTargetTokenEnv(t *testing.T) {
 		t.Fatalf("invoke requests len = %d, want 1", len(harness.requests))
 	}
 	got := harness.requests[0]
-	if got.GetRunId() != "run-1" || got.GetTarget().GetPlugin().GetPluginName() != "roadmap" || got.GetTarget().GetPlugin().GetOperation() != "sync_items" {
+	if got.GetRunId() != "run-1" || got.GetTarget().GetApp().GetAppName() != "roadmap" || got.GetTarget().GetApp().GetOperation() != "sync_items" {
 		t.Fatalf("invoke request = %#v", got)
 	}
 	if got.GetMetadata().AsMap()["workflow_key"] != "roadmap-sync" {

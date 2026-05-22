@@ -5,7 +5,7 @@ export default {
   cache: "Cache",
   "external-credentials": "External Credentials",
   indexeddb: "IndexedDB",
-  plugins: "Plugin",
+  apps: "Plugin",
   runtime: "Runtime",
   s3: "S3",
   secrets: "Secret",

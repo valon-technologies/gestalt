@@ -15,17 +15,17 @@ import (
 
 func (s *Server) httpBindingPrincipal(binding MountedHTTPBinding, verified *verifiedHTTPBindingSender) *principal.Principal {
 	permissions := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin:     binding.PluginName,
+		App:     binding.AppName,
 		Operations: []string{binding.Target},
 	}})
-	displayName := binding.PluginName + "/" + binding.Name
+	displayName := binding.AppName + "/" + binding.Name
 	if verified != nil && strings.TrimSpace(verified.Subject) != "" {
 		displayName = strings.TrimSpace(verified.Subject)
 	}
 	return principal.Canonicalize(&principal.Principal{
-		SubjectID:        "system:http_binding:" + binding.PluginName + ":" + binding.Name,
+		SubjectID:        "system:http_binding:" + binding.AppName + ":" + binding.Name,
 		DisplayName:      displayName,
-		Scopes:           principal.PermissionPlugins(permissions),
+		Scopes:           principal.PermissionApps(permissions),
 		TokenPermissions: permissions,
 	})
 }
@@ -33,7 +33,7 @@ func (s *Server) httpBindingPrincipal(binding MountedHTTPBinding, verified *veri
 func httpBindingContextValue(binding MountedHTTPBinding, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest) map[string]any {
 	value := map[string]any{
 		"name":   binding.Name,
-		"plugin": binding.PluginName,
+		"app": binding.AppName,
 		"path":   binding.Path,
 		"method": binding.Method,
 		"target": binding.Target,
@@ -68,14 +68,14 @@ func (s *Server) httpBindingOperationInvocation(ctx context.Context, binding Mou
 		p = s.httpBindingPrincipal(binding, verified)
 	}
 	ctx = principal.WithPrincipal(ctx, p)
-	ctx = invocation.WithAccessContext(ctx, s.providerAccessContextWithContext(ctx, p, binding.PluginName))
+	ctx = invocation.WithAccessContext(ctx, s.providerAccessContextWithContext(ctx, p, binding.AppName))
 	ctx = invocation.WithWorkflowContext(ctx, httpBindingContextValue(binding, verified, parsed))
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTPBinding)
 	ctx = invocation.WithHTTPBinding(ctx, binding.Name)
 	if binding.CredentialMode != "" {
 		ctx = invocation.WithCredentialModeOverride(ctx, binding.CredentialMode)
 	}
-	return s.invoker.Invoke(ctx, p, binding.PluginName, "", binding.Target, params)
+	return s.invoker.Invoke(ctx, p, binding.AppName, "", binding.Target, params)
 }
 
 func (s *Server) dispatchHTTPBindingAsync(binding MountedHTTPBinding, p *principal.Principal, verified *verifiedHTTPBindingSender, parsed *parsedHTTPBindingRequest, requestMeta invocation.RequestMeta) {
@@ -84,7 +84,7 @@ func (s *Server) dispatchHTTPBindingAsync(binding MountedHTTPBinding, p *princip
 		ctx = invocation.WithRequestMeta(ctx, requestMeta)
 		result, err := s.httpBindingOperationInvocation(ctx, binding, p, verified, parsed)
 		if err != nil {
-			slog.ErrorContext(ctx, "http binding async operation failed", "plugin", binding.PluginName, "binding", binding.Name, "operation", binding.Target, "error", err)
+			slog.ErrorContext(ctx, "http binding async operation failed", "app", binding.AppName, "binding", binding.Name, "operation", binding.Target, "error", err)
 			return
 		}
 		logHTTPBindingAsyncResult(ctx, binding, result)
@@ -96,7 +96,7 @@ func logHTTPBindingAsyncResult(ctx context.Context, binding MountedHTTPBinding, 
 		return
 	}
 	slog.WarnContext(ctx, "http binding async operation returned non-2xx result",
-		"plugin", binding.PluginName,
+		"app", binding.AppName,
 		"binding", binding.Name,
 		"operation", binding.Target,
 		"result_status", result.Status,

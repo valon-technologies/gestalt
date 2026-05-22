@@ -10,8 +10,8 @@ import (
 
 const (
 	ProviderResourceTypePolicyStatic                   = "policy_static"
-	ProviderResourceTypePluginStatic                   = "plugin_static"
-	ProviderResourceTypePluginDynamic                  = "plugin_dynamic"
+	ProviderResourceTypeAppStatic                   = "app_static"
+	ProviderResourceTypeAppDynamic                  = "app_dynamic"
 	ProviderResourceTypeAdminPolicyStatic              = "admin_policy_static"
 	ProviderResourceTypeAdminDynamic                   = "admin_dynamic"
 	ProviderResourceTypeExternalIdentity               = "external_identity"
@@ -39,8 +39,8 @@ const (
 
 const (
 	resourceTypePolicyStatic       = ProviderResourceTypePolicyStatic
-	resourceTypePluginStatic       = ProviderResourceTypePluginStatic
-	resourceTypePluginDynamic      = ProviderResourceTypePluginDynamic
+	resourceTypeAppStatic       = ProviderResourceTypeAppStatic
+	resourceTypeAppDynamic      = ProviderResourceTypeAppDynamic
 	resourceTypeAdminPolicyStatic  = ProviderResourceTypeAdminPolicyStatic
 	resourceTypeAdminDynamic       = ProviderResourceTypeAdminDynamic
 	resourceTypeExternalIdentity   = ProviderResourceTypeExternalIdentity
@@ -62,8 +62,8 @@ const (
 
 var providerAuthorizationResourceTypes = []string{
 	ProviderResourceTypePolicyStatic,
-	ProviderResourceTypePluginStatic,
-	ProviderResourceTypePluginDynamic,
+	ProviderResourceTypeAppStatic,
+	ProviderResourceTypeAppDynamic,
 	ProviderResourceTypeAdminPolicyStatic,
 	ProviderResourceTypeAdminDynamic,
 	ProviderResourceTypeExternalIdentity,
@@ -86,16 +86,16 @@ func IsManagedProviderRelationship(rel *core.Relationship) bool {
 	return false
 }
 
-func ProviderAuthorizationModelForRoles(policyRoles, pluginStaticRoles, pluginDynamicRoles, adminDynamicRoles []string) *core.AuthorizationModel {
+func ProviderAuthorizationModelForRoles(policyRoles, appStaticRoles, appDynamicRoles, adminDynamicRoles []string) *core.AuthorizationModel {
 	return buildProviderAuthorizationModel(providerBackedRoleState{
 		policyStaticRoles: map[string][]string{
 			"": append([]string(nil), policyRoles...),
 		},
-		pluginStaticRoles: map[string][]string{
-			"": append([]string(nil), pluginStaticRoles...),
+		appStaticRoles: map[string][]string{
+			"": append([]string(nil), appStaticRoles...),
 		},
-		pluginDynamicRoles: map[string][]string{
-			"": append([]string(nil), pluginDynamicRoles...),
+		appDynamicRoles: map[string][]string{
+			"": append([]string(nil), appDynamicRoles...),
 		},
 		adminDynamicRoles: append([]string(nil), adminDynamicRoles...),
 	})
@@ -115,16 +115,16 @@ func buildProviderAuthorizationModel(state providerBackedRoleState) *core.Author
 
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		buildProviderAuthorizationResourceType(
-			resourceTypePluginStatic,
-			resourceTypesForRoles(unionRoleLists(state.pluginStaticRoles), subjectTypeSubject),
-			unionRoleLists(state.pluginStaticRoles),
+			resourceTypeAppStatic,
+			resourceTypesForRoles(unionRoleLists(state.appStaticRoles), subjectTypeSubject),
+			unionRoleLists(state.appStaticRoles),
 		),
 	)
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,
 		buildProviderAuthorizationResourceType(
-			resourceTypePluginDynamic,
-			resourceTypesForRoles(unionRoleLists(state.pluginDynamicRoles), subjectTypeSubject),
-			unionRoleLists(state.pluginDynamicRoles),
+			resourceTypeAppDynamic,
+			resourceTypesForRoles(unionRoleLists(state.appDynamicRoles), subjectTypeSubject),
+			unionRoleLists(state.appDynamicRoles),
 		),
 	)
 	model.ResourceTypes = appendIfModelResourceType(model.ResourceTypes,

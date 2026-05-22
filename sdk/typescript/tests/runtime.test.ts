@@ -65,16 +65,16 @@ import {
   StartProviderRequestSchema,
   StringListSchema,
   SubjectContextSchema,
-} from "../src/internal/gen/v1/plugin_pb.ts";
+} from "../src/internal/gen/v1/app_pb.ts";
 import {
-  GetPluginRuntimeSessionRequestSchema,
-  ListPluginRuntimeSessionsRequestSchema,
-  PreparePluginRuntimeWorkspaceRequestSchema,
-  RemovePluginRuntimeWorkspaceRequestSchema,
-  StartHostedPluginRequestSchema,
-  StartPluginRuntimeSessionRequestSchema,
-  StopPluginRuntimeSessionRequestSchema,
-} from "../src/internal/gen/v1/pluginruntime_pb.ts";
+  GetAppRuntimeSessionRequestSchema,
+  ListAppRuntimeSessionsRequestSchema,
+  PrepareAppRuntimeWorkspaceRequestSchema,
+  RemoveAppRuntimeWorkspaceRequestSchema,
+  StartHostedAppRequestSchema,
+  StartAppRuntimeSessionRequestSchema,
+  StopAppRuntimeSessionRequestSchema,
+} from "../src/internal/gen/v1/appruntime_pb.ts";
 import {
   GetSecretRequestSchema,
   SecretsProvider as SecretsProviderService,
@@ -98,7 +98,7 @@ import {
   ENV_PROVIDER_SOCKET,
   createAuthenticationService,
   createProviderService,
-  createPluginRuntimeProviderService,
+  createAppRuntimeProviderService,
   createRuntimeService,
   createWorkflowProviderService,
   loadProviderFromTarget,
@@ -108,13 +108,13 @@ import {
 import {
   httpSubjectError,
   PresignMethod,
-  PluginRuntimeEgressMode,
+  AppRuntimeEgressMode,
   S3,
   WorkflowRunStatus,
   defineAuthorizationProvider,
   defineCacheProvider,
-  definePlugin,
-  definePluginRuntimeProvider,
+  defineApp,
+  defineAppRuntimeProvider,
   defineS3Provider,
 } from "../src/index.ts";
 import { createS3Service } from "../src/s3.ts";
@@ -148,7 +148,7 @@ function workflowPluginTarget(
 ) {
   return {
     kind: {
-      case: "plugin" as const,
+      case: "app" as const,
       value: { pluginName, operation, ...extra },
     },
   };
@@ -175,7 +175,7 @@ test("runtime main writes a static catalog in catalog mode", async () => {
         name: "@scope/catalog provider",
         gestalt: {
           provider: {
-            kind: "plugin",
+            kind: "app",
             target: "./provider.ts#plugin",
           },
         },
@@ -184,9 +184,9 @@ test("runtime main writes a static catalog in catalog mode", async () => {
     );
     writeFileSync(
       join(root, "provider.ts"),
-      `import { definePlugin, s } from ${JSON.stringify(indexPath)};
+      `import { defineApp, s } from ${JSON.stringify(indexPath)};
 
-export const plugin = definePlugin({
+export const app = defineApp({
   displayName: "Catalog Provider",
   operations: [
     {
@@ -243,23 +243,23 @@ test("loadProviderFromTarget resolves a secrets provider from package metadata",
   expect(provider.displayName).toBe("Fixture Secrets");
 });
 
-test("loadProviderFromTarget falls through null exports to the next plugin candidate", async () => {
-  const plugin = await loadProviderFromTarget(
+test("loadProviderFromTarget falls through null exports to the next app candidate", async () => {
+  const app = await loadProviderFromTarget(
     fixturePath("basic-provider-null-export"),
   );
-  expect(plugin.kind).toBe("integration");
-  expect(plugin.name).toBe("basic-provider-null-export");
-  expect(plugin.displayName).toBe("Fixture Provider Null Export");
+  expect(app.kind).toBe("integration");
+  expect(app.name).toBe("basic-provider-null-export");
+  expect(app.displayName).toBe("Fixture Provider Null Export");
 });
 
 test("loadProviderFromTarget ignores whitespace-only explicit targets", async () => {
-  const plugin = await loadProviderFromTarget(
+  const app = await loadProviderFromTarget(
     fixturePath("basic-provider"),
     "   ",
   );
-  expect(plugin.kind).toBe("integration");
-  expect(plugin.name).toBe("basic-provider");
-  expect(plugin.displayName).toBe("Fixture Provider");
+  expect(app.kind).toBe("integration");
+  expect(app.name).toBe("basic-provider");
+  expect(app.displayName).toBe("Fixture Provider");
 });
 
 test("loadProviderFromTarget formats package target in errors when explicit target is whitespace", async () => {
@@ -281,9 +281,9 @@ test("loadProviderFromTarget formats package target in errors when explicit targ
     );
     writeFileSync(
       join(root, "provider.ts"),
-      `import { definePlugin } from ${JSON.stringify(indexPath)};
+      `import { defineApp } from ${JSON.stringify(indexPath)};
 
-export const plugin = definePlugin({
+export const app = defineApp({
   operations: [
     {
       id: "hello",
@@ -316,7 +316,7 @@ test("loadProviderFromTarget rejects duplicate operation identifiers after trimm
         name: "duplicate-provider",
         gestalt: {
           provider: {
-            kind: "plugin",
+            kind: "app",
             target: "./provider.ts#plugin",
           },
         },
@@ -325,9 +325,9 @@ test("loadProviderFromTarget rejects duplicate operation identifiers after trimm
     );
     writeFileSync(
       join(root, "provider.ts"),
-      `import { definePlugin } from ${JSON.stringify(indexPath)};
+      `import { defineApp } from ${JSON.stringify(indexPath)};
 
-export const plugin = definePlugin({
+export const app = defineApp({
   operations: [
     {
       id: "ping",
@@ -355,7 +355,7 @@ export const plugin = definePlugin({
   }
 });
 
-test("loadProviderFromTarget rejects structural plugin objects without the full runtime lifecycle contract", async () => {
+test("loadProviderFromTarget rejects structural app objects without the full runtime lifecycle contract", async () => {
   const root = makeTempDir("gestalt-typescript-runtime-structural-runtime-base-");
 
   try {
@@ -365,7 +365,7 @@ test("loadProviderFromTarget rejects structural plugin objects without the full 
         name: "structural-runtime-base-provider",
         gestalt: {
           provider: {
-            kind: "plugin",
+            kind: "app",
             target: "./provider.ts#plugin",
           },
         },
@@ -374,11 +374,11 @@ test("loadProviderFromTarget rejects structural plugin objects without the full 
     );
     writeFileSync(
       join(root, "provider.ts"),
-      `export const plugin = {
+      `export const app = {
   kind: "integration",
   name: "structural-runtime-base",
   displayName: "Structural Runtime Base",
-  description: "structural plugin missing runtime base methods",
+  description: "structural app missing runtime base methods",
   version: "1.0.0",
   connectionMode: "unspecified",
   authTypes: [],
@@ -411,7 +411,7 @@ test("loadProviderFromTarget rejects structural plugin objects without the full 
     );
 
     await expect(loadProviderFromTarget(root)).rejects.toThrow(
-      "plugin:./provider.ts#plugin did not resolve to a Gestalt plugin provider",
+      "plugin:./provider.ts#plugin did not resolve to a Gestalt app provider",
     );
   } finally {
     removeTempDir(root);
@@ -597,7 +597,7 @@ test("runtime serves an authorization provider over unix gRPC", async () => {
 }, 15_000);
 
 test("integration provider service exposes metadata, configure, execute, and session catalog", async () => {
-  const plugin = await loadProviderFromTarget(fixturePath("basic-provider"));
+  const app = await loadProviderFromTarget(fixturePath("basic-provider"));
   const service = createProviderService(plugin);
 
   const metadata = await (service.getMetadata as any)();
@@ -772,7 +772,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
 });
 
 test("integration provider service labels metadata failures", async () => {
-  const plugin = definePlugin({
+  const app = defineApp({
     operations: [
       {
         id: "noop",
@@ -798,7 +798,7 @@ test("integration provider service labels metadata failures", async () => {
   }
 });
 
-test("integration provider service resolves hosted HTTP subjects through the plugin hook", async () => {
+test("integration provider service resolves hosted HTTP subjects through the app hook", async () => {
   let seenRequest:
     | import("../src/index.ts").HTTPSubjectRequest
     | undefined;
@@ -806,7 +806,7 @@ test("integration provider service resolves hosted HTTP subjects through the plu
     | import("../src/index.ts").HTTPSubjectResolutionContext
     | undefined;
 
-  const plugin = definePlugin({
+  const app = defineApp({
     resolveHTTPSubject(request, context) {
       seenRequest = request;
       seenContext = context;
@@ -951,7 +951,7 @@ test("integration provider service resolves hosted HTTP subjects through the plu
   expect(fallback.subject).toBeUndefined();
 
   const rejected = await (createProviderService(
-    definePlugin({
+    defineApp({
       resolveHTTPSubject() {
         throw httpSubjectError(403, "unmapped slack subject");
       },
@@ -976,7 +976,7 @@ test("integration provider service resolves hosted HTTP subjects through the plu
 
   await expectConnectCode(
     (createProviderService(
-      definePlugin({
+      defineApp({
         resolveHTTPSubject() {
           throw new Error("boom");
         },
@@ -1011,7 +1011,7 @@ test("integration provider service preserves body-shaped outputs and explicit re
         name: "output-provider",
         gestalt: {
           provider: {
-            kind: "plugin",
+            kind: "app",
             target: "./provider.ts#plugin",
           },
         },
@@ -1020,9 +1020,9 @@ test("integration provider service preserves body-shaped outputs and explicit re
     );
     writeFileSync(
       join(root, "provider.ts"),
-      `import { definePlugin, response, s } from ${JSON.stringify(indexPath)};
+      `import { defineApp, response, s } from ${JSON.stringify(indexPath)};
 
-export const plugin = definePlugin({
+export const app = defineApp({
   operations: [
     {
       id: "echo-body",
@@ -1071,7 +1071,7 @@ export const plugin = definePlugin({
       "utf8",
     );
 
-    const plugin = await loadProviderFromTarget(root);
+    const app = await loadProviderFromTarget(root);
     const service = createProviderService(plugin);
 
     const echoedBody = await (service.execute as any)(
@@ -1332,7 +1332,7 @@ test("authorization provider service treats effective search as paired", async (
 });
 
 test("runtime lifecycle labels provider identity failures", async () => {
-  const plugin = definePlugin({
+  const app = defineApp({
     operations: [
       {
         id: "noop",
@@ -1676,20 +1676,20 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
 
 test("plugin runtime provider serves runtime metadata plus sessions", async () => {
   let startPluginWorkdir: string | undefined;
-  const provider = definePluginRuntimeProvider({
+  const provider = defineAppRuntimeProvider({
     name: "runtime-provider",
     displayName: "Fixture Runtime",
     warnings: ["set RUNTIME_ENDPOINT"],
     getSupport() {
       return {
-        canHostPlugins: true,
-        egressMode: PluginRuntimeEgressMode.HOSTNAME,
+        canHostApps: true,
+        egressMode: AppRuntimeEgressMode.HOSTNAME,
         supportsPrepareWorkspace: true,
       };
     },
     startSession(request) {
       return {
-        id: `${request.pluginName || "plugin"}-session`,
+        id: `${request.pluginName || "app"}-session`,
         state: "ready",
       };
     },
@@ -1718,13 +1718,13 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
         id: "hosted-plugin-1",
         sessionId: request.sessionId,
         pluginName: request.pluginName,
-        dialTarget: "unix:///tmp/plugin.sock",
+        dialTarget: "unix:///tmp/app.sock",
       };
     },
   });
 
   const runtime = createRuntimeService(provider as any);
-  const service = createPluginRuntimeProviderService(provider);
+  const service = createAppRuntimeProviderService(provider);
   const identity = await (runtime.getProviderIdentity as any)(
     create(EmptySchema),
   );
@@ -1735,12 +1735,12 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
 
   const support = await (service.getSupport as any)(create(EmptySchema));
   expect(support.canHostPlugins).toBe(true);
-  expect(support.egressMode).toBe(PluginRuntimeEgressMode.HOSTNAME);
+  expect(support.egressMode).toBe(AppRuntimeEgressMode.HOSTNAME);
   expect(support.supportsPrepareWorkspace).toBe(true);
 
   const session = await (service.startSession as any)(
-    create(StartPluginRuntimeSessionRequestSchema, {
-      pluginName: "plugin",
+    create(StartAppRuntimeSessionRequestSchema, {
+      pluginName: "app",
       image: "example/plugin:latest",
     }),
   );
@@ -1748,20 +1748,20 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
   expect(session.state).toBe("ready");
 
   const fetched = await (service.getSession as any)(
-    create(GetPluginRuntimeSessionRequestSchema, {
+    create(GetAppRuntimeSessionRequestSchema, {
       sessionId: "plugin-session",
     }),
   );
   expect(fetched.id).toBe("plugin-session");
 
   const sessions = await (service.listSessions as any)(
-    create(ListPluginRuntimeSessionsRequestSchema),
+    create(ListAppRuntimeSessionsRequestSchema),
   );
   expect(sessions.sessions).toHaveLength(1);
   expect(sessions.sessions[0].id).toBe("plugin-session");
 
   const prepared = await (service.prepareWorkspace as any)(
-    create(PreparePluginRuntimeWorkspaceRequestSchema, {
+    create(PrepareAppRuntimeWorkspaceRequestSchema, {
       sessionId: "plugin-session",
       agentSessionId: "agent-session-1",
       workspace: {
@@ -1777,30 +1777,30 @@ test("plugin runtime provider serves runtime metadata plus sessions", async () =
   expect(prepared.workspace?.cwd).toBe("/runtime/agent-session-1/app");
 
   const removed = await (service.removeWorkspace as any)(
-    create(RemovePluginRuntimeWorkspaceRequestSchema, {
+    create(RemoveAppRuntimeWorkspaceRequestSchema, {
       sessionId: "plugin-session",
       agentSessionId: "agent-session-1",
     }),
   );
   expect(removed.$typeName).toBe("google.protobuf.Empty");
 
-  const hosted = await (service.startPlugin as any)(
-    create(StartHostedPluginRequestSchema, {
+  const hosted = await (service.startApp as any)(
+    create(StartHostedAppRequestSchema, {
       sessionId: "plugin-session",
-      pluginName: "plugin",
+      pluginName: "app",
       workdir: "/runtime/providers/plugin",
     }),
   );
   expect(hosted).toMatchObject({
     id: "hosted-plugin-1",
     sessionId: "plugin-session",
-    pluginName: "plugin",
-    dialTarget: "unix:///tmp/plugin.sock",
+    pluginName: "app",
+    dialTarget: "unix:///tmp/app.sock",
   });
   expect(startPluginWorkdir).toBe("/runtime/providers/plugin");
 
   const stopped = await (service.stopSession as any)(
-    create(StopPluginRuntimeSessionRequestSchema, {
+    create(StopAppRuntimeSessionRequestSchema, {
       sessionId: "plugin-session",
     }),
   );
@@ -1844,8 +1844,8 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
       }),
     }),
   );
-  if (run.target?.kind.case !== "plugin") {
-    throw new Error("workflow run target is not a plugin target");
+  if (run.target?.kind.case !== "app") {
+    throw new Error("workflow run target is not a app target");
   }
   expect(run.target.kind.value.pluginName).toBe("roadmap");
   expect(run.status).toBe(WorkflowRunStatus.PENDING);
@@ -1867,8 +1867,8 @@ test("workflow provider target resolves and serves runtime metadata plus workflo
     }),
   );
   expect(schedule.id).toBe("nightly");
-  if (schedule.target?.kind.case !== "plugin") {
-    throw new Error("workflow schedule target is not a plugin target");
+  if (schedule.target?.kind.case !== "app") {
+    throw new Error("workflow schedule target is not a app target");
   }
   expect(schedule.target.kind.value.pluginName).toBe("roadmap");
   expect(schedule.createdBy?.subjectId).toBe("service_account:planner");
@@ -2175,7 +2175,7 @@ test("agent provider target resolves and serves runtime metadata plus agent oper
 });
 
 test("integration provider request context includes workflow metadata", async () => {
-  const plugin = definePlugin({
+  const app = defineApp({
     operations: [
       {
         id: "inspect",

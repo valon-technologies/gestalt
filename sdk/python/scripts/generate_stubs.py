@@ -10,8 +10,8 @@ PROTO_MODULES = (
     "authorization",
     "cache",
     "datastore",
-    "plugin",
-    "pluginruntime",
+    "app",
+    "appruntime",
     "runtime",
     "s3",
     "secrets",
@@ -126,7 +126,7 @@ def main() -> int:
                     f"unexpected grpc Python import layout in generated {module_name} stub"
                 )
 
-            # Buf's grpc Python plugin emits a top-level import, but these stubs
+            # Buf's grpc Python app emits a top-level import, but these stubs
             # are vendored under gestalt._gen.v1 and need package-relative imports.
             pb2_grpc_source = pb2_grpc_source.replace(
                 expected_import,

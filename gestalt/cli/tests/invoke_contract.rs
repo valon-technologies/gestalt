@@ -31,7 +31,7 @@ fn test_invoke_precondition_error_suggests_connect_command() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/auth_svc/operations",
+        "/api/v1/apps/auth_svc/operations",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("list_items"))
@@ -47,11 +47,11 @@ fn test_invoke_precondition_error_suggests_connect_command() {
     .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugin", "invoke", "auth_svc", "list_items"])
+        .args(["app", "invoke", "auth_svc", "list_items"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "failed to invoke auth_svc.list_items: plugin \"auth_svc\" is not connected. Connect it first with `gestalt plugin connect auth_svc`",
+            "failed to invoke auth_svc.list_items: app \"auth_svc\" is not connected. Connect it first with `gestalt app connect auth_svc`",
         ))
         .stderr(predicate::str::contains("OAuth first").not());
 }
@@ -64,7 +64,7 @@ fn test_invoke_reconnect_error_suggests_reconnect_command() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/clickhouse/operations",
+        "/api/v1/apps/clickhouse/operations",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("run_query"))
@@ -80,11 +80,11 @@ fn test_invoke_reconnect_error_suggests_reconnect_command() {
     .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugin", "invoke", "clickhouse", "run_query"])
+        .args(["app", "invoke", "clickhouse", "run_query"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "failed to invoke clickhouse.run_query: token for plugin \"clickhouse\" expired or was revoked. Reconnect it with `gestalt plugin connect clickhouse`",
+            "failed to invoke clickhouse.run_query: token for app \"clickhouse\" expired or was revoked. Reconnect it with `gestalt app connect clickhouse`",
         ))
         .stderr(predicate::str::contains("OAuth token for integration").not());
 }
@@ -97,7 +97,7 @@ fn test_invoke_instance_selection_error_suggests_instance_flag() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/slack/operations",
+        "/api/v1/apps/slack/operations",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("channels"))
@@ -113,7 +113,7 @@ fn test_invoke_instance_selection_error_suggests_instance_flag() {
     .create();
 
     let _integrations_mock =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
             .with_body(
                 r#"[{
             "name":"slack",
@@ -126,7 +126,7 @@ fn test_invoke_instance_selection_error_suggests_instance_flag() {
             .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugin", "invoke", "slack", "channels"])
+        .args(["app", "invoke", "slack", "channels"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -143,11 +143,11 @@ fn test_invoke_instance_selection_error_suggests_instance_flag() {
         .stderr(predicate::str::contains("--sandbox"))
         .stderr(predicate::str::contains("-team"))
         .stderr(predicate::str::contains(
-            "gestalt plugin invoke slack channels",
+            "gestalt app invoke slack channels",
         ))
         .stderr(predicate::str::contains("'--sandbox'"))
         .stderr(predicate::str::contains("'-team'"))
-        .stderr(predicate::str::contains("gestalt plugin connect").not());
+        .stderr(predicate::str::contains("gestalt app connect").not());
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn test_invoke_requires_selector_before_catalog_resolution_when_multiple_connect
     let home = TempDir::new().unwrap();
 
     let integrations_mock =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
             .with_body(
                 r#"[{
             "name":"multi_svc",
@@ -169,7 +169,7 @@ fn test_invoke_requires_selector_before_catalog_resolution_when_multiple_connect
             .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugin", "invoke", "multi_svc", "healthcheck"])
+        .args(["app", "invoke", "multi_svc", "healthcheck"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -182,7 +182,7 @@ fn test_invoke_requires_selector_before_catalog_resolution_when_multiple_connect
         .stderr(predicate::str::contains("stage"))
         .stderr(predicate::str::contains("default"))
         .stderr(predicate::str::contains(
-            "gestalt plugin invoke multi_svc healthcheck",
+            "gestalt app invoke multi_svc healthcheck",
         ))
         .stderr(predicate::str::contains("--connection dev"))
         .stderr(predicate::str::contains("--instance default"))
@@ -197,7 +197,7 @@ fn test_list_operations_infers_only_connected_instance_before_catalog_resolution
     let home = TempDir::new().unwrap();
 
     let integrations_mock =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
             .with_body(
                 r#"[{
             "name":"frontPorch",
@@ -213,14 +213,14 @@ fn test_list_operations_infers_only_connected_instance_before_catalog_resolution
     let catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/frontPorch/operations?_connection=prod&_instance=default",
+        "/api/v1/apps/frontPorch/operations?_connection=prod&_instance=default",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("healthcheck"))
     .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugin", "invoke", "frontPorch"])
+        .args(["app", "invoke", "frontPorch"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Connection: prod"))
@@ -238,7 +238,7 @@ fn test_invoke_with_connection_infers_only_matching_instance() {
     let home = TempDir::new().unwrap();
 
     let integrations_mock =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
             .with_body(
                 r#"[{
             "name":"multi_svc",
@@ -253,7 +253,7 @@ fn test_invoke_with_connection_infers_only_matching_instance() {
     let catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/multi_svc/operations?_connection=dev&_instance=default",
+        "/api/v1/apps/multi_svc/operations?_connection=dev&_instance=default",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("healthcheck"))
@@ -274,7 +274,7 @@ fn test_invoke_with_connection_infers_only_matching_instance() {
 
     cli_command_for_server(home.path(), &server)
         .args([
-            "plugin",
+            "app",
             "invoke",
             "multi_svc",
             "healthcheck",
@@ -297,7 +297,7 @@ fn test_invoke_with_unknown_connection_does_not_infer_unrelated_instance() {
     let home = TempDir::new().unwrap();
 
     let integrations_mock =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+        authed_json_mock!(server, Method::GET, "/api/v1/apps", StatusCode::OK)
             .with_body(
                 r#"[{
             "name":"multi_svc",
@@ -311,7 +311,7 @@ fn test_invoke_with_unknown_connection_does_not_infer_unrelated_instance() {
     let catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/multi_svc/operations?_connection=stage",
+        "/api/v1/apps/multi_svc/operations?_connection=stage",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("healthcheck"))
@@ -332,7 +332,7 @@ fn test_invoke_with_unknown_connection_does_not_infer_unrelated_instance() {
 
     cli_command_for_server(home.path(), &server)
         .args([
-            "plugin",
+            "app",
             "invoke",
             "multi_svc",
             "healthcheck",
@@ -356,7 +356,7 @@ fn test_invoke_error_with_instance_action_name_keeps_original_error() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/slack/operations",
+        "/api/v1/apps/slack/operations",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("status"))
@@ -372,7 +372,7 @@ fn test_invoke_error_with_instance_action_name_keeps_original_error() {
     .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugin", "invoke", "slack", "status"])
+        .args(["app", "invoke", "slack", "status"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -389,18 +389,18 @@ fn test_catalog_reconnect_error_suggests_reconnect_command() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/clickhouse/operations",
+        "/api/v1/apps/clickhouse/operations",
         StatusCode::PRECONDITION_FAILED
     )
     .with_body(r#"{"error":"OAuth token for integration \"clickhouse\" expired or was revoked; reconnect it","code":"reconnect_required","integration":"clickhouse"}"#)
     .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugin", "invoke", "clickhouse"])
+        .args(["app", "invoke", "clickhouse"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "failed to invoke clickhouse: token for plugin \"clickhouse\" expired or was revoked. Reconnect it with `gestalt plugin connect clickhouse`",
+            "failed to invoke clickhouse: token for app \"clickhouse\" expired or was revoked. Reconnect it with `gestalt app connect clickhouse`",
         ))
         .stderr(predicate::str::contains("OAuth token for integration").not());
 }
@@ -411,7 +411,7 @@ fn test_list_operations_formats_parameters() {
     let mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(
@@ -442,7 +442,7 @@ fn test_list_operations_formats_parameters() {
     )
     .create();
 
-    let output = run_cli(&server, &["plugin", "invoke", "test_svc"]);
+    let output = run_cli(&server, &["app", "invoke", "test_svc"]);
     mock.assert();
     assert!(
         output.status.success(),
@@ -469,7 +469,7 @@ fn test_list_operations_json_format() {
     let mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(
@@ -497,7 +497,7 @@ fn test_list_operations_empty_parameters() {
     let mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(
@@ -519,7 +519,7 @@ fn test_invoke_with_connection_and_instance() {
     let _catalog_mock = json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
+        "/api/v1/apps/test_svc/operations?_connection=workspace&_instance=team-a",
         StatusCode::OK
     )
     .with_body(catalog_body())
@@ -563,7 +563,7 @@ fn test_invoke_with_connection_and_instance() {
     let _secondary_catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/other_svc/operations?_connection=workspace&_instance=team-a",
+        "/api/v1/apps/other_svc/operations?_connection=workspace&_instance=team-a",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("check_status"))
@@ -601,7 +601,7 @@ fn test_invoke_with_connection_and_instance() {
 
     secondary_invoke_mock.assert();
     assert!(err.contains(
-        "Connect it first with `gestalt plugin connect other_svc --connection workspace --instance team-a`"
+        "Connect it first with `gestalt app connect other_svc --connection workspace --instance team-a`"
     ));
 }
 
@@ -613,7 +613,7 @@ fn test_list_operations_uses_unselected_catalog_when_selected_catalog_is_empty()
     let selected_catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/sample_svc/operations?_connection=dev",
+        "/api/v1/apps/sample_svc/operations?_connection=dev",
         StatusCode::OK
     )
     .with_body(r#"[]"#)
@@ -621,14 +621,14 @@ fn test_list_operations_uses_unselected_catalog_when_selected_catalog_is_empty()
     let fallback_catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/sample_svc/operations",
+        "/api/v1/apps/sample_svc/operations",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("healthcheck"))
     .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["plugin", "invoke", "sample_svc", "--connection", "dev"])
+        .args(["app", "invoke", "sample_svc", "--connection", "dev"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Connection: dev"))
@@ -647,7 +647,7 @@ fn test_invoke_retries_without_catalog_when_preflight_masks_surface_error() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/sample_svc/operations?_connection=session-conn&_instance=default",
+        "/api/v1/apps/sample_svc/operations?_connection=session-conn&_instance=default",
         StatusCode::PRECONDITION_FAILED
     )
     .with_body(r#"{"error":"no token stored for integration \"sample_svc\"; connect via OAuth first","code":"not_connected","integration":"sample_svc"}"#)
@@ -670,7 +670,7 @@ fn test_invoke_retries_without_catalog_when_preflight_masks_surface_error() {
 
     cli_command_for_server(home.path(), &server)
         .args([
-            "plugin",
+            "app",
             "invoke",
             "--connection",
             "session-conn",
@@ -695,7 +695,7 @@ fn test_cli_lists_operations_with_connection_and_instance() {
     let catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
+        "/api/v1/apps/test_svc/operations?_connection=workspace&_instance=team-a",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("do_thing"))
@@ -705,7 +705,7 @@ fn test_cli_lists_operations_with_connection_and_instance() {
     cmd.env("GESTALT_API_KEY", TEST_TOKEN).args([
         "--url",
         &server.url(),
-        "plugin",
+        "app",
         "invoke",
         "--connection",
         "workspace",
@@ -730,7 +730,7 @@ fn test_describe_operation() {
     let mock = json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(catalog_body())
@@ -752,13 +752,13 @@ fn test_describe_operation() {
     let mock = json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(catalog_body())
     .create();
 
-    let output = run_cli(&server, &["plugin", "describe", "test_svc", "do_thing"]);
+    let output = run_cli(&server, &["app", "describe", "test_svc", "do_thing"]);
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -769,7 +769,7 @@ fn test_describe_operation() {
     let mock = json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(catalog_body())
@@ -791,7 +791,7 @@ fn test_cli_describe_operation_with_connection_and_instance() {
     let mock = json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
+        "/api/v1/apps/test_svc/operations?_connection=workspace&_instance=team-a",
         StatusCode::OK
     )
     .with_body(catalog_body())
@@ -800,7 +800,7 @@ fn test_cli_describe_operation_with_connection_and_instance() {
     let output = run_cli(
         &server,
         &[
-            "plugin",
+            "app",
             "describe",
             "test_svc",
             "do_thing",
@@ -834,7 +834,7 @@ fn test_cli_describe_fallback_error_lists_unselected_catalog_operations() {
     let selected_catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/sample_svc/operations?_connection=dev",
+        "/api/v1/apps/sample_svc/operations?_connection=dev",
         StatusCode::OK
     )
     .with_body(r#"[]"#)
@@ -843,7 +843,7 @@ fn test_cli_describe_fallback_error_lists_unselected_catalog_operations() {
     let fallback_catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/sample_svc/operations",
+        "/api/v1/apps/sample_svc/operations",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("healthcheck"))
@@ -851,7 +851,7 @@ fn test_cli_describe_fallback_error_lists_unselected_catalog_operations() {
 
     cli_command_for_server(home.path(), &server)
         .args([
-            "plugin",
+            "app",
             "describe",
             "sample_svc",
             "missing",
@@ -878,7 +878,7 @@ fn test_cli_invoke_merges_file_params_and_selects_output() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(catalog_body())
@@ -903,7 +903,7 @@ fn test_cli_invoke_merges_file_params_and_selects_output() {
         &server.url(),
         "--format",
         "json",
-        "plugin",
+        "app",
         "invoke",
         "test_svc",
         "do_thing",
@@ -932,7 +932,7 @@ fn test_cli_invoke_table_keeps_nested_json_inline() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(catalog_body())
@@ -959,7 +959,7 @@ fn test_cli_invoke_table_keeps_nested_json_inline() {
     cmd.env("GESTALT_API_KEY", TEST_TOKEN).args([
         "--url",
         &server.url(),
-        "plugin",
+        "app",
         "invoke",
         "test_svc",
         "do_thing",
@@ -987,7 +987,7 @@ fn test_cli_invoke_rejects_duplicate_scalar_params() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(catalog_body())
@@ -997,7 +997,7 @@ fn test_cli_invoke_rejects_duplicate_scalar_params() {
     cmd.env("GESTALT_API_KEY", TEST_TOKEN).args([
         "--url",
         &server.url(),
-        "plugin",
+        "app",
         "invoke",
         "test_svc",
         "do_thing",
@@ -1017,13 +1017,13 @@ fn test_prefix_match_shows_filtered_table() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(multi_operation_catalog())
     .create();
 
-    let output = run_cli(&server, &["plugin", "invoke", "test_svc", "widgets"]);
+    let output = run_cli(&server, &["app", "invoke", "test_svc", "widgets"]);
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -1044,7 +1044,7 @@ fn test_prefix_match_shows_filtered_table() {
 
     let output = run_cli(
         &server,
-        &["plugin", "invoke", "test_svc", "widgets", "bulk"],
+        &["app", "invoke", "test_svc", "widgets", "bulk"],
     );
     assert!(
         output.status.success(),
@@ -1070,7 +1070,7 @@ fn test_space_separated_segments_invoke() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(multi_operation_catalog())
@@ -1116,7 +1116,7 @@ fn test_space_separated_segments_invoke() {
 
     let output = run_cli(
         &server,
-        &["plugin", "invoke", "test_svc", "widgets", "bulk", "create"],
+        &["app", "invoke", "test_svc", "widgets", "bulk", "create"],
     );
     assert!(
         output.status.success(),
@@ -1136,7 +1136,7 @@ fn test_space_separated_segments_invoke() {
 
     let output = run_cli(
         &server,
-        &["plugin", "invoke", "test_svc", "widgets", "delete"],
+        &["app", "invoke", "test_svc", "widgets", "delete"],
     );
     assert!(
         output.status.success(),
@@ -1152,13 +1152,13 @@ fn test_no_match_returns_error() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(multi_operation_catalog())
     .create();
 
-    let output = run_cli(&server, &["plugin", "invoke", "test_svc", "nonexistent"]);
+    let output = run_cli(&server, &["app", "invoke", "test_svc", "nonexistent"]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("no operation matching"), "stderr: {stderr}");
@@ -1170,7 +1170,7 @@ fn test_prefix_match_with_params_warns() {
     let _catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/apps/test_svc/operations",
         StatusCode::OK
     )
     .with_body(multi_operation_catalog())
@@ -1178,7 +1178,7 @@ fn test_prefix_match_with_params_warns() {
 
     let output = run_cli(
         &server,
-        &["plugin", "invoke", "test_svc", "widgets", "-p", "name=foo"],
+        &["app", "invoke", "test_svc", "widgets", "-p", "name=foo"],
     );
     assert!(
         output.status.success(),

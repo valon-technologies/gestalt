@@ -37,21 +37,21 @@ import (
 	indexeddbservice "github.com/valon-technologies/gestalt/server/services/indexeddb"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	plugininvokerservice "github.com/valon-technologies/gestalt/server/services/plugininvoker"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
-	"github.com/valon-technologies/gestalt/server/services/plugins/composite"
-	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
-	"github.com/valon-technologies/gestalt/server/services/plugins/graphql"
-	"github.com/valon-technologies/gestalt/server/services/plugins/mcpoauth"
-	"github.com/valon-technologies/gestalt/server/services/plugins/mcpupstream"
-	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
-	"github.com/valon-technologies/gestalt/server/services/plugins/openapi"
-	"github.com/valon-technologies/gestalt/server/services/plugins/operationexposure"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	appinvokerservice "github.com/valon-technologies/gestalt/server/services/appinvoker"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/composite"
+	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/graphql"
+	"github.com/valon-technologies/gestalt/server/services/apps/mcpoauth"
+	"github.com/valon-technologies/gestalt/server/services/apps/mcpupstream"
+	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
+	"github.com/valon-technologies/gestalt/server/services/apps/openapi"
+	"github.com/valon-technologies/gestalt/server/services/apps/operationexposure"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
-	"github.com/valon-technologies/gestalt/server/services/runtimehost/pluginruntime"
+	"github.com/valon-technologies/gestalt/server/services/runtimehost/appruntime"
 	"github.com/valon-technologies/gestalt/server/services/s3"
 	workflowservice "github.com/valon-technologies/gestalt/server/services/workflows"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowmanager"
@@ -100,7 +100,7 @@ func buildProvidersAsync(
 	}
 
 	ready := make(chan struct{})
-	if len(cfg.Plugins) == 0 {
+	if len(cfg.Apps) == 0 {
 		close(ready)
 		return &reg.Providers, ready,
 			func() map[string]map[string]OAuthHandler { return connAuth },
@@ -111,8 +111,8 @@ func buildProvidersAsync(
 
 	var wg sync.WaitGroup
 	var errMu sync.Mutex
-	for name := range cfg.Plugins {
-		intgDef := cfg.Plugins[name]
+	for name := range cfg.Apps {
+		intgDef := cfg.Apps[name]
 		var proxy *startupProviderProxy
 		if deps.WorkflowRuntime != nil {
 			spec, operationRouting, err := buildStartupProviderSpec(name, intgDef)
@@ -223,7 +223,7 @@ func validateProviderConnectionMode(provider string, mode core.ConnectionMode) e
 	}
 }
 
-func BuildStartupProviderSpec(name string, entry *config.ProviderEntry) (pluginservice.StaticProviderSpec, map[string]string, error) {
+func BuildStartupProviderSpec(name string, entry *config.ProviderEntry) (appservice.StaticProviderSpec, map[string]string, error) {
 	spec, routing, err := buildStartupProviderSpec(name, entry)
 	return spec, routing.connections, err
 }
@@ -234,40 +234,40 @@ type startupOperationRouting struct {
 	overridePolicy core.OperationConnectionOverridePolicy
 }
 
-func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (pluginservice.StaticProviderSpec, startupOperationRouting, error) {
+func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (appservice.StaticProviderSpec, startupOperationRouting, error) {
 	if entry == nil {
-		return pluginservice.StaticProviderSpec{}, startupOperationRouting{}, fmt.Errorf("integration %q has no plugin defined", name)
+		return appservice.StaticProviderSpec{}, startupOperationRouting{}, fmt.Errorf("integration %q has no app defined", name)
 	}
 	manifest := entry.ResolvedManifest
-	manifestPlugin := entry.ManifestSpec()
-	if manifest == nil || manifestPlugin == nil {
-		return pluginservice.StaticProviderSpec{}, startupOperationRouting{}, fmt.Errorf("integration %q must resolve to a provider manifest", name)
+	manifestApp := entry.ManifestSpec()
+	if manifest == nil || manifestApp == nil {
+		return appservice.StaticProviderSpec{}, startupOperationRouting{}, fmt.Errorf("integration %q must resolve to a provider manifest", name)
 	}
 
 	meta := resolveProviderMetadata(entry)
-	spec, plan, err := buildPluginStaticSpec(name, entry, manifest, meta)
+	spec, plan, err := buildAppStaticSpec(name, entry, manifest, meta)
 	if err != nil {
-		return pluginservice.StaticProviderSpec{}, startupOperationRouting{}, err
+		return appservice.StaticProviderSpec{}, startupOperationRouting{}, err
 	}
-	restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestPlugin)
+	restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestApp)
 	if err != nil {
-		return pluginservice.StaticProviderSpec{}, startupOperationRouting{}, err
+		return appservice.StaticProviderSpec{}, startupOperationRouting{}, err
 	}
 	if spec.Catalog != nil {
 		return spec, startupOperationRouting{connections: operationConnectionsForCatalog(spec.Catalog, plan, restConnections)}, nil
 	}
-	if !manifestPlugin.IsDeclarative() && !manifestPlugin.IsSpecLoaded() {
+	if !manifestApp.IsDeclarative() && !manifestApp.IsSpecLoaded() {
 		return spec, startupOperationRouting{connections: map[string]string{}}, nil
 	}
-	declarative, err := pluginservice.NewDeclarativeProvider(
+	declarative, err := appservice.NewDeclarativeProvider(
 		manifest,
 		nil,
-		pluginservice.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-		pluginservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
-		pluginservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
+		appservice.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+		appservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+		appservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
 	)
 	if err != nil {
-		return pluginservice.StaticProviderSpec{}, startupOperationRouting{}, err
+		return appservice.StaticProviderSpec{}, startupOperationRouting{}, err
 	}
 	spec.Catalog = declarative.Catalog()
 	return spec, startupOperationRouting{
@@ -318,68 +318,68 @@ func configuredSpecConnection(plan config.StaticConnectionPlan) string {
 
 func hybridPluginOperationConnection(plan config.StaticConnectionPlan, specConnection string) string {
 	if explicitPluginConnection(plan) {
-		return config.PluginConnectionName
+		return config.AppConnectionName
 	}
-	if specConnection != "" && specConnection != config.PluginConnectionName {
+	if specConnection != "" && specConnection != config.AppConnectionName {
 		return specConnection
 	}
 	if fallback := plan.AuthDefaultConnection(); fallback != "" {
 		return fallback
 	}
-	return config.PluginConnectionName
+	return config.AppConnectionName
 }
 
 func explicitPluginConnection(plan config.StaticConnectionPlan) bool {
-	pluginConnection := plan.ResolvedPluginConnection()
+	pluginConnection := plan.ResolvedAppConnection()
 	if pluginConnection.Source.ModeSource == config.ConfigSourceDeploy ||
 		pluginConnection.Source.AuthSource == config.ConfigSourceDeploy ||
 		len(pluginConnection.Params) > 0 {
 		return true
 	}
-	return plan.AuthDefaultConnection() == config.PluginConnectionName && len(plan.NamedConnectionNames()) > 0
+	return plan.AuthDefaultConnection() == config.AppConnectionName && len(plan.NamedConnectionNames()) > 0
 }
 
 func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
 	if entry == nil {
-		return nil, fmt.Errorf("integration %q has no plugin defined", name)
+		return nil, fmt.Errorf("integration %q has no app defined", name)
 	}
 
 	meta := resolveProviderMetadata(entry)
 	pluginConfig, err := config.NodeToMap(entry.Config)
 	if err != nil {
-		return nil, fmt.Errorf("decode plugin config for %q: %w", name, err)
+		return nil, fmt.Errorf("decode app config for %q: %w", name, err)
 	}
 
 	manifest := entry.ResolvedManifest
-	manifestPlugin := entry.ManifestSpec()
-	if manifest == nil || manifestPlugin == nil {
+	manifestApp := entry.ManifestSpec()
+	if manifest == nil || manifestApp == nil {
 		return nil, fmt.Errorf("integration %q must resolve to a provider manifest", name)
 	}
 
 	allowedOperations := entry.AllowedOperations
 	if allowedOperations == nil {
-		allowedOperations = maps.Clone(manifestPlugin.AllowedOperations)
+		allowedOperations = maps.Clone(manifestApp.AllowedOperations)
 	}
 
 	switch {
-	case manifestPlugin.IsSpecLoaded() && manifest.Entrypoint == nil:
+	case manifestApp.IsSpecLoaded() && manifest.Entrypoint == nil:
 		return buildSpecLoadedProvider(ctx, name, entry, manifest, pluginConfig, meta, deps, allowedOperations)
-	case manifestPlugin.IsDeclarative() && manifest.Entrypoint == nil:
-		plan, err := config.BuildStaticConnectionPlan(entry, manifestPlugin)
+	case manifestApp.IsDeclarative() && manifest.Entrypoint == nil:
+		plan, err := config.BuildStaticConnectionPlan(entry, manifestApp)
 		if err != nil {
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
 		}
-		restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestPlugin)
+		restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestApp)
 		if err != nil {
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
 		}
-		declarative, err := pluginservice.NewDeclarativeProvider(
+		declarative, err := appservice.NewDeclarativeProvider(
 			manifest,
 			nil,
-			pluginservice.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-			pluginservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
-			pluginservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
-			pluginservice.WithDeclarativeEgressCheck(deps.Egress.CheckFunc(entry.EffectiveAllowedHosts())),
+			appservice.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+			appservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+			appservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
+			appservice.WithDeclarativeEgressCheck(deps.Egress.CheckFunc(entry.EffectiveAllowedHosts())),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
@@ -391,32 +391,32 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 		}
 		return newProviderBuildResult(name, entry, manifest, pluginConfig, prov, nil, deps)
 	default:
-		return buildExecutablePluginProvider(ctx, name, entry, pluginConfig, meta, deps)
+		return buildExecutableAppProvider(ctx, name, entry, pluginConfig, meta, deps)
 	}
 }
 
-func buildExecutablePluginProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, meta providerMetadata, deps Deps) (*ProviderBuildResult, error) {
+func buildExecutableAppProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, meta providerMetadata, deps Deps) (*ProviderBuildResult, error) {
 	manifest := entry.ResolvedManifest
-	manifestPlugin := entry.ManifestSpec()
-	if manifest == nil || manifestPlugin == nil {
-		return nil, fmt.Errorf("build executable plugin provider %q: resolved manifest is required", name)
+	manifestApp := entry.ManifestSpec()
+	if manifest == nil || manifestApp == nil {
+		return nil, fmt.Errorf("build executable app provider %q: resolved manifest is required", name)
 	}
-	staticSpec, plan, err := buildPluginStaticSpec(name, entry, manifest, meta)
+	staticSpec, plan, err := buildAppStaticSpec(name, entry, manifest, meta)
 	if err != nil {
-		return nil, fmt.Errorf("build executable plugin provider %q: %w", name, err)
+		return nil, fmt.Errorf("build executable app provider %q: %w", name, err)
 	}
-	pluginProv, err := buildPluginProvider(ctx, name, entry, pluginConfig, staticSpec, deps)
+	pluginProv, err := buildAppProvider(ctx, name, entry, pluginConfig, staticSpec, deps)
 	if err != nil {
 		return nil, err
 	}
 	allowedOperations := entry.AllowedOperations
-	if allowedOperations == nil && manifestPlugin != nil {
-		allowedOperations = maps.Clone(manifestPlugin.AllowedOperations)
+	if allowedOperations == nil && manifestApp != nil {
+		allowedOperations = maps.Clone(manifestApp.AllowedOperations)
 	}
 	staticAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 
-	if manifestPlugin.IsDeclarative() {
-		restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestPlugin)
+	if manifestApp.IsDeclarative() {
+		restConnections, restSelectors, restLocks, err := plan.RESTOperationConnectionBindings(manifestApp)
 		if err != nil {
 			closeIfPossible(pluginProv)
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
@@ -427,13 +427,13 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 			return nil, err
 		}
 		pluginProv = filteredPluginProv
-		declarative, err := pluginservice.NewDeclarativeProvider(
+		declarative, err := appservice.NewDeclarativeProvider(
 			manifest,
 			nil,
-			pluginservice.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-			pluginservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
-			pluginservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
-			pluginservice.WithDeclarativeEgressCheck(deps.Egress.CheckFunc(entry.EffectiveAllowedHosts())),
+			appservice.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+			appservice.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+			appservice.WithDeclarativeOperationConnections(restConnections, restSelectors, restLocks),
+			appservice.WithDeclarativeEgressCheck(deps.Egress.CheckFunc(entry.EffectiveAllowedHosts())),
 		)
 		if err != nil {
 			closeIfPossible(pluginProv)
@@ -465,7 +465,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 		return newProviderBuildResult(name, entry, manifest, pluginConfig, merged, nil, deps)
 	}
 
-	specProv, authFallback, err := buildConfiguredSpecComposite(ctx, name, entry, plan, manifestPlugin, meta, deps, allowedOperations)
+	specProv, authFallback, err := buildConfiguredSpecComposite(ctx, name, entry, plan, manifestApp, meta, deps, allowedOperations)
 	if err != nil {
 		closeIfPossible(pluginProv)
 		return nil, fmt.Errorf("build hybrid spec provider %q: %w", name, err)
@@ -504,7 +504,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 }
 
 type specProviderConfig struct {
-	manifestPlugin       *providermanifestv1.Spec
+	manifestApp       *providermanifestv1.Spec
 	allowedOperations    map[string]*config.OperationOverride
 	allowedHosts         []string
 	baseURL              string
@@ -526,7 +526,7 @@ func (f *specAuthFallback) add(connectionName string, def *declarative.Definitio
 	}
 	resolvedName := config.ResolveConnectionAlias(connectionName)
 	if resolvedName == "" {
-		resolvedName = config.PluginConnectionName
+		resolvedName = config.AppConnectionName
 	}
 	if _, ok := f.definitions[resolvedName]; ok {
 		return
@@ -540,7 +540,7 @@ func (f *specAuthFallback) definitionFor(connectionName string) *declarative.Def
 	}
 	resolvedName := config.ResolveConnectionAlias(connectionName)
 	if resolvedName == "" {
-		resolvedName = config.PluginConnectionName
+		resolvedName = config.AppConnectionName
 	}
 	return f.definitions[resolvedName]
 }
@@ -593,7 +593,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.Pro
 	return newProviderBuildResult(name, entry, manifest, pluginConfig, prov, authFallback, deps)
 }
 
-func buildConfiguredSpecComposite(ctx context.Context, name string, entry *config.ProviderEntry, plan config.StaticConnectionPlan, manifestPlugin *providermanifestv1.Spec, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (core.Provider, *specAuthFallback, error) {
+func buildConfiguredSpecComposite(ctx context.Context, name string, entry *config.ProviderEntry, plan config.StaticConnectionPlan, manifestApp *providermanifestv1.Spec, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (core.Provider, *specAuthFallback, error) {
 	mcpResolved, hasMCP := plan.ResolvedSurface(config.SpecSurfaceMCP)
 	mcpURL := ""
 	if hasMCP {
@@ -601,10 +601,10 @@ func buildConfiguredSpecComposite(ctx context.Context, name string, entry *confi
 	}
 
 	cfg := specProviderConfig{
-		manifestPlugin:       manifestPlugin,
+		manifestApp:       manifestApp,
 		allowedOperations:    allowedOperations,
 		allowedHosts:         entry.EffectiveAllowedHosts(),
-		baseURL:              config.EffectiveProviderSpecBaseURL(entry, manifestPlugin),
+		baseURL:              config.EffectiveProviderSpecBaseURL(entry, manifestApp),
 		applyResponseMapping: true,
 		providerBuildOptions: func(conn config.ConnectionDef) []declarative.BuildOption {
 			return mcpOAuthBuildOpts(conn, mcpURL, deps)
@@ -823,7 +823,7 @@ func buildPostConnectOnlyProvider(name, connectionName string, conn config.Conne
 		Description: meta.description,
 		IconSVG:     meta.iconSVG,
 		BaseURL:     cfg.baseURL,
-		Headers:     manifestHeaders(cfg.manifestPlugin),
+		Headers:     manifestHeaders(cfg.manifestApp),
 	}
 	buildOpts := []declarative.BuildOption{
 		declarative.WithEgressCheck(deps.Egress.CheckFunc(cfg.allowedHosts)),
@@ -858,14 +858,14 @@ func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved conf
 	if cfg.baseURL != "" && resolved.Surface == config.SpecSurfaceOpenAPI {
 		def.BaseURL = cfg.baseURL
 	}
-	applyProviderHeaders(def, cfg.manifestPlugin)
-	if err := applyManagedParameters(def, cfg.manifestPlugin); err != nil {
+	applyProviderHeaders(def, cfg.manifestApp)
+	if err := applyManagedParameters(def, cfg.manifestApp); err != nil {
 		return nil, err
 	}
 	if cfg.applyResponseMapping {
-		applyProviderResponseMapping(def, cfg.manifestPlugin)
+		applyProviderResponseMapping(def, cfg.manifestApp)
 	}
-	applyProviderPagination(def, cfg.manifestPlugin, cfg.allowedOperations)
+	applyProviderPagination(def, cfg.manifestApp, cfg.allowedOperations)
 	if meta.displayName != "" {
 		def.DisplayName = meta.displayName
 	}
@@ -910,7 +910,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved conf
 			name,
 			resolved.URL,
 			connMode,
-			manifestHeaders(cfg.manifestPlugin),
+			manifestHeaders(cfg.manifestApp),
 			deps.Egress.CheckFunc(cfg.allowedHosts),
 			mcpupstream.WithMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
 		)
@@ -964,7 +964,7 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 	return len(cat.Operations)
 }
 
-func buildPluginProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, spec pluginservice.StaticProviderSpec, deps Deps) (core.Provider, error) {
+func buildAppProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, spec appservice.StaticProviderSpec, deps Deps) (core.Provider, error) {
 	command := entry.Command
 	args := entry.Args
 	workdir := ""
@@ -975,7 +975,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			cleanup()
 		}
 	}()
-	runtimeConfig, runtimeProvider, runtimeOwned, err := effectivePluginRuntime(ctx, name, entry, deps)
+	runtimeConfig, runtimeProvider, runtimeOwned, err := effectiveAppRuntime(ctx, name, entry, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -986,7 +986,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		}
 		return nil, fmt.Errorf("query %s support: %w", hostedRuntimeLabel(runtimeConfig), err)
 	}
-	runtimePlan, err := buildPluginRuntimePlan(name, entry, deps, runtimeSupport)
+	runtimePlan, err := buildAppRuntimePlan(name, entry, deps, runtimeSupport)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1006,7 +1006,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			}
 			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
 		}
-		execution, err := providerpkg.SourceManifestExecution(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
+		execution, err := providerpkg.SourceManifestExecution(entry.ResolvedManifestPath, providermanifestv1.KindApp, providerpkg.SourceBuildOptions{})
 		if err != nil {
 			if runtimeOwned {
 				_ = runtimeProvider.Close()
@@ -1018,7 +1018,7 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		workdir = execution.Workdir
 		cleanup = execution.Cleanup
 	}
-	launch, err := prepareHostedProcessLaunch(providermanifestv1.KindPlugin, name, entry, command, args, cleanup, runtimeConfig)
+	launch, err := prepareHostedProcessLaunch(providermanifestv1.KindApp, name, entry, command, args, cleanup, runtimeConfig)
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
@@ -1034,12 +1034,12 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	}()
 	command = launch.command
 	args = launch.args
-	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindPlugin, name, runtimeConfig))
+	session, err := runtimeProvider.StartSession(ctx, buildHostedRuntimeStartSessionRequest(providermanifestv1.KindApp, name, runtimeConfig))
 	if err != nil {
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
 		}
-		return nil, fmt.Errorf("start plugin runtime session: %w", err)
+		return nil, fmt.Errorf("start app runtime session: %w", err)
 	}
 	sessionID := session.ID
 	stopSession := true
@@ -1047,16 +1047,16 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		if !stopSession {
 			return
 		}
-		_ = stopPluginRuntimeSession(runtimeProvider, sessionID)
+		_ = stopAppRuntimeSession(runtimeProvider, sessionID)
 		if runtimeOwned {
 			_ = runtimeProvider.Close()
 		}
 	}()
-	if _, err := waitForPluginRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
-		return nil, fmt.Errorf("wait for plugin runtime session %q ready: %w", sessionID, err)
+	if _, err := waitForAppRuntimeSessionReady(ctx, runtimeProvider, sessionID); err != nil {
+		return nil, fmt.Errorf("wait for app runtime session %q ready: %w", sessionID, err)
 	}
 
-	hostServices, invTokens, runtimeCleanup, err := buildPluginRuntimeHostServices(name, entry, deps)
+	hostServices, invTokens, runtimeCleanup, err := buildAppRuntimeHostServices(name, entry, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -1097,54 +1097,54 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		maps.Copy(startEnv, egressPlan.Env)
 	}
 
-	hostedPlugin, err := runtimeProvider.StartPlugin(ctx, pluginruntime.StartPluginRequest{
+	hostedApp, err := runtimeProvider.StartApp(ctx, appruntime.StartAppRequest{
 		SessionID:  sessionID,
-		PluginName: name,
+		AppName: name,
 		Command:    command,
 		Args:       args,
 		Workdir:    workdir,
 		Env:        startEnv,
-		Egress: pluginruntime.RuntimeEgressPolicy{
+		Egress: appruntime.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
-			DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
+			DefaultAction: appruntime.PolicyAction(deps.Egress.DefaultAction),
 		},
 		HostBinary: entry.HostBinary,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start hosted plugin: %w", err)
 	}
-	conn, err := pluginruntime.DialHostedPlugin(ctx, hostedPlugin.DialTarget,
-		pluginruntime.WithProviderName(name),
-		pluginruntime.WithTelemetry(deps.Telemetry),
+	conn, err := appruntime.DialHostedApp(ctx, hostedApp.DialTarget,
+		appruntime.WithProviderName(name),
+		appruntime.WithTelemetry(deps.Telemetry),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("dial hosted plugin: %w", err)
 	}
-	opts := []pluginservice.RemoteProviderOption{
-		pluginservice.WithCloser(&runtimeBackedHostedCloser{
+	opts := []appservice.RemoteProviderOption{
+		appservice.WithCloser(&runtimeBackedHostedCloser{
 			conn:         conn,
 			runtime:      runtimeProvider,
 			sessionID:    sessionID,
 			closeRuntime: runtimeOwned,
 			cleanup:      cleanup,
 		}),
-		pluginservice.WithHostContext(deps.BaseURL),
+		appservice.WithHostContext(deps.BaseURL),
 	}
 	if invTokens != nil {
 		opts = append(opts,
-			pluginservice.WithInvocationTokens(invTokens),
-			pluginservice.WithInvocationTokenSubject(
+			appservice.WithInvocationTokens(invTokens),
+			appservice.WithInvocationTokenSubject(
 				name,
-				plugininvokerservice.InvocationDependencyGrants(
-					invocationconfig.PluginInvocationDependencies(entry.Invokes),
+				appinvokerservice.InvocationDependencyGrants(
+					invocationconfig.AppInvocationDependencies(entry.Invokes),
 				),
 			),
-			pluginservice.WithWorkflowManagerGrants(
-				invocationconfig.PluginWorkflowManagerGrants(entry.Capabilities),
+			appservice.WithWorkflowManagerGrants(
+				invocationconfig.AppWorkflowManagerGrants(entry.Capabilities),
 			),
 		)
 	}
-	prov, err := pluginservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
+	prov, err := appservice.NewRemote(ctx, conn.Integration(), spec, pluginConfig, opts...)
 	if err != nil {
 		_ = conn.Close()
 		return nil, err
@@ -1182,7 +1182,7 @@ func buildHostedAgentProvider(ctx context.Context, name string, entry *config.Pr
 type hostedAgentProviderLaunch struct {
 	name            string
 	runtimeConfig   config.EffectiveRuntimePlacement
-	runtimeProvider pluginruntime.Provider
+	runtimeProvider appruntime.Provider
 	runtimeOwned    bool
 	runtimePlan     RuntimePlacementPlan
 	cfg             componentprovider.YAMLConfig
@@ -1193,9 +1193,9 @@ type hostedAgentProviderLaunch struct {
 
 type hostedAgentProviderInstance struct {
 	provider         coreagent.Provider
-	runtimeProvider  pluginruntime.Provider
+	runtimeProvider  appruntime.Provider
 	runtimeSessionID string
-	runtimeSession   *pluginruntime.Session
+	runtimeSession   *appruntime.Session
 }
 
 func (p *hostedAgentProviderLaunch) close() {
@@ -1326,7 +1326,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		if !stopSession {
 			return
 		}
-		_ = stopPluginRuntimeSession(runtimeProvider, sessionID)
+		_ = stopAppRuntimeSession(runtimeProvider, sessionID)
 		if closeOnFailure {
 			_ = runtimeProvider.Close()
 		}
@@ -1335,7 +1335,7 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		}
 	}()
 	phaseStarted = time.Now()
-	readySession, err := waitForPluginRuntimeSessionReady(ctx, runtimeProvider, sessionID)
+	readySession, err := waitForAppRuntimeSessionReady(ctx, runtimeProvider, sessionID)
 	if err != nil {
 		recordHostedAgentRuntimeStartPhase(ctx, name, "runtime_session_ready", phaseStarted, err)
 		return nil, fmt.Errorf("wait for hosted agent runtime session %q ready: %w", sessionID, err)
@@ -1382,16 +1382,16 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}
 
 	phaseStarted = time.Now()
-	hostedPlugin, err := runtimeProvider.StartPlugin(ctx, pluginruntime.StartPluginRequest{
+	hostedApp, err := runtimeProvider.StartApp(ctx, appruntime.StartAppRequest{
 		SessionID:  sessionID,
-		PluginName: name,
+		AppName: name,
 		Command:    launch.launch.command,
 		Args:       launch.launch.args,
 		Workdir:    cfg.Workdir,
 		Env:        startEnv,
-		Egress: pluginruntime.RuntimeEgressPolicy{
+		Egress: appruntime.RuntimeEgressPolicy{
 			AllowedHosts:  egressPlan.RuntimeAllowedHosts,
-			DefaultAction: pluginruntime.PolicyAction(deps.Egress.DefaultAction),
+			DefaultAction: appruntime.PolicyAction(deps.Egress.DefaultAction),
 		},
 		HostBinary: cfg.HostBinary,
 	})
@@ -1400,9 +1400,9 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 		return nil, fmt.Errorf("start hosted agent provider: %w", err)
 	}
 	phaseStarted = time.Now()
-	conn, err := pluginruntime.DialHostedAgent(ctx, hostedPlugin.DialTarget,
-		pluginruntime.WithProviderName(name),
-		pluginruntime.WithTelemetry(deps.Telemetry),
+	conn, err := appruntime.DialHostedAgent(ctx, hostedApp.DialTarget,
+		appruntime.WithProviderName(name),
+		appruntime.WithTelemetry(deps.Telemetry),
 	)
 	recordHostedAgentRuntimeStartPhase(ctx, name, "provider_dial", phaseStarted, err)
 	if err != nil {
@@ -1439,16 +1439,16 @@ func startHostedAgentProviderInstance(ctx context.Context, launch *hostedAgentPr
 	}, nil
 }
 
-func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, entry *config.ProviderEntry, deps Deps) (config.EffectiveRuntimePlacement, pluginruntime.Provider, bool, error) {
+func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, entry *config.ProviderEntry, deps Deps) (config.EffectiveRuntimePlacement, appruntime.Provider, bool, error) {
 	if entry == nil || !entry.UsesRuntimePlacement() {
 		return config.EffectiveRuntimePlacement{}, nil, false, nil
 	}
 	explicitRuntimeConfig := providerEntryRuntimePlacementConfig(entry)
-	if deps.PluginRuntime != nil {
-		return explicitRuntimeConfig, deps.PluginRuntime, false, nil
+	if deps.AppRuntime != nil {
+		return explicitRuntimeConfig, deps.AppRuntime, false, nil
 	}
-	if deps.PluginRuntimeRegistry != nil {
-		runtimeConfig, runtimeProvider, err := deps.PluginRuntimeRegistry.Resolve(ctx, configPath, entry)
+	if deps.AppRuntimeRegistry != nil {
+		runtimeConfig, runtimeProvider, err := deps.AppRuntimeRegistry.Resolve(ctx, configPath, entry)
 		if err != nil {
 			return config.EffectiveRuntimePlacement{}, nil, false, err
 		}
@@ -1456,18 +1456,18 @@ func effectiveConfiguredHostedRuntime(ctx context.Context, configPath string, en
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return localRuntimePlacementConfig(runtimeConfig), newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
+			return localRuntimePlacementConfig(runtimeConfig), newLocalAppRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
-	return localRuntimePlacementConfig(explicitRuntimeConfig), newLocalPluginRuntime(explicitRuntimeConfig.ProviderName, deps), true, nil
+	return localRuntimePlacementConfig(explicitRuntimeConfig), newLocalAppRuntime(explicitRuntimeConfig.ProviderName, deps), true, nil
 }
 
-func effectivePluginRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectiveRuntimePlacement, pluginruntime.Provider, bool, error) {
-	if deps.PluginRuntime != nil {
-		return providerEntryRuntimePlacementConfig(entry), deps.PluginRuntime, false, nil
+func effectiveAppRuntime(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (config.EffectiveRuntimePlacement, appruntime.Provider, bool, error) {
+	if deps.AppRuntime != nil {
+		return providerEntryRuntimePlacementConfig(entry), deps.AppRuntime, false, nil
 	}
-	if deps.PluginRuntimeRegistry != nil {
-		runtimeConfig, runtimeProvider, err := deps.PluginRuntimeRegistry.Resolve(ctx, "plugins."+name, entry)
+	if deps.AppRuntimeRegistry != nil {
+		runtimeConfig, runtimeProvider, err := deps.AppRuntimeRegistry.Resolve(ctx, "apps."+name, entry)
 		if err != nil {
 			return config.EffectiveRuntimePlacement{}, nil, false, err
 		}
@@ -1475,10 +1475,10 @@ func effectivePluginRuntime(ctx context.Context, name string, entry *config.Prov
 			return runtimeConfig, runtimeProvider, false, nil
 		}
 		if runtimeConfig.Enabled {
-			return localRuntimePlacementConfig(runtimeConfig), newLocalPluginRuntime(runtimeConfig.ProviderName, deps), true, nil
+			return localRuntimePlacementConfig(runtimeConfig), newLocalAppRuntime(runtimeConfig.ProviderName, deps), true, nil
 		}
 	}
-	return localRuntimePlacementConfig(config.EffectiveRuntimePlacement{}), newLocalPluginRuntime("", deps), true, nil
+	return localRuntimePlacementConfig(config.EffectiveRuntimePlacement{}), newLocalAppRuntime("", deps), true, nil
 }
 
 func providerEntryRuntimePlacementConfig(entry *config.ProviderEntry) config.EffectiveRuntimePlacement {
@@ -1532,16 +1532,16 @@ func localRuntimePlacementConfig(runtimeConfig config.EffectiveRuntimePlacement)
 	return runtimeConfig
 }
 
-func newLocalPluginRuntime(runtimeProviderName string, deps Deps) pluginruntime.Provider {
+func newLocalAppRuntime(runtimeProviderName string, deps Deps) appruntime.Provider {
 	runtimeProviderName = strings.TrimSpace(runtimeProviderName)
 	if runtimeProviderName == "" {
 		runtimeProviderName = "local"
 	}
-	opts := []pluginruntime.LocalOption{pluginruntime.WithLocalTelemetry(deps.Telemetry)}
+	opts := []appruntime.LocalOption{appruntime.WithLocalTelemetry(deps.Telemetry)}
 	if deps.Services != nil && deps.Services.RuntimeSessionLogs != nil {
-		opts = append(opts, pluginruntime.WithLocalRuntimeSessionLogs(runtimeProviderName, deps.Services.RuntimeSessionLogs))
+		opts = append(opts, appruntime.WithLocalRuntimeSessionLogs(runtimeProviderName, deps.Services.RuntimeSessionLogs))
 	}
-	return pluginruntime.NewLocalProvider(opts...)
+	return appruntime.NewLocalProvider(opts...)
 }
 
 const (
@@ -1565,7 +1565,7 @@ func hostedRuntimeLabel(runtimeConfig config.EffectiveRuntimePlacement) string {
 	return "hosted runtime"
 }
 
-func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig config.EffectiveRuntimePlacement) pluginruntime.StartSessionRequest {
+func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig config.EffectiveRuntimePlacement) appruntime.StartSessionRequest {
 	metadata := maps.Clone(runtimeConfig.Metadata)
 	if metadata == nil {
 		metadata = map[string]string{}
@@ -1576,8 +1576,8 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 	if name != "" {
 		metadata["provider_name"] = name
 	}
-	return pluginruntime.StartSessionRequest{
-		PluginName:    name,
+	return appruntime.StartSessionRequest{
+		AppName:    name,
 		Template:      runtimeConfig.Template,
 		Image:         runtimeConfig.Image,
 		ImagePullAuth: hostedRuntimeImagePullAuth(runtimeConfig.ImagePullAuth),
@@ -1585,11 +1585,11 @@ func buildHostedRuntimeStartSessionRequest(kind, name string, runtimeConfig conf
 	}
 }
 
-func hostedRuntimeImagePullAuth(auth *config.RuntimePlacementImagePullAuth) *pluginruntime.ImagePullAuth {
+func hostedRuntimeImagePullAuth(auth *config.RuntimePlacementImagePullAuth) *appruntime.ImagePullAuth {
 	if auth == nil {
 		return nil
 	}
-	return &pluginruntime.ImagePullAuth{
+	return &appruntime.ImagePullAuth{
 		DockerConfigJSON: auth.DockerConfigJSON,
 	}
 }
@@ -1618,7 +1618,7 @@ const pluginRuntimeStopTimeout = 3 * time.Second
 
 type runtimeBackedHostedCloser struct {
 	conn         io.Closer
-	runtime      pluginruntime.Provider
+	runtime      appruntime.Provider
 	sessionID    string
 	closeRuntime bool
 	cleanup      func()
@@ -1631,7 +1631,7 @@ func (c *runtimeBackedHostedCloser) Close() error {
 	}
 	var errs []error
 	if c.runtime != nil && c.sessionID != "" {
-		errs = append(errs, stopPluginRuntimeSessionWithTimeout(c.runtime, c.sessionID, c.stopTimeout))
+		errs = append(errs, stopAppRuntimeSessionWithTimeout(c.runtime, c.sessionID, c.stopTimeout))
 	}
 	if c.conn != nil {
 		errs = append(errs, c.conn.Close())
@@ -1645,11 +1645,11 @@ func (c *runtimeBackedHostedCloser) Close() error {
 	return errors.Join(errs...)
 }
 
-func stopPluginRuntimeSession(runtimeProvider pluginruntime.Provider, sessionID string) error {
-	return stopPluginRuntimeSessionWithTimeout(runtimeProvider, sessionID, 0)
+func stopAppRuntimeSession(runtimeProvider appruntime.Provider, sessionID string) error {
+	return stopAppRuntimeSessionWithTimeout(runtimeProvider, sessionID, 0)
 }
 
-func stopPluginRuntimeSessionWithTimeout(runtimeProvider pluginruntime.Provider, sessionID string, timeout time.Duration) error {
+func stopAppRuntimeSessionWithTimeout(runtimeProvider appruntime.Provider, sessionID string, timeout time.Duration) error {
 	if runtimeProvider == nil || sessionID == "" {
 		return nil
 	}
@@ -1661,27 +1661,27 @@ func stopPluginRuntimeSessionWithTimeout(runtimeProvider pluginruntime.Provider,
 
 	done := make(chan error, 1)
 	go func() {
-		done <- runtimeProvider.StopSession(ctx, pluginruntime.StopSessionRequest{SessionID: sessionID})
+		done <- runtimeProvider.StopSession(ctx, appruntime.StopSessionRequest{SessionID: sessionID})
 	}()
 
 	select {
 	case err := <-done:
 		return err
 	case <-ctx.Done():
-		return fmt.Errorf("stop plugin runtime session %q: %w", sessionID, ctx.Err())
+		return fmt.Errorf("stop app runtime session %q: %w", sessionID, ctx.Err())
 	}
 }
 
-func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider pluginruntime.Provider, sessionID string) (*pluginruntime.Session, error) {
+func waitForAppRuntimeSessionReady(ctx context.Context, runtimeProvider appruntime.Provider, sessionID string) (*appruntime.Session, error) {
 	for {
-		session, err := runtimeProvider.GetSession(ctx, pluginruntime.GetSessionRequest{SessionID: sessionID})
+		session, err := runtimeProvider.GetSession(ctx, appruntime.GetSessionRequest{SessionID: sessionID})
 		if err != nil {
 			return nil, err
 		}
 		switch session.State {
-		case pluginruntime.SessionStateReady, pluginruntime.SessionStateRunning:
+		case appruntime.SessionStateReady, appruntime.SessionStateRunning:
 			return session, nil
-		case pluginruntime.SessionStateFailed, pluginruntime.SessionStateStopped:
+		case appruntime.SessionStateFailed, appruntime.SessionStateStopped:
 			return nil, fmt.Errorf("session entered %q state", session.State)
 		}
 
@@ -1693,13 +1693,13 @@ func waitForPluginRuntimeSessionReady(ctx context.Context, runtimeProvider plugi
 	}
 }
 
-func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *plugininvokerservice.InvocationTokenManager, func(), error) {
+func buildAppRuntimeHostServices(name string, entry *config.ProviderEntry, deps Deps) ([]runtimehost.HostService, *appinvokerservice.InvocationTokenManager, func(), error) {
 	var (
 		hostServices []runtimehost.HostService
 		cleanup      func()
-		invTokens    *plugininvokerservice.InvocationTokenManager
+		invTokens    *appinvokerservice.InvocationTokenManager
 	)
-	fail := func(err error) ([]runtimehost.HostService, *plugininvokerservice.InvocationTokenManager, func(), error) {
+	fail := func(err error) ([]runtimehost.HostService, *appinvokerservice.InvocationTokenManager, func(), error) {
 		if cleanup != nil {
 			cleanup()
 			cleanup = nil
@@ -1707,7 +1707,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		return nil, nil, nil, err
 	}
 
-	effectiveIndexedDB, err := config.ResolveEffectivePluginIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
+	effectiveIndexedDB, err := config.ResolveEffectiveAppIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
 	if err != nil {
 		return fail(err)
 	}
@@ -1741,7 +1741,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		needInvocationTokens = true
 	}
 	if needInvocationTokens {
-		invTokens, err = plugininvokerservice.NewInvocationTokenManager(deps.EncryptionKey)
+		invTokens, err = appinvokerservice.NewInvocationTokenManager(deps.EncryptionKey)
 		if err != nil {
 			return fail(err)
 		}
@@ -1759,7 +1759,7 @@ func buildPluginRuntimeHostServices(name string, entry *config.ProviderEntry, de
 		hostServices = append(hostServices, buildPluginAuthorizationHostService(deps.AuthorizationProvider))
 	}
 	if len(entry.Invokes) > 0 {
-		hostServices = append(hostServices, buildPluginInvokerHostService(name, entry, deps, invTokens))
+		hostServices = append(hostServices, buildAppInvokerHostService(name, entry, deps, invTokens))
 	}
 	return hostServices, invTokens, cleanup, nil
 }
@@ -1771,7 +1771,7 @@ func appendRuntimeLogHostService(hostServices []runtimehost.HostService, runtime
 	runtimeProviderName := runtimeSessionLogProviderName(runtimeConfig)
 	return append(hostServices, runtimehost.HostService{
 		Name:           "runtime_log_host",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.PluginRuntimeLogHost_ServiceDesc.ServiceName)},
+		MethodPrefixes: []string{grpcMethodPrefix(proto.AppRuntimeLogHost_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
 			runtimehost.RegisterRuntimeLogHostServer(srv, runtimeProviderName, deps.Services.RuntimeSessionLogs.AppendSessionLogs)
 		},
@@ -1870,7 +1870,7 @@ func mergeHostedRuntimeHostServiceRelayEnv(providerName, sessionID string, hostS
 
 type runtimeHostServiceSessionVerifier struct {
 	providerName string
-	provider     pluginruntime.Provider
+	provider     appruntime.Provider
 }
 
 func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.Context, sessionID string) error {
@@ -1881,7 +1881,7 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 	if v.provider == nil {
 		return fmt.Errorf("plugin runtime provider is not configured")
 	}
-	session, err := v.provider.GetSession(ctx, pluginruntime.GetSessionRequest{SessionID: sessionID})
+	session, err := v.provider.GetSession(ctx, appruntime.GetSessionRequest{SessionID: sessionID})
 	if err != nil {
 		return err
 	}
@@ -1900,14 +1900,14 @@ func (v runtimeHostServiceSessionVerifier) VerifyHostServiceSession(ctx context.
 		}
 	}
 	switch session.State {
-	case pluginruntime.SessionStatePending, pluginruntime.SessionStateReady, pluginruntime.SessionStateRunning:
+	case appruntime.SessionStatePending, appruntime.SessionStateReady, appruntime.SessionStateRunning:
 		return nil
 	default:
 		return fmt.Errorf("plugin runtime session %q is %s", sessionID, session.State)
 	}
 }
 
-func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan RuntimePlacementPlan, runtimeProvider pluginruntime.Provider) (func(), error) {
+func registerPublicRuntimeHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps, runtimePlan RuntimePlacementPlan, runtimeProvider appruntime.Provider) (func(), error) {
 	if runtimePlan.Resolved.HostServiceAccess != RuntimeHostServiceAccessRelay || deps.PublicHostServices == nil {
 		return nil, nil
 	}
@@ -1938,7 +1938,7 @@ func (workflowHostServiceSessionVerifier) VerifyHostServiceSession(context.Conte
 }
 
 func registerPublicWorkflowHostServices(providerName string, hostServices []runtimehost.HostService, deps Deps) (func(), error) {
-	if deps.PublicHostServices == nil || !hostCanRelayPluginRuntimeHostServices(deps) {
+	if deps.PublicHostServices == nil || !hostCanRelayAppRuntimeHostServices(deps) {
 		return nil, nil
 	}
 	registerHostServices := make([]runtimehost.HostService, 0, len(hostServices))
@@ -1974,7 +1974,7 @@ func buildHostedRuntimePublicEgressProxy(providerName, sessionID string, allowed
 		return nil, fmt.Errorf("init egress proxy tokens: %w", err)
 	}
 	token, err := tokenManager.MintToken(egressproxy.TokenRequest{
-		PluginName:    providerName,
+		AppName:    providerName,
 		SessionID:     sessionID,
 		AllowedHosts:  slices.Clone(allowedHosts),
 		DefaultAction: defaultAction,
@@ -2012,7 +2012,7 @@ func buildHostedRuntimePublicHostServiceRelay(providerName, sessionID string, ho
 		return "", nil, "", false, fmt.Errorf("init host service relay tokens: %w", err)
 	}
 	token, err := tokenManager.MintToken(runtimehost.HostServiceRelayTokenRequest{
-		PluginName: providerName,
+		AppName: providerName,
 		SessionID:  sessionID,
 		Service:    "host_service",
 		// MethodPrefix "/" scopes the relay to the unified host-service surface.
@@ -2262,7 +2262,7 @@ func registerS3Servers(bindings map[string]s3store.Client, defaultBinding, plugi
 	return s3.NewRoutingServers(bindings, defaultBinding, pluginName, accessURLs)
 }
 
-func buildPluginWorkflowProviderHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
+func buildPluginWorkflowProviderHostService(pluginName string, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.WorkflowManager
 	if manager == nil {
 		manager = unavailableWorkflowManager{}
@@ -2276,7 +2276,7 @@ func buildPluginWorkflowProviderHostService(pluginName string, deps Deps, tokens
 	}
 }
 
-func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
+func buildPluginAgentProviderHostService(pluginName string, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
 	manager := deps.AgentManager
 	if manager == nil {
 		manager = unavailableAgentManager{}
@@ -2310,18 +2310,18 @@ func buildPluginExternalCredentialsHostService(provider core.ExternalCredentialP
 	}
 }
 
-func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *plugininvokerservice.InvocationTokenManager) runtimehost.HostService {
-	invoker := deps.PluginInvoker
+func buildAppInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps, tokens *appinvokerservice.InvocationTokenManager) runtimehost.HostService {
+	invoker := deps.AppInvoker
 	if invoker == nil {
-		invoker = unavailablePluginInvoker{}
+		invoker = unavailableAppInvoker{}
 	}
 	return runtimehost.HostService{
-		Name:           "plugin_invoker",
-		MethodPrefixes: []string{grpcMethodPrefix(proto.PluginInvoker_ServiceDesc.ServiceName)},
+		Name:           "app_invoker",
+		MethodPrefixes: []string{grpcMethodPrefix(proto.AppInvoker_ServiceDesc.ServiceName)},
 		Register: func(srv *grpc.Server) {
-			proto.RegisterPluginInvokerServer(srv, plugininvokerservice.NewServer(
+			proto.RegisterAppInvokerServer(srv, appinvokerservice.NewServer(
 				pluginName,
-				invocationconfig.PluginInvocationDependencies(entry.Invokes),
+				invocationconfig.AppInvocationDependencies(entry.Invokes),
 				invoker,
 				tokens,
 			))
@@ -2329,13 +2329,13 @@ func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntr
 	}
 }
 
-type unavailablePluginInvoker struct{}
+type unavailableAppInvoker struct{}
 
-func (unavailablePluginInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+func (unavailableAppInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
 	return nil, fmt.Errorf("plugin invoker is not available")
 }
 
-func (unavailablePluginInvoker) InvokeGraphQL(context.Context, *principal.Principal, string, string, invocation.GraphQLRequest) (*core.OperationResult, error) {
+func (unavailableAppInvoker) InvokeGraphQL(context.Context, *principal.Principal, string, string, invocation.GraphQLRequest) (*core.OperationResult, error) {
 	return nil, fmt.Errorf("plugin invoker is not available")
 }
 
@@ -2693,13 +2693,13 @@ func clonePluginEnv(src map[string]string) map[string]string {
 	return dst
 }
 
-func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (pluginservice.StaticProviderSpec, config.StaticConnectionPlan, error) {
+func buildAppStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (appservice.StaticProviderSpec, config.StaticConnectionPlan, error) {
 	if manifest == nil || manifest.Spec == nil {
-		return pluginservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("resolved manifest is required")
+		return appservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("resolved manifest is required")
 	}
 	plan, err := config.BuildStaticConnectionPlan(entry, manifest.Spec)
 	if err != nil {
-		return pluginservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, err
+		return appservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, err
 	}
 
 	displayName := meta.displayNameOr(manifest.DisplayName)
@@ -2717,7 +2717,7 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		}
 	}
 
-	conn := plan.PluginConnection()
+	conn := plan.AppConnection()
 	connMode := plan.ConnectionMode()
 
 	var staticCatalog *catalog.Catalog
@@ -2725,14 +2725,14 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		var err error
 		staticCatalog, err = providerpkg.ReadStaticCatalog(manifestRoot, name)
 		if err != nil {
-			return pluginservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, err
+			return appservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, err
 		}
 	}
 	if staticCatalog == nil && providerpkg.StaticCatalogRequired(manifest) {
 		if entry.ResolvedManifestPath == "" {
-			return pluginservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("resolved manifest path is required for executable provider static catalog")
+			return appservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("resolved manifest path is required for executable provider static catalog")
 		}
-		return pluginservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", providerpkg.StaticCatalogFile)
+		return appservice.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", providerpkg.StaticCatalogFile)
 	}
 	if staticCatalog != nil {
 		if displayName != "" {
@@ -2746,7 +2746,7 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		}
 	}
 
-	return pluginservice.StaticProviderSpec{
+	return appservice.StaticProviderSpec{
 		Name:               name,
 		DisplayName:        displayName,
 		Description:        description,
@@ -2754,10 +2754,10 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		ConnectionMode:     connMode,
 		Catalog:            staticCatalog,
 		AuthTypes:          staticAuthTypes(conn.Auth.Type),
-		ConnectionParams:   pluginservice.ConnectionParamDefsFromManifest(conn.ConnectionParams),
-		CredentialFields:   pluginservice.CredentialFieldsFromManifest(conn.Auth.Credentials),
-		DiscoveryConfig:    pluginservice.DiscoveryConfigFromManifest(conn.Discovery),
-		PostConnectConfigs: pluginservice.PostConnectConfigsFromManifestConnections(manifest.Spec.Connections),
+		ConnectionParams:   appservice.ConnectionParamDefsFromManifest(conn.ConnectionParams),
+		CredentialFields:   appservice.CredentialFieldsFromManifest(conn.Auth.Credentials),
+		DiscoveryConfig:    appservice.DiscoveryConfigFromManifest(conn.Discovery),
+		PostConnectConfigs: appservice.PostConnectConfigsFromManifestConnections(manifest.Spec.Connections),
 	}, plan, nil
 }
 
@@ -2781,33 +2781,33 @@ func mcpOAuthBuildOpts(conn config.ConnectionDef, mcpURL string, deps Deps) []de
 	}
 }
 
-func manifestHeaders(manifestPlugin *providermanifestv1.Spec) map[string]string {
-	if manifestPlugin == nil || len(manifestPlugin.Headers) == 0 {
+func manifestHeaders(manifestApp *providermanifestv1.Spec) map[string]string {
+	if manifestApp == nil || len(manifestApp.Headers) == 0 {
 		return nil
 	}
-	return maps.Clone(manifestPlugin.Headers)
+	return maps.Clone(manifestApp.Headers)
 }
 
-func applyProviderHeaders(def *declarative.Definition, manifestPlugin *providermanifestv1.Spec) {
+func applyProviderHeaders(def *declarative.Definition, manifestApp *providermanifestv1.Spec) {
 	if def == nil {
 		return
 	}
-	headers := manifestHeaders(manifestPlugin)
+	headers := manifestHeaders(manifestApp)
 	if len(headers) == 0 {
 		return
 	}
 	def.Headers = headers
 }
 
-func applyManagedParameters(def *declarative.Definition, manifestPlugin *providermanifestv1.Spec) error {
-	if def == nil || manifestPlugin == nil || len(manifestPlugin.ManagedParameters) == 0 {
+func applyManagedParameters(def *declarative.Definition, manifestApp *providermanifestv1.Spec) error {
+	if def == nil || manifestApp == nil || len(manifestApp.ManagedParameters) == 0 {
 		return nil
 	}
 
 	if def.Headers == nil {
 		def.Headers = make(map[string]string)
 	}
-	for _, param := range manifestPlugin.ManagedParameters {
+	for _, param := range manifestApp.ManagedParameters {
 		location := strings.ToLower(strings.TrimSpace(param.In))
 		name := strings.TrimSpace(param.Name)
 		switch location {
@@ -2824,14 +2824,14 @@ func applyManagedParameters(def *declarative.Definition, manifestPlugin *provide
 
 	for opName := range def.Operations {
 		op := def.Operations[opName]
-		for _, param := range manifestPlugin.ManagedParameters {
+		for _, param := range manifestApp.ManagedParameters {
 			if strings.EqualFold(strings.TrimSpace(param.In), "path") {
 				op.Path = strings.ReplaceAll(op.Path, "{"+strings.TrimSpace(param.Name)+"}", param.Value)
 			}
 		}
 		filtered := op.Parameters[:0]
 		for _, param := range op.Parameters {
-			if isManagedOperationParameter(param, manifestPlugin.ManagedParameters) {
+			if isManagedOperationParameter(param, manifestApp.ManagedParameters) {
 				continue
 			}
 			filtered = append(filtered, param)
@@ -2862,31 +2862,31 @@ func isManagedOperationParameter(param declarative.ParameterDef, managed []provi
 	return false
 }
 
-func applyProviderResponseMapping(def *declarative.Definition, manifestPlugin *providermanifestv1.Spec) {
-	if def == nil || manifestPlugin == nil || manifestPlugin.ResponseMapping == nil {
+func applyProviderResponseMapping(def *declarative.Definition, manifestApp *providermanifestv1.Spec) {
+	if def == nil || manifestApp == nil || manifestApp.ResponseMapping == nil {
 		return
 	}
 	rm := &declarative.ResponseMappingDef{
-		DataPath: manifestPlugin.ResponseMapping.DataPath,
+		DataPath: manifestApp.ResponseMapping.DataPath,
 	}
-	if manifestPlugin.ResponseMapping.Pagination != nil {
+	if manifestApp.ResponseMapping.Pagination != nil {
 		rm.Pagination = &declarative.PaginationMappingDef{
-			HasMore: cloneManifestValueSelectorDef(manifestPlugin.ResponseMapping.Pagination.HasMore),
-			Cursor:  cloneManifestValueSelectorDef(manifestPlugin.ResponseMapping.Pagination.Cursor),
+			HasMore: cloneManifestValueSelectorDef(manifestApp.ResponseMapping.Pagination.HasMore),
+			Cursor:  cloneManifestValueSelectorDef(manifestApp.ResponseMapping.Pagination.Cursor),
 		}
 	}
 	def.ResponseMapping = rm
 }
 
-func applyProviderPagination(def *declarative.Definition, manifestPlugin *providermanifestv1.Spec, allowedOperations map[string]*config.OperationOverride) {
-	if def == nil || manifestPlugin == nil {
+func applyProviderPagination(def *declarative.Definition, manifestApp *providermanifestv1.Spec, allowedOperations map[string]*config.OperationOverride) {
+	if def == nil || manifestApp == nil {
 		return
 	}
 	for opName, override := range allowedOperations {
 		if override == nil || !override.Paginate {
 			continue
 		}
-		pgn := mergedPaginationConfig(manifestPlugin.Pagination, override.Pagination)
+		pgn := mergedPaginationConfig(manifestApp.Pagination, override.Pagination)
 		if pgn == nil {
 			continue
 		}

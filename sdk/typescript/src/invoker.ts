@@ -1,6 +1,6 @@
 import { createClient, type Client } from "@connectrpc/connect";
 
-import { PluginInvoker as PluginInvokerService } from "./internal/gen/v1/plugin_pb.ts";
+import { AppInvoker as AppInvokerService } from "./internal/gen/v1/app_pb.ts";
 import type { OperationResult, Request } from "./api.ts";
 import { structFromObject, type JsonObjectInput } from "./protocol.ts";
 import {
@@ -21,31 +21,31 @@ export interface PluginInvokeOptions {
 }
 
 /** Grant included when exchanging an invocation token for a child token. */
-export interface PluginInvocationGrant {
-  /** Plugin name that the child token may invoke. */
+export interface AppInvocationGrant {
+  /** App name that the child token may invoke. */
   plugin: string;
   /** Specific operation ids allowed by the child token. */
   operations?: string[];
   /** Surface names allowed by the child token. */
   surfaces?: string[];
-  /** Whether the child token may invoke every operation on the plugin. */
+  /** Whether the child token may invoke every operation on the app. */
   allOperations?: boolean;
 }
 
-/** Options for invoking a plugin GraphQL surface. */
+/** Options for invoking a app GraphQL surface. */
 export interface PluginGraphQLInvokeOptions extends PluginInvokeOptions {
   /** GraphQL variables encoded as a JSON object. */
   variables?: JsonObjectInput;
 }
 
 /**
- * Client for invoking sibling plugin operations through the host.
+ * Client for invoking sibling app operations through the host.
  *
  * The constructor accepts either a Gestalt request or an invocation token. The
  * token is attached to every operation, GraphQL, and token-exchange request.
  */
-export class PluginInvoker {
-  private readonly client: Client<typeof PluginInvokerService>;
+export class AppInvoker {
+  private readonly client: Client<typeof AppInvokerService>;
   private readonly invocationToken: string;
 
   constructor(request: Request);
@@ -58,10 +58,10 @@ export class PluginInvoker {
       parseHostServiceTarget("plugin invoker", target),
       hostServiceMetadataInterceptors(token, ""),
     );
-    this.client = createClient(PluginInvokerService, transport);
+    this.client = createClient(AppInvokerService, transport);
   }
 
-  /** Invokes one operation on another plugin. */
+  /** Invokes one operation on another app. */
   async invoke(
     plugin: string,
     operation: string,
@@ -114,7 +114,7 @@ export class PluginInvoker {
   /** Exchanges this invocation token for a narrower child token. */
   async exchangeInvocationToken(options?: {
     /** Grants to attach to the child token. */
-    grants?: PluginInvocationGrant[];
+    grants?: AppInvocationGrant[];
     /** Requested child-token time-to-live in seconds. */
     ttlSeconds?: number;
   }): Promise<string> {
@@ -122,7 +122,7 @@ export class PluginInvoker {
       parentInvocationToken: this.invocationToken,
       grants: (options?.grants ?? [])
         .map((grant) => ({
-          plugin: grant.plugin.trim(),
+          plugin: grant.app.trim(),
           operations: (grant.operations ?? [])
             .map((operation) => operation.trim())
             .filter(Boolean),
@@ -131,7 +131,7 @@ export class PluginInvoker {
             .filter(Boolean),
           allOperations: grant.allOperations ?? false,
         }))
-        .filter((grant) => grant.plugin.length > 0),
+        .filter((grant) => grant.app.length > 0),
       ttlSeconds: BigInt(Math.max(0, options?.ttlSeconds ?? 0)),
     });
     return response.invocationToken;

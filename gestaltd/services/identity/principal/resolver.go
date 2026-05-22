@@ -163,7 +163,7 @@ func (r *Resolver) resolveUserAPIToken(ctx context.Context, apiToken *core.APITo
 	if perms, actionPerms, ok := permissionsForAPIToken(apiToken); ok {
 		p.TokenPermissions = perms
 		p.ActionPermissions = actionPerms
-		p.Scopes = PermissionPlugins(perms)
+		p.Scopes = PermissionApps(perms)
 	}
 	return p, nil
 }
@@ -194,7 +194,7 @@ func resolveSubjectAPIToken(apiToken *core.APIToken) (*Principal, error) {
 	if perms, actionPerms, ok := permissionsForAPIToken(apiToken); ok {
 		p.TokenPermissions = perms
 		p.ActionPermissions = actionPerms
-		p.Scopes = PermissionPlugins(perms)
+		p.Scopes = PermissionApps(perms)
 	}
 	return Canonicalize(p), nil
 }

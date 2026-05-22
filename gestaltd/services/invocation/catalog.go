@@ -13,7 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	integration "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -193,7 +193,7 @@ func OperationConnectionOverrideAllowed(prov core.Provider, operation string, pa
 			return true
 		}
 	}
-	if op, ok := CatalogOperation(providerCatalog(prov), operation); ok && OperationTransport(op) == catalog.TransportPlugin {
+	if op, ok := CatalogOperation(providerCatalog(prov), operation); ok && OperationTransport(op) == catalog.TransportApp {
 		return true
 	}
 	return false

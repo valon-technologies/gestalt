@@ -56,7 +56,7 @@
 // Provider runtimes are modeled by [AuthenticationProvider],
 // [AuthorizationProvider], [CacheProvider], [IndexedDBProvider], [S3Provider],
 // [SecretsProvider], [WorkflowProvider], [AgentProvider], and
-// [PluginRuntimeProvider].
+// [AppRuntimeProvider].
 //
 // Workflow and agent helpers include [NewAgentMessage] and [NewAgentToolRef].
 // Workflow structs use native Go values at provider boundaries; SDK adapters
@@ -82,7 +82,7 @@
 // package also exposes provider interfaces for host-service backends, including
 // AuthenticationProvider, AuthorizationProvider, CacheProvider,
 // IndexedDBProvider, S3Provider, SecretsProvider, WorkflowProvider,
-// AgentProvider, and PluginRuntimeProvider.
+// AgentProvider, and AppRuntimeProvider.
 //
 // Use the host-service clients when provider code needs to call sibling
 // services exposed by gestaltd. These include CacheClient, IndexedDBClient,
@@ -95,6 +95,6 @@
 // keep transport serialization at the SDK boundary.
 //
 // See https://gestaltd.ai/reference/sdk for the SDK overview.
-// See https://gestaltd.ai/providers/plugins for the typed plugin authoring flow.
+// See https://gestaltd.ai/providers/apps for the typed app authoring flow.
 // See https://gestaltd.ai/providers for the provider model.
 package gestalt

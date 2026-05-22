@@ -15,11 +15,11 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		slog.Error("usage", "command", "gestalt-plugin-echo provider")
+		slog.Error("usage", "command", "gestalt-app-echo provider")
 		os.Exit(2)
 	}
 	if err := run(); err != nil {
-		slog.Error("echo plugin failed", "error", err)
+		slog.Error("echo app failed", "error", err)
 		os.Exit(1)
 	}
 }

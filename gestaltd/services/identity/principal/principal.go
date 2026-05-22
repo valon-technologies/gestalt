@@ -187,24 +187,24 @@ func CompilePermissions(perms []core.AccessPermission) PermissionSet {
 	}
 	set := make(PermissionSet, len(perms))
 	for _, perm := range perms {
-		plugin := strings.TrimSpace(perm.Plugin)
-		if plugin == "" {
+		appName := strings.TrimSpace(perm.App)
+		if appName == "" {
 			continue
 		}
 		if len(perm.Operations) == 0 {
 			if len(perm.Actions) > 0 {
 				continue
 			}
-			set[plugin] = nil
+			set[appName] = nil
 			continue
 		}
-		if _, ok := set[plugin]; ok && set[plugin] == nil {
+		if _, ok := set[appName]; ok && set[appName] == nil {
 			continue
 		}
-		ops := set[plugin]
+		ops := set[appName]
 		if ops == nil {
 			ops = map[string]struct{}{}
-			set[plugin] = ops
+			set[appName] = ops
 		}
 		for _, op := range perm.Operations {
 			op = strings.TrimSpace(op)
@@ -226,8 +226,8 @@ func CompileActionPermissions(perms []core.AccessPermission) ActionPermissionSet
 	}
 	set := make(ActionPermissionSet, len(perms))
 	for _, perm := range perms {
-		plugin := strings.TrimSpace(perm.Plugin)
-		if plugin == "" {
+		appName := strings.TrimSpace(perm.App)
+		if appName == "" {
 			continue
 		}
 		for _, action := range perm.Actions {
@@ -235,10 +235,10 @@ func CompileActionPermissions(perms []core.AccessPermission) ActionPermissionSet
 			if action == "" {
 				continue
 			}
-			actions := set[plugin]
+			actions := set[appName]
 			if actions == nil {
 				actions = map[string]struct{}{}
-				set[plugin] = actions
+				set[appName] = actions
 			}
 			actions[action] = struct{}{}
 		}
@@ -259,7 +259,7 @@ func PermissionsFromScopeString(scopes string) PermissionSet {
 		if scope == "" {
 			continue
 		}
-		perms = append(perms, core.AccessPermission{Plugin: scope})
+		perms = append(perms, core.AccessPermission{App: scope})
 	}
 	return CompilePermissions(perms)
 }
@@ -303,15 +303,15 @@ func PermissionsToAccessPermissions(set PermissionSet) []core.AccessPermission {
 	if set == nil {
 		return nil
 	}
-	plugins := make([]string, 0, len(set))
-	for plugin := range set {
-		plugins = append(plugins, plugin)
+	appNames := make([]string, 0, len(set))
+	for appName := range set {
+		appNames = append(appNames, appName)
 	}
-	sort.Strings(plugins)
-	out := make([]core.AccessPermission, 0, len(plugins))
-	for _, plugin := range plugins {
-		ops := set[plugin]
-		perm := core.AccessPermission{Plugin: plugin}
+	sort.Strings(appNames)
+	out := make([]core.AccessPermission, 0, len(appNames))
+	for _, appName := range appNames {
+		ops := set[appName]
+		perm := core.AccessPermission{App: appName}
 		if len(ops) > 0 {
 			names := make([]string, 0, len(ops))
 			for op := range ops {
@@ -325,16 +325,16 @@ func PermissionsToAccessPermissions(set PermissionSet) []core.AccessPermission {
 	return out
 }
 
-func PermissionPlugins(set PermissionSet) []string {
+func PermissionApps(set PermissionSet) []string {
 	if set == nil {
 		return nil
 	}
-	plugins := make([]string, 0, len(set))
-	for plugin := range set {
-		plugins = append(plugins, plugin)
+	appNames := make([]string, 0, len(set))
+	for appName := range set {
+		appNames = append(appNames, appName)
 	}
-	sort.Strings(plugins)
-	return plugins
+	sort.Strings(appNames)
+	return appNames
 }
 
 func AllowsProviderPermission(p *Principal, provider string) bool {

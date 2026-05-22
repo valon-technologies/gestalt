@@ -387,7 +387,7 @@ func TestAgentProviderTypedTransportRoundTrip(t *testing.T) {
 		CreatedBy:      session.GetCreatedBy(),
 		ExecutionRef:   "exec-turn-1",
 		ToolRefs: []*proto.AgentToolRef{{
-			Plugin:    "slack",
+			App: "slack",
 			Operation: "chat.postMessage",
 		}},
 		ToolSource: proto.AgentToolSourceMode_AGENT_TOOL_SOURCE_MODE_MCP_CATALOG,

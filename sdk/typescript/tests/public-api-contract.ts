@@ -1,6 +1,6 @@
 import {
   Authorization,
-  PluginRuntimeEgressMode,
+  AppRuntimeEgressMode,
   RuntimeLogHost,
   WorkflowRunStatus,
   type AuthorizationEvaluateInput,
@@ -18,9 +18,9 @@ import { AccessEvaluationRequestSchema as RootAccessEvaluationRequestSchema } fr
 // @ts-expect-error Root package must not expose generated protocol message types.
 import type { AccessEvaluationRequest as RootAccessEvaluationRequest } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose runtime-log generated request schemas.
-import { AppendPluginRuntimeLogsRequestSchema as RootAppendPluginRuntimeLogsRequestSchema } from "@valon-technologies/gestalt";
+import { AppendAppRuntimeLogsRequestSchema as RootAppendAppRuntimeLogsRequestSchema } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose runtime-log generated enums.
-import { PluginRuntimeLogStream as RootPluginRuntimeLogStream } from "@valon-technologies/gestalt";
+import { AppRuntimeLogStream as RootAppRuntimeLogStream } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose protobuf message helper types.
 import type { MessageInitShape } from "@valon-technologies/gestalt";
 // @ts-expect-error Root package must not expose provider metadata wire helpers.
@@ -45,7 +45,7 @@ const workspace: AgentManagerWorkspace = {
   cwd: "/workspace",
   checkouts: [{ url: "https://example.test/repo.git", ref: "main" }],
 };
-const egressMode: PluginRuntimeEgressMode = PluginRuntimeEgressMode.NONE;
+const egressMode: AppRuntimeEgressMode = AppRuntimeEgressMode.NONE;
 
 void Authorization;
 void RuntimeLogHost;

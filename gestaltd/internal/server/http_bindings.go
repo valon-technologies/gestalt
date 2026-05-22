@@ -13,8 +13,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/plugins/httpbinding"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	"github.com/valon-technologies/gestalt/server/services/apps/httpbinding"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 )
 
 var validMountedHTTPBindingMethods = map[string]bool{
@@ -93,7 +93,7 @@ func mountedHTTPBindingsFromEntries(entries map[string]*config.ProviderEntry, pr
 			}
 			mounted = append(mounted, MountedHTTPBinding{
 				Name:           bindingName,
-				PluginName:     pluginName,
+				AppName:     pluginName,
 				Path:           mountedHTTPBindingPath(pluginName, relativePath),
 				Method:         method,
 				Target:         target,
@@ -234,11 +234,11 @@ func validateMountedHTTPBindingRoutes(bindings []MountedHTTPBinding, mountedUIs 
 	for i := range bindings {
 		binding := &bindings[i]
 		if binding.Path == "" {
-			return fmt.Errorf("http binding %s.%s path is required", binding.PluginName, binding.Name)
+			return fmt.Errorf("http binding %s.%s path is required", binding.AppName, binding.Name)
 		}
-		for _, prefix := range []string{"/api/v1/auth", "/api/v1/tokens", "/api/v1/workflow", "/api/v1/integrations", "/api/v1/s3"} {
+		for _, prefix := range []string{"/api/v1/auth", "/api/v1/tokens", "/api/v1/workflow", "/api/v1/apps", "/api/v1/s3"} {
 			if binding.Path == prefix || strings.HasPrefix(binding.Path, prefix+"/") {
-				return fmt.Errorf("http binding %s.%s path %q conflicts with core route namespace %q", binding.PluginName, binding.Name, binding.Path, prefix)
+				return fmt.Errorf("http binding %s.%s path %q conflicts with core route namespace %q", binding.AppName, binding.Name, binding.Path, prefix)
 			}
 		}
 		for _, mounted := range mountedUIs {
@@ -246,14 +246,14 @@ func validateMountedHTTPBindingRoutes(bindings []MountedHTTPBinding, mountedUIs 
 				continue
 			}
 			if binding.Path == mounted.Path || strings.HasPrefix(binding.Path, mounted.Path+"/") {
-				return fmt.Errorf("http binding %s.%s path %q conflicts with mounted UI %q", binding.PluginName, binding.Name, binding.Path, mounted.Path)
+				return fmt.Errorf("http binding %s.%s path %q conflicts with mounted UI %q", binding.AppName, binding.Name, binding.Path, mounted.Path)
 			}
 		}
 		key := binding.Method + " " + binding.Path
 		if previous, ok := seen[key]; ok {
-			return fmt.Errorf("http binding %s.%s duplicates http route %s", binding.PluginName, binding.Name, previous)
+			return fmt.Errorf("http binding %s.%s duplicates http route %s", binding.AppName, binding.Name, previous)
 		}
-		seen[key] = binding.PluginName + "." + binding.Name
+		seen[key] = binding.AppName + "." + binding.Name
 	}
 	return nil
 }
@@ -263,7 +263,7 @@ func (s *Server) mountHTTPBindingRoutes(r chi.Router) {
 		binding := &s.mountedHTTPBindings[i]
 		r.MethodFunc(binding.Method, binding.Path, func(w http.ResponseWriter, r *http.Request) {
 			metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
-				ProviderName:    binding.PluginName,
+				ProviderName:    binding.AppName,
 				OperationName:   binding.Target,
 				HTTPBindingName: binding.Name,
 				Surface:         metricutil.InvocationSurfaceHTTPBinding,

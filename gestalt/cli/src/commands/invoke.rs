@@ -7,7 +7,7 @@ use crate::catalog::{
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
-use super::plugin_errors;
+use super::app_errors;
 
 #[derive(Clone, Copy, Default)]
 pub struct InvokeOptions<'a> {
@@ -26,19 +26,19 @@ pub fn run(
     format: Format,
 ) -> Result<()> {
     let query = segments.join(".");
-    let resolved_selector = match plugin_errors::resolve_selector(
+    let resolved_selector = match app_errors::resolve_selector(
         client,
         plugin,
         &query,
         options.connection,
         options.instance,
-        plugin_errors::SelectorCommand::Invoke,
+        app_errors::SelectorCommand::Invoke,
     ) {
-        plugin_errors::SelectorResolution::Selected(selector) => Some(selector),
-        plugin_errors::SelectorResolution::Message(message) => {
+        app_errors::SelectorResolution::Selected(selector) => Some(selector),
+        app_errors::SelectorResolution::Message(message) => {
             anyhow::bail!(message);
         }
-        plugin_errors::SelectorResolution::Unchanged => None,
+        app_errors::SelectorResolution::Unchanged => None,
     };
     let options = InvokeOptions {
         connection: resolved_selector
@@ -120,18 +120,18 @@ pub fn invoke(
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let selector_resolution = plugin_errors::resolve_selector(
+    let selector_resolution = app_errors::resolve_selector(
         client,
         plugin,
         operation,
         options.connection,
         options.instance,
-        plugin_errors::SelectorCommand::Invoke,
+        app_errors::SelectorCommand::Invoke,
     );
     let resolved_selector = match selector_resolution {
-        plugin_errors::SelectorResolution::Selected(selector) => Some(selector),
-        plugin_errors::SelectorResolution::Message(message) => anyhow::bail!(message),
-        plugin_errors::SelectorResolution::Unchanged => None,
+        app_errors::SelectorResolution::Selected(selector) => Some(selector),
+        app_errors::SelectorResolution::Message(message) => anyhow::bail!(message),
+        app_errors::SelectorResolution::Unchanged => None,
     };
     let options = InvokeOptions {
         connection: resolved_selector
@@ -183,13 +183,13 @@ pub fn list_operations_with_selector(
     instance: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let cat = plugin_errors::map_catalog_error(
+    let cat = app_errors::map_catalog_error(
         client,
         plugin,
         "",
         connection,
         instance,
-        plugin_errors::SelectorCommand::Invoke,
+        app_errors::SelectorCommand::Invoke,
         catalog::fetch_catalog(client, plugin, connection, instance),
     )?;
     display_operations(cat.operations(), format, connection, instance)
@@ -231,14 +231,14 @@ fn execute(
         client.post(&path, &serde_json::Value::Object(param_map))
     })
     .map_err(|err| {
-        plugin_errors::rewrite_connect_error(
+        app_errors::rewrite_connect_error(
             client,
             err,
             plugin,
             operation,
             options.connection,
             options.instance,
-            plugin_errors::SelectorCommand::Invoke,
+            app_errors::SelectorCommand::Invoke,
         )
     })
     .with_context(|| format!("failed to invoke {}.{}", plugin, operation))?;
@@ -257,7 +257,7 @@ fn execute(
 }
 
 fn should_retry_without_catalog(err: &anyhow::Error, operation: &str) -> bool {
-    plugin_errors::should_retry_without_catalog(err, operation)
+    app_errors::should_retry_without_catalog(err, operation)
 }
 
 fn display_operations<'a>(
@@ -313,13 +313,13 @@ fn load_catalog_for_invoke(
     connection: Option<&str>,
     instance: Option<&str>,
 ) -> Result<OperationsCatalog> {
-    plugin_errors::map_catalog_error(
+    app_errors::map_catalog_error(
         client,
         plugin,
         operation,
         connection,
         instance,
-        plugin_errors::SelectorCommand::Invoke,
+        app_errors::SelectorCommand::Invoke,
         catalog::fetch_catalog(client, plugin, connection, instance),
     )
     .with_context(|| format!("failed to invoke {}", invoke_target(plugin, operation)))

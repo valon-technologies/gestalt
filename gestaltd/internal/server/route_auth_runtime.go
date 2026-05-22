@@ -74,10 +74,10 @@ func (s *Server) pluginAuthRuntime(pluginName string) (authRuntime, error) {
 }
 
 func (s *Server) mountedUIAuthRuntime(mounted MountedUI) (authRuntime, error) {
-	if strings.TrimSpace(mounted.PluginName) == "" {
+	if strings.TrimSpace(mounted.AppName) == "" {
 		return s.serverAuthRuntime(), nil
 	}
-	return s.pluginAuthRuntime(mounted.PluginName)
+	return s.pluginAuthRuntime(mounted.AppName)
 }
 
 func (s *Server) loginAuthRuntimeForNextPath(nextPath string) (authRuntime, error) {

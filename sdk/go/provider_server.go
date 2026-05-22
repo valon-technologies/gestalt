@@ -14,10 +14,10 @@ import (
 )
 
 // ProviderServer adapts a [Provider] implementation to the gRPC
-// IntegrationProvider service. Most integration-provider authors should use
+// AppProvider service. Most integration-provider authors should use
 // [ServeProvider] instead of constructing this directly.
 type ProviderServer struct {
-	proto.UnimplementedIntegrationProviderServer
+	proto.UnimplementedAppProviderServer
 	provider    Provider
 	executeFn   func(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 	sessionCat  func() (SessionCatalogProvider, bool)

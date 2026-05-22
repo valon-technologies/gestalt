@@ -68,7 +68,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
     async deleteDefinition() {},
     async startRun(request) {
       const detail =
-        request.target?.kind?.case === "plugin"
+        request.target?.kind?.case === "app"
           ? request.target.kind.value.operation ?? ""
           : "";
       calls.push({ method: "start-run", detail });
@@ -212,7 +212,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       idempotencyKey: "run-native-ts",
       target: {
         kind: {
-          case: "plugin",
+          case: "app",
           value: { pluginName: "demo", operation: "sync" },
         },
       },
@@ -224,7 +224,7 @@ test("WorkflowProvider service converts transport messages to native callbacks",
       idempotencyKey: "definition-native-ts",
       target: {
         kind: {
-          case: "plugin",
+          case: "app",
           value: { pluginName: "demo", operation: "define" },
         },
       },

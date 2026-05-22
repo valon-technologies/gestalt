@@ -681,7 +681,7 @@ func providerEntryCollectionsForVersionUpdate(doc *yaml.Node, kind string) []pro
 	providers := mappingValueNodeLocal(doc, "providers")
 	runtimeProviders := mappingValueNodeLocal(mappingValueNodeLocal(doc, "runtime"), "providers")
 	return []providerEntryCollectionRef{
-		{kind: providermanifestv1.KindPlugin, node: mappingValueNodeLocal(doc, "plugins")},
+		{kind: providermanifestv1.KindApp, node: mappingValueNodeLocal(doc, "apps")},
 		{kind: providermanifestv1.KindAuthentication, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindAuthentication))},
 		{kind: providermanifestv1.KindAuthorization, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindAuthorization))},
 		{kind: providermanifestv1.KindExternalCredentials, node: mappingValueNodeLocal(providers, configKindKey(providermanifestv1.KindExternalCredentials))},
@@ -700,8 +700,8 @@ func providerEntryCollectionsForVersionUpdate(doc *yaml.Node, kind string) []pro
 
 func providerEntryCollectionNode(doc *yaml.Node, kind string) *yaml.Node {
 	switch kind {
-	case "", providermanifestv1.KindPlugin:
-		return mappingValueNodeLocal(doc, "plugins")
+	case "", providermanifestv1.KindApp:
+		return mappingValueNodeLocal(doc, "apps")
 	case providermanifestv1.KindRuntime:
 		return mappingValueNodeLocal(mappingValueNodeLocal(doc, "runtime"), "providers")
 	default:
@@ -726,8 +726,8 @@ func packageSourceInCollection(collection *yaml.Node, name string) *yaml.Node {
 
 func providerEntryCollection(doc *yaml.Node, kind string) *yaml.Node {
 	switch kind {
-	case "", providermanifestv1.KindPlugin:
-		return ensureMapping(doc, "plugins")
+	case "", providermanifestv1.KindApp:
+		return ensureMapping(doc, "apps")
 	case providermanifestv1.KindUI:
 		return ensureMapping(ensureMapping(doc, "providers"), "ui")
 	case providermanifestv1.KindRuntime:

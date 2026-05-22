@@ -12,7 +12,7 @@ DESCRIPTOR: _descriptor.FileDescriptor
 class ProviderKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     PROVIDER_KIND_UNSPECIFIED: _ClassVar[ProviderKind]
-    PROVIDER_KIND_INTEGRATION: _ClassVar[ProviderKind]
+    PROVIDER_KIND_APP: _ClassVar[ProviderKind]
     PROVIDER_KIND_AUTHENTICATION: _ClassVar[ProviderKind]
     PROVIDER_KIND_INDEXEDDB: _ClassVar[ProviderKind]
     PROVIDER_KIND_SECRETS: _ClassVar[ProviderKind]
@@ -25,7 +25,7 @@ class ProviderKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PROVIDER_KIND_AGENT: _ClassVar[ProviderKind]
     PROVIDER_KIND_EXTERNAL_CREDENTIAL: _ClassVar[ProviderKind]
 PROVIDER_KIND_UNSPECIFIED: ProviderKind
-PROVIDER_KIND_INTEGRATION: ProviderKind
+PROVIDER_KIND_APP: ProviderKind
 PROVIDER_KIND_AUTHENTICATION: ProviderKind
 PROVIDER_KIND_INDEXEDDB: ProviderKind
 PROVIDER_KIND_SECRETS: ProviderKind

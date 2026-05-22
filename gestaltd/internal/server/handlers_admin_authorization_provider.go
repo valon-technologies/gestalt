@@ -162,18 +162,18 @@ func (s *Server) listAdminAuthorizationRelationships(w http.ResponseWriter, r *h
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) providerPluginAuthorizationRows(ctx context.Context, plugin string) ([]adminAuthorizationMemberRow, error) {
+func (s *Server) providerPluginAuthorizationRows(ctx context.Context, app string) ([]adminAuthorizationMemberRow, error) {
 	relationships, err := s.readAllAuthorizationRelationships(ctx, &core.ReadRelationshipsRequest{
 		PageSize: adminAuthorizationProviderReadPageSize,
 		Resource: &core.ResourceRef{
-			Type: authorization.ProviderResourceTypePluginDynamic,
-			Id:   plugin,
+			Type: authorization.ProviderResourceTypeAppDynamic,
+			Id:   app,
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
-	return s.adminAuthorizationRowsFromProviderRelationships(ctx, plugin, relationships)
+	return s.adminAuthorizationRowsFromProviderRelationships(ctx, app, relationships)
 }
 
 func (s *Server) providerAdminAuthorizationRows(ctx context.Context) ([]adminAuthorizationMemberRow, error) {
@@ -190,11 +190,11 @@ func (s *Server) providerAdminAuthorizationRows(ctx context.Context) ([]adminAut
 	return s.adminAuthorizationRowsFromProviderRelationships(ctx, "", relationships)
 }
 
-func (s *Server) adminAuthorizationRowsFromProviderRelationships(ctx context.Context, plugin string, relationships []*core.Relationship) ([]adminAuthorizationMemberRow, error) {
+func (s *Server) adminAuthorizationRowsFromProviderRelationships(ctx context.Context, app string, relationships []*core.Relationship) ([]adminAuthorizationMemberRow, error) {
 	rows := make([]adminAuthorizationMemberRow, 0, len(relationships))
 	indexByKey := make(map[string]int, len(relationships))
 	for _, rel := range relationships {
-		row, ok, err := s.adminAuthorizationDynamicRowFromProviderRelationship(ctx, plugin, rel)
+		row, ok, err := s.adminAuthorizationDynamicRowFromProviderRelationship(ctx, app, rel)
 		if err != nil {
 			return nil, err
 		}
@@ -212,14 +212,14 @@ func (s *Server) adminAuthorizationRowsFromProviderRelationships(ctx context.Con
 	return rows, nil
 }
 
-func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx context.Context, plugin string, rel *core.Relationship) (adminAuthorizationMemberRow, bool, error) {
+func (s *Server) adminAuthorizationDynamicRowFromProviderRelationship(ctx context.Context, app string, rel *core.Relationship) (adminAuthorizationMemberRow, bool, error) {
 	subject := authorization.RelationshipSubject(rel)
 	if subject == nil {
 		return adminAuthorizationMemberRow{}, false, nil
 	}
 
 	row := adminAuthorizationMemberRow{
-		Plugin:    plugin,
+		App:    app,
 		Role:      strings.TrimSpace(rel.GetRelation()),
 		Source:    "dynamic",
 		Effective: true,
@@ -348,5 +348,5 @@ func adminAuthorizationRelationshipFromProvider(rel *core.Relationship) adminAut
 }
 
 func adminAuthorizationDynamicRowDedupeKey(row adminAuthorizationMemberRow) string {
-	return strings.Join([]string{row.Plugin, row.Role, row.SelectorKind, row.SelectorValue}, "\x00")
+	return strings.Join([]string{row.App, row.Role, row.SelectorKind, row.SelectorValue}, "\x00")
 }

@@ -28,7 +28,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -59,7 +59,7 @@ type RuntimeEnvBuilder func(sessionID string) (RuntimeEnv, error)
 type Target struct {
 	Name       string
 	Source     string
-	Spec       pluginservice.StaticProviderSpec
+	Spec       appservice.StaticProviderSpec
 	Config     map[string]any
 	ConfigSet  bool
 	UI         bool
@@ -86,7 +86,7 @@ type CreateSessionRequest struct {
 type AttachProvider struct {
 	Name   string                           `json:"name"`
 	Source string                           `json:"source,omitempty"`
-	Spec   pluginservice.StaticProviderSpec `json:"spec"`
+	Spec   appservice.StaticProviderSpec `json:"spec"`
 	Config *map[string]any                  `json:"config,omitempty"`
 	UI     bool                             `json:"ui,omitempty"`
 }
@@ -1527,7 +1527,7 @@ func (t *attachedTarget) providerForSession(ctx context.Context, session provide
 	}
 
 	client := &sessionProviderClient{session: session, provider: providerName}
-	prov, err := pluginservice.NewRemote(ctx, client, t.target.Spec, t.target.Config)
+	prov, err := appservice.NewRemote(ctx, client, t.target.Spec, t.target.Config)
 	if err != nil {
 		return nil, err
 	}
@@ -1794,7 +1794,7 @@ func (c Client) CloseSession(ctx context.Context, sessionID string) error {
 	return c.doJSON(ctx, http.MethodDelete, path, nil, nil)
 }
 
-func (c Client) RunDispatcher(ctx context.Context, sessionID string, providers map[string]proto.IntegrationProviderClient, options ...DispatcherOption) error {
+func (c Client) RunDispatcher(ctx context.Context, sessionID string, providers map[string]proto.AppProviderClient, options ...DispatcherOption) error {
 	cfg := dispatcherConfig{}
 	for _, option := range options {
 		if option != nil {
@@ -1927,7 +1927,7 @@ func dispatcherContextDone(ctx context.Context) bool {
 	return ctx.Err() != nil
 }
 
-func (c Client) dispatchCall(ctx context.Context, call *PollResponse, providers map[string]proto.IntegrationProviderClient, cfg dispatcherConfig) CompleteCallRequest {
+func (c Client) dispatchCall(ctx context.Context, call *PollResponse, providers map[string]proto.AppProviderClient, cfg dispatcherConfig) CompleteCallRequest {
 	if call.Method == "ServeUIAsset" {
 		return dispatchProviderDevUI(ctx, call, cfg.UIHandlers)
 	}
@@ -2011,7 +2011,7 @@ func dispatchProviderDevUIRequest(ctx context.Context, handler http.Handler, pay
 	return out, nil
 }
 
-func dispatchProviderRPC(ctx context.Context, client proto.IntegrationProviderClient, method string, payload []byte) ([]byte, error) {
+func dispatchProviderRPC(ctx context.Context, client proto.AppProviderClient, method string, payload []byte) ([]byte, error) {
 	switch method {
 	case "GetMetadata":
 		req := &emptypb.Empty{}
@@ -2241,7 +2241,7 @@ func normalizeAttachProviders(values []AttachProvider) ([]AttachProvider, error)
 	return requests, nil
 }
 
-func buildAttachSpec(remoteSpec pluginservice.StaticProviderSpec, localSpec pluginservice.StaticProviderSpec) pluginservice.StaticProviderSpec {
+func buildAttachSpec(remoteSpec appservice.StaticProviderSpec, localSpec appservice.StaticProviderSpec) appservice.StaticProviderSpec {
 	spec := cloneStaticProviderSpec(remoteSpec)
 	if spec.Name == "" {
 		spec.Name = localSpec.Name
@@ -2290,7 +2290,7 @@ func buildAttachCatalog(remoteCat, localCat *catalog.Catalog) *catalog.Catalog {
 	return out
 }
 
-func cloneStaticProviderSpec(spec pluginservice.StaticProviderSpec) pluginservice.StaticProviderSpec {
+func cloneStaticProviderSpec(spec appservice.StaticProviderSpec) appservice.StaticProviderSpec {
 	out := spec
 	out.AuthTypes = slices.Clone(spec.AuthTypes)
 	if spec.ConnectionParams != nil {

@@ -22,7 +22,7 @@ func TestNewExecutableWorkflowForwardsProcessRuntimeOptions(t *testing.T) {
 	wantErr := errors.New("boom")
 	wantTelemetry := workflowTestTelemetry{}
 	var got runtimehost.ProcessConfig
-	startWorkflowProviderProcess = func(_ context.Context, cfg runtimehost.ProcessConfig) (*runtimehost.PluginProcess, error) {
+	startWorkflowProviderProcess = func(_ context.Context, cfg runtimehost.ProcessConfig) (*runtimehost.AppProcess, error) {
 		got = cfg
 		return nil, wantErr
 	}

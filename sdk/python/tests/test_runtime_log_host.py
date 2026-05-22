@@ -19,11 +19,11 @@ from gestalt import (
     RuntimeLogHandler,
     RuntimeLogHost,
 )
-from gestalt._gen.v1 import pluginruntime_pb2 as _pluginruntime_pb2
-from gestalt._gen.v1 import pluginruntime_pb2_grpc as _pluginruntime_pb2_grpc
+from gestalt._gen.v1 import appruntime_pb2 as _appruntime_pb2
+from gestalt._gen.v1 import appruntime_pb2_grpc as _appruntime_pb2_grpc
 
-pluginruntime_pb2: Any = _pluginruntime_pb2
-pluginruntime_pb2_grpc: Any = _pluginruntime_pb2_grpc
+appruntime_pb2: Any = _appruntime_pb2
+appruntime_pb2_grpc: Any = _appruntime_pb2_grpc
 
 _server: grpc.Server | None = None
 _socket_path = ""
@@ -31,7 +31,7 @@ _requests: list[Any] = []
 _relay_tokens: list[str] = []
 
 
-class _RuntimeLogHostServicer(pluginruntime_pb2_grpc.PluginRuntimeLogHostServicer):
+class _RuntimeLogHostServicer(appruntime_pb2_grpc.AppRuntimeLogHostServicer):
     def AppendLogs(self, request: Any, context: grpc.ServicerContext) -> Any:
         _relay_tokens.extend(
             value
@@ -40,7 +40,7 @@ class _RuntimeLogHostServicer(pluginruntime_pb2_grpc.PluginRuntimeLogHostService
         )
         _requests.append(request)
         last_seq = request.logs[-1].source_seq if request.logs else 0
-        return pluginruntime_pb2.AppendPluginRuntimeLogsResponse(last_seq=last_seq)
+        return appruntime_pb2.AppendAppRuntimeLogsResponse(last_seq=last_seq)
 
 
 def setUpModule() -> None:
@@ -52,7 +52,7 @@ def setUpModule() -> None:
         os.remove(_socket_path)
 
     _server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    pluginruntime_pb2_grpc.add_PluginRuntimeLogHostServicer_to_server(
+    appruntime_pb2_grpc.add_AppRuntimeLogHostServicer_to_server(
         _RuntimeLogHostServicer(), _server
     )
     _server.add_insecure_port(f"unix:{_socket_path}")
@@ -109,7 +109,7 @@ class RuntimeLogHostTransportTests(unittest.TestCase):
         self.assertEqual(_requests[0].logs[0].message, "runtime boot\n")
         self.assertEqual(
             _requests[0].logs[0].stream,
-            pluginruntime_pb2.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
+            appruntime_pb2.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
         )
         self.assertEqual(
             _requests[0].logs[0].observed_at.ToDatetime(tzinfo=timezone.utc),
@@ -119,11 +119,11 @@ class RuntimeLogHostTransportTests(unittest.TestCase):
         self.assertEqual(_requests[1].logs[0].message, "stderr line\n")
         self.assertEqual(
             _requests[1].logs[0].stream,
-            pluginruntime_pb2.PLUGIN_RUNTIME_LOG_STREAM_STDERR,
+            appruntime_pb2.PLUGIN_RUNTIME_LOG_STREAM_STDERR,
         )
         self.assertEqual(_requests[1].logs[0].source_seq, 8)
         self.assertEqual(_requests[2].logs[0].message, "ERROR:dispatch failed\n")
         self.assertEqual(
             _requests[2].logs[0].stream,
-            pluginruntime_pb2.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
+            appruntime_pb2.PLUGIN_RUNTIME_LOG_STREAM_RUNTIME,
         )

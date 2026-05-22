@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// InvokeOptions selects a target connection for a plugin invocation.
+// InvokeOptions selects a target connection for a app invocation.
 type InvokeOptions struct {
 	// Connection is the connected account id or name to invoke against.
 	Connection string
@@ -22,8 +22,8 @@ type InvokeOptions struct {
 
 // InvocationGrant describes access granted to an exchanged invocation token.
 type InvocationGrant struct {
-	// Plugin is the plugin name the child token may invoke.
-	Plugin string
+	// App is the app name the child token may invoke.
+	App string
 	// Operations are the specific operation ids allowed by the child token.
 	Operations []string
 	// Surfaces are the surface names allowed by the child token.
@@ -32,13 +32,13 @@ type InvocationGrant struct {
 	AllOperations bool
 }
 
-// InvokerClient invokes sibling plugin operations through the host.
+// InvokerClient invokes sibling app operations through the host.
 type InvokerClient struct {
-	client          proto.PluginInvokerClient
+	client          proto.AppInvokerClient
 	invocationToken string
 }
 
-var sharedInvokerTransport sharedManagerTransport[proto.PluginInvokerClient]
+var sharedInvokerTransport sharedManagerTransport[proto.AppInvokerClient]
 
 // Invoker returns a client that attaches invocationToken to every request.
 func Invoker(invocationToken string) (*InvokerClient, error) {
@@ -53,7 +53,7 @@ func Invoker(invocationToken string) (*InvokerClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "plugin invoker", target, token, &sharedInvokerTransport, proto.NewPluginInvokerClient)
+	client, err := managerTransportClient(ctx, "plugin invoker", target, token, &sharedInvokerTransport, proto.NewAppInvokerClient)
 	if err != nil {
 		return nil, err
 	}
@@ -74,8 +74,8 @@ func (c *InvokerClient) Close() error {
 	return nil
 }
 
-// Invoke calls one operation on another plugin.
-func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, params any, opts *InvokeOptions) (*OperationResult, error) {
+// Invoke calls one operation on another app.
+func (c *InvokerClient) Invoke(ctx context.Context, app, operation string, params any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("plugin invoker: client is not initialized")
 	}
@@ -90,9 +90,9 @@ func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, pa
 		msg = &structpb.Struct{}
 	}
 
-	req := &proto.PluginInvokeRequest{
+	req := &proto.AppInvokeRequest{
 		InvocationToken: c.invocationToken,
-		Plugin:          plugin,
+		App:             app,
 		Operation:       operation,
 		Params:          msg,
 	}
@@ -113,7 +113,7 @@ func (c *InvokerClient) Invoke(ctx context.Context, plugin, operation string, pa
 }
 
 // InvokeGraphQL calls another plugin's GraphQL surface.
-func (c *InvokerClient) InvokeGraphQL(ctx context.Context, plugin, document string, variables any, opts *InvokeOptions) (*OperationResult, error) {
+func (c *InvokerClient) InvokeGraphQL(ctx context.Context, app, document string, variables any, opts *InvokeOptions) (*OperationResult, error) {
 	if c == nil || c.client == nil {
 		return nil, fmt.Errorf("plugin invoker: client is not initialized")
 	}
@@ -134,9 +134,9 @@ func (c *InvokerClient) InvokeGraphQL(ctx context.Context, plugin, document stri
 		}
 	}
 
-	req := &proto.PluginInvokeGraphQLRequest{
+	req := &proto.AppInvokeGraphQLRequest{
 		InvocationToken: c.invocationToken,
-		Plugin:          plugin,
+		App:             app,
 		Document:        document,
 		Variables:       msg,
 	}
@@ -180,14 +180,14 @@ func (c *InvokerClient) ExchangeInvocationToken(ctx context.Context, grants []In
 	return resp.GetInvocationToken(), nil
 }
 
-func encodeInvocationGrants(grants []InvocationGrant) []*proto.PluginInvocationGrant {
+func encodeInvocationGrants(grants []InvocationGrant) []*proto.AppInvocationGrant {
 	if len(grants) == 0 {
 		return nil
 	}
-	out := make([]*proto.PluginInvocationGrant, 0, len(grants))
+	out := make([]*proto.AppInvocationGrant, 0, len(grants))
 	for _, grant := range grants {
-		plugin := strings.TrimSpace(grant.Plugin)
-		if plugin == "" {
+		app := strings.TrimSpace(grant.App)
+		if app == "" {
 			continue
 		}
 		ops := make([]string, 0, len(grant.Operations))
@@ -198,8 +198,8 @@ func encodeInvocationGrants(grants []InvocationGrant) []*proto.PluginInvocationG
 			}
 			ops = append(ops, operation)
 		}
-		out = append(out, &proto.PluginInvocationGrant{
-			Plugin:        plugin,
+		out = append(out, &proto.AppInvocationGrant{
+			App:           app,
 			Operations:    ops,
 			Surfaces:      grant.Surfaces,
 			AllOperations: grant.AllOperations,

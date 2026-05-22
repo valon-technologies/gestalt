@@ -11,8 +11,8 @@ import (
 
 const (
 	providerLockSchemaName          = "gestaltd-provider-lock"
-	providerLockLegacySchemaVersion = 6
-	providerLockSchemaVersion       = 7
+	providerLockLegacySchemaVersion = 7
+	providerLockSchemaVersion       = 8
 	providerLockMinSchemaVersion    = 5
 	providerLockRevision            = 0
 	providerLockKindWorkflow        = "workflow"
@@ -32,7 +32,7 @@ type providerLockfile struct {
 }
 
 type providerLockBuckets struct {
-	Plugin              map[string]portableLockEntry `json:"plugin,omitempty"`
+	App              map[string]portableLockEntry `json:"app,omitempty"`
 	Authentication      map[string]portableLockEntry `json:"authentication,omitempty"`
 	Authorization       map[string]portableLockEntry `json:"authorization,omitempty"`
 	ExternalCredentials map[string]portableLockEntry `json:"externalCredentials,omitempty"`
@@ -134,7 +134,7 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 
 func providerLockKinds() []string {
 	return []string{
-		providermanifestv1.KindPlugin,
+		providermanifestv1.KindApp,
 		providermanifestv1.KindAuthentication,
 		providermanifestv1.KindAuthorization,
 		providermanifestv1.KindExternalCredentials,
@@ -156,7 +156,7 @@ func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntr
 		return nil
 	}
 	switch kind {
-	case providermanifestv1.KindPlugin:
+	case providermanifestv1.KindApp:
 		return lock.Providers
 	case providermanifestv1.KindAuthentication:
 		return lock.Authentication
@@ -196,7 +196,7 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 		SchemaVersion: providerLockSchemaVersionForLock(lock),
 		Revision:      providerLockRevision,
 		Providers: providerLockBuckets{
-			Plugin:              portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindPlugin),
+			App:              portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindApp),
 			Authentication:      portableEntriesFromLockEntries(lock.Authentication, providermanifestv1.KindAuthentication),
 			Authorization:       portableEntriesFromLockEntries(lock.Authorization, providermanifestv1.KindAuthorization),
 			ExternalCredentials: portableEntriesFromLockEntries(lock.ExternalCredentials, providermanifestv1.KindExternalCredentials),
@@ -219,7 +219,7 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 	if lock == nil {
 		return runtimeLock
 	}
-	runtimeLock.Providers = lockEntriesFromPortableEntries(lock.Providers.Plugin)
+	runtimeLock.Providers = lockEntriesFromPortableEntries(lock.Providers.App)
 	runtimeLock.Authentication = lockEntriesFromPortableEntries(lock.Providers.Authentication)
 	runtimeLock.Authorization = lockEntriesFromPortableEntries(lock.Providers.Authorization)
 	runtimeLock.ExternalCredentials = lockEntriesFromPortableEntries(lock.Providers.ExternalCredentials)

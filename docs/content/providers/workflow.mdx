@@ -5,7 +5,7 @@ import ActiveDevelopmentCallout from '../../components/ActiveDevelopmentCallout'
 
 <ActiveDevelopmentCallout verb="are">Workflows</ActiveDevelopmentCallout>
 
-Gestalt workflows let you invoke a plugin operation or agent target later
+Gestalt workflows let you invoke a app operation or agent target later
 instead of right now.
 Today that primarily means cron-based schedules, triggers, workflow run
 history, event publishing, and run cancelation. The workflow model is global.
@@ -14,12 +14,12 @@ A workflow target is always explicit: `target.plugin` or `target.agent`.
 ## Mental model
 
 Start by configuring at least one workflow provider under
-`providers.workflow`, then define a workflow target for the plugin operation
+`providers.workflow`, then define a workflow target for the app operation
 you want Gestalt to invoke. From there you create either a schedule, which runs
 on a cron expression, or a trigger, which runs when a published event
 matches. The workflow provider persists that object, creates workflow runs, and
 calls back into Gestalt when a run should execute. Gestalt then invokes the
-target plugin operation, and you inspect or cancel the resulting runs through
+target app operation, and you inspect or cancel the resulting runs through
 the global workflow runs surface.
 
 There are two ownership modes. Config-managed workflows live in YAML under
@@ -52,7 +52,7 @@ the full subject would otherwise have.
 Config-managed workflows follow the same pattern, but the owner is the system
 config actor rather than a human subject. See
 [Authorization](/providers/authorization) for the deeper
-distinction between workflow execution-ref scopes, nested plugin `invokes`, and
+distinction between workflow execution-ref scopes, nested app `invokes`, and
 credential resolution.
 
 ## Configuring `providers.workflow`
@@ -200,7 +200,7 @@ synthetic workflow subject.
         "cron": "0 */6 * * *",
         "timezone": "America/New_York",
         "target": {
-          "plugin": {
+          "app": {
             "name": "github",
             "operation": "issues.list",
             "connection": "default",
@@ -296,7 +296,7 @@ subject, not as a plugin-local or synthetic workflow subject.
           "subject": "item"
         },
         "target": {
-          "plugin": {
+          "app": {
             "name": "slack",
             "operation": "chat.postMessage",
             "connection": "default",
@@ -352,11 +352,11 @@ exact-match fields. This is also the main handoff mechanism for multi-step
 workflows.
 
 The public HTTP route and CLI publish to every configured workflow provider.
-Plugin code can be more specific when it already knows where triggers are
+App code can be more specific when it already knows where triggers are
 stored. The workflow-manager SDK accepts a provider selection field on
 `PublishEvent` (`providerName` in TypeScript, `provider_name` in Python and
 Rust, `ProviderName` in Go); setting it publishes only to that workflow
-provider. This selection names the workflow backend, not the plugin that owns
+provider. This selection names the workflow backend, not the app that owns
 matching triggers. Trigger ownership and target invocation are still controlled
 by the configured trigger.
 
@@ -399,20 +399,20 @@ trigger route it to deployer-owned code.
 
 ## Using `WorkflowManager` from a plugin
 
-Plugins and other executable provider code can use `WorkflowManager` to create
+Apps and other executable provider code can use `WorkflowManager` to create
 reusable workflow definitions, publish workflow events, start runs, signal runs,
 and create schedules or triggers from the current provider request. The SDK
 attaches the request invocation token to each manager call, so the host keeps
 the same subject and permission ceiling.
 
-Deployments can make this host-service access explicit with plugin workflow
-capabilities. When `capabilities.workflow` is omitted, plugins keep the legacy
+Deployments can make this host-service access explicit with app workflow
+capabilities. When `capabilities.workflow` is omitted, apps keep the legacy
 behavior and workflow-manager calls are allowed subject to the current principal
 and target authorization. When it is present, `operations` is an allowlist for
-the workflow-manager methods that plugin code may call:
+the workflow-manager methods that app code may call:
 
 ```yaml
-plugins:
+apps:
   slack:
     capabilities:
       workflow:
@@ -592,7 +592,7 @@ workflows:
 The target operation reads the published event from the workflow trigger
 context, for example `request.workflow.trigger.event` in TypeScript. Keeping the
 callback provider generic and routing through workflow events lets each deployer
-own the ingestion operation in whatever SDK language their plugin uses.
+own the ingestion operation in whatever SDK language their app uses.
 
 ## Composing larger workflows
 
@@ -655,7 +655,7 @@ both triggers match it and the flow fans out into Slack notification and search
 reindexing.
 
 You can publish that handoff event from outside Gestalt through
-`POST /api/v1/workflow/events`, or from plugin code through the plugin-facing
+`POST /api/v1/workflow/events`, or from app code through the plugin-facing
 workflow manager `PublishEvent` call. External publishing is useful when some
 other system already knows the step finished. Plugin-side publishing is useful
 when the operation itself owns the next handoff.
@@ -736,7 +736,7 @@ spec:
 The workflow protocol is a state and dispatch surface. A provider stores
 workflow objects and reports their current state. When one of those objects
 should execute, the provider calls back into Gestalt through `WorkflowHost` so
-the host can invoke the target plugin operation or agent target under the right
+the host can invoke the target app operation or agent target under the right
 subject and authorization ceiling.
 
 The full protocol includes:
@@ -936,14 +936,14 @@ This is useful for workflows where many external events should coalesce into
 one active run.
 
 Execution references store the subject, credential subject, caller plugin, and
-allowed plugin operations that delayed execution may use later. Config-managed
+allowed app operations that delayed execution may use later. Config-managed
 workflows and user-owned workflows both rely on this reference when a provider
 fires a run after the creating request has ended.
 
 ### Workflow host
 
 Workflow providers call back into Gestalt through the workflow host SDK helper
-when delayed work is ready to invoke a target plugin operation or agent target.
+when delayed work is ready to invoke a target app operation or agent target.
 The host owns authorization, credential resolution, and target dispatch; the
 provider owns durable workflow state and run status transitions.
 
@@ -958,8 +958,8 @@ provider owns durable workflow state and run status transitions.
 
     resp, err := host.InvokeOperation(ctx, gestalt.InvokeWorkflowOperationInput{
         Target: &gestalt.BoundWorkflowTarget{
-            Plugin: &gestalt.BoundWorkflowPluginTarget{
-                PluginName: "roadmap",
+            Plugin: &gestalt.BoundWorkflowAppTarget{
+                AppName: "roadmap",
                 Operation:  "sync_items",
             },
         },
@@ -970,7 +970,7 @@ provider owns durable workflow state and run status transitions.
   <Tabs.Tab>
     ```python
     from gestalt import (
-        BoundWorkflowPluginTarget,
+        BoundWorkflowAppTarget,
         BoundWorkflowTarget,
         InvokeWorkflowOperationInput,
         WorkflowHost,
@@ -980,8 +980,8 @@ provider owns durable workflow state and run status transitions.
         resp = host.invoke_operation(
             InvokeWorkflowOperationInput(
                 target=BoundWorkflowTarget(
-                    plugin=BoundWorkflowPluginTarget(
-                        plugin_name="roadmap",
+                    plugin=BoundWorkflowAppTarget(
+                        app_name="roadmap",
                         operation="sync_items",
                     ),
                 ),
@@ -996,8 +996,8 @@ provider owns durable workflow state and run status transitions.
     let resp = host
         .invoke_operation(gestalt::InvokeWorkflowOperationInput {
             target: Some(gestalt::BoundWorkflowTarget::Plugin(
-                gestalt::BoundWorkflowPluginTarget {
-                    plugin_name: "roadmap".into(),
+                gestalt::BoundWorkflowAppTarget {
+                    app_name: "roadmap".into(),
                     operation: "sync_items".into(),
                     ..Default::default()
                 },

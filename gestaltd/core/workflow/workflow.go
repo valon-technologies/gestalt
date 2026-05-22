@@ -33,12 +33,12 @@ type Actor struct {
 }
 
 type Target struct {
-	Plugin *PluginTarget
+	App *AppTarget
 	Agent  *AgentTarget
 }
 
-type PluginTarget struct {
-	PluginName     string
+type AppTarget struct {
+	AppName     string
 	Operation      string
 	Connection     string
 	Instance       string
@@ -82,7 +82,7 @@ type AgentStepWhen struct {
 }
 
 type OutputDelivery struct {
-	Target         PluginTarget
+	Target         AppTarget
 	InputBindings  []OutputBinding
 	CredentialMode core.ConnectionMode
 }
@@ -115,7 +115,7 @@ type ExecutionReference struct {
 	ID                  string
 	ProviderName        string
 	Target              Target
-	CallerPluginName    string
+	CallerAppName    string
 	SourceDefinitionID  string
 	SubjectID           string
 	SubjectKind         string
@@ -222,7 +222,7 @@ type GetRunRequest struct {
 type ListRunsRequest struct {
 	PageSize     int
 	PageToken    string
-	TargetPlugin string
+	TargetApp string
 	Status       RunStatus
 }
 
@@ -324,7 +324,7 @@ type ResumeEventTriggerRequest struct {
 }
 
 type PublishEventRequest struct {
-	PluginName  string
+	AppName  string
 	Event       Event
 	PublishedBy Actor
 }
@@ -375,7 +375,7 @@ type Host interface {
 }
 
 func TargetsEqual(left, right Target) bool {
-	if (left.Agent != nil && left.Plugin != nil) || (right.Agent != nil && right.Plugin != nil) {
+	if (left.Agent != nil && left.App != nil) || (right.Agent != nil && right.App != nil) {
 		return false
 	}
 	leftJSON, leftErr := json.Marshal(normalizedTargetComparisonPayload(left))
@@ -396,7 +396,7 @@ func TargetFingerprint(target Target) (string, error) {
 }
 
 type targetComparisonPayload struct {
-	Plugin *PluginTarget
+	App *AppTarget
 	Agent  *AgentTarget
 }
 
@@ -448,12 +448,12 @@ func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
 		out.Agent = &agentTarget
 		return out
 	}
-	if target.Plugin != nil {
-		pluginTarget := *target.Plugin
+	if target.App != nil {
+		pluginTarget := *target.App
 		if len(pluginTarget.Input) == 0 {
 			pluginTarget.Input = nil
 		}
-		out.Plugin = &pluginTarget
+		out.App = &pluginTarget
 	}
 	return out
 }

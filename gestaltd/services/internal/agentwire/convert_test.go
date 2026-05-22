@@ -12,7 +12,7 @@ func TestToolRefProtoRoundTripCarriesRunAs(t *testing.T) {
 	t.Parallel()
 
 	ref := coreagent.ToolRef{
-		Plugin:      "notion",
+		App:      "notion",
 		Operation:   "search",
 		Connection:  "support",
 		Instance:    "default",
@@ -50,7 +50,7 @@ func TestToolRefFromProtoDropsMalformedRunAsExternalIdentity(t *testing.T) {
 	t.Parallel()
 
 	decoded := ToolRefFromProto(&proto.AgentToolRef{
-		Plugin:    "notion",
+		App:    "notion",
 		Operation: "search",
 		RunAs: &proto.SubjectContext{
 			Id: "service_account:gestalt-support-notion",

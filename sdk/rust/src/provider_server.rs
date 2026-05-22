@@ -15,7 +15,7 @@ use crate::api::{
 use crate::catalog::{catalog_to_proto, object_map};
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
-use crate::generated::v1::integration_provider_server::IntegrationProvider;
+use crate::generated::v1::integration_provider_server::AppProvider;
 use crate::generated::v1::{
     ExecuteRequest, GetSessionCatalogRequest, GetSessionCatalogResponse, HttpSubjectRequest,
     OperationResult as ProtoOperationResult, PostConnectCredential, PostConnectRequest,
@@ -82,7 +82,7 @@ impl<P> ProviderServer<P> {
 }
 
 #[tonic::async_trait]
-impl<P> IntegrationProvider for ProviderServer<P>
+impl<P> AppProvider for ProviderServer<P>
 where
     P: Provider,
 {

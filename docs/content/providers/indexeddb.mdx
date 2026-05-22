@@ -8,9 +8,9 @@ allows Gestalt to be agnostic of relational, document, or key-value backends.
 
 ## Using IndexedDB from a plugin
 
-Plugins use the IndexedDB client from the language SDK. By default, Gestalt
-uses the host IndexedDB provider and the plugin name as the database scope.
-Configure `plugins.<name>.indexeddb` only when a plugin needs a different
+Apps use the IndexedDB client from the language SDK. By default, Gestalt
+uses the host IndexedDB provider and the app name as the database scope.
+Configure `apps.<name>.indexeddb` only when a app needs a different
 provider or database scope.
 
 For example:
@@ -35,7 +35,7 @@ providers:
       config:
         dsn: ${APP_DATABASE_URL}
 
-plugins:
+apps:
   workplace_hub:
     source: ./plugin/manifest.yaml
     indexeddb:
@@ -124,9 +124,9 @@ Then inside the plugin:
   </Tabs.Tab>
 </Tabs>
 
-Normal plugin config gives the plugin one effective IndexedDB binding. If you
+Normal app config gives the app one effective IndexedDB binding. If you
 need a different backing store or a different scoped database name, choose that
-in YAML instead of encoding transport details in plugin code.
+in YAML instead of encoding transport details in app code.
 
 ### Advanced reads and writes
 
@@ -584,7 +584,7 @@ providers:
 Gestalt needs exactly one active datastore selected by
 `server.providers.indexeddb`. Published datastore packages can be locked and
 prepared with `gestaltd lock` and `gestaltd sync --locked` just like other
-provider types. Plugins still go through the
+provider types. Apps still go through the
 host's request and auth model, so they do not talk to the datastore provider
 directly.
 

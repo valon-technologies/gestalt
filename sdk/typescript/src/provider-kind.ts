@@ -9,9 +9,9 @@ type ProviderKindDefinition = {
 
 const PROVIDER_KIND_DEFINITIONS = {
   integration: {
-    tokens: ["plugin"],
-    formatToken: "plugin",
-    defaultExportNames: ["provider", "plugin"],
+    tokens: ["app"],
+    formatToken: "app",
+    defaultExportNames: ["provider", "app"],
     label: "plugin provider",
   },
   authentication: {

@@ -302,7 +302,7 @@ When a request references an unknown provider or operation, `gestaltd` records
 
 ### Connection Authentication Metrics
 
-These metrics are recorded around plugin connection authentication flows including
+These metrics are recorded around app connection authentication flows including
 OAuth start and completion, manual connect, and token refresh.
 
 <Tabs items={['OpenTelemetry', 'Prometheus']}>
@@ -361,7 +361,7 @@ provider name) and `gestalt.action` (`begin_login`, `complete_login`, or
 ### Discovery Metrics
 
 These metrics are recorded around credentialed HTTP catalog discovery, currently
-`GET /api/v1/integrations/{name}/operations` when `gestaltd` resolves a
+`GET /api/v1/apps/{name}/operations` when `gestaltd` resolves a
 session catalog with stored or identity credentials.
 
 <Tabs items={['OpenTelemetry', 'Prometheus']}>
@@ -436,7 +436,7 @@ These metrics carry low-cardinality attributes:
 ### Credential And Catalog Resolution Metrics
 
 Credential and catalog resolution metrics make the pre-invocation and agent
-tool paths visible before work reaches a plugin provider.
+tool paths visible before work reaches a app provider.
 
 | OpenTelemetry family | Prometheus families | Meaning |
 | --- | --- | --- |
@@ -447,9 +447,9 @@ These metrics carry low-cardinality attributes:
 
 - `gestalt.credential.provider` identifies the configured credential provider.
 - `gestalt.credential.operation` identifies the credential provider method.
-- `gestalt.provider` identifies the plugin provider when the path has resolved
+- `gestalt.provider` identifies the app provider when the path has resolved
   one.
-- `gestalt.operation` identifies the plugin operation for catalog operation
+- `gestalt.operation` identifies the app operation for catalog operation
   resolution.
 - `gestalt.catalog.source` is attached to catalog resolution spans and records
   whether the resolved operation came from `static`, `session`, or a
@@ -533,7 +533,7 @@ The built-in `gestaltd` metric surface emits broker operation result status via
 `gestalt.result_status` and `gestalt.result_status_class`, but it does not emit
 separate per-upstream-request HTTP `status_code` or `status_class` metrics for
 HTTP catalog transports. It also does not emit deduplicated DAU, WAU, or MAU
-analytics for users or plugins. Those need separate semantic decisions or an
+analytics for users or apps. Those need separate semantic decisions or an
 analytics pipeline instead of more process-local counters.
 
 ### HTTP Server Metrics
@@ -616,7 +616,7 @@ service traffic. They only apply to provider-backed components.
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `rpc_client_call_duration_seconds` | Histogram | Outbound plugin RPC duration |
+    | `rpc_client_call_duration_seconds` | Histogram | Outbound app RPC duration |
     | `rpc_server_call_duration_seconds` | Histogram | Inbound provider or host-service RPC duration |
   </Tabs.Tab>
 </Tabs>
@@ -673,7 +673,7 @@ development and other trusted-network environments. The embedded admin UI
 visualizes that same scrape surface instead of using a separate metrics API.
 
 The Prometheus endpoint and OTLP export hang off the same meter provider and
-include the HTTP middleware metrics, broker metrics, plugin gRPC client
+include the HTTP middleware metrics, broker metrics, app gRPC client
 metrics, and exporter metadata described above.
 
 The admin UI intentionally stays basic: it renders summary cards and lightweight

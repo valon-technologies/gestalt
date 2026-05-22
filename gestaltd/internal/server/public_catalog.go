@@ -9,7 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	declarative "github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	declarative "github.com/valon-technologies/gestalt/server/services/apps/declarative"
 )
 
 type operationConnectionProjection struct {

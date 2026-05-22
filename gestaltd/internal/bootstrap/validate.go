@@ -14,15 +14,15 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/authorization"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 )
 
 // Validate loads daemon dependencies and integration factories without
 // starting the server or running migrations. Unlike Bootstrap, provider
 // validation is strict: any provider construction failure is returned.
 func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) ([]string, error) {
-	if err := pluginservice.ValidateEffectiveCatalogsAndDependencies(ctx, config.PluginValidationConfig(cfg)); err != nil {
+	if err := appservice.ValidateEffectiveCatalogsAndDependencies(ctx, config.AppValidationConfig(cfg)); err != nil {
 		return nil, err
 	}
 
@@ -69,7 +69,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err
 	}
-	authz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Plugins))
+	authz, err := authorization.New(config.AuthorizationStaticConfig(cfg.Authorization, cfg.Apps))
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return warnings, err
@@ -134,11 +134,11 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 		}
 	}
 
-	names := slices.Sorted(maps.Keys(cfg.Plugins))
+	names := slices.Sorted(maps.Keys(cfg.Apps))
 
 	var errs []error
 	for _, name := range names {
-		entry := cfg.Plugins[name]
+		entry := cfg.Apps[name]
 		result, err := buildProviderForValidation(ctx, name, entry, deps)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))
@@ -195,7 +195,7 @@ func newPreparedProviderStub(name string, entry *config.ProviderEntry) (core.Pro
 	}
 	description := spec.Description
 	if description == "" {
-		description = fmt.Sprintf("prepared plugin stub for %s", name)
+		description = fmt.Sprintf("prepared app stub for %s", name)
 	}
 	cat := spec.Catalog
 	if cat == nil {

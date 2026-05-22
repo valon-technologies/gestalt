@@ -9,7 +9,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 )
 
 type providerLocalWatchPlan struct {
@@ -89,7 +89,7 @@ func providerLocalEntryPaths(cfg *config.Config, entryPath func(*config.Provider
 			}
 		}
 	}
-	addProviderEntries(cfg.Plugins)
+	addProviderEntries(cfg.Apps)
 	addProviderEntries(cfg.Providers.Authentication)
 	addProviderEntries(cfg.Providers.Authorization)
 	addProviderEntries(cfg.Providers.ExternalCredentials)

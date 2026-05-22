@@ -24,7 +24,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/workflows/workflowprincipal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -46,7 +46,7 @@ const workflowScheduleExecutionRefBasePrefix = "workflow_schedule:"
 const workflowEventTriggerExecutionRefBasePrefix = "workflow_event_trigger:"
 const workflowRunExecutionRefBasePrefix = "workflow_run:"
 const workflowDefinitionExecutionRefBasePrefix = "workflow_definition:"
-const workflowNoProviderPermissionsPlugin = "__gestalt.workflow.no_provider_permissions__"
+const workflowNoProviderPermissionsApp = "__gestalt.workflow.no_provider_permissions__"
 const defaultWorkflowEventSpecVersion = "1.0"
 const workflowRunListDefaultPageSize = 100
 const workflowRunListMaxPageSize = 200
@@ -111,7 +111,7 @@ type Config struct {
 	Authorizer        authorization.RuntimeAuthorizer
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
-	PluginInvokes     map[string][]invocation.PluginInvocationDependency
+	AppInvokes        map[string][]invocation.AppInvocationDependency
 	Now               func() time.Time
 }
 
@@ -125,7 +125,7 @@ type Manager struct {
 	authorizer        authorization.RuntimeAuthorizer
 	defaultConnection map[string]string
 	catalogConnection map[string]string
-	pluginInvokes     map[string][]invocation.PluginInvocationDependency
+	appInvokes        map[string][]invocation.AppInvocationDependency
 	now               func() time.Time
 }
 
@@ -138,7 +138,7 @@ type ScheduleUpsert struct {
 	SourceDefinitionID string
 	Paused             bool
 	IdempotencyKey     string
-	CallerPluginName   string
+	CallerAppName   string
 	Permissions        []core.AccessPermission
 }
 
@@ -146,7 +146,7 @@ type DefinitionUpsert struct {
 	ProviderName     string
 	Target           coreworkflow.Target
 	IdempotencyKey   string
-	CallerPluginName string
+	CallerAppName string
 	Permissions      []core.AccessPermission
 }
 
@@ -157,7 +157,7 @@ type EventTriggerUpsert struct {
 	DefinitionID     string
 	Paused           bool
 	IdempotencyKey   string
-	CallerPluginName string
+	CallerAppName string
 }
 
 type RunStart struct {
@@ -166,7 +166,7 @@ type RunStart struct {
 	DefinitionID     string
 	IdempotencyKey   string
 	WorkflowKey      string
-	CallerPluginName string
+	CallerAppName string
 	Permissions      []core.AccessPermission
 }
 
@@ -182,14 +182,14 @@ type RunSignalOrStart struct {
 	DefinitionID     string
 	IdempotencyKey   string
 	Signal           coreworkflow.Signal
-	CallerPluginName string
+	CallerAppName string
 }
 
 type EventPublish struct {
 	ProviderName string
-	// PluginName is trusted owner context. Callers must derive or authorize it before
+	// AppName is trusted owner context. Callers must derive or authorize it before
 	// entering the workflow manager; the manager only normalizes and forwards it.
-	PluginName string
+	AppName string
 	Event      coreworkflow.Event
 }
 
@@ -279,7 +279,7 @@ func New(cfg Config) *Manager {
 		authorizer:        cfg.Authorizer,
 		defaultConnection: maps.Clone(cfg.DefaultConnection),
 		catalogConnection: maps.Clone(cfg.CatalogConnection),
-		pluginInvokes:     invocation.ClonePluginInvocationDependencyMap(cfg.PluginInvokes),
+		appInvokes:     invocation.CloneAppInvocationDependencyMap(cfg.AppInvokes),
 		now:               now,
 	}
 }
@@ -300,11 +300,11 @@ func (a *workflowAuditEvent) setProvider(providerName string) {
 	a.entry.Provider = strings.TrimSpace(providerName)
 }
 
-func (a *workflowAuditEvent) setCallerPlugin(callerPlugin string) {
+func (a *workflowAuditEvent) setCallerPlugin(callerApp string) {
 	if a == nil {
 		return
 	}
-	a.entry.CallerPlugin = strings.TrimSpace(callerPlugin)
+	a.entry.CallerApp = strings.TrimSpace(callerApp)
 }
 
 func (a *workflowAuditEvent) setWorkflowKey(workflowKey string) {
@@ -328,11 +328,11 @@ func (a *workflowAuditEvent) setWorkflowTarget(target coreworkflow.Target) {
 		return
 	}
 	a.entry.WorkflowTargetKind = workflowAuditTargetKind(target)
-	if target.Plugin == nil {
+	if target.App == nil {
 		return
 	}
-	pluginName := strings.TrimSpace(target.Plugin.PluginName)
-	operation := strings.TrimSpace(target.Plugin.Operation)
+	pluginName := strings.TrimSpace(target.App.AppName)
+	operation := strings.TrimSpace(target.App.Operation)
 	if pluginName == "" || operation == "" {
 		return
 	}
@@ -372,8 +372,8 @@ func (a *workflowAuditEvent) finish(ctx context.Context, err error) {
 
 func workflowAuditTargetKind(target coreworkflow.Target) string {
 	switch {
-	case target.Plugin != nil:
-		return "plugin"
+	case target.App != nil:
+		return "app"
 	case target.Agent != nil:
 		return "agent"
 	default:
@@ -399,7 +399,7 @@ func workflowRunID(run *coreworkflow.Run) string {
 func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, req DefinitionUpsert) (out *ManagedDefinition, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionCreate)
-	audit.setCallerPlugin(req.CallerPluginName)
+	audit.setCallerPlugin(req.CallerAppName)
 	defer func() {
 		if out != nil && out.Definition != nil {
 			audit.setProvider(out.ProviderName)
@@ -415,7 +415,7 @@ func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerAppName)
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +425,7 @@ func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, 
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	definitionID := newDefinitionID("")
 	if idempotencyKey != "" {
-		definitionID = newDefinitionID(workflowCreateIdempotencyScope(p, req.CallerPluginName, idempotencyKey))
+		definitionID = newDefinitionID(workflowCreateIdempotencyScope(p, req.CallerAppName, idempotencyKey))
 		existing, err := m.requireOwnedDefinition(ctx, definitionID, p)
 		if err == nil {
 			if !managedDefinitionMatchesUpsert(existing, providerName, target) {
@@ -439,7 +439,7 @@ func (m *Manager) CreateDefinition(ctx context.Context, p *principal.Principal, 
 		}
 	}
 	audit.setObjectTarget(workflowAuditTargetDefinition, definitionID, "")
-	ref, err := m.putExecutionRefWithPermissions(ctx, definitionID, providerName, provider, target, p, req.CallerPluginName, "", req.Permissions)
+	ref, err := m.putExecutionRefWithPermissions(ctx, definitionID, providerName, provider, target, p, req.CallerAppName, "", req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +457,7 @@ func (m *Manager) GetDefinition(ctx context.Context, p *principal.Principal, def
 func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, definitionID string, req DefinitionUpsert) (out *ManagedDefinition, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationDefinitionUpdate)
-	audit.setCallerPlugin(req.CallerPluginName)
+	audit.setCallerPlugin(req.CallerAppName)
 	audit.setObjectTarget(workflowAuditTargetDefinition, definitionID, "")
 	defer func() {
 		if out != nil && out.Definition != nil {
@@ -479,7 +479,7 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 	if err != nil {
 		return nil, err
 	}
-	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerPluginName)
+	target, err := m.resolveTarget(ctx, p, req.Target, req.CallerAppName)
 	if err != nil {
 		return nil, err
 	}
@@ -489,7 +489,7 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 		if _, err := m.revokeExecutionRefWithError(ctx, existing.Definition); err != nil {
 			return nil, err
 		}
-		ref, err := m.putExecutionRefWithPermissions(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName, "", req.Permissions)
+		ref, err := m.putExecutionRefWithPermissions(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerAppName, "", req.Permissions)
 		if err != nil {
 			m.restoreExecutionRef(ctx, existing.Definition)
 			return nil, err
@@ -500,7 +500,7 @@ func (m *Manager) UpdateDefinition(ctx context.Context, p *principal.Principal, 
 			provider:     provider,
 		}, nil
 	}
-	ref, err := m.putExecutionRefWithPermissions(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerPluginName, "", req.Permissions)
+	ref, err := m.putExecutionRefWithPermissions(ctx, strings.TrimSpace(definitionID), providerName, provider, target, p, req.CallerAppName, "", req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -599,7 +599,7 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 				PageSize:     pageSize,
 				PageToken:    providerPageToken,
 				Status:       req.Status,
-				TargetPlugin: strings.TrimSpace(req.TargetPlugin),
+				TargetApp: strings.TrimSpace(req.TargetApp),
 			})
 			if err != nil {
 				return nil, err
@@ -821,7 +821,7 @@ type workflowRunListPageToken struct {
 	ProviderFingerprint string                         `json:"providerFingerprint"`
 	Providers           []workflowRunProviderPageState `json:"providers"`
 	PageSize            int                            `json:"pageSize"`
-	TargetPlugin        string                         `json:"targetPlugin,omitempty"`
+	TargetApp        string                         `json:"targetApp,omitempty"`
 	Status              coreworkflow.RunStatus         `json:"status,omitempty"`
 }
 
@@ -858,7 +858,7 @@ func decodeWorkflowRunListPageToken(raw string, providerNames []string, req core
 	if token.PageSize != pageSize {
 		return nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
-	if token.TargetPlugin != strings.TrimSpace(req.TargetPlugin) || token.Status != req.Status {
+	if token.TargetApp != strings.TrimSpace(req.TargetApp) || token.Status != req.Status {
 		return nil, fmt.Errorf("%w: page_token is invalid", invocation.ErrInvalidInvocation)
 	}
 	for i := range token.Providers {
@@ -885,7 +885,7 @@ func workflowRunListNextPageToken(providerNames []string, req coreworkflow.ListR
 		ProviderFingerprint: workflowRunProviderListFingerprint(providerNames),
 		Providers:           cloneWorkflowRunProviderPageStates(states),
 		PageSize:            pageSize,
-		TargetPlugin:        strings.TrimSpace(req.TargetPlugin),
+		TargetApp:        strings.TrimSpace(req.TargetApp),
 		Status:              req.Status,
 	}
 	return encodeWorkflowRunListPageToken(token)
@@ -1016,8 +1016,8 @@ func runMatchesListFilters(run *coreworkflow.Run, req coreworkflow.ListRunsReque
 	if run == nil {
 		return false
 	}
-	if plugin := strings.TrimSpace(req.TargetPlugin); plugin != "" {
-		if run.Target.Plugin == nil || strings.TrimSpace(run.Target.Plugin.PluginName) != plugin {
+	if app := strings.TrimSpace(req.TargetApp); app != "" {
+		if run.Target.App == nil || strings.TrimSpace(run.Target.App.AppName) != app {
 			return false
 		}
 	}
@@ -1030,7 +1030,7 @@ func runMatchesListFilters(run *coreworkflow.Run, req coreworkflow.ListRunsReque
 func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunStart) (out *ManagedRun, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationRunStart)
-	audit.setCallerPlugin(req.CallerPluginName)
+	audit.setCallerPlugin(req.CallerAppName)
 	audit.setWorkflowKey(req.WorkflowKey)
 	audit.setObjectTarget(workflowAuditTargetRun, "", "")
 	defer func() {
@@ -1046,15 +1046,15 @@ func (m *Manager) StartRun(ctx context.Context, p *principal.Principal, req RunS
 	if strings.TrimSpace(principalSubjectID(p)) == "" {
 		return nil, ErrWorkflowSubjectRequired
 	}
-	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
+	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerAppName)
 	if err != nil {
 		return nil, err
 	}
 	audit.setProvider(providerName)
 	audit.setWorkflowTarget(target)
 
-	executionRefID := newRunExecutionRefID(workflowCreateIdempotencyScope(p, req.CallerPluginName, req.IdempotencyKey), req.WorkflowKey)
-	ref, createdRef, err := m.putRunExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID, req.Permissions)
+	executionRefID := newRunExecutionRefID(workflowCreateIdempotencyScope(p, req.CallerAppName, req.IdempotencyKey), req.WorkflowKey)
+	ref, createdRef, err := m.putRunExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerAppName, req.DefinitionID, req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -1209,7 +1209,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	var targetAuthFailure *targetAuthorizationFailure
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationRunSignalOrStart)
-	audit.setCallerPlugin(req.CallerPluginName)
+	audit.setCallerPlugin(req.CallerAppName)
 	audit.setWorkflowKey(req.WorkflowKey)
 	audit.setObjectTarget(workflowAuditTargetRun, "", "")
 	defer func() {
@@ -1239,7 +1239,7 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	}
 	phase = "resolve_provider_target"
 	var provider coreworkflow.Provider
-	providerName, provider, target, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
+	providerName, provider, target, err = m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerAppName)
 	if err != nil {
 		return nil, err
 	}
@@ -1252,19 +1252,19 @@ func (m *Manager) SignalOrStartRun(ctx context.Context, p *principal.Principal, 
 	}
 
 	phase = "authorize_target"
-	executionRefPermissions := m.executionRefPermissions(p, target, req.CallerPluginName)
+	executionRefPermissions := m.executionRefPermissions(p, target, req.CallerAppName)
 	targetAuth := m.checkTargetAuthorization(ctx, executionRefPrincipal(p, executionRefPermissions), target)
 	if !targetAuth.allowed {
 		targetAuthFailure = &targetAuth.failure
 		return nil, core.ErrNotFound
 	}
 	phase = "derive_execution_ref"
-	executionRefID, err = signalOrStartExecutionRefID(providerName, workflowKey, target, p, req.CallerPluginName, executionRefPermissions)
+	executionRefID, err = signalOrStartExecutionRefID(providerName, workflowKey, target, p, req.CallerAppName, executionRefPermissions)
 	if err != nil {
 		return nil, err
 	}
 	phase = "put_execution_ref"
-	ref, err := m.putSignalOrStartExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID, executionRefPermissions)
+	ref, err := m.putSignalOrStartExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerAppName, req.DefinitionID, executionRefPermissions)
 	if err != nil {
 		return nil, err
 	}
@@ -1376,7 +1376,7 @@ func workflowManagerErrorType(err error) string {
 func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req EventPublish) (out coreworkflow.Event, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationEventPublish)
-	audit.setCallerPlugin(req.PluginName)
+	audit.setCallerPlugin(req.AppName)
 	finishAudit := true
 	defer func() {
 		eventType := out.Type
@@ -1396,7 +1396,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 	}
 
 	providerSelection := strings.TrimSpace(req.ProviderName)
-	pluginName := strings.TrimSpace(req.PluginName)
+	pluginName := strings.TrimSpace(req.AppName)
 	event := req.Event
 	event = normalizePublishedEvent(event, m.now())
 	if strings.TrimSpace(event.Type) == "" {
@@ -1411,7 +1411,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 		}
 		audit.setProvider(providerName)
 		published, err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
-			PluginName:  pluginName,
+			AppName:  pluginName,
 			Event:       event,
 			PublishedBy: publishedBy,
 		})
@@ -1438,7 +1438,7 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 			return coreworkflow.Event{}, err
 		}
 		_, err = provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
-			PluginName:  pluginName,
+			AppName:  pluginName,
 			Event:       event,
 			PublishedBy: publishedBy,
 		})
@@ -1508,7 +1508,7 @@ func (m *Manager) ListSchedules(ctx context.Context, p *principal.Principal) ([]
 func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, req ScheduleUpsert) (out *ManagedSchedule, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationScheduleCreate)
-	audit.setCallerPlugin(req.CallerPluginName)
+	audit.setCallerPlugin(req.CallerAppName)
 	defer func() {
 		if out != nil && out.Schedule != nil {
 			audit.setProvider(out.ProviderName)
@@ -1524,7 +1524,7 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 	}
 
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
-	idempotencyScope := workflowCreateIdempotencyScope(p, req.CallerPluginName, idempotencyKey)
+	idempotencyScope := workflowCreateIdempotencyScope(p, req.CallerAppName, idempotencyKey)
 	scheduleID := newScheduleID(idempotencyScope)
 	audit.setObjectTarget(workflowAuditTargetSchedule, scheduleID, "")
 	var existing *ManagedSchedule
@@ -1550,7 +1550,7 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 		}
 	}
 
-	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
+	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerAppName)
 	if err != nil {
 		return nil, err
 	}
@@ -1563,7 +1563,7 @@ func (m *Manager) CreateSchedule(ctx context.Context, p *principal.Principal, re
 		return existing, nil
 	}
 	executionRefID := newScheduleExecutionRefID(scheduleID, idempotencyScope)
-	ref, err := m.putExecutionRefWithPermissions(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, scheduleUpsertSourceDefinitionID(req), req.Permissions)
+	ref, err := m.putExecutionRefWithPermissions(ctx, executionRefID, providerName, provider, target, p, req.CallerAppName, scheduleUpsertSourceDefinitionID(req), req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -1637,7 +1637,7 @@ func (m *Manager) GetSchedule(ctx context.Context, p *principal.Principal, sched
 func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, scheduleID string, req ScheduleUpsert) (out *ManagedSchedule, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationScheduleUpdate)
-	audit.setCallerPlugin(req.CallerPluginName)
+	audit.setCallerPlugin(req.CallerAppName)
 	audit.setObjectTarget(workflowAuditTargetSchedule, scheduleID, "")
 	defer func() {
 		if out != nil && out.Schedule != nil {
@@ -1657,7 +1657,7 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 		return nil, err
 	}
 	audit.setProvider(existing.ProviderName)
-	nextProviderName, nextProvider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
+	nextProviderName, nextProvider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerAppName)
 	if err != nil {
 		return nil, err
 	}
@@ -1665,7 +1665,7 @@ func (m *Manager) UpdateSchedule(ctx context.Context, p *principal.Principal, sc
 	audit.setWorkflowTarget(target)
 
 	executionRefID := scheduleExecutionRefID(strings.TrimSpace(existing.Schedule.ID))
-	nextRef, err := m.putExecutionRefWithPermissions(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName, scheduleUpsertSourceDefinitionID(req), req.Permissions)
+	nextRef, err := m.putExecutionRefWithPermissions(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerAppName, scheduleUpsertSourceDefinitionID(req), req.Permissions)
 	if err != nil {
 		return nil, err
 	}
@@ -1849,7 +1849,7 @@ func (m *Manager) ListEventTriggers(ctx context.Context, p *principal.Principal)
 func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal, req EventTriggerUpsert) (out *ManagedEventTrigger, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationEventTriggerCreate)
-	audit.setCallerPlugin(req.CallerPluginName)
+	audit.setCallerPlugin(req.CallerAppName)
 	defer func() {
 		if out != nil && out.Trigger != nil {
 			audit.setProvider(out.ProviderName)
@@ -1869,7 +1869,7 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 	}
 
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
-	idempotencyScope := workflowCreateIdempotencyScope(p, req.CallerPluginName, idempotencyKey)
+	idempotencyScope := workflowCreateIdempotencyScope(p, req.CallerAppName, idempotencyKey)
 	triggerID := newEventTriggerID(idempotencyScope)
 	audit.setObjectTarget(workflowAuditTargetEventTrigger, triggerID, "")
 	var existing *ManagedEventTrigger
@@ -1895,7 +1895,7 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 		}
 	}
 
-	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
+	providerName, provider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerAppName)
 	if err != nil {
 		return nil, err
 	}
@@ -1908,7 +1908,7 @@ func (m *Manager) CreateEventTrigger(ctx context.Context, p *principal.Principal
 		return existing, nil
 	}
 	executionRefID := newEventTriggerExecutionRefID(triggerID, idempotencyScope)
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerPluginName, req.DefinitionID)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, req.CallerAppName, req.DefinitionID)
 	if err != nil {
 		return nil, err
 	}
@@ -1968,7 +1968,7 @@ func (m *Manager) GetEventTrigger(ctx context.Context, p *principal.Principal, t
 func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal, triggerID string, req EventTriggerUpsert) (out *ManagedEventTrigger, err error) {
 	p = principal.Canonicalized(p)
 	ctx, audit := m.beginWorkflowAudit(ctx, p, workflowAuditOperationEventTriggerUpdate)
-	audit.setCallerPlugin(req.CallerPluginName)
+	audit.setCallerPlugin(req.CallerAppName)
 	audit.setObjectTarget(workflowAuditTargetEventTrigger, triggerID, "")
 	defer func() {
 		if out != nil && out.Trigger != nil {
@@ -1988,7 +1988,7 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 		return nil, err
 	}
 	audit.setProvider(existing.ProviderName)
-	nextProviderName, nextProvider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerPluginName)
+	nextProviderName, nextProvider, target, err := m.resolveRequestProviderTarget(ctx, p, req.ProviderName, req.Target, req.DefinitionID, req.CallerAppName)
 	if err != nil {
 		return nil, err
 	}
@@ -2000,7 +2000,7 @@ func (m *Manager) UpdateEventTrigger(ctx context.Context, p *principal.Principal
 	}
 
 	executionRefID := eventTriggerExecutionRefID(strings.TrimSpace(existing.Trigger.ID))
-	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerPluginName, req.DefinitionID)
+	nextRef, err := m.putExecutionRef(ctx, executionRefID, nextProviderName, nextProvider, target, p, req.CallerAppName, req.DefinitionID)
 	if err != nil {
 		return nil, err
 	}
@@ -2140,14 +2140,14 @@ func (m *Manager) resolveProviderByName(providerName string) (coreworkflow.Provi
 	return m.workflow.ResolveProvider(strings.TrimSpace(providerName))
 }
 
-func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal.Principal, providerSelection string, target coreworkflow.Target, definitionID, callerPluginName string) (string, coreworkflow.Provider, coreworkflow.Target, error) {
+func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal.Principal, providerSelection string, target coreworkflow.Target, definitionID, callerAppName string) (string, coreworkflow.Provider, coreworkflow.Target, error) {
 	definitionID = strings.TrimSpace(definitionID)
 	if definitionID == "" {
 		providerName, provider, err := m.resolveProviderSelection(strings.TrimSpace(providerSelection))
 		if err != nil {
 			return "", nil, coreworkflow.Target{}, err
 		}
-		resolvedTarget, err := m.resolveTarget(ctx, p, target, callerPluginName)
+		resolvedTarget, err := m.resolveTarget(ctx, p, target, callerAppName)
 		if err != nil {
 			return "", nil, coreworkflow.Target{}, err
 		}
@@ -2169,7 +2169,7 @@ func (m *Manager) resolveRequestProviderTarget(ctx context.Context, p *principal
 			return "", nil, coreworkflow.Target{}, fmt.Errorf("%w: workflow definition %s belongs to provider %q, not %q", invocation.ErrInvalidInvocation, definitionID, definition.ProviderName, selectedProviderName)
 		}
 	}
-	resolvedTarget, err := m.resolveTarget(ctx, p, definition.Definition.Target, callerPluginName)
+	resolvedTarget, err := m.resolveTarget(ctx, p, definition.Definition.Target, callerAppName)
 	if err != nil {
 		return "", nil, coreworkflow.Target{}, err
 	}
@@ -2192,32 +2192,32 @@ func (m *Manager) validateExistingProviderSelection(providerSelection, existingP
 }
 
 func workflowTargetIsSet(target coreworkflow.Target) bool {
-	return target.Plugin != nil || target.Agent != nil
+	return target.App != nil || target.Agent != nil
 }
 
-func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target, callerPluginName string) (coreworkflow.Target, error) {
-	hasPlugin := target.Plugin != nil
+func (m *Manager) resolveTarget(ctx context.Context, p *principal.Principal, target coreworkflow.Target, callerAppName string) (coreworkflow.Target, error) {
+	hasApp := target.App != nil
 	hasAgent := target.Agent != nil
-	if hasAgent && hasPlugin {
-		return coreworkflow.Target{}, fmt.Errorf("workflow target must set exactly one of plugin or agent")
+	if hasAgent && hasApp {
+		return coreworkflow.Target{}, fmt.Errorf("workflow target must set exactly one of app or agent")
 	}
 	if hasAgent {
-		return m.resolveAgentTarget(ctx, p, *target.Agent, callerPluginName)
+		return m.resolveAgentTarget(ctx, p, *target.Agent, callerAppName)
 	}
-	pluginTarget := coreworkflow.PluginTarget{}
-	if target.Plugin != nil {
-		pluginTarget = *target.Plugin
+	pluginTarget := coreworkflow.AppTarget{}
+	if target.App != nil {
+		pluginTarget = *target.App
 	}
-	return m.resolvePluginTarget(ctx, p, pluginTarget, callerPluginName)
+	return m.resolveAppTarget(ctx, p, pluginTarget, callerAppName)
 }
 
-func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principal, target coreworkflow.PluginTarget, callerPluginName string) (coreworkflow.Target, error) {
+func (m *Manager) resolveAppTarget(ctx context.Context, p *principal.Principal, target coreworkflow.AppTarget, callerAppName string) (coreworkflow.Target, error) {
 	if m == nil || m.providers == nil {
 		return coreworkflow.Target{}, fmt.Errorf("%w: workflow providers are not configured", invocation.ErrInternal)
 	}
-	pluginName := strings.TrimSpace(target.PluginName)
+	pluginName := strings.TrimSpace(target.AppName)
 	if pluginName == "" {
-		return coreworkflow.Target{}, fmt.Errorf("%w: workflow target plugin is required", invocation.ErrProviderNotFound)
+		return coreworkflow.Target{}, fmt.Errorf("%w: workflow target app is required", invocation.ErrProviderNotFound)
 	}
 	prov, err := m.providers.Get(pluginName)
 	if err != nil {
@@ -2233,7 +2233,7 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 	if !m.allowProvider(ctx, p, pluginName) || !m.allowOperation(ctx, p, pluginName, operation) {
 		return coreworkflow.Target{}, invocation.ErrAuthorizationDenied
 	}
-	credentialMode, err := m.normalizeWorkflowPluginTargetCredentialMode(target.CredentialMode, callerPluginName, pluginName, operation)
+	credentialMode, err := m.normalizeWorkflowAppTargetCredentialMode(target.CredentialMode, callerAppName, pluginName, operation)
 	if err != nil {
 		return coreworkflow.Target{}, err
 	}
@@ -2284,8 +2284,8 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 			sessionInstance = cred.Instance
 		}
 	}
-	pluginTarget := coreworkflow.PluginTarget{
-		PluginName:     pluginName,
+	pluginTarget := coreworkflow.AppTarget{
+		AppName:     pluginName,
 		Operation:      opMeta.ID,
 		Connection:     connection,
 		Instance:       sessionInstance,
@@ -2293,11 +2293,11 @@ func (m *Manager) resolvePluginTarget(ctx context.Context, p *principal.Principa
 		Input:          maps.Clone(target.Input),
 	}
 	return coreworkflow.Target{
-		Plugin: &pluginTarget,
+		App: &pluginTarget,
 	}, nil
 }
 
-func (m *Manager) normalizeWorkflowPluginTargetCredentialMode(mode core.ConnectionMode, callerPluginName, pluginName, operation string) (core.ConnectionMode, error) {
+func (m *Manager) normalizeWorkflowAppTargetCredentialMode(mode core.ConnectionMode, callerAppName, pluginName, operation string) (core.ConnectionMode, error) {
 	mode = core.NormalizeOptionalConnectionMode(mode)
 	switch mode {
 	case "":
@@ -2306,10 +2306,10 @@ func (m *Manager) normalizeWorkflowPluginTargetCredentialMode(mode core.Connecti
 	default:
 		return "", fmt.Errorf("%w: workflow target credential_mode %q is not supported", invocation.ErrInvalidInvocation, mode)
 	}
-	if strings.TrimSpace(callerPluginName) == "" {
-		return "", fmt.Errorf("%w: workflow target credential_mode requires a caller plugin declaration", invocation.ErrAuthorizationDenied)
+	if strings.TrimSpace(callerAppName) == "" {
+		return "", fmt.Errorf("%w: workflow target credential_mode requires a caller app declaration", invocation.ErrAuthorizationDenied)
 	}
-	declared, ok, err := m.callerPluginInvokeCredentialMode(callerPluginName, pluginName, operation)
+	declared, ok, err := m.callerPluginInvokeCredentialMode(callerAppName, pluginName, operation)
 	if err != nil {
 		return "", err
 	}
@@ -2322,7 +2322,7 @@ func (m *Manager) normalizeWorkflowPluginTargetCredentialMode(mode core.Connecti
 	return mode, nil
 }
 
-func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal, target coreworkflow.AgentTarget, callerPluginName string) (coreworkflow.Target, error) {
+func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal, target coreworkflow.AgentTarget, callerAppName string) (coreworkflow.Target, error) {
 	if m == nil || m.agent == nil || m.agentManager == nil {
 		return coreworkflow.Target{}, fmt.Errorf("%w: agent workflows are not configured", invocation.ErrInternal)
 	}
@@ -2356,13 +2356,13 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	if err := validateWorkflowAgentToolRefs(target.ToolRefs); err != nil {
 		return coreworkflow.Target{}, err
 	}
-	if err := m.normalizeWorkflowOutputDelivery(target.OutputDelivery, callerPluginName); err != nil {
+	if err := m.normalizeWorkflowOutputDelivery(target.OutputDelivery, callerAppName); err != nil {
 		return coreworkflow.Target{}, err
 	}
-	if err := m.normalizeWorkflowAgentDelivery(target.SessionReadyDelivery, callerPluginName, "session_ready_delivery"); err != nil {
+	if err := m.normalizeWorkflowAgentDelivery(target.SessionReadyDelivery, callerAppName, "session_ready_delivery"); err != nil {
 		return coreworkflow.Target{}, err
 	}
-	steps, err := m.normalizeWorkflowAgentSteps(target.Steps, callerPluginName)
+	steps, err := m.normalizeWorkflowAgentSteps(target.Steps, callerAppName)
 	if err != nil {
 		return coreworkflow.Target{}, err
 	}
@@ -2370,7 +2370,7 @@ func (m *Manager) resolveAgentTarget(ctx context.Context, p *principal.Principal
 	return coreworkflow.Target{Agent: &target}, nil
 }
 
-func (m *Manager) normalizeWorkflowAgentSteps(steps []coreworkflow.AgentStep, callerPluginName string) ([]coreworkflow.AgentStep, error) {
+func (m *Manager) normalizeWorkflowAgentSteps(steps []coreworkflow.AgentStep, callerAppName string) ([]coreworkflow.AgentStep, error) {
 	if len(steps) == 0 {
 		return nil, nil
 	}
@@ -2401,7 +2401,7 @@ func (m *Manager) normalizeWorkflowAgentSteps(steps []coreworkflow.AgentStep, ca
 		if err := validateWorkflowAgentToolRefs(step.ToolRefs); err != nil {
 			return nil, err
 		}
-		if err := m.normalizeWorkflowAgentDelivery(step.OutputDelivery, callerPluginName, fmt.Sprintf("steps[%d].output_delivery", i)); err != nil {
+		if err := m.normalizeWorkflowAgentDelivery(step.OutputDelivery, callerAppName, fmt.Sprintf("steps[%d].output_delivery", i)); err != nil {
 			return nil, err
 		}
 		if step.When != nil {
@@ -2601,11 +2601,11 @@ func (m *Manager) findOwnedEventTriggerExecutionRef(ctx context.Context, trigger
 	return match, nil
 }
 
-func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string) (*coreworkflow.ExecutionReference, error) {
-	return m.putExecutionRefWithPermissions(ctx, executionRefID, providerName, provider, target, p, callerPluginName, sourceDefinitionID, nil)
+func (m *Manager) putExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerAppName, sourceDefinitionID string) (*coreworkflow.ExecutionReference, error) {
+	return m.putExecutionRefWithPermissions(ctx, executionRefID, providerName, provider, target, p, callerAppName, sourceDefinitionID, nil)
 }
 
-func (m *Manager) putExecutionRefWithPermissions(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
+func (m *Manager) putExecutionRefWithPermissions(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerAppName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
 	store, err := workflowExecutionReferenceStore(providerName, provider)
 	if err != nil {
 		return nil, err
@@ -2620,27 +2620,27 @@ func (m *Manager) putExecutionRefWithPermissions(ctx context.Context, executionR
 		ID:                  executionRefID,
 		ProviderName:        strings.TrimSpace(providerName),
 		Target:              target,
-		CallerPluginName:    strings.TrimSpace(callerPluginName),
+		CallerAppName:    strings.TrimSpace(callerAppName),
 		SourceDefinitionID:  strings.TrimSpace(sourceDefinitionID),
 		SubjectID:           subjectID,
 		SubjectKind:         actor.SubjectKind,
 		DisplayName:         actor.DisplayName,
 		AuthSource:          actor.AuthSource,
 		CredentialSubjectID: strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		Permissions:         m.executionRefPermissionsWithOverride(p, target, callerPluginName, permissions),
+		Permissions:         m.executionRefPermissionsWithOverride(p, target, callerAppName, permissions),
 	})
 }
 
-func (m *Manager) putRunExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, bool, error) {
+func (m *Manager) putRunExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerAppName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, bool, error) {
 	store, err := workflowExecutionReferenceStore(providerName, provider)
 	if err != nil {
 		return nil, false, err
 	}
-	expectedPermissions := m.executionRefPermissionsWithOverride(p, target, callerPluginName, permissions)
+	expectedPermissions := m.executionRefPermissionsWithOverride(p, target, callerAppName, permissions)
 	existing, err := store.GetExecutionReference(ctx, executionRefID)
 	if err == nil {
 		existing = workflowExecutionRefForProvider(existing, providerName)
-		if !runExecutionRefMatches(existing, executionRefID, providerName, target, p, callerPluginName, sourceDefinitionID, expectedPermissions) {
+		if !runExecutionRefMatches(existing, executionRefID, providerName, target, p, callerAppName, sourceDefinitionID, expectedPermissions) {
 			return nil, false, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, executionRefID)
 		}
 		if executionRefActive(existing) {
@@ -2659,7 +2659,7 @@ func (m *Manager) putRunExecutionRef(ctx context.Context, executionRefID, provid
 		ID:                  executionRefID,
 		ProviderName:        strings.TrimSpace(providerName),
 		Target:              target,
-		CallerPluginName:    strings.TrimSpace(callerPluginName),
+		CallerAppName:    strings.TrimSpace(callerAppName),
 		SourceDefinitionID:  strings.TrimSpace(sourceDefinitionID),
 		SubjectID:           subjectID,
 		SubjectKind:         actor.SubjectKind,
@@ -2674,18 +2674,18 @@ func (m *Manager) putRunExecutionRef(ctx context.Context, executionRefID, provid
 	return ref, true, nil
 }
 
-func (m *Manager) executionRefPermissionsWithOverride(p *principal.Principal, target coreworkflow.Target, callerPluginName string, override []core.AccessPermission) []core.AccessPermission {
+func (m *Manager) executionRefPermissionsWithOverride(p *principal.Principal, target coreworkflow.Target, callerAppName string, override []core.AccessPermission) []core.AccessPermission {
 	if override == nil {
-		return m.executionRefPermissions(p, target, callerPluginName)
+		return m.executionRefPermissions(p, target, callerAppName)
 	}
 	out := principal.PermissionsToAccessPermissions(principal.CompilePermissions(override))
 	if len(out) == 0 {
-		return []core.AccessPermission{{Plugin: workflowNoProviderPermissionsPlugin}}
+		return []core.AccessPermission{{App: workflowNoProviderPermissionsApp}}
 	}
 	return out
 }
 
-func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
+func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRefID, providerName string, provider coreworkflow.Provider, target coreworkflow.Target, p *principal.Principal, callerAppName, sourceDefinitionID string, permissions []core.AccessPermission) (*coreworkflow.ExecutionReference, error) {
 	store, err := workflowExecutionReferenceStore(providerName, provider)
 	if err != nil {
 		return nil, err
@@ -2693,7 +2693,7 @@ func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRef
 	existing, err := store.GetExecutionReference(ctx, executionRefID)
 	if err == nil {
 		existing = workflowExecutionRefForProvider(existing, providerName)
-		if !signalOrStartExecutionRefMatches(existing, executionRefID, providerName, target, p, callerPluginName, permissions) {
+		if !signalOrStartExecutionRefMatches(existing, executionRefID, providerName, target, p, callerAppName, permissions) {
 			return nil, fmt.Errorf("%w: %s", ErrDuplicateExecutionRefs, executionRefID)
 		}
 		if executionRefActive(existing) {
@@ -2703,14 +2703,14 @@ func (m *Manager) putSignalOrStartExecutionRef(ctx context.Context, executionRef
 		return nil, err
 	}
 
-	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, callerPluginName, sourceDefinitionID)
+	ref, err := m.putExecutionRef(ctx, executionRefID, providerName, provider, target, p, callerAppName, sourceDefinitionID)
 	if err != nil {
 		return nil, err
 	}
 	return ref, nil
 }
 
-func (m *Manager) executionRefPermissions(p *principal.Principal, target coreworkflow.Target, callerPluginName string) []core.AccessPermission {
+func (m *Manager) executionRefPermissions(p *principal.Principal, target coreworkflow.Target, callerAppName string) []core.AccessPermission {
 	p = principal.Canonicalized(p)
 	if p == nil || p.TokenPermissions == nil {
 		return principal.PermissionsToAccessPermissions(nil)
@@ -2719,42 +2719,42 @@ func (m *Manager) executionRefPermissions(p *principal.Principal, target corewor
 	if target.Agent != nil {
 		for i := range target.Agent.ToolRefs {
 			tool := target.Agent.ToolRefs[i]
-			pluginName := strings.TrimSpace(tool.Plugin)
+			pluginName := strings.TrimSpace(tool.App)
 			operation := strings.TrimSpace(tool.Operation)
 			if pluginName == "" || pluginName == "*" || operation == "" {
 				continue
 			}
-			if m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+			if m.callerPluginDeclaresInvoke(callerAppName, pluginName, operation) {
 				addWorkflowPermission(permissions, pluginName, operation)
 			}
 		}
-		if pluginName, operation, ok := workflowOutputDeliveryOperation(target.Agent.OutputDelivery); ok && m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+		if pluginName, operation, ok := workflowOutputDeliveryOperation(target.Agent.OutputDelivery); ok && m.callerPluginDeclaresInvoke(callerAppName, pluginName, operation) {
 			addWorkflowPermission(permissions, pluginName, operation)
 		}
-		if pluginName, operation, ok := workflowOutputDeliveryOperation(target.Agent.SessionReadyDelivery); ok && m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+		if pluginName, operation, ok := workflowOutputDeliveryOperation(target.Agent.SessionReadyDelivery); ok && m.callerPluginDeclaresInvoke(callerAppName, pluginName, operation) {
 			addWorkflowPermission(permissions, pluginName, operation)
 		}
 		for i := range target.Agent.Steps {
 			step := target.Agent.Steps[i]
 			for j := range step.ToolRefs {
 				tool := step.ToolRefs[j]
-				pluginName := strings.TrimSpace(tool.Plugin)
+				pluginName := strings.TrimSpace(tool.App)
 				operation := strings.TrimSpace(tool.Operation)
 				if pluginName == "" || pluginName == "*" || operation == "" {
 					continue
 				}
-				if m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+				if m.callerPluginDeclaresInvoke(callerAppName, pluginName, operation) {
 					addWorkflowPermission(permissions, pluginName, operation)
 				}
 			}
-			if pluginName, operation, ok := workflowOutputDeliveryOperation(step.OutputDelivery); ok && m.callerPluginDeclaresInvoke(callerPluginName, pluginName, operation) {
+			if pluginName, operation, ok := workflowOutputDeliveryOperation(step.OutputDelivery); ok && m.callerPluginDeclaresInvoke(callerAppName, pluginName, operation) {
 				addWorkflowPermission(permissions, pluginName, operation)
 			}
 		}
 	}
 	out := principal.PermissionsToAccessPermissions(permissions)
 	if len(out) == 0 {
-		return []core.AccessPermission{{Plugin: workflowNoProviderPermissionsPlugin}}
+		return []core.AccessPermission{{App: workflowNoProviderPermissionsApp}}
 	}
 	return out
 }
@@ -2771,22 +2771,22 @@ func executionRefPrincipal(p *principal.Principal, permissions []core.AccessPerm
 	next := *p
 	next.TokenPermissions = compiled
 	next.ActionPermissions = nil
-	next.Scopes = principal.PermissionPlugins(compiled)
+	next.Scopes = principal.PermissionApps(compiled)
 	return principal.Canonicalize(&next)
 }
 
-func (m *Manager) callerPluginDeclaresInvoke(callerPluginName, pluginName, operation string) bool {
-	callerPluginName = strings.TrimSpace(callerPluginName)
+func (m *Manager) callerPluginDeclaresInvoke(callerAppName, pluginName, operation string) bool {
+	callerAppName = strings.TrimSpace(callerAppName)
 	pluginName = strings.TrimSpace(pluginName)
 	operation = strings.TrimSpace(operation)
-	if callerPluginName == "" || pluginName == "" || operation == "" || m == nil {
+	if callerAppName == "" || pluginName == "" || operation == "" || m == nil {
 		return false
 	}
-	for _, invoke := range m.pluginInvokes[callerPluginName] {
+	for _, invoke := range m.appInvokes[callerAppName] {
 		if strings.TrimSpace(invoke.Surface) != "" {
 			continue
 		}
-		if strings.TrimSpace(invoke.Plugin) == pluginName && strings.TrimSpace(invoke.Operation) == operation {
+		if strings.TrimSpace(invoke.App) == pluginName && strings.TrimSpace(invoke.Operation) == operation {
 			return true
 		}
 	}
@@ -2910,7 +2910,7 @@ const (
 	targetAuthorizationComponentAgentToolRef         = "agent_tool_ref"
 	targetAuthorizationComponentOutputDelivery       = "output_delivery"
 	targetAuthorizationComponentSessionReadyDelivery = "session_ready_delivery"
-	targetAuthorizationComponentPluginTarget         = "plugin_target"
+	targetAuthorizationComponentAppTarget         = "plugin_target"
 
 	targetAuthorizationReasonMissingAgentProvider               = "missing_agent_provider"
 	targetAuthorizationReasonAuthorizerProviderDenied           = "authorizer_provider_denied"
@@ -2920,8 +2920,8 @@ const (
 	targetAuthorizationReasonNonExactToolRefWithSystemTools     = "non_exact_tool_ref_with_system_tools"
 	targetAuthorizationReasonAuthorizerOperationDenied          = "authorizer_operation_denied"
 	targetAuthorizationReasonPrincipalOperationPermissionDenied = "principal_operation_permission_denied"
-	targetAuthorizationReasonMissingPluginTarget                = "missing_plugin_target"
-	targetAuthorizationReasonMissingPluginProvider              = "missing_plugin_provider"
+	targetAuthorizationReasonMissingAppTarget                = "missing_plugin_target"
+	targetAuthorizationReasonMissingAppProvider              = "missing_plugin_provider"
 	targetAuthorizationReasonMissingPluginOperation             = "missing_plugin_operation"
 )
 
@@ -2961,12 +2961,12 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 				if systemName != coreagent.SystemToolWorkflow || strings.TrimSpace(tool.Operation) == "" {
 					return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonInvalidSystemToolRef, "", "", i)
 				}
-				if strings.TrimSpace(tool.Plugin) != "" || strings.TrimSpace(tool.Connection) != "" || strings.TrimSpace(tool.Instance) != "" || tool.CredentialMode != "" {
+				if strings.TrimSpace(tool.App) != "" || strings.TrimSpace(tool.Connection) != "" || strings.TrimSpace(tool.Instance) != "" || tool.CredentialMode != "" {
 					return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonInvalidSystemToolRef, "", "", i)
 				}
 				continue
 			}
-			pluginName := strings.TrimSpace(tool.Plugin)
+			pluginName := strings.TrimSpace(tool.App)
 			operation := strings.TrimSpace(tool.Operation)
 			if pluginName == "" {
 				return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonMissingToolProvider, "", operation, i)
@@ -3024,12 +3024,12 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 					if systemName != coreagent.SystemToolWorkflow || strings.TrimSpace(tool.Operation) == "" {
 						return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonInvalidSystemToolRef, "", "", i)
 					}
-					if strings.TrimSpace(tool.Plugin) != "" || strings.TrimSpace(tool.Connection) != "" || strings.TrimSpace(tool.Instance) != "" || tool.CredentialMode != "" {
+					if strings.TrimSpace(tool.App) != "" || strings.TrimSpace(tool.Connection) != "" || strings.TrimSpace(tool.Instance) != "" || tool.CredentialMode != "" {
 						return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonInvalidSystemToolRef, "", "", i)
 					}
 					continue
 				}
-				pluginName := strings.TrimSpace(tool.Plugin)
+				pluginName := strings.TrimSpace(tool.App)
 				operation := strings.TrimSpace(tool.Operation)
 				if pluginName == "" {
 					return targetAuthorizationDenied(targetAuthorizationComponentAgentToolRef, targetAuthorizationReasonMissingToolProvider, "", operation, i)
@@ -3070,26 +3070,26 @@ func (m *Manager) checkTargetAuthorization(ctx context.Context, p *principal.Pri
 		}
 		return targetAuthorizationAllowed()
 	}
-	if target.Plugin == nil {
-		return targetAuthorizationDenied(targetAuthorizationComponentTarget, targetAuthorizationReasonMissingPluginTarget, "", "", -1)
+	if target.App == nil {
+		return targetAuthorizationDenied(targetAuthorizationComponentTarget, targetAuthorizationReasonMissingAppTarget, "", "", -1)
 	}
-	pluginTarget := *target.Plugin
-	pluginName := strings.TrimSpace(pluginTarget.PluginName)
+	pluginTarget := *target.App
+	pluginName := strings.TrimSpace(pluginTarget.AppName)
 	operation := strings.TrimSpace(pluginTarget.Operation)
 	if pluginName == "" {
-		return targetAuthorizationDenied(targetAuthorizationComponentPluginTarget, targetAuthorizationReasonMissingPluginProvider, "", operation, -1)
+		return targetAuthorizationDenied(targetAuthorizationComponentAppTarget, targetAuthorizationReasonMissingAppProvider, "", operation, -1)
 	}
 	if operation == "" {
-		return targetAuthorizationDenied(targetAuthorizationComponentPluginTarget, targetAuthorizationReasonMissingPluginOperation, pluginName, "", -1)
+		return targetAuthorizationDenied(targetAuthorizationComponentAppTarget, targetAuthorizationReasonMissingPluginOperation, pluginName, "", -1)
 	}
 	if !m.allowProvider(ctx, p, pluginName) {
-		return targetAuthorizationDenied(targetAuthorizationComponentPluginTarget, targetAuthorizationReasonAuthorizerProviderDenied, pluginName, operation, -1)
+		return targetAuthorizationDenied(targetAuthorizationComponentAppTarget, targetAuthorizationReasonAuthorizerProviderDenied, pluginName, operation, -1)
 	}
 	if !m.allowOperation(ctx, p, pluginName, operation) {
-		return targetAuthorizationDenied(targetAuthorizationComponentPluginTarget, targetAuthorizationReasonAuthorizerOperationDenied, pluginName, operation, -1)
+		return targetAuthorizationDenied(targetAuthorizationComponentAppTarget, targetAuthorizationReasonAuthorizerOperationDenied, pluginName, operation, -1)
 	}
 	if !principal.AllowsOperationPermission(p, pluginName, operation) {
-		return targetAuthorizationDenied(targetAuthorizationComponentPluginTarget, targetAuthorizationReasonPrincipalOperationPermissionDenied, pluginName, operation, -1)
+		return targetAuthorizationDenied(targetAuthorizationComponentAppTarget, targetAuthorizationReasonPrincipalOperationPermissionDenied, pluginName, operation, -1)
 	}
 	return targetAuthorizationAllowed()
 }
@@ -3124,13 +3124,13 @@ func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
 	for i := range refs {
 		ref := refs[i]
 		systemName := strings.TrimSpace(ref.System)
-		pluginName := strings.TrimSpace(ref.Plugin)
+		pluginName := strings.TrimSpace(ref.App)
 		operation := strings.TrimSpace(ref.Operation)
 		connection := strings.TrimSpace(ref.Connection)
 		instance := strings.TrimSpace(ref.Instance)
 		if systemName != "" {
 			if pluginName != "" {
-				return fmt.Errorf("%w: workflow agent tool_refs[%d] must set exactly one of plugin or system", invocation.ErrInvalidInvocation, i)
+				return fmt.Errorf("%w: workflow agent tool_refs[%d] must set exactly one of app or system", invocation.ErrInvalidInvocation, i)
 			}
 			if systemName != coreagent.SystemToolWorkflow {
 				return fmt.Errorf("%w: workflow agent tool_refs[%d].system %q is not supported", invocation.ErrInvalidInvocation, i, systemName)
@@ -3147,28 +3147,28 @@ func validateWorkflowAgentToolRefs(refs []coreagent.ToolRef) error {
 			continue
 		}
 		if pluginName == "" || pluginName == "*" || operation == "" {
-			return fmt.Errorf("%w: workflow agent tool_refs[%d] must be an exact plugin operation when workflow system tools are delegated", invocation.ErrInvalidInvocation, i)
+			return fmt.Errorf("%w: workflow agent tool_refs[%d] must be an exact app operation when workflow system tools are delegated", invocation.ErrInvalidInvocation, i)
 		}
 	}
 	return nil
 }
 
-func (m *Manager) normalizeWorkflowOutputDelivery(delivery *coreworkflow.OutputDelivery, callerPluginName string) error {
-	return m.normalizeWorkflowAgentDelivery(delivery, callerPluginName, "output_delivery")
+func (m *Manager) normalizeWorkflowOutputDelivery(delivery *coreworkflow.OutputDelivery, callerAppName string) error {
+	return m.normalizeWorkflowAgentDelivery(delivery, callerAppName, "output_delivery")
 }
 
-func (m *Manager) normalizeWorkflowAgentDelivery(delivery *coreworkflow.OutputDelivery, callerPluginName, fieldName string) error {
+func (m *Manager) normalizeWorkflowAgentDelivery(delivery *coreworkflow.OutputDelivery, callerAppName, fieldName string) error {
 	if delivery == nil {
 		return nil
 	}
-	delivery.Target.PluginName = strings.TrimSpace(delivery.Target.PluginName)
+	delivery.Target.AppName = strings.TrimSpace(delivery.Target.AppName)
 	delivery.Target.Operation = strings.TrimSpace(delivery.Target.Operation)
 	delivery.Target.Connection = strings.TrimSpace(delivery.Target.Connection)
 	delivery.Target.Instance = strings.TrimSpace(delivery.Target.Instance)
 	delivery.Target.CredentialMode = core.NormalizeOptionalConnectionMode(delivery.Target.CredentialMode)
 	delivery.CredentialMode = core.NormalizeOptionalConnectionMode(delivery.CredentialMode)
-	if delivery.Target.PluginName == "" {
-		return fmt.Errorf("%w: workflow agent %s.target.plugin_name is required", invocation.ErrProviderNotFound, fieldName)
+	if delivery.Target.AppName == "" {
+		return fmt.Errorf("%w: workflow agent %s.target.app_name is required", invocation.ErrProviderNotFound, fieldName)
 	}
 	if delivery.Target.Operation == "" {
 		return fmt.Errorf("%w: workflow agent %s.target.operation is required", invocation.ErrOperationNotFound, fieldName)
@@ -3176,13 +3176,13 @@ func (m *Manager) normalizeWorkflowAgentDelivery(delivery *coreworkflow.OutputDe
 	if delivery.Target.CredentialMode != "" {
 		return fmt.Errorf("%w: workflow agent %s.target.credential_mode is not supported", invocation.ErrInvalidInvocation, fieldName)
 	}
-	if delivery.CredentialMode != "" && callerPluginName == "" {
-		return fmt.Errorf("%w: workflow agent %s.credential_mode requires a caller plugin declaration", invocation.ErrAuthorizationDenied, fieldName)
+	if delivery.CredentialMode != "" && callerAppName == "" {
+		return fmt.Errorf("%w: workflow agent %s.credential_mode requires a caller app declaration", invocation.ErrAuthorizationDenied, fieldName)
 	}
 	if delivery.CredentialMode != "" && delivery.CredentialMode != core.ConnectionModeNone && delivery.CredentialMode != core.ConnectionModeUser {
 		return fmt.Errorf("%w: workflow agent %s.credential_mode %q is not supported", invocation.ErrInvalidInvocation, fieldName, delivery.CredentialMode)
 	}
-	mode, declared, err := m.callerPluginInvokeCredentialMode(callerPluginName, delivery.Target.PluginName, delivery.Target.Operation)
+	mode, declared, err := m.callerPluginInvokeCredentialMode(callerAppName, delivery.Target.AppName, delivery.Target.Operation)
 	if err != nil {
 		return err
 	}
@@ -3215,18 +3215,18 @@ func (m *Manager) normalizeWorkflowAgentDelivery(delivery *coreworkflow.OutputDe
 	return nil
 }
 
-func (m *Manager) callerPluginInvokeCredentialMode(callerPluginName, pluginName, operation string) (core.ConnectionMode, bool, error) {
-	callerPluginName = strings.TrimSpace(callerPluginName)
+func (m *Manager) callerPluginInvokeCredentialMode(callerAppName, pluginName, operation string) (core.ConnectionMode, bool, error) {
+	callerAppName = strings.TrimSpace(callerAppName)
 	pluginName = strings.TrimSpace(pluginName)
 	operation = strings.TrimSpace(operation)
-	if callerPluginName == "" || pluginName == "" || operation == "" || m == nil {
+	if callerAppName == "" || pluginName == "" || operation == "" || m == nil {
 		return "", false, nil
 	}
-	for _, invoke := range m.pluginInvokes[callerPluginName] {
+	for _, invoke := range m.appInvokes[callerAppName] {
 		if strings.TrimSpace(invoke.Surface) != "" {
 			continue
 		}
-		if strings.TrimSpace(invoke.Plugin) != pluginName || strings.TrimSpace(invoke.Operation) != operation {
+		if strings.TrimSpace(invoke.App) != pluginName || strings.TrimSpace(invoke.Operation) != operation {
 			continue
 		}
 		mode := core.NormalizeOptionalConnectionMode(invoke.CredentialMode)
@@ -3236,7 +3236,7 @@ func (m *Manager) callerPluginInvokeCredentialMode(callerPluginName, pluginName,
 		case core.ConnectionModeNone, core.ConnectionModeUser:
 			return mode, true, nil
 		default:
-			return "", false, fmt.Errorf("%w: caller plugin invoke credentialMode %q is not supported", invocation.ErrInvalidInvocation, invoke.CredentialMode)
+			return "", false, fmt.Errorf("%w: caller app invoke credentialMode %q is not supported", invocation.ErrInvalidInvocation, invoke.CredentialMode)
 		}
 	}
 	return "", false, nil
@@ -3266,7 +3266,7 @@ func workflowOutputDeliveryOperation(delivery *coreworkflow.OutputDelivery) (str
 	if delivery == nil {
 		return "", "", false
 	}
-	pluginName := strings.TrimSpace(delivery.Target.PluginName)
+	pluginName := strings.TrimSpace(delivery.Target.AppName)
 	operation := strings.TrimSpace(delivery.Target.Operation)
 	if pluginName == "" || operation == "" {
 		return "", "", false
@@ -3363,7 +3363,7 @@ func targetMatchesExecutionRef(target coreworkflow.Target, ref *coreworkflow.Exe
 	return coreworkflow.TargetsEqual(target, ref.Target)
 }
 
-func signalOrStartExecutionRefMatches(ref *coreworkflow.ExecutionReference, executionRefID, providerName string, target coreworkflow.Target, p *principal.Principal, callerPluginName string, permissions []core.AccessPermission) bool {
+func signalOrStartExecutionRefMatches(ref *coreworkflow.ExecutionReference, executionRefID, providerName string, target coreworkflow.Target, p *principal.Principal, callerAppName string, permissions []core.AccessPermission) bool {
 	if ref == nil {
 		return false
 	}
@@ -3373,7 +3373,7 @@ func signalOrStartExecutionRefMatches(ref *coreworkflow.ExecutionReference, exec
 	if providerName = strings.TrimSpace(providerName); providerName != "" && strings.TrimSpace(ref.ProviderName) != providerName {
 		return false
 	}
-	if strings.TrimSpace(ref.CallerPluginName) != strings.TrimSpace(callerPluginName) {
+	if strings.TrimSpace(ref.CallerAppName) != strings.TrimSpace(callerAppName) {
 		return false
 	}
 	if strings.TrimSpace(ref.CredentialSubjectID) != strings.TrimSpace(principal.EffectiveCredentialSubjectID(principal.Canonicalized(p))) {
@@ -3385,8 +3385,8 @@ func signalOrStartExecutionRefMatches(ref *coreworkflow.ExecutionReference, exec
 	return executionRefOwnedBy(ref, p) && targetMatchesExecutionRef(target, ref)
 }
 
-func runExecutionRefMatches(ref *coreworkflow.ExecutionReference, executionRefID, providerName string, target coreworkflow.Target, p *principal.Principal, callerPluginName, sourceDefinitionID string, permissions []core.AccessPermission) bool {
-	if !signalOrStartExecutionRefMatches(ref, executionRefID, providerName, target, p, callerPluginName, permissions) {
+func runExecutionRefMatches(ref *coreworkflow.ExecutionReference, executionRefID, providerName string, target coreworkflow.Target, p *principal.Principal, callerAppName, sourceDefinitionID string, permissions []core.AccessPermission) bool {
+	if !signalOrStartExecutionRefMatches(ref, executionRefID, providerName, target, p, callerAppName, permissions) {
 		return false
 	}
 	return strings.TrimSpace(ref.SourceDefinitionID) == strings.TrimSpace(sourceDefinitionID)
@@ -3453,12 +3453,12 @@ func newScheduleID(idempotencyScope string) string {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gestalt.workflow.schedule:"+idempotencyScope)).String()
 }
 
-func workflowCreateIdempotencyScope(p *principal.Principal, callerPluginName, idempotencyKey string) string {
+func workflowCreateIdempotencyScope(p *principal.Principal, callerAppName, idempotencyKey string) string {
 	idempotencyKey = strings.TrimSpace(idempotencyKey)
 	if idempotencyKey == "" {
 		return ""
 	}
-	return strings.Join([]string{strings.TrimSpace(principalSubjectID(p)), strings.TrimSpace(callerPluginName), idempotencyKey}, "\x00")
+	return strings.Join([]string{strings.TrimSpace(principalSubjectID(p)), strings.TrimSpace(callerAppName), idempotencyKey}, "\x00")
 }
 
 func newScheduleExecutionRefID(scheduleID, idempotencyScope string) string {
@@ -3540,7 +3540,7 @@ func newRunExecutionRefID(idempotencyScope, workflowKey string) string {
 	return runExecutionRefID(uuid.NewSHA1(uuid.NameSpaceURL, []byte(scope)).String())
 }
 
-func signalOrStartExecutionRefID(providerName, workflowKey string, target coreworkflow.Target, p *principal.Principal, callerPluginName string, permissions []core.AccessPermission) (string, error) {
+func signalOrStartExecutionRefID(providerName, workflowKey string, target coreworkflow.Target, p *principal.Principal, callerAppName string, permissions []core.AccessPermission) (string, error) {
 	targetFingerprint, err := coreworkflow.TargetFingerprint(target)
 	if err != nil {
 		return "", fmt.Errorf("workflow target fingerprint: %w", err)
@@ -3551,7 +3551,7 @@ func signalOrStartExecutionRefID(providerName, workflowKey string, target corewo
 		strings.TrimSpace(workflowKey),
 		strings.TrimSpace(principalSubjectID(p)),
 		strings.TrimSpace(principal.EffectiveCredentialSubjectID(p)),
-		strings.TrimSpace(callerPluginName),
+		strings.TrimSpace(callerAppName),
 		targetFingerprint,
 		executionRefPermissionsScope(permissions),
 	}, "\x00")
@@ -3569,12 +3569,12 @@ func executionRefPermissionsScope(permissions []core.AccessPermission) string {
 	b.WriteString("set\x1f")
 	wrote := false
 	for _, permission := range permissions {
-		plugin := strings.TrimSpace(permission.Plugin)
-		if plugin == "" {
+		app := strings.TrimSpace(permission.App)
+		if app == "" {
 			continue
 		}
 		wrote = true
-		b.WriteString(plugin)
+		b.WriteString(app)
 		b.WriteByte('\x1e')
 		operations := append([]string(nil), permission.Operations...)
 		sort.Strings(operations)

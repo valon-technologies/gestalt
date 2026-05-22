@@ -74,7 +74,7 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
-		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
+		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of app or agent")
 		return
 	}
 	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
@@ -124,7 +124,7 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
-		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
+		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of app or agent")
 		return
 	}
 	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
@@ -259,7 +259,7 @@ func (s *Server) writeWorkflowEventTriggerProviderError(ctx context.Context, w h
 		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow trigger %q not found", triggerID))
 	default:
 		slog.ErrorContext(ctx, "workflow trigger provider error",
-			"plugin", pluginName,
+			"app", pluginName,
 			"trigger_id", triggerID,
 			"error", err,
 		)

@@ -18,7 +18,7 @@ func TestHostServiceHandlerReturnsVerifierError(t *testing.T) {
 	s := &Server{publicHostServices: registry}
 
 	handler, err := s.hostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
-		PluginName: "support",
+		AppName: "support",
 		SessionID:  "session-1",
 		Service:    "cache",
 	}, "/gestalt.provider.v1.Cache/Get")
@@ -38,7 +38,7 @@ func TestUnifiedHostServiceHandlerRoutesByGRPCMethod(t *testing.T) {
 	s := &Server{publicHostServices: registry}
 
 	handler, err := s.hostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
-		PluginName: "support",
+		AppName: "support",
 		SessionID:  "session-1",
 		Service:    "host_service",
 	}, "/gestalt.provider.v1.Cache/Get")
@@ -50,7 +50,7 @@ func TestUnifiedHostServiceHandlerRoutesByGRPCMethod(t *testing.T) {
 	}
 
 	handler, err = s.hostServiceHandler(context.Background(), runtimehost.HostServiceRelayTarget{
-		PluginName: "support",
+		AppName: "support",
 		SessionID:  "session-1",
 		Service:    "host_service",
 	}, "/gestalt.provider.v1.S3/ListObjects")
@@ -87,7 +87,7 @@ func TestValidatePublicHostServicesAllowsDuplicateVerifiedServices(t *testing.T)
 
 func testPublicHostService(pluginName string, verifier runtimehost.PublicHostServiceSessionVerifier) runtimehost.PublicHostService {
 	return runtimehost.PublicHostService{
-		PluginName:      pluginName,
+		AppName:      pluginName,
 		SessionVerifier: verifier,
 		Service:         testHostService(),
 	}

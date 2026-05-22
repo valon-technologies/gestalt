@@ -17,7 +17,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
+	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 )
 
 type connectManualRequest struct {

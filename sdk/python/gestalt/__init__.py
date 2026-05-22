@@ -11,9 +11,9 @@ providers, host-service clients, and provider-owned telemetry.
     class SearchInput(Model):
         query: str
 
-    plugin = Plugin("search")
+    app = Plugin("search")
 
-    @plugin.operation(title="Search")
+    @app.operation(title="Search")
     def search(params: SearchInput):
         return {"query": params.query}
 
@@ -162,31 +162,31 @@ _AUTHORIZATION_HELPER_EXPORTS = (
 )
 
 _PLUGIN_RUNTIME_AUTHORED_EXPORTS = (
-    "GetPluginRuntimeSessionRequest",
-    "GetPluginRuntimeSupportRequest",
-    "HostedPlugin",
-    "ListPluginRuntimeSessionsRequest",
-    "ListPluginRuntimeSessionsResponse",
-    "PLUGIN_RUNTIME_EGRESS_MODE_CIDR",
-    "PLUGIN_RUNTIME_EGRESS_MODE_HOSTNAME",
-    "PLUGIN_RUNTIME_EGRESS_MODE_NONE",
-    "PLUGIN_RUNTIME_EGRESS_MODE_UNSPECIFIED",
-    "PluginRuntimeImagePullAuth",
-    "PluginRuntimeSession",
-    "PluginRuntimeSessionLifecycle",
-    "PluginRuntimeSupport",
-    "PreparePluginRuntimeWorkspaceRequest",
-    "PreparePluginRuntimeWorkspaceResponse",
-    "RemovePluginRuntimeWorkspaceRequest",
-    "StartHostedPluginRequest",
-    "StartPluginRuntimeSessionRequest",
-    "StopPluginRuntimeSessionRequest",
+    "GetAppRuntimeSessionRequest",
+    "GetAppRuntimeSupportRequest",
+    "HostedApp",
+    "ListAppRuntimeSessionsRequest",
+    "ListAppRuntimeSessionsResponse",
+    "APP_RUNTIME_EGRESS_MODE_CIDR",
+    "APP_RUNTIME_EGRESS_MODE_HOSTNAME",
+    "APP_RUNTIME_EGRESS_MODE_NONE",
+    "APP_RUNTIME_EGRESS_MODE_UNSPECIFIED",
+    "AppRuntimeImagePullAuth",
+    "AppRuntimeSession",
+    "AppRuntimeSessionLifecycle",
+    "AppRuntimeSupport",
+    "PrepareAppRuntimeWorkspaceRequest",
+    "PrepareAppRuntimeWorkspaceResponse",
+    "RemoveAppRuntimeWorkspaceRequest",
+    "StartHostedAppRequest",
+    "StartAppRuntimeSessionRequest",
+    "StopAppRuntimeSessionRequest",
 )
 
 _WORKFLOW_AUTHORED_EXPORTS = (
     "BoundWorkflowAgentTarget",
     "BoundWorkflowEventTrigger",
-    "BoundWorkflowPluginTarget",
+    "BoundWorkflowAppTarget",
     "BoundWorkflowRun",
     "BoundWorkflowSchedule",
     "BoundWorkflowTarget",
@@ -359,7 +359,7 @@ _LAZY_EXPORTS = {
     "Closer": ("._providers", "Closer"),
     "CompleteLoginRequest": ("._authentication", "CompleteLoginRequest"),
     "CopyOptions": ("._s3", "CopyOptions"),
-    "ConnectedToken": ("._plugin", "ConnectedToken"),
+    "ConnectedToken": ("._app", "ConnectedToken"),
     "Cursor": ("._indexeddb", "Cursor"),
     "ExternalTokenValidator": ("._providers", "ExternalTokenValidator"),
     "HealthChecker": ("._providers", "HealthChecker"),
@@ -389,11 +389,11 @@ _LAZY_EXPORTS = {
     "ObjectStore": ("._indexeddb", "ObjectStore"),
     "ObjectStoreSchema": ("._indexeddb", "ObjectStoreSchema"),
     "OperationAnnotations": ("._catalog", "OperationAnnotations"),
-    "Plugin": ("._plugin", "Plugin"),
-    "PluginInvoker": ("._invoker", "PluginInvoker"),
-    "PluginProvider": ("._providers", "PluginProvider"),
-    "PluginProviderAdapter": ("._providers", "PluginProviderAdapter"),
-    "PluginRuntimeProvider": ("._providers", "PluginRuntimeProvider"),
+    "Plugin": ("._app", "Plugin"),
+    "AppInvoker": ("._invoker", "AppInvoker"),
+    "AppProvider": ("._providers", "AppProvider"),
+    "AppProviderAdapter": ("._providers", "AppProviderAdapter"),
+    "AppRuntimeProvider": ("._providers", "AppRuntimeProvider"),
     "PresignMethod": ("._s3", "PresignMethod"),
     "PresignOptions": ("._s3", "PresignOptions"),
     "PresignResult": ("._s3", "PresignResult"),
@@ -425,16 +425,16 @@ _LAZY_EXPORTS = {
     "WorkflowProvider": ("._providers", "WorkflowProvider"),
     "WriteOptions": ("._s3", "WriteOptions"),
     "compare_indexeddb_values": ("._indexeddb", "compare_indexeddb_values"),
-    "http_subject": ("._plugin", "http_subject"),
+    "http_subject": ("._app", "http_subject"),
     "http_subject_error": ("._http_subject", "http_subject_error"),
     "indexeddb_range_bounds": ("._indexeddb", "indexeddb_range_bounds"),
     "new_indexeddb_cursor_snapshot": (
         "._indexeddb",
         "new_indexeddb_cursor_snapshot",
     ),
-    "operation": ("._plugin", "operation"),
-    "post_connect": ("._plugin", "post_connect"),
-    "session_catalog": ("._plugin", "session_catalog"),
+    "operation": ("._app", "operation"),
+    "post_connect": ("._app", "post_connect"),
+    "session_catalog": ("._app", "session_catalog"),
 }
 
 _LAZY_EXPORTS.update({name: ("._agent", name) for name in _AGENT_PROTOCOL_EXPORTS})
@@ -446,7 +446,7 @@ _LAZY_EXPORTS.update(
     {name: ("._authorization", name) for name in _AUTHORIZATION_HELPER_EXPORTS}
 )
 _LAZY_EXPORTS.update(
-    {name: ("._pluginruntime", name) for name in _PLUGIN_RUNTIME_AUTHORED_EXPORTS}
+    {name: ("._appruntime", name) for name in _PLUGIN_RUNTIME_AUTHORED_EXPORTS}
 )
 _LAZY_EXPORTS.update(
     {name: ("._workflow", name) for name in _WORKFLOW_AUTHORED_EXPORTS}
@@ -533,10 +533,10 @@ __all__ = [
     "ObjectStoreSchema",
     "OperationAnnotations",
     "Plugin",
-    "PluginInvoker",
-    "PluginProvider",
-    "PluginProviderAdapter",
-    "PluginRuntimeProvider",
+    "AppInvoker",
+    "AppProvider",
+    "AppProviderAdapter",
+    "AppRuntimeProvider",
     "PresignMethod",
     "PresignOptions",
     "PresignResult",

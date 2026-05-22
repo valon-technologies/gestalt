@@ -14,7 +14,7 @@ export default [
         sourceType: "module",
       },
     },
-    plugins: {
+    apps: {
       tsdoc,
     },
     rules: {

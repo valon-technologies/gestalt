@@ -21,7 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
+	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 	"gopkg.in/yaml.v3"
 )
 
@@ -43,9 +43,9 @@ const (
 	DefaultProviderInstance            = "default"
 )
 
-const PluginConnectionName = core.PluginConnectionName
-const PluginConnectionAlias = core.PluginConnectionAlias
-const ConfigAPIVersion = "gestaltd.config/v5"
+const AppConnectionName = core.AppConnectionName
+const AppConnectionAlias = core.AppConnectionAlias
+const ConfigAPIVersion = "gestaltd.config/v6"
 
 type Config struct {
 	APIVersion                   string                                      `yaml:"apiVersion,omitempty"`
@@ -57,7 +57,7 @@ type Config struct {
 	Providers                    ProvidersConfig                             `yaml:"providers"`
 	Runtime                      RuntimeConfig                               `yaml:"runtime,omitempty"`
 	Workflows                    WorkflowsConfig                             `yaml:"workflows,omitempty"`
-	Plugins                      map[string]*ProviderEntry                   `yaml:"plugins,omitempty"`
+	Apps                      map[string]*ProviderEntry                   `yaml:"apps,omitempty"`
 }
 
 type ProviderRepositoryConfig struct {
@@ -500,8 +500,8 @@ type ProviderEntry struct {
 	UI                string                        `yaml:"-"`
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
-	Invokes           []PluginInvocationDependency  `yaml:"invokes,omitempty"`
-	Capabilities      *PluginCapabilitiesConfig     `yaml:"capabilities,omitempty"`
+	Invokes           []AppInvocationDependency  `yaml:"invokes,omitempty"`
+	Capabilities      *AppCapabilitiesConfig     `yaml:"capabilities,omitempty"`
 	IndexedDB         *HostIndexedDBBindingConfig   `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
@@ -833,16 +833,16 @@ func (r *WorkflowRunAsConfig) SubjectRef() *core.RunAsSubject {
 }
 
 type WorkflowInvokeConfig struct {
-	Plugin    string `yaml:"plugin,omitempty"`
+	App    string `yaml:"app,omitempty"`
 	Operation string `yaml:"operation,omitempty"`
 }
 
 type WorkflowTargetConfig struct {
-	Plugin *WorkflowPluginTargetConfig `yaml:"plugin,omitempty"`
+	App *WorkflowAppTargetConfig `yaml:"app,omitempty"`
 	Agent  *WorkflowAgentConfig        `yaml:"agent,omitempty"`
 }
 
-type WorkflowPluginTargetConfig struct {
+type WorkflowAppTargetConfig struct {
 	Name           string                            `yaml:"name,omitempty"`
 	Operation      string                            `yaml:"operation,omitempty"`
 	Connection     string                            `yaml:"connection,omitempty"`
@@ -915,7 +915,7 @@ func (c *WorkflowAgentStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
 }
 
 type WorkflowOutputDeliveryConfig struct {
-	Target         WorkflowPluginTargetConfig        `yaml:"target,omitempty"`
+	Target         WorkflowAppTargetConfig        `yaml:"target,omitempty"`
 	InputBindings  []WorkflowOutputBindingConfig     `yaml:"inputBindings,omitempty"`
 	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
 }
@@ -941,7 +941,7 @@ type WorkflowAgentMessage struct {
 
 type WorkflowAgentToolRef struct {
 	System      string `yaml:"system,omitempty"`
-	Plugin      string `yaml:"plugin,omitempty"`
+	App      string `yaml:"app,omitempty"`
 	Operation   string `yaml:"operation,omitempty"`
 	Connection  string `yaml:"connection,omitempty"`
 	Instance    string `yaml:"instance,omitempty"`
@@ -988,7 +988,7 @@ type ProviderMCPSurfaceOverride struct {
 type UIEntry struct {
 	ProviderEntry `yaml:",inline"`
 	Path          string `yaml:"path,omitempty"`
-	OwnerPlugin   string `yaml:"-"`
+	OwnerApp   string `yaml:"-"`
 }
 
 func (e *UIEntry) UnmarshalYAML(value *yaml.Node) error {
@@ -2052,8 +2052,8 @@ type CredentialFieldRefDef = providermanifestv1.CredentialFieldRef
 
 type ConnectionParamDef = providermanifestv1.ProviderConnectionParam
 
-// ResolveConnectionAlias maps the user-facing "plugin" alias to the
-// internal PluginConnectionName. All other names pass through unchanged.
+// ResolveConnectionAlias maps the user-facing "app" alias to the
+// internal AppConnectionName. All other names pass through unchanged.
 func ResolveConnectionAlias(name string) string {
 	return core.ResolveConnectionAlias(name)
 }
@@ -2263,29 +2263,29 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 // OperationOverride holds optional alias and description for an allowed operation.
 type OperationOverride = providermanifestv1.ManifestOperationOverride
 
-type PluginInvocationDependency struct {
-	Plugin         string                            `yaml:"plugin,omitempty"`
+type AppInvocationDependency struct {
+	App         string                            `yaml:"app,omitempty"`
 	Operation      string                            `yaml:"operation,omitempty"`
 	Surface        string                            `yaml:"surface,omitempty"`
 	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
-	RunAs          *PluginInvocationRunAsConfig      `yaml:"runAs,omitempty"`
+	RunAs          *AppInvocationRunAsConfig      `yaml:"runAs,omitempty"`
 }
 
-type PluginCapabilitiesConfig struct {
-	Workflow *PluginWorkflowCapabilitiesConfig `yaml:"workflow,omitempty"`
+type AppCapabilitiesConfig struct {
+	Workflow *AppWorkflowCapabilitiesConfig `yaml:"workflow,omitempty"`
 }
 
-type PluginWorkflowCapabilitiesConfig struct {
+type AppWorkflowCapabilitiesConfig struct {
 	Operations []string `yaml:"operations,omitempty"`
 }
 
-type PluginInvocationRunAsConfig struct {
-	Subject          *PluginInvocationRunAsSubjectConfig     `yaml:"subject,omitempty"`
-	ExternalIdentity *PluginInvocationExternalIdentityConfig `yaml:"externalIdentity,omitempty"`
+type AppInvocationRunAsConfig struct {
+	Subject          *AppInvocationRunAsSubjectConfig     `yaml:"subject,omitempty"`
+	ExternalIdentity *AppInvocationExternalIdentityConfig `yaml:"externalIdentity,omitempty"`
 	ApplyByDefault   *bool                                   `yaml:"applyByDefault,omitempty"`
 }
 
-type PluginInvocationRunAsSubjectConfig struct {
+type AppInvocationRunAsSubjectConfig struct {
 	ID                  string `yaml:"id,omitempty"`
 	Kind                string `yaml:"kind,omitempty"`
 	CredentialSubjectID string `yaml:"credentialSubjectId,omitempty"`
@@ -2295,12 +2295,12 @@ type PluginInvocationRunAsSubjectConfig struct {
 
 // TODO(#1823): Reconcile runAs.externalIdentity grants from readable refs at
 // deploy time.
-type PluginInvocationExternalIdentityConfig struct {
+type AppInvocationExternalIdentityConfig struct {
 	Type string `yaml:"type,omitempty"`
 	ID   string `yaml:"id,omitempty"`
 }
 
-func (d PluginInvocationDependency) RunAsSubject() *core.RunAsSubject {
+func (d AppInvocationDependency) RunAsSubject() *core.RunAsSubject {
 	if d.RunAs == nil {
 		return nil
 	}
@@ -2316,14 +2316,14 @@ func (d PluginInvocationDependency) RunAsSubject() *core.RunAsSubject {
 	return nil
 }
 
-func (d PluginInvocationDependency) RunAsAppliesByDefault() bool {
+func (d AppInvocationDependency) RunAsAppliesByDefault() bool {
 	if d.RunAs == nil || d.RunAs.ApplyByDefault == nil {
 		return true
 	}
 	return *d.RunAs.ApplyByDefault
 }
 
-func (d PluginInvocationDependency) RunAsExternalIdentity() *core.ExternalIdentityRef {
+func (d AppInvocationDependency) RunAsExternalIdentity() *core.ExternalIdentityRef {
 	if d.RunAs == nil || d.RunAs.ExternalIdentity == nil {
 		return nil
 	}
@@ -2373,10 +2373,10 @@ func LoadPartialPreserveMissingEnvPaths(paths []string) (*Config, error) {
 	return loadWithLookupPathsMode(paths, os.LookupEnv, envMissingPreserve, "", false, false, false)
 }
 
-// LoadPluginScopePreserveMissingEnvPaths projects the merged YAML before typed
+// LoadAppScopePreserveMissingEnvPaths projects the merged YAML before typed
 // decoding so dropped non-string fields with unresolved env placeholders cannot
-// fail before the plugin scope is applied.
-func LoadPluginScopePreserveMissingEnvPaths(paths []string, plugins []string) (*Config, error) {
+// fail before the app scope is applied.
+func LoadAppScopePreserveMissingEnvPaths(paths []string, apps []string) (*Config, error) {
 	root, err := loadMergedConfigRoot(paths, os.LookupEnv, envMissingPreserve, "")
 	if err != nil {
 		return nil, err
@@ -2384,7 +2384,7 @@ func LoadPluginScopePreserveMissingEnvPaths(paths []string, plugins []string) (*
 	if err := NormalizeConfigSecretRefs(&root); err != nil {
 		return nil, err
 	}
-	if err := applyPluginScopeNode(&root, plugins); err != nil {
+	if err := applyAppScopeNode(&root, apps); err != nil {
 		return nil, err
 	}
 	if err := validateNoMissingEnvRefsInNode(&root); err != nil {
@@ -2419,7 +2419,7 @@ func ValidateNoMissingEnvRefs(cfg *Config) error {
 	return nil
 }
 
-func ValidateNoMissingEnvRefsForPluginScope(cfg *Config) error {
+func ValidateNoMissingEnvRefsForAppScope(cfg *Config) error {
 	if cfg == nil {
 		return nil
 	}
@@ -2445,7 +2445,7 @@ func referencedTopLevelConnectionDefs(cfg *Config) map[string]struct{} {
 			}
 		}
 	}
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		addEntryRefs(entry)
 	}
 	for _, entries := range [][]*ProviderEntry{
@@ -2510,7 +2510,7 @@ func collectProviderSources(cfg *Config, visit func(ProviderSource)) {
 			visit(entry.Source)
 		}
 	}
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		visitEntry(entry)
 	}
 	for _, entries := range [][]*ProviderEntry{
@@ -2684,7 +2684,7 @@ func normalizeProviderEntries(cfg *Config) {
 	if cfg == nil {
 		return
 	}
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		normalizeProviderEntryAliases(entry)
 	}
 	for _, entry := range cfg.Providers.Authentication {
@@ -2743,12 +2743,12 @@ func OverlayRemotePluginConfigPaths(paths []string, cfg *Config) error {
 	}
 	doc := documentValueNode(&root)
 	providersNode := mappingValueNode(documentValueNode(&root), "providers")
-	pluginsNode := mappingValueNode(doc, "plugins")
-	for name, entry := range cfg.Plugins {
+	appsNode := mappingValueNode(doc, "apps")
+	for name, entry := range cfg.Apps {
 		if entry == nil || !entry.HasRemoteSource() {
 			continue
 		}
-		if err := overlayRemoteEntryConfigNode(mappingValueNode(pluginsNode, name), entry, "plugin "+strconv.Quote(name)); err != nil {
+		if err := overlayRemoteEntryConfigNode(mappingValueNode(appsNode, name), entry, "app "+strconv.Quote(name)); err != nil {
 			return err
 		}
 	}
@@ -3437,7 +3437,7 @@ func applyDefaults(cfg *Config) {
 	if cfg.Connections == nil {
 		cfg.Connections = map[string]*ConnectionDef{}
 	}
-	cfg.Plugins = nonNilProviderEntryMap(cfg.Plugins)
+	cfg.Apps = nonNilProviderEntryMap(cfg.Apps)
 	cfg.Workflows.Schedules = nonNilWorkflowScheduleMap(cfg.Workflows.Schedules)
 	cfg.Workflows.EventTriggers = nonNilWorkflowEventTriggerMap(cfg.Workflows.EventTriggers)
 	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
@@ -3481,8 +3481,8 @@ func normalizeProviderSourceShapes(cfg *Config) {
 		normalizeProviderSource(kind, &entry.Source)
 	}
 
-	for _, entry := range cfg.Plugins {
-		normalizeEntry(providermanifestv1.KindPlugin, entry)
+	for _, entry := range cfg.Apps {
+		normalizeEntry(providermanifestv1.KindApp, entry)
 	}
 	for _, collection := range []struct {
 		kind    string
@@ -3893,58 +3893,58 @@ func normalizedSubjectPolicyDef(policy SubjectPolicyDef) SubjectPolicyDef {
 }
 
 func applyPluginMountBindings(cfg *Config) error {
-	if cfg == nil || len(cfg.Plugins) == 0 {
+	if cfg == nil || len(cfg.Apps) == 0 {
 		return nil
 	}
 
-	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
+	pluginNames := slices.Sorted(maps.Keys(cfg.Apps))
 	seenUIs := make(map[string]string, len(pluginNames))
 	for _, pluginName := range pluginNames {
-		plugin := cfg.Plugins[pluginName]
-		if plugin == nil {
-			return fmt.Errorf("config validation: plugins.%s is required", pluginName)
+		app := cfg.Apps[pluginName]
+		if app == nil {
+			return fmt.Errorf("config validation: apps.%s is required", pluginName)
 		}
-		plugin.UI = strings.TrimSpace(plugin.UI)
-		plugin.MountPath = strings.TrimSpace(plugin.MountPath)
-		plugin.AuthorizationPolicy = strings.TrimSpace(plugin.AuthorizationPolicy)
+		app.UI = strings.TrimSpace(app.UI)
+		app.MountPath = strings.TrimSpace(app.MountPath)
+		app.AuthorizationPolicy = strings.TrimSpace(app.AuthorizationPolicy)
 
-		if plugin.MountPath == "" {
-			if plugin.UI != "" {
-				return fmt.Errorf("config validation: plugins.%s.ui.bundle requires plugins.%s.ui.path", pluginName, pluginName)
+		if app.MountPath == "" {
+			if app.UI != "" {
+				return fmt.Errorf("config validation: apps.%s.ui.bundle requires apps.%s.ui.path", pluginName, pluginName)
 			}
 			continue
 		}
-		normalizedPath, err := normalizeMountedUIPath(plugin.MountPath)
+		normalizedPath, err := normalizeMountedUIPath(app.MountPath)
 		if err != nil {
-			return fmt.Errorf("config validation: plugins.%s.ui.path: %w", pluginName, err)
+			return fmt.Errorf("config validation: apps.%s.ui.path: %w", pluginName, err)
 		}
-		plugin.MountPath = normalizedPath
-		if err := validateAuthorizationPolicyReference(cfg, "plugin", pluginName, plugin.AuthorizationPolicy); err != nil {
+		app.MountPath = normalizedPath
+		if err := validateAuthorizationPolicyReference(cfg, "app", pluginName, app.AuthorizationPolicy); err != nil {
 			return err
 		}
-		if plugin.UI == "" {
+		if app.UI == "" {
 			continue
 		}
-		if prev, exists := seenUIs[plugin.UI]; exists && prev != pluginName {
-			return fmt.Errorf("config validation: plugins.%s.ui %q duplicates plugins.%s", pluginName, plugin.UI, prev)
+		if prev, exists := seenUIs[app.UI]; exists && prev != pluginName {
+			return fmt.Errorf("config validation: apps.%s.ui %q duplicates apps.%s", pluginName, app.UI, prev)
 		}
-		ui := cfg.Providers.UI[plugin.UI]
+		ui := cfg.Providers.UI[app.UI]
 		if ui == nil {
-			return fmt.Errorf("config validation: plugins.%s.ui references unknown ui %q", pluginName, plugin.UI)
+			return fmt.Errorf("config validation: apps.%s.ui references unknown ui %q", pluginName, app.UI)
 		}
-		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != plugin.AuthorizationPolicy {
-			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", pluginName, plugin.UI, plugin.UI)
+		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
+			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", pluginName, app.UI, app.UI)
 		}
-		if current := strings.TrimSpace(ui.Path); current != "" && current != plugin.MountPath {
-			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s.path", pluginName, plugin.UI, plugin.UI)
+		if current := strings.TrimSpace(ui.Path); current != "" && current != app.MountPath {
+			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.path", pluginName, app.UI, app.UI)
 		}
-		if current := strings.TrimSpace(ui.OwnerPlugin); current != "" && current != pluginName {
-			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s owner", pluginName, plugin.UI, plugin.UI)
+		if current := strings.TrimSpace(ui.OwnerApp); current != "" && current != pluginName {
+			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s owner", pluginName, app.UI, app.UI)
 		}
-		ui.AuthorizationPolicy = plugin.AuthorizationPolicy
-		ui.Path = plugin.MountPath
-		ui.OwnerPlugin = pluginName
-		seenUIs[plugin.UI] = pluginName
+		ui.AuthorizationPolicy = app.AuthorizationPolicy
+		ui.Path = app.MountPath
+		ui.OwnerApp = pluginName
+		seenUIs[app.UI] = pluginName
 	}
 
 	return nil
@@ -3995,8 +3995,8 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 		}
 	}
 
-	for _, entry := range mapValues(nestedMap(root, "plugins")) {
-		resolveRelativePathsInEntry(providermanifestv1.KindPlugin, entry, baseDir)
+	for _, entry := range mapValues(nestedMap(root, "apps")) {
+		resolveRelativePathsInEntry(providermanifestv1.KindApp, entry, baseDir)
 	}
 }
 
@@ -4142,7 +4142,7 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 			resolveEntry(&entry.ProviderEntry)
 		}
 	}
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		resolveEntry(entry)
 	}
 }

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/httpbinding"
+	"github.com/valon-technologies/gestalt/server/services/apps/httpbinding"
 )
 
 type verifiedHTTPBindingSender struct {
@@ -62,7 +62,7 @@ func (s *Server) verifyHTTPBindingRequest(r *http.Request, binding MountedHTTPBi
 	case providermanifestv1.HTTPSecuritySchemeTypeNone:
 		return &verifiedHTTPBindingSender{
 			Scheme:  binding.SecurityName,
-			Subject: binding.PluginName + "/" + binding.Name + "#" + binding.SecurityName,
+			Subject: binding.AppName + "/" + binding.Name + "#" + binding.SecurityName,
 			Claims: map[string]string{
 				"scheme": binding.SecurityName,
 			},
@@ -110,14 +110,14 @@ func (s *Server) verifyHTTPBindingHMACRequest(r *http.Request, binding MountedHT
 		return nil, newHTTPBindingRequestError(http.StatusUnauthorized, "invalid request signature", nil)
 	}
 	if binding.Ack != nil && strings.TrimSpace(binding.Security.TimestampHeader) != "" && binding.Security.MaxAgeSeconds > 0 {
-		replayKey := binding.PluginName + "\x00" + binding.Name + "\x00" + binding.SecurityName + "\x00sig:" + signature
+		replayKey := binding.AppName + "\x00" + binding.Name + "\x00" + binding.SecurityName + "\x00sig:" + signature
 		if !s.httpBindingReplayStore.MarkIfNew(replayKey, time.Duration(binding.Security.MaxAgeSeconds)*time.Second) {
 			return nil, newHTTPBindingRequestError(http.StatusOK, "duplicate signed delivery", nil)
 		}
 	}
 	return &verifiedHTTPBindingSender{
 		Scheme:  binding.SecurityName,
-		Subject: binding.PluginName + "/" + binding.Name + "#" + binding.SecurityName,
+		Subject: binding.AppName + "/" + binding.Name + "#" + binding.SecurityName,
 		Claims: map[string]string{
 			"scheme": binding.SecurityName,
 		},
@@ -146,7 +146,7 @@ func verifyHTTPBindingAPIKey(r *http.Request, binding MountedHTTPBinding) (*veri
 	}
 	return &verifiedHTTPBindingSender{
 		Scheme:  binding.SecurityName,
-		Subject: binding.PluginName + "/" + binding.Name + "#" + binding.SecurityName,
+		Subject: binding.AppName + "/" + binding.Name + "#" + binding.SecurityName,
 		Claims: map[string]string{
 			"scheme": binding.SecurityName,
 		},
@@ -183,7 +183,7 @@ func verifyHTTPBindingHTTPAuth(r *http.Request, binding MountedHTTPBinding) (*ve
 	}
 	return &verifiedHTTPBindingSender{
 		Scheme:  binding.SecurityName,
-		Subject: binding.PluginName + "/" + binding.Name + "#" + binding.SecurityName,
+		Subject: binding.AppName + "/" + binding.Name + "#" + binding.SecurityName,
 		Claims: map[string]string{
 			"scheme": binding.SecurityName,
 		},

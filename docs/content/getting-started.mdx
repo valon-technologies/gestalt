@@ -16,7 +16,7 @@ Run `gestaltd` with no arguments:
 gestaltd
 ```
 
-When no config file exists, `gestaltd` generates one at `~/.gestaltd/config.yaml` and starts immediately with SQLite storage via the [RelationalDB](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) implementation of the [IndexedDB provider](/providers/indexeddb), the [default UI](https://github.com/valon-technologies/gestalt-providers/tree/main/ui/default) mounted at `/`, no authentication, and an [HTTPBin](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/httpbin) implementation of the [plugin provider](/providers/plugins) on port 8080.
+When no config file exists, `gestaltd` generates one at `~/.gestaltd/config.yaml` and starts immediately with SQLite storage via the [RelationalDB](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) implementation of the [IndexedDB provider](/providers/indexeddb), the [default UI](https://github.com/valon-technologies/gestalt-providers/tree/main/ui/default) mounted at `/`, no authentication, and an [HTTPBin](https://github.com/valon-technologies/gestalt-providers/tree/main/apps/httpbin) implementation of the [plugin provider](/providers/apps) on port 8080.
 
 ```
 2026/04/10 10:00:00 INFO generated default config path=~/.gestaltd/config.yaml
@@ -36,7 +36,7 @@ The wizard prompts for the server URL. Enter `http://localhost:8080` and it save
 Verify the connection:
 
 ```sh
-gestalt plugin list
+gestalt app list
 ```
 
 ```
@@ -49,10 +49,10 @@ gestalt plugin list
 
 ### List operations
 
-See what the httpbin plugin can do:
+See what the httpbin app can do:
 
 ```sh
-gestalt plugin invoke httpbin
+gestalt app invoke httpbin
 ```
 
 ```
@@ -72,7 +72,7 @@ gestalt plugin invoke httpbin
 <Tabs items={['CLI', 'HTTP']}>
   <Tabs.Tab>
     ```sh
-    gestalt plugin invoke httpbin get_ip
+    gestalt app invoke httpbin get_ip
     ```
 
     ```
@@ -100,11 +100,11 @@ gestalt plugin invoke httpbin
   </Tabs.Tab>
 </Tabs>
 
-Both access the same underlying operation. Anything you can do with `gestalt plugin invoke` you can also do with `curl` or any HTTP client.
+Both access the same underlying operation. Anything you can do with `gestalt app invoke` you can also do with `curl` or any HTTP client.
 
 ## Connecting over MCP
 
-Gestalt exposes all MCP-enabled plugins at a single endpoint: `http://localhost:8080/mcp`. Any MCP-compatible client can connect to it.
+Gestalt exposes all MCP-enabled apps at a single endpoint: `http://localhost:8080/mcp`. Any MCP-compatible client can connect to it.
 
 <Tabs items={['Claude Code', 'Codex', 'Cursor']}>
   <Tabs.Tab>
@@ -156,7 +156,7 @@ Gestalt exposes all MCP-enabled plugins at a single endpoint: `http://localhost:
   </Tabs.Tab>
 </Tabs>
 
-Once connected, your agent can call any operation exposed by the server. The same auth model applies: when plugins require credentials, users connect through the Gestalt UI or CLI before the agent can invoke those tools.
+Once connected, your agent can call any operation exposed by the server. The same auth model applies: when apps require credentials, users connect through the Gestalt UI or CLI before the agent can invoke those tools.
 
 ## Next steps
 

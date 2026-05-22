@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/packageio"
+	"github.com/valon-technologies/gestalt/server/services/apps/packageio"
 )
 
 type installedPackage struct {
@@ -40,7 +40,7 @@ func installPackage(packagePath, destDir string) (*installedPackage, error) {
 
 	if isUIOnly(manifest) {
 		if err := os.MkdirAll(destDir, 0755); err != nil {
-			return nil, fmt.Errorf("create plugin directory: %w", err)
+			return nil, fmt.Errorf("create app directory: %w", err)
 		}
 		if err := packageio.ExtractPackage(packagePath, destDir); err != nil {
 			return nil, err
@@ -75,7 +75,7 @@ func installPackage(packagePath, destDir string) (*installedPackage, error) {
 	}
 
 	if err := os.MkdirAll(destDir, 0755); err != nil {
-		return nil, fmt.Errorf("create plugin directory: %w", err)
+		return nil, fmt.Errorf("create app directory: %w", err)
 	}
 	if err := packageio.ExtractPackage(packagePath, destDir); err != nil {
 		return nil, err

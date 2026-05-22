@@ -42,8 +42,8 @@ func TestProviderBackedResolveAccessUsesModelPinnedRelationships(t *testing.T) {
 		activeModelID: "model-b",
 		relationshipsByModelID: map[string][]*core.Relationship{
 			"model-a": {
-				providerBackedRoleTestRelationship("user:user-123", resourceTypePluginStatic, "slack", "editor"),
-				providerBackedRoleTestRelationship("user:user-123", resourceTypePluginStatic, "slack", "viewer"),
+				providerBackedRoleTestRelationship("user:user-123", resourceTypeAppStatic, "slack", "editor"),
+				providerBackedRoleTestRelationship("user:user-123", resourceTypeAppStatic, "slack", "viewer"),
 			},
 		},
 	}
@@ -69,7 +69,7 @@ func TestProviderBackedResolveAccessUsesModelPinnedRelationships(t *testing.T) {
 	if got, want := first.GetSubject().GetId(), "user:user-123"; got != want {
 		t.Fatalf("first subject id = %q, want %q", got, want)
 	}
-	if got, want := first.GetResource().GetType(), resourceTypePluginStatic; got != want {
+	if got, want := first.GetResource().GetType(), resourceTypeAppStatic; got != want {
 		t.Fatalf("first resource type = %q, want %q", got, want)
 	}
 	if got, want := first.GetResource().GetId(), "slack"; got != want {
@@ -96,7 +96,7 @@ func TestProviderBackedResolveAccessDeniesMissingCachedModelRelationship(t *test
 		activeModelID: "model-b",
 		relationshipsByModelID: map[string][]*core.Relationship{
 			"model-b": {
-				providerBackedRoleTestRelationship("user:user-123", resourceTypePluginStatic, "slack", "admin"),
+				providerBackedRoleTestRelationship("user:user-123", resourceTypeAppStatic, "slack", "admin"),
 			},
 		},
 	}
@@ -118,7 +118,7 @@ func TestProviderBackedResolveAccessDeniesMismatchedReadRelationshipsModel(t *te
 		responseModelID: "model-b",
 		relationshipsByModelID: map[string][]*core.Relationship{
 			"model-a": {
-				providerBackedRoleTestRelationship("user:user-123", resourceTypePluginStatic, "slack", "admin"),
+				providerBackedRoleTestRelationship("user:user-123", resourceTypeAppStatic, "slack", "admin"),
 			},
 		},
 	}
@@ -144,7 +144,7 @@ func TestProviderBackedReloadComposesConfigAndDynamicFragmentSources(t *testing.
 			Id:   "user:alice",
 		}}},
 		Relation:   "editor",
-		Resource:   &core.ResourceRef{Type: resourceTypePluginDynamic, Id: "slack"},
+		Resource:   &core.ResourceRef{Type: resourceTypeAppDynamic, Id: "slack"},
 		Properties: mustStruct(t, map[string]any{"source": "provider"}),
 	}
 	provider := newProviderBackedComposerTestProvider("model-0", legacyDynamic)
@@ -162,7 +162,7 @@ func TestProviderBackedReloadComposesConfigAndDynamicFragmentSources(t *testing.
 		t.Fatalf("PutFragment: %v", err)
 	}
 	if _, err := services.AuthzFragments.PutFragment(ctx, &coredata.AuthorizationDynamicFragment{
-		Owner: coredata.AuthorizationPluginFragmentOwner("github"),
+		Owner: coredata.AuthorizationAppFragmentOwner("github"),
 		ResourceTypes: map[string]json.RawMessage{
 			"repository": json.RawMessage(`{"relations":{"maintainer":{"subjectTypes":["subject"]}},"actions":{"administer":{"relations":["maintainer"]}}}`),
 		},
@@ -201,22 +201,22 @@ func TestProviderBackedReloadComposesConfigAndDynamicFragmentSources(t *testing.
 	if authorizationModelResourceType(provider.lastModel, "project") == nil {
 		t.Fatalf("composed model resource types = %#v, want project fragment", provider.lastModel.GetResourceTypes())
 	}
-	if authorizationModelResourceType(provider.lastModel, "plugin/github/repository") == nil {
-		t.Fatalf("composed model resource types = %#v, want plugin/github/repository fragment", provider.lastModel.GetResourceTypes())
+	if authorizationModelResourceType(provider.lastModel, "app/github/repository") == nil {
+		t.Fatalf("composed model resource types = %#v, want app/github/repository fragment", provider.lastModel.GetResourceTypes())
 	}
 	if !provider.hasRelationship(providerBackedRoleTestRelationship("user:carol", "project", "proj-1", "viewer")) {
 		t.Fatal("provider is missing generic dynamic fragment relationship")
 	}
-	if !provider.hasRelationship(providerBackedRoleTestRelationship("user:dana", "plugin/github/repository", "valon-tools", "maintainer")) {
+	if !provider.hasRelationship(providerBackedRoleTestRelationship("user:dana", "app/github/repository", "valon-tools", "maintainer")) {
 		t.Fatal("provider is missing plugin-qualified dynamic fragment relationship")
 	}
 	if !provider.hasRelationship(legacyDynamic) {
-		t.Fatal("provider is missing backfilled plugin dynamic relationship")
+		t.Fatal("provider is missing backfilled app dynamic relationship")
 	}
 	if !provider.hasRelationship(providerBackedRoleTestRelationship("user:bob", "workspace", "ws-1", "member")) {
 		t.Fatal("provider is missing static config relationship")
 	}
-	fragment, err := services.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationPluginFragmentOwner("slack"))
+	fragment, err := services.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationAppFragmentOwner("slack"))
 	if err != nil {
 		t.Fatalf("GetFragmentByOwner: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestProviderBackedReloadComposesConfigAndDynamicFragmentSources(t *testing.
 		t.Fatalf("backfilled fragment properties = %#v, want provider source", fragment.Relationships[0].Properties)
 	}
 
-	deleted, _, err := services.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationPluginFragmentOwner("slack"), fragment.Relationships[0], coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test_delete"})
+	deleted, _, err := services.AuthzFragments.DeleteRelationship(ctx, coredata.AuthorizationAppFragmentOwner("slack"), fragment.Relationships[0], coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test_delete"})
 	if err != nil {
 		t.Fatalf("DeleteRelationship: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestProviderBackedReloadComposesConfigAndDynamicFragmentSources(t *testing.
 		t.Fatalf("ReloadAuthorizationState after delete: %v", err)
 	}
 	if provider.hasRelationship(legacyDynamic) {
-		t.Fatal("provider still has plugin dynamic relationship after source fragment deletion")
+		t.Fatal("provider still has app dynamic relationship after source fragment deletion")
 	}
 }
 
@@ -301,7 +301,7 @@ func TestProviderBackedReloadRemovesDynamicFragmentRedefiningProviderResourceTyp
 	if _, err := services.AuthzFragments.PutFragment(ctx, &coredata.AuthorizationDynamicFragment{
 		Owner: coredata.AuthorizationGlobalFragmentOwner(),
 		ResourceTypes: map[string]json.RawMessage{
-			resourceTypePluginStatic: json.RawMessage(`{"relations":{"viewer":{"subjectTypes":["subject"]}}}`),
+			resourceTypeAppStatic: json.RawMessage(`{"relations":{"viewer":{"subjectTypes":["subject"]}}}`),
 		},
 	}, coredata.AuthorizationDynamicFragmentUpdate{Audit: coredata.AuthorizationDynamicFragmentAuditMetadata{Reason: "test_builtin_conflict"}}); err != nil {
 		t.Fatalf("PutFragment invalid: %v", err)
@@ -333,7 +333,7 @@ func TestProviderBackedReloadRemovesDynamicFragmentWithInvalidRelationshipTarget
 		t.Fatalf("coredata.New: %v", err)
 	}
 	if _, err := services.AuthzFragments.PutFragment(ctx, &coredata.AuthorizationDynamicFragment{
-		Owner: coredata.AuthorizationPluginFragmentOwner("github"),
+		Owner: coredata.AuthorizationAppFragmentOwner("github"),
 		ResourceTypes: map[string]json.RawMessage{
 			"repository": json.RawMessage(`{"relations":{"maintainer":{"subjectTypes":["subject"]}}}`),
 		},
@@ -361,10 +361,10 @@ func TestProviderBackedReloadRemovesDynamicFragmentWithInvalidRelationshipTarget
 	if err := authorizer.ReloadAuthorizationState(ctx); err != nil {
 		t.Fatalf("ReloadAuthorizationState: %v", err)
 	}
-	if _, err := services.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationPluginFragmentOwner("github")); !errors.Is(err, core.ErrNotFound) {
+	if _, err := services.AuthzFragments.GetFragmentByOwner(ctx, coredata.AuthorizationAppFragmentOwner("github")); !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("GetFragmentByOwner invalid target err = %v, want not found", err)
 	}
-	if provider.hasRelationship(providerBackedRoleTestRelationship("user:dana", "plugin/github/repository", "valon-tools", "maintainer")) {
+	if provider.hasRelationship(providerBackedRoleTestRelationship("user:dana", "app/github/repository", "valon-tools", "maintainer")) {
 		t.Fatal("provider has relationship from invalid dynamic fragment target")
 	}
 }
@@ -378,20 +378,20 @@ func TestProviderBackedValidateDynamicRelationshipChecksCompatibilityDynamicRela
 	}
 	authorizer := &ProviderBackedAuthorizer{base: base}
 	fragments := []*coredata.AuthorizationDynamicFragment{{
-		Owner:  coredata.AuthorizationPluginFragmentOwner("github"),
+		Owner:  coredata.AuthorizationAppFragmentOwner("github"),
 		Status: coredata.AuthorizationFragmentStatusActive,
 		Relationships: []coredata.AuthorizationDynamicFragmentRelationship{{
 			Subject:  coredata.AuthorizationDynamicFragmentSubject{Type: subjectTypeSubject, ID: "user:alice"},
 			Relation: "viewer",
-			Resource: coredata.AuthorizationDynamicFragmentResource{Type: resourceTypePluginDynamic, ID: "github"},
+			Resource: coredata.AuthorizationDynamicFragmentResource{Type: resourceTypeAppDynamic, ID: "github"},
 		}},
 	}}
 	staticResourceTypes, resourceRelations := authorizer.staticResourceTypeState(dynamicFragmentRoleState(fragments))
 
-	if err := authorizer.validateDynamicRelationship(providerBackedRoleTestRelationship("user:alice", resourceTypePluginDynamic, "github", "viewer"), resourceRelations, staticResourceTypes); err != nil {
+	if err := authorizer.validateDynamicRelationship(providerBackedRoleTestRelationship("user:alice", resourceTypeAppDynamic, "github", "viewer"), resourceRelations, staticResourceTypes); err != nil {
 		t.Fatalf("validateDynamicRelationship viewer: %v", err)
 	}
-	err = authorizer.validateDynamicRelationship(providerBackedRoleTestRelationship("user:alice", resourceTypePluginDynamic, "github", "owner"), resourceRelations, staticResourceTypes)
+	err = authorizer.validateDynamicRelationship(providerBackedRoleTestRelationship("user:alice", resourceTypeAppDynamic, "github", "owner"), resourceRelations, staticResourceTypes)
 	if err == nil || !strings.Contains(err.Error(), `relation "owner" is not defined`) {
 		t.Fatalf("validateDynamicRelationship owner error = %v, want undefined relation", err)
 	}
@@ -417,10 +417,10 @@ func newProviderBackedRoleTestAuthorizer(t *testing.T, provider *providerBackedR
 	}
 	authorizer.state = providerBackedRoleState{
 		modelID: modelID,
-		pluginStaticRoles: map[string][]string{
+		appStaticRoles: map[string][]string{
 			"slack": roles,
 		},
-		pluginDynamicRoles: map[string][]string{},
+		appDynamicRoles: map[string][]string{},
 		policyStaticRoles:  map[string][]string{},
 	}
 	return authorizer

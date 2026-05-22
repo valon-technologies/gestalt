@@ -70,7 +70,7 @@ func ToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 	}
 	return coreagent.ToolRef{
 		System:      ref.GetSystem(),
-		Plugin:      ref.GetPlugin(),
+		App:      ref.GetApp(),
 		Operation:   ref.GetOperation(),
 		Connection:  ref.GetConnection(),
 		Instance:    ref.GetInstance(),
@@ -86,7 +86,7 @@ func ToolRefFromProto(ref *proto.AgentToolRef) coreagent.ToolRef {
 func ToolRefToProto(ref coreagent.ToolRef) *proto.AgentToolRef {
 	return &proto.AgentToolRef{
 		System:      ref.System,
-		Plugin:      ref.Plugin,
+		App:      ref.App,
 		Operation:   ref.Operation,
 		Connection:  ref.Connection,
 		Instance:    ref.Instance,

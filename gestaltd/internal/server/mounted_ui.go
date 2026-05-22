@@ -17,7 +17,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/ui"
 	"github.com/valon-technologies/gestalt/server/services/ui/adminui"
@@ -136,7 +136,7 @@ func mountedUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedUI, err
 		mounted = append(mounted, MountedUI{
 			Name:                name,
 			Path:                entry.Path,
-			PluginName:          entry.OwnerPlugin,
+			AppName:          entry.OwnerApp,
 			AuthorizationPolicy: entry.AuthorizationPolicy,
 			Routes:              routes,
 			Handler:             handler,
@@ -332,7 +332,7 @@ func (s *Server) mountedUIHandler(mounted MountedUI) http.Handler {
 }
 
 func (s *Server) providerDevMountedUIHandler(mounted MountedUI, fallback http.Handler) http.Handler {
-	if s.providerDevSessions == nil || strings.TrimSpace(mounted.PluginName) == "" {
+	if s.providerDevSessions == nil || strings.TrimSpace(mounted.AppName) == "" {
 		return fallback
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -340,7 +340,7 @@ func (s *Server) providerDevMountedUIHandler(mounted MountedUI, fallback http.Ha
 			fallback.ServeHTTP(w, r)
 			return
 		}
-		resp, ok, err := s.providerDevSessions.ServeUIAsset(r.Context(), s.providerDevUIPrincipal(r, mounted), mounted.PluginName, providerdev.UIAssetRequest{
+		resp, ok, err := s.providerDevSessions.ServeUIAsset(r.Context(), s.providerDevUIPrincipal(r, mounted), mounted.AppName, providerdev.UIAssetRequest{
 			Method:   r.Method,
 			Path:     providerDevUIAssetPath(mounted, r.URL.Path),
 			RawQuery: r.URL.RawQuery,
@@ -434,7 +434,7 @@ func (s *Server) protectedUIHandler(mounted MountedUI, inner http.Handler, redir
 func mountedUITelemetryHandler(mounted MountedUI, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		metricutil.AddHTTPServerMetricDims(r.Context(), metricutil.HTTPMetricDims{
-			ProviderName: mounted.PluginName,
+			ProviderName: mounted.AppName,
 			Surface:      metricutil.InvocationSurfaceUI,
 			UIName:       mounted.Name,
 		})
@@ -470,8 +470,8 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		allowed bool
 	)
 	switch {
-	case mounted.PluginName != "":
-		access, allowed = s.authorizer.ResolveAccess(r.Context(), p, mounted.PluginName)
+	case mounted.AppName != "":
+		access, allowed = s.authorizer.ResolveAccess(r.Context(), p, mounted.AppName)
 	case mounted.builtInAdmin:
 		access, allowed = s.authorizer.ResolveAdminAccess(r.Context(), p, mounted.AuthorizationPolicy)
 	default:

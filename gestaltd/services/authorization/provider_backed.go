@@ -22,8 +22,8 @@ import (
 type providerBackedRoleState struct {
 	modelID            string
 	policyStaticRoles  map[string][]string
-	pluginStaticRoles  map[string][]string
-	pluginDynamicRoles map[string][]string
+	appStaticRoles  map[string][]string
+	appDynamicRoles map[string][]string
 	adminDynamicRoles  []string
 }
 
@@ -71,8 +71,8 @@ func NewProviderBacked(base *Authorizer, provider core.AuthorizationProvider, op
 		provider: provider,
 		state: providerBackedRoleState{
 			policyStaticRoles:  map[string][]string{},
-			pluginStaticRoles:  map[string][]string{},
-			pluginDynamicRoles: map[string][]string{},
+			appStaticRoles:  map[string][]string{},
+			appDynamicRoles: map[string][]string{},
 		},
 	}
 	for _, opt := range opts {
@@ -163,11 +163,11 @@ func (a *ProviderBackedAuthorizer) EnsureManagedDynamicRole(ctx context.Context,
 	defer a.reloadMu.Unlock()
 	return a.reloadAuthorizationStateLocked(ctx, func(roles *providerBackedRoleState) error {
 		switch resourceType {
-		case resourceTypePluginDynamic:
-			if roles.pluginDynamicRoles == nil {
-				roles.pluginDynamicRoles = map[string][]string{}
+		case resourceTypeAppDynamic:
+			if roles.appDynamicRoles == nil {
+				roles.appDynamicRoles = map[string][]string{}
 			}
-			roles.pluginDynamicRoles[resourceID] = roleListWith(roles.pluginDynamicRoles[resourceID], role)
+			roles.appDynamicRoles[resourceID] = roleListWith(roles.appDynamicRoles[resourceID], role)
 		case resourceTypeAdminDynamic:
 			if resourceID != resourceIDAdminDynamicGlobal {
 				return fmt.Errorf("unsupported admin dynamic resource %q", resourceID)
@@ -329,7 +329,7 @@ func (a *ProviderBackedAuthorizer) ResolveAccess(ctx context.Context, p *princip
 	access := AccessContext{Policy: policyName}
 	role, ok, err := a.resolveProviderRole(ctx, provider, p)
 	if err != nil {
-		a.logProviderEvalError("plugin", provider, err)
+		a.logProviderEvalError("app", provider, err)
 		if policy.DefaultAllow && defaultAllowAppliesToPrincipal(p) {
 			access.Role = defaultSubjectRole
 			return access, true
@@ -498,9 +498,9 @@ func (a *ProviderBackedAuthorizer) resolveProviderRole(ctx context.Context, prov
 	role, ok, err := a.resolveRoleVariants(
 		ctx,
 		staticSubjectRefs(p),
-		resourceTypePluginStatic,
+		resourceTypeAppStatic,
 		provider,
-		state.pluginStaticRoles[provider],
+		state.appStaticRoles[provider],
 	)
 	if err != nil || ok {
 		return role, ok, err
@@ -508,9 +508,9 @@ func (a *ProviderBackedAuthorizer) resolveProviderRole(ctx context.Context, prov
 	return a.resolveRoleVariants(
 		ctx,
 		dynamicSubjectRefs(p),
-		resourceTypePluginDynamic,
+		resourceTypeAppDynamic,
 		provider,
-		state.pluginDynamicRoles[provider],
+		state.appDynamicRoles[provider],
 	)
 }
 
@@ -634,12 +634,12 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 	desired := map[string]*core.Relationship{}
 	state := providerBackedRoleState{
 		policyStaticRoles:  map[string][]string{},
-		pluginStaticRoles:  map[string][]string{},
-		pluginDynamicRoles: map[string][]string{},
+		appStaticRoles:  map[string][]string{},
+		appDynamicRoles: map[string][]string{},
 	}
 	policyStaticRoles := map[string]map[string]struct{}{}
-	pluginStaticRoles := map[string]map[string]struct{}{}
-	pluginDynamicRoles := map[string]map[string]struct{}{}
+	appStaticRoles := map[string]map[string]struct{}{}
+	appDynamicRoles := map[string]map[string]struct{}{}
 	adminDynamicRoles := map[string]struct{}{}
 
 	for _, rel := range existing {
@@ -647,7 +647,7 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 			continue
 		}
 		switch strings.TrimSpace(rel.GetResource().GetType()) {
-		case resourceTypePluginDynamic:
+		case resourceTypeAppDynamic:
 			if a.fragmentSource != nil {
 				continue
 			}
@@ -656,8 +656,8 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 			if resourceID == "" || relation == "" {
 				continue
 			}
-			addDesiredRelationship(desired, synthesizedRelationship(rel, "provider_dynamic", "legacy_plugin_dynamic", "plugin", resourceID))
-			ensureRoleSet(pluginDynamicRoles, resourceID)[relation] = struct{}{}
+			addDesiredRelationship(desired, synthesizedRelationship(rel, "provider_dynamic", "legacy_app_dynamic", "app", resourceID))
+			ensureRoleSet(appDynamicRoles, resourceID)[relation] = struct{}{}
 		case resourceTypeAdminDynamic:
 			if a.fragmentSource != nil {
 				continue
@@ -709,14 +709,14 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 			sourceID = "dynamic_fragment"
 		}
 		switch strings.TrimSpace(rel.GetResource().GetType()) {
-		case resourceTypePluginDynamic:
+		case resourceTypeAppDynamic:
 			resourceID := strings.TrimSpace(rel.GetResource().GetId())
 			relation := strings.TrimSpace(rel.GetRelation())
 			if resourceID == "" || relation == "" {
 				continue
 			}
-			addDesiredRelationship(desired, synthesizedRelationship(rel, "dynamic_fragment", sourceID, "plugin", resourceID))
-			ensureRoleSet(pluginDynamicRoles, resourceID)[relation] = struct{}{}
+			addDesiredRelationship(desired, synthesizedRelationship(rel, "dynamic_fragment", sourceID, "app", resourceID))
+			ensureRoleSet(appDynamicRoles, resourceID)[relation] = struct{}{}
 		case resourceTypeAdminDynamic:
 			resourceID := strings.TrimSpace(rel.GetResource().GetId())
 			relation := strings.TrimSpace(rel.GetRelation())
@@ -761,12 +761,12 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 				Resource: &core.ResourceRef{Type: resourceTypeAdminPolicyStatic, Id: policyName},
 			}, "static_config", "authorization.policies."+policyName, "policy", policyName))
 			for _, providerName := range providersByPolicy[policyName] {
-				ensureRoleSet(pluginStaticRoles, providerName)[role] = struct{}{}
+				ensureRoleSet(appStaticRoles, providerName)[role] = struct{}{}
 				addDesiredRelationship(desired, synthesizedRelationship(&core.Relationship{
 					Subject:  &core.SubjectRef{Type: subjectTypeSubject, Id: subjectID},
 					Relation: role,
-					Resource: &core.ResourceRef{Type: resourceTypePluginStatic, Id: providerName},
-				}, "static_config", "authorization.policies."+policyName, "plugin", providerName))
+					Resource: &core.ResourceRef{Type: resourceTypeAppStatic, Id: providerName},
+				}, "static_config", "authorization.policies."+policyName, "app", providerName))
 			}
 		}
 	}
@@ -781,11 +781,11 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(existing map[string
 	for name, roles := range policyStaticRoles {
 		state.policyStaticRoles[name] = normalizeRoleList(roles)
 	}
-	for name, roles := range pluginStaticRoles {
-		state.pluginStaticRoles[name] = normalizeRoleList(roles)
+	for name, roles := range appStaticRoles {
+		state.appStaticRoles[name] = normalizeRoleList(roles)
 	}
-	for name, roles := range pluginDynamicRoles {
-		state.pluginDynamicRoles[name] = normalizeRoleList(roles)
+	for name, roles := range appDynamicRoles {
+		state.appDynamicRoles[name] = normalizeRoleList(roles)
 	}
 	state.adminDynamicRoles = normalizeRoleList(adminDynamicRoles)
 	return desired, state, nil
@@ -943,7 +943,7 @@ func (a *ProviderBackedAuthorizer) staticResourceTypeState(roles providerBackedR
 
 func dynamicFragmentRoleState(fragments []*coredata.AuthorizationDynamicFragment) providerBackedRoleState {
 	state := providerBackedRoleState{
-		pluginDynamicRoles: map[string][]string{},
+		appDynamicRoles: map[string][]string{},
 	}
 	pluginRoles := map[string]map[string]struct{}{}
 	adminRoles := map[string]struct{}{}
@@ -962,7 +962,7 @@ func dynamicFragmentRoleState(fragments []*coredata.AuthorizationDynamicFragment
 				continue
 			}
 			switch resourceType {
-			case resourceTypePluginDynamic:
+			case resourceTypeAppDynamic:
 				resourceID := strings.TrimSpace(relationship.Resource.ID)
 				if resourceID != "" {
 					ensureRoleSet(pluginRoles, resourceID)[relation] = struct{}{}
@@ -975,7 +975,7 @@ func dynamicFragmentRoleState(fragments []*coredata.AuthorizationDynamicFragment
 		}
 	}
 	for resourceID, roles := range pluginRoles {
-		state.pluginDynamicRoles[resourceID] = normalizeRoleList(roles)
+		state.appDynamicRoles[resourceID] = normalizeRoleList(roles)
 	}
 	state.adminDynamicRoles = normalizeRoleList(adminRoles)
 	return state
@@ -1009,17 +1009,17 @@ func dynamicFragmentCanonicalResourceType(owner coredata.AuthorizationFragmentOw
 	if resourceType == "" {
 		return "", fmt.Errorf("resource type is required")
 	}
-	if strings.TrimSpace(owner.Kind) != coredata.AuthorizationFragmentOwnerKindPlugin {
+	if strings.TrimSpace(owner.Kind) != coredata.AuthorizationFragmentOwnerKindApp {
 		return resourceType, nil
 	}
-	plugin := strings.TrimSpace(owner.Plugin)
-	if plugin == "" {
-		return "", fmt.Errorf("plugin owner requires plugin")
+	appName := strings.TrimSpace(owner.App)
+	if appName == "" {
+		return "", fmt.Errorf("app owner requires app")
 	}
-	prefix := "plugin/" + plugin + "/"
-	if strings.HasPrefix(resourceType, "plugin/") {
+	prefix := "app/" + appName + "/"
+	if strings.HasPrefix(resourceType, "app/") {
 		if !strings.HasPrefix(resourceType, prefix) {
-			return "", fmt.Errorf("plugin fragment cannot reference resource type %q outside %q", resourceType, prefix)
+			return "", fmt.Errorf("app fragment cannot reference resource type %q outside %q", resourceType, prefix)
 		}
 		return resourceType, nil
 	}
@@ -1027,10 +1027,10 @@ func dynamicFragmentCanonicalResourceType(owner coredata.AuthorizationFragmentOw
 		return prefix + resourceType, nil
 	}
 	switch resourceType {
-	case resourceTypePluginDynamic:
+	case resourceTypeAppDynamic:
 		return resourceType, nil
 	default:
-		return "", fmt.Errorf("plugin fragment cannot reference non-local resource type %q", resourceType)
+		return "", fmt.Errorf("app fragment cannot reference non-local resource type %q", resourceType)
 	}
 }
 
@@ -1039,8 +1039,8 @@ func dynamicFragmentOwnerKey(owner coredata.AuthorizationFragmentOwner) string {
 }
 
 func dynamicFragmentOwnerID(owner coredata.AuthorizationFragmentOwner) string {
-	if strings.TrimSpace(owner.Kind) == coredata.AuthorizationFragmentOwnerKindPlugin {
-		return strings.TrimSpace(owner.Plugin)
+	if strings.TrimSpace(owner.Kind) == coredata.AuthorizationFragmentOwnerKindApp {
+		return strings.TrimSpace(owner.App)
 	}
 	return coredata.AuthorizationFragmentOwnerKindGlobal
 }
@@ -1059,7 +1059,7 @@ func (a *ProviderBackedAuthorizer) validateDynamicRelationship(rel *core.Relatio
 		return fmt.Errorf("relation %q is not defined on resource type %q", relation, resourceType)
 	}
 	if _, static := staticResourceTypes[resourceType]; static &&
-		resourceType != resourceTypePluginDynamic &&
+		resourceType != resourceTypeAppDynamic &&
 		resourceType != resourceTypeAdminDynamic &&
 		!a.base.resourceDynamicPolicies[resourceType].AllowAdditionalRelationships {
 		return fmt.Errorf("static resource type %q does not allow dynamic relationships", resourceType)
@@ -1103,12 +1103,12 @@ func dynamicFragmentRelationshipFromProvider(rel *core.Relationship) (coredata.A
 	}
 	resource := rel.GetResource()
 	switch strings.TrimSpace(resource.GetType()) {
-	case resourceTypePluginDynamic:
-		plugin := strings.TrimSpace(resource.GetId())
-		if plugin == "" {
+	case resourceTypeAppDynamic:
+		appName := strings.TrimSpace(resource.GetId())
+		if appName == "" {
 			return coredata.AuthorizationDynamicFragmentRelationship{}, coredata.AuthorizationFragmentOwner{}, false
 		}
-		return dynamicFragmentRelationshipFromCore(rel), coredata.AuthorizationPluginFragmentOwner(plugin), true
+		return dynamicFragmentRelationshipFromCore(rel), coredata.AuthorizationAppFragmentOwner(appName), true
 	case resourceTypeAdminDynamic:
 		if strings.TrimSpace(resource.GetId()) != resourceIDAdminDynamicGlobal {
 			return coredata.AuthorizationDynamicFragmentRelationship{}, coredata.AuthorizationFragmentOwner{}, false

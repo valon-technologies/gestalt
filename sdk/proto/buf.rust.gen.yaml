@@ -6,8 +6,8 @@ inputs:
       - v1/agent.proto
       - v1/authentication.proto
       - v1/authorization.proto
-      - v1/plugin.proto
-      - v1/pluginruntime.proto
+      - v1/app.proto
+      - v1/appruntime.proto
       - v1/runtime.proto
       - v1/cache.proto
       - v1/secrets.proto

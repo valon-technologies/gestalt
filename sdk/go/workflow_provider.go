@@ -22,7 +22,7 @@ type ListWorkflowProviderRunsRequest struct {
 	PageSize     int
 	PageToken    string
 	Status       WorkflowRunStatus
-	TargetPlugin string
+	TargetApp string
 }
 
 // ListWorkflowProviderRunsResponse contains workflow runs.
@@ -246,7 +246,7 @@ func (r *ListWorkflowExecutionReferencesResponse) GetReferences() []WorkflowExec
 
 // PublishWorkflowProviderEventRequest requests publishing a workflow event.
 type PublishWorkflowProviderEventRequest struct {
-	PluginName  string
+	AppName  string
 	Event       *WorkflowEvent
 	PublishedBy *WorkflowActor
 }

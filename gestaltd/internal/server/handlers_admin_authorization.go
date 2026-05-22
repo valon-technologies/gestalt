@@ -27,7 +27,7 @@ type adminAuthorizationPluginInfo struct {
 }
 
 type adminAuthorizationMemberRow struct {
-	Plugin        string `json:"plugin"`
+	App        string `json:"app"`
 	Role          string `json:"role"`
 	Source        string `json:"source"`
 	Effective     bool   `json:"effective"`
@@ -63,10 +63,10 @@ func (s *Server) mountAdminAuthorizationRoutes(r chi.Router) {
 	r.Get("/authorization/admins/members", s.listAdminAuthorizationAdminMembers)
 	r.Put("/authorization/admins/members", s.putAdminAuthorizationAdminMember)
 	r.Delete("/authorization/admins/members/{subjectID}", s.deleteAdminAuthorizationAdminMember)
-	r.Get("/authorization/plugins", s.listAdminAuthorizationPlugins)
-	r.Get("/authorization/plugins/{plugin}/members", s.listAdminAuthorizationPluginMembers)
-	r.Put("/authorization/plugins/{plugin}/members", s.putAdminAuthorizationPluginMember)
-	r.Delete("/authorization/plugins/{plugin}/members/{subjectID}", s.deleteAdminAuthorizationPluginMember)
+	r.Get("/authorization/apps", s.listAdminAuthorizationPlugins)
+	r.Get("/authorization/apps/{app}/members", s.listAdminAuthorizationPluginMembers)
+	r.Put("/authorization/apps/{app}/members", s.putAdminAuthorizationPluginMember)
+	r.Delete("/authorization/apps/{app}/members/{subjectID}", s.deleteAdminAuthorizationPluginMember)
 }
 
 func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
@@ -98,7 +98,7 @@ func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if plugin, ok := pluginScopedAdminAuthorizationRoutePlugin(r); ok {
+		if plugin, ok := appScopedAdminAuthorizationRoutePlugin(r); ok {
 			access, allowed := s.authorizer.ResolveAccess(r.Context(), p, plugin)
 			if allowed && adminAuthorizationPluginRoleCanMutate(access.Role) {
 				s.serveAdminAPIWithAccess(next, w, r, p, access)
@@ -121,7 +121,7 @@ func (s *Server) serveAdminAPIWithAccess(next http.Handler, w http.ResponseWrite
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
-func pluginScopedAdminAuthorizationRoutePlugin(r *http.Request) (string, bool) {
+func appScopedAdminAuthorizationRoutePlugin(r *http.Request) (string, bool) {
 	if r == nil || r.URL == nil {
 		return "", false
 	}
@@ -131,10 +131,10 @@ func pluginScopedAdminAuthorizationRoutePlugin(r *http.Request) (string, bool) {
 	}
 	var rest string
 	switch {
-	case strings.HasPrefix(path, "/authorization/plugins/"):
-		rest = strings.TrimPrefix(path, "/authorization/plugins/")
-	case strings.HasPrefix(path, "/admin/api/v1/authorization/plugins/"):
-		rest = strings.TrimPrefix(path, "/admin/api/v1/authorization/plugins/")
+	case strings.HasPrefix(path, "/authorization/apps/"):
+		rest = strings.TrimPrefix(path, "/authorization/apps/")
+	case strings.HasPrefix(path, "/admin/api/v1/authorization/apps/"):
+		rest = strings.TrimPrefix(path, "/admin/api/v1/authorization/apps/")
 	default:
 		return "", false
 	}
@@ -152,11 +152,11 @@ func pluginScopedAdminAuthorizationRoutePlugin(r *http.Request) (string, bool) {
 	default:
 		return "", false
 	}
-	plugin := strings.TrimSpace(pluginSegment)
-	if plugin == "" {
+	app := strings.TrimSpace(pluginSegment)
+	if app == "" {
 		return "", false
 	}
-	return plugin, true
+	return app, true
 }
 
 func adminAuthorizationFragmentRoutePlugin(path string) (string, bool) {
@@ -173,12 +173,12 @@ func adminAuthorizationFragmentRoutePlugin(path string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	plugin, ok := strings.CutPrefix(rest, "plugin/")
-	if !ok || plugin == "" || strings.Contains(plugin, "/") {
+	appName, ok := strings.CutPrefix(rest, "app/")
+	if !ok || appName == "" || strings.Contains(appName, "/") {
 		return "", false
 	}
-	plugin = strings.TrimSpace(plugin)
-	return plugin, plugin != ""
+	appName = strings.TrimSpace(appName)
+	return appName, appName != ""
 }
 
 func adminAuthorizationRoutePath(r *http.Request) string {
@@ -221,7 +221,7 @@ func (s *Server) listAdminAuthorizationPlugins(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) listAdminAuthorizationPluginMembers(w http.ResponseWriter, r *http.Request) {
-	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "plugin"))
+	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "app"))
 	if err != nil {
 		s.writeAdminAuthorizationPluginError(w, err)
 		return
@@ -239,7 +239,7 @@ func (s *Server) listAdminAuthorizationPluginMembers(w http.ResponseWriter, r *h
 }
 
 func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *http.Request) {
-	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "plugin"))
+	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "app"))
 	if err != nil {
 		s.writeAdminAuthorizationPluginError(w, err)
 		return
@@ -274,7 +274,7 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 	}
 
 	row := adminAuthorizationMemberRow{
-		Plugin:        membership.Plugin,
+		App:        membership.App,
 		Role:          membership.Role,
 		Source:        "dynamic",
 		Effective:     true,
@@ -301,7 +301,7 @@ func (s *Server) putAdminAuthorizationPluginMember(w http.ResponseWriter, r *htt
 }
 
 func (s *Server) deleteAdminAuthorizationPluginMember(w http.ResponseWriter, r *http.Request) {
-	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "plugin"))
+	plugin, _, err := s.adminAuthorizationPluginEntry(chi.URLParam(r, "app"))
 	if err != nil {
 		s.writeAdminAuthorizationPluginError(w, err)
 		return
@@ -462,25 +462,25 @@ func (s *Server) deleteAdminAuthorizationAdminMember(w http.ResponseWriter, r *h
 	})
 }
 
-func (s *Server) adminAuthorizationPluginEntry(plugin string) (string, *config.ProviderEntry, error) {
-	plugin = strings.TrimSpace(plugin)
-	if plugin == "" {
-		return "", nil, errAdminAuthorizationPluginMissing
+func (s *Server) adminAuthorizationPluginEntry(appName string) (string, *config.ProviderEntry, error) {
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		return "", nil, errAdminAuthorizationAppMissing
 	}
-	entry := s.pluginDefs[plugin]
+	entry := s.pluginDefs[appName]
 	if entry == nil {
 		return "", nil, errAdminAuthorizationPluginUnknown
 	}
 	if strings.TrimSpace(entry.AuthorizationPolicy) == "" {
 		return "", nil, errAdminAuthorizationPluginUnbound
 	}
-	return plugin, entry, nil
+	return appName, entry, nil
 }
 
 func (s *Server) writeAdminAuthorizationPluginError(w http.ResponseWriter, err error) {
 	switch err {
-	case errAdminAuthorizationPluginMissing:
-		writeError(w, http.StatusBadRequest, "plugin is required")
+	case errAdminAuthorizationAppMissing:
+		writeError(w, http.StatusBadRequest, "app is required")
 	case errAdminAuthorizationPluginUnknown:
 		writeError(w, http.StatusNotFound, "plugin not found")
 	case errAdminAuthorizationPluginUnbound:
@@ -490,12 +490,12 @@ func (s *Server) writeAdminAuthorizationPluginError(w http.ResponseWriter, err e
 	}
 }
 
-func (s *Server) adminAuthorizationMemberRows(ctx context.Context, plugin string) ([]adminAuthorizationMemberRow, error) {
+func (s *Server) adminAuthorizationMemberRows(ctx context.Context, app string) ([]adminAuthorizationMemberRow, error) {
 	if s.authorizer == nil || s.authorizationProvider == nil {
 		return nil, errAdminAuthorizationUnavailable
 	}
-	staticRows := s.adminAuthorizationStaticRows(ctx, plugin)
-	dynamicRows, err := s.providerPluginAuthorizationRows(ctx, plugin)
+	staticRows := s.adminAuthorizationStaticRows(ctx, app)
+	dynamicRows, err := s.providerPluginAuthorizationRows(ctx, app)
 	if err != nil {
 		return nil, err
 	}
@@ -514,12 +514,12 @@ func (s *Server) adminAuthorizationAdminRows(ctx context.Context) ([]adminAuthor
 	return mergeAdminAuthorizationRows(staticRows, dynamicRows), nil
 }
 
-func (s *Server) adminAuthorizationStaticRows(ctx context.Context, plugin string) []adminAuthorizationMemberRow {
-	_, members, ok := s.authorizer.StaticMembersForProvider(plugin)
+func (s *Server) adminAuthorizationStaticRows(ctx context.Context, app string) []adminAuthorizationMemberRow {
+	_, members, ok := s.authorizer.StaticMembersForProvider(app)
 	if !ok {
 		return nil
 	}
-	return s.adminAuthorizationRowsFromStaticMembers(ctx, plugin, members)
+	return s.adminAuthorizationRowsFromStaticMembers(ctx, app, members)
 }
 
 func (s *Server) adminAuthorizationStaticAdminRows(ctx context.Context) []adminAuthorizationMemberRow {
@@ -530,11 +530,11 @@ func (s *Server) adminAuthorizationStaticAdminRows(ctx context.Context) []adminA
 	return s.adminAuthorizationRowsFromStaticMembers(ctx, "", members)
 }
 
-func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, plugin string, members []authorization.StaticSubjectMember) []adminAuthorizationMemberRow {
+func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, app string, members []authorization.StaticSubjectMember) []adminAuthorizationMemberRow {
 	rows := make([]adminAuthorizationMemberRow, 0, len(members))
 	for _, member := range members {
 		rows = append(rows, adminAuthorizationMemberRow{
-			Plugin:        plugin,
+			App:        app,
 			Role:          member.Role,
 			Source:        "static",
 			Effective:     true,
@@ -686,7 +686,7 @@ func adminAuthorizationValidSubjectID(subjectID string) bool {
 }
 
 var (
-	errAdminAuthorizationPluginMissing = errors.New("plugin is required")
+	errAdminAuthorizationAppMissing = errors.New("app is required")
 	errAdminAuthorizationPluginUnknown = errors.New("plugin not found")
 	errAdminAuthorizationPluginUnbound = errors.New("plugin does not declare authorizationPolicy")
 	errAdminAuthorizationUnavailable   = errors.New("dynamic authorization is unavailable")

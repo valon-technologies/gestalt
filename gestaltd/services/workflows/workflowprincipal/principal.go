@@ -49,7 +49,7 @@ func principalFromExecutionReferenceFields(subjectID, credentialSubjectID, displ
 		CredentialSubjectID: strings.TrimSpace(credentialSubjectID),
 		DisplayName:         strings.TrimSpace(displayName),
 		Kind:                principal.Kind(strings.TrimSpace(subjectKind)),
-		Scopes:              principal.PermissionPlugins(compiled),
+		Scopes:              principal.PermissionApps(compiled),
 		TokenPermissions:    compiled,
 	}
 	principal.SetAuthSource(value, authSource)

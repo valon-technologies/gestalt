@@ -23,7 +23,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/s3"
@@ -50,7 +50,7 @@ type MountedUIRoute = providermanifestv1.UIRoute
 type MountedUI struct {
 	Name                string
 	Path                string
-	PluginName          string
+	AppName          string
 	AuthorizationPolicy string
 	Routes              []MountedUIRoute
 	Handler             http.Handler
@@ -59,7 +59,7 @@ type MountedUI struct {
 
 type MountedHTTPBinding struct {
 	Name           string
-	PluginName     string
+	AppName     string
 	Path           string
 	Method         string
 	Target         string
@@ -163,14 +163,14 @@ type Config struct {
 	Agent                 bootstrap.AgentControl
 	AgentManager          agentmanager.Service
 	Workflow              bootstrap.WorkflowControl
-	PluginRuntimes        bootstrap.RuntimeInspector
+	AppRuntimes        bootstrap.RuntimeInspector
 	Invoker               invocation.Invoker
-	PluginInvoker         invocation.Invoker
+	AppInvoker         invocation.Invoker
 	DefaultConnection     map[string]string
 	CatalogConnection     map[string]string
 	ConnectionAuth        func() map[string]map[string]bootstrap.OAuthHandler
 	ManualConnectionAuth  func() map[string]map[string]bootstrap.ManualTokenExchanger
-	PluginDefs            map[string]*config.ProviderEntry
+	AppDefs               map[string]*config.ProviderEntry
 	AgentDefs             map[string]*config.ProviderEntry
 	ProviderUIs           map[string]*config.UIEntry
 	Authorizer            authorization.RuntimeAuthorizer
@@ -203,7 +203,7 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Invoker == nil {
 		return nil, fmt.Errorf("invoker is required")
 	}
-	pluginInvoker := cfg.PluginInvoker
+	pluginInvoker := cfg.AppInvoker
 	if pluginInvoker == nil {
 		pluginInvoker = cfg.Invoker
 	}
@@ -262,7 +262,7 @@ func New(cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	mountedHTTPBindings, err := mountedHTTPBindingsFromEntries(cfg.PluginDefs, cfg.Providers, mountedUIs)
+	mountedHTTPBindings, err := mountedHTTPBindingsFromEntries(cfg.AppDefs, cfg.Providers, mountedUIs)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +355,7 @@ func New(cfg Config) (*Server, error) {
 		authorizationProvider:  cfg.AuthorizationProvider,
 		providers:              cfg.Providers,
 		workflow:               cfg.Workflow,
-		pluginRuntimes:         cfg.PluginRuntimes,
+		pluginRuntimes:         cfg.AppRuntimes,
 		resolver:               resolver,
 		authResolvers:          authResolvers,
 		invoker:                cfg.Invoker,
@@ -366,7 +366,7 @@ func New(cfg Config) (*Server, error) {
 		catalogConnection:      cfg.CatalogConnection,
 		connectionAuth:         cfg.ConnectionAuth,
 		manualConnectionAuth:   cfg.ManualConnectionAuth,
-		pluginDefs:             cfg.PluginDefs,
+		pluginDefs:             cfg.AppDefs,
 		agentDefs:              cfg.AgentDefs,
 		authorizer:             cfg.Authorizer,
 		noAuth:                 noAuth,
@@ -406,7 +406,7 @@ func New(cfg Config) (*Server, error) {
 		Authorizer:        cfg.Authorizer,
 		DefaultConnection: cfg.DefaultConnection,
 		CatalogConnection: cfg.CatalogConnection,
-		PluginInvokes:     pluginInvokesFromProviderEntries(cfg.PluginDefs),
+		AppInvokes:     pluginInvokesFromProviderEntries(cfg.AppDefs),
 		Now:               now,
 	})
 	if noAuth || hasAnonymousAuthProvider(authProviders) {
@@ -440,16 +440,16 @@ func hasAnonymousAuthProvider(providers map[string]core.AuthenticationProvider) 
 	return false
 }
 
-func pluginInvokesFromProviderEntries(entries map[string]*config.ProviderEntry) map[string][]invocation.PluginInvocationDependency {
+func pluginInvokesFromProviderEntries(entries map[string]*config.ProviderEntry) map[string][]invocation.AppInvocationDependency {
 	if len(entries) == 0 {
 		return nil
 	}
-	out := make(map[string][]invocation.PluginInvocationDependency, len(entries))
+	out := make(map[string][]invocation.AppInvocationDependency, len(entries))
 	for pluginName, entry := range entries {
 		if entry == nil || len(entry.Invokes) == 0 {
 			continue
 		}
-		out[pluginName] = invocationconfig.PluginInvocationDependencies(entry.Invokes)
+		out[pluginName] = invocationconfig.AppInvocationDependencies(entry.Invokes)
 	}
 	if len(out) == 0 {
 		return nil

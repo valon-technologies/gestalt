@@ -12,7 +12,7 @@ test("workflow builders accept native JSON objects and Dates", () => {
   const createdAt = new Date("2026-05-08T12:00:00.000Z");
   const target = boundWorkflowTarget({
     plugin: {
-      pluginName: "plugin",
+      pluginName: "app",
       operation: "run",
       input: { ok: false, count: 0 },
     },
@@ -31,8 +31,8 @@ test("workflow builders accept native JSON objects and Dates", () => {
     createdAt,
   });
 
-  if (target.kind?.case !== "plugin") {
-    throw new Error("expected plugin target");
+  if (target.kind?.case !== "app") {
+    throw new Error("expected app target");
   }
   expect(target.kind.value.input).toEqual({ ok: false, count: 0 });
   expect(signal.payload).toEqual({ ok: true, count: 1 });
@@ -43,15 +43,15 @@ test("workflow builders accept native JSON objects and Dates", () => {
 test("workflow copy helpers do not alias nested payloads", () => {
   const target = boundWorkflowTarget({
     plugin: {
-      pluginName: "plugin",
+      pluginName: "app",
       operation: "run",
       input: { nested: { value: "original" } },
     },
   });
   const copied = boundWorkflowTargetFromTarget(target);
 
-  if (target.kind?.case !== "plugin" || copied.kind?.case !== "plugin") {
-    throw new Error("expected plugin targets");
+  if (target.kind?.case !== "app" || copied.kind?.case !== "app") {
+    throw new Error("expected app targets");
   }
   const input = target.kind.value.input as { nested: { value: string } };
   input.nested.value = "changed";

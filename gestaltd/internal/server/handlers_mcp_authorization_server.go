@@ -13,7 +13,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
-	"github.com/valon-technologies/gestalt/server/services/plugins/oauth"
+	"github.com/valon-technologies/gestalt/server/services/apps/oauth"
 )
 
 const (

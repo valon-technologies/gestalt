@@ -20,7 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
-	"github.com/valon-technologies/gestalt/server/services/plugins/declarative"
+	"github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -39,7 +39,7 @@ type agentRuntime struct {
 type agentSystemToolExecutionRequest struct {
 	Principal               *principal.Principal
 	ProviderName            string
-	CallerPluginName        string
+	CallerAppName        string
 	SessionID               string
 	TurnID                  string
 	ToolCallID              string
@@ -333,7 +333,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	}
 	resolvedTool, err := searcher.ResolveTool(ctx, principalValue, coreagent.ToolRef{
 		System:                toolTarget.System,
-		Plugin:                toolTarget.Plugin,
+		App:                toolTarget.App,
 		Operation:             toolTarget.Operation,
 		Connection:            toolTarget.Connection,
 		Instance:              toolTarget.Instance,
@@ -358,7 +358,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 		return systemTools.ExecuteSystemTool(ctx, agentSystemToolExecutionRequest{
 			Principal:               principalValue,
 			ProviderName:            strings.TrimSpace(grant.ProviderName),
-			CallerPluginName:        strings.TrimSpace(grant.CallerPluginName),
+			CallerAppName:        strings.TrimSpace(grant.CallerAppName),
 			SessionID:               strings.TrimSpace(req.SessionID),
 			TurnID:                  strings.TrimSpace(req.TurnID),
 			ToolCallID:              strings.TrimSpace(req.ToolCallID),
@@ -400,7 +400,7 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 	if grant.ToolRefsSet {
 		ctx = invocation.WithToolRefsContext(ctx, grant.ToolRefs)
 	}
-	result, err := invoker.Invoke(ctx, invokePrincipal, resolvedTool.Target.Plugin, strings.TrimSpace(resolvedTool.Target.Instance), resolvedTool.Target.Operation, params)
+	result, err := invoker.Invoke(ctx, invokePrincipal, resolvedTool.Target.App, strings.TrimSpace(resolvedTool.Target.Instance), resolvedTool.Target.Operation, params)
 	if err != nil {
 		return nil, err
 	}
@@ -513,8 +513,8 @@ func agentToolRefsLogValue(refs []coreagent.ToolRef) []map[string]string {
 		if systemName := strings.TrimSpace(ref.System); systemName != "" {
 			value["system"] = systemName
 		}
-		if pluginName := strings.TrimSpace(ref.Plugin); pluginName != "" {
-			value["plugin"] = pluginName
+		if pluginName := strings.TrimSpace(ref.App); pluginName != "" {
+			value["app"] = pluginName
 		}
 		if operation := strings.TrimSpace(ref.Operation); operation != "" {
 			value["operation"] = operation
@@ -580,8 +580,8 @@ func githubListedToolMCPNames(tools []coreagent.ListedTool) []string {
 }
 
 func listedToolIsGitHub(tool coreagent.ListedTool) bool {
-	return strings.TrimSpace(tool.Ref.Plugin) == "github" ||
-		strings.TrimSpace(tool.Target.Plugin) == "github" ||
+	return strings.TrimSpace(tool.Ref.App) == "github" ||
+		strings.TrimSpace(tool.Target.App) == "github" ||
 		strings.HasPrefix(strings.TrimSpace(tool.MCPName), "github__")
 }
 
@@ -606,7 +606,7 @@ func (r *agentRuntime) ResolveConnection(ctx context.Context, req coreagent.Reso
 	}
 	connection := config.ResolveConnectionAlias(req.Connection)
 	if connection == "" {
-		connection = config.PluginConnectionName
+		connection = config.AppConnectionName
 	}
 	if !agentRunGrantAllowsConnection(grant, connection) {
 		return nil, fmt.Errorf("%w: agent connection %q is outside the run scope", invocation.ErrAuthorizationDenied, connection)
@@ -749,7 +749,7 @@ func agentRunGrantPrincipal(grant agentgrant.Grant) *principal.Principal {
 		CredentialSubjectID: strings.TrimSpace(grant.CredentialSubjectID),
 		DisplayName:         strings.TrimSpace(grant.DisplayName),
 		Kind:                principal.Kind(strings.TrimSpace(grant.SubjectKind)),
-		Scopes:              principal.PermissionPlugins(compiled),
+		Scopes:              principal.PermissionApps(compiled),
 		TokenPermissions:    compiled,
 	}
 	principal.SetAuthSource(value, grant.AuthSource)
@@ -893,7 +893,7 @@ func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *pri
 		}
 		return nil
 	}
-	pluginName := strings.TrimSpace(target.Plugin)
+	pluginName := strings.TrimSpace(target.App)
 	if pluginName == "" || operation == "" {
 		return fmt.Errorf("%w: agent tool target is incomplete", invocation.ErrAuthorizationDenied)
 	}
@@ -959,9 +959,9 @@ func validateUnavailableAgentToolTarget(principalValue *principal.Principal, ref
 	if strings.TrimSpace(target.System) != "" || strings.TrimSpace(target.Operation) != "" {
 		return fmt.Errorf("%w: unavailable agent tool %q cannot target a concrete operation", invocation.ErrAuthorizationDenied, rawToolID)
 	}
-	pluginName := strings.TrimSpace(target.Plugin)
+	pluginName := strings.TrimSpace(target.App)
 	if pluginName == "" {
-		return fmt.Errorf("%w: unavailable agent tool %q plugin is required", invocation.ErrAuthorizationDenied, rawToolID)
+		return fmt.Errorf("%w: unavailable agent tool %q app is required", invocation.ErrAuthorizationDenied, rawToolID)
 	}
 	if !principal.AllowsProviderPermission(principalValue, pluginName) {
 		return fmt.Errorf("%w: unavailable agent tool %q is not authorized", invocation.ErrAuthorizationDenied, rawToolID)
@@ -1013,7 +1013,7 @@ func executeUnavailableAgentTool(target coreagent.ToolTarget) (*coreagent.Execut
 		"error": map[string]any{
 			"code":       reason,
 			"message":    message,
-			"plugin":     strings.TrimSpace(target.Plugin),
+			"app":     strings.TrimSpace(target.App),
 			"connection": strings.TrimSpace(target.Connection),
 			"instance":   strings.TrimSpace(target.Instance),
 		},
@@ -1065,7 +1065,7 @@ func validateAgentListedTools(p *principal.Principal, refs []coreagent.ToolRef, 
 			}
 			continue
 		}
-		pluginName := strings.TrimSpace(target.Plugin)
+		pluginName := strings.TrimSpace(target.App)
 		operation := strings.TrimSpace(target.Operation)
 		if pluginName == "" || operation == "" {
 			return fmt.Errorf("%w: listed agent tool target is incomplete", invocation.ErrAuthorizationDenied)
@@ -1119,10 +1119,10 @@ func agentToolMatchesRefs(target coreagent.ToolTarget, refs []coreagent.ToolRef)
 	targetConnection := config.ResolveConnectionAlias(strings.TrimSpace(target.Connection))
 	for i := range refs {
 		ref := refs[i]
-		if strings.TrimSpace(ref.Plugin) == "*" && strings.TrimSpace(ref.Operation) == "" {
+		if strings.TrimSpace(ref.App) == "*" && strings.TrimSpace(ref.Operation) == "" {
 			return true
 		}
-		if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) {
+		if strings.TrimSpace(ref.App) != strings.TrimSpace(target.App) {
 			continue
 		}
 		if operation := strings.TrimSpace(ref.Operation); operation != "" && operation != strings.TrimSpace(target.Operation) {
@@ -1185,7 +1185,7 @@ func agentToolHiddenExplicitlyGranted(target coreagent.ToolTarget, rawToolID str
 	targetConnection := config.ResolveConnectionAlias(strings.TrimSpace(target.Connection))
 	for i := range refs {
 		ref := refs[i]
-		if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) {
+		if strings.TrimSpace(ref.App) != strings.TrimSpace(target.App) {
 			continue
 		}
 		if strings.TrimSpace(ref.Operation) != targetOperation {
@@ -1220,10 +1220,10 @@ func agentToolCredentialModeExplicitlyGranted(target coreagent.ToolTarget, refs 
 	}
 	for i := range refs {
 		ref := refs[i]
-		if strings.TrimSpace(ref.Plugin) == "*" {
+		if strings.TrimSpace(ref.App) == "*" {
 			continue
 		}
-		if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) {
+		if strings.TrimSpace(ref.App) != strings.TrimSpace(target.App) {
 			continue
 		}
 		if strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
@@ -1252,10 +1252,10 @@ func agentToolRunAsExplicitlyGranted(target coreagent.ToolTarget, refs []coreage
 	}
 	for i := range refs {
 		ref := refs[i]
-		if strings.TrimSpace(ref.Plugin) == "*" {
+		if strings.TrimSpace(ref.App) == "*" {
 			continue
 		}
-		if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) {
+		if strings.TrimSpace(ref.App) != strings.TrimSpace(target.App) {
 			continue
 		}
 		if strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
@@ -1284,10 +1284,10 @@ func agentToolExternalIdentityExplicitlyGranted(target coreagent.ToolTarget, ref
 	}
 	for i := range refs {
 		ref := refs[i]
-		if strings.TrimSpace(ref.Plugin) == "*" {
+		if strings.TrimSpace(ref.App) == "*" {
 			continue
 		}
-		if strings.TrimSpace(ref.Plugin) != strings.TrimSpace(target.Plugin) {
+		if strings.TrimSpace(ref.App) != strings.TrimSpace(target.App) {
 			continue
 		}
 		if strings.TrimSpace(ref.Operation) != strings.TrimSpace(target.Operation) {
@@ -1312,7 +1312,7 @@ func agentToolExternalIdentityExplicitlyGranted(target coreagent.ToolTarget, ref
 
 func agentToolTargetsEqual(left, right coreagent.ToolTarget) bool {
 	return strings.TrimSpace(left.System) == strings.TrimSpace(right.System) &&
-		strings.TrimSpace(left.Plugin) == strings.TrimSpace(right.Plugin) &&
+		strings.TrimSpace(left.App) == strings.TrimSpace(right.App) &&
 		strings.TrimSpace(left.Operation) == strings.TrimSpace(right.Operation) &&
 		config.ResolveConnectionAlias(strings.TrimSpace(left.Connection)) == config.ResolveConnectionAlias(strings.TrimSpace(right.Connection)) &&
 		strings.TrimSpace(left.Instance) == strings.TrimSpace(right.Instance) &&

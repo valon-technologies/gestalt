@@ -283,7 +283,7 @@ func (s *s3Server) PresignObject(ctx context.Context, req *proto.PresignObjectRe
 			return nil, status.Error(codes.FailedPrecondition, "presign is not supported for plugin-scoped s3 bindings")
 		}
 		result, err := s.accessURLs.MintURL(ObjectAccessURLRequest{
-			PluginName:         s.pluginName,
+			AppName:         s.pluginName,
 			BindingName:        s.bindingName,
 			Ref:                objectRefFromProto(req.GetRef()),
 			Method:             presignMethodFromProto(req.GetMethod()),
@@ -344,7 +344,7 @@ func (s *s3Server) stripOwnedMetaNamespace(meta s3store.ObjectMeta) (s3store.Obj
 func (s *s3Server) requireOwnedMetaNamespace(meta s3store.ObjectMeta) (s3store.ObjectMeta, error) {
 	meta, ok := s.stripOwnedMetaNamespace(meta)
 	if !ok {
-		return s3store.ObjectMeta{}, status.Error(codes.Internal, "s3 provider returned object outside plugin namespace")
+		return s3store.ObjectMeta{}, status.Error(codes.Internal, "s3 provider returned object outside app namespace")
 	}
 	return meta, nil
 }

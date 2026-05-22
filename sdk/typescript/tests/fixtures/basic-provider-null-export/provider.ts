@@ -1,8 +1,8 @@
-import { definePlugin, ok, operation, s } from "../../../src/index.ts";
+import { defineApp, ok, operation, s } from "../../../src/index.ts";
 
 export const provider = null;
 
-export const plugin = definePlugin({
+export const app = defineApp({
   displayName: "Fixture Provider Null Export",
   operations: [
     operation({

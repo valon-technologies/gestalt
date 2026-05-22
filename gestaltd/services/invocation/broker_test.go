@@ -330,7 +330,7 @@ func TestBrokerInvokeAllowsExplicitConnectionForResolvedPluginTransport(t *testi
 		catalog.CatalogOperation{
 			ID:        "assistant.reconcileStuckRequests",
 			Method:    "POST",
-			Transport: catalog.TransportPlugin,
+			Transport: catalog.TransportApp,
 		},
 	)
 
@@ -444,7 +444,7 @@ func TestOperationConnectionOverrideAllowedForPluginTransportOperations(t *testi
 			CatalogVal: &catalog.Catalog{
 				Name: "slack",
 				Operations: []catalog.CatalogOperation{
-					{ID: "assistant.reconcileStuckRequests", Method: "POST", Transport: catalog.TransportPlugin},
+					{ID: "assistant.reconcileStuckRequests", Method: "POST", Transport: catalog.TransportApp},
 					{ID: "chat.postMessage", Method: "POST", Transport: catalog.TransportREST},
 				},
 			},

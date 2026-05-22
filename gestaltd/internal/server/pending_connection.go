@@ -233,7 +233,7 @@ func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, stat
 
 func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integration string) {
 	s.clearPendingConnectionCookie(w)
-	linkURL := "/integrations"
+	linkURL := "/apps"
 	if connectedURL, err := setURLQueryParam(linkURL, "connected", integration); err == nil {
 		linkURL = connectedURL
 	}
@@ -454,7 +454,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 
 	if _, err := r.Cookie(sessionCookieName); err == nil {
 		s.clearPendingConnectionCookie(w)
-		connectedURL := "/integrations"
+		connectedURL := "/apps"
 		if nextURL, err := setURLQueryParam(connectedURL, "connected", state.Credential.Integration); err == nil {
 			connectedURL = nextURL
 		}

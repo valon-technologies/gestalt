@@ -3,42 +3,42 @@
   "providers": [
     {
       "configTarget": {
-        "entryKind": "plugin",
+        "entryKind": "app",
         "section": "plugins"
       },
       "description": "Read public and private conversations, DMs, and group DMs; send messages; and manage channels.",
       "displayName": "Slack",
       "docs": [
         {
-          "editUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/plugins/slack/docs/index.mdx",
+          "editUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/apps/slack/docs/index.mdx",
           "path": "/",
           "rawUrl": "/registry-test/slack-index.mdx",
-          "sourcePath": "plugins/slack/docs/index.mdx",
+          "sourcePath": "apps/slack/docs/index.mdx",
           "title": "Overview"
         },
         {
-          "editUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/plugins/slack/docs/events.mdx",
+          "editUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/apps/slack/docs/events.mdx",
           "path": "/events/",
           "rawUrl": "/registry-test/slack-events.mdx",
-          "sourcePath": "plugins/slack/docs/events.mdx",
+          "sourcePath": "apps/slack/docs/events.mdx",
           "title": "Events"
         }
       ],
       "iconUrl": null,
-      "kind": "plugin",
+      "kind": "app",
       "latestInstallableVersion": "0.0.1-alpha.42",
-      "manifestUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/plugins/slack/manifest.yaml",
+      "manifestUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/apps/slack/manifest.yaml",
       "manifestVersion": "0.0.1-alpha.42",
       "name": "slack",
-      "package": "github.com/valon-technologies/gestalt-providers/plugins/slack",
-      "packagePath": "plugins/slack",
-      "readmeUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/plugins/slack/README.md",
-      "registryPath": "/providers/plugin/slack/",
-      "sourceUrl": "https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/slack",
+      "package": "github.com/valon-technologies/gestalt-providers/apps/slack",
+      "packagePath": "apps/slack",
+      "readmeUrl": "https://github.com/valon-technologies/gestalt-providers/blob/main/apps/slack/README.md",
+      "registryPath": "/providers/app/slack/",
+      "sourceUrl": "https://github.com/valon-technologies/gestalt-providers/tree/main/apps/slack",
       "versions": [
         {
-          "kind": "plugin",
-          "metadata": "https://github.com/valon-technologies/gestalt-providers/releases/download/plugins/slack/v0.0.1-alpha.42/provider-release.yaml",
+          "kind": "app",
+          "metadata": "https://github.com/valon-technologies/gestalt-providers/releases/download/apps/slack/v0.0.1-alpha.42/provider-release.yaml",
           "platforms": [
             "darwin/amd64",
             "darwin/arm64",

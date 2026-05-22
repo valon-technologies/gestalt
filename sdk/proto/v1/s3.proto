@@ -185,7 +185,7 @@ service S3 {
 }
 
 // S3ObjectAccess models host-mediated object access for plugin-scoped S3
-// bindings. It is registered by gestaltd for plugins and is not implemented by
+// bindings. It is registered by gestaltd for apps and is not implemented by
 // S3 providers.
 service S3ObjectAccess {
   rpc CreateObjectAccessURL(CreateObjectAccessURLRequest) returns (CreateObjectAccessURLResponse);

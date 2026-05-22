@@ -1112,7 +1112,7 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	if req.ToolSource != coreagent.ToolSourceModeMCPCatalog {
 		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.ToolSource)
 	}
-	if got := req.ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+	if got := req.ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want global broad catalog ref", got)
 	}
 	if strings.TrimSpace(req.RunGrant) == "" {
@@ -1125,7 +1125,7 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	if grant.ToolSource != coreagent.ToolSourceModeMCPCatalog {
 		t.Fatalf("grant tool source = %q, want mcp_catalog", grant.ToolSource)
 	}
-	if got := grant.ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+	if got := grant.ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
 		t.Fatalf("grant tool refs = %#v, want global broad catalog ref", got)
 	}
 }
@@ -1163,9 +1163,9 @@ func TestManagerCreateTurnCarriesInheritedOutputDeliveryInRunGrant(t *testing.T)
 	p := &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
-			{Plugin: "alpha"},
-			{Plugin: "roadmap", Operations: []string{"sync"}},
-			{Plugin: "notification", Operations: []string{"reply"}},
+			{App: "alpha"},
+			{App: "roadmap", Operations: []string{"sync"}},
+			{App: "notification", Operations: []string{"reply"}},
 		}),
 	}
 	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
@@ -1176,7 +1176,7 @@ func TestManagerCreateTurnCarriesInheritedOutputDeliveryInRunGrant(t *testing.T)
 		t.Fatalf("CreateSession: %v", err)
 	}
 	ctx := WithInheritedOutputDelivery(context.Background(), &coreworkflow.OutputDelivery{
-		Target: coreworkflow.PluginTarget{PluginName: "notification", Operation: "reply"},
+		Target: coreworkflow.AppTarget{AppName: "notification", Operation: "reply"},
 		InputBindings: []coreworkflow.OutputBinding{
 			{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
 			{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{Literal: "signed-ref"}},
@@ -1185,7 +1185,7 @@ func TestManagerCreateTurnCarriesInheritedOutputDeliveryInRunGrant(t *testing.T)
 	_, err = manager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
 		SessionID: session.ID,
 		Model:     "test-model",
-		ToolRefs:  []coreagent.ToolRef{{Plugin: "roadmap", Operation: "sync"}},
+		ToolRefs:  []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
 	})
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
@@ -1197,15 +1197,15 @@ func TestManagerCreateTurnCarriesInheritedOutputDeliveryInRunGrant(t *testing.T)
 	if err != nil {
 		t.Fatalf("Resolve run grant: %v", err)
 	}
-	if grant.InheritedOutputDelivery == nil || grant.InheritedOutputDelivery.Target.PluginName != "notification" || grant.InheritedOutputDelivery.Target.Operation != "reply" {
+	if grant.InheritedOutputDelivery == nil || grant.InheritedOutputDelivery.Target.AppName != "notification" || grant.InheritedOutputDelivery.Target.Operation != "reply" {
 		t.Fatalf("inherited output delivery = %#v", grant.InheritedOutputDelivery)
 	}
-	if got := grant.ToolRefs; len(got) != 1 || got[0].Plugin != "roadmap" || got[0].Operation != "sync" {
+	if got := grant.ToolRefs; len(got) != 1 || got[0].App != "roadmap" || got[0].Operation != "sync" {
 		t.Fatalf("grant tool refs = %#v, want only visible roadmap tool", got)
 	}
 	if !reflect.DeepEqual(grant.Permissions, []core.AccessPermission{
-		{Plugin: "notification", Operations: []string{"reply"}},
-		{Plugin: "roadmap", Operations: []string{"sync"}},
+		{App: "notification", Operations: []string{"reply"}},
+		{App: "roadmap", Operations: []string{"sync"}},
 	}) {
 		t.Fatalf("grant permissions = %#v, want hidden delivery permission merged", grant.Permissions)
 	}
@@ -1255,14 +1255,14 @@ func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProv
 	if req.ToolSource != coreagent.ToolSourceModeMCPCatalog {
 		t.Fatalf("CreateTurn tool source = %q, want mcp_catalog", req.ToolSource)
 	}
-	if got := req.ToolRefs; len(got) != 1 || got[0].Plugin != "linear" || got[0].Operation != "" {
+	if got := req.ToolRefs; len(got) != 1 || got[0].App != "linear" || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want linear provider ref", got)
 	}
 	grant, err := grants.Resolve(req.RunGrant)
 	if err != nil {
 		t.Fatalf("Resolve run grant: %v", err)
 	}
-	if got := grant.ToolRefs; len(got) != 1 || got[0].Plugin != "linear" || got[0].Operation != "" {
+	if got := grant.ToolRefs; len(got) != 1 || got[0].App != "linear" || got[0].Operation != "" {
 		t.Fatalf("grant tool refs = %#v, want linear provider ref", got)
 	}
 
@@ -1273,7 +1273,7 @@ func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProv
 	if err != nil {
 		t.Fatalf("ListTools narrowed grant: %v", err)
 	}
-	if len(listed.Tools) != 1 || listed.Tools[0].Target.Plugin != "linear" || listed.Tools[0].Target.Operation != "issues" {
+	if len(listed.Tools) != 1 || listed.Tools[0].Target.App != "linear" || listed.Tools[0].Target.Operation != "issues" {
 		t.Fatalf("ListTools narrowed grant = %#v, want only linear issues", listed.Tools)
 	}
 }
@@ -1312,7 +1312,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardForSmallCatalogs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for small catalog", got)
 	}
 }
@@ -1354,7 +1354,7 @@ func TestManagerCreateTurnDoesNotEnumerateCatalogsWhenNoProviderMentionMatches(t
 	if linear.catalogCalls != 0 {
 		t.Fatalf("linear catalog calls = %d, want no enumeration without a provider mention", linear.catalogCalls)
 	}
-	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard without provider mention", got)
 	}
 }
@@ -1396,7 +1396,7 @@ func TestManagerCreateTurnDoesNotStemProviderMentionsForImplicitNarrowing(t *tes
 	if docs.catalogCalls != 0 {
 		t.Fatalf("docs catalog calls = %d, want no enumeration for non-exact provider mention", docs.catalogCalls)
 	}
-	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for non-exact provider mention", got)
 	}
 }
@@ -1430,7 +1430,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardForCallerPluginDefaults(t *testin
 		t.Fatalf("CreateSession: %v", err)
 	}
 	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		SessionID:        session.ID,
 		Model:            "test-model",
 		Messages:         []coreagent.Message{{Role: "user", Text: "show me my linear tickets"}},
@@ -1438,18 +1438,18 @@ func TestManagerCreateTurnKeepsImplicitWildcardForCallerPluginDefaults(t *testin
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
-		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for caller plugin default", got)
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
+		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard for caller app default", got)
 	}
 	grant, err := grants.Resolve(alpha.createTurnReqs[0].RunGrant)
 	if err != nil {
 		t.Fatalf("Resolve run grant: %v", err)
 	}
-	if grant.CallerPluginName != "slack" {
-		t.Fatalf("grant caller plugin = %q, want slack", grant.CallerPluginName)
+	if grant.CallerAppName != "slack" {
+		t.Fatalf("grant caller app = %q, want slack", grant.CallerAppName)
 	}
 	if linear.catalogCalls != 0 {
-		t.Fatalf("linear catalog calls = %d, want caller plugin default to skip narrowing probes", linear.catalogCalls)
+		t.Fatalf("linear catalog calls = %d, want caller app default to skip narrowing probes", linear.catalogCalls)
 	}
 }
 
@@ -1500,7 +1500,7 @@ func TestManagerCreateTurnNarrowsFromLatestUserTextOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != "github" || got[0].Operation != "" {
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].App != "github" || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want github from latest user text part only", got)
 	}
 }
@@ -1545,7 +1545,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderCannotBeProb
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want fail-open broad wildcard", got)
 	}
 }
@@ -1594,7 +1594,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderUnavailable(
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard when mentioned provider is unavailable", got)
 	}
 }
@@ -1645,7 +1645,7 @@ func TestManagerCreateTurnKeepsImplicitWildcardWhenMentionedProviderHasNoVisible
 	if err != nil {
 		t.Fatalf("CreateTurn: %v", err)
 	}
-	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].Plugin != agentToolSearchAllPlugin || got[0].Operation != "" {
+	if got := alpha.createTurnReqs[0].ToolRefs; len(got) != 1 || got[0].App != agentToolSearchAllApp || got[0].Operation != "" {
 		t.Fatalf("CreateTurn tool refs = %#v, want broad wildcard when provider has no visible candidates", got)
 	}
 }
@@ -1823,7 +1823,7 @@ func TestManagerCreateTurnValidatesStructuredOutputSchema(t *testing.T) {
 			},
 			req: coreagent.ManagerCreateTurnRequest{
 				ToolSource: coreagent.ToolSourceModeNone,
-				ToolRefs:   []coreagent.ToolRef{{Plugin: "docs"}},
+				ToolRefs:   []coreagent.ToolRef{{App: "docs"}},
 			},
 			wantErr: invocation.ErrInvalidInvocation,
 		},
@@ -2071,7 +2071,7 @@ func TestAgentRunPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing.
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin:     "linear",
+		App:     "linear",
 		Operations: []string{"issues"},
 	}})
 	p := &principal.Principal{
@@ -2080,12 +2080,12 @@ func TestAgentRunPermissionsKeepsAPITokenRestrictionsForHTTPWildcard(t *testing.
 		Kind:             principal.KindUser,
 		Source:           principal.SourceAPIToken,
 		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
-	got := agentRunPermissions(ctx, p, "slack", []coreagent.ToolRef{{Plugin: "*"}})
-	if len(got) != 1 || got[0].Plugin != "linear" || len(got[0].Operations) != 1 || got[0].Operations[0] != "issues" {
+	got := agentRunPermissions(ctx, p, "slack", []coreagent.ToolRef{{App: "*"}})
+	if len(got) != 1 || got[0].App != "linear" || len(got[0].Operations) != 1 || got[0].Operations[0] != "issues" {
 		t.Fatalf("agentRunPermissions = %#v, want API token permissions preserved", got)
 	}
 }
@@ -2094,9 +2094,9 @@ func TestAgentRunPermissionsCompactsExplicitCatalogRefs(t *testing.T) {
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{
-		{Plugin: "linear", Operations: []string{"viewer", "issues.list", "issues.create"}},
-		{Plugin: "slack"},
-		{Plugin: "github"},
+		{App: "linear", Operations: []string{"viewer", "issues.list", "issues.create"}},
+		{App: "slack"},
+		{App: "github"},
 	})
 	p := &principal.Principal{
 		SubjectID:        principal.UserSubjectID("user-1"),
@@ -2104,19 +2104,19 @@ func TestAgentRunPermissionsCompactsExplicitCatalogRefs(t *testing.T) {
 		Kind:             principal.KindUser,
 		Source:           principal.SourceAPIToken,
 		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
 	got := agentRunPermissions(ctx, p, "", []coreagent.ToolRef{
-		{Plugin: "slack", Operation: "chat.postMessage"},
-		{Plugin: "linear", Operation: "viewer"},
-		{Plugin: "slack", Operation: "chat.postMessage"},
+		{App: "slack", Operation: "chat.postMessage"},
+		{App: "linear", Operation: "viewer"},
+		{App: "slack", Operation: "chat.postMessage"},
 		{System: coreagent.SystemToolWorkflow, Operation: "run"},
 	})
 	want := []core.AccessPermission{
-		{Plugin: "linear", Operations: []string{"viewer"}},
-		{Plugin: "slack", Operations: []string{"chat.postMessage"}},
+		{App: "linear", Operations: []string{"viewer"}},
+		{App: "slack", Operations: []string{"chat.postMessage"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("agentRunPermissions = %#v, want %#v", got, want)
@@ -2127,8 +2127,8 @@ func TestAgentRunPermissionsCompactsExactRefsAfterAuthorization(t *testing.T) {
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{
-		{Plugin: "linear", Operations: []string{"mcp.call"}},
-		{Plugin: "slack"},
+		{App: "linear", Operations: []string{"mcp.call"}},
+		{App: "slack"},
 	})
 	p := &principal.Principal{
 		SubjectID:        principal.UserSubjectID("user-1"),
@@ -2136,12 +2136,12 @@ func TestAgentRunPermissionsCompactsExactRefsAfterAuthorization(t *testing.T) {
 		Kind:             principal.KindUser,
 		Source:           principal.SourceAPIToken,
 		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
-	got := agentRunPermissions(ctx, p, "", []coreagent.ToolRef{{Plugin: "linear", Operation: "viewer"}})
-	want := []core.AccessPermission{{Plugin: "linear", Operations: []string{"viewer"}}}
+	got := agentRunPermissions(ctx, p, "", []coreagent.ToolRef{{App: "linear", Operation: "viewer"}})
+	want := []core.AccessPermission{{App: "linear", Operations: []string{"viewer"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("agentRunPermissions = %#v, want %#v", got, want)
 	}
@@ -2151,8 +2151,8 @@ func TestAgentRunPermissionsCompactsProviderWideCatalogRef(t *testing.T) {
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{
-		{Plugin: "linear", Operations: []string{"viewer"}},
-		{Plugin: "slack"},
+		{App: "linear", Operations: []string{"viewer"}},
+		{App: "slack"},
 	})
 	p := &principal.Principal{
 		SubjectID:        principal.UserSubjectID("user-1"),
@@ -2160,15 +2160,15 @@ func TestAgentRunPermissionsCompactsProviderWideCatalogRef(t *testing.T) {
 		Kind:             principal.KindUser,
 		Source:           principal.SourceAPIToken,
 		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
 	got := agentRunPermissions(ctx, p, "", []coreagent.ToolRef{
-		{Plugin: "linear", Operation: "viewer"},
-		{Plugin: "linear"},
+		{App: "linear", Operation: "viewer"},
+		{App: "linear"},
 	})
-	want := []core.AccessPermission{{Plugin: "linear", Operations: []string{"viewer"}}}
+	want := []core.AccessPermission{{App: "linear", Operations: []string{"viewer"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("agentRunPermissions = %#v, want %#v", got, want)
 	}
@@ -2178,7 +2178,7 @@ func TestAgentRunPermissionsClearsHTTPResolvedUserWildcardRestrictions(t *testin
 	t.Parallel()
 
 	perms := principal.CompilePermissions([]core.AccessPermission{{
-		Plugin:     "slack",
+		App:     "slack",
 		Operations: []string{"events.reply"},
 	}})
 	p := &principal.Principal{
@@ -2186,11 +2186,11 @@ func TestAgentRunPermissionsClearsHTTPResolvedUserWildcardRestrictions(t *testin
 		UserID:           "user-1",
 		Kind:             principal.KindUser,
 		TokenPermissions: perms,
-		Scopes:           principal.PermissionPlugins(perms),
+		Scopes:           principal.PermissionApps(perms),
 	}
 	ctx := invocation.WithInvocationSurface(context.Background(), invocation.InvocationSurfaceHTTP)
 
-	if got := agentRunPermissions(ctx, p, "slack", []coreagent.ToolRef{{Plugin: "*"}}); got != nil {
+	if got := agentRunPermissions(ctx, p, "slack", []coreagent.ToolRef{{App: "*"}}); got != nil {
 		t.Fatalf("agentRunPermissions = %#v, want nil permissions for resolved user wildcard search", got)
 	}
 }
@@ -2246,7 +2246,7 @@ func TestResolveToolsExpandsPluginOnlyRefs(t *testing.T) {
 	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.ResolveToolsRequest{
-		ToolRefs: []coreagent.ToolRef{{Plugin: "docs"}},
+		ToolRefs: []coreagent.ToolRef{{App: "docs"}},
 	})
 	if err != nil {
 		t.Fatalf("ResolveTools: %v", err)
@@ -2283,7 +2283,7 @@ func TestListToolsClampsOversizedPageSize(t *testing.T) {
 
 	firstPage, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "docs"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "docs"}},
 		PageSize:   5,
 	})
 	if err != nil {
@@ -2295,7 +2295,7 @@ func TestListToolsClampsOversizedPageSize(t *testing.T) {
 
 	clampedPage, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "docs"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "docs"}},
 		PageSize:   10000,
 		PageToken:  firstPage.NextPageToken,
 	})
@@ -2309,7 +2309,7 @@ func TestListToolsClampsOversizedPageSize(t *testing.T) {
 
 	lastPage, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
-		ToolRefs:   []coreagent.ToolRef{{Plugin: "docs"}},
+		ToolRefs:   []coreagent.ToolRef{{App: "docs"}},
 		PageSize:   10000,
 		PageToken:  clampedPage.NextPageToken,
 	})
@@ -2338,9 +2338,9 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialMode(t *testing.T) {
 	}
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, provider),
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slackbot": {{
-				Plugin:         "slack",
+				App:         "slack",
 				Operation:      "events.reply",
 				CredentialMode: core.ConnectionModeNone,
 			}},
@@ -2350,9 +2350,9 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialMode(t *testing.T) {
 	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.ResolveToolsRequest{
-		CallerPluginName: "slackbot",
+		CallerAppName: "slackbot",
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "slack",
+			App:    "slack",
 			Operation: "events.reply",
 		}},
 	})
@@ -2362,7 +2362,7 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialMode(t *testing.T) {
 	if len(tools) != 1 {
 		t.Fatalf("ResolveTools returned %d tools, want 1", len(tools))
 	}
-	if tools[0].Target.Plugin != "slack" || tools[0].Target.Operation != "events.reply" {
+	if tools[0].Target.App != "slack" || tools[0].Target.Operation != "events.reply" {
 		t.Fatalf("tool target = %#v, want slack.events.reply", tools[0].Target)
 	}
 	if tools[0].Target.CredentialMode != core.ConnectionModeNone {
@@ -2396,9 +2396,9 @@ func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
 	}
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, provider),
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				Plugin:                "github",
+				App:                "github",
 				Operation:             "bot.createPullRequest",
 				RunAs:                 runAs,
 				RunAsExternalIdentity: externalIdentity,
@@ -2409,9 +2409,9 @@ func TestResolveToolsAppliesDeclaredInvokeRunAs(t *testing.T) {
 	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.ResolveToolsRequest{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "github",
+			App:    "github",
 			Operation: "bot.createPullRequest",
 			RunAs: &core.RunAsSubject{
 				SubjectID:   runAs.SubjectID,
@@ -2466,9 +2466,9 @@ func TestResolveToolsExplicitOnlyInvokeRunAsDoesNotApplyImplicitly(t *testing.T)
 	}
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, provider),
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				Plugin:                "notion",
+				App:                "notion",
 				Operation:             "search",
 				RunAs:                 runAs,
 				RunAsExternalIdentity: externalIdentity,
@@ -2480,9 +2480,9 @@ func TestResolveToolsExplicitOnlyInvokeRunAsDoesNotApplyImplicitly(t *testing.T)
 	implicitTools, err := manager.ResolveTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.ResolveToolsRequest{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "notion",
+			App:    "notion",
 			Operation: "search",
 		}},
 	})
@@ -2502,9 +2502,9 @@ func TestResolveToolsExplicitOnlyInvokeRunAsDoesNotApplyImplicitly(t *testing.T)
 	explicitTools, err := manager.ResolveTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.ResolveToolsRequest{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "notion",
+			App:    "notion",
 			Operation: "search",
 			RunAs: &core.RunAsSubject{
 				SubjectID: runAs.SubjectID,
@@ -2539,9 +2539,9 @@ func TestApplyCallerInvokePoliciesExplicitOnlyExternalIdentityRequestAppliesRunA
 		ID:   "valon-support",
 	}
 	manager := newTestManager(t, Config{
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				Plugin:                "notion",
+				App:                "notion",
 				Operation:             "search",
 				RunAs:                 runAs,
 				RunAsExternalIdentity: externalIdentity,
@@ -2553,7 +2553,7 @@ func TestApplyCallerInvokePoliciesExplicitOnlyExternalIdentityRequestAppliesRunA
 	// Exercise the policy helper directly because normalizeToolRefs rejects this
 	// user-facing shape before policy application.
 	refs, err := manager.applyCallerInvokePolicies("slack", []coreagent.ToolRef{{
-		Plugin:                "notion",
+		App:                "notion",
 		Operation:             "search",
 		RunAsExternalIdentity: externalIdentity,
 	}})
@@ -2606,9 +2606,9 @@ func TestManagerCreateTurnAppliesExplicitInvokeRunAsToProviderAndRunGrant(t *tes
 			},
 		},
 		Providers: testutil.NewProviderRegistry(t, provider),
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				Plugin:                "notion",
+				App:                "notion",
 				Operation:             "search",
 				RunAs:                 runAs,
 				RunAsExternalIdentity: externalIdentity,
@@ -2628,11 +2628,11 @@ func TestManagerCreateTurnAppliesExplicitInvokeRunAsToProviderAndRunGrant(t *tes
 	_, err = manager.CreateTurn(context.Background(), p, coreagent.ManagerCreateTurnRequest{
 		SessionID:        session.ID,
 		Model:            "test-model",
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		ToolSource:       coreagent.ToolSourceModeMCPCatalog,
 		ToolRefsSet:      true,
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "notion",
+			App:    "notion",
 			Operation: "search",
 			RunAs: &core.RunAsSubject{
 				SubjectID: runAs.SubjectID,
@@ -2660,8 +2660,8 @@ func TestManagerCreateTurnAppliesExplicitInvokeRunAsToProviderAndRunGrant(t *tes
 	if err != nil {
 		t.Fatalf("Resolve run grant: %v", err)
 	}
-	if grant.CallerPluginName != "slack" {
-		t.Fatalf("run grant caller plugin = %q, want slack", grant.CallerPluginName)
+	if grant.CallerAppName != "slack" {
+		t.Fatalf("run grant caller app = %q, want slack", grant.CallerAppName)
 	}
 	if len(grant.ToolRefs) != 1 {
 		t.Fatalf("run grant tool refs = %d, want 1", len(grant.ToolRefs))
@@ -2694,9 +2694,9 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialModeAndRunAs(t *testing.T) {
 	}
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, provider),
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				Plugin:         "slack",
+				App:         "slack",
 				Operation:      "chat.postMessage",
 				CredentialMode: core.ConnectionModeNone,
 				RunAs:          runAs,
@@ -2707,9 +2707,9 @@ func TestResolveToolsAppliesDeclaredInvokeCredentialModeAndRunAs(t *testing.T) {
 	tools, err := manager.ResolveTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.ResolveToolsRequest{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "slack",
+			App:    "slack",
 			Operation: "chat.postMessage",
 		}},
 	})
@@ -2742,9 +2742,9 @@ func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
 	}
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, provider),
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slackbot": {{
-				Plugin:         "slack",
+				App:         "slack",
 				Operation:      "chat.postMessage",
 				CredentialMode: core.ConnectionModeNone,
 			}},
@@ -2753,10 +2753,10 @@ func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
 
 	for _, tc := range []struct {
 		name             string
-		callerPluginName string
+		callerAppName string
 	}{
 		{name: "public request"},
-		{name: "caller without matching invoke", callerPluginName: "slackbot"},
+		{name: "caller without matching invoke", callerAppName: "slackbot"},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -2765,9 +2765,9 @@ func TestResolveToolsRejectsUndeclaredCredentialMode(t *testing.T) {
 			_, err := manager.ResolveTools(context.Background(), &principal.Principal{
 				SubjectID: principal.UserSubjectID("user-1"),
 			}, coreagent.ResolveToolsRequest{
-				CallerPluginName: tc.callerPluginName,
+				CallerAppName: tc.callerAppName,
 				ToolRefs: []coreagent.ToolRef{{
-					Plugin:         "slack",
+					App:         "slack",
 					Operation:      "events.reply",
 					CredentialMode: core.ConnectionModeNone,
 				}},
@@ -2799,9 +2799,9 @@ func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
 	}
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, provider),
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				Plugin:    "github",
+				App:    "github",
 				Operation: "bot.getPullRequest",
 				RunAs:     runAs,
 			}},
@@ -2810,10 +2810,10 @@ func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
 
 	for _, tc := range []struct {
 		name             string
-		callerPluginName string
+		callerAppName string
 	}{
 		{name: "public request"},
-		{name: "caller without matching invoke", callerPluginName: "slack"},
+		{name: "caller without matching invoke", callerAppName: "slack"},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -2822,9 +2822,9 @@ func TestResolveToolsRejectsUndeclaredRunAs(t *testing.T) {
 			_, err := manager.ResolveTools(context.Background(), &principal.Principal{
 				SubjectID: principal.UserSubjectID("user-1"),
 			}, coreagent.ResolveToolsRequest{
-				CallerPluginName: tc.callerPluginName,
+				CallerAppName: tc.callerAppName,
 				ToolRefs: []coreagent.ToolRef{{
-					Plugin:    "github",
+					App:    "github",
 					Operation: "bot.createPullRequest",
 					RunAs:     runAs,
 				}},
@@ -2856,9 +2856,9 @@ func TestResolveToolsRejectsMismatchedRunAsExternalIdentity(t *testing.T) {
 	}
 	manager := newTestManager(t, Config{
 		Providers: testutil.NewProviderRegistry(t, provider),
-		PluginInvokes: map[string][]invocation.PluginInvocationDependency{
+		AppInvokes: map[string][]invocation.AppInvocationDependency{
 			"slack": {{
-				Plugin:    "github",
+				App:    "github",
 				Operation: "bot.createPullRequest",
 				RunAs:     runAs,
 				RunAsExternalIdentity: &core.ExternalIdentityRef{
@@ -2872,9 +2872,9 @@ func TestResolveToolsRejectsMismatchedRunAsExternalIdentity(t *testing.T) {
 	_, err := manager.ResolveTools(context.Background(), &principal.Principal{
 		SubjectID: principal.UserSubjectID("user-1"),
 	}, coreagent.ResolveToolsRequest{
-		CallerPluginName: "slack",
+		CallerAppName: "slack",
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "github",
+			App:    "github",
 			Operation: "bot.createPullRequest",
 			RunAs:     runAs,
 			RunAsExternalIdentity: &core.ExternalIdentityRef{
@@ -2987,10 +2987,10 @@ func TestManagerProjectsAgentFacingPluginToolSchemas(t *testing.T) {
 	manager := newTestManager(t, Config{Providers: testutil.NewProviderRegistry(t, provider)})
 	p := &principal.Principal{SubjectID: principal.UserSubjectID("user-1")}
 	refs := []coreagent.ToolRef{
-		{Plugin: "planner", Operation: "choose_target"},
-		{Plugin: "planner", Operation: "bad_schema"},
-		{Plugin: "planner", Operation: "conflict_schema"},
-		{Plugin: "planner", Operation: "hidden_admin"},
+		{App: "planner", Operation: "choose_target"},
+		{App: "planner", Operation: "bad_schema"},
+		{App: "planner", Operation: "conflict_schema"},
+		{App: "planner", Operation: "hidden_admin"},
 	}
 
 	listed, err := manager.ListTools(context.Background(), p, coreagent.ListToolsRequest{
@@ -3040,9 +3040,9 @@ func TestManagerProjectsAgentFacingPluginToolSchemas(t *testing.T) {
 	resolved, err := manager.ResolveTools(context.Background(), p, coreagent.ResolveToolsRequest{
 		ToolSource: coreagent.ToolSourceModeMCPCatalog,
 		ToolRefs: []coreagent.ToolRef{
-			{Plugin: "planner", Operation: "bad_schema"},
-			{Plugin: "planner", Operation: "empty_schema"},
-			{Plugin: "planner", Operation: "hidden_admin"},
+			{App: "planner", Operation: "bad_schema"},
+			{App: "planner", Operation: "empty_schema"},
+			{App: "planner", Operation: "hidden_admin"},
 		},
 	})
 	if err != nil {
@@ -3295,7 +3295,7 @@ func TestAgentToolTargetKeyIgnoresRunAsDisplayMetadata(t *testing.T) {
 	t.Parallel()
 
 	base := coreagent.ToolRef{
-		Plugin:    "github",
+		App:    "github",
 		Operation: "bot.createPullRequest",
 		RunAs: &core.RunAsSubject{
 			SubjectID:           "service_account:github_app_installation:99:repo:acme/widgets",

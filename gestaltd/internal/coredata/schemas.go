@@ -71,7 +71,7 @@ var AuthorizationDynamicFragmentsSchema = indexeddb.ObjectStoreSchema{
 	Indexes: []indexeddb.IndexSchema{
 		{Name: "by_owner", KeyPath: []string{"owner_kind", "owner_id"}, Unique: true},
 		{Name: "by_scope", KeyPath: []string{"scope"}},
-		{Name: "by_plugin", KeyPath: []string{"plugin"}},
+		{Name: "by_app", KeyPath: []string{"app"}},
 		{Name: "by_status", KeyPath: []string{"status"}},
 	},
 	Columns: []indexeddb.ColumnDef{
@@ -79,7 +79,7 @@ var AuthorizationDynamicFragmentsSchema = indexeddb.ObjectStoreSchema{
 		{Name: "owner_kind", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "owner_id", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "scope", Type: indexeddb.TypeString, NotNull: true},
-		{Name: "plugin", Type: indexeddb.TypeString},
+		{Name: "app", Type: indexeddb.TypeString},
 		{Name: "version", Type: indexeddb.TypeInt},
 		{Name: "status", Type: indexeddb.TypeString},
 		{Name: "resource_types_json", Type: indexeddb.TypeString},

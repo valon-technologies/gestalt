@@ -747,7 +747,7 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 	srv := newTestServer(t, func(cfg *server.Config) {
 		cfg.MeterProvider = metrics.Provider
 		cfg.Providers = testutil.NewProviderRegistry(t, provider)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
+		cfg.AppDefs = map[string]*config.ProviderEntry{
 			providerName: {
 				SecuritySchemes: map[string]*config.HTTPSecurityScheme{
 					"public": {Type: providermanifestv1.HTTPSecuritySchemeTypeNone},
@@ -766,7 +766,7 @@ func TestHTTPBindingOperationMetricsIncludeBinding(t *testing.T) {
 				},
 			},
 		}
-		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.PluginDefs)
+		cfg.Authorizer = mustAuthorizer(t, config.AuthorizationConfig{}, cfg.AppDefs)
 	})
 	testutil.CloseOnCleanup(t, srv)
 
@@ -868,7 +868,7 @@ func TestHTTPDiscoveryMetrics(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/"+providerName+"/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/"+providerName+"/operations", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -928,7 +928,7 @@ func TestHTTPDiscoveryMetrics_FailureRecordsErrorCount(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/"+providerName+"/operations", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/apps/"+providerName+"/operations", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

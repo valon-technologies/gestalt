@@ -87,8 +87,8 @@ impl TryFrom<i32> for WorkflowRunStatus {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct BoundWorkflowPluginTarget {
-    pub plugin_name: String,
+pub struct BoundWorkflowAppTarget {
+    pub app_name: String,
     pub operation: String,
     pub input: Option<WorkflowJson>,
     pub connection: String,
@@ -115,7 +115,7 @@ pub struct WorkflowOutputBinding {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WorkflowOutputDelivery {
-    pub target: Option<BoundWorkflowPluginTarget>,
+    pub target: Option<BoundWorkflowAppTarget>,
     pub input_bindings: Vec<WorkflowOutputBinding>,
     pub credential_mode: String,
 }
@@ -162,7 +162,7 @@ pub struct WorkflowAgentStepWhen {
 pub enum BoundWorkflowTarget {
     #[default]
     Empty,
-    Plugin(BoundWorkflowPluginTarget),
+    Plugin(BoundWorkflowAppTarget),
     Agent(BoundWorkflowAgentTarget),
 }
 
@@ -308,7 +308,7 @@ pub struct WorkflowExecutionReference {
     pub subject_kind: String,
     pub display_name: String,
     pub auth_source: String,
-    pub caller_plugin_name: String,
+    pub caller_app_name: String,
     pub run_as: Option<WorkflowRunAsSubject>,
     pub source_definition_id: String,
 }
@@ -399,7 +399,7 @@ pub struct WorkflowManagerRunSignal {
     pub workflow_key: String,
 }
 
-impl BoundWorkflowPluginTarget {
+impl BoundWorkflowAppTarget {
     /// Sets the target input from any JSON-object-like serializable value.
     pub fn with_input<T: Serialize>(mut self, value: T) -> ProviderResult<Self> {
         self.input = Some(protocol::json_from_serializable(value)?);
@@ -487,7 +487,7 @@ pub struct ListWorkflowProviderRunsRequest {
     pub page_size: i32,
     pub page_token: String,
     pub status: WorkflowRunStatus,
-    pub target_plugin: String,
+    pub target_app: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -586,7 +586,7 @@ pub struct ResumeWorkflowProviderEventTriggerRequest {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PublishWorkflowProviderEventRequest {
-    pub plugin_name: String,
+    pub app_name: String,
     pub event: Option<WorkflowEvent>,
     pub published_by: Option<WorkflowActor>,
 }
@@ -731,7 +731,7 @@ pub fn workflow_access_permission_input_from_permission(
     input: &WorkflowAccessPermission,
 ) -> WorkflowAccessPermission {
     WorkflowAccessPermission {
-        plugin: input.plugin.clone(),
+        plugin: input.app.clone(),
         operations: input.operations.clone(),
     }
 }
@@ -958,12 +958,12 @@ fn workflow_output_delivery_from_proto(
     })
 }
 
-/// Creates a bound plugin workflow target.
+/// Creates a bound app workflow target.
 pub fn new_bound_workflow_plugin_target(
-    input: BoundWorkflowPluginTarget,
-) -> ProviderResult<BoundWorkflowPluginTarget> {
-    Ok(BoundWorkflowPluginTarget {
-        plugin_name: input.plugin_name,
+    input: BoundWorkflowAppTarget,
+) -> ProviderResult<BoundWorkflowAppTarget> {
+    Ok(BoundWorkflowAppTarget {
+        app_name: input.app_name,
         operation: input.operation,
         input: input.input,
         connection: input.connection,
@@ -972,12 +972,12 @@ pub fn new_bound_workflow_plugin_target(
     })
 }
 
-/// Returns input copied from a bound plugin workflow target.
+/// Returns input copied from a bound app workflow target.
 pub fn bound_workflow_plugin_target_input_from_target(
-    input: &BoundWorkflowPluginTarget,
-) -> ProviderResult<BoundWorkflowPluginTarget> {
-    Ok(BoundWorkflowPluginTarget {
-        plugin_name: input.plugin_name.clone(),
+    input: &BoundWorkflowAppTarget,
+) -> ProviderResult<BoundWorkflowAppTarget> {
+    Ok(BoundWorkflowAppTarget {
+        app_name: input.app_name.clone(),
         operation: input.operation.clone(),
         input: input.input.clone(),
         connection: input.connection.clone(),
@@ -987,10 +987,10 @@ pub fn bound_workflow_plugin_target_input_from_target(
 }
 
 fn bound_workflow_plugin_target_to_proto(
-    input: BoundWorkflowPluginTarget,
-) -> ProviderResult<pb::BoundWorkflowPluginTarget> {
-    Ok(pb::BoundWorkflowPluginTarget {
-        plugin_name: input.plugin_name,
+    input: BoundWorkflowAppTarget,
+) -> ProviderResult<pb::BoundWorkflowAppTarget> {
+    Ok(pb::BoundWorkflowAppTarget {
+        app_name: input.app_name,
         operation: input.operation,
         input: input.input.map(protocol::struct_from_json).transpose()?,
         connection: input.connection,
@@ -1000,10 +1000,10 @@ fn bound_workflow_plugin_target_to_proto(
 }
 
 fn bound_workflow_plugin_target_from_proto(
-    input: pb::BoundWorkflowPluginTarget,
-) -> ProviderResult<BoundWorkflowPluginTarget> {
-    Ok(BoundWorkflowPluginTarget {
-        plugin_name: input.plugin_name,
+    input: pb::BoundWorkflowAppTarget,
+) -> ProviderResult<BoundWorkflowAppTarget> {
+    Ok(BoundWorkflowAppTarget {
+        app_name: input.app_name,
         operation: input.operation,
         input: input.input.as_ref().map(protocol::json_from_struct),
         connection: input.connection,
@@ -2037,7 +2037,7 @@ pub fn new_workflow_execution_reference(
         subject_kind: input.subject_kind,
         display_name: input.display_name,
         auth_source: input.auth_source,
-        caller_plugin_name: input.caller_plugin_name,
+        caller_app_name: input.caller_app_name,
         run_as: input.run_as.map(new_workflow_run_as_subject),
         source_definition_id: input.source_definition_id,
     })
@@ -2067,7 +2067,7 @@ pub fn workflow_execution_reference_input_from_reference(
         subject_kind: input.subject_kind.clone(),
         display_name: input.display_name.clone(),
         auth_source: input.auth_source.clone(),
-        caller_plugin_name: input.caller_plugin_name.clone(),
+        caller_app_name: input.caller_app_name.clone(),
         run_as: input
             .run_as
             .as_ref()
@@ -2098,7 +2098,7 @@ pub(crate) fn workflow_execution_reference_to_proto(
         subject_kind: input.subject_kind,
         display_name: input.display_name,
         auth_source: input.auth_source,
-        caller_plugin_name: input.caller_plugin_name,
+        caller_app_name: input.caller_app_name,
         run_as: input.run_as.map(workflow_run_as_subject_to_proto),
         source_definition_id: input.source_definition_id,
     })
@@ -2134,7 +2134,7 @@ pub(crate) fn workflow_execution_reference_from_proto(
         subject_kind: input.subject_kind,
         display_name: input.display_name,
         auth_source: input.auth_source,
-        caller_plugin_name: input.caller_plugin_name,
+        caller_app_name: input.caller_app_name,
         run_as: input.run_as.map(workflow_run_as_subject_from_proto),
         source_definition_id: input.source_definition_id,
     })
@@ -2262,7 +2262,7 @@ fn list_workflow_provider_runs_request_from_proto(
         page_size: request.page_size,
         page_token: request.page_token,
         status: WorkflowRunStatus::try_from(request.status)?,
-        target_plugin: request.target_plugin,
+        target_app: request.target_app,
     })
 }
 
@@ -2331,7 +2331,7 @@ fn publish_event_request_from_proto(
     request: pb::PublishWorkflowProviderEventRequest,
 ) -> ProviderResult<PublishWorkflowProviderEventRequest> {
     Ok(PublishWorkflowProviderEventRequest {
-        plugin_name: request.plugin_name,
+        app_name: request.app_name,
         event: request.event.map(workflow_event_from_proto).transpose()?,
         published_by: request.published_by.map(workflow_actor_from_proto),
     })

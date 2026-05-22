@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { array, definePlugin, PluginProvider } from "../src/index.ts";
+import { array, defineApp, AppProvider } from "../src/index.ts";
 import { s } from "../src/schema.ts";
 
 test("schema parses defaults and optional fields", () => {
@@ -48,7 +48,7 @@ test("number schema accepts full finite numeric strings", () => {
 test("schema builders are exported from the package entrypoint", () => {
   expect(array(s.integer()).parse(["1", 2], "$")).toEqual([1, 2]);
 
-  const plugin = definePlugin({
+  const app = defineApp({
     operations: [
       {
         id: "ping",
@@ -60,5 +60,5 @@ test("schema builders are exported from the package entrypoint", () => {
       },
     ],
   });
-  expect(plugin).toBeInstanceOf(PluginProvider);
+  expect(plugin).toBeInstanceOf(AppProvider);
 });

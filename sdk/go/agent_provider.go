@@ -160,7 +160,7 @@ type ResolvedAgentTool struct {
 }
 
 type AgentToolRef struct {
-	Plugin                string
+	App                string
 	Operation             string
 	Connection            string
 	Instance              string

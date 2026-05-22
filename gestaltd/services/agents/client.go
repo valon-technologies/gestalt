@@ -29,7 +29,7 @@ type ExecConfig struct {
 	Telemetry    metricutil.TelemetryProviders
 }
 
-var startAgentProviderProcess = runtimehost.StartPluginProcess
+var startAgentProviderProcess = runtimehost.StartAppProcess
 
 type remoteAgent struct {
 	client  proto.AgentProviderClient

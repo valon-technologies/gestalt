@@ -21,7 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
 	"github.com/valon-technologies/gestalt/server/services/invocation"
 	"github.com/valon-technologies/gestalt/server/services/observability/metricutil"
-	"github.com/valon-technologies/gestalt/server/services/plugins/apiexec"
+	"github.com/valon-technologies/gestalt/server/services/apps/apiexec"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -259,7 +259,7 @@ func (s *Server) connectedIntegrationsForSubject(ctx context.Context, subjectID 
 		}
 		credentialInvalid := credentialNeedsReconnect(tok, now)
 		for _, binding := range s.pluginConnectionBindingsForCredentialID(tok.ConnectionID) {
-			m[binding.Plugin] = append(m[binding.Plugin], instanceInfo{
+			m[binding.App] = append(m[binding.App], instanceInfo{
 				Name:              tok.Instance,
 				Connection:        userFacingConnectionName(binding.Connection),
 				credentialInvalid: credentialInvalid,
@@ -277,7 +277,7 @@ func credentialNeedsReconnect(credential *core.ExternalCredential, now time.Time
 }
 
 type pluginConnectionBinding struct {
-	Plugin     string
+	App     string
 	Connection string
 }
 
@@ -303,9 +303,9 @@ func (s *Server) pluginConnectionBindingsForCredentialID(connectionID string) []
 			if serverCredentialConnectionID(pluginName, connection, conn) != connectionID {
 				return
 			}
-			bindings = append(bindings, pluginConnectionBinding{Plugin: pluginName, Connection: connection})
+			bindings = append(bindings, pluginConnectionBinding{App: pluginName, Connection: connection})
 		}
-		add(config.PluginConnectionName, plan.PluginConnection())
+		add(config.AppConnectionName, plan.AppConnection())
 		for _, connection := range plan.NamedConnectionNames() {
 			conn, ok := plan.NamedConnectionDef(connection)
 			if ok {
@@ -314,8 +314,8 @@ func (s *Server) pluginConnectionBindingsForCredentialID(connectionID string) []
 		}
 	}
 	sort.Slice(bindings, func(i, j int) bool {
-		if bindings[i].Plugin != bindings[j].Plugin {
-			return bindings[i].Plugin < bindings[j].Plugin
+		if bindings[i].App != bindings[j].App {
+			return bindings[i].App < bindings[j].App
 		}
 		return bindings[i].Connection < bindings[j].Connection
 	})
@@ -328,7 +328,7 @@ func serverCredentialConnectionID(pluginName, connection string, conn config.Con
 	}
 	connection = strings.TrimSpace(connection)
 	if connection == "" {
-		connection = config.PluginConnectionName
+		connection = config.AppConnectionName
 	}
 	return strings.TrimSpace(pluginName) + ":" + connection
 }
@@ -398,7 +398,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		for _, binding := range s.pluginConnectionBindingsForCredentialID(tok.ConnectionID) {
-			if binding.Plugin != name {
+			if binding.App != name {
 				continue
 			}
 			if requestedConnection != "" && binding.Connection != requestedConnection {

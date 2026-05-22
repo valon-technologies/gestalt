@@ -24,8 +24,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerregistry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"gopkg.in/yaml.v3"
 )
 
@@ -113,7 +113,7 @@ type Lifecycle struct {
 type StatePaths struct {
 	ArtifactsDir string
 	LockfilePath string
-	PluginScope  []string
+	AppScope  []string
 }
 
 type SyncOptions struct {
@@ -375,7 +375,7 @@ func (l *Lifecycle) prepareCommittedLockAtPaths(configPaths []string, state Stat
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
-	if err := applyPluginScope(cfg, state); err != nil {
+	if err := applyAppScope(cfg, state); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
@@ -415,7 +415,7 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, d
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, fmt.Errorf("loading config: %v", err)
 	}
-	if err := applyPluginScope(cfg, state); err != nil {
+	if err := applyAppScope(cfg, state); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
@@ -432,7 +432,7 @@ func (l *Lifecycle) prepareLockAtPaths(configPaths []string, state StatePaths, d
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
-	catalogs, err := pluginservice.EffectiveCatalogsAndDependencies(context.Background(), config.PluginValidationConfig(cfg))
+	catalogs, err := appservice.EffectiveCatalogsAndDependencies(context.Background(), config.AppValidationConfig(cfg))
 	if err != nil {
 		return nil, nil, lifecyclePaths{}, err
 	}
@@ -462,7 +462,7 @@ func (l *Lifecycle) prepareCommittedRuntimeLockFromLoadedConfig(ctx context.Cont
 	}
 
 	lock := newLockfile()
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if !providerRequiresCommittedLock(entry) {
 			continue
 		}
@@ -638,7 +638,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 		return nil, err
 	}
 	for name := range resolvedProviders {
-		if providerRequiresCommittedLock(cfg.Plugins[name]) {
+		if providerRequiresCommittedLock(cfg.Apps[name]) {
 			lock.Providers[name] = resolvedProviders[name]
 		}
 	}
@@ -715,7 +715,7 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfigWithSecretMode(ctx context
 	for name, entry := range cfg.Providers.UI {
 		if entry != nil && sourceBacked(&entry.ProviderEntry) {
 			if _, existed := existingUIEntries[name]; !existed && (entry.HasLocalSource() || entry.HasLocalReleaseSource()) {
-				if plugin := cfg.Plugins[name]; plugin != nil && strings.TrimSpace(plugin.UI) == "" && strings.TrimSpace(plugin.MountPath) != "" {
+				if app := cfg.Apps[name]; app != nil && strings.TrimSpace(app.UI) == "" && strings.TrimSpace(app.MountPath) != "" {
 					continue
 				}
 			}
@@ -742,7 +742,7 @@ func (l *Lifecycle) resolvePackageSources(ctx context.Context, cfg *config.Confi
 	if err != nil {
 		return err
 	}
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if err := l.resolvePackageSourceEntry(ctx, "plugin "+strconv.Quote(name), entry, repos); err != nil {
 			return err
 		}
@@ -810,7 +810,7 @@ func configHasPackageSources(cfg *config.Config) bool {
 	if cfg == nil {
 		return false
 	}
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		if entry != nil && entry.Source.IsPackage() {
 			return true
 		}
@@ -913,7 +913,7 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 			}
 		}
 	}
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		addEntry(entry)
 	}
 	for _, entry := range cfg.Runtime.Providers {
@@ -949,7 +949,7 @@ func defaultLockfilePath(configPath string) string {
 }
 
 func pluginScopeNames(scope []string) []string {
-	names := config.NormalizePluginScopeNames(scope)
+	names := config.NormalizeAppScopeNames(scope)
 	slices.Sort(names)
 	return names
 }
@@ -965,15 +965,15 @@ func pluginScopeLabel(scope []string) string {
 	return strings.Join(names, ",")
 }
 
-func applyPluginScope(cfg *config.Config, state StatePaths) error {
-	names := pluginScopeNames(state.PluginScope)
+func applyAppScope(cfg *config.Config, state StatePaths) error {
+	names := pluginScopeNames(state.AppScope)
 	if len(names) == 0 {
 		return nil
 	}
-	if err := config.ApplyPluginScope(cfg, names); err != nil {
+	if err := config.ApplyAppScope(cfg, names); err != nil {
 		return err
 	}
-	if err := config.ValidateNoMissingEnvRefsForPluginScope(cfg); err != nil {
+	if err := config.ValidateNoMissingEnvRefsForAppScope(cfg); err != nil {
 		return err
 	}
 	if err := config.ValidateStructure(cfg); err != nil {
@@ -983,8 +983,8 @@ func applyPluginScope(cfg *config.Config, state StatePaths) error {
 }
 
 func loadConfigForLifecycle(configPaths []string, state StatePaths, allowMissingEnv bool) (*config.Config, error) {
-	if pluginScopeLabel(state.PluginScope) != "" {
-		return config.LoadPluginScopePreserveMissingEnvPaths(configPaths, state.PluginScope)
+	if pluginScopeLabel(state.AppScope) != "" {
+		return config.LoadAppScopePreserveMissingEnvPaths(configPaths, state.AppScope)
 	}
 	if allowMissingEnv {
 		return config.LoadAllowMissingEnvPaths(configPaths)
@@ -1005,7 +1005,7 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
-	if err := applyPluginScope(cfg, state); err != nil {
+	if err := applyAppScope(cfg, state); err != nil {
 		return nil, nil, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
@@ -1035,7 +1035,7 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithStatePaths(configPaths []string, 
 		return nil, nil, err
 	}
 	if !secretsValidated && !dependenciesValidated {
-		if err := pluginservice.ValidateDependencies(context.Background(), config.PluginValidationConfig(cfg)); err != nil {
+		if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -1047,7 +1047,7 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
-	if err := applyPluginScope(cfg, state); err != nil {
+	if err := applyAppScope(cfg, state); err != nil {
 		return nil, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
@@ -1064,7 +1064,7 @@ func (l *Lifecycle) LoadForValidationAtPathsWithStatePaths(configPaths []string,
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, err
 	}
-	if err := pluginservice.ValidateDependencies(context.Background(), config.PluginValidationConfig(cfg)); err != nil {
+	if err := appservice.ValidateDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return nil, err
 	}
 	return cfg, nil
@@ -1078,7 +1078,7 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
-	if err := applyPluginScope(cfg, state); err != nil {
+	if err := applyAppScope(cfg, state); err != nil {
 		return nil, err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
@@ -1097,7 +1097,7 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 				(paths.pluginScope != "" || !configRequiresRemoteStaticLock(cfg))
 			if !canPrepareScratchLock {
 				if paths.pluginScope != "" {
-					return nil, fmt.Errorf("scoped validation for plugin %q requires an existing scoped lockfile for platform %q; pass --lockfile with that metadata or validate on the current platform without --platform: %w", paths.pluginScope, platform, lockErr)
+					return nil, fmt.Errorf("scoped validation for app %q requires an existing scoped lockfile for platform %q; pass --lockfile with that metadata or validate on the current platform without --platform: %w", paths.pluginScope, platform, lockErr)
 				}
 				return nil, fmt.Errorf("lockfile is missing or unreadable; run `%s`: %w", formatLockCommand(paths), lockErr)
 			}
@@ -1129,7 +1129,7 @@ func (l *Lifecycle) LoadForStaticValidationAtPathsWithStatePaths(configPaths []s
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, err
 	}
-	if err := pluginservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), config.PluginValidationConfig(cfg)); err != nil {
+	if err := appservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return nil, err
 	}
 	return cfg, nil
@@ -1144,7 +1144,7 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if err := config.OverlayRemotePluginConfigPaths(configPaths, cfg); err != nil {
 		return fmt.Errorf("loading config: %v", err)
 	}
-	if err := applyPluginScope(cfg, state); err != nil {
+	if err := applyAppScope(cfg, state); err != nil {
 		return err
 	}
 	paths := resolveLifecyclePaths(configPaths, cfg, state)
@@ -1154,14 +1154,14 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 			lock = newLockfile()
 		} else {
 			if paths.pluginScope != "" {
-				return fmt.Errorf("scoped local plugin lock metadata is missing or unreadable for plugin %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
+				return fmt.Errorf("scoped local app lock metadata is missing or unreadable for app %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
 			}
 			return fmt.Errorf("source-backed providers require lock metadata; run `%s`: %w", formatLockCommand(paths), err)
 		}
 	}
 	if !lockMetadataMatchesConfigForSync(cfg, paths, lock) {
 		if paths.pluginScope != "" {
-			return fmt.Errorf("scoped local plugin lockfile is out of date for plugin %q; rerun without --locked to prepare it", paths.pluginScope)
+			return fmt.Errorf("scoped local app lockfile is out of date for app %q; rerun without --locked to prepare it", paths.pluginScope)
 		}
 		return fmt.Errorf("lockfile is out of date; run `%s`", formatLockCommand(paths))
 	}
@@ -1180,7 +1180,7 @@ func (l *Lifecycle) syncAtPathsWithStatePaths(configPaths []string, state StateP
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return err
 	}
-	if err := pluginservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), config.PluginValidationConfig(cfg)); err != nil {
+	if err := appservice.ValidateEffectiveCatalogsAndDependencies(context.Background(), config.AppValidationConfig(cfg)); err != nil {
 		return err
 	}
 	return nil
@@ -1412,11 +1412,11 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, state StatePat
 	if err != nil {
 		if paths.pluginScope != "" {
 			if locked {
-				return nil, false, fmt.Errorf("scoped local plugin state is missing or stale for plugin %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
+				return nil, false, fmt.Errorf("scoped local app state is missing or stale for app %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
 			}
-			return nil, false, fmt.Errorf("preparing scoped local plugin state for plugin %q failed: %w", paths.pluginScope, err)
+			return nil, false, fmt.Errorf("preparing scoped local app state for app %q failed: %w", paths.pluginScope, err)
 		}
-		return nil, false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-plugin development, use `gestaltd serve --plugin NAME` or `gestaltd serve --path PATH`; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		return nil, false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --app NAME` or `gestaltd serve --path PATH`; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
 	return lock, validatedDuringPrepare, nil
 }
@@ -1610,8 +1610,8 @@ func formatConfigStateFlags(paths []string, state StatePaths) string {
 	if state.LockfilePath != "" {
 		args = append(args, "--lockfile", state.LockfilePath)
 	}
-	for _, plugin := range pluginScopeNames(state.PluginScope) {
-		args = append(args, "--plugin", plugin)
+	for _, appName := range pluginScopeNames(state.AppScope) {
+		args = append(args, "--app", appName)
 	}
 	return strings.Join(args, " ")
 }
@@ -1648,14 +1648,14 @@ func formatSyncLockedCommand(paths lifecyclePaths) string {
 
 func preparedArtifactStaleError(paths lifecyclePaths, format string, args ...any) error {
 	if paths.pluginScope != "" {
-		return fmt.Errorf(format+"; rerun without --locked to prepare scoped local state for plugin %q", append(args, paths.pluginScope)...)
+		return fmt.Errorf(format+"; rerun without --locked to prepare scoped local state for app %q", append(args, paths.pluginScope)...)
 	}
 	return fmt.Errorf(format+"; run `%s`", append(args, formatSyncLockedCommand(paths))...)
 }
 
 func lockMetadataStaleError(paths lifecyclePaths, format string, args ...any) error {
 	if paths.pluginScope != "" {
-		return fmt.Errorf(format+"; rerun without --locked to prepare scoped local state for plugin %q", append(args, paths.pluginScope)...)
+		return fmt.Errorf(format+"; rerun without --locked to prepare scoped local state for app %q", append(args, paths.pluginScope)...)
 	}
 	return fmt.Errorf(format+"; run `%s`", append(args, formatLockCommand(paths))...)
 }
@@ -1744,7 +1744,7 @@ func configRequiresCommittedLock(cfg *config.Config) bool {
 }
 
 func configHasLocalProviderSources(cfg *config.Config) bool {
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		if entry.HasLocalSource() || entry.HasLocalReleaseSource() {
 			return true
 		}
@@ -1780,7 +1780,7 @@ func configHasLocalProviderSources(cfg *config.Config) bool {
 }
 
 func configHasMetadataProviderSources(cfg *config.Config) bool {
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		if entry != nil && entry.HasMetadataSource() {
 			return true
 		}
@@ -1874,11 +1874,11 @@ func resolveLockfilePath(configPath, override string) string {
 
 func scopedLifecycleStatePaths(configPath string, cfg *config.Config, state StatePaths) (string, string) {
 	artifactsRoot := resolveArtifactsDir(configPath, cfg, state.ArtifactsDir)
-	if pluginScopeLabel(state.PluginScope) == "" {
+	if pluginScopeLabel(state.AppScope) == "" {
 		return artifactsRoot, resolveLockfilePath(configPath, state.LockfilePath)
 	}
 
-	scopeDir := filepath.Join(artifactsRoot, ".gestaltd", "scopes", "plugins", pluginScopeLabel(state.PluginScope))
+	scopeDir := filepath.Join(artifactsRoot, ".gestaltd", "scopes", "apps", pluginScopeLabel(state.AppScope))
 	lockfilePath := resolveLockfilePath(configPath, state.LockfilePath)
 	if state.LockfilePath == "" {
 		lockfilePath = filepath.Join(scopeDir, LockfileName)
@@ -1894,7 +1894,7 @@ func resolveLifecyclePaths(configPaths []string, cfg *config.Config, state State
 		configPaths:            append([]string(nil), configPaths...),
 		configFlags:            formatConfigStateFlags(configPaths, state),
 		lockFlags:              formatLockFlags(configPaths, state),
-		pluginScope:            pluginScopeLabel(state.PluginScope),
+		pluginScope:            pluginScopeLabel(state.AppScope),
 		configPath:             configPath,
 		configDir:              configDir,
 		artifactsDir:           artifactsDir,
@@ -2235,7 +2235,7 @@ func providerManifestKind(kind config.HostProviderKind) string {
 	case config.HostProviderKindSecrets:
 		return providermanifestv1.KindSecrets
 	case config.HostProviderKindTelemetry, config.HostProviderKindAudit:
-		return providermanifestv1.KindPlugin
+		return providermanifestv1.KindApp
 	case config.HostProviderKindCache:
 		return providermanifestv1.KindCache
 	case config.HostProviderKindIndexedDB:
@@ -2297,12 +2297,12 @@ func lockMatchesConfig(cfg *config.Config, paths lifecyclePaths, lock *Lockfile)
 	if lock == nil {
 		return false
 	}
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if !providerRequiresCommittedLock(entry) {
 			continue
 		}
 		lockEntry, found := lock.Providers[name]
-		if !lockEntryMatches(paths, providermanifestv1.KindPlugin, name, entry, lockEntry, found, providerDestDir(paths, name)) {
+		if !lockEntryMatches(paths, providermanifestv1.KindApp, name, entry, lockEntry, found, providerDestDir(paths, name)) {
 			return false
 		}
 	}
@@ -2377,12 +2377,12 @@ func lockMetadataMatchesConfigForSync(cfg *config.Config, paths lifecyclePaths, 
 	if lock == nil {
 		return false
 	}
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if !providerRequiresCommittedLock(entry) {
 			continue
 		}
 		lockEntry, found := lock.Providers[name]
-		if !lockEntryMetadataMatchesForMode(paths, providermanifestv1.KindPlugin, name, entry, lockEntry, found, providerDestDir(paths, name), false) {
+		if !lockEntryMetadataMatchesForMode(paths, providermanifestv1.KindApp, name, entry, lockEntry, found, providerDestDir(paths, name), false) {
 			return false
 		}
 	}
@@ -2844,7 +2844,7 @@ func fingerprintLocalReleaseMetadataDigest(sourcePath string) (string, error) {
 func archivePolicyKind(kind string) string {
 	switch kind {
 	case providerLockKindTelemetry, providerLockKindAudit:
-		return providermanifestv1.KindPlugin
+		return providermanifestv1.KindApp
 	default:
 		return kind
 	}
@@ -2852,7 +2852,7 @@ func archivePolicyKind(kind string) string {
 
 func archivePolicySubject(kind, name string) string {
 	switch archivePolicyKind(kind) {
-	case providermanifestv1.KindPlugin:
+	case providermanifestv1.KindApp:
 		return fmt.Sprintf("provider %q", name)
 	case providermanifestv1.KindUI:
 		return fmt.Sprintf("ui provider %q", name)
@@ -2863,7 +2863,7 @@ func archivePolicySubject(kind, name string) string {
 
 func lockEntryDestDir(paths lifecyclePaths, kind, name string) string {
 	switch kind {
-	case providermanifestv1.KindPlugin:
+	case providermanifestv1.KindApp:
 		return providerDestDir(paths, name)
 	case providermanifestv1.KindAuthentication:
 		return authDestDir(paths, name)
@@ -2923,7 +2923,7 @@ func lockEntryMatches(paths lifecyclePaths, kind, name string, providerEntry *co
 		policyKind := archivePolicyKind(kind)
 		var manifest *providermanifestv1.Manifest
 		var err error
-		if policyKind == providermanifestv1.KindPlugin {
+		if policyKind == providermanifestv1.KindApp {
 			manifest, err = readLockEntryManifest(paths, entry, destDir)
 			if err != nil {
 				return false
@@ -3079,11 +3079,11 @@ func stageLocalSourceInstall(kind, name, manifestPath, destDir string) (*prepare
 
 	stageKind := kind
 	if stageKind == providerLockKindTelemetry || stageKind == providerLockKindAudit {
-		stageKind = providermanifestv1.KindPlugin
+		stageKind = providermanifestv1.KindApp
 	}
 	if _, err := providerpkg.StageSourcePreparedInstallDir(manifestPath, tempDir, providerpkg.StageSourcePreparedInstallOptions{
 		Kind:       stageKind,
-		PluginName: name,
+		AppName: name,
 		GOOS:       runtime.GOOS,
 		GOARCH:     runtime.GOARCH,
 	}); err != nil {
@@ -3155,8 +3155,8 @@ func pathWithinRoot(root, target string) bool {
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
 }
 
-func localLockEntryFromPreparedInstall(paths lifecyclePaths, kind, name string, plugin *config.ProviderEntry, install *preparedInstall) (LockEntry, error) {
-	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
+func localLockEntryFromPreparedInstall(paths lifecyclePaths, kind, name string, app *config.ProviderEntry, install *preparedInstall) (LockEntry, error) {
+	fingerprint, err := ProviderFingerprint(name, app, paths.configDir)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 	}
@@ -3177,16 +3177,16 @@ func localLockEntryFromPreparedInstall(paths lifecyclePaths, kind, name string, 
 		Manifest:    manifestPath,
 		Executable:  executablePath,
 	}
-	if plugin != nil && plugin.HasLocalSource() {
-		if err := writePreparedLockMetadata(paths, install, kind, name, plugin); err != nil {
+	if app != nil && app.HasLocalSource() {
+		if err := writePreparedLockMetadata(paths, install, kind, name, app); err != nil {
 			return LockEntry{}, fmt.Errorf("write prepared lock metadata for %s %q: %w", kind, name, err)
 		}
 	}
 	return entry, nil
 }
 
-func localUILockEntryFromPreparedInstall(paths lifecyclePaths, name string, plugin *config.ProviderEntry, install *preparedInstall) (LockEntry, error) {
-	fingerprint, err := NamedUIProviderFingerprint(name, plugin, paths.configDir)
+func localUILockEntryFromPreparedInstall(paths lifecyclePaths, name string, app *config.ProviderEntry, install *preparedInstall) (LockEntry, error) {
+	fingerprint, err := NamedUIProviderFingerprint(name, app, paths.configDir)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("fingerprinting ui %q: %w", name, err)
 	}
@@ -3207,17 +3207,17 @@ func localUILockEntryFromPreparedInstall(paths lifecyclePaths, name string, plug
 		Manifest:    manifestPath,
 		AssetRoot:   assetRoot,
 	}
-	if plugin != nil && plugin.HasLocalSource() {
-		if err := writePreparedLockMetadata(paths, install, providermanifestv1.KindUI, name, plugin); err != nil {
+	if app != nil && app.HasLocalSource() {
+		if err := writePreparedLockMetadata(paths, install, providermanifestv1.KindUI, name, app); err != nil {
 			return LockEntry{}, fmt.Errorf("write prepared lock metadata for ui %q: %w", name, err)
 		}
 	}
 	return entry, nil
 }
 
-func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, plugin *config.ProviderEntry, configDir string) (*installedPackage, LockEntry, error) {
-	sourceLocation := plugin.SourceReleaseLocation()
-	metadata, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseMetadata(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(plugin))
+func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, app *config.ProviderEntry, configDir string) (*installedPackage, LockEntry, error) {
+	sourceLocation := app.SourceReleaseLocation()
+	metadata, resolvedMetadataLocation, gitHubReleaseAssets, err := fetchProviderReleaseMetadata(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(app))
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("%s fetch metadata %q: %w", subject, sourceLocation, err)
 	}
@@ -3233,7 +3233,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 		Package:  metadata.Package,
 		Kind:     metadata.Kind,
 		Runtime:  metadata.Runtime,
-		Source:   providerSourceLockLocation(plugin, configDir),
+		Source:   providerSourceLockLocation(app, configDir),
 		Version:  metadata.Version,
 		Archives: archives,
 	}
@@ -3247,7 +3247,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("resolve archive for %s: %w", subject, err)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archiveLocation)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("download metadata source package for %s: %w", subject, err)
 	}
@@ -3285,7 +3285,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths lifecyclePaths) (map[string]LockEntry, error) {
 	written := make(map[string]LockEntry)
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if entry == nil {
 			continue
 		}
@@ -3306,31 +3306,31 @@ func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Conf
 	return written, nil
 }
 
-func (l *Lifecycle) lockCommittedProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
-	if !providerRequiresCommittedLock(plugin) {
+func (l *Lifecycle) lockCommittedProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+	if !providerRequiresCommittedLock(app) {
 		return LockEntry{}, fmt.Errorf("provider %q does not require committed lock metadata", name)
 	}
-	return l.lockProviderEntryForSource(ctx, cfg, paths, name, plugin, configMap)
+	return l.lockProviderEntryForSource(ctx, cfg, paths, name, app, configMap)
 }
 
-func (l *Lifecycle) writeComponentArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry, configNode yaml.Node) (LockEntry, error) {
+func (l *Lifecycle) writeComponentArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configNode yaml.Node) (LockEntry, error) {
 	configMap, err := config.NodeToMap(configNode)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
 	}
-	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, plugin, configMap)
+	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap)
 }
 
-func (l *Lifecycle) lockCommittedComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
-	if !providerRequiresCommittedLock(plugin) {
+func (l *Lifecycle) lockCommittedComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+	if !providerRequiresCommittedLock(app) {
 		return LockEntry{}, fmt.Errorf("%s %q does not require committed lock metadata", kind, name)
 	}
-	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, plugin, configMap)
+	return l.lockComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap)
 }
 
-func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
-	if plugin != nil && plugin.HasLocalSource() {
-		install, err := prepareLocalSourceInstall(kind, name, plugin.SourcePath(), destDir)
+func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, kind, name, destDir string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+	if app != nil && app.HasLocalSource() {
+		install, err := prepareLocalSourceInstall(kind, name, app.SourcePath(), destDir)
 		if err != nil {
 			return LockEntry{}, err
 		}
@@ -3340,23 +3340,23 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config
 		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, kind, configMap); err != nil {
 			return LockEntry{}, fmt.Errorf("provider config validation for %s %q: %w", kind, name, err)
 		}
-		return localLockEntryFromPreparedInstall(paths, kind, name, plugin, install)
+		return localLockEntryFromPreparedInstall(paths, kind, name, app, install)
 	}
-	if plugin != nil && plugin.HasGitSource() {
-		return l.lockGitComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, plugin, configMap)
+	if app != nil && app.HasGitSource() {
+		return l.lockGitComponentEntryForSource(ctx, cfg, paths, kind, name, destDir, app, configMap)
 	}
 
-	sourceLocation := plugin.SourceReleaseLocation()
+	sourceLocation := app.SourceReleaseLocation()
 	var (
 		installed *installedPackage
 		entry     LockEntry
 		err       error
 	)
 	subject := fmt.Sprintf("%s %q", kind, name)
-	if !plugin.HasReleaseMetadataSource() {
+	if !app.HasReleaseMetadataSource() {
 		return LockEntry{}, fmt.Errorf("%s %q source %q: only provider-release metadata sources and local manifest paths are supported", kind, name, sourceLocation)
 	}
-	installed, entry, err = l.installMetadataSourcePackage(ctx, kind, name, subject, destDir, plugin, paths.configDir)
+	installed, entry, err = l.installMetadataSourcePackage(ctx, kind, name, subject, destDir, app, paths.configDir)
 	if err != nil {
 		return LockEntry{}, err
 	}
@@ -3368,7 +3368,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config
 	if entrypoint == nil {
 		return LockEntry{}, fmt.Errorf("%s %q manifest does not define a %s entrypoint", kind, name, kind)
 	}
-	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
+	fingerprint, err := ProviderFingerprint(name, app, paths.configDir)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 	}
@@ -3386,43 +3386,43 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, cfg *config
 	return entry, nil
 }
 
-func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
-	if plugin != nil && plugin.HasLocalSource() {
-		install, err := prepareLocalSourceInstall(providermanifestv1.KindPlugin, name, plugin.SourcePath(), providerDestDir(paths, name))
+func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+	if app != nil && app.HasLocalSource() {
+		install, err := prepareLocalSourceInstall(providermanifestv1.KindApp, name, app.SourcePath(), providerDestDir(paths, name))
 		if err != nil {
 			return LockEntry{}, err
 		}
-		if err := validateInstalledManifestKind(providermanifestv1.KindPlugin, name, install.manifest); err != nil {
+		if err := validateInstalledManifestKind(providermanifestv1.KindApp, name, install.manifest); err != nil {
 			return LockEntry{}, err
 		}
-		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindPlugin, configMap); err != nil {
+		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindApp, configMap); err != nil {
 			return LockEntry{}, fmt.Errorf("provider config validation for provider %q: %w", name, err)
 		}
-		return localLockEntryFromPreparedInstall(paths, providermanifestv1.KindPlugin, name, plugin, install)
+		return localLockEntryFromPreparedInstall(paths, providermanifestv1.KindApp, name, app, install)
 	}
-	if plugin != nil && plugin.HasGitSource() {
-		return l.lockGitProviderEntryForSource(ctx, cfg, paths, name, plugin, configMap)
+	if app != nil && app.HasGitSource() {
+		return l.lockGitProviderEntryForSource(ctx, cfg, paths, name, app, configMap)
 	}
 
-	sourceLocation := plugin.SourceReleaseLocation()
+	sourceLocation := app.SourceReleaseLocation()
 	destDir := providerDestDir(paths, name)
 	var (
 		installed *installedPackage
 		entry     LockEntry
 		err       error
 	)
-	if !plugin.HasReleaseMetadataSource() {
+	if !app.HasReleaseMetadataSource() {
 		return LockEntry{}, fmt.Errorf("provider %q source %q: only provider-release metadata sources and local manifest paths are supported", name, sourceLocation)
 	}
-	installed, entry, err = l.installMetadataSourcePackage(ctx, providermanifestv1.KindPlugin, name, fmt.Sprintf("provider %q", name), destDir, plugin, paths.configDir)
+	installed, entry, err = l.installMetadataSourcePackage(ctx, providermanifestv1.KindApp, name, fmt.Sprintf("provider %q", name), destDir, app, paths.configDir)
 	if err != nil {
 		return LockEntry{}, err
 	}
 
-	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindPlugin, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindApp, configMap); err != nil {
 		return LockEntry{}, fmt.Errorf("provider config validation for provider %q: %w", name, err)
 	}
-	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
+	fingerprint, err := ProviderFingerprint(name, app, paths.configDir)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("fingerprinting provider %q: %w", name, err)
 	}
@@ -3443,20 +3443,20 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, cfg *config.
 	return entry, nil
 }
 
-func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, plugin *config.ProviderEntry, destDir string, subject string) (LockEntry, error) {
-	if plugin == nil || !sourceBacked(plugin) {
+func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, destDir string, subject string) (LockEntry, error) {
+	if app == nil || !sourceBacked(app) {
 		return LockEntry{}, fmt.Errorf("%s requires source configuration", subject)
 	}
-	configMap, err := config.NodeToMap(plugin.Config)
+	configMap, err := config.NodeToMap(app.Config)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("decode %s config: %w", subject, err)
 	}
-	fingerprint, err := NamedUIProviderFingerprint(name, plugin, paths.configDir)
+	fingerprint, err := NamedUIProviderFingerprint(name, app, paths.configDir)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("fingerprinting %s: %w", subject, err)
 	}
-	if plugin.HasLocalSource() {
-		install, err := prepareLocalSourceInstall(providermanifestv1.KindUI, name, plugin.SourcePath(), destDir)
+	if app.HasLocalSource() {
+		install, err := prepareLocalSourceInstall(providermanifestv1.KindUI, name, app.SourcePath(), destDir)
 		if err != nil {
 			return LockEntry{}, err
 		}
@@ -3466,27 +3466,27 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, cfg *confi
 		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindUI, configMap); err != nil {
 			return LockEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
 		}
-		entry, err := localUILockEntryFromPreparedInstall(paths, name, plugin, install)
+		entry, err := localUILockEntryFromPreparedInstall(paths, name, app, install)
 		if err != nil {
 			return LockEntry{}, err
 		}
 		entry.Fingerprint = fingerprint
 		return entry, nil
 	}
-	if plugin.HasGitSource() {
-		return l.lockGitUIEntryForSource(ctx, cfg, paths, name, plugin, destDir, subject, configMap)
+	if app.HasGitSource() {
+		return l.lockGitUIEntryForSource(ctx, cfg, paths, name, app, destDir, subject, configMap)
 	}
-	expectedPackage := plugin.SourceReleaseLocation()
+	expectedPackage := app.SourceReleaseLocation()
 
 	var (
 		installed *installedPackage
 		entry     LockEntry
 		opErr     error
 	)
-	if !plugin.HasReleaseMetadataSource() {
+	if !app.HasReleaseMetadataSource() {
 		return LockEntry{}, fmt.Errorf("%s source %q: only provider-release metadata sources and local manifest paths are supported", subject, expectedPackage)
 	}
-	installed, entry, opErr = l.installMetadataSourcePackage(ctx, providermanifestv1.KindUI, name, subject, destDir, plugin, paths.configDir)
+	installed, entry, opErr = l.installMetadataSourcePackage(ctx, providermanifestv1.KindUI, name, subject, destDir, app, paths.configDir)
 	if opErr != nil {
 		return LockEntry{}, opErr
 	}
@@ -3507,11 +3507,11 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, cfg *confi
 	return entry, nil
 }
 
-func (l *Lifecycle) lockCommittedNamedUIProviderArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, plugin *config.ProviderEntry, destDir string, subject string) (LockEntry, error) {
-	if !providerRequiresCommittedLock(plugin) {
+func (l *Lifecycle) lockCommittedNamedUIProviderArtifact(ctx context.Context, cfg *config.Config, paths lifecyclePaths, name string, app *config.ProviderEntry, destDir string, subject string) (LockEntry, error) {
+	if !providerRequiresCommittedLock(app) {
 		return LockEntry{}, fmt.Errorf("%s does not require committed lock metadata", subject)
 	}
-	return l.writeNamedUIProviderArtifact(ctx, cfg, paths, name, plugin, destDir, subject)
+	return l.writeNamedUIProviderArtifact(ctx, cfg, paths, name, app, destDir, subject)
 }
 
 func (l *Lifecycle) applyPreparedProviders(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode, opts SyncOptions) error {
@@ -3746,11 +3746,11 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, state StatePaths,
 	if err != nil {
 		if paths.pluginScope != "" {
 			if locked {
-				return false, fmt.Errorf("scoped local plugin state is missing or stale for plugin %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
+				return false, fmt.Errorf("scoped local app state is missing or stale for app %q; rerun without --locked to prepare it: %w", paths.pluginScope, err)
 			}
-			return false, fmt.Errorf("preparing scoped local plugin state for plugin %q failed: %w", paths.pluginScope, err)
+			return false, fmt.Errorf("preparing scoped local app state for app %q failed: %w", paths.pluginScope, err)
 		}
-		return false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-plugin development, use `gestaltd serve --plugin NAME` or `gestaltd serve --path PATH`; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
+		return false, fmt.Errorf("source-backed providers require lock metadata; full config mode prepares all source-backed providers. For local single-app development, use `gestaltd serve --app NAME` or `gestaltd serve --path PATH`; otherwise run `%s` then `%s`: %w", formatLockCommand(paths), formatSyncLockedCommand(paths), err)
 	}
 	if err := l.applyPreparedProviders(paths, lock, cfg, mode, SyncOptions{Parallelism: 1}); err != nil {
 		return false, err
@@ -3791,7 +3791,7 @@ func installLockedPackageAtomic(packagePath, destDir string) (*installedPackage,
 	}, commit, nil
 }
 
-func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs map[string]pluginservice.EffectiveCatalogResult) error {
+func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs map[string]appservice.EffectiveCatalogResult) error {
 	if lock == nil || cfg == nil {
 		return nil
 	}
@@ -3806,7 +3806,7 @@ func attachStaticValidationMetadata(lock *Lockfile, cfg *config.Config, catalogs
 		lockEntry.StaticManifest = portableStaticValidationManifest(entry.ResolvedManifest, entry.ResolvedManifestPath)
 		entries[name] = lockEntry
 	}
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		attach(lock.Providers, name, entry)
 		if entry == nil || entry.ResolvedManifest == nil {
 			continue
@@ -3859,14 +3859,14 @@ func validateResolvedStructureForCommittedLock(paths lifecyclePaths, cfg *config
 		return nil
 	}
 	validation := &config.Config{
-		Plugins: make(map[string]*config.ProviderEntry),
+		Apps: make(map[string]*config.ProviderEntry),
 		Providers: config.ProvidersConfig{
 			UI: make(map[string]*config.UIEntry),
 		},
 	}
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if providerRequiresCommittedLock(entry) {
-			validation.Plugins[name] = entry
+			validation.Apps[name] = entry
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
@@ -3880,29 +3880,29 @@ func validateResolvedStructureForCommittedLock(paths lifecyclePaths, cfg *config
 	return config.ValidateResolvedStructure(validation)
 }
 
-func effectiveCatalogsForCommittedLock(ctx context.Context, cfg *config.Config, lock *Lockfile) (map[string]pluginservice.EffectiveCatalogResult, error) {
+func effectiveCatalogsForCommittedLock(ctx context.Context, cfg *config.Config, lock *Lockfile) (map[string]appservice.EffectiveCatalogResult, error) {
 	if cfg == nil || lock == nil || len(lock.Providers) == 0 {
 		return nil, nil
 	}
-	validation := &pluginservice.ValidationConfig{
-		Plugins: make(map[string]*pluginservice.ValidationPlugin, len(cfg.Plugins)),
+	validation := &appservice.ValidationConfig{
+		Apps: make(map[string]*appservice.ValidationApp, len(cfg.Apps)),
 	}
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if entry == nil {
 			continue
 		}
 		if _, locked := lock.Providers[name]; locked {
-			validation.Plugins[name] = config.PluginValidationEntry(entry)
+			validation.Apps[name] = config.AppValidationEntry(entry)
 			continue
 		}
 		if entry.HasLocalSource() {
-			validation.Plugins[name] = &pluginservice.ValidationPlugin{
+			validation.Apps[name] = &appservice.ValidationApp{
 				EffectiveCatalogAvailable: true,
 				StaticMetadataUnavailable: true,
 			}
 		}
 	}
-	results, err := pluginservice.EffectiveCatalogsAndDependencies(ctx, validation)
+	results, err := appservice.EffectiveCatalogsAndDependencies(ctx, validation)
 	if err != nil {
 		return nil, err
 	}
@@ -3921,11 +3921,11 @@ func synthesizedCommittedOwnedUIEntry(paths lifecyclePaths, cfg *config.Config, 
 	if !pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), entry.SourcePath()) {
 		return false
 	}
-	owner := strings.TrimSpace(entry.OwnerPlugin)
+	owner := strings.TrimSpace(entry.OwnerApp)
 	if owner == "" {
 		owner = name
 	}
-	return providerRequiresCommittedLock(cfg.Plugins[owner])
+	return providerRequiresCommittedLock(cfg.Apps[owner])
 }
 
 func portableStaticValidationManifest(manifest *providermanifestv1.Manifest, manifestPath string) *providermanifestv1.Manifest {
@@ -4088,7 +4088,7 @@ func configHasMatchingProviderEntry(cfg *config.Config, matches func(*config.Pro
 	if cfg == nil || matches == nil {
 		return false
 	}
-	for _, entry := range cfg.Plugins {
+	for _, entry := range cfg.Apps {
 		if matches(entry) {
 			return true
 		}
@@ -4127,7 +4127,7 @@ func (l *Lifecycle) applyStaticValidationProviders(ctx context.Context, paths li
 	if !configHasProviderLoading(cfg) {
 		return nil
 	}
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if entry == nil {
 			continue
 		}
@@ -4135,7 +4135,7 @@ func (l *Lifecycle) applyStaticValidationProviders(ctx context.Context, paths li
 		if err != nil {
 			return fmt.Errorf("decode provider config for provider %q: %w", name, err)
 		}
-		if err := l.applyStaticValidationEntry(ctx, paths, lockEntriesForProviderKind(lock, providermanifestv1.KindPlugin), providermanifestv1.KindPlugin, name, entry, configMap, providerDestDir(paths, name), platform, false, func(manifestPath string, manifest *providermanifestv1.Manifest) error {
+		if err := l.applyStaticValidationEntry(ctx, paths, lockEntriesForProviderKind(lock, providermanifestv1.KindApp), providermanifestv1.KindApp, name, entry, configMap, providerDestDir(paths, name), platform, false, func(manifestPath string, manifest *providermanifestv1.Manifest) error {
 			return bindResolvedProviderManifest(name, entry, manifestPath, manifest, configMap)
 		}); err != nil {
 			return err
@@ -4269,7 +4269,7 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 			}
 		}
 		if entry.StaticManifest != nil && !staticManifestReferencesPackageFiles(entry.StaticManifest) {
-			if kind == providermanifestv1.KindPlugin {
+			if kind == providermanifestv1.KindApp {
 				fingerprint, err := staticCatalogInputFingerprint(provider)
 				if err != nil {
 					return err
@@ -4316,7 +4316,7 @@ func (l *Lifecycle) applyStaticValidationEntry(ctx context.Context, paths lifecy
 	if err != nil {
 		if isStaticArchiveUnavailable(err) {
 			if manifest := fallbackStaticValidationManifest(kind, entry); manifest != nil {
-				provider.ResolvedCatalogSessionOnly = kind == providermanifestv1.KindPlugin
+				provider.ResolvedCatalogSessionOnly = kind == providermanifestv1.KindApp
 				provider.StaticManifestUnavailable = true
 				return bind("", manifest)
 			}
@@ -4333,8 +4333,8 @@ func staticValidationNeedsSourceAuthSecrets(paths lifecyclePaths, cfg *config.Co
 	check := func(lockEntries map[string]LockEntry, kind, name string, provider *config.ProviderEntry, ui bool) (bool, error) {
 		return staticValidationEntryNeedsSourceAuthSecret(paths, lockEntries, kind, name, provider, platform, ui)
 	}
-	for name, entry := range cfg.Plugins {
-		needs, err := check(lockEntriesForProviderKind(lock, providermanifestv1.KindPlugin), providermanifestv1.KindPlugin, name, entry, false)
+	for name, entry := range cfg.Apps {
+		needs, err := check(lockEntriesForProviderKind(lock, providermanifestv1.KindApp), providermanifestv1.KindApp, name, entry, false)
 		if needs || err != nil {
 			return needs, err
 		}
@@ -4531,7 +4531,7 @@ func (l *Lifecycle) installLockedArchiveForStaticValidation(ctx context.Context,
 
 func installPackageForStaticValidation(packagePath, destDir string) (*preparedInstall, error) {
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create plugin directory: %w", err)
+		return nil, fmt.Errorf("create app directory: %w", err)
 	}
 	if err := providerpkg.ExtractPackage(packagePath, destDir); err != nil {
 		return nil, err
@@ -4548,7 +4548,7 @@ func installPackageForStaticValidation(packagePath, destDir string) (*preparedIn
 	return &preparedInstall{manifestPath: manifestPath, manifest: manifest}, nil
 }
 
-type preparedPluginWork struct {
+type preparedAppWork struct {
 	name          string
 	entry         *config.ProviderEntry
 	configMap     map[string]any
@@ -4561,10 +4561,10 @@ func (l *Lifecycle) resolveConfiguredPlugins(paths lifecyclePaths, lock *Lockfil
 }
 
 func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lock *Lockfile, cfg *config.Config, mode artifactMode, opts SyncOptions) error {
-	var localWork []*preparedPluginWork
-	var ordered []*preparedPluginWork
-	for _, name := range slices.Sorted(maps.Keys(cfg.Plugins)) {
-		entry := cfg.Plugins[name]
+	var localWork []*preparedAppWork
+	var ordered []*preparedAppWork
+	for _, name := range slices.Sorted(maps.Keys(cfg.Apps)) {
+		entry := cfg.Apps[name]
 		if entry == nil {
 			continue
 		}
@@ -4572,11 +4572,11 @@ func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lo
 		if err != nil {
 			return fmt.Errorf("decode provider config for provider %q: %w", name, err)
 		}
-		work := &preparedPluginWork{
+		work := &preparedAppWork{
 			name:          name,
 			entry:         entry,
 			configMap:     configMap,
-			localParallel: localPluginParallelPrepareCandidate(paths, entry, mode),
+			localParallel: localAppParallelPrepareCandidate(paths, entry, mode),
 		}
 		ordered = append(ordered, work)
 		if work.localParallel {
@@ -4591,7 +4591,7 @@ func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lo
 			return err
 		}
 	}
-	if err := l.prepareLocalPluginProviders(paths, localWork, opts); err != nil {
+	if err := l.prepareLocalAppProviders(paths, localWork, opts); err != nil {
 		return err
 	}
 	for _, work := range ordered {
@@ -4609,7 +4609,7 @@ func (l *Lifecycle) resolveConfiguredPluginsWithOptions(paths lifecyclePaths, lo
 	return nil
 }
 
-func localPluginParallelPrepareCandidate(paths lifecyclePaths, entry *config.ProviderEntry, mode artifactMode) bool {
+func localAppParallelPrepareCandidate(paths lifecyclePaths, entry *config.ProviderEntry, mode artifactMode) bool {
 	if mode != artifactModeMaterialize || entry == nil || !entry.HasLocalSource() {
 		return false
 	}
@@ -4619,7 +4619,7 @@ func localPluginParallelPrepareCandidate(paths lifecyclePaths, entry *config.Pro
 	return true
 }
 
-func (l *Lifecycle) prepareLocalPluginProviders(paths lifecyclePaths, work []*preparedPluginWork, opts SyncOptions) error {
+func (l *Lifecycle) prepareLocalAppProviders(paths lifecyclePaths, work []*preparedAppWork, opts SyncOptions) error {
 	if len(work) == 0 {
 		return nil
 	}
@@ -4627,7 +4627,7 @@ func (l *Lifecycle) prepareLocalPluginProviders(paths lifecyclePaths, work []*pr
 	tasks := make([]pathDomainTask, 0, len(work))
 	for _, work := range work {
 		work := work
-		domains, err := localPluginSourcePathDomains(paths, work.name, work.entry)
+		domains, err := localAppSourcePathDomains(paths, work.name, work.entry)
 		if err != nil {
 			return err
 		}
@@ -4635,7 +4635,7 @@ func (l *Lifecycle) prepareLocalPluginProviders(paths lifecyclePaths, work []*pr
 			name:    work.name,
 			domains: domains,
 			run: func() error {
-				install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindPlugin, work.name, work.entry, work.configMap, providerDestDir(paths, work.name), "provider "+strconv.Quote(work.name), artifactModeMaterialize)
+				install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindApp, work.name, work.entry, work.configMap, providerDestDir(paths, work.name), "provider "+strconv.Quote(work.name), artifactModeMaterialize)
 				if err != nil {
 					return err
 				}
@@ -4650,13 +4650,13 @@ func (l *Lifecycle) prepareLocalPluginProviders(paths lifecyclePaths, work []*pr
 	return runPathDomainTasks(tasks, opts.Parallelism)
 }
 
-func localPluginSourcePathDomains(paths lifecyclePaths, name string, entry *config.ProviderEntry) ([]string, error) {
+func localAppSourcePathDomains(paths lifecyclePaths, name string, entry *config.ProviderEntry) ([]string, error) {
 	if entry == nil {
 		return nil, nil
 	}
 	normalized, err := normalizeLocalSource(entry.SourcePath())
 	if err != nil {
-		return nil, fmt.Errorf("manifest for plugin %q not found at %s: %w", name, entry.SourcePath(), err)
+		return nil, fmt.Errorf("manifest for app %q not found at %s: %w", name, entry.SourcePath(), err)
 	}
 	domainPaths := []string{
 		normalized.sourceDir,
@@ -4672,7 +4672,7 @@ func localPluginSourcePathDomains(paths lifecyclePaths, name string, entry *conf
 		return nil, err
 	}
 	domainPaths = append(domainPaths, buildDomains...)
-	if manifest != nil && manifest.Kind == providermanifestv1.KindPlugin && manifest.Spec != nil && manifest.Spec.UI != nil && strings.TrimSpace(manifest.Spec.UI.Path) != "" {
+	if manifest != nil && manifest.Kind == providermanifestv1.KindApp && manifest.Spec != nil && manifest.Spec.UI != nil && strings.TrimSpace(manifest.Spec.UI.Path) != "" {
 		uiManifestPath := filepath.Join(normalized.sourceDir, filepath.FromSlash(manifest.Spec.UI.Path))
 		uiNormalized, err := normalizeLocalSource(uiManifestPath)
 		if err != nil {
@@ -4699,37 +4699,37 @@ func synthesizePluginOwnedUIEntries(cfg *config.Config) error {
 }
 
 func synthesizeCommittedPluginOwnedUIEntries(cfg *config.Config) error {
-	return synthesizePluginOwnedUIEntriesMatching(cfg, func(_ string, plugin *config.ProviderEntry) bool {
-		return providerRequiresCommittedLock(plugin)
+	return synthesizePluginOwnedUIEntriesMatching(cfg, func(_ string, app *config.ProviderEntry) bool {
+		return providerRequiresCommittedLock(app)
 	})
 }
 
 func synthesizePluginOwnedUIEntriesMatching(cfg *config.Config, include func(string, *config.ProviderEntry) bool) error {
-	if cfg == nil || len(cfg.Plugins) == 0 {
+	if cfg == nil || len(cfg.Apps) == 0 {
 		return nil
 	}
 	if cfg.Providers.UI == nil {
 		cfg.Providers.UI = map[string]*config.UIEntry{}
 	}
 
-	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
+	pluginNames := slices.Sorted(maps.Keys(cfg.Apps))
 	for _, pluginName := range pluginNames {
-		plugin := cfg.Plugins[pluginName]
-		if plugin == nil || (include != nil && !include(pluginName, plugin)) || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" {
+		app := cfg.Apps[pluginName]
+		if app == nil || (include != nil && !include(pluginName, app)) || strings.TrimSpace(app.UI) != "" || strings.TrimSpace(app.MountPath) == "" {
 			continue
 		}
-		manifestSpec := plugin.ManifestSpec()
+		manifestSpec := app.ManifestSpec()
 		if manifestSpec == nil || manifestSpec.UI == nil {
-			return fmt.Errorf("plugin %q ui.path requires spec.ui or plugins.%s.ui.bundle", pluginName, pluginName)
+			return fmt.Errorf("plugin %q ui.path requires spec.ui or apps.%s.ui.bundle", pluginName, pluginName)
 		}
 		ownedUI := manifestSpec.UI
-		entry, err := ownedUIEntryForPlugin(plugin, ownedUI)
+		entry, err := ownedUIEntryForPlugin(app, ownedUI)
 		if err != nil {
 			return fmt.Errorf("plugin %q ui: %w", pluginName, err)
 		}
-		entry.Path = strings.TrimSpace(plugin.MountPath)
-		entry.AuthorizationPolicy = strings.TrimSpace(plugin.AuthorizationPolicy)
-		entry.OwnerPlugin = pluginName
+		entry.Path = strings.TrimSpace(app.MountPath)
+		entry.AuthorizationPolicy = strings.TrimSpace(app.AuthorizationPolicy)
+		entry.OwnerApp = pluginName
 		if existing := cfg.Providers.UI[pluginName]; existing != nil {
 			if err := validateSynthesizedPluginUIEntry(pluginName, existing, entry); err != nil {
 				return err
@@ -4739,7 +4739,7 @@ func synthesizePluginOwnedUIEntriesMatching(cfg *config.Config, include func(str
 			}
 			existing.Path = cmp.Or(existing.Path, entry.Path)
 			existing.AuthorizationPolicy = cmp.Or(existing.AuthorizationPolicy, entry.AuthorizationPolicy)
-			existing.OwnerPlugin = cmp.Or(existing.OwnerPlugin, entry.OwnerPlugin)
+			existing.OwnerApp = cmp.Or(existing.OwnerApp, entry.OwnerApp)
 			continue
 		}
 		cfg.Providers.UI[pluginName] = entry
@@ -4747,11 +4747,11 @@ func synthesizePluginOwnedUIEntriesMatching(cfg *config.Config, include func(str
 	return nil
 }
 
-func ownedUIEntryForPlugin(plugin *config.ProviderEntry, ownedUI *providermanifestv1.OwnedUI) (*config.UIEntry, error) {
-	if plugin == nil || ownedUI == nil {
+func ownedUIEntryForPlugin(app *config.ProviderEntry, ownedUI *providermanifestv1.OwnedUI) (*config.UIEntry, error) {
+	if app == nil || ownedUI == nil {
 		return nil, fmt.Errorf("owned ui definition is required")
 	}
-	return ownedUIEntryFromManifest(plugin.ResolvedManifestPath, ownedUI)
+	return ownedUIEntryFromManifest(app.ResolvedManifestPath, ownedUI)
 }
 
 func ownedUIEntryFromManifest(manifestPath string, ownedUI *providermanifestv1.OwnedUI) (*config.UIEntry, error) {
@@ -4762,7 +4762,7 @@ func ownedUIEntryFromManifest(manifestPath string, ownedUI *providermanifestv1.O
 		return nil, fmt.Errorf("spec.ui.path is required")
 	}
 	if strings.TrimSpace(manifestPath) == "" {
-		return nil, fmt.Errorf("resolved plugin manifest path is required for spec.ui.path")
+		return nil, fmt.Errorf("resolved app manifest path is required for spec.ui.path")
 	}
 	entry := &config.UIEntry{}
 	entry.Source.Path = filepath.Clean(filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(ownedUI.Path)))
@@ -4774,19 +4774,19 @@ func validateSynthesizedPluginUIEntry(pluginName string, existing, expected *con
 		return nil
 	}
 	if current := strings.TrimSpace(existing.SourceReleaseLocation()); current != "" {
-		return fmt.Errorf("config validation: plugins.%s owned ui conflicts with providers.ui.%s.source", pluginName, pluginName)
+		return fmt.Errorf("config validation: apps.%s owned ui conflicts with providers.ui.%s.source", pluginName, pluginName)
 	}
 	if current := strings.TrimSpace(existing.Source.Path); current != "" && !equivalentProviderManifestPath(current, expected.Source.Path) {
-		return fmt.Errorf("config validation: plugins.%s owned ui conflicts with providers.ui.%s.source.path", pluginName, pluginName)
+		return fmt.Errorf("config validation: apps.%s owned ui conflicts with providers.ui.%s.source.path", pluginName, pluginName)
 	}
 	if current := strings.TrimSpace(existing.Path); current != "" && current != expected.Path {
-		return fmt.Errorf("config validation: plugins.%s.ui.path %q conflicts with providers.ui.%s.path", pluginName, expected.Path, pluginName)
+		return fmt.Errorf("config validation: apps.%s.ui.path %q conflicts with providers.ui.%s.path", pluginName, expected.Path, pluginName)
 	}
 	if current := strings.TrimSpace(existing.AuthorizationPolicy); current != "" && current != expected.AuthorizationPolicy {
-		return fmt.Errorf("config validation: plugins.%s.authorizationPolicy conflicts with providers.ui.%s.authorizationPolicy", pluginName, pluginName)
+		return fmt.Errorf("config validation: apps.%s.authorizationPolicy conflicts with providers.ui.%s.authorizationPolicy", pluginName, pluginName)
 	}
-	if current := strings.TrimSpace(existing.OwnerPlugin); current != "" && current != expected.OwnerPlugin {
-		return fmt.Errorf("config validation: plugins.%s owned ui conflicts with providers.ui.%s owner", pluginName, pluginName)
+	if current := strings.TrimSpace(existing.OwnerApp); current != "" && current != expected.OwnerApp {
+		return fmt.Errorf("config validation: apps.%s owned ui conflicts with providers.ui.%s owner", pluginName, pluginName)
 	}
 	return nil
 }
@@ -4865,8 +4865,8 @@ func (l *Lifecycle) ensureLocalPreparedInstall(paths lifecyclePaths, kind, name 
 	return install, nil
 }
 
-func bindPreparedProviderInstall(paths lifecyclePaths, name string, plugin *config.ProviderEntry, configMap map[string]any, install *preparedInstall) error {
-	if err := bindResolvedProviderManifest(name, plugin, install.manifestPath, install.manifest, configMap); err != nil {
+func bindPreparedProviderInstall(paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any, install *preparedInstall) error {
+	if err := bindResolvedProviderManifest(name, app, install.manifestPath, install.manifest, configMap); err != nil {
 		return err
 	}
 	if install.executablePath == "" {
@@ -4879,25 +4879,25 @@ func bindPreparedProviderInstall(paths lifecyclePaths, name string, plugin *conf
 	if err != nil {
 		return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
 	}
-	plugin.Command = install.executablePath
-	plugin.Args = append([]string(nil), args...)
+	app.Command = install.executablePath
+	app.Args = append([]string(nil), args...)
 	return nil
 }
 
-func (l *Lifecycle) applyLocalProviderEntry(paths lifecyclePaths, name string, plugin *config.ProviderEntry, configMap map[string]any, mode artifactMode) error {
+func (l *Lifecycle) applyLocalProviderEntry(paths lifecyclePaths, name string, app *config.ProviderEntry, configMap map[string]any, mode artifactMode) error {
 	subject := "provider " + strconv.Quote(name)
-	install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindPlugin, name, plugin, configMap, providerDestDir(paths, name), subject, mode)
+	install, err := l.ensureLocalPreparedInstall(paths, providermanifestv1.KindApp, name, app, configMap, providerDestDir(paths, name), subject, mode)
 	if err != nil {
 		return err
 	}
-	return bindPreparedProviderInstall(paths, name, plugin, configMap, install)
+	return bindPreparedProviderInstall(paths, name, app, configMap, install)
 }
 
-func bindPreparedComponentInstall(paths lifecyclePaths, kind, name string, plugin *config.ProviderEntry, configMap map[string]any, destDir string, install *preparedInstall) error {
+func bindPreparedComponentInstall(paths lifecyclePaths, kind, name string, app *config.ProviderEntry, configMap map[string]any, destDir string, install *preparedInstall) error {
 	if install.executablePath == "" {
 		return preparedArtifactStaleError(paths, "prepared executable for %s %q not found in %s", kind, name, destDir)
 	}
-	if err := bindResolvedComponentManifest(kind, name, plugin, install.manifestPath, install.manifest, configMap); err != nil {
+	if err := bindResolvedComponentManifest(kind, name, app, install.manifestPath, install.manifest, configMap); err != nil {
 		return err
 	}
 	if _, err := os.Stat(install.executablePath); err != nil {
@@ -4907,18 +4907,18 @@ func bindPreparedComponentInstall(paths lifecyclePaths, kind, name string, plugi
 	if err != nil {
 		return fmt.Errorf("resolve entrypoint for %s %q: %w", kind, name, err)
 	}
-	plugin.Command = install.executablePath
-	plugin.Args = append([]string(nil), args...)
+	app.Command = install.executablePath
+	app.Args = append([]string(nil), args...)
 	return nil
 }
 
-func (l *Lifecycle) applyLocalComponentEntry(paths lifecyclePaths, kind, name string, plugin *config.ProviderEntry, configMap map[string]any, destDir string, mode artifactMode) error {
+func (l *Lifecycle) applyLocalComponentEntry(paths lifecyclePaths, kind, name string, app *config.ProviderEntry, configMap map[string]any, destDir string, mode artifactMode) error {
 	subject := fmt.Sprintf("%s %q", kind, name)
-	install, err := l.ensureLocalPreparedInstall(paths, kind, name, plugin, configMap, destDir, subject, mode)
+	install, err := l.ensureLocalPreparedInstall(paths, kind, name, app, configMap, destDir, subject, mode)
 	if err != nil {
 		return err
 	}
-	return bindPreparedComponentInstall(paths, kind, name, plugin, configMap, destDir, install)
+	return bindPreparedComponentInstall(paths, kind, name, app, configMap, destDir, install)
 }
 
 func bindPreparedUIInstall(provider *config.ProviderEntry, subject, destDir string, configMap map[string]any, install *preparedInstall) (string, error) {
@@ -5074,9 +5074,9 @@ func (l *Lifecycle) applyComponentProvider(paths lifecyclePaths, lockEntries map
 	return nil
 }
 
-func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfile, name string, plugin *config.ProviderEntry, configMap map[string]any, mode artifactMode) error {
-	if plugin != nil && plugin.HasLocalSource() {
-		return l.applyLocalProviderEntry(paths, name, plugin, configMap, mode)
+func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfile, name string, app *config.ProviderEntry, configMap map[string]any, mode artifactMode) error {
+	if app != nil && app.HasLocalSource() {
+		return l.applyLocalProviderEntry(paths, name, app, configMap, mode)
 	}
 	if lock == nil {
 		return lockMetadataStaleError(paths, "lock entry for provider %q is missing or stale", name)
@@ -5085,10 +5085,10 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 	if !ok {
 		return lockMetadataStaleError(paths, "lock entry for provider %q is missing or stale", name)
 	}
-	if !lockEntrySourceMatchesProvider(paths, plugin, entry) {
+	if !lockEntrySourceMatchesProvider(paths, app, entry) {
 		return lockMetadataStaleError(paths, "lock entry for provider %q is stale", name)
 	}
-	fingerprintMatches, err := lockEntryFingerprintMatchesProviderForMode(name, plugin, paths.configDir, entry, mode)
+	fingerprintMatches, err := lockEntryFingerprintMatchesProviderForMode(name, app, paths.configDir, entry, mode)
 	if err != nil {
 		return fmt.Errorf("fingerprinting provider %q: %w", name, err)
 	}
@@ -5107,11 +5107,11 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 	}
 
 	install, err := inspectPreparedInstall(destDir)
-	needMaterialize := err != nil || !preparedInstallMatchesLockForMode(providermanifestv1.KindPlugin, name, plugin, entry, install, mode)
+	needMaterialize := err != nil || !preparedInstallMatchesLockForMode(providermanifestv1.KindApp, name, app, entry, install, mode)
 	if err == nil && !needMaterialize {
 		platform := providerpkg.CurrentPlatformString()
 		if _, resolvedKey, ok := resolveArchiveForPlatform(entry, platform); ok {
-			if policyErr := validateLockedArchivePolicy(fmt.Sprintf("provider %q", name), providermanifestv1.KindPlugin, install.manifest, entry, platform, resolvedKey); policyErr != nil {
+			if policyErr := validateLockedArchivePolicy(fmt.Sprintf("provider %q", name), providermanifestv1.KindApp, install.manifest, entry, platform, resolvedKey); policyErr != nil {
 				return policyErr
 			}
 		}
@@ -5126,19 +5126,19 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			return preparedArtifactStaleError(paths, "prepared artifact for provider %q is missing or stale", name)
 		}
 		if len(entry.Archives) == 0 {
-			if !plugin.HasLocalSource() && !plugin.HasGitSource() {
+			if !app.HasLocalSource() && !app.HasGitSource() {
 				return preparedArtifactStaleError(paths, "prepared artifact for provider %q is missing or stale", name)
 			}
 			if stagedInstall == nil {
-				if plugin.HasGitSource() {
-					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindPlugin, name, destDir, plugin)
+				if app.HasGitSource() {
+					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, providermanifestv1.KindApp, name, destDir, app)
 				} else {
-					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindPlugin, name, plugin.SourcePath(), destDir)
+					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(providermanifestv1.KindApp, name, app.SourcePath(), destDir)
 				}
 				if err != nil {
 					return err
 				}
-				fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
+				fingerprint, err := ProviderFingerprint(name, app, paths.configDir)
 				if err != nil {
 					return fmt.Errorf("fingerprinting provider %q: %w", name, err)
 				}
@@ -5153,7 +5153,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 				return err
 			}
 		} else {
-			if err := l.materializeLockedProvider(context.Background(), paths, name, plugin, entry); err != nil {
+			if err := l.materializeLockedProvider(context.Background(), paths, name, app, entry); err != nil {
 				return err
 			}
 		}
@@ -5162,20 +5162,20 @@ func (l *Lifecycle) applyLockedProviderEntry(paths lifecyclePaths, lock *Lockfil
 			return fmt.Errorf("read prepared manifest for provider %q: %w", name, err)
 		}
 	}
-	return bindPreparedProviderInstall(paths, name, plugin, configMap, install)
+	return bindPreparedProviderInstall(paths, name, app, configMap, install)
 }
 
-func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockEntry, kind, name string, plugin *config.ProviderEntry, configMap map[string]any, destDir string, mode artifactMode) error {
-	if plugin != nil && plugin.HasLocalSource() {
-		return l.applyLocalComponentEntry(paths, kind, name, plugin, configMap, destDir, mode)
+func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockEntry, kind, name string, app *config.ProviderEntry, configMap map[string]any, destDir string, mode artifactMode) error {
+	if app != nil && app.HasLocalSource() {
+		return l.applyLocalComponentEntry(paths, kind, name, app, configMap, destDir, mode)
 	}
 	if entry == nil {
 		return lockMetadataStaleError(paths, "lock entry for %s %q is missing or stale", kind, name)
 	}
-	if !lockEntrySourceMatchesProvider(paths, plugin, *entry) {
+	if !lockEntrySourceMatchesProvider(paths, app, *entry) {
 		return lockMetadataStaleError(paths, "lock entry for %s %q is stale", kind, name)
 	}
-	fingerprintMatches, err := lockEntryFingerprintMatchesProviderForMode(name, plugin, paths.configDir, *entry, mode)
+	fingerprintMatches, err := lockEntryFingerprintMatchesProviderForMode(name, app, paths.configDir, *entry, mode)
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 	}
@@ -5193,7 +5193,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 	}
 
 	install, err := inspectPreparedInstall(destDir)
-	needMaterialize := err != nil || !preparedInstallMatchesLockForMode(kind, name, plugin, *entry, install, mode)
+	needMaterialize := err != nil || !preparedInstallMatchesLockForMode(kind, name, app, *entry, install, mode)
 	if err == nil && !needMaterialize {
 		platform := providerpkg.CurrentPlatformString()
 		if _, resolvedKey, ok := resolveArchiveForPlatform(*entry, platform); ok {
@@ -5215,19 +5215,19 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 			return preparedArtifactStaleError(paths, "prepared artifact for %s %q is missing or stale", kind, name)
 		}
 		if len(entry.Archives) == 0 {
-			if !plugin.HasLocalSource() && !plugin.HasGitSource() {
+			if !app.HasLocalSource() && !app.HasGitSource() {
 				return preparedArtifactStaleError(paths, "prepared artifact for %s %q is missing or stale", kind, name)
 			}
 			if stagedInstall == nil {
-				if plugin.HasGitSource() {
-					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, kind, name, destDir, plugin)
+				if app.HasGitSource() {
+					stagedInstall, cleanupStaged, commitStaged, err = l.stageGitSourceInstall(context.Background(), paths, kind, name, destDir, app)
 				} else {
-					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(kind, name, plugin.SourcePath(), destDir)
+					stagedInstall, cleanupStaged, commitStaged, err = stageLocalSourceInstall(kind, name, app.SourcePath(), destDir)
 				}
 				if err != nil {
 					return err
 				}
-				fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
+				fingerprint, err := ProviderFingerprint(name, app, paths.configDir)
 				if err != nil {
 					return fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 				}
@@ -5242,7 +5242,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 				return err
 			}
 		} else {
-			if err := l.materializeLockedComponent(context.Background(), paths, kind, name, plugin, *entry, destDir); err != nil {
+			if err := l.materializeLockedComponent(context.Background(), paths, kind, name, app, *entry, destDir); err != nil {
 				return err
 			}
 		}
@@ -5251,24 +5251,24 @@ func (l *Lifecycle) applyLockedComponentEntry(paths lifecyclePaths, entry *LockE
 			return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
 		}
 	}
-	return bindPreparedComponentInstall(paths, kind, name, plugin, configMap, destDir, install)
+	return bindPreparedComponentInstall(paths, kind, name, app, configMap, destDir, install)
 }
 
-func bindResolvedProviderManifest(name string, plugin *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
+func bindResolvedProviderManifest(name string, app *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
 	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
-	if err := validateInstalledManifestKind(providermanifestv1.KindPlugin, name, manifest); err != nil {
+	if err := validateInstalledManifestKind(providermanifestv1.KindApp, name, manifest); err != nil {
 		return err
 	}
-	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, providermanifestv1.KindPlugin, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, providermanifestv1.KindApp, configMap); err != nil {
 		return fmt.Errorf("provider config validation for provider %q: %w", name, err)
 	}
-	resolveProviderIcon(manifest, manifestPath, plugin)
-	plugin.ResolvedManifestPath = manifestPath
-	plugin.ResolvedManifest = manifest
+	resolveProviderIcon(manifest, manifestPath, app)
+	app.ResolvedManifestPath = manifestPath
+	app.ResolvedManifest = manifest
 	return nil
 }
 
-func bindResolvedComponentManifest(kind, name string, plugin *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
+func bindResolvedComponentManifest(kind, name string, app *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
 	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
 	if err := validateInstalledManifestKind(kind, name, manifest); err != nil {
 		return err
@@ -5276,13 +5276,13 @@ func bindResolvedComponentManifest(kind, name string, plugin *config.ProviderEnt
 	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, kind, configMap); err != nil {
 		return fmt.Errorf("provider config validation for %s %q: %w", kind, name, err)
 	}
-	resolveProviderIcon(manifest, manifestPath, plugin)
-	plugin.ResolvedManifestPath = manifestPath
-	plugin.ResolvedManifest = manifest
+	resolveProviderIcon(manifest, manifestPath, app)
+	app.ResolvedManifestPath = manifestPath
+	app.ResolvedManifest = manifest
 	return nil
 }
 
-func bindResolvedUIManifest(plugin *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
+func bindResolvedUIManifest(app *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
 	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
 	if err := validateInstalledManifestKind(providermanifestv1.KindUI, "provider", manifest); err != nil {
 		return err
@@ -5290,14 +5290,14 @@ func bindResolvedUIManifest(plugin *config.ProviderEntry, manifestPath string, m
 	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, providermanifestv1.KindUI, configMap); err != nil {
 		return fmt.Errorf("provider config validation for ui provider: %w", err)
 	}
-	resolveProviderIcon(manifest, manifestPath, plugin)
-	plugin.ResolvedManifestPath = manifestPath
-	plugin.ResolvedManifest = manifest
+	resolveProviderIcon(manifest, manifestPath, app)
+	app.ResolvedManifestPath = manifestPath
+	app.ResolvedManifest = manifest
 	return nil
 }
 
-func bindPathBackedUIManifest(plugin *config.ProviderEntry, configMap map[string]any) (string, error) {
-	manifestPath := plugin.SourcePath()
+func bindPathBackedUIManifest(app *config.ProviderEntry, configMap map[string]any) (string, error) {
+	manifestPath := app.SourcePath()
 	if strings.TrimSpace(manifestPath) == "" {
 		return "", fmt.Errorf("resolved ui manifest path is required")
 	}
@@ -5310,7 +5310,7 @@ func bindPathBackedUIManifest(plugin *config.ProviderEntry, configMap map[string
 	if err != nil {
 		return "", fmt.Errorf("prepare manifest for ui provider: %w", err)
 	}
-	if err := bindResolvedUIManifest(plugin, manifestPath, manifest, configMap); err != nil {
+	if err := bindResolvedUIManifest(app, manifestPath, manifest, configMap); err != nil {
 		return "", err
 	}
 	assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Spec.AssetRoot))
@@ -5320,7 +5320,7 @@ func bindPathBackedUIManifest(plugin *config.ProviderEntry, configMap map[string
 	return assetRoot, nil
 }
 
-func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyclePaths, name string, plugin *config.ProviderEntry, entry LockEntry) error {
+func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyclePaths, name string, app *config.ProviderEntry, entry LockEntry) error {
 	platform := providerpkg.CurrentPlatformString()
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
@@ -5333,7 +5333,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyc
 	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
 		return fmt.Errorf("no verified hash for platform %s for provider %q; run `%s --platform %s`", platform, name, formatLockCommand(paths), platform)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archiveLocation)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
 	if err != nil {
 		return fmt.Errorf("download locked source provider for provider %q: %w", name, err)
 	}
@@ -5367,7 +5367,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyc
 	if installed.Manifest.Version != entry.Version {
 		return fmt.Errorf("locked source provider manifest version mismatch for provider %q: got %q, want %q", name, installed.Manifest.Version, entry.Version)
 	}
-	if err := validateLockedArchivePolicy(fmt.Sprintf("provider %q", name), providermanifestv1.KindPlugin, installed.Manifest, entry, platform, resolvedKey); err != nil {
+	if err := validateLockedArchivePolicy(fmt.Sprintf("provider %q", name), providermanifestv1.KindApp, installed.Manifest, entry, platform, resolvedKey); err != nil {
 		return err
 	}
 	if err := commitInstall(); err != nil {
@@ -5376,7 +5376,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths lifecyc
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecyclePaths, kind, name string, plugin *config.ProviderEntry, entry LockEntry, destDir string) error {
+func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecyclePaths, kind, name string, app *config.ProviderEntry, entry LockEntry, destDir string) error {
 	platform := providerpkg.CurrentPlatformString()
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
@@ -5389,7 +5389,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecy
 	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
 		return fmt.Errorf("no verified hash for platform %s for %s %q; run `%s --platform %s`", platform, kind, name, formatLockCommand(paths), platform)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archiveLocation)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
 	if err != nil {
 		return fmt.Errorf("download locked source provider for %s %q: %w", kind, name, err)
 	}
@@ -5437,7 +5437,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths lifecy
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, plugin *config.ProviderEntry, entry LockEntry, destDir string) error {
+func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifecyclePaths, app *config.ProviderEntry, entry LockEntry, destDir string) error {
 	platform := providerpkg.CurrentPlatformString()
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
@@ -5450,7 +5450,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths lifec
 	if archive.SHA256 == "" && archiveReferenceNeedsIntegrityHash(archiveLocation) {
 		return fmt.Errorf("no verified hash for platform %s for ui provider; run `%s --platform %s`", platform, formatLockCommand(paths), platform)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archiveLocation)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(app), archiveLocation)
 	if err != nil {
 		return fmt.Errorf("download locked source for ui provider: %w", err)
 	}
@@ -5525,7 +5525,7 @@ func (l *Lifecycle) hashArchiveEntry(ctx context.Context, kind, name string, ent
 	}
 	policyKind := archivePolicyKind(kind)
 	var manifest *providermanifestv1.Manifest
-	if policyKind == providermanifestv1.KindPlugin {
+	if policyKind == providermanifestv1.KindApp {
 		var manifestErr error
 		manifest, manifestErr = readLockEntryManifest(paths, *entry, lockEntryDestDir(paths, kind, name))
 		if manifestErr != nil {
@@ -5553,7 +5553,7 @@ func (l *Lifecycle) hashArchiveEntry(ctx context.Context, kind, name string, ent
 	return nil
 }
 
-func resolveProviderIcon(manifest *providermanifestv1.Manifest, manifestPath string, plugin *config.ProviderEntry) {
+func resolveProviderIcon(manifest *providermanifestv1.Manifest, manifestPath string, app *config.ProviderEntry) {
 	if manifest.IconFile == "" {
 		return
 	}
@@ -5562,7 +5562,7 @@ func resolveProviderIcon(manifest *providermanifestv1.Manifest, manifestPath str
 		slog.Warn("provider icon_file not found", "path", iconPath, "error", err)
 		return
 	}
-	plugin.ResolvedIconFile = iconPath
+	app.ResolvedIconFile = iconPath
 }
 
 func providerEntrypointArgs(manifest *providermanifestv1.Manifest) ([]string, error) {

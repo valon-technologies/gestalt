@@ -14,9 +14,9 @@ import (
 	"strings"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
-	"github.com/valon-technologies/gestalt/server/services/plugins/source"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/source"
 	"gopkg.in/yaml.v3"
 )
 
@@ -153,7 +153,7 @@ func runProviderRelease(args []string) (err error) {
 	if err != nil {
 		return fmt.Errorf("invalid source in manifest: %w", err)
 	}
-	pluginName := src.PluginName()
+	pluginName := src.AppName()
 
 	if err := os.MkdirAll(*outputDir, 0755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
@@ -353,7 +353,7 @@ func buildPlatformArchive(manifestPath, pluginName, version string, platform rel
 	return createReleaseArchive(outputDir, archiveName, func(stagingDir string) (*providerpkg.StagedPreparedInstall, error) {
 		return providerpkg.StageSourcePreparedInstallDir(manifestPath, stagingDir, providerpkg.StageSourcePreparedInstallOptions{
 			VersionOverride: version,
-			PluginName:      pluginName,
+			AppName:      pluginName,
 			GOOS:            platform.GOOS,
 			GOARCH:          platform.GOARCH,
 		})
@@ -405,7 +405,7 @@ func currentReleasePlatform() string {
 }
 
 func buildSourceArchive(manifestPath, pluginName, version, outputDir string) (string, error) {
-	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s.tar.gz", pluginName, version)
+	archiveName := fmt.Sprintf("gestalt-app-%s_v%s.tar.gz", pluginName, version)
 	return createReleaseArchive(outputDir, archiveName, func(stagingDir string) (*providerpkg.StagedPreparedInstall, error) {
 		return providerpkg.StageSourcePreparedInstallDir(manifestPath, stagingDir, providerpkg.StageSourcePreparedInstallOptions{
 			VersionOverride: version,
@@ -414,18 +414,18 @@ func buildSourceArchive(manifestPath, pluginName, version, outputDir string) (st
 }
 
 func validateStagedReleaseCatalog(staged *providerpkg.StagedPreparedInstall) error {
-	if staged == nil || staged.Manifest == nil || staged.Manifest.Kind != providermanifestv1.KindPlugin {
+	if staged == nil || staged.Manifest == nil || staged.Manifest.Kind != providermanifestv1.KindApp {
 		return nil
 	}
 	src, err := source.Parse(staged.Manifest.Source)
 	if err != nil {
 		return fmt.Errorf("invalid source in staged manifest: %w", err)
 	}
-	return pluginservice.ValidateEffectiveManifest(context.Background(), src.PluginName(), staged.ManifestPath, staged.Manifest)
+	return appservice.ValidateEffectiveManifest(context.Background(), src.AppName(), staged.ManifestPath, staged.Manifest)
 }
 
 func platformArchiveName(pluginName, version string, plat releasePlatform) string {
-	return fmt.Sprintf("gestalt-plugin-%s_v%s_%s.tar.gz", pluginName, version, providerpkg.PlatformArchiveSuffix(plat.GOOS, plat.GOARCH))
+	return fmt.Sprintf("gestalt-app-%s_v%s_%s.tar.gz", pluginName, version, providerpkg.PlatformArchiveSuffix(plat.GOOS, plat.GOARCH))
 }
 
 func writeChecksums(dir string, archives []releaseArchive) error {
@@ -524,7 +524,7 @@ func releaseRuntimeMetadata(manifest *providermanifestv1.Manifest, archives []re
 	}
 
 	switch kind {
-	case providermanifestv1.KindPlugin:
+	case providermanifestv1.KindApp:
 		if releaseIncludesBuiltPluginArtifact(archives) {
 			return providerReleaseRuntimeKindExecutable, nil
 		}
@@ -560,7 +560,7 @@ func validateReleaseOutputDir(manifest *providermanifestv1.Manifest, sourceDir, 
 
 	sourceAbs, err := filepath.Abs(sourceDir)
 	if err != nil {
-		return fmt.Errorf("resolve plugin root: %w", err)
+		return fmt.Errorf("resolve app root: %w", err)
 	}
 
 	assetRootAbs := filepath.Join(sourceAbs, filepath.FromSlash(assetRoot))
@@ -596,7 +596,7 @@ func normalizeReleasePath(rel string) (string, error) {
 
 	cleanPath := path.Clean(strings.ReplaceAll(rel, "\\", "/"))
 	if path.IsAbs(cleanPath) || cleanPath == ".." || strings.HasPrefix(cleanPath, "../") {
-		return "", fmt.Errorf("release path %q must stay within plugin root", rel)
+		return "", fmt.Errorf("release path %q must stay within app root", rel)
 	}
 	return cleanPath, nil
 }
@@ -615,7 +615,7 @@ func printProviderUsage(w io.Writer) {
 	writeUsageLine(w, "  repo        Manage provider package repositories")
 	writeUsageLine(w, "  search      Search configured provider package repositories")
 	writeUsageLine(w, "  upgrade     Refresh a provider package lock or version constraint")
-	writeUsageLine(w, "  validate    Validate a local source plugin inside a synthesized Gestalt config")
+	writeUsageLine(w, "  validate    Validate a local source app inside a synthesized Gestalt config")
 }
 
 func printProviderReleaseUsage(w io.Writer) {

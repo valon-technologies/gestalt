@@ -1,4 +1,4 @@
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 server:
   encryptionKey: dev-key-for-example-only
   providers:
@@ -11,9 +11,9 @@ providers:
       config:
         dsn: sqlite://./example.db
 
-plugins:
+apps:
   example:
     source:
-      path: ./plugin.yaml
+      path: ./app.yaml
     config:
       greeting: "Hello from example Rust plugin"

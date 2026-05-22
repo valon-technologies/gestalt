@@ -15,5 +15,5 @@ type TelemetryProviders = metricutil.TelemetryProviders
 type AppendRuntimeLogEntry = runtimelogs.AppendEntry
 
 func RegisterRuntimeLogHostServer(srv *grpc.Server, runtimeProviderName string, appendLogs func(context.Context, string, string, []AppendRuntimeLogEntry) (int64, error)) {
-	proto.RegisterPluginRuntimeLogHostServer(srv, NewRuntimeLogHostServer(runtimeProviderName, appendLogs))
+	proto.RegisterAppRuntimeLogHostServer(srv, NewRuntimeLogHostServer(runtimeProviderName, appendLogs))
 }

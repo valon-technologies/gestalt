@@ -2448,7 +2448,7 @@ fn build_messages(system: &[String], messages: &[String]) -> Vec<Value> {
 
 fn agent_tool_ref_value(tool: &AgentToolArg) -> Value {
     json!({
-        "plugin": tool.plugin,
+        "app": tool.app,
         "operation": tool.operation,
     })
 }

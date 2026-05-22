@@ -12,20 +12,20 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/egress"
-	pluginservice "github.com/valon-technologies/gestalt/server/services/plugins"
-	"github.com/valon-technologies/gestalt/server/services/plugins/registry"
+	appservice "github.com/valon-technologies/gestalt/server/services/apps"
+	"github.com/valon-technologies/gestalt/server/services/apps/registry"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 )
 
 func buildProviderDevManager(cfg *config.Config, providers *registry.ProviderMap[core.Provider], deps Deps) (*providerdev.Manager, error) {
-	if cfg == nil || len(cfg.Plugins) == 0 {
+	if cfg == nil || len(cfg.Apps) == 0 {
 		return nil, nil
 	}
 
 	sharedAttachmentState := cfg.Server.Dev.AttachmentState == config.DevAttachmentStateIndexedDB
 	runtimeHostServiceDescriptors := map[string][]hostServiceBindingDescriptor{}
-	targets := make([]providerdev.Target, 0, len(cfg.Plugins))
-	for name, entry := range cfg.Plugins {
+	targets := make([]providerdev.Target, 0, len(cfg.Apps))
+	for name, entry := range cfg.Apps {
 		result := deriveProviderDevTarget(name, entry, providers, deps, runtimeHostServiceDescriptors)
 		switch result.state {
 		case providerDevTargetAttachable:
@@ -127,9 +127,9 @@ func deriveProviderDevTarget(name string, entry *config.ProviderEntry, providers
 	}
 }
 
-func providerDevStaticSpecFromProvider(name string, entry *config.ProviderEntry, provider core.Provider) pluginservice.StaticProviderSpec {
+func providerDevStaticSpecFromProvider(name string, entry *config.ProviderEntry, provider core.Provider) appservice.StaticProviderSpec {
 	meta := resolveProviderMetadata(entry)
-	spec := pluginservice.StaticProviderSpec{
+	spec := appservice.StaticProviderSpec{
 		Name:             name,
 		DisplayName:      provider.DisplayName(),
 		Description:      provider.Description(),
@@ -204,14 +204,14 @@ func registerProviderDevPublicHostServices(cfg *config.Config, manager *provider
 	for i := range targets {
 		targetNames[targets[i].Name] = struct{}{}
 	}
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if _, ok := targetNames[name]; !ok {
 			continue
 		}
 		if entry == nil || !entry.HasResolvedManifest() {
 			continue
 		}
-		hostServices, _, cleanup, err := buildPluginRuntimeHostServices(name, entry, deps)
+		hostServices, _, cleanup, err := buildAppRuntimeHostServices(name, entry, deps)
 		if err != nil {
 			if cleanup != nil {
 				cleanup()

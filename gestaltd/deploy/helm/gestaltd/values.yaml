@@ -73,7 +73,7 @@ persistence:
 # placeholders at startup, so secrets can be injected via extraEnv when
 # you enable OAuth/OIDC or an external datastore below.
 config:
-  apiVersion: gestaltd.config/v5
+  apiVersion: gestaltd.config/v6
   server:
     public:
       port: 8080
@@ -155,7 +155,7 @@ extraEnv: []
 
 preparation:
   # Enable this when your config uses remote REST/GraphQL upstreams or
-  # packaged plugins and you want the chart to lock and sync prepared artifacts
+  # packaged apps and you want the chart to lock and sync prepared artifacts
   # before the main container starts in locked mode.
   enabled: false
 

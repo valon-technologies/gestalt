@@ -13,7 +13,7 @@ type PublicHostServiceSessionVerifier interface {
 // PublicHostService describes a host service that can be served by the public
 // gestaltd listener after a host-service relay token has authorized the RPC.
 type PublicHostService struct {
-	PluginName      string
+	AppName      string
 	SessionVerifier PublicHostServiceSessionVerifier
 	Service         HostService
 	registrationID  uint64
@@ -53,7 +53,7 @@ func (r *PublicHostServiceRegistry) register(pluginName string, verifier PublicH
 		r.nextID++
 		ids = append(ids, r.nextID)
 		r.services = append(r.services, PublicHostService{
-			PluginName:      pluginName,
+			AppName:      pluginName,
 			SessionVerifier: verifier,
 			Service:         service,
 			registrationID:  r.nextID,

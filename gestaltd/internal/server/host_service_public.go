@@ -60,7 +60,7 @@ func checkHostServiceHandlerDuplicate(key hostServiceHandlerKey, entries []hostS
 
 func publicHostServiceHandlerKey(service runtimehost.PublicHostService) (hostServiceHandlerKey, bool) {
 	key := hostServiceHandlerKey{
-		pluginName: strings.TrimSpace(service.PluginName),
+		pluginName: strings.TrimSpace(service.AppName),
 	}
 	if key.pluginName == "" || service.Service.Register == nil {
 		return hostServiceHandlerKey{}, false
@@ -77,7 +77,7 @@ func (s *Server) hostServiceHandler(ctx context.Context, target runtimehost.Host
 }
 
 func (s *Server) unifiedHostServiceHandler(ctx context.Context, target runtimehost.HostServiceRelayTarget, methodPath string) (http.Handler, error) {
-	pluginName := strings.TrimSpace(target.PluginName)
+	pluginName := strings.TrimSpace(target.AppName)
 	if s == nil || pluginName == "" {
 		return nil, nil
 	}

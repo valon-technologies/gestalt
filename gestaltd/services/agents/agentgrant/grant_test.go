@@ -56,7 +56,7 @@ func TestGrantToolRefsSetInferredForNonEmptyToolRefs(t *testing.T) {
 		TurnID:       "turn-1",
 		SubjectID:    "user:user-123",
 		ToolRefs: []coreagent.ToolRef{{
-			Plugin:    "linear",
+			App:    "linear",
 			Operation: "searchIssues",
 		}},
 	})

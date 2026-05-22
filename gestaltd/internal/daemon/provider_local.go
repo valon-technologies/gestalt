@@ -28,8 +28,8 @@ import (
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
-	"github.com/valon-technologies/gestalt/server/services/plugins/source"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/source"
 	"github.com/valon-technologies/gestalt/server/services/providerdev"
 	"github.com/valon-technologies/gestalt/server/services/runtimehost"
 	"github.com/valon-technologies/gestalt/server/services/ui"
@@ -39,7 +39,7 @@ import (
 const (
 	providerDevHost          = "127.0.0.1"
 	providerDevIndexedDBName = "main"
-	providerLocalPluginDir   = "plugin"
+	providerLocalPluginDir   = "app"
 	providerLocalSiblingUI   = "ui"
 	gestaltAPIKeyEnv         = "GESTALT_API_KEY"
 )
@@ -48,7 +48,7 @@ type providerLocalCommandOptions struct {
 	Path        string
 	ConfigPaths []string
 	Name        string
-	Plugin      string
+	App      string
 	Port        int
 	Remote      string
 	RemoteToken string
@@ -167,7 +167,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		return err
 	}
 	if len(targets) == 0 {
-		return errors.New("gestaltd serve --remote requires at least one source-backed plugin in --config or --path")
+		return errors.New("gestaltd serve --remote requires at least one source-backed app in --config or --path")
 	}
 
 	if _, err := providerRemoteBaseURL(opts.Remote); err != nil {
@@ -187,7 +187,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 	for i, target := range targets {
 		spec, _, err := bootstrap.BuildStartupProviderSpec(target.Name, target.Entry)
 		if err != nil {
-			return fmt.Errorf("build serve remote spec for plugins.%s: %w", target.Name, err)
+			return fmt.Errorf("build serve remote spec for apps.%s: %w", target.Name, err)
 		}
 		attachName := target.Name
 		if target.InheritRemoteConfig && opts.Name == "" {
@@ -201,7 +201,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		if !target.InheritRemoteConfig {
 			pluginConfig, err := config.NodeToMap(target.Entry.Config)
 			if err != nil {
-				return fmt.Errorf("build serve remote config for plugins.%s: %w", target.Name, err)
+				return fmt.Errorf("build serve remote config for apps.%s: %w", target.Name, err)
 			}
 			if pluginConfig == nil {
 				pluginConfig = map[string]any{}
@@ -210,7 +210,7 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		}
 		uiHandler, hasUI, err := providerRemoteUIHandler(cfg, target)
 		if err != nil {
-			return fmt.Errorf("prepare serve remote ui for plugins.%s: %w", target.Name, err)
+			return fmt.Errorf("prepare serve remote ui for apps.%s: %w", target.Name, err)
 		}
 		if hasUI {
 			requested.UI = true
@@ -248,8 +248,8 @@ func runProviderRemoteDev(opts providerLocalCommandOptions) error {
 		}
 	}
 
-	processes := make([]*runtimehost.PluginProcess, 0, len(targets))
-	providerClients := make(map[string]proto.IntegrationProviderClient, len(targets))
+	processes := make([]*runtimehost.AppProcess, 0, len(targets))
+	providerClients := make(map[string]proto.AppProviderClient, len(targets))
 	cleanupProcesses := func() {
 		for _, process := range processes {
 			_ = process.Close()
@@ -458,7 +458,7 @@ func providerRemoteCreateSessionError(err error) error {
 	}
 	return fmt.Errorf(`%w
 
-remote provider-dev attach was denied. The remote plugin must grant dev.attach.allowedRoles for your resolved role, and API token callers must use a user token with permissions[].actions including provider_dev.attach for every attached plugin.
+remote provider-dev attach was denied. The remote app must grant dev.attach.allowedRoles for your resolved role, and API token callers must use a user token with permissions[].actions including provider_dev.attach for every attached app.
 
 provider scopes, operation permissions, and subject-owned API tokens do not grant direct remote attach. Run without --remote-token/%s to use browser approval when the server supports it`, err, gestaltAPIKeyEnv)
 }
@@ -521,8 +521,8 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 	if err != nil {
 		return nil, err
 	}
-	if kind != providermanifestv1.KindPlugin && kind != providermanifestv1.KindUI {
-		return nil, fmt.Errorf("gestaltd serve --path and provider validate only support kind: plugin or ui in v1 (got %q)", kind)
+	if kind != providermanifestv1.KindApp && kind != providermanifestv1.KindUI {
+		return nil, fmt.Errorf("gestaltd serve --path and provider validate only support kind: app or ui in v1 (got %q)", kind)
 	}
 
 	targetManifestPath, err := canonicalPath(manifestPath)
@@ -553,7 +553,7 @@ func prepareProviderLocalSession(opts providerLocalCommandOptions) (*providerLoc
 
 	var session *providerLocalSession
 	switch kind {
-	case providermanifestv1.KindPlugin:
+	case providermanifestv1.KindApp:
 		session, err = preparePluginLocalSession(sessionDir, baseConfigPath, state, opts, targetManifestPath, manifest)
 	case providermanifestv1.KindUI:
 		session, err = prepareUILocalSession(sessionDir, baseConfigPath, state, opts, targetManifestPath, manifest)
@@ -602,7 +602,7 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 		}
 	case siblingUIManifestPath != "":
 		var uiName string
-		if entry := loadedCfg.Plugins[resolvedKey]; entry != nil {
+		if entry := loadedCfg.Apps[resolvedKey]; entry != nil {
 			uiName = strings.TrimSpace(entry.UI)
 			autoMountPath = strings.TrimSpace(entry.MountPath)
 		}
@@ -634,7 +634,7 @@ func preparePluginLocalSession(sessionDir, baseConfigPath string, state operator
 
 	return &providerLocalSession{
 		Dir:               sessionDir,
-		Kind:              providermanifestv1.KindPlugin,
+		Kind:              providermanifestv1.KindApp,
 		ManifestPath:      targetManifestPath,
 		TargetKey:         resolvedKey,
 		ConfigPaths:       configPaths,
@@ -695,8 +695,8 @@ func prepareUILocalSession(sessionDir, baseConfigPath string, state operator.Sta
 
 func prepareProviderRemoteConfigPaths(opts providerLocalCommandOptions) ([]string, func(), error) {
 	cleanup := func() {}
-	if strings.TrimSpace(opts.Plugin) != "" && strings.TrimSpace(opts.Path) != "" {
-		return nil, cleanup, errors.New("--plugin cannot be combined with --path")
+	if strings.TrimSpace(opts.App) != "" && strings.TrimSpace(opts.Path) != "" {
+		return nil, cleanup, errors.New("--app cannot be combined with --path")
 	}
 	if strings.TrimSpace(opts.Path) == "" {
 		if len(opts.ConfigPaths) == 0 {
@@ -713,8 +713,8 @@ func prepareProviderRemoteConfigPaths(opts providerLocalCommandOptions) ([]strin
 	if err != nil {
 		return nil, cleanup, err
 	}
-	if kind != providermanifestv1.KindPlugin {
-		return nil, cleanup, fmt.Errorf("gestaltd serve --remote only supports kind: plugin in v1 (got %q)", kind)
+	if kind != providermanifestv1.KindApp {
+		return nil, cleanup, fmt.Errorf("gestaltd serve --remote only supports kind: app in v1 (got %q)", kind)
 	}
 	targetManifestPath, err := canonicalPath(manifestPath)
 	if err != nil {
@@ -745,8 +745,8 @@ func collectProviderRemoteTargets(cfg *config.Config, explicitName string, inher
 		return nil, nil
 	}
 	var targets []providerRemoteTarget
-	names := make([]string, 0, len(cfg.Plugins))
-	for name := range cfg.Plugins {
+	names := make([]string, 0, len(cfg.Apps))
+	for name := range cfg.Apps {
 		names = append(names, name)
 	}
 	slices.Sort(names)
@@ -754,7 +754,7 @@ func collectProviderRemoteTargets(cfg *config.Config, explicitName string, inher
 		if explicitName != "" && name != explicitName {
 			continue
 		}
-		entry := cfg.Plugins[name]
+		entry := cfg.Apps[name]
 		if entry == nil || !entry.HasLocalSource() {
 			continue
 		}
@@ -763,18 +763,18 @@ func collectProviderRemoteTargets(cfg *config.Config, explicitName string, inher
 			return nil, err
 		}
 		if manifest == nil || manifestPath == "" {
-			return nil, fmt.Errorf("plugins.%s must resolve to a local source manifest", name)
+			return nil, fmt.Errorf("apps.%s must resolve to a local source manifest", name)
 		}
 		kind, err := providerpkg.ManifestKind(manifest)
 		if err != nil {
 			return nil, err
 		}
-		if kind != providermanifestv1.KindPlugin {
-			return nil, fmt.Errorf("gestaltd serve --remote only supports plugins in v1 (plugins.%s has kind %q)", name, kind)
+		if kind != providermanifestv1.KindApp {
+			return nil, fmt.Errorf("gestaltd serve --remote only supports apps in v1 (apps.%s has kind %q)", name, kind)
 		}
 		source := strings.TrimSpace(manifest.Source)
 		if inheritRemoteConfig && explicitName == "" && source == "" {
-			return nil, fmt.Errorf("plugins.%s manifest source is required for gestaltd serve --remote --path without --name", name)
+			return nil, fmt.Errorf("apps.%s manifest source is required for gestaltd serve --remote --path without --name", name)
 		}
 		targets = append(targets, providerRemoteTarget{
 			Name:                name,
@@ -784,25 +784,25 @@ func collectProviderRemoteTargets(cfg *config.Config, explicitName string, inher
 		})
 	}
 	if explicitName != "" && len(targets) == 0 {
-		return nil, fmt.Errorf("no source-backed plugins.%s entry found in serve remote config", explicitName)
+		return nil, fmt.Errorf("no source-backed apps.%s entry found in serve remote config", explicitName)
 	}
 	return targets, nil
 }
 
 func ensureProviderRemoteManifestResolved(name string, entry *config.ProviderEntry) (string, *providermanifestv1.Manifest, error) {
 	if entry == nil {
-		return "", nil, fmt.Errorf("plugins.%s is not configured", name)
+		return "", nil, fmt.Errorf("apps.%s is not configured", name)
 	}
 	if entry.ResolvedManifest != nil && entry.ResolvedManifestPath != "" {
 		return entry.ResolvedManifestPath, entry.ResolvedManifest, nil
 	}
 	sourcePath := strings.TrimSpace(entry.SourcePath())
 	if sourcePath == "" {
-		return "", nil, fmt.Errorf("plugins.%s must use a local source path", name)
+		return "", nil, fmt.Errorf("apps.%s must use a local source path", name)
 	}
 	info, err := os.Stat(sourcePath)
 	if err != nil {
-		return "", nil, fmt.Errorf("stat plugins.%s source %q: %w", name, sourcePath, err)
+		return "", nil, fmt.Errorf("stat apps.%s source %q: %w", name, sourcePath, err)
 	}
 	manifestPath := sourcePath
 	if info.IsDir() {
@@ -811,7 +811,7 @@ func ensureProviderRemoteManifestResolved(name string, entry *config.ProviderEnt
 			return "", nil, err
 		}
 	} else if !providerpkg.IsManifestFile(sourcePath) {
-		return "", nil, fmt.Errorf("plugins.%s source %q must point to a provider manifest file or directory", name, sourcePath)
+		return "", nil, fmt.Errorf("apps.%s source %q must point to a provider manifest file or directory", name, sourcePath)
 	}
 	manifestPath, err = canonicalPath(manifestPath)
 	if err != nil {
@@ -826,7 +826,7 @@ func ensureProviderRemoteManifestResolved(name string, entry *config.ProviderEnt
 	return manifestPath, manifest, nil
 }
 
-func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget, remote providerdev.CreateSessionProvider) (*runtimehost.PluginProcess, error) {
+func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget, remote providerdev.CreateSessionProvider) (*runtimehost.AppProcess, error) {
 	entry := target.Entry
 	command := entry.Command
 	args := slices.Clone(entry.Args)
@@ -835,12 +835,12 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 	var cleanup func()
 	if command == "" {
 		if entry.ResolvedManifestPath == "" {
-			return nil, fmt.Errorf("plugins.%s resolved manifest path is required for source provider execution", target.Name)
+			return nil, fmt.Errorf("apps.%s resolved manifest path is required for source provider execution", target.Name)
 		}
 		var err error
-		execution, err := providerpkg.SourceManifestExecution(entry.ResolvedManifestPath, providermanifestv1.KindPlugin, providerpkg.SourceBuildOptions{})
+		execution, err := providerpkg.SourceManifestExecution(entry.ResolvedManifestPath, providermanifestv1.KindApp, providerpkg.SourceBuildOptions{})
 		if err != nil {
-			return nil, fmt.Errorf("plugins.%s: prepare source provider execution: %w", target.Name, err)
+			return nil, fmt.Errorf("apps.%s: prepare source provider execution: %w", target.Name, err)
 		}
 		command = execution.Command
 		args = execution.Args
@@ -849,10 +849,10 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 	}
 	env = mergeStringMaps(env, remote.Env)
 
-	// Remote dev runs arbitrary local source trees. The plugin sandbox is tuned
+	// Remote dev runs arbitrary local source trees. The app sandbox is tuned
 	// for staged executables and can hide source files from TypeScript/Python
 	// runtimes, so v1 leaves local source execution unsandboxed.
-	process, err := runtimehost.StartPluginProcess(ctx, runtimehost.ProcessConfig{
+	process, err := runtimehost.StartAppProcess(ctx, runtimehost.ProcessConfig{
 		Command:      command,
 		Args:         args,
 		Workdir:      workdir,
@@ -867,7 +867,7 @@ func startProviderRemoteProcess(ctx context.Context, target providerRemoteTarget
 		if cleanup != nil {
 			cleanup()
 		}
-		return nil, fmt.Errorf("start local provider plugins.%s: %w", target.Name, err)
+		return nil, fmt.Errorf("start local provider apps.%s: %w", target.Name, err)
 	}
 	return process, nil
 }
@@ -891,7 +891,7 @@ func providerRemoteUIManifestPath(cfg *config.Config, target providerRemoteTarge
 	}
 	if uiName := strings.TrimSpace(entry.UI); uiName != "" {
 		if cfg == nil || cfg.Providers.UI == nil || cfg.Providers.UI[uiName] == nil {
-			return "", false, fmt.Errorf("plugins.%s.ui references unknown ui %q", target.Name, uiName)
+			return "", false, fmt.Errorf("apps.%s.ui references unknown ui %q", target.Name, uiName)
 		}
 		uiEntry := cfg.Providers.UI[uiName]
 		manifestPath, ok, err := sourceUIManifestPathFromEntry(uiEntry)
@@ -1013,8 +1013,8 @@ func resolveProviderRemotePluginKey(configPaths []string, targetManifestPath str
 	return resolveProviderPluginKey(configPaths, targetManifestPath, manifest, explicitName, loadConfiguredPluginsAllowMissingEnv)
 }
 
-func resolveProviderPluginKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string, loadPlugins func([]string) (map[string]*config.ProviderEntry, error)) (string, error) {
-	plugins, err := loadPlugins(configPaths)
+func resolveProviderPluginKey(configPaths []string, targetManifestPath string, manifest *providermanifestv1.Manifest, explicitName string, loadApps func([]string) (map[string]*config.ProviderEntry, error)) (string, error) {
+	plugins, err := loadApps(configPaths)
 	if err != nil {
 		return "", err
 	}
@@ -1028,10 +1028,10 @@ func resolveProviderPluginKey(configPaths []string, targetManifestPath string, m
 			return "", fmt.Errorf("invalid --name %q: use only letters, numbers, and underscores", explicitName)
 		}
 		if len(matchingKeys) == 1 && matchingKeys[0] != explicitName {
-			return "", fmt.Errorf("target manifest is already configured as plugins.%s; pass --name %q or remove the conflicting config entry", matchingKeys[0], matchingKeys[0])
+			return "", fmt.Errorf("target manifest is already configured as apps.%s; pass --name %q or remove the conflicting config entry", matchingKeys[0], matchingKeys[0])
 		}
 		if len(matchingKeys) > 1 && !slices.Contains(matchingKeys, explicitName) {
-			return "", fmt.Errorf("target manifest is configured by multiple plugin keys (%s); remove the ambiguity before using --name", strings.Join(matchingKeys, ", "))
+			return "", fmt.Errorf("target manifest is configured by multiple app keys (%s); remove the ambiguity before using --name", strings.Join(matchingKeys, ", "))
 		}
 		return explicitName, nil
 	}
@@ -1040,7 +1040,7 @@ func resolveProviderPluginKey(configPaths []string, targetManifestPath string, m
 		return matchingKeys[0], nil
 	}
 	if len(matchingKeys) > 1 {
-		return "", fmt.Errorf("target manifest is configured by multiple plugin keys (%s); pass --name to choose the target key", strings.Join(matchingKeys, ", "))
+		return "", fmt.Errorf("target manifest is configured by multiple app keys (%s); pass --name to choose the target key", strings.Join(matchingKeys, ", "))
 	}
 
 	if name := derivedPluginKey(manifest, targetManifestPath); name != "" {
@@ -1049,7 +1049,7 @@ func resolveProviderPluginKey(configPaths []string, targetManifestPath string, m
 		}
 		return name, nil
 	}
-	return "", fmt.Errorf("unable to derive a plugin key for %s; pass --name", targetManifestPath)
+	return "", fmt.Errorf("unable to derive a app key for %s; pass --name", targetManifestPath)
 }
 
 func writeProviderLocalBaseConfig(path, dbPath string) error {
@@ -1116,7 +1116,7 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 				"port": port,
 			},
 		},
-		"plugins": map[string]any{
+		"apps": map[string]any{
 			pluginKey: pluginEntry,
 		},
 	}
@@ -1135,7 +1135,7 @@ func writeProviderLocalPluginOverlayConfig(path, pluginKey, manifestPath string,
 func writeProviderRemotePluginOverlayConfig(path, pluginKey, manifestPath string) error {
 	cfg := map[string]any{
 		"apiVersion": config.ConfigAPIVersion,
-		"plugins": map[string]any{
+		"apps": map[string]any{
 			pluginKey: map[string]any{
 				"source":  providerLocalSourceOverride(manifestPath),
 				"runtime": nil,
@@ -1184,7 +1184,7 @@ func shouldAutoMountOwnedUI(cfg *config.Config, pluginKey string, manifest *prov
 	if cfg == nil || manifest == nil || manifest.Spec == nil || manifest.Spec.UI == nil {
 		return false
 	}
-	entry := cfg.Plugins[pluginKey]
+	entry := cfg.Apps[pluginKey]
 	if entry == nil {
 		return true
 	}
@@ -1202,17 +1202,17 @@ func ensureNoPublicUIPathCollision(cfg *config.Config, pluginKey, mountPath stri
 		if strings.TrimSpace(entry.Path) != mountPath {
 			continue
 		}
-		if entry.OwnerPlugin == pluginKey || name == pluginKey {
+		if entry.OwnerApp == pluginKey || name == pluginKey {
 			continue
 		}
-		return fmt.Errorf("auto-mounted ui path %q for plugins.%s collides with providers.ui.%s", mountPath, pluginKey, name)
+		return fmt.Errorf("auto-mounted ui path %q for apps.%s collides with providers.ui.%s", mountPath, pluginKey, name)
 	}
-	for name, entry := range cfg.Plugins {
+	for name, entry := range cfg.Apps {
 		if entry == nil || name == pluginKey {
 			continue
 		}
 		if strings.TrimSpace(entry.MountPath) == mountPath {
-			return fmt.Errorf("auto-mounted ui path %q for plugins.%s collides with plugins.%s.ui.path", mountPath, pluginKey, name)
+			return fmt.Errorf("auto-mounted ui path %q for apps.%s collides with apps.%s.ui.path", mountPath, pluginKey, name)
 		}
 	}
 	return nil
@@ -1338,7 +1338,7 @@ func logProviderLocalSummary(message string, session *providerLocalSession) {
 	case providermanifestv1.KindUI:
 		args = append(args, "ui", session.TargetKey)
 	default:
-		args = append(args, "plugin", session.TargetKey)
+		args = append(args, "app", session.TargetKey)
 	}
 	slog.Info(message, args...)
 }
@@ -1406,7 +1406,7 @@ func canonicalPath(path string) (string, error) {
 func derivedPluginKey(manifest *providermanifestv1.Manifest, manifestPath string) string {
 	if manifest != nil {
 		if src, err := source.Parse(manifest.Source); err == nil {
-			if name := sanitizeDerivedPluginKey(src.PluginName()); name != "" {
+			if name := sanitizeDerivedPluginKey(src.AppName()); name != "" {
 				return name
 			}
 		}
@@ -1450,7 +1450,7 @@ func defaultProviderLocalMountPath(manifest *providermanifestv1.Manifest, manife
 func derivedProviderLocalMountSlug(manifest *providermanifestv1.Manifest, manifestPath string) string {
 	if manifest != nil {
 		if src, err := source.Parse(manifest.Source); err == nil {
-			if slug := strings.TrimSpace(src.PluginName()); slug != "" {
+			if slug := strings.TrimSpace(src.AppName()); slug != "" {
 				return slug
 			}
 		}
@@ -1508,10 +1508,10 @@ func loadConfiguredPlugins(configPaths []string) (map[string]*config.ProviderEnt
 	if err != nil {
 		return nil, fmt.Errorf("load provider overlay config: %w", err)
 	}
-	if cfg.Plugins == nil {
+	if cfg.Apps == nil {
 		return map[string]*config.ProviderEntry{}, nil
 	}
-	return cfg.Plugins, nil
+	return cfg.Apps, nil
 }
 
 func loadConfiguredPluginsAllowMissingEnv(configPaths []string) (map[string]*config.ProviderEntry, error) {
@@ -1522,10 +1522,10 @@ func loadConfiguredPluginsAllowMissingEnv(configPaths []string) (map[string]*con
 	if err != nil {
 		return nil, fmt.Errorf("load provider overlay config: %w", err)
 	}
-	if cfg.Plugins == nil {
+	if cfg.Apps == nil {
 		return map[string]*config.ProviderEntry{}, nil
 	}
-	return cfg.Plugins, nil
+	return cfg.Apps, nil
 }
 
 func loadConfiguredUIs(configPaths []string) (map[string]*config.UIEntry, error) {
@@ -1657,8 +1657,8 @@ func printProviderValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd provider validate [--path PATH] [--config PATH]... [--name NAME]")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "Validate a local source plugin or ui inside a synthesized Gestalt config.")
-	writeUsageLine(w, "v1 supports kind: plugin and kind: ui manifests.")
+	writeUsageLine(w, "Validate a local source app or ui inside a synthesized Gestalt config.")
+	writeUsageLine(w, "v1 supports kind: app and kind: ui manifests.")
 	writeUsageLine(w, "Repeated --config flags merge left-to-right using the normal Gestalt rules.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")

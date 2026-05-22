@@ -8,7 +8,7 @@ const SCHEDULE_JSON: &str = r#"{
     "cron":"0 0 * * *",
     "timezone":"UTC",
     "target":{
-        "plugin":{
+        "app":{
             "name":"dummy",
             "operation":"doit",
             "input":{"k":"v"}
@@ -25,7 +25,7 @@ const TRIGGER_JSON: &str = r#"{
     "provider":"test-provider",
     "match":{"type":"dummy.event","source":"dummy","subject":"item"},
     "target":{
-        "plugin":{
+        "app":{
             "name":"dummy",
             "operation":"doit",
             "input":{"k":"v"}
@@ -45,7 +45,7 @@ const AGENT_TRIGGER_JSON: &str = r#"{
             "provider":"simple",
             "model":"fast",
             "prompt":"Summarize the updated roadmap item.",
-            "toolRefs":[{"plugin":"roadmap","operation":"items.get"}]
+            "toolRefs":[{"app":"roadmap","operation":"items.get"}]
         }
     },
     "paused":false,
@@ -58,7 +58,7 @@ const RUN_JSON: &str = r#"{
     "provider":"test-provider",
     "status":"succeeded",
     "target":{
-        "plugin":{
+        "app":{
             "name":"dummy",
             "operation":"doit",
             "input":{"k":"v"}
@@ -124,10 +124,10 @@ fn test_cli_lists_schedules() {
 }
 
 #[test]
-fn test_cli_list_schedules_filters_by_plugin() {
+fn test_cli_list_schedules_filters_by_app() {
     let body = r#"[
-        {"id":"sched-a","provider":"p","cron":"* * * * *","target":{"plugin":{"name":"alpha","operation":"x"}},"paused":false},
-        {"id":"sched-b","provider":"p","cron":"* * * * *","target":{"plugin":{"name":"beta","operation":"y"}},"paused":false}
+        {"id":"sched-a","provider":"p","cron":"* * * * *","target":{"app":{"name":"alpha","operation":"x"}},"paused":false},
+        {"id":"sched-b","provider":"p","cron":"* * * * *","target":{"app":{"name":"beta","operation":"y"}},"paused":false}
     ]"#;
     let mut server = Server::new();
     let _mock = authed_json_mock!(
@@ -183,7 +183,7 @@ fn test_cli_creates_schedule() {
         r#"{
             "cron":"0 */5 * * *",
             "timezone":"UTC",
-            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}}},
+            "target":{"app":{"name":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}}},
             "paused":false
         }"#
         .to_string(),
@@ -238,7 +238,7 @@ fn test_cli_updates_schedule_merges_existing_fields() {
         r#"{
             "cron":"15 * * * *",
             "timezone":"UTC",
-            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"k":"v"}}},
+            "target":{"app":{"name":"dummy","operation":"doit","input":{"k":"v"}}},
             "paused":true
         }"#
         .to_string(),
@@ -369,8 +369,8 @@ fn test_cli_lists_event_triggers() {
 #[test]
 fn test_cli_list_event_triggers_filters() {
     let body = r#"[
-        {"id":"trg-a","match":{"type":"alpha.created"},"target":{"plugin":{"name":"alpha","operation":"x"}},"paused":false},
-        {"id":"trg-b","match":{"type":"beta.failed"},"target":{"plugin":{"name":"beta","operation":"y"}},"paused":false}
+        {"id":"trg-a","match":{"type":"alpha.created"},"target":{"app":{"name":"alpha","operation":"x"}},"paused":false},
+        {"id":"trg-b","match":{"type":"beta.failed"},"target":{"app":{"name":"beta","operation":"y"}},"paused":false}
     ]"#;
     let mut server = Server::new();
     let _mock = authed_json_mock!(
@@ -433,7 +433,7 @@ fn test_cli_creates_event_trigger() {
     .match_body(Matcher::JsonString(
         r#"{
             "match":{"type":"dummy.event","source":"dummy","subject":"item"},
-            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}}},
+            "target":{"app":{"name":"dummy","operation":"doit","input":{"channel":"C1","text":"hi"}}},
             "paused":false
         }"#
         .to_string(),
@@ -486,7 +486,7 @@ fn test_cli_creates_event_trigger_from_target_file() {
                     "provider":"simple",
                     "model":"fast",
                     "prompt":"Summarize the updated roadmap item.",
-                    "toolRefs":[{"plugin":"roadmap","operation":"items.get"}]
+                    "toolRefs":[{"app":"roadmap","operation":"items.get"}]
                 }
             },
             "paused":false
@@ -521,7 +521,7 @@ fn test_cli_creates_event_trigger_from_target_file() {
                     "provider": "simple",
                     "model": "fast",
                     "prompt": "Summarize the updated roadmap item.",
-                    "toolRefs": [{"plugin": "roadmap", "operation": "items.get"}]
+                    "toolRefs": [{"app": "roadmap", "operation": "items.get"}]
                 }
             }"#,
         )
@@ -553,7 +553,7 @@ fn test_cli_updates_event_trigger_merges_existing_fields() {
         r#"{
             "provider":"test-provider",
             "match":{"type":"dummy.event.updated","source":"dummy","subject":"item"},
-            "target":{"plugin":{"name":"dummy","operation":"doit","input":{"k":"v"}}},
+            "target":{"app":{"name":"dummy","operation":"doit","input":{"k":"v"}}},
             "paused":true
         }"#
         .to_string(),
@@ -658,13 +658,13 @@ fn test_cli_lists_runs() {
 #[test]
 fn test_cli_list_runs_filters() {
     let body = r#"{
-        "runs":[{"id":"run-b","status":"failed","target":{"plugin":{"name":"beta","operation":"y"}},"trigger":{"kind":"event","triggerId":"evt-1"}}],
+        "runs":[{"id":"run-b","status":"failed","target":{"app":{"name":"beta","operation":"y"}},"trigger":{"kind":"event","triggerId":"evt-1"}}],
         "nextPageToken":"next-filtered"
     }"#;
     let mut server = Server::new();
     let _mock = authed_json_mock!(server, Method::GET, "/api/v1/workflow/runs", StatusCode::OK)
         .match_query(Matcher::AllOf(vec![
-            Matcher::UrlEncoded("plugin".into(), "beta".into()),
+            Matcher::UrlEncoded("app".into(), "beta".into()),
             Matcher::UrlEncoded("status".into(), "failed".into()),
             Matcher::UrlEncoded("pageSize".into(), "25".into()),
             Matcher::UrlEncoded("pageToken".into(), "cursor-1".into()),
@@ -732,7 +732,7 @@ fn test_cli_cancels_run() {
             "id":"run-1",
             "provider":"test-provider",
             "status":"canceled",
-            "target":{"plugin":{"name":"dummy","operation":"doit"}},
+            "target":{"app":{"name":"dummy","operation":"doit"}},
             "statusMessage":"operator requested"
         }"#,
     )

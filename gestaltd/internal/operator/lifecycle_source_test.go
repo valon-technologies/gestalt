@@ -27,7 +27,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
-	"github.com/valon-technologies/gestalt/server/services/plugins/providerpkg"
+	"github.com/valon-technologies/gestalt/server/services/apps/providerpkg"
 	"github.com/valon-technologies/gestalt/server/services/providerdrivers"
 	"gopkg.in/yaml.v3"
 )
@@ -35,9 +35,9 @@ import (
 const (
 	testOwner   = "testowner"
 	testRepo    = "testrepo"
-	testPlugin  = "testplugin"
+	testApp  = "testplugin"
 	testVersion = "1.0.0"
-	testSource  = "github.com/" + testOwner + "/" + testRepo + "/plugins/" + testPlugin
+	testSource  = "github.com/" + testOwner + "/" + testRepo + "/apps/" + testApp
 	testBinary  = "fake-binary-content"
 )
 
@@ -46,8 +46,8 @@ func TestLifecycleGitSourceBuildLockSyncContract(t *testing.T) {
 
 	dir := t.TempDir()
 	repoDir := filepath.Join(dir, "providers")
-	const packageSource = "github.com/acme/providers/plugins/alpha"
-	writeSourceProviderTree(t, filepath.Join(repoDir, "plugins", "alpha"), packageSource, "1.2.3", "alpha-binary")
+	const packageSource = "github.com/acme/providers/apps/alpha"
+	writeSourceProviderTree(t, filepath.Join(repoDir, "apps", "alpha"), packageSource, "1.2.3", "alpha-binary")
 	runGitTestCommand(t, repoDir, "init")
 	runGitTestCommand(t, repoDir, "config", "user.email", "test@example.com")
 	runGitTestCommand(t, repoDir, "config", "user.name", "Test")
@@ -58,20 +58,20 @@ func TestLifecycleGitSourceBuildLockSyncContract(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 %s
 server:
   providers:
     indexeddb: sqlite
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-plugins:
+apps:
   alpha:
     source:
       git:
         repo: file://%s
         ref: %s
-        path: plugins/alpha/manifest.yaml
+        path: apps/alpha/manifest.yaml
         materialization: source
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(artifactsDir), filepath.ToSlash(repoDir), ref)
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
@@ -93,7 +93,7 @@ plugins:
 	if entry.SourceRef.Ref != ref {
 		t.Fatalf("sourceRef.ref = %q, want %q", entry.SourceRef.Ref, ref)
 	}
-	if entry.Source != "git+file://"+repoDir+"@"+ref+"#plugins/alpha/manifest.yaml" {
+	if entry.Source != "git+file://"+repoDir+"@"+ref+"#apps/alpha/manifest.yaml" {
 		t.Fatalf("source = %q", entry.Source)
 	}
 	if entry.Version != "1.2.3" {
@@ -136,7 +136,7 @@ func TestLifecycleGitSourceUIBuildLockSyncContract(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 %s
   ui:
     roadmap:
@@ -236,12 +236,12 @@ func TestLifecycleSyncLockedPreparesIndependentLocalUIsInParallel(t *testing.T) 
 			if err := os.MkdirAll(syncDir, 0o755); err != nil {
 				t.Fatalf("mkdir sync dir: %v", err)
 			}
-			alphaPlugin := filepath.Join(dir, "plugins", "alpha")
-			betaPlugin := filepath.Join(dir, "plugins", "beta")
+			alphaApp := filepath.Join(dir, "apps", "alpha")
+			betaApp := filepath.Join(dir, "apps", "beta")
 			alphaDir := filepath.Join(dir, "ui", "alpha")
 			betaDir := filepath.Join(dir, "ui", "beta")
-			writeSourceProviderTree(t, alphaPlugin, "github.com/acme/plugins/alpha", "1.2.3", "alpha-binary")
-			writeSourceProviderTree(t, betaPlugin, "github.com/acme/plugins/beta", "1.2.3", "beta-binary")
+			writeSourceProviderTree(t, alphaApp, "github.com/acme/apps/alpha", "1.2.3", "alpha-binary")
+			writeSourceProviderTree(t, betaApp, "github.com/acme/apps/beta", "1.2.3", "beta-binary")
 			writeBlockingSourceUITree(t, alphaDir, "github.com/acme/ui/alpha", "1.2.3", fmt.Sprintf(`#!/bin/sh
 set -eu
 touch %s/alpha.started
@@ -274,8 +274,8 @@ printf '<html>beta</html>\n' > dist/index.html
 `, syncDir, syncDir))
 
 			configPath, lock := tc.configure(t, dir, map[string]string{
-				"alpha": filepath.Join(alphaPlugin, "manifest.yaml"),
-				"beta":  filepath.Join(betaPlugin, "manifest.yaml"),
+				"alpha": filepath.Join(alphaApp, "manifest.yaml"),
+				"beta":  filepath.Join(betaApp, "manifest.yaml"),
 			}, map[string]string{
 				"alpha": filepath.Join(alphaDir, "manifest.yaml"),
 				"beta":  filepath.Join(betaDir, "manifest.yaml"),
@@ -294,12 +294,12 @@ printf '<html>beta</html>\n' > dist/index.html
 				if entry == nil {
 					t.Fatalf("loaded ui %q = nil", name)
 				}
-				if got := entry.OwnerPlugin; tc.bound {
+				if got := entry.OwnerApp; tc.bound {
 					if got != name {
-						t.Fatalf("ui %q OwnerPlugin = %q, want %q", name, got, name)
+						t.Fatalf("ui %q OwnerApp = %q, want %q", name, got, name)
 					}
 				} else if got != "" {
-					t.Fatalf("ui %q OwnerPlugin = %q, want empty", name, got)
+					t.Fatalf("ui %q OwnerApp = %q, want empty", name, got)
 				}
 			}
 			lockPath := filepath.Join(dir, LockfileName)
@@ -335,12 +335,12 @@ func TestLifecycleSyncLockedParallelismOnePreparesLocalUIsSequentially(t *testin
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "build.log")
-	alphaPlugin := filepath.Join(dir, "plugins", "alpha")
-	betaPlugin := filepath.Join(dir, "plugins", "beta")
+	alphaApp := filepath.Join(dir, "apps", "alpha")
+	betaApp := filepath.Join(dir, "apps", "beta")
 	alphaDir := filepath.Join(dir, "ui", "alpha")
 	betaDir := filepath.Join(dir, "ui", "beta")
-	writeSourceProviderTree(t, alphaPlugin, "github.com/acme/plugins/alpha", "1.2.3", "alpha-binary")
-	writeSourceProviderTree(t, betaPlugin, "github.com/acme/plugins/beta", "1.2.3", "beta-binary")
+	writeSourceProviderTree(t, alphaApp, "github.com/acme/apps/alpha", "1.2.3", "alpha-binary")
+	writeSourceProviderTree(t, betaApp, "github.com/acme/apps/beta", "1.2.3", "beta-binary")
 	writeBlockingSourceUITree(t, alphaDir, "github.com/acme/ui/alpha", "1.2.3", fmt.Sprintf(`#!/bin/sh
 set -eu
 printf 'alpha start\n' >> %s
@@ -357,8 +357,8 @@ printf 'beta end\n' >> %s
 `, logPath, logPath))
 
 	configPath, _ := writePluginBoundLocalUITestConfig(t, dir, map[string]string{
-		"alpha": filepath.Join(alphaPlugin, "manifest.yaml"),
-		"beta":  filepath.Join(betaPlugin, "manifest.yaml"),
+		"alpha": filepath.Join(alphaApp, "manifest.yaml"),
+		"beta":  filepath.Join(betaApp, "manifest.yaml"),
 	}, map[string]string{
 		"alpha": filepath.Join(alphaDir, "manifest.yaml"),
 		"beta":  filepath.Join(betaDir, "manifest.yaml"),
@@ -388,11 +388,11 @@ func TestLifecycleSyncLockedParallelizesPluginOwnedUIs(t *testing.T) {
 	if err := os.MkdirAll(syncDir, 0o755); err != nil {
 		t.Fatalf("mkdir sync dir: %v", err)
 	}
-	alphaPlugin := filepath.Join(dir, "plugins", "alpha")
-	betaPlugin := filepath.Join(dir, "plugins", "beta")
+	alphaApp := filepath.Join(dir, "apps", "alpha")
+	betaApp := filepath.Join(dir, "apps", "beta")
 	alphaUI := filepath.Join(dir, "ui", "alpha")
 	betaUI := filepath.Join(dir, "ui", "beta")
-	alphaManifest := writeOwnedUISourcePluginTree(t, alphaPlugin, alphaUI, "alpha", fmt.Sprintf(`#!/bin/sh
+	alphaManifest := writeOwnedUISourcePluginTree(t, alphaApp, alphaUI, "alpha", fmt.Sprintf(`#!/bin/sh
 set -eu
 touch %s/alpha.started
 i=0
@@ -407,7 +407,7 @@ done
 mkdir -p dist
 printf '<html>alpha</html>\n' > dist/index.html
 `, syncDir, syncDir))
-	betaManifest := writeOwnedUISourcePluginTree(t, betaPlugin, betaUI, "beta", fmt.Sprintf(`#!/bin/sh
+	betaManifest := writeOwnedUISourcePluginTree(t, betaApp, betaUI, "beta", fmt.Sprintf(`#!/bin/sh
 set -eu
 touch %s/beta.started
 i=0
@@ -446,14 +446,14 @@ func TestLifecycleSyncLockedParallelismOnePreparesPluginOwnedUIsSequentially(t *
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "build.log")
-	alphaManifest := writeOwnedUISourcePluginTree(t, filepath.Join(dir, "plugins", "alpha"), filepath.Join(dir, "ui", "alpha"), "alpha", fmt.Sprintf(`#!/bin/sh
+	alphaManifest := writeOwnedUISourcePluginTree(t, filepath.Join(dir, "apps", "alpha"), filepath.Join(dir, "ui", "alpha"), "alpha", fmt.Sprintf(`#!/bin/sh
 set -eu
 printf 'alpha start\n' >> %s
 mkdir -p dist
 printf '<html>alpha</html>\n' > dist/index.html
 printf 'alpha end\n' >> %s
 `, logPath, logPath))
-	betaManifest := writeOwnedUISourcePluginTree(t, filepath.Join(dir, "plugins", "beta"), filepath.Join(dir, "ui", "beta"), "beta", fmt.Sprintf(`#!/bin/sh
+	betaManifest := writeOwnedUISourcePluginTree(t, filepath.Join(dir, "apps", "beta"), filepath.Join(dir, "ui", "beta"), "beta", fmt.Sprintf(`#!/bin/sh
 set -eu
 printf 'beta start\n' >> %s
 mkdir -p dist
@@ -502,8 +502,8 @@ mkdir -p dist
 printf '<html>shared</html>\n' > dist/index.html
 printf 'end\n' >> %s
 `, lockDir, logPath, lockDir, logPath, logPath))
-	alphaManifest := writeOwnedUISourcePluginForUI(t, filepath.Join(dir, "plugins", "alpha"), filepath.Join(sharedUI, "manifest.yaml"), "alpha")
-	betaManifest := writeOwnedUISourcePluginForUI(t, filepath.Join(dir, "plugins", "beta"), filepath.Join(sharedUI, "manifest.yaml"), "beta")
+	alphaManifest := writeOwnedUISourcePluginForUI(t, filepath.Join(dir, "apps", "alpha"), filepath.Join(sharedUI, "manifest.yaml"), "alpha")
+	betaManifest := writeOwnedUISourcePluginForUI(t, filepath.Join(dir, "apps", "beta"), filepath.Join(sharedUI, "manifest.yaml"), "beta")
 
 	configPath := writeOwnedUIPluginTestConfig(t, dir, map[string]string{
 		"alpha": alphaManifest,
@@ -604,11 +604,11 @@ func TestLifecycleLocalSourceLockedExecutionUsesPreparedArtifactsWithoutSourceTr
 
 	dir := t.TempDir()
 	const (
-		pluginSource = "github.com/acme/tools/plugins/alpha"
+		pluginSource = "github.com/acme/tools/apps/alpha"
 		uiSource     = "github.com/acme/tools/ui/roadmap"
 		version      = "1.2.3"
 	)
-	pluginDir := filepath.Join(dir, "plugins", "alpha")
+	pluginDir := filepath.Join(dir, "apps", "alpha")
 	uiDir := filepath.Join(dir, "ui", "roadmap")
 	writeSourceProviderTree(t, pluginDir, pluginSource, version, "alpha-binary")
 	writeSourceUITree(t, uiDir, uiSource, version)
@@ -616,7 +616,7 @@ func TestLifecycleLocalSourceLockedExecutionUsesPreparedArtifactsWithoutSourceTr
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 %s  ui:
     roadmap:
       source:
@@ -627,10 +627,10 @@ server:
     indexeddb: sqlite
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-plugins:
+apps:
   alpha:
     source:
-      path: plugins/alpha/manifest.yaml
+      path: apps/alpha/manifest.yaml
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(artifactsDir))
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -654,7 +654,7 @@ plugins:
 	for _, schemaVersion := range []int{5, 6, 7} {
 		legacyEntry := portableLockEntry{
 			InputDigest: "legacy-local",
-			Kind:        providermanifestv1.KindPlugin,
+			Kind:        providermanifestv1.KindApp,
 			Runtime:     providerReleaseRuntimeExecutable,
 		}
 		if schemaVersion == 7 {
@@ -665,7 +665,7 @@ plugins:
 			SchemaVersion: schemaVersion,
 			Revision:      providerLockRevision,
 			Providers: providerLockBuckets{
-				Plugin: map[string]portableLockEntry{"alpha": legacyEntry},
+				App: map[string]portableLockEntry{"alpha": legacyEntry},
 				UI: map[string]portableLockEntry{
 					"roadmap": {
 						InputDigest: "legacy-local",
@@ -715,8 +715,8 @@ plugins:
 	if _, err := os.Stat(preparedUIMetadata); err != nil {
 		t.Fatalf("prepared ui lock metadata missing before source removal: %v", err)
 	}
-	if err := os.RemoveAll(filepath.Join(dir, "plugins")); err != nil {
-		t.Fatalf("remove plugin source tree: %v", err)
+	if err := os.RemoveAll(filepath.Join(dir, "apps")); err != nil {
+		t.Fatalf("remove app source tree: %v", err)
 	}
 	if err := os.RemoveAll(filepath.Join(dir, "ui")); err != nil {
 		t.Fatalf("remove ui source tree: %v", err)
@@ -726,11 +726,11 @@ plugins:
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true) without local source tree: %v", err)
 	}
-	plugin := cfg.Plugins["alpha"]
-	if plugin == nil || plugin.ResolvedManifest == nil {
-		t.Fatalf("resolved plugin = %+v", plugin)
+	app := cfg.Apps["alpha"]
+	if app == nil || app.ResolvedManifest == nil {
+		t.Fatalf("resolved app = %+v", app)
 	}
-	if got, want := filepath.ToSlash(plugin.Command), filepath.ToSlash(preparedProvider); got != want {
+	if got, want := filepath.ToSlash(app.Command), filepath.ToSlash(preparedProvider); got != want {
 		t.Fatalf("plugin command = %q, want %q", got, want)
 	}
 	ui := cfg.Providers.UI["roadmap"]
@@ -743,7 +743,7 @@ plugins:
 	if err := lc.CheckSyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) {
 		t.Fatalf("CheckSyncAtPathsWithStatePaths without local source tree error = %v, want stale provider artifact", err)
 	}
-	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), `manifest for plugin "alpha" not found`) {
+	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err == nil || !strings.Contains(err.Error(), `manifest for app "alpha" not found`) {
 		t.Fatalf("SyncAtPathsWithStatePaths without local source tree error = %v, want missing source manifest", err)
 	}
 
@@ -773,7 +773,7 @@ plugins:
 	if err := os.WriteFile(preparedProvider, []byte("stale-binary"), 0o755); err != nil {
 		t.Fatalf("write stale prepared provider binary: %v", err)
 	}
-	if err := os.WriteFile(preparedProviderMetadata, []byte(`{"inputDigest":"stale","kind":"plugin","name":"alpha"}`+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(preparedProviderMetadata, []byte(`{"inputDigest":"stale","kind":"app","name":"alpha"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write stale prepared provider lock metadata before sync: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(preparedUI, "index.html"), []byte("<html>stale</html>\n"), 0o644); err != nil {
@@ -799,8 +799,8 @@ plugins:
 	if string(uiData) != "<html>roadmap</html>\n" {
 		t.Fatalf("prepared ui asset after stale metadata sync = %q, want re-materialized source asset", string(uiData))
 	}
-	if err := os.RemoveAll(filepath.Join(dir, "plugins")); err != nil {
-		t.Fatalf("remove plugin source tree after backfill: %v", err)
+	if err := os.RemoveAll(filepath.Join(dir, "apps")); err != nil {
+		t.Fatalf("remove app source tree after backfill: %v", err)
 	}
 	if err := os.RemoveAll(filepath.Join(dir, "ui")); err != nil {
 		t.Fatalf("remove ui source tree after backfill: %v", err)
@@ -809,7 +809,7 @@ plugins:
 		t.Fatalf("LoadForExecutionAtPath(locked=true) after metadata backfill: %v", err)
 	}
 
-	if err := os.WriteFile(preparedProviderMetadata, []byte(`{"inputDigest":"stale","kind":"plugin","name":"alpha"}`+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(preparedProviderMetadata, []byte(`{"inputDigest":"stale","kind":"app","name":"alpha"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("write stale prepared provider lock metadata: %v", err)
 	}
 	if _, _, err := lc.LoadForExecutionAtPath(configPath, true); err == nil || !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) {
@@ -833,7 +833,7 @@ func TestLockAtPathsSkipsMissingConfiguredLocalSources(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 %s  ui:
     missing:
       source:
@@ -844,10 +844,10 @@ server:
     indexeddb: sqlite
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-plugins:
+apps:
   missing:
     source:
-      path: plugins/missing/manifest.yaml
+      path: apps/missing/manifest.yaml
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(artifactsDir))
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -875,7 +875,7 @@ func TestLockAtPathsValidatesCommittedProviderInvokes(t *testing.T) {
 	writeLocalRelease := func(name, source, version string) string {
 		t.Helper()
 
-		archivePath := buildExecutableArchiveWithConfigSchema(t, dir, name+"-src", source, version, providermanifestv1.KindPlugin, name, name+"-binary")
+		archivePath := buildExecutableArchiveWithConfigSchema(t, dir, name+"-src", source, version, providermanifestv1.KindApp, name, name+"-binary")
 		archiveData, err := os.ReadFile(archivePath)
 		if err != nil {
 			t.Fatalf("read %s archive: %v", name, err)
@@ -894,7 +894,7 @@ func TestLockAtPathsValidatesCommittedProviderInvokes(t *testing.T) {
 			Schema:        providerReleaseSchemaName,
 			SchemaVersion: providerReleaseSchemaVersion,
 			Package:       source,
-			Kind:          providermanifestv1.KindPlugin,
+			Kind:          providermanifestv1.KindApp,
 			Version:       version,
 			Runtime:       providerReleaseRuntimeExecutable,
 			Artifacts: map[string]providerReleaseArtifact{
@@ -911,14 +911,14 @@ func TestLockAtPathsValidatesCommittedProviderInvokes(t *testing.T) {
 	targetSource := writeLocalRelease("target", "github.com/acme/tools/target", "1.0.0")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
-%splugins:
+apiVersion: gestaltd.config/v6
+%sapps:
   target:
     source: %s
   caller:
     source: %s
     invokes:
-      - plugin: target
+      - app: target
         operation: missing
 server:
   providers:
@@ -935,11 +935,11 @@ server:
 	}
 }
 
-func TestLoadForExecutionPluginScopeIgnoresUnrelatedLocalSources(t *testing.T) {
+func TestLoadForExecutionAppScopeIgnoresUnrelatedLocalSources(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
 	externalCredentialsManifestPath := writeExecutableSourceManifest(t, dir, "external-credentials-local", "github.com/acme/tools/external-credentials/local", "0.1.0", providermanifestv1.KindExternalCredentials, []localExecutableManifestArtifact{{
 		goos:       runtime.GOOS,
 		goarch:     runtime.GOARCH,
@@ -950,7 +950,7 @@ func TestLoadForExecutionPluginScopeIgnoresUnrelatedLocalSources(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 connections:
   orphan:
     mode: none
@@ -961,7 +961,7 @@ workflows:
   schedules:
     noisy:
       target:
-        plugin:
+        app:
           name: beta
           operation: ping
       cron: "* * * * *"
@@ -1001,14 +1001,14 @@ server:
     secrets: runtime_env
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-plugins:
+apps:
   alpha:
     source:
-      path: plugins/alpha/manifest.yaml
+      path: apps/alpha/manifest.yaml
   beta:
     default: ${GESTALT_SCOPED_PLUGIN_DROPPED_BOOL_MISSING_ENV}
     source:
-      path: plugins/beta/manifest.yaml
+      path: apps/beta/manifest.yaml
     env:
       UNRELATED_TOKEN: ${GESTALT_SCOPED_PLUGIN_TEST_MISSING_ENV}
     connections:
@@ -1024,18 +1024,18 @@ plugins:
 		t.Fatal("unscoped load unexpectedly succeeded with unrelated missing sources")
 	}
 
-	loaded, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, false)
+	loaded, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, false)
 	if err != nil {
 		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths: %v", err)
 	}
-	if got, want := len(loaded.Plugins), 1; got != want {
-		t.Fatalf("loaded plugins = %d, want %d", got, want)
+	if got, want := len(loaded.Apps), 1; got != want {
+		t.Fatalf("loaded apps = %d, want %d", got, want)
 	}
-	if loaded.Plugins["alpha"] == nil {
-		t.Fatal("plugins.alpha missing from scoped config")
+	if loaded.Apps["alpha"] == nil {
+		t.Fatal("apps.alpha missing from scoped config")
 	}
-	if _, ok := loaded.Plugins["beta"]; ok {
-		t.Fatal("plugins.beta should be dropped from scoped config")
+	if _, ok := loaded.Apps["beta"]; ok {
+		t.Fatal("apps.beta should be dropped from scoped config")
 	}
 	if _, ok := loaded.Providers.UI["noisy"]; ok {
 		t.Fatal("providers.ui.noisy should be dropped from scoped config")
@@ -1052,7 +1052,7 @@ plugins:
 	if _, err := os.Stat(filepath.Join(dir, LockfileName)); !os.IsNotExist(err) {
 		t.Fatalf("production lockfile should not be written, stat err=%v", err)
 	}
-	scopedLockPath := filepath.Join(artifactsDir, ".gestaltd", "scopes", "plugins", "alpha", LockfileName)
+	scopedLockPath := filepath.Join(artifactsDir, ".gestaltd", "scopes", "apps", "alpha", LockfileName)
 	lock, err := ReadLockfile(scopedLockPath)
 	if err != nil {
 		t.Fatalf("read scoped lockfile: %v", err)
@@ -1066,18 +1066,18 @@ plugins:
 	if err := os.Remove(scopedLockPath); err != nil {
 		t.Fatalf("remove empty scoped lockfile: %v", err)
 	}
-	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, nil); err != nil {
+	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, nil); err != nil {
 		t.Fatalf("CheckLockAtPathsWithStatePaths should allow missing local-only scoped lockfile: %v", err)
 	}
 
 	explicitArtifactsDir := filepath.Join(dir, "explicit-artifacts")
 	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{
 		ArtifactsDir: explicitArtifactsDir,
-		PluginScope:  []string{"alpha"},
+		AppScope:  []string{"alpha"},
 	}, false); err != nil {
 		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths with explicit artifacts dir: %v", err)
 	}
-	explicitScopedLockPath := filepath.Join(explicitArtifactsDir, ".gestaltd", "scopes", "plugins", "alpha", LockfileName)
+	explicitScopedLockPath := filepath.Join(explicitArtifactsDir, ".gestaltd", "scopes", "apps", "alpha", LockfileName)
 	if _, err := os.Stat(explicitScopedLockPath); err != nil {
 		t.Fatalf("explicit artifacts scoped lockfile missing: %v", err)
 	}
@@ -1095,24 +1095,24 @@ plugins:
 	}
 	if _, _, err := lc.LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{
 		ArtifactsDir: relativeArtifactsDir,
-		PluginScope:  []string{"alpha"},
+		AppScope:  []string{"alpha"},
 	}, false); err != nil {
 		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths with relative artifacts dir: %v", err)
 	}
-	relativeScopedLockPath := filepath.Join(relativeArtifactsRoot, ".gestaltd", "scopes", "plugins", "alpha", LockfileName)
+	relativeScopedLockPath := filepath.Join(relativeArtifactsRoot, ".gestaltd", "scopes", "apps", "alpha", LockfileName)
 	if _, err := os.Stat(relativeScopedLockPath); err != nil {
 		t.Fatalf("relative artifacts scoped lockfile missing: %v", err)
 	}
 }
 
-func TestLoadForExecutionPluginScopeKeepsReferencedSecretsProvider(t *testing.T) {
+func TestLoadForExecutionAppScopeKeepsReferencedSecretsProvider(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("GESTALT_SCOPED_PLUGIN_REPO_TOKEN", "repo-token")
-	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
 
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 %s
   secrets:
     runtime_env:
@@ -1128,10 +1128,10 @@ server:
     secrets: runtime_env
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-plugins:
+apps:
   alpha:
     source:
-      path: plugins/alpha/manifest.yaml
+      path: apps/alpha/manifest.yaml
     env:
       TARGET_TOKEN:
         secret:
@@ -1142,71 +1142,71 @@ plugins:
 		t.Fatalf("write config: %v", err)
 	}
 
-	loaded, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, false)
+	loaded, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, false)
 	if err != nil {
 		t.Fatalf("scoped LoadForExecutionAtPathsWithStatePaths: %v", err)
 	}
 	if _, ok := loaded.Providers.Secrets["repo_auth"]; !ok {
-		t.Fatal("providers.secrets.repo_auth should be kept for selected plugin secret ref")
+		t.Fatal("providers.secrets.repo_auth should be kept for selected app secret ref")
 	}
 	if _, ok := loaded.Providers.Secrets["unused"]; ok {
 		t.Fatal("providers.secrets.unused should be dropped")
 	}
 }
 
-func TestLoadForExecutionPluginScopeLockedMissingStateUsesScopedError(t *testing.T) {
+func TestLoadForExecutionAppScopeLockedMissingStateUsesScopedError(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
 
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 %s
 server:
   providers:
     indexeddb: sqlite
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-plugins:
+apps:
   alpha:
     source:
-      path: plugins/alpha/manifest.yaml
+      path: apps/alpha/manifest.yaml
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
-	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, true)
+	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, true)
 	if err == nil {
 		t.Fatal("locked scoped load unexpectedly succeeded without scoped state")
 	}
 	if !strings.Contains(err.Error(), `prepared artifact for provider "alpha" is missing or stale`) ||
-		!strings.Contains(err.Error(), `scoped local state for plugin "alpha"`) {
+		!strings.Contains(err.Error(), `scoped local state for app "alpha"`) {
 		t.Fatalf("error = %v, want scoped prepared artifact guidance", err)
 	}
 }
 
-func TestLoadForExecutionPluginScopeRejectsMissingEnvInSelectedClosure(t *testing.T) {
+func TestLoadForExecutionAppScopeRejectsMissingEnvInSelectedClosure(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
 
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 %s
 server:
   providers:
     indexeddb: sqlite
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-plugins:
+apps:
   alpha:
     source:
-      path: plugins/alpha/manifest.yaml
+      path: apps/alpha/manifest.yaml
     env:
       TARGET_TOKEN: ${GESTALT_SCOPED_PLUGIN_SELECTED_MISSING_ENV}
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
@@ -1214,41 +1214,41 @@ plugins:
 		t.Fatalf("write config: %v", err)
 	}
 
-	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, false)
+	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, false)
 	if err == nil {
-		t.Fatal("scoped load unexpectedly succeeded with missing selected plugin env")
+		t.Fatal("scoped load unexpectedly succeeded with missing selected app env")
 	}
 	if !strings.Contains(err.Error(), `environment variable "GESTALT_SCOPED_PLUGIN_SELECTED_MISSING_ENV" not set`) {
 		t.Fatalf("error = %v, want selected missing env", err)
 	}
 }
 
-func TestLoadForExecutionPluginScopeRejectsMissingEnvInSelectedNonStringField(t *testing.T) {
+func TestLoadForExecutionAppScopeRejectsMissingEnvInSelectedNonStringField(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeSourceProviderTree(t, filepath.Join(dir, "plugins", "alpha"), "github.com/acme/tools/plugins/alpha", "1.2.3", "alpha-binary")
+	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
 
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 %s
 server:
   providers:
     indexeddb: sqlite
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-plugins:
+apps:
   alpha:
     default: ${GESTALT_SCOPED_PLUGIN_SELECTED_BOOL_MISSING_ENV}
     source:
-      path: plugins/alpha/manifest.yaml
+      path: apps/alpha/manifest.yaml
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
-	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"alpha"}}, false)
+	_, _, err := NewLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"alpha"}}, false)
 	if err == nil {
 		t.Fatal("scoped load unexpectedly succeeded with selected non-string missing env")
 	}
@@ -1264,7 +1264,7 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	const (
 		ref           = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		gestaltRef    = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-		packageSource = "github.com/acme/providers/plugins/alpha"
+		packageSource = "github.com/acme/providers/apps/alpha"
 		version       = "0.0.0-snapshot.gaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	)
 	archivePath := buildV2Archive(t, dir, packageSource, version, "snapshot-binary")
@@ -1280,13 +1280,13 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	var archiveCount atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/snapshots/github.com/acme/providers/" + ref + "/plugins/alpha/provider-release.yaml":
+		case "/snapshots/github.com/acme/providers/" + ref + "/apps/alpha/provider-release.yaml":
 			metadataCount.Add(1)
 			metadata := providerReleaseMetadata{
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       packageSource,
-				Kind:          providermanifestv1.KindPlugin,
+				Kind:          providermanifestv1.KindApp,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -1301,7 +1301,7 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 				t.Fatalf("marshal metadata: %v", err)
 			}
 			_, _ = w.Write(data)
-		case "/snapshots/github.com/acme/providers/" + ref + "/plugins/alpha/alpha.tar.gz":
+		case "/snapshots/github.com/acme/providers/" + ref + "/apps/alpha/alpha.tar.gz":
 			archiveCount.Add(1)
 			_, _ = w.Write(archiveData)
 		default:
@@ -1313,7 +1313,7 @@ func TestLifecycleGitSourceSnapshotRequireContract(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "artifacts")
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providerSnapshotRepositories:
   valon:
     url: %s/snapshots
@@ -1324,13 +1324,13 @@ server:
     indexeddb: sqlite
   artifactsDir: %s
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-plugins:
+apps:
   alpha:
     source:
       git:
         repo: https://github.com/acme/providers.git
         ref: %s
-        path: plugins/alpha/manifest.yaml
+        path: apps/alpha/manifest.yaml
         artifactRepository: valon
         materialization: snapshot
 `, srv.URL, gestaltRef, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "snapshot.db")), filepath.ToSlash(artifactsDir), ref)
@@ -1352,7 +1352,7 @@ plugins:
 	if entry.SourceRef.ResolvedGestaltRef != gestaltRef {
 		t.Fatalf("resolvedGestaltRef = %q, want %q", entry.SourceRef.ResolvedGestaltRef, gestaltRef)
 	}
-	if entry.Source != srv.URL+"/snapshots/github.com/acme/providers/"+ref+"/plugins/alpha/provider-release.yaml" {
+	if entry.Source != srv.URL+"/snapshots/github.com/acme/providers/"+ref+"/apps/alpha/provider-release.yaml" {
 		t.Fatalf("source = %q", entry.Source)
 	}
 	if entry.Version != version {
@@ -1423,7 +1423,7 @@ func TestLifecycleGitSourceSnapshotRequirePrimesSecretsProvider(t *testing.T) {
 	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
 	configPath := filepath.Join(dir, "gestaltd.yaml")
 	configYAML := fmt.Sprintf(`
-apiVersion: gestaltd.config/v5
+apiVersion: gestaltd.config/v6
 providerSnapshotRepositories:
   valon:
     url: %s/snapshots
@@ -1501,7 +1501,7 @@ func writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent s
 	manifest := &providermanifestv1.Manifest{
 		Source:      source,
 		Version:     version,
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		DisplayName: "Alpha",
 		Spec:        &providermanifestv1.Spec{},
 		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "provider"},
@@ -1524,7 +1524,7 @@ func writeOwnedUISourcePluginTree(t *testing.T, pluginDir, uiDir, name, uiBuildS
 func writeOwnedUISourcePluginForUI(t *testing.T, pluginDir, uiManifestPath, name string) string {
 	t.Helper()
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatalf("create source plugin dir: %v", err)
+		t.Fatalf("create source app dir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(pluginDir, "provider"), []byte(name+"-provider"), 0o755); err != nil {
 		t.Fatalf("write provider binary: %v", err)
@@ -1537,9 +1537,9 @@ func writeOwnedUISourcePluginForUI(t *testing.T, pluginDir, uiManifestPath, name
 		t.Fatalf("relative owned ui path: %v", err)
 	}
 	manifest := &providermanifestv1.Manifest{
-		Source:      "github.com/acme/plugins/" + name,
+		Source:      "github.com/acme/apps/" + name,
 		Version:     "1.2.3",
-		Kind:        providermanifestv1.KindPlugin,
+		Kind:        providermanifestv1.KindApp,
 		DisplayName: name,
 		Spec: withNoAuthDefaultConnection(&providermanifestv1.Spec{
 			UI: &providermanifestv1.OwnedUI{Path: filepath.ToSlash(ownedUIPath)},
@@ -1548,11 +1548,11 @@ func writeOwnedUISourcePluginForUI(t *testing.T, pluginDir, uiManifestPath, name
 	}
 	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
-		t.Fatalf("encode plugin manifest: %v", err)
+		t.Fatalf("encode app manifest: %v", err)
 	}
 	manifestPath := filepath.Join(pluginDir, "manifest.yaml")
 	if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
-		t.Fatalf("write plugin manifest: %v", err)
+		t.Fatalf("write app manifest: %v", err)
 	}
 	return manifestPath
 }
@@ -1619,7 +1619,7 @@ func writeNamedBlockingSourceUIManifest(t *testing.T, dir, manifestName, source,
 func writeLocalUITestConfig(t *testing.T, dir string, uiManifests map[string]string) string {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString("apiVersion: gestaltd.config/v5\n")
+	b.WriteString("apiVersion: gestaltd.config/v6\n")
 	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
 	b.WriteString("  ui:\n")
 	for _, name := range slices.Sorted(maps.Keys(uiManifests)) {
@@ -1644,16 +1644,16 @@ func writeLocalUITestConfig(t *testing.T, dir string, uiManifests map[string]str
 	return configPath
 }
 
-func writeOwnedUIPluginTestConfig(t *testing.T, dir string, plugins map[string]string) string {
+func writeOwnedUIPluginTestConfig(t *testing.T, dir string, apps map[string]string) string {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString("apiVersion: gestaltd.config/v5\n")
+	b.WriteString("apiVersion: gestaltd.config/v6\n")
 	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
-	b.WriteString("plugins:\n")
-	for _, name := range slices.Sorted(maps.Keys(plugins)) {
+	b.WriteString("apps:\n")
+	for _, name := range slices.Sorted(maps.Keys(apps)) {
 		b.WriteString("  " + name + ":\n")
 		b.WriteString("    source:\n")
-		b.WriteString("      path: " + filepath.ToSlash(plugins[name]) + "\n")
+		b.WriteString("      path: " + filepath.ToSlash(apps[name]) + "\n")
 		b.WriteString("    ui:\n")
 		b.WriteString("      path: /" + name + "\n")
 	}
@@ -1676,7 +1676,7 @@ func writeOwnedUIPluginTestConfig(t *testing.T, dir string, plugins map[string]s
 func writePluginBoundLocalUITestConfig(t *testing.T, dir string, plugins, uiManifests map[string]string) (string, *Lockfile) {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString("apiVersion: gestaltd.config/v5\n")
+	b.WriteString("apiVersion: gestaltd.config/v6\n")
 	b.WriteString(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")))
 	b.WriteString("  ui:\n")
 	for _, name := range slices.Sorted(maps.Keys(uiManifests)) {
@@ -1684,7 +1684,7 @@ func writePluginBoundLocalUITestConfig(t *testing.T, dir string, plugins, uiMani
 		b.WriteString("      source:\n")
 		b.WriteString("        path: " + filepath.ToSlash(uiManifests[name]) + "\n")
 	}
-	b.WriteString("plugins:\n")
+	b.WriteString("apps:\n")
 	for _, name := range slices.Sorted(maps.Keys(plugins)) {
 		b.WriteString("  " + name + ":\n")
 		b.WriteString("    source:\n")
@@ -1792,7 +1792,7 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 	manifest := &providermanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kind:    providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{},
+		Kind:    providermanifestv1.KindApp, Spec: &providermanifestv1.Spec{},
 		Artifacts: []providermanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -1853,7 +1853,7 @@ func TestFingerprintLocalReleaseMetadataIgnoresAdjacentSourceTree(t *testing.T) 
 		Schema:        providerReleaseSchemaName,
 		SchemaVersion: providerReleaseSchemaVersion,
 		Package:       "github.com/acme/providers/alpha",
-		Kind:          providermanifestv1.KindPlugin,
+		Kind:          providermanifestv1.KindApp,
 		Runtime:       providerReleaseRuntimeExecutable,
 		Version:       "1.0.0",
 		Artifacts: map[string]providerReleaseArtifact{
@@ -1880,7 +1880,7 @@ func TestFingerprintLocalReleaseMetadataIgnoresAdjacentSourceTree(t *testing.T) 
 		Schema:        providerReleaseSchemaName,
 		SchemaVersion: providerReleaseSchemaVersion,
 		Package:       "github.com/acme/providers/alpha",
-		Kind:          providermanifestv1.KindPlugin,
+		Kind:          providermanifestv1.KindApp,
 		Runtime:       providerReleaseRuntimeExecutable,
 		Version:       "1.0.1",
 		Artifacts: map[string]providerReleaseArtifact{
@@ -1908,7 +1908,7 @@ func buildExecutableArchiveWithConfigSchema(t *testing.T, dir, srcDirName, sourc
 	artPath := artifactRelPath(binaryName)
 	srcDir := filepath.Join(dir, srcDirName)
 	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artPath))), 0o755); err != nil {
-		t.Fatalf("create plugin src dir: %v", err)
+		t.Fatalf("create app src dir: %v", err)
 	}
 	binaryData := []byte(binaryContent)
 	manifest := &providermanifestv1.Manifest{
@@ -1970,7 +1970,7 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 	artPath := artifactRelPath(binaryName)
 	srcDir := filepath.Join(dir, srcDirName)
 	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artPath))), 0755); err != nil {
-		t.Fatalf("create plugin src dir: %v", err)
+		t.Fatalf("create app src dir: %v", err)
 	}
 	manifest := &providermanifestv1.Manifest{
 		Source:  source,
@@ -2286,7 +2286,7 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 					Schema:        providerReleaseSchemaName,
 					SchemaVersion: providerReleaseSchemaVersion,
 					Package:       packageSource,
-					Kind:          providermanifestv1.KindPlugin,
+					Kind:          providermanifestv1.KindApp,
 					Version:       version,
 					Runtime:       providerReleaseRuntimeExecutable,
 					Artifacts: map[string]providerReleaseArtifact{
@@ -2323,7 +2323,7 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 							Schema:        providerReleaseSchemaName,
 							SchemaVersion: providerReleaseSchemaVersion,
 							Package:       packageSource,
-							Kind:          providermanifestv1.KindPlugin,
+							Kind:          providermanifestv1.KindApp,
 							Version:       version,
 							Runtime:       providerReleaseRuntimeExecutable,
 							Artifacts: map[string]providerReleaseArtifact{
@@ -2424,7 +2424,7 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				configLines = append(configLines, strings.Split(strings.TrimSuffix(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), "\n"), "\n")...)
 			}
 			configLines = append(configLines,
-				"plugins:",
+				"apps:",
 				"  alpha:",
 			)
 			if !tc.localSource || tc.remoteArchives {
@@ -2481,8 +2481,8 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			if entry.Package != packageSource {
 				t.Fatalf("entry.Package = %q, want %q", entry.Package, packageSource)
 			}
-			if entry.Kind != providermanifestv1.KindPlugin {
-				t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindPlugin)
+			if entry.Kind != providermanifestv1.KindApp {
+				t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindApp)
 			}
 			if entry.Runtime != providerReleaseRuntimeExecutable {
 				t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeExecutable)
@@ -2521,7 +2521,7 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			if err := json.Unmarshal(lockData, &diskLock); err != nil {
 				t.Fatalf("Unmarshal lockfile: %v", err)
 			}
-			diskEntry, ok := diskLock.Providers.Plugin["alpha"]
+			diskEntry, ok := diskLock.Providers.App["alpha"]
 			if !ok {
 				t.Fatal(`disk lock providers.plugin["alpha"] not found`)
 			}
@@ -2534,8 +2534,8 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			if diskEntry.Runtime != providerReleaseRuntimeExecutable {
 				t.Fatalf("disk lock runtime = %q, want %q", diskEntry.Runtime, providerReleaseRuntimeExecutable)
 			}
-			if diskEntry.Kind != providermanifestv1.KindPlugin {
-				t.Fatalf("disk lock kind = %q, want %q", diskEntry.Kind, providermanifestv1.KindPlugin)
+			if diskEntry.Kind != providermanifestv1.KindApp {
+				t.Fatalf("disk lock kind = %q, want %q", diskEntry.Kind, providermanifestv1.KindApp)
 			}
 			if got := diskEntry.Archives[providerpkg.CurrentPlatformString()].SHA256; got != wantCurrentSHA {
 				t.Fatalf("disk lock current SHA256 = %q, want %q", got, wantCurrentSHA)
@@ -2549,7 +2549,7 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 
 			pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
 			if err := os.RemoveAll(pluginRoot); err != nil {
-				t.Fatalf("RemoveAll plugin root: %v", err)
+				t.Fatalf("RemoveAll app root: %v", err)
 			}
 			if tc.tamperLocalArchive {
 				if err := os.WriteFile(localCurrentArchivePath, []byte("tampered-local-archive"), 0o644); err != nil {
@@ -2593,27 +2593,27 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			if err != nil {
 				t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 			}
-			if cfg.Plugins["alpha"] == nil {
-				t.Fatal(`cfg.Plugins["alpha"] = nil`)
+			if cfg.Apps["alpha"] == nil {
+				t.Fatal(`cfg.Apps["alpha"] = nil`)
 				return
 			}
-			if cfg.Plugins["alpha"].ResolvedManifest == nil {
-				t.Fatal(`cfg.Plugins["alpha"].ResolvedManifest = nil`)
+			if cfg.Apps["alpha"].ResolvedManifest == nil {
+				t.Fatal(`cfg.Apps["alpha"].ResolvedManifest = nil`)
 				return
 			}
-			if cfg.Plugins["alpha"].ResolvedManifest.Source != packageSource {
-				t.Fatalf("ResolvedManifest.Source = %q, want %q", cfg.Plugins["alpha"].ResolvedManifest.Source, packageSource)
+			if cfg.Apps["alpha"].ResolvedManifest.Source != packageSource {
+				t.Fatalf("ResolvedManifest.Source = %q, want %q", cfg.Apps["alpha"].ResolvedManifest.Source, packageSource)
 			}
 			executablePath := resolveLockPath(artifactsDir, entry.Executable)
-			if cfg.Plugins["alpha"].Command != executablePath {
-				t.Fatalf("plugin command = %q, want %q", cfg.Plugins["alpha"].Command, executablePath)
+			if cfg.Apps["alpha"].Command != executablePath {
+				t.Fatalf("plugin command = %q, want %q", cfg.Apps["alpha"].Command, executablePath)
 			}
 			if tc.localSource {
 				writeProviderReleaseMetadataFile(t, localMetadataPath, providerReleaseMetadata{
 					Schema:        providerReleaseSchemaName,
 					SchemaVersion: providerReleaseSchemaVersion,
 					Package:       packageSource,
-					Kind:          providermanifestv1.KindPlugin,
+					Kind:          providermanifestv1.KindApp,
 					Version:       "1.2.4",
 					Runtime:       providerReleaseRuntimeExecutable,
 					Artifacts: map[string]providerReleaseArtifact{
@@ -2696,7 +2696,7 @@ packages:
     versions:
       %s:
         metadata: providers/alpha/v1.2.3/provider-release.yaml
-        kind: plugin
+        kind: app
         runtime: executable
         platforms:
           - %s
@@ -2716,7 +2716,7 @@ packages:
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       packageSource,
-				Kind:          providermanifestv1.KindPlugin,
+				Kind:          providermanifestv1.KindApp,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -2755,7 +2755,7 @@ packages:
 		"  local:",
 		"    url: " + srv.URL + indexPath,
 		strings.TrimSuffix(requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), "\n"),
-		"plugins:",
+		"apps:",
 		"  alpha:",
 		"    source:",
 		"      repo: local",
@@ -2819,7 +2819,7 @@ packages:
 	}
 	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
 	if err := os.RemoveAll(pluginRoot); err != nil {
-		t.Fatalf("RemoveAll plugin root: %v", err)
+		t.Fatalf("RemoveAll app root: %v", err)
 	}
 	failIndexAndMetadata.Store(true)
 	indexBefore := indexCount.Load()
@@ -2858,10 +2858,10 @@ packages:
 	if got := archiveCount.Load(); got != archiveBeforeLoad {
 		t.Fatalf("archive request count after locked load = %d, want %d", got, archiveBeforeLoad)
 	}
-	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
-		t.Fatal(`cfg.Plugins["alpha"].ResolvedManifest missing`)
+	if cfg.Apps["alpha"] == nil || cfg.Apps["alpha"].ResolvedManifest == nil {
+		t.Fatal(`cfg.Apps["alpha"].ResolvedManifest missing`)
 	}
-	if got := cfg.Plugins["alpha"].ResolvedManifest.Source; got != packageSource {
+	if got := cfg.Apps["alpha"].ResolvedManifest.Source; got != packageSource {
 		t.Fatalf("ResolvedManifest.Source = %q, want %q", got, packageSource)
 	}
 }
@@ -3591,7 +3591,7 @@ func TestSourcePluginPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) 
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       packageSource,
-				Kind:          providermanifestv1.KindPlugin,
+				Kind:          providermanifestv1.KindApp,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -3620,7 +3620,7 @@ func TestSourcePluginPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
-		"plugins:",
+		"apps:",
 		"  gadget:",
 		"    source: " + srv.URL + metadataPath,
 		"server:",
@@ -3700,7 +3700,7 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       packageSource,
-				Kind:          providermanifestv1.KindPlugin,
+				Kind:          providermanifestv1.KindApp,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -3746,7 +3746,7 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
-		"plugins:",
+		"apps:",
 		"  alpha:",
 		"    source:",
 		"      url: " + metadataURL,
@@ -3792,7 +3792,7 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 
 	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
 	if err := os.RemoveAll(pluginRoot); err != nil {
-		t.Fatalf("RemoveAll plugin root: %v", err)
+		t.Fatalf("RemoveAll app root: %v", err)
 	}
 
 	metadataBefore := metadataCount.Load()
@@ -3814,8 +3814,8 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
 	}
-	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
-		t.Fatal("resolved metadata plugin manifest missing after locked load")
+	if cfg.Apps["alpha"] == nil || cfg.Apps["alpha"].ResolvedManifest == nil {
+		t.Fatal("resolved metadata app manifest missing after locked load")
 	}
 }
 
@@ -3832,7 +3832,7 @@ func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 
 	const (
 		repo         = "valon-technologies/toolshed"
-		tag          = "plugins/workplace-hub/v0.0.1-alpha.1"
+		tag          = "apps/workplace-hub/v0.0.1-alpha.1"
 		metadataID   = int64(101)
 		archiveID    = int64(202)
 		metadataName = "provider-release.yaml"
@@ -3840,7 +3840,7 @@ func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	)
 
 	archiveAssetURL := fmt.Sprintf("https://api.github.com/repos/%s/releases/assets/%d", repo, archiveID)
-	logicalSource := "github-release://github.com/valon-technologies/toolshed?asset=provider-release.yaml&tag=plugins%2Fworkplace-hub%2Fv0.0.1-alpha.1"
+	logicalSource := "github-release://github.com/valon-technologies/toolshed?asset=provider-release.yaml&tag=apps%2Fworkplace-hub%2Fv0.0.1-alpha.1"
 
 	var releaseCount atomic.Int64
 	var metadataCount atomic.Int64
@@ -3889,7 +3889,7 @@ func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       testSource,
-				Kind:          providermanifestv1.KindPlugin,
+				Kind:          providermanifestv1.KindApp,
 				Version:       testVersion,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -3946,7 +3946,7 @@ func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
-		"plugins:",
+		"apps:",
 		"  alpha:",
 		"    source:",
 		"      githubRelease:",
@@ -4042,7 +4042,7 @@ func TestSourcePluginMetadataURLRetriesTransientRemoteMetadataFailure(t *testing
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       testSource,
-				Kind:          providermanifestv1.KindPlugin,
+				Kind:          providermanifestv1.KindApp,
 				Version:       testVersion,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -4073,7 +4073,7 @@ func TestSourcePluginMetadataURLRetriesTransientRemoteMetadataFailure(t *testing
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
-		"plugins:",
+		"apps:",
 		"  alpha:",
 		"    source:",
 		"      url: " + srv.URL + metadataPath,
@@ -4148,7 +4148,7 @@ func TestSourcePluginMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
-		"plugins:",
+		"apps:",
 		"  alpha:",
 		"    source:",
 		"      url: " + srv.URL + metadataPath,
@@ -4241,7 +4241,7 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       packageSource,
-				Kind:          providermanifestv1.KindPlugin,
+				Kind:          providermanifestv1.KindApp,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -4281,7 +4281,7 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
-		"plugins:",
+		"apps:",
 		"  alpha:",
 		"    source:",
 		"      url: " + srv.URL + metadataPath,
@@ -4340,11 +4340,11 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 	if got := archiveCount.Load(); got <= archiveBefore {
 		t.Fatalf("archive request count after unlocked load = %d, want > %d", got, archiveBefore)
 	}
-	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
-		t.Fatal("resolved metadata plugin manifest missing after unlocked refresh")
+	if cfg.Apps["alpha"] == nil || cfg.Apps["alpha"].ResolvedManifest == nil {
+		t.Fatal("resolved metadata app manifest missing after unlocked refresh")
 		return
 	}
-	if got := cfg.Plugins["alpha"].ResolvedManifest.Version; got != updatedVersion {
+	if got := cfg.Apps["alpha"].ResolvedManifest.Version; got != updatedVersion {
 		t.Fatalf("resolved manifest version after unlocked refresh = %q, want %q", got, updatedVersion)
 	}
 
@@ -4365,7 +4365,7 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 	const version = "1.0.0"
 
 	pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindPlugin,
+		Kind:    providermanifestv1.KindApp,
 		Source:  source,
 		Version: version,
 		Spec: &providermanifestv1.Spec{
@@ -4451,7 +4451,7 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       source,
-				Kind:          providermanifestv1.KindPlugin,
+				Kind:          providermanifestv1.KindApp,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -4481,7 +4481,7 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"apiVersion: " + config.ConfigAPIVersion,
-		"plugins:",
+		"apps:",
 		"  gadget:",
 		"    source: " + srv.URL + metadataPath,
 		"server:",
@@ -4539,7 +4539,7 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 		t.Fatalf("download count during sync = %d, want 1", got)
 	}
 
-	gotManifest := cfg.Plugins["gadget"].ResolvedManifest
+	gotManifest := cfg.Apps["gadget"].ResolvedManifest
 	if gotManifest == nil {
 		t.Fatal("ResolvedManifest is nil")
 		return
@@ -4865,10 +4865,10 @@ func TestLockAndSyncSkipRuntimeOnlySecretRefs(t *testing.T) {
 
 	dir := t.TempDir()
 	pluginSource := "github.com/acme/tools/runtime-secret-free-lock"
-	pluginManifestPath := writeExecutableSourceManifest(t, dir, "plugin-src", pluginSource, "1.0.0", providermanifestv1.KindPlugin, []localExecutableManifestArtifact{{
+	pluginManifestPath := writeExecutableSourceManifest(t, dir, "plugin-src", pluginSource, "1.0.0", providermanifestv1.KindApp, []localExecutableManifestArtifact{{
 		goos:       runtime.GOOS,
 		goarch:     runtime.GOARCH,
-		binaryName: "plugin",
+		binaryName: "app",
 		data:       []byte("plugin-binary"),
 	}})
 	runtimeSecretsManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/runtime-secrets", "0.1.0")
@@ -4889,7 +4889,7 @@ func TestLockAndSyncSkipRuntimeOnlySecretRefs(t *testing.T) {
 		"    secret:",
 		"      provider: runtime_only",
 		"      name: encryption-key",
-		"plugins:",
+		"apps:",
 		"  alpha:",
 		"    source:",
 		"      path: " + pluginManifestPath,
@@ -4993,7 +4993,7 @@ func TestLockRejectsLocalSourceAuthSecretsProviderBeforeFetch(t *testing.T) {
 				"    secrets: " + tc.selectedSecrets,
 				"  artifactsDir: " + filepath.Join(dir, "prepared-artifacts"),
 				"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-				"plugins:",
+				"apps:",
 				"  private:",
 				"    source:",
 				"      url: https://example.invalid/private/provider-release.yaml",
@@ -5024,7 +5024,7 @@ func TestLockRejectsLocalSourceAuthSecretsProviderBeforeFetch(t *testing.T) {
 	}
 }
 
-func TestLoadForStaticValidationPluginScopePreparesMissingCurrentPlatformLock(t *testing.T) {
+func TestLoadForStaticValidationAppScopePreparesMissingCurrentPlatformLock(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -5032,7 +5032,7 @@ func TestLoadForStaticValidationPluginScopePreparesMissingCurrentPlatformLock(t 
 		packageSource = "github.com/acme/tools/private"
 		version       = "0.0.1-alpha.1"
 	)
-	archivePath := buildExecutableArchive(t, dir, "private-src", packageSource, version, providermanifestv1.KindPlugin, "private-plugin", "private-plugin-binary")
+	archivePath := buildExecutableArchive(t, dir, "private-src", packageSource, version, providermanifestv1.KindApp, "private-plugin", "private-plugin-binary")
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
 		t.Fatalf("read archive: %v", err)
@@ -5049,7 +5049,7 @@ func TestLoadForStaticValidationPluginScopePreparesMissingCurrentPlatformLock(t 
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       packageSource,
-				Kind:          providermanifestv1.KindPlugin,
+				Kind:          providermanifestv1.KindApp,
 				Version:       version,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -5082,7 +5082,7 @@ func TestLoadForStaticValidationPluginScopePreparesMissingCurrentPlatformLock(t 
 			"    indexeddb: sqlite",
 			"  artifactsDir: " + filepath.ToSlash(filepath.Join(dir, "artifacts")),
 			"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			"plugins:",
+			"apps:",
 			"  private:",
 			"    source: " + srv.URL + "/providers/private/provider-release.yaml",
 			"  unrelated:",
@@ -5095,7 +5095,7 @@ func TestLoadForStaticValidationPluginScopePreparesMissingCurrentPlatformLock(t 
 
 	_, err = NewLifecycle().
 		WithHTTPClient(srv.Client()).
-		LoadForStaticValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{PluginScope: []string{"private"}}, StaticValidationOptions{})
+		LoadForStaticValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{AppScope: []string{"private"}}, StaticValidationOptions{})
 	if err != nil {
 		t.Fatalf("LoadForStaticValidationAtPathsWithStatePaths: %v", err)
 	}
@@ -5157,10 +5157,10 @@ func TestLockAndSyncResolveSourceAuthSecretRefsFromPackageSecretsProvider(t *tes
 	}
 	secretsArchiveSum := sha256.Sum256(secretsArchiveData)
 
-	pluginArchivePath := buildExecutableArchive(t, dir, "private-package-auth-src", pluginSource, pluginVersion, providermanifestv1.KindPlugin, "private-plugin", "private-plugin-binary")
+	pluginArchivePath := buildExecutableArchive(t, dir, "private-package-auth-src", pluginSource, pluginVersion, providermanifestv1.KindApp, "private-plugin", "private-plugin-binary")
 	pluginArchiveData, err := os.ReadFile(pluginArchivePath)
 	if err != nil {
-		t.Fatalf("read plugin archive: %v", err)
+		t.Fatalf("read app archive: %v", err)
 	}
 	pluginArchiveSum := sha256.Sum256(pluginArchiveData)
 
@@ -5251,7 +5251,7 @@ packages:
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
 				Package:       pluginSource,
-				Kind:          providermanifestv1.KindPlugin,
+				Kind:          providermanifestv1.KindApp,
 				Version:       pluginVersion,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
@@ -5263,7 +5263,7 @@ packages:
 			}
 			data, err := yaml.Marshal(metadata)
 			if err != nil {
-				handlerErrs <- fmt.Errorf("marshal plugin metadata: %v", err)
+				handlerErrs <- fmt.Errorf("marshal app metadata: %v", err)
 				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
 				return
 			}
@@ -5301,7 +5301,7 @@ packages:
 		"    secrets: bootstrap",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"plugins:",
+		"apps:",
 		"  private:",
 		"    source:",
 		"      url: " + srv.URL + pluginMetadataPath,
@@ -5385,7 +5385,7 @@ packages:
 		t.Fatalf("RemoveAll secrets root: %v", err)
 	}
 	if err := os.RemoveAll(filepath.Join(artifactsDir, ".gestaltd", "providers", "private")); err != nil {
-		t.Fatalf("RemoveAll plugin root: %v", err)
+		t.Fatalf("RemoveAll app root: %v", err)
 	}
 	indexBefore := indexCount.Load()
 	secretsMetadataBefore := secretsMetadataCount.Load()
@@ -5437,7 +5437,7 @@ packages:
 		t.Fatal(handlerErr)
 	}
 	if got := pluginMetadataCount.Load(); got == pluginMetadataBeforeValidation {
-		t.Fatal("runtime validation did not fetch plugin metadata")
+		t.Fatal("runtime validation did not fetch app metadata")
 	}
 	if got := secretsArchiveCount.Load() - secretsArchivesBeforeValidation; got != 1 {
 		t.Fatalf("secrets archive requests during runtime validation = %d, want 1", got)
@@ -5463,7 +5463,7 @@ func TestLockSourceAuthSecretRefsRequireSourceAuthResolver(t *testing.T) {
 		"    secrets: bootstrap",
 		"  artifactsDir: " + filepath.Join(dir, "prepared-artifacts"),
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"plugins:",
+		"apps:",
 		"  private:",
 		"    source:",
 		"      url: https://example.invalid/provider-release.yaml",

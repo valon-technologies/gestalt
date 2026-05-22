@@ -73,12 +73,12 @@ export const provider = defineWorkflowProvider({
     }
   },
   async startRun(request) {
-    const plugin =
-      request.target?.kind?.case === "plugin"
+    const app =
+      request.target?.kind?.case === "app"
         ? request.target.kind.value
         : undefined;
     const run = createRun(
-      `${plugin?.pluginName ?? "plugin"}:${plugin?.operation ?? "operation"}:${runs.size + 1}`,
+      `${plugin?.pluginName ?? "app"}:${plugin?.operation ?? "operation"}:${runs.size + 1}`,
       request,
       WorkflowRunStatus.PENDING,
       request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",

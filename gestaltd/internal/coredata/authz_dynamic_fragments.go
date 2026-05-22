@@ -15,10 +15,10 @@ import (
 
 const (
 	AuthorizationFragmentOwnerKindGlobal = "global"
-	AuthorizationFragmentOwnerKindPlugin = "plugin"
+	AuthorizationFragmentOwnerKindApp = "app"
 
 	AuthorizationFragmentScopeGlobal = "global"
-	AuthorizationFragmentScopePlugin = "plugin"
+	AuthorizationFragmentScopeApp = "app"
 
 	AuthorizationFragmentStatusActive = "active"
 )
@@ -29,14 +29,14 @@ type AuthorizationDynamicFragmentService struct {
 
 type AuthorizationFragmentOwner struct {
 	Kind   string `json:"kind"`
-	Plugin string `json:"plugin,omitempty"`
+	App string `json:"app,omitempty"`
 }
 
 type AuthorizationDynamicFragment struct {
 	ID            string                                     `json:"id"`
 	Owner         AuthorizationFragmentOwner                 `json:"owner"`
 	Scope         string                                     `json:"scope"`
-	Plugin        string                                     `json:"plugin,omitempty"`
+	App        string                                     `json:"app,omitempty"`
 	Version       int64                                      `json:"version"`
 	Status        string                                     `json:"status"`
 	ResourceTypes map[string]json.RawMessage                 `json:"resourceTypes,omitempty"`
@@ -119,8 +119,8 @@ func AuthorizationGlobalFragmentOwner() AuthorizationFragmentOwner {
 	return AuthorizationFragmentOwner{Kind: AuthorizationFragmentOwnerKindGlobal}
 }
 
-func AuthorizationPluginFragmentOwner(plugin string) AuthorizationFragmentOwner {
-	return AuthorizationFragmentOwner{Kind: AuthorizationFragmentOwnerKindPlugin, Plugin: strings.TrimSpace(plugin)}
+func AuthorizationAppFragmentOwner(plugin string) AuthorizationFragmentOwner {
+	return AuthorizationFragmentOwner{Kind: AuthorizationFragmentOwnerKindApp, App: strings.TrimSpace(plugin)}
 }
 
 func (s *AuthorizationDynamicFragmentService) ListFragments(ctx context.Context) ([]*AuthorizationDynamicFragment, error) {
@@ -197,7 +197,7 @@ func (s *AuthorizationDynamicFragmentService) PutFragment(ctx context.Context, f
 	fragment.Audit = update.Audit
 	fragment.Status = defaultAuthorizationFragmentStatus(fragment.Status)
 	fragment.Scope = authorizationFragmentScope(fragment.Owner)
-	fragment.Plugin = authorizationFragmentPlugin(fragment.Owner)
+	fragment.App = authorizationFragmentPlugin(fragment.Owner)
 	fragment.UpdatedAt = time.Now().UTC().Truncate(time.Second)
 	if err := s.store.Put(ctx, authorizationDynamicFragmentToRecord(fragment)); err != nil {
 		return nil, fmt.Errorf("put authorization dynamic fragment: %w", err)
@@ -369,9 +369,9 @@ func authorizationFragmentRelationshipMatchesSubjectResource(relationship Author
 
 func normalizeAuthorizationFragmentOwner(owner AuthorizationFragmentOwner) AuthorizationFragmentOwner {
 	owner.Kind = strings.TrimSpace(owner.Kind)
-	owner.Plugin = strings.TrimSpace(owner.Plugin)
-	if owner.Kind == "" && owner.Plugin != "" {
-		owner.Kind = AuthorizationFragmentOwnerKindPlugin
+	owner.App = strings.TrimSpace(owner.App)
+	if owner.Kind == "" && owner.App != "" {
+		owner.Kind = AuthorizationFragmentOwnerKindApp
 	}
 	return owner
 }
@@ -380,9 +380,9 @@ func validateAuthorizationFragmentOwner(owner AuthorizationFragmentOwner) error 
 	switch owner.Kind {
 	case AuthorizationFragmentOwnerKindGlobal:
 		return nil
-	case AuthorizationFragmentOwnerKindPlugin:
-		if owner.Plugin == "" {
-			return fmt.Errorf("plugin owner requires plugin")
+	case AuthorizationFragmentOwnerKindApp:
+		if owner.App == "" {
+			return fmt.Errorf("app owner requires app")
 		}
 		return nil
 	default:
@@ -508,8 +508,8 @@ func validateAuthorizationFragmentRelationship(relationship AuthorizationDynamic
 
 func authorizationFragmentOwnerID(owner AuthorizationFragmentOwner) string {
 	switch owner.Kind {
-	case AuthorizationFragmentOwnerKindPlugin:
-		return strings.TrimSpace(owner.Plugin)
+	case AuthorizationFragmentOwnerKindApp:
+		return strings.TrimSpace(owner.App)
 	default:
 		return AuthorizationFragmentOwnerKindGlobal
 	}
@@ -517,23 +517,23 @@ func authorizationFragmentOwnerID(owner AuthorizationFragmentOwner) string {
 
 func authorizationFragmentID(owner AuthorizationFragmentOwner) string {
 	switch owner.Kind {
-	case AuthorizationFragmentOwnerKindPlugin:
-		return "plugin/" + strings.TrimSpace(owner.Plugin)
+	case AuthorizationFragmentOwnerKindApp:
+		return "app/" + strings.TrimSpace(owner.App)
 	default:
 		return AuthorizationFragmentOwnerKindGlobal
 	}
 }
 
 func authorizationFragmentScope(owner AuthorizationFragmentOwner) string {
-	if owner.Kind == AuthorizationFragmentOwnerKindPlugin {
-		return AuthorizationFragmentScopePlugin
+	if owner.Kind == AuthorizationFragmentOwnerKindApp {
+		return AuthorizationFragmentScopeApp
 	}
 	return AuthorizationFragmentScopeGlobal
 }
 
 func authorizationFragmentPlugin(owner AuthorizationFragmentOwner) string {
-	if owner.Kind == AuthorizationFragmentOwnerKindPlugin {
-		return strings.TrimSpace(owner.Plugin)
+	if owner.Kind == AuthorizationFragmentOwnerKindApp {
+		return strings.TrimSpace(owner.App)
 	}
 	return ""
 }
@@ -581,7 +581,7 @@ func authorizationDynamicFragmentToRecord(fragment *AuthorizationDynamicFragment
 		"owner_kind":          fragment.Owner.Kind,
 		"owner_id":            ownerID,
 		"scope":               fragment.Scope,
-		"plugin":              fragment.Plugin,
+		"app":              fragment.App,
 		"version":             fragment.Version,
 		"status":              fragment.Status,
 		"resource_types_json": string(resourceTypesJSON),
@@ -599,14 +599,14 @@ func recordToAuthorizationDynamicFragment(rec indexeddb.Record) (*AuthorizationD
 		ID:        recString(rec, "id"),
 		Owner:     AuthorizationFragmentOwner{Kind: ownerKind},
 		Scope:     recString(rec, "scope"),
-		Plugin:    recString(rec, "plugin"),
+		App:    recString(rec, "app"),
 		Version:   recInt64(rec, "version"),
 		Status:    recString(rec, "status"),
 		CreatedAt: recTime(rec, "created_at"),
 		UpdatedAt: recTime(rec, "updated_at"),
 	}
-	if ownerKind == AuthorizationFragmentOwnerKindPlugin {
-		fragment.Owner.Plugin = ownerID
+	if ownerKind == AuthorizationFragmentOwnerKindApp {
+		fragment.Owner.App = ownerID
 	}
 	if raw := recString(rec, "resource_types_json"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &fragment.ResourceTypes); err != nil {

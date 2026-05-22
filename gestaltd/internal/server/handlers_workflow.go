@@ -21,11 +21,11 @@ import (
 )
 
 type workflowScheduleTargetRequest struct {
-	Plugin *workflowPluginTargetRequest `json:"plugin,omitempty"`
+	App *workflowAppTargetRequest `json:"app,omitempty"`
 	Agent  *workflowAgentTargetRequest  `json:"agent,omitempty"`
 }
 
-type workflowPluginTargetRequest struct {
+type workflowAppTargetRequest struct {
 	Name           string         `json:"name,omitempty"`
 	Operation      string         `json:"operation"`
 	Connection     string         `json:"connection,omitempty"`
@@ -91,7 +91,7 @@ func (r *workflowAgentStepWhenRequest) UnmarshalJSON(data []byte) error {
 }
 
 type workflowOutputDeliveryRequest struct {
-	Target         workflowPluginTargetRequest    `json:"target"`
+	Target         workflowAppTargetRequest    `json:"target"`
 	InputBindings  []workflowOutputBindingRequest `json:"inputBindings,omitempty"`
 	CredentialMode string                         `json:"credentialMode,omitempty"`
 }
@@ -118,11 +118,11 @@ type workflowScheduleUpsertRequest struct {
 }
 
 type workflowScheduleTargetInfo struct {
-	Plugin *workflowPluginTargetInfo `json:"plugin,omitempty"`
+	App *workflowAppTargetInfo `json:"app,omitempty"`
 	Agent  *workflowAgentTargetInfo  `json:"agent,omitempty"`
 }
 
-type workflowPluginTargetInfo struct {
+type workflowAppTargetInfo struct {
 	Name           string         `json:"name"`
 	Operation      string         `json:"operation"`
 	Connection     string         `json:"connection,omitempty"`
@@ -166,7 +166,7 @@ type workflowAgentStepWhenInfo struct {
 }
 
 type workflowOutputDeliveryInfo struct {
-	Target         workflowPluginTargetInfo    `json:"target"`
+	Target         workflowAppTargetInfo    `json:"target"`
 	InputBindings  []workflowOutputBindingInfo `json:"inputBindings,omitempty"`
 	CredentialMode string                      `json:"credentialMode,omitempty"`
 }
@@ -225,7 +225,7 @@ func (s *Server) createWorkflowSchedule(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
-		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
+		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of app or agent")
 		return
 	}
 	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
@@ -272,7 +272,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
-		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of plugin or agent")
+		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of app or agent")
 		return
 	}
 	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
@@ -352,17 +352,17 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 		agentTarget := workflowAgentTargetFromRequest(target.Agent)
 		return coreworkflow.Target{Agent: &agentTarget}
 	}
-	plugin := workflowPluginTargetFromRequest(target.Plugin)
-	pluginTarget := coreworkflow.PluginTarget{
-		PluginName:     strings.TrimSpace(plugin.Name),
-		Operation:      strings.TrimSpace(plugin.Operation),
-		Connection:     strings.TrimSpace(plugin.Connection),
-		Instance:       strings.TrimSpace(plugin.Instance),
-		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(plugin.CredentialMode)),
-		Input:          maps.Clone(plugin.Input),
+	appTarget := workflowAppTargetFromRequest(target.App)
+	pluginTarget := coreworkflow.AppTarget{
+		AppName:        strings.TrimSpace(appTarget.Name),
+		Operation:      strings.TrimSpace(appTarget.Operation),
+		Connection:     strings.TrimSpace(appTarget.Connection),
+		Instance:       strings.TrimSpace(appTarget.Instance),
+		CredentialMode: core.NormalizeOptionalConnectionMode(core.ConnectionMode(appTarget.CredentialMode)),
+		Input:          maps.Clone(appTarget.Input),
 	}
 	return coreworkflow.Target{
-		Plugin: &pluginTarget,
+		App: &pluginTarget,
 	}
 }
 
@@ -381,17 +381,17 @@ func decodeWorkflowJSONBody(r *http.Request, dst any) error {
 	return nil
 }
 
-func workflowPluginTargetFromRequest(target *workflowPluginTargetRequest) workflowPluginTargetRequest {
+func workflowAppTargetFromRequest(target *workflowAppTargetRequest) workflowAppTargetRequest {
 	if target == nil {
-		return workflowPluginTargetRequest{}
+		return workflowAppTargetRequest{}
 	}
 	return *target
 }
 
 func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) error {
-	if target.Plugin != nil {
-		if strings.TrimSpace(target.Plugin.CredentialMode) != "" {
-			return fmt.Errorf("workflow target plugin.credentialMode is not supported on public requests")
+	if target.App != nil {
+		if strings.TrimSpace(target.App.CredentialMode) != "" {
+			return fmt.Errorf("workflow target app.credentialMode is not supported on public requests")
 		}
 		return nil
 	}
@@ -471,8 +471,8 @@ func workflowOutputDeliveryFromRequest(delivery *workflowOutputDeliveryRequest) 
 		return nil
 	}
 	return &coreworkflow.OutputDelivery{
-		Target: coreworkflow.PluginTarget{
-			PluginName:     strings.TrimSpace(delivery.Target.Name),
+		Target: coreworkflow.AppTarget{
+			AppName:     strings.TrimSpace(delivery.Target.Name),
 			Operation:      strings.TrimSpace(delivery.Target.Operation),
 			Connection:     strings.TrimSpace(delivery.Target.Connection),
 			Instance:       strings.TrimSpace(delivery.Target.Instance),
@@ -505,23 +505,23 @@ func workflowOutputBindingsFromRequest(bindings []workflowOutputBindingRequest) 
 }
 
 func workflowScheduleTargetRequestHasOneKind(target workflowScheduleTargetRequest) bool {
-	hasPlugin := target.Plugin != nil
+	hasApp := target.App != nil
 	hasAgent := target.Agent != nil
-	return hasPlugin != hasAgent
+	return hasApp != hasAgent
 }
 
 func workflowScheduleTargetErrorPlugin(target workflowScheduleTargetRequest) string {
 	if target.Agent != nil {
 		return "agent"
 	}
-	return strings.TrimSpace(workflowPluginTargetFromRequest(target.Plugin).Name)
+	return strings.TrimSpace(workflowAppTargetFromRequest(target.App).Name)
 }
 
 func workflowScheduleTargetErrorOperation(target workflowScheduleTargetRequest) string {
 	if target.Agent != nil {
 		return "turn"
 	}
-	return strings.TrimSpace(workflowPluginTargetFromRequest(target.Plugin).Operation)
+	return strings.TrimSpace(workflowAppTargetFromRequest(target.App).Operation)
 }
 
 func workflowScheduleInfoFromManaged(managed *workflowmanager.ManagedSchedule) workflowScheduleInfo {
@@ -569,13 +569,13 @@ func workflowScheduleTargetInfoFromCore(target coreworkflow.Target) workflowSche
 			},
 		}
 	}
-	if target.Plugin == nil {
+	if target.App == nil {
 		return workflowScheduleTargetInfo{}
 	}
-	pluginTarget := *target.Plugin
+	pluginTarget := *target.App
 	return workflowScheduleTargetInfo{
-		Plugin: &workflowPluginTargetInfo{
-			Name:           pluginTarget.PluginName,
+		App: &workflowAppTargetInfo{
+			Name:           pluginTarget.AppName,
 			Operation:      pluginTarget.Operation,
 			Connection:     userFacingConnectionName(pluginTarget.Connection),
 			Instance:       pluginTarget.Instance,
@@ -624,8 +624,8 @@ func workflowOutputDeliveryInfoFromCore(delivery *coreworkflow.OutputDelivery) *
 		return nil
 	}
 	return &workflowOutputDeliveryInfo{
-		Target: workflowPluginTargetInfo{
-			Name:       delivery.Target.PluginName,
+		Target: workflowAppTargetInfo{
+			Name:       delivery.Target.AppName,
 			Operation:  delivery.Target.Operation,
 			Connection: userFacingConnectionName(delivery.Target.Connection),
 			Instance:   delivery.Target.Instance,
@@ -662,7 +662,7 @@ func (s *Server) writeWorkflowScheduleProviderError(ctx context.Context, w http.
 		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow schedule %q not found", scheduleID))
 	default:
 		slog.ErrorContext(ctx, "workflow schedule provider error",
-			"plugin", pluginName,
+			"app", pluginName,
 			"schedule_id", scheduleID,
 			"error", err,
 		)
