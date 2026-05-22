@@ -4708,13 +4708,10 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Permissions = []core.AccessPermission{{
-		App: "slack",
-		Operations: []string{
-			"conversations.list",
-			"conversations.history",
-		},
-	}}
+	nightly.Invokes = []config.WorkflowInvokeConfig{
+		{App: "slack", Operation: "conversations.list"},
+		{App: "slack", Operation: "conversations.history"},
+	}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},
@@ -4779,7 +4776,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	}
 }
 
-func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissionsChange(t *testing.T) {
+func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenInvokesChange(t *testing.T) {
 	t.Parallel()
 
 	factories := validFactories()
@@ -4848,15 +4845,12 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Permissions = []core.AccessPermission{{
-		App:        "slack",
-		Operations: []string{"conversations.history"},
-	}}
+	nightly.Invokes = []config.WorkflowInvokeConfig{{App: "slack", Operation: "conversations.history"}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 
 	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
 	if err != nil {
-		t.Fatalf("Bootstrap with permissions: %v", err)
+		t.Fatalf("Bootstrap with invokes: %v", err)
 	}
 	defer func() { _ = result.Close(context.Background()) }()
 	<-result.ProvidersReady
@@ -4866,7 +4860,7 @@ func TestBootstrapRecreatesConfiguredWorkflowScheduleExecutionRefWhenPermissions
 	}
 	nextExecutionRef := recorders[1].upsertedSchedules[0].ExecutionRef
 	if nextExecutionRef == initialExecutionRef {
-		t.Fatalf("execution ref = %q, want recreated after permissions change", nextExecutionRef)
+		t.Fatalf("execution ref = %q, want recreated after invokes change", nextExecutionRef)
 	}
 	oldRef, err := recorders[1].GetExecutionReference(context.Background(), initialExecutionRef)
 	if err != nil {
@@ -4966,10 +4960,7 @@ func TestBootstrapKeepsExistingConfiguredWorkflowScheduleWhenExecutionRefRefresh
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Permissions = []core.AccessPermission{{
-		App:        "slack",
-		Operations: []string{"conversations.history"},
-	}}
+	nightly.Invokes = []config.WorkflowInvokeConfig{{App: "slack", Operation: "conversations.history"}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 	failExecutionRefWrites = true
 
@@ -5291,7 +5282,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefa
 	}
 }
 
-func TestBootstrapAllowsConfiguredWorkflowSchedulePermissionScopesForUserCredentialedApps(t *testing.T) {
+func TestBootstrapAllowsConfiguredWorkflowScheduleInvokesForUserCredentialedApps(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
@@ -5321,10 +5312,7 @@ func TestBootstrapAllowsConfiguredWorkflowSchedulePermissionScopesForUserCredent
 		},
 	})
 	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Permissions = []core.AccessPermission{{
-		App:        "slack",
-		Operations: []string{"conversations.list"},
-	}}
+	nightly.Invokes = []config.WorkflowInvokeConfig{{App: "slack", Operation: "conversations.list"}}
 	cfg.Workflows.Schedules["nightly_sync"] = nightly
 
 	factories := validFactories()
@@ -5424,39 +5412,6 @@ func TestBootstrapConfiguredWorkflowScheduleInvokesScopesExecutionRef(t *testing
 	}
 	if !reflect.DeepEqual(ref.Permissions, wantPermissions) {
 		t.Fatalf("permissions = %#v, want %#v", ref.Permissions, wantPermissions)
-	}
-}
-
-func TestBootstrapRejectsConfiguredWorkflowScheduleInvokesAndPermissions(t *testing.T) {
-	t.Parallel()
-
-	cfg := workflowStartupCallbackConfig("https://example.invalid")
-	setWorkflowFixture(cfg, "roadmap", &workflowFixture{
-		Provider: "temporal",
-		Schedules: map[string]workflowFixtureSchedule{
-			"nightly_sync": {
-				Cron:      "0 2 * * *",
-				Timezone:  "UTC",
-				Operation: "sync",
-			},
-		},
-	})
-	nightly := cfg.Workflows.Schedules["nightly_sync"]
-	nightly.Invokes = []config.WorkflowInvokeConfig{{App: "roadmap", Operation: "sync"}}
-	nightly.Permissions = []core.AccessPermission{{App: "roadmap", Operations: []string{"sync"}}}
-	cfg.Workflows.Schedules["nightly_sync"] = nightly
-
-	factories := validFactories()
-	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []runtimehost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
-		return &recordingWorkflowProvider{}, nil
-	}
-
-	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-	if err == nil {
-		t.Fatal("expected Bootstrap to reject both invokes and permissions")
-	}
-	if !strings.Contains(err.Error(), "workflows.schedules.nightly_sync must not set both invokes and permissions") {
-		t.Fatalf("Bootstrap error = %v", err)
 	}
 }
 
@@ -6291,10 +6246,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 		},
 	})
 	taskUpdated := cfg.Workflows.EventTriggers["task_updated"]
-	taskUpdated.Permissions = []core.AccessPermission{{
-		App:        "slack",
-		Operations: []string{"conversations.history"},
-	}}
+	taskUpdated.Invokes = []config.WorkflowInvokeConfig{{App: "slack", Operation: "conversations.history"}}
 	cfg.Workflows.EventTriggers["task_updated"] = taskUpdated
 	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
 		"temporal": {Source: config.ProviderSource{Path: "stub"}},

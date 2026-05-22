@@ -76,7 +76,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
-		permissions, err := workflowConfigExecutionPermissions(cfg, "workflows.schedules."+desiredEntry.ScheduleKey, schedule.Invokes, schedule.Permissions)
+		permissions, err := workflowConfigExecutionPermissions(cfg, "workflows.schedules."+desiredEntry.ScheduleKey, schedule.Invokes)
 		if err != nil {
 			return fmt.Errorf("bootstrap: workflow schedule %q for app %q: %w", desiredEntry.ScheduleKey, appName, err)
 		}
@@ -292,12 +292,9 @@ func workflowConfigRunAsSubject(path string, runAs *config.WorkflowRunAsConfig) 
 	return subject, nil
 }
 
-func workflowConfigExecutionPermissions(cfg *config.Config, path string, invokes []config.WorkflowInvokeConfig, permissions []core.AccessPermission) ([]core.AccessPermission, error) {
-	if len(invokes) > 0 && len(permissions) > 0 {
-		return nil, fmt.Errorf("config validation: %s must not set both invokes and permissions", path)
-	}
+func workflowConfigExecutionPermissions(cfg *config.Config, path string, invokes []config.WorkflowInvokeConfig) ([]core.AccessPermission, error) {
 	if len(invokes) == 0 {
-		return permissions, nil
+		return nil, nil
 	}
 	out := make([]core.AccessPermission, 0, len(invokes))
 	appIndexes := make(map[string]int, len(invokes))

@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
-
-	"github.com/valon-technologies/gestalt/server/core"
 )
 
 func workflowTargetNodeInAppClosure(targetNode *yaml.Node, keepApps map[string]struct{}) bool {
@@ -38,11 +36,6 @@ func workflowRefsFromNode(workflowNode *yaml.Node) workflowAppRefs {
 	if invokesNode := mappingValueNode(workflowNode, "invokes"); invokesNode != nil && invokesNode.Kind == yaml.SequenceNode {
 		for _, invoke := range invokesNode.Content {
 			refs.Add(scalarStringNode(mappingValueNode(invoke, "app")))
-		}
-	}
-	if permissionsNode := mappingValueNode(workflowNode, "permissions"); permissionsNode != nil && permissionsNode.Kind == yaml.SequenceNode {
-		for _, permission := range permissionsNode.Content {
-			refs.Add(scalarStringNode(mappingValueNode(permission, "app")))
 		}
 	}
 	return refs
@@ -140,7 +133,6 @@ func workflowScheduleAppRefs(schedule WorkflowScheduleConfig) workflowAppRefs {
 	refs := workflowAppRefs{}
 	addWorkflowTargetRefs(refs, schedule.Target)
 	addWorkflowInvokeRefs(refs, schedule.Invokes)
-	addPermissionRefs(refs, schedule.Permissions)
 	return refs
 }
 
@@ -148,7 +140,6 @@ func workflowEventTriggerAppRefs(trigger WorkflowEventTriggerConfig) workflowApp
 	refs := workflowAppRefs{}
 	addWorkflowTargetRefs(refs, trigger.Target)
 	addWorkflowInvokeRefs(refs, trigger.Invokes)
-	addPermissionRefs(refs, trigger.Permissions)
 	return refs
 }
 
@@ -172,11 +163,5 @@ func addWorkflowTargetRefs(refs workflowAppRefs, target *WorkflowTargetConfig) {
 func addWorkflowInvokeRefs(refs workflowAppRefs, invokes []WorkflowInvokeConfig) {
 	for _, invoke := range invokes {
 		refs.Add(invoke.App)
-	}
-}
-
-func addPermissionRefs(refs workflowAppRefs, permissions []core.AccessPermission) {
-	for _, permission := range permissions {
-		refs.Add(permission.App)
 	}
 }

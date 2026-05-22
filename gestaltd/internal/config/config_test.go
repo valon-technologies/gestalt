@@ -3061,11 +3061,11 @@ workflows:
               credentialMode: none
               input:
                 source: yaml
-      permissions:
+      invokes:
         - app: slack
-          operations:
-            - conversations.list
-            - conversations.history
+          operation: conversations.list
+        - app: slack
+          operation: conversations.history
   eventTriggers:
     task_updated:
       provider: temporal
@@ -3080,10 +3080,9 @@ workflows:
               operation: backfill_items
               input:
                 source: event
-      permissions:
+      invokes:
         - app: slack
-          operations:
-            - chat.postMessage
+          operation: chat.postMessage
       paused: true
 providers:
   workflow:
@@ -3109,13 +3108,10 @@ server:
 			Target: workflowTestAppTargetConfig("roadmap", "nightly_sync", providermanifestv1.ConnectionModeNone, map[string]any{
 				"source": "yaml",
 			}),
-			Permissions: []core.AccessPermission{{
-				App: "slack",
-				Operations: []string{
-					"conversations.list",
-					"conversations.history",
-				},
-			}},
+			Invokes: []WorkflowInvokeConfig{
+				{App: "slack", Operation: "conversations.list"},
+				{App: "slack", Operation: "conversations.history"},
+			},
 			Cron:     "0 2 * * *",
 			Timezone: "UTC",
 		}
@@ -3127,10 +3123,7 @@ server:
 			Target: workflowTestAppTargetConfig("roadmap", "backfill_items", "", map[string]any{
 				"source": "event",
 			}),
-			Permissions: []core.AccessPermission{{
-				App:        "slack",
-				Operations: []string{"chat.postMessage"},
-			}},
+			Invokes: []WorkflowInvokeConfig{{App: "slack", Operation: "chat.postMessage"}},
 			Match: WorkflowEventMatch{
 				Type:   "roadmap.task.updated",
 				Source: "roadmap",
@@ -3175,7 +3168,7 @@ server:
 				want: `workflows.schedules.nightly.target.steps[0].app.name references unknown app "missing"`,
 			},
 			{
-				name: "unknown schedule permission app",
+				name: "unknown schedule invoke app",
 				yaml: `
 apps:
   roadmap:
@@ -3192,9 +3185,9 @@ workflows:
             app:
               name: roadmap
               operation: nightly_sync
-      permissions:
+      invokes:
         - app: missing
-          operations: [conversations.list]
+          operation: conversations.list
 providers:
   workflow:
     temporal:
@@ -3203,10 +3196,10 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.permissions[0].app references unknown app "missing"`,
+				want: `workflows.schedules.nightly.invokes[0].app references unknown app "missing"`,
 			},
 			{
-				name: "schedule permission requires operations",
+				name: "schedule invoke requires operation",
 				yaml: `
 apps:
   roadmap:
@@ -3226,7 +3219,7 @@ workflows:
             app:
               name: roadmap
               operation: nightly_sync
-      permissions:
+      invokes:
         - app: slack
 providers:
   workflow:
@@ -3236,7 +3229,7 @@ providers:
 server:
   encryptionKey: server-key
 `,
-				want: `workflows.schedules.nightly.permissions[0].operations is required`,
+				want: `workflows.schedules.nightly.invokes[0].operation is required`,
 			},
 			{
 				name: "schedule app rejects unsupported credential mode",
@@ -7105,7 +7098,6 @@ func TestApplyAppScopeRetainedWorkflowAddsReferencedApps(t *testing.T) {
 						App:       "beta",
 						Operation: "ping",
 					}},
-					Permissions: []core.AccessPermission{{App: "gamma"}},
 				},
 				"dependency_target": {
 					Target: workflowTestAppTargetConfig("beta", "", "", nil),
@@ -7121,7 +7113,7 @@ func TestApplyAppScopeRetainedWorkflowAddsReferencedApps(t *testing.T) {
 	if err := ApplyAppScope(cfg, []string{"alpha"}); err != nil {
 		t.Fatalf("ApplyAppScope: %v", err)
 	}
-	if got, want := sortedProviderEntryKeys(cfg.Apps), []string{"alpha", "beta", "gamma"}; !reflect.DeepEqual(got, want) {
+	if got, want := sortedProviderEntryKeys(cfg.Apps), []string{"alpha", "beta"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("Apps = %v, want %v", got, want)
 	}
 	if got, want := sortedWorkflowScheduleKeys(cfg.Workflows.Schedules), []string{"fanout"}; !reflect.DeepEqual(got, want) {
