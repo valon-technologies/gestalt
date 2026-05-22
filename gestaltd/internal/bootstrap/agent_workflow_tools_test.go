@@ -651,6 +651,55 @@ func TestAgentRuntimeWorkflowSystemToolRejectsDuplicateStepIDs(t *testing.T) {
 	}
 }
 
+func TestWorkflowSystemToolStepsRejectsEmptyStepID(t *testing.T) {
+	t.Parallel()
+
+	_, err := workflowSystemToolStepsFromValue([]any{
+		map[string]any{
+			"plugin": map[string]any{
+				"name":      "github",
+				"operation": "createIssue",
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("workflowSystemToolStepsFromValue succeeded, want invalid invocation")
+	}
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("workflowSystemToolStepsFromValue error = %v, want invalid invocation", err)
+	}
+	if !strings.Contains(err.Error(), "target.steps[0].id is required") {
+		t.Fatalf("workflowSystemToolStepsFromValue error = %v, want step id required message", err)
+	}
+}
+
+func TestWorkflowSystemToolStepWhenRequiresValue(t *testing.T) {
+	t.Parallel()
+
+	_, err := workflowSystemToolStepWhenFromValue(map[string]any{"equals": "ready"}, "target.steps[0].when")
+	if err == nil {
+		t.Fatal("workflowSystemToolStepWhenFromValue succeeded, want invalid invocation")
+	}
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("workflowSystemToolStepWhenFromValue error = %v, want invalid invocation", err)
+	}
+	if !strings.Contains(err.Error(), "target.steps[0].when.value is required") {
+		t.Fatalf("workflowSystemToolStepWhenFromValue error = %v, want when.value required message", err)
+	}
+}
+
+func TestWorkflowSystemToolValueInfoTemplateRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	got := workflowSystemToolValueInfo(coreworkflow.Value{
+		Template: &coreworkflow.Text{Template: "${steps.first.plugin.issue_number}"},
+	})
+	want := map[string]any{"template": "${steps.first.plugin.issue_number}"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("workflowSystemToolValueInfo = %#v, want %#v", got, want)
+	}
+}
+
 func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithStepOutputDelivery(t *testing.T) {
 	t.Parallel()
 

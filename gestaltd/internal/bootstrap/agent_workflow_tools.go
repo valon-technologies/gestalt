@@ -1106,18 +1106,17 @@ func workflowSystemToolStepsFromValue(value any) ([]coreworkflow.Step, error) {
 			step.Agent = agent
 		}
 		stepID := strings.TrimSpace(step.ID)
-		if stepID != "" {
-			if _, ok := previousSteps[stepID]; ok {
-				return nil, fmt.Errorf("%w: %s.id %q is duplicated", invocation.ErrInvalidInvocation, path, stepID)
-			}
+		if stepID == "" {
+			return nil, fmt.Errorf("%w: %s.id is required", invocation.ErrInvalidInvocation, path)
+		}
+		if _, ok := previousSteps[stepID]; ok {
+			return nil, fmt.Errorf("%w: %s.id %q is duplicated", invocation.ErrInvalidInvocation, path, stepID)
 		}
 		if err := workflowSystemToolValidateStepOutputRefs(path, step, previousSteps); err != nil {
 			return nil, err
 		}
 		out = append(out, step)
-		if stepID != "" {
-			previousSteps[stepID] = struct{}{}
-		}
+		previousSteps[stepID] = struct{}{}
 	}
 	return out, nil
 }
@@ -1404,7 +1403,11 @@ func workflowSystemToolStepWhenFromValue(value any, path string) (*coreworkflow.
 	if !jsonvalue.IsScalar(equals) {
 		return nil, fmt.Errorf("%w: %s.equals must be a scalar JSON value", invocation.ErrInvalidInvocation, path)
 	}
-	whenValue, err := workflowSystemToolValueFromValue(whenMap["value"], path+".value")
+	whenValueArg, ok := whenMap["value"]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s.value is required", invocation.ErrInvalidInvocation, path)
+	}
+	whenValue, err := workflowSystemToolValueFromValue(whenValueArg, path+".value")
 	if err != nil {
 		return nil, err
 	}
@@ -2126,7 +2129,7 @@ func workflowSystemToolValueInfo(value coreworkflow.Value) any {
 		}
 		return map[string]any{"array": items}
 	case value.Template != nil:
-		return map[string]any{"template": workflowSystemToolTextInfo(*value.Template)}
+		return workflowSystemToolTextInfo(*value.Template)
 	case strings.TrimSpace(value.RunInput) != "":
 		return map[string]any{"runInput": value.RunInput}
 	case strings.TrimSpace(value.SignalPayload) != "":

@@ -22,7 +22,7 @@ pub fn list(client: &ApiClient, plugin: Option<&str>, format: Format) -> Result<
         .get(SCHEDULES_PATH)
         .context("failed to list workflow schedules")?;
     let filtered = filter_by_plugin(resp, plugin);
-    print_schedules(&filtered, format);
+    print_schedules(&filtered, format, plugin);
     Ok(())
 }
 
@@ -105,7 +105,7 @@ pub fn list_triggers(
         .get(TRIGGERS_PATH)
         .context("failed to list workflow triggers")?;
     let filtered = filter_triggers(resp, plugin, event_type);
-    print_triggers(&filtered, format);
+    print_triggers(&filtered, format, plugin);
     Ok(())
 }
 
@@ -193,7 +193,7 @@ pub fn list_runs(
 ) -> Result<()> {
     let path = runs_path(plugin, status, page_size, page_token)?;
     let resp = client.get(&path).context("failed to list workflow runs")?;
-    print_runs(&resp, format);
+    print_runs(&resp, format, plugin);
     Ok(())
 }
 
@@ -731,14 +731,14 @@ fn workflow_literal_input(input: &Map<String, Value>) -> Value {
     Value::Object(value)
 }
 
-fn target_plugin(value: &Value) -> Option<&str> {
-    target_plugin_step(value)?
+fn target_plugin<'a>(value: &'a Value, preferred_plugin: Option<&str>) -> Option<&'a str> {
+    target_plugin_step(value, preferred_plugin)?
         .get("name")
         .and_then(Value::as_str)
 }
 
-fn target_operation(value: &Value) -> Option<&str> {
-    target_plugin_field(value, "operation")
+fn target_operation<'a>(value: &'a Value, preferred_plugin: Option<&str>) -> Option<&'a str> {
+    target_plugin_field(value, preferred_plugin, "operation")
 }
 
 fn target_single_plugin_step(value: &Value) -> Option<SinglePluginStep<'_>> {
@@ -771,17 +771,34 @@ fn target_has_plugin(value: &Value, plugin: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn target_plugin_step(value: &Value) -> Option<&Map<String, Value>> {
-    value
-        .get("target")?
-        .get("steps")?
-        .as_array()?
-        .iter()
-        .find_map(|step| step.get("plugin").and_then(Value::as_object))
+fn target_plugin_step<'a>(
+    value: &'a Value,
+    preferred_plugin: Option<&str>,
+) -> Option<&'a Map<String, Value>> {
+    let steps = value.get("target")?.get("steps")?.as_array()?;
+    let mut first_plugin_step = None;
+    for step in steps {
+        let Some(plugin_step) = step.get("plugin").and_then(Value::as_object) else {
+            continue;
+        };
+        if first_plugin_step.is_none() {
+            first_plugin_step = Some(plugin_step);
+        }
+        if let Some(preferred_plugin) = preferred_plugin {
+            if plugin_step.get("name").and_then(Value::as_str) == Some(preferred_plugin) {
+                return Some(plugin_step);
+            }
+        }
+    }
+    first_plugin_step
 }
 
-fn target_plugin_field<'a>(value: &'a Value, field: &str) -> Option<&'a str> {
-    target_plugin_step(value)?
+fn target_plugin_field<'a>(
+    value: &'a Value,
+    preferred_plugin: Option<&str>,
+    field: &str,
+) -> Option<&'a str> {
+    target_plugin_step(value, preferred_plugin)?
         .get(field)
         .and_then(Value::as_str)
 }
@@ -802,18 +819,21 @@ fn print_schedule(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let rows = vec![schedule_row(value)];
+            let rows = vec![schedule_row(value, None)];
             output::print_table(&schedule_headers(), &rows);
         }
     }
 }
 
-fn print_schedules(value: &Value, format: Format) {
+fn print_schedules(value: &Value, format: Format, preferred_plugin: Option<&str>) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
             let items = value.as_array().cloned().unwrap_or_default();
-            let rows: Vec<Vec<String>> = items.iter().map(schedule_row).collect();
+            let rows: Vec<Vec<String>> = items
+                .iter()
+                .map(|item| schedule_row(item, preferred_plugin))
+                .collect();
             output::print_table(&schedule_headers(), &rows);
         }
     }
@@ -823,18 +843,21 @@ fn print_trigger(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let rows = vec![trigger_row(value)];
+            let rows = vec![trigger_row(value, None)];
             output::print_table(&trigger_headers(), &rows);
         }
     }
 }
 
-fn print_triggers(value: &Value, format: Format) {
+fn print_triggers(value: &Value, format: Format, preferred_plugin: Option<&str>) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
             let items = value.as_array().cloned().unwrap_or_default();
-            let rows: Vec<Vec<String>> = items.iter().map(trigger_row).collect();
+            let rows: Vec<Vec<String>> = items
+                .iter()
+                .map(|item| trigger_row(item, preferred_plugin))
+                .collect();
             output::print_table(&trigger_headers(), &rows);
         }
     }
@@ -844,18 +867,21 @@ fn print_run(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let rows = vec![run_row(value)];
+            let rows = vec![run_row(value, None)];
             output::print_table(&run_headers(), &rows);
         }
     }
 }
 
-fn print_runs(value: &Value, format: Format) {
+fn print_runs(value: &Value, format: Format, preferred_plugin: Option<&str>) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
             let items = workflow_run_items(value);
-            let rows: Vec<Vec<String>> = items.iter().map(run_row).collect();
+            let rows: Vec<Vec<String>> = items
+                .iter()
+                .map(|item| run_row(item, preferred_plugin))
+                .collect();
             output::print_table(&run_headers(), &rows);
             if let Some(token) = next_page_token(value) {
                 eprintln!("Next page token: {token}");
@@ -905,7 +931,7 @@ fn trigger_headers() -> [&'static str; 8] {
     ]
 }
 
-fn trigger_row(value: &Value) -> Vec<String> {
+fn trigger_row(value: &Value, preferred_plugin: Option<&str>) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
         value["match"]["type"].as_str().unwrap_or("-").to_string(),
@@ -914,8 +940,12 @@ fn trigger_row(value: &Value) -> Vec<String> {
             .as_str()
             .unwrap_or("-")
             .to_string(),
-        target_plugin(value).unwrap_or("-").to_string(),
-        target_operation(value).unwrap_or("-").to_string(),
+        target_plugin(value, preferred_plugin)
+            .unwrap_or("-")
+            .to_string(),
+        target_operation(value, preferred_plugin)
+            .unwrap_or("-")
+            .to_string(),
         format_bool(value["paused"].as_bool()),
         value["createdAt"].as_str().unwrap_or("-").to_string(),
     ]
@@ -934,11 +964,15 @@ fn schedule_headers() -> [&'static str; 8] {
     ]
 }
 
-fn schedule_row(value: &Value) -> Vec<String> {
+fn schedule_row(value: &Value, preferred_plugin: Option<&str>) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
-        target_plugin(value).unwrap_or("-").to_string(),
-        target_operation(value).unwrap_or("-").to_string(),
+        target_plugin(value, preferred_plugin)
+            .unwrap_or("-")
+            .to_string(),
+        target_operation(value, preferred_plugin)
+            .unwrap_or("-")
+            .to_string(),
         value["cron"].as_str().unwrap_or("-").to_string(),
         value["timezone"].as_str().unwrap_or("-").to_string(),
         format_bool(value["paused"].as_bool()),
@@ -973,11 +1007,15 @@ fn published_event_row(value: &Value) -> Vec<String> {
     ]
 }
 
-fn run_row(value: &Value) -> Vec<String> {
+fn run_row(value: &Value, preferred_plugin: Option<&str>) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
-        target_plugin(value).unwrap_or("-").to_string(),
-        target_operation(value).unwrap_or("-").to_string(),
+        target_plugin(value, preferred_plugin)
+            .unwrap_or("-")
+            .to_string(),
+        target_operation(value, preferred_plugin)
+            .unwrap_or("-")
+            .to_string(),
         value["status"].as_str().unwrap_or("-").to_string(),
         run_trigger_label(value),
         value["startedAt"]
@@ -1011,5 +1049,41 @@ fn format_bool(value: Option<bool>) -> String {
         Some(true) => "yes".to_string(),
         Some(false) => "no".to_string(),
         None => "-".to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn target_plugin_fields_prefer_matching_plugin_step() {
+        let value = json!({
+            "target": {
+                "steps": [
+                    {
+                        "id": "first",
+                        "plugin": {
+                            "name": "github",
+                            "operation": "createIssue"
+                        }
+                    },
+                    {
+                        "id": "second",
+                        "plugin": {
+                            "name": "slack",
+                            "operation": "reply"
+                        }
+                    }
+                ]
+            }
+        });
+
+        assert_eq!(target_plugin(&value, None), Some("github"));
+        assert_eq!(target_operation(&value, None), Some("createIssue"));
+        assert_eq!(target_plugin(&value, Some("slack")), Some("slack"));
+        assert_eq!(target_operation(&value, Some("slack")), Some("reply"));
+        assert_eq!(target_plugin(&value, Some("jira")), Some("github"));
+        assert_eq!(target_operation(&value, Some("jira")), Some("createIssue"));
     }
 }
