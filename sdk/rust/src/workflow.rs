@@ -253,6 +253,7 @@ pub struct BoundWorkflowRun {
     pub created_by: Option<WorkflowActor>,
     pub execution_ref: String,
     pub workflow_key: String,
+    pub provider_name: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -267,6 +268,7 @@ pub struct BoundWorkflowSchedule {
     pub next_run_at: Option<SystemTime>,
     pub created_by: Option<WorkflowActor>,
     pub execution_ref: String,
+    pub provider_name: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -279,6 +281,7 @@ pub struct BoundWorkflowEventTrigger {
     pub updated_at: Option<SystemTime>,
     pub created_by: Option<WorkflowActor>,
     pub execution_ref: String,
+    pub provider_name: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -287,6 +290,7 @@ pub struct BoundWorkflowDefinition {
     pub target: Option<BoundWorkflowTarget>,
     pub created_by: Option<WorkflowActor>,
     pub created_at: Option<SystemTime>,
+    pub provider_name: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -316,6 +320,30 @@ pub struct SignalWorkflowRunResponse {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+pub struct CreateWorkflowProviderDefinitionRequest {
+    pub provider_name: String,
+    pub target: Option<BoundWorkflowTarget>,
+    pub idempotency_key: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GetWorkflowProviderDefinitionRequest {
+    pub definition_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct UpdateWorkflowProviderDefinitionRequest {
+    pub definition_id: String,
+    pub provider_name: String,
+    pub target: Option<BoundWorkflowTarget>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeleteWorkflowProviderDefinitionRequest {
+    pub definition_id: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ListWorkflowProviderRunsResponse {
     pub runs: Vec<BoundWorkflowRun>,
     pub next_page_token: String,
@@ -337,31 +365,31 @@ pub struct ListWorkflowExecutionReferencesResponse {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ManagedWorkflowSchedule {
+pub struct WorkflowManagerSchedule {
     pub provider_name: String,
     pub schedule: Option<BoundWorkflowSchedule>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ManagedWorkflowEventTrigger {
+pub struct WorkflowManagerEventTrigger {
     pub provider_name: String,
     pub trigger: Option<BoundWorkflowEventTrigger>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ManagedWorkflowDefinition {
+pub struct WorkflowManagerDefinition {
     pub provider_name: String,
     pub definition: Option<BoundWorkflowDefinition>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ManagedWorkflowRun {
+pub struct WorkflowManagerRun {
     pub provider_name: String,
     pub run: Option<BoundWorkflowRun>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct ManagedWorkflowRunSignal {
+pub struct WorkflowManagerRunSignal {
     pub provider_name: String,
     pub run: Option<BoundWorkflowRun>,
     pub signal: Option<WorkflowSignal>,
@@ -444,6 +472,7 @@ pub struct StartWorkflowProviderRunRequest {
     pub created_by: Option<WorkflowActor>,
     pub execution_ref: String,
     pub workflow_key: String,
+    pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -456,6 +485,7 @@ pub struct ListWorkflowProviderRunsRequest {
     pub page_size: i32,
     pub page_token: String,
     pub status: WorkflowRunStatus,
+    pub target_plugin: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -478,6 +508,7 @@ pub struct SignalOrStartWorkflowProviderRunRequest {
     pub created_by: Option<WorkflowActor>,
     pub execution_ref: String,
     pub signal: Option<WorkflowSignal>,
+    pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -489,6 +520,8 @@ pub struct UpsertWorkflowProviderScheduleRequest {
     pub paused: bool,
     pub requested_by: Option<WorkflowActor>,
     pub execution_ref: String,
+    pub idempotency_key: String,
+    pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -522,6 +555,8 @@ pub struct UpsertWorkflowProviderEventTriggerRequest {
     pub paused: bool,
     pub requested_by: Option<WorkflowActor>,
     pub execution_ref: String,
+    pub idempotency_key: String,
+    pub definition_id: String,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -1616,6 +1651,7 @@ pub fn new_bound_workflow_run(input: BoundWorkflowRun) -> ProviderResult<BoundWo
         created_by: input.created_by.map(new_workflow_actor),
         execution_ref: input.execution_ref,
         workflow_key: input.workflow_key,
+        provider_name: input.provider_name,
     })
 }
 
@@ -1647,6 +1683,7 @@ pub fn bound_workflow_run_input_from_run(
             .map(workflow_actor_input_from_actor),
         execution_ref: input.execution_ref.clone(),
         workflow_key: input.workflow_key.clone(),
+        provider_name: input.provider_name.clone(),
     })
 }
 
@@ -1672,6 +1709,7 @@ pub(crate) fn bound_workflow_run_to_proto(
         created_by: input.created_by.map(workflow_actor_to_proto),
         execution_ref: input.execution_ref,
         workflow_key: input.workflow_key,
+        provider_name: input.provider_name,
     })
 }
 
@@ -1709,6 +1747,7 @@ pub(crate) fn bound_workflow_run_from_proto(
         created_by: input.created_by.map(workflow_actor_from_proto),
         execution_ref: input.execution_ref,
         workflow_key: input.workflow_key,
+        provider_name: input.provider_name,
     })
 }
 
@@ -1735,6 +1774,7 @@ pub fn bound_workflow_definition_input_from_definition(
             .as_ref()
             .map(workflow_actor_input_from_actor),
         created_at: input.created_at,
+        provider_name: input.provider_name.clone(),
     })
 }
 
@@ -1753,6 +1793,7 @@ pub fn new_bound_workflow_schedule(
         next_run_at: input.next_run_at,
         created_by: input.created_by.map(new_workflow_actor),
         execution_ref: input.execution_ref,
+        provider_name: input.provider_name,
     })
 }
 
@@ -1778,6 +1819,7 @@ pub fn bound_workflow_schedule_input_from_schedule(
             .as_ref()
             .map(workflow_actor_input_from_actor),
         execution_ref: input.execution_ref.clone(),
+        provider_name: input.provider_name.clone(),
     })
 }
 
@@ -1798,6 +1840,7 @@ pub(crate) fn bound_workflow_schedule_to_proto(
         next_run_at: input.next_run_at.map(protocol::timestamp_from_system_time),
         created_by: input.created_by.map(workflow_actor_to_proto),
         execution_ref: input.execution_ref,
+        provider_name: input.provider_name,
     })
 }
 
@@ -1830,6 +1873,7 @@ pub(crate) fn bound_workflow_schedule_from_proto(
             .transpose()?,
         created_by: input.created_by.map(workflow_actor_from_proto),
         execution_ref: input.execution_ref,
+        provider_name: input.provider_name,
     })
 }
 
@@ -1853,6 +1897,7 @@ pub fn new_bound_workflow_event_trigger(
         updated_at: input.updated_at,
         created_by: input.created_by.map(new_workflow_actor),
         execution_ref: input.execution_ref,
+        provider_name: input.provider_name,
     })
 }
 
@@ -1879,6 +1924,7 @@ pub fn bound_workflow_event_trigger_input_from_trigger(
             .as_ref()
             .map(workflow_actor_input_from_actor),
         execution_ref: input.execution_ref.clone(),
+        provider_name: input.provider_name.clone(),
     })
 }
 
@@ -1897,6 +1943,7 @@ pub(crate) fn bound_workflow_event_trigger_to_proto(
         updated_at: input.updated_at.map(protocol::timestamp_from_system_time),
         created_by: input.created_by.map(workflow_actor_to_proto),
         execution_ref: input.execution_ref,
+        provider_name: input.provider_name,
     })
 }
 
@@ -1923,6 +1970,7 @@ pub(crate) fn bound_workflow_event_trigger_from_proto(
             .transpose()?,
         created_by: input.created_by.map(workflow_actor_from_proto),
         execution_ref: input.execution_ref,
+        provider_name: input.provider_name,
     })
 }
 
@@ -1948,6 +1996,22 @@ pub(crate) fn bound_workflow_definition_from_proto(
             .as_ref()
             .map(protocol::system_time_from_timestamp)
             .transpose()?,
+        provider_name: input.provider_name,
+    })
+}
+
+pub(crate) fn bound_workflow_definition_to_proto(
+    input: BoundWorkflowDefinition,
+) -> ProviderResult<pb::BoundWorkflowDefinition> {
+    Ok(pb::BoundWorkflowDefinition {
+        id: input.id,
+        target: input
+            .target
+            .map(bound_workflow_target_to_proto)
+            .transpose()?,
+        created_by: input.created_by.map(workflow_actor_to_proto),
+        created_at: input.created_at.map(protocol::timestamp_from_system_time),
+        provider_name: input.provider_name,
     })
 }
 
@@ -2135,6 +2199,7 @@ fn start_workflow_provider_run_request_from_proto(
         created_by: request.created_by.map(workflow_actor_from_proto),
         execution_ref: request.execution_ref,
         workflow_key: request.workflow_key,
+        definition_id: request.definition_id,
     })
 }
 
@@ -2146,6 +2211,32 @@ fn signal_workflow_run_response_to_proto(
         signal: response.signal.map(workflow_signal_to_proto).transpose()?,
         started_run: response.started_run,
         workflow_key: response.workflow_key,
+    })
+}
+
+fn create_workflow_provider_definition_request_from_proto(
+    request: pb::CreateWorkflowProviderDefinitionRequest,
+) -> ProviderResult<CreateWorkflowProviderDefinitionRequest> {
+    Ok(CreateWorkflowProviderDefinitionRequest {
+        provider_name: request.provider_name,
+        target: request
+            .target
+            .map(bound_workflow_target_from_proto)
+            .transpose()?,
+        idempotency_key: request.idempotency_key,
+    })
+}
+
+fn update_workflow_provider_definition_request_from_proto(
+    request: pb::UpdateWorkflowProviderDefinitionRequest,
+) -> ProviderResult<UpdateWorkflowProviderDefinitionRequest> {
+    Ok(UpdateWorkflowProviderDefinitionRequest {
+        definition_id: request.definition_id,
+        provider_name: request.provider_name,
+        target: request
+            .target
+            .map(bound_workflow_target_from_proto)
+            .transpose()?,
     })
 }
 
@@ -2169,6 +2260,7 @@ fn list_workflow_provider_runs_request_from_proto(
         page_size: request.page_size,
         page_token: request.page_token,
         status: WorkflowRunStatus::try_from(request.status)?,
+        target_plugin: request.target_plugin,
     })
 }
 
@@ -2186,6 +2278,8 @@ fn upsert_schedule_request_from_proto(
         paused: request.paused,
         requested_by: request.requested_by.map(workflow_actor_from_proto),
         execution_ref: request.execution_ref,
+        idempotency_key: request.idempotency_key,
+        definition_id: request.definition_id,
     })
 }
 
@@ -2214,6 +2308,8 @@ fn upsert_event_trigger_request_from_proto(
         paused: request.paused,
         requested_by: request.requested_by.map(workflow_actor_from_proto),
         execution_ref: request.execution_ref,
+        idempotency_key: request.idempotency_key,
+        definition_id: request.definition_id,
     })
 }
 
@@ -2251,56 +2347,52 @@ fn list_execution_references_response_to_proto(
     })
 }
 
-pub(crate) fn managed_workflow_schedule_from_proto(
-    input: pb::ManagedWorkflowSchedule,
-) -> ProviderResult<ManagedWorkflowSchedule> {
-    Ok(ManagedWorkflowSchedule {
-        provider_name: input.provider_name,
-        schedule: input
-            .schedule
-            .map(bound_workflow_schedule_from_proto)
-            .transpose()?,
+pub(crate) fn workflow_manager_schedule_from_proto(
+    input: pb::BoundWorkflowSchedule,
+) -> ProviderResult<WorkflowManagerSchedule> {
+    Ok(WorkflowManagerSchedule {
+        provider_name: input.provider_name.clone(),
+        schedule: Some(bound_workflow_schedule_from_proto(input)?),
     })
 }
 
-pub(crate) fn managed_workflow_event_trigger_from_proto(
-    input: pb::ManagedWorkflowEventTrigger,
-) -> ProviderResult<ManagedWorkflowEventTrigger> {
-    Ok(ManagedWorkflowEventTrigger {
-        provider_name: input.provider_name,
-        trigger: input
-            .trigger
-            .map(bound_workflow_event_trigger_from_proto)
-            .transpose()?,
+pub(crate) fn workflow_manager_event_trigger_from_proto(
+    input: pb::BoundWorkflowEventTrigger,
+) -> ProviderResult<WorkflowManagerEventTrigger> {
+    Ok(WorkflowManagerEventTrigger {
+        provider_name: input.provider_name.clone(),
+        trigger: Some(bound_workflow_event_trigger_from_proto(input)?),
     })
 }
 
-pub(crate) fn managed_workflow_definition_from_proto(
-    input: pb::ManagedWorkflowDefinition,
-) -> ProviderResult<ManagedWorkflowDefinition> {
-    Ok(ManagedWorkflowDefinition {
-        provider_name: input.provider_name,
-        definition: input
-            .definition
-            .map(bound_workflow_definition_from_proto)
-            .transpose()?,
+pub(crate) fn workflow_manager_definition_from_proto(
+    input: pb::BoundWorkflowDefinition,
+) -> ProviderResult<WorkflowManagerDefinition> {
+    Ok(WorkflowManagerDefinition {
+        provider_name: input.provider_name.clone(),
+        definition: Some(bound_workflow_definition_from_proto(input)?),
     })
 }
 
-pub(crate) fn managed_workflow_run_from_proto(
-    input: pb::ManagedWorkflowRun,
-) -> ProviderResult<ManagedWorkflowRun> {
-    Ok(ManagedWorkflowRun {
-        provider_name: input.provider_name,
-        run: input.run.map(bound_workflow_run_from_proto).transpose()?,
+pub(crate) fn workflow_manager_run_from_proto(
+    input: pb::BoundWorkflowRun,
+) -> ProviderResult<WorkflowManagerRun> {
+    Ok(WorkflowManagerRun {
+        provider_name: input.provider_name.clone(),
+        run: Some(bound_workflow_run_from_proto(input)?),
     })
 }
 
-pub(crate) fn managed_workflow_run_signal_from_proto(
-    input: pb::ManagedWorkflowRunSignal,
-) -> ProviderResult<ManagedWorkflowRunSignal> {
-    Ok(ManagedWorkflowRunSignal {
-        provider_name: input.provider_name,
+pub(crate) fn workflow_manager_run_signal_from_proto(
+    input: pb::SignalWorkflowRunResponse,
+) -> ProviderResult<WorkflowManagerRunSignal> {
+    let provider_name = input
+        .run
+        .as_ref()
+        .map(|run| run.provider_name.clone())
+        .unwrap_or_default();
+    Ok(WorkflowManagerRunSignal {
+        provider_name,
         run: input.run.map(bound_workflow_run_from_proto).transpose()?,
         signal: input.signal.map(workflow_signal_from_proto).transpose()?,
         started_run: input.started_run,
@@ -2503,6 +2595,46 @@ pub trait WorkflowProvider: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Creates or idempotently returns a workflow definition.
+    async fn create_definition(
+        &self,
+        _request: CreateWorkflowProviderDefinitionRequest,
+    ) -> ProviderResult<BoundWorkflowDefinition> {
+        Err(crate::Error::unimplemented(
+            "workflow create definition is not implemented",
+        ))
+    }
+
+    /// Returns one workflow definition by ID.
+    async fn get_definition(
+        &self,
+        _request: GetWorkflowProviderDefinitionRequest,
+    ) -> ProviderResult<BoundWorkflowDefinition> {
+        Err(crate::Error::unimplemented(
+            "workflow get definition is not implemented",
+        ))
+    }
+
+    /// Updates a workflow definition.
+    async fn update_definition(
+        &self,
+        _request: UpdateWorkflowProviderDefinitionRequest,
+    ) -> ProviderResult<BoundWorkflowDefinition> {
+        Err(crate::Error::unimplemented(
+            "workflow update definition is not implemented",
+        ))
+    }
+
+    /// Deletes a workflow definition.
+    async fn delete_definition(
+        &self,
+        _request: DeleteWorkflowProviderDefinitionRequest,
+    ) -> ProviderResult<()> {
+        Err(crate::Error::unimplemented(
+            "workflow delete definition is not implemented",
+        ))
+    }
+
     /// Starts or idempotently returns a workflow run.
     async fn start_run(
         &self,
@@ -2687,7 +2819,7 @@ pub trait WorkflowProvider: Send + Sync + 'static {
     async fn publish_event(
         &self,
         _request: PublishWorkflowProviderEventRequest,
-    ) -> ProviderResult<()> {
+    ) -> ProviderResult<WorkflowEvent> {
         Err(crate::Error::unimplemented(
             "workflow publish event is not implemented",
         ))
@@ -2740,6 +2872,78 @@ impl<P> pb::workflow_provider_server::WorkflowProvider for WorkflowServer<P>
 where
     P: WorkflowProvider,
 {
+    async fn create_definition(
+        &self,
+        request: GrpcRequest<pb::CreateWorkflowProviderDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowDefinition>, Status> {
+        let definition = self
+            .provider
+            .create_definition(
+                create_workflow_provider_definition_request_from_proto(request.into_inner())
+                    .map_err(|error| rpc_status("workflow create definition", error))?,
+            )
+            .await
+            .map_err(|error| rpc_status("workflow create definition", error))?;
+        Ok(GrpcResponse::new(
+            bound_workflow_definition_to_proto(definition)
+                .map_err(|error| rpc_status("workflow create definition", error))?,
+        ))
+    }
+
+    async fn get_definition(
+        &self,
+        request: GrpcRequest<pb::GetWorkflowProviderDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowDefinition>, Status> {
+        let definition = self
+            .provider
+            .get_definition({
+                let request = request.into_inner();
+                GetWorkflowProviderDefinitionRequest {
+                    definition_id: request.definition_id,
+                }
+            })
+            .await
+            .map_err(|error| rpc_status("workflow get definition", error))?;
+        Ok(GrpcResponse::new(
+            bound_workflow_definition_to_proto(definition)
+                .map_err(|error| rpc_status("workflow get definition", error))?,
+        ))
+    }
+
+    async fn update_definition(
+        &self,
+        request: GrpcRequest<pb::UpdateWorkflowProviderDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<pb::BoundWorkflowDefinition>, Status> {
+        let definition = self
+            .provider
+            .update_definition(
+                update_workflow_provider_definition_request_from_proto(request.into_inner())
+                    .map_err(|error| rpc_status("workflow update definition", error))?,
+            )
+            .await
+            .map_err(|error| rpc_status("workflow update definition", error))?;
+        Ok(GrpcResponse::new(
+            bound_workflow_definition_to_proto(definition)
+                .map_err(|error| rpc_status("workflow update definition", error))?,
+        ))
+    }
+
+    async fn delete_definition(
+        &self,
+        request: GrpcRequest<pb::DeleteWorkflowProviderDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<()>, Status> {
+        self.provider
+            .delete_definition({
+                let request = request.into_inner();
+                DeleteWorkflowProviderDefinitionRequest {
+                    definition_id: request.definition_id,
+                }
+            })
+            .await
+            .map_err(|error| rpc_status("workflow delete definition", error))?;
+        Ok(GrpcResponse::new(()))
+    }
+
     async fn start_run(
         &self,
         request: GrpcRequest<pb::StartWorkflowProviderRunRequest>,
@@ -2865,6 +3069,7 @@ where
                         .map(workflow_signal_from_proto)
                         .transpose()
                         .map_err(|error| rpc_status("workflow signal or start run", error))?,
+                    definition_id: request.definition_id,
                 }
             })
             .await
@@ -3103,15 +3308,18 @@ where
     async fn publish_event(
         &self,
         request: GrpcRequest<pb::PublishWorkflowProviderEventRequest>,
-    ) -> std::result::Result<GrpcResponse<()>, Status> {
-        self.provider
+    ) -> std::result::Result<GrpcResponse<pb::WorkflowEvent>, Status> {
+        let event = self
+            .provider
             .publish_event(
                 publish_event_request_from_proto(request.into_inner())
                     .map_err(|error| rpc_status("workflow publish event", error))?,
             )
             .await
             .map_err(|error| rpc_status("workflow publish event", error))?;
-        Ok(GrpcResponse::new(()))
+        Ok(GrpcResponse::new(workflow_event_to_proto(event).map_err(
+            |error| rpc_status("workflow publish event", error),
+        )?))
     }
 
     async fn put_execution_reference(

@@ -22,6 +22,8 @@ let tmpDir: string;
 let harnessBinPath: string;
 let socketPath: string;
 let proc: Subprocess;
+let defaultTCPProc: Subprocess | undefined;
+let defaultClient: S3 | undefined;
 
 beforeAll(async () => {
   tmpDir = mkdtempSync(join(tmpdir(), "s3-transport-test-"));
@@ -55,7 +57,13 @@ beforeAll(async () => {
   }
   reader.releaseLock();
 
-  process.env.GESTALT_S3_SOCKET = socketPath;
+  const defaultTCP = await startTCPHarness();
+  defaultTCPProc = defaultTCP.proc;
+
+  // Keep the heavier default round-trip tests on TCP. Bun's HTTP/2 Unix-socket
+  // client can flake after many S3 calls; the named binding test still covers
+  // raw Unix socket dialing.
+  process.env.GESTALT_S3_SOCKET = defaultTCP.target;
   process.env[s3SocketEnv("named")] = socketPath;
 }, 60_000);
 
@@ -108,6 +116,8 @@ async function startTCPHarness(expectToken?: string): Promise<{ proc: Subprocess
 
 afterAll(() => {
   proc?.kill();
+  defaultTCPProc?.kill();
+  defaultClient = undefined;
   delete process.env.GESTALT_S3_SOCKET;
   delete process.env[s3SocketEnv("named")];
   delete process.env[s3SocketTokenEnv()];
@@ -117,7 +127,7 @@ afterAll(() => {
 });
 
 describe("S3 transport", () => {
-  const client = (): S3 => new S3();
+  const client = (): S3 => defaultClient ??= new S3();
 
   test("named socket env selects the requested binding", async () => {
     const named = new S3("named");

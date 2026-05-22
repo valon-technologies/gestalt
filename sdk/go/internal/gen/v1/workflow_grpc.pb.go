@@ -20,6 +20,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
+	WorkflowProvider_CreateDefinition_FullMethodName        = "/gestalt.provider.v1.WorkflowProvider/CreateDefinition"
+	WorkflowProvider_GetDefinition_FullMethodName           = "/gestalt.provider.v1.WorkflowProvider/GetDefinition"
+	WorkflowProvider_UpdateDefinition_FullMethodName        = "/gestalt.provider.v1.WorkflowProvider/UpdateDefinition"
+	WorkflowProvider_DeleteDefinition_FullMethodName        = "/gestalt.provider.v1.WorkflowProvider/DeleteDefinition"
 	WorkflowProvider_StartRun_FullMethodName                = "/gestalt.provider.v1.WorkflowProvider/StartRun"
 	WorkflowProvider_GetRun_FullMethodName                  = "/gestalt.provider.v1.WorkflowProvider/GetRun"
 	WorkflowProvider_ListRuns_FullMethodName                = "/gestalt.provider.v1.WorkflowProvider/ListRuns"
@@ -48,6 +52,10 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WorkflowProviderClient interface {
+	CreateDefinition(ctx context.Context, in *CreateWorkflowProviderDefinitionRequest, opts ...grpc.CallOption) (*BoundWorkflowDefinition, error)
+	GetDefinition(ctx context.Context, in *GetWorkflowProviderDefinitionRequest, opts ...grpc.CallOption) (*BoundWorkflowDefinition, error)
+	UpdateDefinition(ctx context.Context, in *UpdateWorkflowProviderDefinitionRequest, opts ...grpc.CallOption) (*BoundWorkflowDefinition, error)
+	DeleteDefinition(ctx context.Context, in *DeleteWorkflowProviderDefinitionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	StartRun(ctx context.Context, in *StartWorkflowProviderRunRequest, opts ...grpc.CallOption) (*BoundWorkflowRun, error)
 	GetRun(ctx context.Context, in *GetWorkflowProviderRunRequest, opts ...grpc.CallOption) (*BoundWorkflowRun, error)
 	ListRuns(ctx context.Context, in *ListWorkflowProviderRunsRequest, opts ...grpc.CallOption) (*ListWorkflowProviderRunsResponse, error)
@@ -69,7 +77,7 @@ type WorkflowProviderClient interface {
 	PutExecutionReference(ctx context.Context, in *PutWorkflowExecutionReferenceRequest, opts ...grpc.CallOption) (*WorkflowExecutionReference, error)
 	GetExecutionReference(ctx context.Context, in *GetWorkflowExecutionReferenceRequest, opts ...grpc.CallOption) (*WorkflowExecutionReference, error)
 	ListExecutionReferences(ctx context.Context, in *ListWorkflowExecutionReferencesRequest, opts ...grpc.CallOption) (*ListWorkflowExecutionReferencesResponse, error)
-	PublishEvent(ctx context.Context, in *PublishWorkflowProviderEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PublishEvent(ctx context.Context, in *PublishWorkflowProviderEventRequest, opts ...grpc.CallOption) (*WorkflowEvent, error)
 }
 
 type workflowProviderClient struct {
@@ -78,6 +86,46 @@ type workflowProviderClient struct {
 
 func NewWorkflowProviderClient(cc grpc.ClientConnInterface) WorkflowProviderClient {
 	return &workflowProviderClient{cc}
+}
+
+func (c *workflowProviderClient) CreateDefinition(ctx context.Context, in *CreateWorkflowProviderDefinitionRequest, opts ...grpc.CallOption) (*BoundWorkflowDefinition, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BoundWorkflowDefinition)
+	err := c.cc.Invoke(ctx, WorkflowProvider_CreateDefinition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowProviderClient) GetDefinition(ctx context.Context, in *GetWorkflowProviderDefinitionRequest, opts ...grpc.CallOption) (*BoundWorkflowDefinition, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BoundWorkflowDefinition)
+	err := c.cc.Invoke(ctx, WorkflowProvider_GetDefinition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowProviderClient) UpdateDefinition(ctx context.Context, in *UpdateWorkflowProviderDefinitionRequest, opts ...grpc.CallOption) (*BoundWorkflowDefinition, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BoundWorkflowDefinition)
+	err := c.cc.Invoke(ctx, WorkflowProvider_UpdateDefinition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *workflowProviderClient) DeleteDefinition(ctx context.Context, in *DeleteWorkflowProviderDefinitionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, WorkflowProvider_DeleteDefinition_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *workflowProviderClient) StartRun(ctx context.Context, in *StartWorkflowProviderRunRequest, opts ...grpc.CallOption) (*BoundWorkflowRun, error) {
@@ -290,9 +338,9 @@ func (c *workflowProviderClient) ListExecutionReferences(ctx context.Context, in
 	return out, nil
 }
 
-func (c *workflowProviderClient) PublishEvent(ctx context.Context, in *PublishWorkflowProviderEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *workflowProviderClient) PublishEvent(ctx context.Context, in *PublishWorkflowProviderEventRequest, opts ...grpc.CallOption) (*WorkflowEvent, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
+	out := new(WorkflowEvent)
 	err := c.cc.Invoke(ctx, WorkflowProvider_PublishEvent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -304,6 +352,10 @@ func (c *workflowProviderClient) PublishEvent(ctx context.Context, in *PublishWo
 // All implementations must embed UnimplementedWorkflowProviderServer
 // for forward compatibility.
 type WorkflowProviderServer interface {
+	CreateDefinition(context.Context, *CreateWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error)
+	GetDefinition(context.Context, *GetWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error)
+	UpdateDefinition(context.Context, *UpdateWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error)
+	DeleteDefinition(context.Context, *DeleteWorkflowProviderDefinitionRequest) (*emptypb.Empty, error)
 	StartRun(context.Context, *StartWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
 	GetRun(context.Context, *GetWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
 	ListRuns(context.Context, *ListWorkflowProviderRunsRequest) (*ListWorkflowProviderRunsResponse, error)
@@ -325,7 +377,7 @@ type WorkflowProviderServer interface {
 	PutExecutionReference(context.Context, *PutWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
 	GetExecutionReference(context.Context, *GetWorkflowExecutionReferenceRequest) (*WorkflowExecutionReference, error)
 	ListExecutionReferences(context.Context, *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error)
-	PublishEvent(context.Context, *PublishWorkflowProviderEventRequest) (*emptypb.Empty, error)
+	PublishEvent(context.Context, *PublishWorkflowProviderEventRequest) (*WorkflowEvent, error)
 	mustEmbedUnimplementedWorkflowProviderServer()
 }
 
@@ -336,6 +388,18 @@ type WorkflowProviderServer interface {
 // pointer dereference when methods are called.
 type UnimplementedWorkflowProviderServer struct{}
 
+func (UnimplementedWorkflowProviderServer) CreateDefinition(context.Context, *CreateWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateDefinition not implemented")
+}
+func (UnimplementedWorkflowProviderServer) GetDefinition(context.Context, *GetWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDefinition not implemented")
+}
+func (UnimplementedWorkflowProviderServer) UpdateDefinition(context.Context, *UpdateWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateDefinition not implemented")
+}
+func (UnimplementedWorkflowProviderServer) DeleteDefinition(context.Context, *DeleteWorkflowProviderDefinitionRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteDefinition not implemented")
+}
 func (UnimplementedWorkflowProviderServer) StartRun(context.Context, *StartWorkflowProviderRunRequest) (*BoundWorkflowRun, error) {
 	return nil, status.Error(codes.Unimplemented, "method StartRun not implemented")
 }
@@ -399,7 +463,7 @@ func (UnimplementedWorkflowProviderServer) GetExecutionReference(context.Context
 func (UnimplementedWorkflowProviderServer) ListExecutionReferences(context.Context, *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListExecutionReferences not implemented")
 }
-func (UnimplementedWorkflowProviderServer) PublishEvent(context.Context, *PublishWorkflowProviderEventRequest) (*emptypb.Empty, error) {
+func (UnimplementedWorkflowProviderServer) PublishEvent(context.Context, *PublishWorkflowProviderEventRequest) (*WorkflowEvent, error) {
 	return nil, status.Error(codes.Unimplemented, "method PublishEvent not implemented")
 }
 func (UnimplementedWorkflowProviderServer) mustEmbedUnimplementedWorkflowProviderServer() {}
@@ -421,6 +485,78 @@ func RegisterWorkflowProviderServer(s grpc.ServiceRegistrar, srv WorkflowProvide
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&WorkflowProvider_ServiceDesc, srv)
+}
+
+func _WorkflowProvider_CreateDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateWorkflowProviderDefinitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowProviderServer).CreateDefinition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowProvider_CreateDefinition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowProviderServer).CreateDefinition(ctx, req.(*CreateWorkflowProviderDefinitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowProvider_GetDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWorkflowProviderDefinitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowProviderServer).GetDefinition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowProvider_GetDefinition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowProviderServer).GetDefinition(ctx, req.(*GetWorkflowProviderDefinitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowProvider_UpdateDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateWorkflowProviderDefinitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowProviderServer).UpdateDefinition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowProvider_UpdateDefinition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowProviderServer).UpdateDefinition(ctx, req.(*UpdateWorkflowProviderDefinitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WorkflowProvider_DeleteDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteWorkflowProviderDefinitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WorkflowProviderServer).DeleteDefinition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WorkflowProvider_DeleteDefinition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WorkflowProviderServer).DeleteDefinition(ctx, req.(*DeleteWorkflowProviderDefinitionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _WorkflowProvider_StartRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -827,6 +963,22 @@ var WorkflowProvider_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*WorkflowProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
+			MethodName: "CreateDefinition",
+			Handler:    _WorkflowProvider_CreateDefinition_Handler,
+		},
+		{
+			MethodName: "GetDefinition",
+			Handler:    _WorkflowProvider_GetDefinition_Handler,
+		},
+		{
+			MethodName: "UpdateDefinition",
+			Handler:    _WorkflowProvider_UpdateDefinition_Handler,
+		},
+		{
+			MethodName: "DeleteDefinition",
+			Handler:    _WorkflowProvider_DeleteDefinition_Handler,
+		},
+		{
 			MethodName: "StartRun",
 			Handler:    _WorkflowProvider_StartRun_Handler,
 		},
@@ -1015,830 +1167,6 @@ var WorkflowHost_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "InvokeOperation",
 			Handler:    _WorkflowHost_InvokeOperation_Handler,
-		},
-	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "v1/workflow.proto",
-}
-
-const (
-	WorkflowManagerHost_StartRun_FullMethodName           = "/gestalt.provider.v1.WorkflowManagerHost/StartRun"
-	WorkflowManagerHost_SignalRun_FullMethodName          = "/gestalt.provider.v1.WorkflowManagerHost/SignalRun"
-	WorkflowManagerHost_SignalOrStartRun_FullMethodName   = "/gestalt.provider.v1.WorkflowManagerHost/SignalOrStartRun"
-	WorkflowManagerHost_CreateDefinition_FullMethodName   = "/gestalt.provider.v1.WorkflowManagerHost/CreateDefinition"
-	WorkflowManagerHost_GetDefinition_FullMethodName      = "/gestalt.provider.v1.WorkflowManagerHost/GetDefinition"
-	WorkflowManagerHost_UpdateDefinition_FullMethodName   = "/gestalt.provider.v1.WorkflowManagerHost/UpdateDefinition"
-	WorkflowManagerHost_DeleteDefinition_FullMethodName   = "/gestalt.provider.v1.WorkflowManagerHost/DeleteDefinition"
-	WorkflowManagerHost_CreateSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowManagerHost/CreateSchedule"
-	WorkflowManagerHost_GetSchedule_FullMethodName        = "/gestalt.provider.v1.WorkflowManagerHost/GetSchedule"
-	WorkflowManagerHost_UpdateSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowManagerHost/UpdateSchedule"
-	WorkflowManagerHost_DeleteSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowManagerHost/DeleteSchedule"
-	WorkflowManagerHost_PauseSchedule_FullMethodName      = "/gestalt.provider.v1.WorkflowManagerHost/PauseSchedule"
-	WorkflowManagerHost_ResumeSchedule_FullMethodName     = "/gestalt.provider.v1.WorkflowManagerHost/ResumeSchedule"
-	WorkflowManagerHost_CreateEventTrigger_FullMethodName = "/gestalt.provider.v1.WorkflowManagerHost/CreateEventTrigger"
-	WorkflowManagerHost_GetEventTrigger_FullMethodName    = "/gestalt.provider.v1.WorkflowManagerHost/GetEventTrigger"
-	WorkflowManagerHost_UpdateEventTrigger_FullMethodName = "/gestalt.provider.v1.WorkflowManagerHost/UpdateEventTrigger"
-	WorkflowManagerHost_DeleteEventTrigger_FullMethodName = "/gestalt.provider.v1.WorkflowManagerHost/DeleteEventTrigger"
-	WorkflowManagerHost_PauseEventTrigger_FullMethodName  = "/gestalt.provider.v1.WorkflowManagerHost/PauseEventTrigger"
-	WorkflowManagerHost_ResumeEventTrigger_FullMethodName = "/gestalt.provider.v1.WorkflowManagerHost/ResumeEventTrigger"
-	WorkflowManagerHost_PublishEvent_FullMethodName       = "/gestalt.provider.v1.WorkflowManagerHost/PublishEvent"
-)
-
-// WorkflowManagerHostClient is the client API for WorkflowManagerHost service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type WorkflowManagerHostClient interface {
-	StartRun(ctx context.Context, in *WorkflowManagerStartRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRun, error)
-	SignalRun(ctx context.Context, in *WorkflowManagerSignalRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRunSignal, error)
-	SignalOrStartRun(ctx context.Context, in *WorkflowManagerSignalOrStartRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRunSignal, error)
-	CreateDefinition(ctx context.Context, in *WorkflowManagerCreateDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error)
-	GetDefinition(ctx context.Context, in *WorkflowManagerGetDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error)
-	UpdateDefinition(ctx context.Context, in *WorkflowManagerUpdateDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error)
-	DeleteDefinition(ctx context.Context, in *WorkflowManagerDeleteDefinitionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	CreateSchedule(ctx context.Context, in *WorkflowManagerCreateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
-	GetSchedule(ctx context.Context, in *WorkflowManagerGetScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
-	UpdateSchedule(ctx context.Context, in *WorkflowManagerUpdateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
-	DeleteSchedule(ctx context.Context, in *WorkflowManagerDeleteScheduleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	PauseSchedule(ctx context.Context, in *WorkflowManagerPauseScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
-	ResumeSchedule(ctx context.Context, in *WorkflowManagerResumeScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error)
-	CreateEventTrigger(ctx context.Context, in *WorkflowManagerCreateEventTriggerRequest, opts ...grpc.CallOption) (*ManagedWorkflowEventTrigger, error)
-	GetEventTrigger(ctx context.Context, in *WorkflowManagerGetEventTriggerRequest, opts ...grpc.CallOption) (*ManagedWorkflowEventTrigger, error)
-	UpdateEventTrigger(ctx context.Context, in *WorkflowManagerUpdateEventTriggerRequest, opts ...grpc.CallOption) (*ManagedWorkflowEventTrigger, error)
-	DeleteEventTrigger(ctx context.Context, in *WorkflowManagerDeleteEventTriggerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	PauseEventTrigger(ctx context.Context, in *WorkflowManagerPauseEventTriggerRequest, opts ...grpc.CallOption) (*ManagedWorkflowEventTrigger, error)
-	ResumeEventTrigger(ctx context.Context, in *WorkflowManagerResumeEventTriggerRequest, opts ...grpc.CallOption) (*ManagedWorkflowEventTrigger, error)
-	PublishEvent(ctx context.Context, in *WorkflowManagerPublishEventRequest, opts ...grpc.CallOption) (*WorkflowEvent, error)
-}
-
-type workflowManagerHostClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewWorkflowManagerHostClient(cc grpc.ClientConnInterface) WorkflowManagerHostClient {
-	return &workflowManagerHostClient{cc}
-}
-
-func (c *workflowManagerHostClient) StartRun(ctx context.Context, in *WorkflowManagerStartRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRun, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowRun)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_StartRun_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) SignalRun(ctx context.Context, in *WorkflowManagerSignalRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRunSignal, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowRunSignal)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_SignalRun_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) SignalOrStartRun(ctx context.Context, in *WorkflowManagerSignalOrStartRunRequest, opts ...grpc.CallOption) (*ManagedWorkflowRunSignal, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowRunSignal)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_SignalOrStartRun_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) CreateDefinition(ctx context.Context, in *WorkflowManagerCreateDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowDefinition)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_CreateDefinition_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) GetDefinition(ctx context.Context, in *WorkflowManagerGetDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowDefinition)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_GetDefinition_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) UpdateDefinition(ctx context.Context, in *WorkflowManagerUpdateDefinitionRequest, opts ...grpc.CallOption) (*ManagedWorkflowDefinition, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowDefinition)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_UpdateDefinition_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) DeleteDefinition(ctx context.Context, in *WorkflowManagerDeleteDefinitionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_DeleteDefinition_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) CreateSchedule(ctx context.Context, in *WorkflowManagerCreateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowSchedule)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_CreateSchedule_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) GetSchedule(ctx context.Context, in *WorkflowManagerGetScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowSchedule)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_GetSchedule_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) UpdateSchedule(ctx context.Context, in *WorkflowManagerUpdateScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowSchedule)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_UpdateSchedule_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) DeleteSchedule(ctx context.Context, in *WorkflowManagerDeleteScheduleRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_DeleteSchedule_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) PauseSchedule(ctx context.Context, in *WorkflowManagerPauseScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowSchedule)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_PauseSchedule_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) ResumeSchedule(ctx context.Context, in *WorkflowManagerResumeScheduleRequest, opts ...grpc.CallOption) (*ManagedWorkflowSchedule, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowSchedule)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_ResumeSchedule_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) CreateEventTrigger(ctx context.Context, in *WorkflowManagerCreateEventTriggerRequest, opts ...grpc.CallOption) (*ManagedWorkflowEventTrigger, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowEventTrigger)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_CreateEventTrigger_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) GetEventTrigger(ctx context.Context, in *WorkflowManagerGetEventTriggerRequest, opts ...grpc.CallOption) (*ManagedWorkflowEventTrigger, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowEventTrigger)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_GetEventTrigger_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) UpdateEventTrigger(ctx context.Context, in *WorkflowManagerUpdateEventTriggerRequest, opts ...grpc.CallOption) (*ManagedWorkflowEventTrigger, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowEventTrigger)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_UpdateEventTrigger_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) DeleteEventTrigger(ctx context.Context, in *WorkflowManagerDeleteEventTriggerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_DeleteEventTrigger_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) PauseEventTrigger(ctx context.Context, in *WorkflowManagerPauseEventTriggerRequest, opts ...grpc.CallOption) (*ManagedWorkflowEventTrigger, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowEventTrigger)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_PauseEventTrigger_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) ResumeEventTrigger(ctx context.Context, in *WorkflowManagerResumeEventTriggerRequest, opts ...grpc.CallOption) (*ManagedWorkflowEventTrigger, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ManagedWorkflowEventTrigger)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_ResumeEventTrigger_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *workflowManagerHostClient) PublishEvent(ctx context.Context, in *WorkflowManagerPublishEventRequest, opts ...grpc.CallOption) (*WorkflowEvent, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(WorkflowEvent)
-	err := c.cc.Invoke(ctx, WorkflowManagerHost_PublishEvent_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-// WorkflowManagerHostServer is the server API for WorkflowManagerHost service.
-// All implementations must embed UnimplementedWorkflowManagerHostServer
-// for forward compatibility.
-type WorkflowManagerHostServer interface {
-	StartRun(context.Context, *WorkflowManagerStartRunRequest) (*ManagedWorkflowRun, error)
-	SignalRun(context.Context, *WorkflowManagerSignalRunRequest) (*ManagedWorkflowRunSignal, error)
-	SignalOrStartRun(context.Context, *WorkflowManagerSignalOrStartRunRequest) (*ManagedWorkflowRunSignal, error)
-	CreateDefinition(context.Context, *WorkflowManagerCreateDefinitionRequest) (*ManagedWorkflowDefinition, error)
-	GetDefinition(context.Context, *WorkflowManagerGetDefinitionRequest) (*ManagedWorkflowDefinition, error)
-	UpdateDefinition(context.Context, *WorkflowManagerUpdateDefinitionRequest) (*ManagedWorkflowDefinition, error)
-	DeleteDefinition(context.Context, *WorkflowManagerDeleteDefinitionRequest) (*emptypb.Empty, error)
-	CreateSchedule(context.Context, *WorkflowManagerCreateScheduleRequest) (*ManagedWorkflowSchedule, error)
-	GetSchedule(context.Context, *WorkflowManagerGetScheduleRequest) (*ManagedWorkflowSchedule, error)
-	UpdateSchedule(context.Context, *WorkflowManagerUpdateScheduleRequest) (*ManagedWorkflowSchedule, error)
-	DeleteSchedule(context.Context, *WorkflowManagerDeleteScheduleRequest) (*emptypb.Empty, error)
-	PauseSchedule(context.Context, *WorkflowManagerPauseScheduleRequest) (*ManagedWorkflowSchedule, error)
-	ResumeSchedule(context.Context, *WorkflowManagerResumeScheduleRequest) (*ManagedWorkflowSchedule, error)
-	CreateEventTrigger(context.Context, *WorkflowManagerCreateEventTriggerRequest) (*ManagedWorkflowEventTrigger, error)
-	GetEventTrigger(context.Context, *WorkflowManagerGetEventTriggerRequest) (*ManagedWorkflowEventTrigger, error)
-	UpdateEventTrigger(context.Context, *WorkflowManagerUpdateEventTriggerRequest) (*ManagedWorkflowEventTrigger, error)
-	DeleteEventTrigger(context.Context, *WorkflowManagerDeleteEventTriggerRequest) (*emptypb.Empty, error)
-	PauseEventTrigger(context.Context, *WorkflowManagerPauseEventTriggerRequest) (*ManagedWorkflowEventTrigger, error)
-	ResumeEventTrigger(context.Context, *WorkflowManagerResumeEventTriggerRequest) (*ManagedWorkflowEventTrigger, error)
-	PublishEvent(context.Context, *WorkflowManagerPublishEventRequest) (*WorkflowEvent, error)
-	mustEmbedUnimplementedWorkflowManagerHostServer()
-}
-
-// UnimplementedWorkflowManagerHostServer must be embedded to have
-// forward compatible implementations.
-//
-// NOTE: this should be embedded by value instead of pointer to avoid a nil
-// pointer dereference when methods are called.
-type UnimplementedWorkflowManagerHostServer struct{}
-
-func (UnimplementedWorkflowManagerHostServer) StartRun(context.Context, *WorkflowManagerStartRunRequest) (*ManagedWorkflowRun, error) {
-	return nil, status.Error(codes.Unimplemented, "method StartRun not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) SignalRun(context.Context, *WorkflowManagerSignalRunRequest) (*ManagedWorkflowRunSignal, error) {
-	return nil, status.Error(codes.Unimplemented, "method SignalRun not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) SignalOrStartRun(context.Context, *WorkflowManagerSignalOrStartRunRequest) (*ManagedWorkflowRunSignal, error) {
-	return nil, status.Error(codes.Unimplemented, "method SignalOrStartRun not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) CreateDefinition(context.Context, *WorkflowManagerCreateDefinitionRequest) (*ManagedWorkflowDefinition, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateDefinition not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) GetDefinition(context.Context, *WorkflowManagerGetDefinitionRequest) (*ManagedWorkflowDefinition, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetDefinition not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) UpdateDefinition(context.Context, *WorkflowManagerUpdateDefinitionRequest) (*ManagedWorkflowDefinition, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateDefinition not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) DeleteDefinition(context.Context, *WorkflowManagerDeleteDefinitionRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteDefinition not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) CreateSchedule(context.Context, *WorkflowManagerCreateScheduleRequest) (*ManagedWorkflowSchedule, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateSchedule not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) GetSchedule(context.Context, *WorkflowManagerGetScheduleRequest) (*ManagedWorkflowSchedule, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetSchedule not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) UpdateSchedule(context.Context, *WorkflowManagerUpdateScheduleRequest) (*ManagedWorkflowSchedule, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateSchedule not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) DeleteSchedule(context.Context, *WorkflowManagerDeleteScheduleRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteSchedule not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) PauseSchedule(context.Context, *WorkflowManagerPauseScheduleRequest) (*ManagedWorkflowSchedule, error) {
-	return nil, status.Error(codes.Unimplemented, "method PauseSchedule not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) ResumeSchedule(context.Context, *WorkflowManagerResumeScheduleRequest) (*ManagedWorkflowSchedule, error) {
-	return nil, status.Error(codes.Unimplemented, "method ResumeSchedule not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) CreateEventTrigger(context.Context, *WorkflowManagerCreateEventTriggerRequest) (*ManagedWorkflowEventTrigger, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateEventTrigger not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) GetEventTrigger(context.Context, *WorkflowManagerGetEventTriggerRequest) (*ManagedWorkflowEventTrigger, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetEventTrigger not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) UpdateEventTrigger(context.Context, *WorkflowManagerUpdateEventTriggerRequest) (*ManagedWorkflowEventTrigger, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateEventTrigger not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) DeleteEventTrigger(context.Context, *WorkflowManagerDeleteEventTriggerRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteEventTrigger not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) PauseEventTrigger(context.Context, *WorkflowManagerPauseEventTriggerRequest) (*ManagedWorkflowEventTrigger, error) {
-	return nil, status.Error(codes.Unimplemented, "method PauseEventTrigger not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) ResumeEventTrigger(context.Context, *WorkflowManagerResumeEventTriggerRequest) (*ManagedWorkflowEventTrigger, error) {
-	return nil, status.Error(codes.Unimplemented, "method ResumeEventTrigger not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) PublishEvent(context.Context, *WorkflowManagerPublishEventRequest) (*WorkflowEvent, error) {
-	return nil, status.Error(codes.Unimplemented, "method PublishEvent not implemented")
-}
-func (UnimplementedWorkflowManagerHostServer) mustEmbedUnimplementedWorkflowManagerHostServer() {}
-func (UnimplementedWorkflowManagerHostServer) testEmbeddedByValue()                             {}
-
-// UnsafeWorkflowManagerHostServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to WorkflowManagerHostServer will
-// result in compilation errors.
-type UnsafeWorkflowManagerHostServer interface {
-	mustEmbedUnimplementedWorkflowManagerHostServer()
-}
-
-func RegisterWorkflowManagerHostServer(s grpc.ServiceRegistrar, srv WorkflowManagerHostServer) {
-	// If the following call panics, it indicates UnimplementedWorkflowManagerHostServer was
-	// embedded by pointer and is nil.  This will cause panics if an
-	// unimplemented method is ever invoked, so we test this at initialization
-	// time to prevent it from happening at runtime later due to I/O.
-	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
-		t.testEmbeddedByValue()
-	}
-	s.RegisterService(&WorkflowManagerHost_ServiceDesc, srv)
-}
-
-func _WorkflowManagerHost_StartRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerStartRunRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).StartRun(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_StartRun_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).StartRun(ctx, req.(*WorkflowManagerStartRunRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_SignalRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerSignalRunRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).SignalRun(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_SignalRun_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).SignalRun(ctx, req.(*WorkflowManagerSignalRunRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_SignalOrStartRun_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerSignalOrStartRunRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).SignalOrStartRun(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_SignalOrStartRun_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).SignalOrStartRun(ctx, req.(*WorkflowManagerSignalOrStartRunRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_CreateDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerCreateDefinitionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).CreateDefinition(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_CreateDefinition_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).CreateDefinition(ctx, req.(*WorkflowManagerCreateDefinitionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_GetDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerGetDefinitionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).GetDefinition(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_GetDefinition_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).GetDefinition(ctx, req.(*WorkflowManagerGetDefinitionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_UpdateDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerUpdateDefinitionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).UpdateDefinition(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_UpdateDefinition_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).UpdateDefinition(ctx, req.(*WorkflowManagerUpdateDefinitionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_DeleteDefinition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerDeleteDefinitionRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).DeleteDefinition(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_DeleteDefinition_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).DeleteDefinition(ctx, req.(*WorkflowManagerDeleteDefinitionRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_CreateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerCreateScheduleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).CreateSchedule(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_CreateSchedule_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).CreateSchedule(ctx, req.(*WorkflowManagerCreateScheduleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_GetSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerGetScheduleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).GetSchedule(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_GetSchedule_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).GetSchedule(ctx, req.(*WorkflowManagerGetScheduleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_UpdateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerUpdateScheduleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).UpdateSchedule(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_UpdateSchedule_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).UpdateSchedule(ctx, req.(*WorkflowManagerUpdateScheduleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_DeleteSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerDeleteScheduleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).DeleteSchedule(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_DeleteSchedule_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).DeleteSchedule(ctx, req.(*WorkflowManagerDeleteScheduleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_PauseSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerPauseScheduleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).PauseSchedule(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_PauseSchedule_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).PauseSchedule(ctx, req.(*WorkflowManagerPauseScheduleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_ResumeSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerResumeScheduleRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).ResumeSchedule(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_ResumeSchedule_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).ResumeSchedule(ctx, req.(*WorkflowManagerResumeScheduleRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_CreateEventTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerCreateEventTriggerRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).CreateEventTrigger(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_CreateEventTrigger_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).CreateEventTrigger(ctx, req.(*WorkflowManagerCreateEventTriggerRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_GetEventTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerGetEventTriggerRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).GetEventTrigger(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_GetEventTrigger_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).GetEventTrigger(ctx, req.(*WorkflowManagerGetEventTriggerRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_UpdateEventTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerUpdateEventTriggerRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).UpdateEventTrigger(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_UpdateEventTrigger_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).UpdateEventTrigger(ctx, req.(*WorkflowManagerUpdateEventTriggerRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_DeleteEventTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerDeleteEventTriggerRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).DeleteEventTrigger(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_DeleteEventTrigger_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).DeleteEventTrigger(ctx, req.(*WorkflowManagerDeleteEventTriggerRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_PauseEventTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerPauseEventTriggerRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).PauseEventTrigger(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_PauseEventTrigger_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).PauseEventTrigger(ctx, req.(*WorkflowManagerPauseEventTriggerRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_ResumeEventTrigger_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerResumeEventTriggerRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).ResumeEventTrigger(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_ResumeEventTrigger_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).ResumeEventTrigger(ctx, req.(*WorkflowManagerResumeEventTriggerRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _WorkflowManagerHost_PublishEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(WorkflowManagerPublishEventRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(WorkflowManagerHostServer).PublishEvent(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: WorkflowManagerHost_PublishEvent_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(WorkflowManagerHostServer).PublishEvent(ctx, req.(*WorkflowManagerPublishEventRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-// WorkflowManagerHost_ServiceDesc is the grpc.ServiceDesc for WorkflowManagerHost service.
-// It's only intended for direct use with grpc.RegisterService,
-// and not to be introspected or modified (even as a copy)
-var WorkflowManagerHost_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.provider.v1.WorkflowManagerHost",
-	HandlerType: (*WorkflowManagerHostServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "StartRun",
-			Handler:    _WorkflowManagerHost_StartRun_Handler,
-		},
-		{
-			MethodName: "SignalRun",
-			Handler:    _WorkflowManagerHost_SignalRun_Handler,
-		},
-		{
-			MethodName: "SignalOrStartRun",
-			Handler:    _WorkflowManagerHost_SignalOrStartRun_Handler,
-		},
-		{
-			MethodName: "CreateDefinition",
-			Handler:    _WorkflowManagerHost_CreateDefinition_Handler,
-		},
-		{
-			MethodName: "GetDefinition",
-			Handler:    _WorkflowManagerHost_GetDefinition_Handler,
-		},
-		{
-			MethodName: "UpdateDefinition",
-			Handler:    _WorkflowManagerHost_UpdateDefinition_Handler,
-		},
-		{
-			MethodName: "DeleteDefinition",
-			Handler:    _WorkflowManagerHost_DeleteDefinition_Handler,
-		},
-		{
-			MethodName: "CreateSchedule",
-			Handler:    _WorkflowManagerHost_CreateSchedule_Handler,
-		},
-		{
-			MethodName: "GetSchedule",
-			Handler:    _WorkflowManagerHost_GetSchedule_Handler,
-		},
-		{
-			MethodName: "UpdateSchedule",
-			Handler:    _WorkflowManagerHost_UpdateSchedule_Handler,
-		},
-		{
-			MethodName: "DeleteSchedule",
-			Handler:    _WorkflowManagerHost_DeleteSchedule_Handler,
-		},
-		{
-			MethodName: "PauseSchedule",
-			Handler:    _WorkflowManagerHost_PauseSchedule_Handler,
-		},
-		{
-			MethodName: "ResumeSchedule",
-			Handler:    _WorkflowManagerHost_ResumeSchedule_Handler,
-		},
-		{
-			MethodName: "CreateEventTrigger",
-			Handler:    _WorkflowManagerHost_CreateEventTrigger_Handler,
-		},
-		{
-			MethodName: "GetEventTrigger",
-			Handler:    _WorkflowManagerHost_GetEventTrigger_Handler,
-		},
-		{
-			MethodName: "UpdateEventTrigger",
-			Handler:    _WorkflowManagerHost_UpdateEventTrigger_Handler,
-		},
-		{
-			MethodName: "DeleteEventTrigger",
-			Handler:    _WorkflowManagerHost_DeleteEventTrigger_Handler,
-		},
-		{
-			MethodName: "PauseEventTrigger",
-			Handler:    _WorkflowManagerHost_PauseEventTrigger_Handler,
-		},
-		{
-			MethodName: "ResumeEventTrigger",
-			Handler:    _WorkflowManagerHost_ResumeEventTrigger_Handler,
-		},
-		{
-			MethodName: "PublishEvent",
-			Handler:    _WorkflowManagerHost_PublishEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

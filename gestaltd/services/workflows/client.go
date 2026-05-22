@@ -147,9 +147,10 @@ func (r *remoteWorkflow) ListRuns(ctx context.Context, req coreworkflow.ListRuns
 	ctx, cancel := runtimehost.ProviderCallContext(ctx)
 	defer cancel()
 	resp, err := r.client.ListRuns(ctx, &proto.ListWorkflowProviderRunsRequest{
-		PageSize:  int32(req.PageSize),
-		PageToken: strings.TrimSpace(req.PageToken),
-		Status:    workflowRunStatusToProto(req.Status),
+		PageSize:     int32(req.PageSize),
+		PageToken:    strings.TrimSpace(req.PageToken),
+		Status:       workflowRunStatusToProto(req.Status),
+		TargetPlugin: strings.TrimSpace(req.TargetPlugin),
 	})
 	if err != nil {
 		return nil, err
@@ -440,7 +441,7 @@ func (r *remoteWorkflow) ResumeEventTrigger(ctx context.Context, req coreworkflo
 	return workflowEventTriggerFromProto(resp)
 }
 
-func (r *remoteWorkflow) PublishEvent(ctx context.Context, req coreworkflow.PublishEventRequest) (err error) {
+func (r *remoteWorkflow) PublishEvent(ctx context.Context, req coreworkflow.PublishEventRequest) (out *coreworkflow.Event, err error) {
 	ctx, end := r.startProviderOperation(ctx, observability.WorkflowOperationPublishEvent, workflowDims{triggerKind: observability.WorkflowTriggerKindEvent})
 	metricCtx := ctx
 	defer func() {
@@ -451,14 +452,21 @@ func (r *remoteWorkflow) PublishEvent(ctx context.Context, req coreworkflow.Publ
 	defer cancel()
 	pbEvent, err := workflowEventToProto(req.Event)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = r.client.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
+	resp, err := r.client.PublishEvent(ctx, &proto.PublishWorkflowProviderEventRequest{
 		PluginName:  req.PluginName,
 		Event:       pbEvent,
 		PublishedBy: workflowActorToProto(req.PublishedBy),
 	})
-	return err
+	if err != nil {
+		return nil, err
+	}
+	event, err := workflowEventFromProto(resp)
+	if err != nil {
+		return nil, err
+	}
+	return &event, nil
 }
 
 func (r *remoteWorkflow) PutExecutionReference(ctx context.Context, ref *coreworkflow.ExecutionReference) (out *coreworkflow.ExecutionReference, err error) {

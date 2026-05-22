@@ -466,8 +466,8 @@ func (p *Provider) ResumeEventTrigger(context.Context, *gestalt.ResumeWorkflowPr
 	return &gestalt.BoundWorkflowEventTrigger{ID: "generated-trigger"}, nil
 }
 
-func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) error {
-	return nil
+func (p *Provider) PublishEvent(context.Context, *gestalt.PublishWorkflowProviderEventRequest) (*gestalt.WorkflowEvent, error) {
+	return &gestalt.WorkflowEvent{ID: "generated-event"}, nil
 }
 `
 }

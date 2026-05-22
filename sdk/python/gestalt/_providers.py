@@ -104,13 +104,17 @@ if TYPE_CHECKING:
         WriteOptions,
     )
     from ._workflow import (
+        BoundWorkflowDefinition,
         BoundWorkflowEventTrigger,
         BoundWorkflowRun,
         BoundWorkflowSchedule,
         CancelWorkflowProviderRunRequest,
+        CreateWorkflowProviderDefinitionRequest,
+        DeleteWorkflowProviderDefinitionRequest,
         DeleteWorkflowProviderEventTriggerRequest,
         DeleteWorkflowProviderScheduleRequest,
         GetWorkflowExecutionReferenceRequest,
+        GetWorkflowProviderDefinitionRequest,
         GetWorkflowProviderEventTriggerRequest,
         GetWorkflowProviderRunRequest,
         GetWorkflowProviderScheduleRequest,
@@ -132,8 +136,10 @@ if TYPE_CHECKING:
         SignalWorkflowProviderRunRequest,
         SignalWorkflowRunResponse,
         StartWorkflowProviderRunRequest,
+        UpdateWorkflowProviderDefinitionRequest,
         UpsertWorkflowProviderEventTriggerRequest,
         UpsertWorkflowProviderScheduleRequest,
+        WorkflowEvent,
         WorkflowExecutionReference,
     )
 
@@ -649,6 +655,30 @@ class WorkflowProvider(PluginProvider):
     and ``list_execution_references(request)``.
     """
 
+    def create_definition(
+        self,
+        request: CreateWorkflowProviderDefinitionRequest,
+    ) -> BoundWorkflowDefinition:
+        self._unimplemented("create_definition")
+
+    def get_definition(
+        self,
+        request: GetWorkflowProviderDefinitionRequest,
+    ) -> BoundWorkflowDefinition:
+        self._unimplemented("get_definition")
+
+    def update_definition(
+        self,
+        request: UpdateWorkflowProviderDefinitionRequest,
+    ) -> BoundWorkflowDefinition:
+        self._unimplemented("update_definition")
+
+    def delete_definition(
+        self,
+        request: DeleteWorkflowProviderDefinitionRequest,
+    ) -> None:
+        self._unimplemented("delete_definition")
+
     def start_run(
         self,
         request: StartWorkflowProviderRunRequest,
@@ -769,7 +799,10 @@ class WorkflowProvider(PluginProvider):
     ) -> ListWorkflowExecutionReferencesResponse:
         self._unimplemented("list_execution_references")
 
-    def publish_event(self, request: PublishWorkflowProviderEventRequest) -> None:
+    def publish_event(
+        self,
+        request: PublishWorkflowProviderEventRequest,
+    ) -> WorkflowEvent:
         self._unimplemented("publish_event")
 
     def serve(self) -> None:

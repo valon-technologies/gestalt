@@ -40,11 +40,19 @@ func (p *fullWorkflowProvider) StartRun(_ context.Context, req *gestalt.StartWor
 	}, nil
 }
 
-func (p *fullWorkflowProvider) PublishEvent(_ context.Context, req *gestalt.PublishWorkflowProviderEventRequest) error {
+func (p *fullWorkflowProvider) CreateDefinition(_ context.Context, req *gestalt.CreateWorkflowProviderDefinitionRequest) (*gestalt.BoundWorkflowDefinition, error) {
+	return &gestalt.BoundWorkflowDefinition{
+		ID:     req.IdempotencyKey,
+		Target: req.Target,
+	}, nil
+}
+
+func (p *fullWorkflowProvider) PublishEvent(_ context.Context, req *gestalt.PublishWorkflowProviderEventRequest) (*gestalt.WorkflowEvent, error) {
 	if req.Event != nil {
 		p.publishedEvents = append(p.publishedEvents, req.Event.Type)
+		return &gestalt.WorkflowEvent{ID: "published-go", Type: req.Event.Type}, nil
 	}
-	return nil
+	return &gestalt.WorkflowEvent{ID: "published-go"}, nil
 }
 
 func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
@@ -99,10 +107,32 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 		t.Fatalf("StartRun = %+v, want pending run", run)
 	}
 
-	if _, err := workflowClient.PublishEvent(rpcCtx, &proto.PublishWorkflowProviderEventRequest{
+	definition, err := workflowClient.CreateDefinition(rpcCtx, &proto.CreateWorkflowProviderDefinitionRequest{
+		IdempotencyKey: "definition-1",
+		Target: &proto.BoundWorkflowTarget{
+			Kind: &proto.BoundWorkflowTarget_Plugin{
+				Plugin: &proto.BoundWorkflowPluginTarget{
+					PluginName: "github",
+					Operation:  "issues.search",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateDefinition: %v", err)
+	}
+	if definition.GetId() != "definition-1" {
+		t.Fatalf("CreateDefinition id = %q, want definition-1", definition.GetId())
+	}
+
+	published, err := workflowClient.PublishEvent(rpcCtx, &proto.PublishWorkflowProviderEventRequest{
 		Event: &proto.WorkflowEvent{Type: "issue.created"},
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("PublishEvent: %v", err)
+	}
+	if published.GetId() != "published-go" {
+		t.Fatalf("PublishEvent id = %q, want published-go", published.GetId())
 	}
 	if len(provider.publishedEvents) != 1 || provider.publishedEvents[0] != "issue.created" {
 		t.Fatalf("published events = %v, want [issue.created]", provider.publishedEvents)

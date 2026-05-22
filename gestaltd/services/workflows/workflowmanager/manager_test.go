@@ -784,8 +784,8 @@ func TestListRunsFiltersTargetPluginInManager(t *testing.T) {
 		SubjectKind:  string(principal.KindUser),
 	}
 	provider.listRunsHook = func(req coreworkflow.ListRunsRequest) (*coreworkflow.ListRunsResponse, error) {
-		if req.TargetPlugin != "" {
-			t.Fatalf("provider TargetPlugin = %q, want manager-owned filter", req.TargetPlugin)
+		if req.TargetPlugin != "slack" {
+			t.Fatalf("provider TargetPlugin = %q, want slack", req.TargetPlugin)
 		}
 		return &coreworkflow.ListRunsResponse{Runs: []*coreworkflow.Run{
 			{
@@ -2193,9 +2193,9 @@ func (p *testWorkflowProvider) GetEventTrigger(_ context.Context, req coreworkfl
 	return &copied, nil
 }
 
-func (p *testWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) error {
+func (p *testWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
 	p.publishedEvents = append(p.publishedEvents, req)
-	return nil
+	return &req.Event, nil
 }
 
 func (p *testWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {

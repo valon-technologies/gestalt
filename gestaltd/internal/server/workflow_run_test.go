@@ -265,7 +265,7 @@ func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 		t.Fatalf("provider list requests = %#v, want 1", provider.listRunReqs)
 	}
 	got := provider.listRunReqs[0]
-	if got.PageSize != 17 || got.PageToken != "" || got.TargetPlugin != "" || got.Status != coreworkflow.RunStatusRunning {
+	if got.PageSize != 17 || got.PageToken != "" || got.TargetPlugin != "roadmap" || got.Status != coreworkflow.RunStatusRunning {
 		t.Fatalf("provider list request = %#v", got)
 	}
 
@@ -283,7 +283,7 @@ func TestGlobalWorkflowRunListPassesPaginationAndFilters(t *testing.T) {
 		t.Fatalf("provider list requests = %#v, want 2", provider.listRunReqs)
 	}
 	got = provider.listRunReqs[1]
-	if got.PageSize != 17 || got.PageToken != "next-run-page" || got.TargetPlugin != "" || got.Status != coreworkflow.RunStatusRunning {
+	if got.PageSize != 17 || got.PageToken != "next-run-page" || got.TargetPlugin != "roadmap" || got.Status != coreworkflow.RunStatusRunning {
 		t.Fatalf("next provider list request = %#v", got)
 	}
 }

@@ -560,10 +560,10 @@ func (p *startupWorkflowProviderProxy) ResumeEventTrigger(ctx context.Context, r
 	return provider.ResumeEventTrigger(ctx, req)
 }
 
-func (p *startupWorkflowProviderProxy) PublishEvent(ctx context.Context, req coreworkflow.PublishEventRequest) error {
+func (p *startupWorkflowProviderProxy) PublishEvent(ctx context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
 	provider, err := p.awaitForPlugin(ctx, req.PluginName)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	return provider.PublishEvent(ctx, req)
 }

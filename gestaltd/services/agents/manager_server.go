@@ -36,23 +36,23 @@ type ManagerService interface {
 	ResolveInteraction(context.Context, *principal.Principal, string, string, map[string]any) (*coreagent.Interaction, error)
 }
 
-type ManagerServer struct {
-	proto.UnimplementedAgentManagerHostServer
+type ProviderServer struct {
+	proto.UnimplementedAgentProviderServer
 
 	pluginName string
 	manager    ManagerService
 	tokens     *InvocationTokenManager
 }
 
-func NewManagerServer(pluginName string, manager ManagerService, tokens *InvocationTokenManager) *ManagerServer {
-	return &ManagerServer{
+func NewProviderServer(pluginName string, manager ManagerService, tokens *InvocationTokenManager) *ProviderServer {
+	return &ProviderServer{
 		pluginName: pluginName,
 		manager:    manager,
 		tokens:     tokens,
 	}
 }
 
-func (s *ManagerServer) CreateSession(ctx context.Context, req *proto.AgentManagerCreateSessionRequest) (*proto.AgentSession, error) {
+func (s *ProviderServer) CreateSession(ctx context.Context, req *proto.CreateAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -74,7 +74,7 @@ func (s *ManagerServer) CreateSession(ctx context.Context, req *proto.AgentManag
 	return agentSessionToProto(session)
 }
 
-func (s *ManagerServer) GetSession(ctx context.Context, req *proto.AgentManagerGetSessionRequest) (*proto.AgentSession, error) {
+func (s *ProviderServer) GetSession(ctx context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -93,7 +93,7 @@ func (s *ManagerServer) GetSession(ctx context.Context, req *proto.AgentManagerG
 	return agentSessionToProto(session)
 }
 
-func (s *ManagerServer) ListSessions(ctx context.Context, req *proto.AgentManagerListSessionsRequest) (*proto.AgentManagerListSessionsResponse, error) {
+func (s *ProviderServer) ListSessions(ctx context.Context, req *proto.ListAgentProviderSessionsRequest) (*proto.ListAgentProviderSessionsResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -117,7 +117,7 @@ func (s *ManagerServer) ListSessions(ctx context.Context, req *proto.AgentManage
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
-	resp := &proto.AgentManagerListSessionsResponse{Sessions: make([]*proto.AgentSession, 0, len(sessions))}
+	resp := &proto.ListAgentProviderSessionsResponse{Sessions: make([]*proto.AgentSession, 0, len(sessions))}
 	for _, session := range sessions {
 		encoded, err := agentSessionToProto(session)
 		if err != nil {
@@ -128,7 +128,7 @@ func (s *ManagerServer) ListSessions(ctx context.Context, req *proto.AgentManage
 	return resp, nil
 }
 
-func (s *ManagerServer) UpdateSession(ctx context.Context, req *proto.AgentManagerUpdateSessionRequest) (*proto.AgentSession, error) {
+func (s *ProviderServer) UpdateSession(ctx context.Context, req *proto.UpdateAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -156,7 +156,7 @@ func (s *ManagerServer) UpdateSession(ctx context.Context, req *proto.AgentManag
 	return agentSessionToProto(session)
 }
 
-func (s *ManagerServer) CreateTurn(ctx context.Context, req *proto.AgentManagerCreateTurnRequest) (*proto.AgentTurn, error) {
+func (s *ProviderServer) CreateTurn(ctx context.Context, req *proto.CreateAgentProviderTurnRequest) (*proto.AgentTurn, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -189,7 +189,7 @@ func (s *ManagerServer) CreateTurn(ctx context.Context, req *proto.AgentManagerC
 	return agentTurnToProto(turn)
 }
 
-func (s *ManagerServer) GetTurn(ctx context.Context, req *proto.AgentManagerGetTurnRequest) (*proto.AgentTurn, error) {
+func (s *ProviderServer) GetTurn(ctx context.Context, req *proto.GetAgentProviderTurnRequest) (*proto.AgentTurn, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -208,7 +208,7 @@ func (s *ManagerServer) GetTurn(ctx context.Context, req *proto.AgentManagerGetT
 	return agentTurnToProto(turn)
 }
 
-func (s *ManagerServer) ListTurns(ctx context.Context, req *proto.AgentManagerListTurnsRequest) (*proto.AgentManagerListTurnsResponse, error) {
+func (s *ProviderServer) ListTurns(ctx context.Context, req *proto.ListAgentProviderTurnsRequest) (*proto.ListAgentProviderTurnsResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -236,7 +236,7 @@ func (s *ManagerServer) ListTurns(ctx context.Context, req *proto.AgentManagerLi
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
-	resp := &proto.AgentManagerListTurnsResponse{Turns: make([]*proto.AgentTurn, 0, len(turns))}
+	resp := &proto.ListAgentProviderTurnsResponse{Turns: make([]*proto.AgentTurn, 0, len(turns))}
 	for _, turn := range turns {
 		encoded, err := agentTurnToProto(turn)
 		if err != nil {
@@ -247,7 +247,7 @@ func (s *ManagerServer) ListTurns(ctx context.Context, req *proto.AgentManagerLi
 	return resp, nil
 }
 
-func (s *ManagerServer) CancelTurn(ctx context.Context, req *proto.AgentManagerCancelTurnRequest) (*proto.AgentTurn, error) {
+func (s *ProviderServer) CancelTurn(ctx context.Context, req *proto.CancelAgentProviderTurnRequest) (*proto.AgentTurn, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -266,7 +266,7 @@ func (s *ManagerServer) CancelTurn(ctx context.Context, req *proto.AgentManagerC
 	return agentTurnToProto(turn)
 }
 
-func (s *ManagerServer) ListTurnEvents(ctx context.Context, req *proto.AgentManagerListTurnEventsRequest) (*proto.AgentManagerListTurnEventsResponse, error) {
+func (s *ProviderServer) ListTurnEvents(ctx context.Context, req *proto.ListAgentProviderTurnEventsRequest) (*proto.ListAgentProviderTurnEventsResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -282,10 +282,14 @@ func (s *ManagerServer) ListTurnEvents(ctx context.Context, req *proto.AgentMana
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
-	return &proto.AgentManagerListTurnEventsResponse{Events: turnEventsToProto(events)}, nil
+	return &proto.ListAgentProviderTurnEventsResponse{Events: turnEventsToProto(events)}, nil
 }
 
-func (s *ManagerServer) ListInteractions(ctx context.Context, req *proto.AgentManagerListInteractionsRequest) (*proto.AgentManagerListInteractionsResponse, error) {
+func (s *ProviderServer) GetInteraction(ctx context.Context, req *proto.GetAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
+	return nil, status.Error(codes.Unimplemented, "agent get interaction is not available through the public provider facade")
+}
+
+func (s *ProviderServer) ListInteractions(ctx context.Context, req *proto.ListAgentProviderInteractionsRequest) (*proto.ListAgentProviderInteractionsResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -301,10 +305,10 @@ func (s *ManagerServer) ListInteractions(ctx context.Context, req *proto.AgentMa
 	if err != nil {
 		return nil, agentManagerStatusError(err)
 	}
-	return &proto.AgentManagerListInteractionsResponse{Interactions: interactionsToProto(interactions)}, nil
+	return &proto.ListAgentProviderInteractionsResponse{Interactions: interactionsToProto(interactions)}, nil
 }
 
-func (s *ManagerServer) ResolveInteraction(ctx context.Context, req *proto.AgentManagerResolveInteractionRequest) (*proto.AgentInteraction, error) {
+func (s *ProviderServer) ResolveInteraction(ctx context.Context, req *proto.ResolveAgentProviderInteractionRequest) (*proto.AgentInteraction, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -327,7 +331,11 @@ func (s *ManagerServer) ResolveInteraction(ctx context.Context, req *proto.Agent
 	return agentInteractionToProto(interaction)
 }
 
-func (s *ManagerServer) tokenContext(token string) (plugininvokerservice.TokenContext, error) {
+func (s *ProviderServer) GetCapabilities(context.Context, *proto.GetAgentProviderCapabilitiesRequest) (*proto.AgentProviderCapabilities, error) {
+	return nil, status.Error(codes.Unimplemented, "agent get capabilities is not available through the public provider facade")
+}
+
+func (s *ProviderServer) tokenContext(token string) (plugininvokerservice.TokenContext, error) {
 	if s == nil || s.tokens == nil {
 		return plugininvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, "invocation tokens are not configured")
 	}
@@ -369,4 +377,4 @@ func agentManagerStatusError(err error) error {
 	}
 }
 
-var _ proto.AgentManagerHostServer = (*ManagerServer)(nil)
+var _ proto.AgentProviderServer = (*ProviderServer)(nil)

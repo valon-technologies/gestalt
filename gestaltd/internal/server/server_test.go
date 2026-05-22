@@ -764,29 +764,27 @@ func (v *relayTestSessionVerifier) setActive(sessionID string, active bool) {
 	v.active[sessionID] = active
 }
 
-type relayTestWorkflowManagerHostServer struct {
-	proto.UnimplementedWorkflowManagerHostServer
+type relayTestWorkflowProviderServer struct {
+	proto.UnimplementedWorkflowProviderServer
 	calls *atomic.Int64
 }
 
-func (s relayTestWorkflowManagerHostServer) GetSchedule(_ context.Context, req *proto.WorkflowManagerGetScheduleRequest) (*proto.ManagedWorkflowSchedule, error) {
+func (s relayTestWorkflowProviderServer) GetSchedule(_ context.Context, req *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
 	if s.calls != nil {
 		s.calls.Add(1)
 	}
-	return &proto.ManagedWorkflowSchedule{
+	return &proto.BoundWorkflowSchedule{
 		ProviderName: "registered",
-		Schedule: &proto.BoundWorkflowSchedule{
-			Id: req.GetScheduleId(),
-		},
+		Id:           req.GetScheduleId(),
 	}, nil
 }
 
-type relayTestAgentManagerHostServer struct {
-	proto.UnimplementedAgentManagerHostServer
+type relayTestAgentProviderServer struct {
+	proto.UnimplementedAgentProviderServer
 	calls *atomic.Int64
 }
 
-func (s relayTestAgentManagerHostServer) GetSession(_ context.Context, req *proto.AgentManagerGetSessionRequest) (*proto.AgentSession, error) {
+func (s relayTestAgentProviderServer) GetSession(_ context.Context, req *proto.GetAgentProviderSessionRequest) (*proto.AgentSession, error) {
 	if s.calls != nil {
 		s.calls.Add(1)
 	}
@@ -1237,40 +1235,40 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 		call         func(*testing.T, context.Context, *grpc.ClientConn)
 	}{
 		{
-			name:         "workflow manager",
-			service:      "workflow_manager",
-			envVar:       workflowservice.DefaultManagerSocketEnv,
-			methodPrefix: "/" + proto.WorkflowManagerHost_ServiceDesc.ServiceName + "/",
+			name:         "workflow provider",
+			service:      "workflow_provider",
+			envVar:       workflowservice.DefaultProviderSocketEnv,
+			methodPrefix: "/" + proto.WorkflowProvider_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
-				proto.RegisterWorkflowManagerHostServer(srv, relayTestWorkflowManagerHostServer{calls: calls})
+				proto.RegisterWorkflowProviderServer(srv, relayTestWorkflowProviderServer{calls: calls})
 			},
 			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
 				t.Helper()
-				resp, err := proto.NewWorkflowManagerHostClient(conn).GetSchedule(ctx, &proto.WorkflowManagerGetScheduleRequest{ScheduleId: "schedule-1"})
+				resp, err := proto.NewWorkflowProviderClient(conn).GetSchedule(ctx, &proto.GetWorkflowProviderScheduleRequest{ScheduleId: "schedule-1"})
 				if err != nil {
-					t.Fatalf("WorkflowManager.GetSchedule via relay: %v", err)
+					t.Fatalf("WorkflowProvider.GetSchedule via relay: %v", err)
 				}
-				if resp.GetProviderName() != "registered" || resp.GetSchedule().GetId() != "schedule-1" {
-					t.Fatalf("WorkflowManager.GetSchedule response = %+v, want registered schedule-1", resp)
+				if resp.GetProviderName() != "registered" || resp.GetId() != "schedule-1" {
+					t.Fatalf("WorkflowProvider.GetSchedule response = %+v, want registered schedule-1", resp)
 				}
 			},
 		},
 		{
-			name:         "agent manager",
-			service:      "agent_manager",
-			envVar:       agentservice.DefaultManagerSocketEnv,
-			methodPrefix: "/" + proto.AgentManagerHost_ServiceDesc.ServiceName + "/",
+			name:         "agent provider",
+			service:      "agent_provider",
+			envVar:       agentservice.DefaultProviderSocketEnv,
+			methodPrefix: "/" + proto.AgentProvider_ServiceDesc.ServiceName + "/",
 			register: func(srv *grpc.Server, calls *atomic.Int64) {
-				proto.RegisterAgentManagerHostServer(srv, relayTestAgentManagerHostServer{calls: calls})
+				proto.RegisterAgentProviderServer(srv, relayTestAgentProviderServer{calls: calls})
 			},
 			call: func(t *testing.T, ctx context.Context, conn *grpc.ClientConn) {
 				t.Helper()
-				resp, err := proto.NewAgentManagerHostClient(conn).GetSession(ctx, &proto.AgentManagerGetSessionRequest{SessionId: "agent-session-1"})
+				resp, err := proto.NewAgentProviderClient(conn).GetSession(ctx, &proto.GetAgentProviderSessionRequest{SessionId: "agent-session-1"})
 				if err != nil {
-					t.Fatalf("AgentManager.GetSession via relay: %v", err)
+					t.Fatalf("AgentProvider.GetSession via relay: %v", err)
 				}
 				if resp.GetProviderName() != "registered" || resp.GetId() != "agent-session-1" {
-					t.Fatalf("AgentManager.GetSession response = %+v, want registered agent-session-1", resp)
+					t.Fatalf("AgentProvider.GetSession response = %+v, want registered agent-session-1", resp)
 				}
 			},
 		},
@@ -1359,10 +1357,10 @@ func TestHostServiceRelayRoutesRegisteredRuntimeCoreServices(t *testing.T) {
 			defer staleCancel()
 			staleCtx = metadata.NewOutgoingContext(staleCtx, metadata.Pairs(runtimehost.HostServiceRelayTokenHeader, relayToken))
 			switch tc.service {
-			case "workflow_manager":
-				_, err = proto.NewWorkflowManagerHostClient(conn).GetSchedule(staleCtx, &proto.WorkflowManagerGetScheduleRequest{ScheduleId: "schedule-1"})
-			case "agent_manager":
-				_, err = proto.NewAgentManagerHostClient(conn).GetSession(staleCtx, &proto.AgentManagerGetSessionRequest{SessionId: "agent-session-1"})
+			case "workflow_provider":
+				_, err = proto.NewWorkflowProviderClient(conn).GetSchedule(staleCtx, &proto.GetWorkflowProviderScheduleRequest{ScheduleId: "schedule-1"})
+			case "agent_provider":
+				_, err = proto.NewAgentProviderClient(conn).GetSession(staleCtx, &proto.GetAgentProviderSessionRequest{SessionId: "agent-session-1"})
 			case "runtime_log_host":
 				_, err = proto.NewPluginRuntimeLogHostClient(conn).AppendLogs(staleCtx, &proto.AppendPluginRuntimeLogsRequest{
 					SessionId: "runtime-session-1",

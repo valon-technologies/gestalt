@@ -9,6 +9,7 @@ type StartWorkflowProviderRunRequest struct {
 	CreatedBy      *WorkflowActor
 	ExecutionRef   string
 	WorkflowKey    string
+	DefinitionID   string
 }
 
 // GetWorkflowProviderRunRequest identifies one workflow run.
@@ -18,9 +19,10 @@ type GetWorkflowProviderRunRequest struct {
 
 // ListWorkflowProviderRunsRequest requests workflow runs visible to the caller.
 type ListWorkflowProviderRunsRequest struct {
-	PageSize  int
-	PageToken string
-	Status    WorkflowRunStatus
+	PageSize     int
+	PageToken    string
+	Status       WorkflowRunStatus
+	TargetPlugin string
 }
 
 // ListWorkflowProviderRunsResponse contains workflow runs.
@@ -66,6 +68,32 @@ type SignalOrStartWorkflowProviderRunRequest struct {
 	CreatedBy      *WorkflowActor
 	ExecutionRef   string
 	Signal         *WorkflowSignal
+	DefinitionID   string
+}
+
+// CreateWorkflowProviderDefinitionRequest requests creating a workflow
+// definition in provider-owned storage.
+type CreateWorkflowProviderDefinitionRequest struct {
+	Target         *BoundWorkflowTarget
+	IdempotencyKey string
+}
+
+// GetWorkflowProviderDefinitionRequest identifies one workflow definition.
+type GetWorkflowProviderDefinitionRequest struct {
+	DefinitionID string
+}
+
+// UpdateWorkflowProviderDefinitionRequest requests updating a workflow
+// definition.
+type UpdateWorkflowProviderDefinitionRequest struct {
+	DefinitionID string
+	Target       *BoundWorkflowTarget
+}
+
+// DeleteWorkflowProviderDefinitionRequest identifies a workflow definition to
+// delete.
+type DeleteWorkflowProviderDefinitionRequest struct {
+	DefinitionID string
 }
 
 // SignalWorkflowRunResponse contains the run and signal affected by a signal
@@ -83,13 +111,15 @@ type SignalWorkflowRunResponse struct {
 // UpsertWorkflowProviderScheduleRequest requests creating or updating a
 // workflow schedule.
 type UpsertWorkflowProviderScheduleRequest struct {
-	ScheduleID   string
-	Cron         string
-	Timezone     string
-	Target       *BoundWorkflowTarget
-	Paused       bool
-	RequestedBy  *WorkflowActor
-	ExecutionRef string
+	ScheduleID     string
+	Cron           string
+	Timezone       string
+	Target         *BoundWorkflowTarget
+	Paused         bool
+	RequestedBy    *WorkflowActor
+	ExecutionRef   string
+	IdempotencyKey string
+	DefinitionID   string
 }
 
 // GetWorkflowProviderScheduleRequest identifies one workflow schedule.
@@ -134,12 +164,14 @@ type ResumeWorkflowProviderScheduleRequest struct {
 // UpsertWorkflowProviderEventTriggerRequest requests creating or updating a
 // workflow event trigger.
 type UpsertWorkflowProviderEventTriggerRequest struct {
-	TriggerID    string
-	Match        *WorkflowEventMatch
-	Target       *BoundWorkflowTarget
-	Paused       bool
-	RequestedBy  *WorkflowActor
-	ExecutionRef string
+	TriggerID      string
+	Match          *WorkflowEventMatch
+	Target         *BoundWorkflowTarget
+	Paused         bool
+	RequestedBy    *WorkflowActor
+	ExecutionRef   string
+	IdempotencyKey string
+	DefinitionID   string
 }
 
 // GetWorkflowProviderEventTriggerRequest identifies one event trigger.
@@ -224,6 +256,14 @@ type PublishWorkflowProviderEventRequest struct {
 // typed interface instead of generated service bindings.
 type WorkflowProvider interface {
 	Provider
+	// CreateDefinition creates a reusable workflow definition.
+	CreateDefinition(ctx context.Context, req *CreateWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error)
+	// GetDefinition returns one workflow definition by ID.
+	GetDefinition(ctx context.Context, req *GetWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error)
+	// UpdateDefinition updates a reusable workflow definition.
+	UpdateDefinition(ctx context.Context, req *UpdateWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error)
+	// DeleteDefinition deletes a reusable workflow definition.
+	DeleteDefinition(ctx context.Context, req *DeleteWorkflowProviderDefinitionRequest) error
 	// StartRun starts or idempotently returns a workflow run.
 	StartRun(ctx context.Context, req *StartWorkflowProviderRunRequest) (*BoundWorkflowRun, error)
 	// GetRun returns one workflow run by ID.
@@ -267,7 +307,7 @@ type WorkflowProvider interface {
 	// ListExecutionReferences returns workflow execution references for a scope.
 	ListExecutionReferences(ctx context.Context, req *ListWorkflowExecutionReferencesRequest) (*ListWorkflowExecutionReferencesResponse, error)
 	// PublishEvent publishes a workflow event for trigger matching.
-	PublishEvent(ctx context.Context, req *PublishWorkflowProviderEventRequest) error
+	PublishEvent(ctx context.Context, req *PublishWorkflowProviderEventRequest) (*WorkflowEvent, error)
 }
 
 // UnimplementedWorkflowProvider provides no-op lifecycle behavior and
@@ -277,6 +317,22 @@ type UnimplementedWorkflowProvider struct{}
 
 func (UnimplementedWorkflowProvider) Configure(context.Context, string, map[string]any) error {
 	return nil
+}
+
+func (UnimplementedWorkflowProvider) CreateDefinition(context.Context, *CreateWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error) {
+	return nil, Unimplemented("workflow create definition is not implemented")
+}
+
+func (UnimplementedWorkflowProvider) GetDefinition(context.Context, *GetWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error) {
+	return nil, Unimplemented("workflow get definition is not implemented")
+}
+
+func (UnimplementedWorkflowProvider) UpdateDefinition(context.Context, *UpdateWorkflowProviderDefinitionRequest) (*BoundWorkflowDefinition, error) {
+	return nil, Unimplemented("workflow update definition is not implemented")
+}
+
+func (UnimplementedWorkflowProvider) DeleteDefinition(context.Context, *DeleteWorkflowProviderDefinitionRequest) error {
+	return Unimplemented("workflow delete definition is not implemented")
 }
 
 func (UnimplementedWorkflowProvider) StartRun(context.Context, *StartWorkflowProviderRunRequest) (*BoundWorkflowRun, error) {
@@ -363,8 +419,8 @@ func (UnimplementedWorkflowProvider) ListExecutionReferences(context.Context, *L
 	return nil, Unimplemented("workflow list execution references is not implemented")
 }
 
-func (UnimplementedWorkflowProvider) PublishEvent(context.Context, *PublishWorkflowProviderEventRequest) error {
-	return Unimplemented("workflow publish event is not implemented")
+func (UnimplementedWorkflowProvider) PublishEvent(context.Context, *PublishWorkflowProviderEventRequest) (*WorkflowEvent, error) {
+	return nil, Unimplemented("workflow publish event is not implemented")
 }
 
 // WorkflowRunStatus identifies the lifecycle state of a workflow run.

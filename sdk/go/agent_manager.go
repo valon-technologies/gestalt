@@ -12,7 +12,7 @@ import (
 
 // EnvAgentManagerSocket names the environment variable containing the
 // agent-manager service target.
-const EnvAgentManagerSocket = proto.EnvAgentManagerSocket
+const EnvAgentManagerSocket = proto.EnvAgentProviderSocket
 
 // EnvAgentManagerSocketToken names the optional agent-manager relay-token
 // variable.
@@ -20,11 +20,11 @@ const EnvAgentManagerSocketToken = EnvAgentManagerSocket + "_TOKEN"
 
 // AgentManagerClient manages agent sessions, turns, events, and interactions.
 type AgentManagerClient struct {
-	client          proto.AgentManagerHostClient
+	client          proto.AgentProviderClient
 	invocationToken string
 }
 
-var sharedAgentManagerTransport sharedManagerTransport[proto.AgentManagerHostClient]
+var sharedAgentManagerTransport sharedManagerTransport[proto.AgentProviderClient]
 
 // AgentManager returns a client that attaches invocationToken to every request.
 func AgentManager(invocationToken string) (*AgentManagerClient, error) {
@@ -40,7 +40,7 @@ func AgentManager(invocationToken string) (*AgentManagerClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "agent manager", target, token, &sharedAgentManagerTransport, proto.NewAgentManagerHostClient)
+	client, err := managerTransportClient(ctx, "agent manager", target, token, &sharedAgentManagerTransport, proto.NewAgentProviderClient)
 	if err != nil {
 		return nil, err
 	}

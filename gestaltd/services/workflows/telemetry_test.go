@@ -147,8 +147,8 @@ func (workflowTelemetryProviderServer) ListExecutionReferences(context.Context, 
 	return &proto.ListWorkflowExecutionReferencesResponse{References: []*proto.WorkflowExecutionReference{telemetryExecutionReference()}}, nil
 }
 
-func (workflowTelemetryProviderServer) PublishEvent(context.Context, *proto.PublishWorkflowProviderEventRequest) (*emptypb.Empty, error) {
-	return &emptypb.Empty{}, nil
+func (workflowTelemetryProviderServer) PublishEvent(context.Context, *proto.PublishWorkflowProviderEventRequest) (*proto.WorkflowEvent, error) {
+	return &proto.WorkflowEvent{Type: "ignored"}, nil
 }
 
 func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing.T) {
@@ -236,7 +236,8 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 			return err
 		}},
 		{"publish event", observability.WorkflowOperationPublishEvent, workflowMetricAttrsWith(observability.WorkflowOperationPublishEvent, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			return p.PublishEvent(ctx, coreworkflow.PublishEventRequest{Event: coreworkflow.Event{Type: "ignored"}})
+			_, err := p.PublishEvent(ctx, coreworkflow.PublishEventRequest{Event: coreworkflow.Event{Type: "ignored"}})
+			return err
 		}},
 		{"ping", observability.WorkflowOperationPing, workflowMetricAttrs(observability.WorkflowOperationPing), func(ctx context.Context, p coreworkflow.Provider) error {
 			return p.Ping(ctx)
@@ -382,7 +383,7 @@ func TestWorkflowHostRecordsOperationMetricsAcrossTransport(t *testing.T) {
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.host.operation.duration", successAttrs, "gestaltd.workflow.plugin.operation")
 }
 
-func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testing.T) { //nolint:paralleltest // mutates global slog and OTel providers.
+func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T) { //nolint:paralleltest // mutates global slog and OTel providers.
 	metrics := metrictest.NewManualMeterProvider(t)
 	prevMeter := otel.GetMeterProvider()
 	otel.SetMeterProvider(metrics.Provider)
@@ -467,7 +468,7 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 
 	lis := bufconn.Listen(1024 * 1024)
 	srv := grpc.NewServer()
-	proto.RegisterWorkflowManagerHostServer(srv, NewManagerServer("slack", manager, tokens))
+	proto.RegisterWorkflowProviderServer(srv, NewProviderServer("slack", manager, tokens))
 	go func() {
 		_ = srv.Serve(lis)
 	}()
@@ -485,7 +486,7 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 		t.Fatalf("grpc.NewClient: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	client := proto.NewWorkflowManagerHostClient(conn)
+	client := proto.NewWorkflowProviderClient(conn)
 
 	successKey := "slack:T123:C123:1712161829.000300"
 	_, err = client.SignalOrStartRun(context.Background(), workflowManagerTelemetrySignalOrStartRequest(token, successKey, "idem-success"))
@@ -499,7 +500,7 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 		t.Fatalf("SignalOrStartRun failure = %v, want FailedPrecondition", err)
 	}
 	untrustedProviderName := "caller-controlled-provider"
-	_, err = client.SignalOrStartRun(context.Background(), &proto.WorkflowManagerSignalOrStartRunRequest{
+	_, err = client.SignalOrStartRun(context.Background(), &proto.SignalOrStartWorkflowProviderRunRequest{
 		ProviderName:    untrustedProviderName,
 		WorkflowKey:     "slack:T123:C123:1712161831.000500",
 		IdempotencyKey:  "idem-invalid-target",
@@ -513,7 +514,7 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 		t.Fatalf("SignalOrStartRun invalid target = %v, want InvalidArgument", err)
 	}
 	principalDeniedKey := "slack:T123:C123:1712161832.000600"
-	_, err = client.SignalOrStartRun(context.Background(), &proto.WorkflowManagerSignalOrStartRunRequest{
+	_, err = client.SignalOrStartRun(context.Background(), &proto.SignalOrStartWorkflowProviderRunRequest{
 		ProviderName:    "local",
 		WorkflowKey:     principalDeniedKey,
 		IdempotencyKey:  "idem-principal-denied",
@@ -533,7 +534,7 @@ func TestWorkflowManagerHostRecordsSignalOrStartMetricsAcrossTransport(t *testin
 		t.Fatalf("SignalOrStartRun principal denied = %v, want NotFound", err)
 	}
 	authorizerDeniedKey := "slack:T123:C123:1712161833.000700"
-	_, err = client.SignalOrStartRun(context.Background(), &proto.WorkflowManagerSignalOrStartRunRequest{
+	_, err = client.SignalOrStartRun(context.Background(), &proto.SignalOrStartWorkflowProviderRunRequest{
 		ProviderName:    "local",
 		WorkflowKey:     authorizerDeniedKey,
 		IdempotencyKey:  "idem-authorizer-denied",
@@ -778,8 +779,8 @@ func newTelemetryRemoteWorkflow(t *testing.T) coreworkflow.Provider {
 	return workflow
 }
 
-func workflowManagerTelemetrySignalOrStartRequest(token, workflowKey, idempotencyKey string) *proto.WorkflowManagerSignalOrStartRunRequest {
-	return &proto.WorkflowManagerSignalOrStartRunRequest{
+func workflowManagerTelemetrySignalOrStartRequest(token, workflowKey, idempotencyKey string) *proto.SignalOrStartWorkflowProviderRunRequest {
+	return &proto.SignalOrStartWorkflowProviderRunRequest{
 		ProviderName:    "local",
 		WorkflowKey:     workflowKey,
 		IdempotencyKey:  idempotencyKey,

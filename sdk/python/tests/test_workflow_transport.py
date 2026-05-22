@@ -64,7 +64,7 @@ class _WorkflowHostServicer(workflow_pb2_grpc.WorkflowHostServicer):
         )
 
 
-class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
+class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowProviderServicer):
     def CreateDefinition(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         _manager_requests.append(
@@ -75,15 +75,13 @@ class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
                 "provider_name": request.provider_name,
             }
         )
-        return workflow_pb2.ManagedWorkflowDefinition(
+        return workflow_pb2.BoundWorkflowDefinition(
             provider_name=request.provider_name or "basic",
-            definition=workflow_pb2.BoundWorkflowDefinition(
-                id="def-1",
-                target=request.target,
-            ),
+            id="def-1",
+            target=request.target,
         )
 
-    def CreateSchedule(self, request: Any, context: grpc.ServicerContext) -> Any:
+    def UpsertSchedule(self, request: Any, context: grpc.ServicerContext) -> Any:
         _record_manager_relay_tokens(context)
         _manager_requests.append(
             {
@@ -93,15 +91,13 @@ class _WorkflowManagerServicer(workflow_pb2_grpc.WorkflowManagerHostServicer):
                 "cron": request.cron,
             }
         )
-        return workflow_pb2.ManagedWorkflowSchedule(
+        return workflow_pb2.BoundWorkflowSchedule(
             provider_name=request.provider_name or "basic",
-            schedule=workflow_pb2.BoundWorkflowSchedule(
-                id="sched-1",
-                cron=request.cron,
-                timezone=request.timezone,
-                target=request.target,
-                paused=request.paused,
-            ),
+            id="sched-1",
+            cron=request.cron,
+            timezone=request.timezone,
+            target=request.target,
+            paused=request.paused,
         )
 
     def PublishEvent(self, request: Any, context: grpc.ServicerContext) -> Any:
@@ -153,7 +149,7 @@ def setUpModule() -> None:
     _server.start()
 
     _manager_server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
-    workflow_pb2_grpc.add_WorkflowManagerHostServicer_to_server(
+    workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(
         _WorkflowManagerServicer(), _manager_server
     )
     _manager_server.add_insecure_port(f"unix:{_manager_socket_path}")
@@ -203,7 +199,7 @@ class WorkflowTransportTests(unittest.TestCase):
 
         with WorkflowManager("token-123") as manager:
             published = manager.publish_event(
-                workflow_pb2.WorkflowManagerPublishEventRequest(
+                workflow_pb2.PublishWorkflowProviderEventRequest(
                     event=event,
                     provider_name="advanced",
                 )

@@ -9,24 +9,28 @@ mod helpers;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use generated::v1::workflow_manager_host_server::{
-    WorkflowManagerHost as ProtoWorkflowManagerHost, WorkflowManagerHostServer,
+use generated::v1::workflow_provider_server::{
+    WorkflowProvider as ProtoWorkflowProvider, WorkflowProviderServer,
 };
 use generated::v1::{
     AgentMessagePartType, BoundWorkflowDefinition, BoundWorkflowEventTrigger, BoundWorkflowRun,
-    BoundWorkflowSchedule, ManagedWorkflowDefinition, ManagedWorkflowEventTrigger,
-    ManagedWorkflowRun, ManagedWorkflowRunSignal, ManagedWorkflowSchedule,
-    WorkflowEvent as ProtoWorkflowEvent, WorkflowManagerCreateDefinitionRequest,
-    WorkflowManagerCreateEventTriggerRequest, WorkflowManagerCreateScheduleRequest,
-    WorkflowManagerDeleteDefinitionRequest, WorkflowManagerDeleteEventTriggerRequest,
-    WorkflowManagerDeleteScheduleRequest, WorkflowManagerGetDefinitionRequest,
-    WorkflowManagerGetEventTriggerRequest, WorkflowManagerGetScheduleRequest,
-    WorkflowManagerPauseEventTriggerRequest, WorkflowManagerPauseScheduleRequest,
-    WorkflowManagerPublishEventRequest, WorkflowManagerResumeEventTriggerRequest,
-    WorkflowManagerResumeScheduleRequest, WorkflowManagerSignalOrStartRunRequest,
-    WorkflowManagerSignalRunRequest, WorkflowManagerStartRunRequest,
-    WorkflowManagerUpdateDefinitionRequest, WorkflowManagerUpdateEventTriggerRequest,
-    WorkflowManagerUpdateScheduleRequest, bound_workflow_target,
+    BoundWorkflowSchedule, CancelWorkflowProviderRunRequest,
+    CreateWorkflowProviderDefinitionRequest, DeleteWorkflowProviderDefinitionRequest,
+    DeleteWorkflowProviderEventTriggerRequest, DeleteWorkflowProviderScheduleRequest,
+    GetWorkflowExecutionReferenceRequest, GetWorkflowProviderDefinitionRequest,
+    GetWorkflowProviderEventTriggerRequest, GetWorkflowProviderRunRequest,
+    GetWorkflowProviderScheduleRequest, ListWorkflowExecutionReferencesRequest,
+    ListWorkflowExecutionReferencesResponse, ListWorkflowProviderEventTriggersRequest,
+    ListWorkflowProviderEventTriggersResponse, ListWorkflowProviderRunsRequest,
+    ListWorkflowProviderRunsResponse, ListWorkflowProviderSchedulesRequest,
+    ListWorkflowProviderSchedulesResponse, PauseWorkflowProviderEventTriggerRequest,
+    PauseWorkflowProviderScheduleRequest, PublishWorkflowProviderEventRequest,
+    PutWorkflowExecutionReferenceRequest, ResumeWorkflowProviderEventTriggerRequest,
+    ResumeWorkflowProviderScheduleRequest, SignalOrStartWorkflowProviderRunRequest,
+    SignalWorkflowProviderRunRequest, SignalWorkflowRunResponse, StartWorkflowProviderRunRequest,
+    UpdateWorkflowProviderDefinitionRequest, UpsertWorkflowProviderEventTriggerRequest,
+    UpsertWorkflowProviderScheduleRequest, WorkflowEvent as ProtoWorkflowEvent,
+    WorkflowExecutionReference, bound_workflow_target,
 };
 use gestalt::{
     AgentMessage, AgentMessagePart, BoundWorkflowAgentTarget, BoundWorkflowPluginTarget,
@@ -46,7 +50,7 @@ use tonic::codegen::async_trait;
 use tonic::transport::Server;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_MANAGER_SOCKET_TOKEN";
+const ENV_WORKFLOW_MANAGER_SOCKET_TOKEN: &str = "GESTALT_WORKFLOW_PROVIDER_SOCKET_TOKEN";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 struct SeenRequest {
@@ -62,7 +66,7 @@ struct TestWorkflowManagerServer {
     seen: Arc<Mutex<Vec<SeenRequest>>>,
     relay_tokens: Arc<Mutex<Vec<String>>>,
     idempotency_keys: Arc<Mutex<Vec<String>>>,
-    signal_or_start_requests: Arc<Mutex<Vec<WorkflowManagerSignalOrStartRunRequest>>>,
+    signal_or_start_requests: Arc<Mutex<Vec<SignalOrStartWorkflowProviderRunRequest>>>,
 }
 
 fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
@@ -74,16 +78,18 @@ fn plugin_target(plugin_name: &str, operation: &str) -> BoundWorkflowTarget {
 }
 
 #[async_trait]
-impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
+impl ProtoWorkflowProvider for TestWorkflowManagerServer {
     async fn start_run(
         &self,
-        request: GrpcRequest<WorkflowManagerStartRunRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowRun>, Status> {
+        request: GrpcRequest<StartWorkflowProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowRun>, Status> {
         let request = request.into_inner();
-        self.idempotency_keys
-            .lock()
-            .expect("lock idempotency keys")
-            .push(request.idempotency_key.clone());
+        if !request.idempotency_key.is_empty() {
+            self.idempotency_keys
+                .lock()
+                .expect("lock idempotency keys")
+                .push(request.idempotency_key.clone());
+        }
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "start-run".to_string(),
             invocation_token: request.invocation_token.clone(),
@@ -91,25 +97,56 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             trigger_id: String::new(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowRun {
+        Ok(GrpcResponse::new(BoundWorkflowRun {
             provider_name: if request.provider_name.is_empty() {
                 "basic".to_string()
             } else {
                 request.provider_name
             },
-            run: Some(BoundWorkflowRun {
-                id: "run-1".to_string(),
-                target: request.target,
-                workflow_key: request.workflow_key,
-                ..Default::default()
-            }),
+            id: "run-1".to_string(),
+            target: request.target,
+            workflow_key: request.workflow_key,
+            ..Default::default()
+        }))
+    }
+
+    async fn get_run(
+        &self,
+        request: GrpcRequest<GetWorkflowProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowRun>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(BoundWorkflowRun {
+            id: request.run_id,
+            provider_name: "basic".to_string(),
+            ..Default::default()
+        }))
+    }
+
+    async fn list_runs(
+        &self,
+        _request: GrpcRequest<ListWorkflowProviderRunsRequest>,
+    ) -> std::result::Result<GrpcResponse<ListWorkflowProviderRunsResponse>, Status> {
+        Ok(GrpcResponse::new(
+            ListWorkflowProviderRunsResponse::default(),
+        ))
+    }
+
+    async fn cancel_run(
+        &self,
+        request: GrpcRequest<CancelWorkflowProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowRun>, Status> {
+        let request = request.into_inner();
+        Ok(GrpcResponse::new(BoundWorkflowRun {
+            id: request.run_id,
+            provider_name: "basic".to_string(),
+            ..Default::default()
         }))
     }
 
     async fn signal_run(
         &self,
-        request: GrpcRequest<WorkflowManagerSignalRunRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowRunSignal>, Status> {
+        request: GrpcRequest<SignalWorkflowProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<SignalWorkflowRunResponse>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "signal-run".to_string(),
@@ -122,10 +159,10 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
                 .map(|signal| signal.name.clone())
                 .unwrap_or_default(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowRunSignal {
-            provider_name: "basic".to_string(),
+        Ok(GrpcResponse::new(SignalWorkflowRunResponse {
             run: Some(BoundWorkflowRun {
                 id: request.run_id,
+                provider_name: "basic".to_string(),
                 ..Default::default()
             }),
             signal: request.signal,
@@ -136,13 +173,15 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
 
     async fn signal_or_start_run(
         &self,
-        request: GrpcRequest<WorkflowManagerSignalOrStartRunRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowRunSignal>, Status> {
+        request: GrpcRequest<SignalOrStartWorkflowProviderRunRequest>,
+    ) -> std::result::Result<GrpcResponse<SignalWorkflowRunResponse>, Status> {
         let request = request.into_inner();
-        self.idempotency_keys
-            .lock()
-            .expect("lock idempotency keys")
-            .push(request.idempotency_key.clone());
+        if !request.idempotency_key.is_empty() {
+            self.idempotency_keys
+                .lock()
+                .expect("lock idempotency keys")
+                .push(request.idempotency_key.clone());
+        }
         self.signal_or_start_requests
             .lock()
             .expect("lock signal or start requests")
@@ -158,14 +197,15 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
                 .map(|signal| signal.name.clone())
                 .unwrap_or_default(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowRunSignal {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
+        let provider_name = if request.provider_name.is_empty() {
+            "basic".to_string()
+        } else {
+            request.provider_name
+        };
+        Ok(GrpcResponse::new(SignalWorkflowRunResponse {
             run: Some(BoundWorkflowRun {
                 id: "run-1".to_string(),
+                provider_name,
                 target: request.target,
                 workflow_key: request.workflow_key.clone(),
                 ..Default::default()
@@ -178,13 +218,15 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
 
     async fn create_definition(
         &self,
-        request: GrpcRequest<WorkflowManagerCreateDefinitionRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDefinition>, Status> {
+        request: GrpcRequest<CreateWorkflowProviderDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowDefinition>, Status> {
         let request = request.into_inner();
-        self.idempotency_keys
-            .lock()
-            .expect("lock idempotency keys")
-            .push(request.idempotency_key.clone());
+        if !request.idempotency_key.is_empty() {
+            self.idempotency_keys
+                .lock()
+                .expect("lock idempotency keys")
+                .push(request.idempotency_key.clone());
+        }
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "create-definition".to_string(),
             invocation_token: request.invocation_token.clone(),
@@ -192,24 +234,22 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             trigger_id: String::new(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowDefinition {
+        Ok(GrpcResponse::new(BoundWorkflowDefinition {
             provider_name: if request.provider_name.is_empty() {
                 "basic".to_string()
             } else {
                 request.provider_name
             },
-            definition: Some(BoundWorkflowDefinition {
-                id: "definition-1".to_string(),
-                target: request.target,
-                ..Default::default()
-            }),
+            id: "definition-1".to_string(),
+            target: request.target,
+            ..Default::default()
         }))
     }
 
     async fn get_definition(
         &self,
-        request: GrpcRequest<WorkflowManagerGetDefinitionRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDefinition>, Status> {
+        request: GrpcRequest<GetWorkflowProviderDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowDefinition>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "get-definition".to_string(),
@@ -218,19 +258,17 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             trigger_id: String::new(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowDefinition {
+        Ok(GrpcResponse::new(BoundWorkflowDefinition {
             provider_name: "basic".to_string(),
-            definition: Some(BoundWorkflowDefinition {
-                id: request.definition_id,
-                ..Default::default()
-            }),
+            id: request.definition_id,
+            ..Default::default()
         }))
     }
 
     async fn update_definition(
         &self,
-        request: GrpcRequest<WorkflowManagerUpdateDefinitionRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowDefinition>, Status> {
+        request: GrpcRequest<UpdateWorkflowProviderDefinitionRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowDefinition>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "update-definition".to_string(),
@@ -239,23 +277,21 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             trigger_id: String::new(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowDefinition {
+        Ok(GrpcResponse::new(BoundWorkflowDefinition {
             provider_name: if request.provider_name.is_empty() {
                 "basic".to_string()
             } else {
                 request.provider_name
             },
-            definition: Some(BoundWorkflowDefinition {
-                id: request.definition_id,
-                target: request.target,
-                ..Default::default()
-            }),
+            id: request.definition_id,
+            target: request.target,
+            ..Default::default()
         }))
     }
 
     async fn delete_definition(
         &self,
-        request: GrpcRequest<WorkflowManagerDeleteDefinitionRequest>,
+        request: GrpcRequest<DeleteWorkflowProviderDefinitionRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
@@ -268,10 +304,10 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
         Ok(GrpcResponse::new(()))
     }
 
-    async fn create_schedule(
+    async fn upsert_schedule(
         &self,
-        request: GrpcRequest<WorkflowManagerCreateScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
+        request: GrpcRequest<UpsertWorkflowProviderScheduleRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowSchedule>, Status> {
         if let Some(token) = request.metadata().get("x-gestalt-host-service-relay-token") {
             self.relay_tokens
                 .lock()
@@ -279,38 +315,48 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
                 .push(token.to_str().expect("relay token ascii").to_string());
         }
         let request = request.into_inner();
-        self.idempotency_keys
-            .lock()
-            .expect("lock idempotency keys")
-            .push(request.idempotency_key.clone());
+        if !request.idempotency_key.is_empty() {
+            self.idempotency_keys
+                .lock()
+                .expect("lock idempotency keys")
+                .push(request.idempotency_key.clone());
+        }
+        let is_create = request.schedule_id.is_empty();
+        let schedule_id = if is_create {
+            "sched-1".to_string()
+        } else {
+            request.schedule_id.clone()
+        };
         self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "create".to_string(),
+            method: if is_create { "create" } else { "update" }.to_string(),
             invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
+            schedule_id: if is_create {
+                String::new()
+            } else {
+                request.schedule_id.clone()
+            },
             trigger_id: String::new(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowSchedule {
+        Ok(GrpcResponse::new(BoundWorkflowSchedule {
             provider_name: if request.provider_name.is_empty() {
                 "basic".to_string()
             } else {
                 request.provider_name
             },
-            schedule: Some(BoundWorkflowSchedule {
-                id: "sched-1".to_string(),
-                cron: request.cron,
-                timezone: request.timezone,
-                target: request.target,
-                paused: request.paused,
-                ..Default::default()
-            }),
+            id: schedule_id,
+            cron: request.cron,
+            timezone: request.timezone,
+            target: request.target,
+            paused: request.paused,
+            ..Default::default()
         }))
     }
 
     async fn get_schedule(
         &self,
-        request: GrpcRequest<WorkflowManagerGetScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
+        request: GrpcRequest<GetWorkflowProviderScheduleRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowSchedule>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "get".to_string(),
@@ -319,47 +365,25 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             trigger_id: String::new(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowSchedule {
+        Ok(GrpcResponse::new(BoundWorkflowSchedule {
             provider_name: "basic".to_string(),
-            schedule: Some(BoundWorkflowSchedule {
-                id: request.schedule_id,
-                ..Default::default()
-            }),
+            id: request.schedule_id,
+            ..Default::default()
         }))
     }
 
-    async fn update_schedule(
+    async fn list_schedules(
         &self,
-        request: GrpcRequest<WorkflowManagerUpdateScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "update".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: request.schedule_id.clone(),
-            trigger_id: String::new(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowSchedule {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
-            schedule: Some(BoundWorkflowSchedule {
-                id: request.schedule_id,
-                cron: request.cron,
-                timezone: request.timezone,
-                target: request.target,
-                paused: request.paused,
-                ..Default::default()
-            }),
-        }))
+        _request: GrpcRequest<ListWorkflowProviderSchedulesRequest>,
+    ) -> std::result::Result<GrpcResponse<ListWorkflowProviderSchedulesResponse>, Status> {
+        Ok(GrpcResponse::new(
+            ListWorkflowProviderSchedulesResponse::default(),
+        ))
     }
 
     async fn delete_schedule(
         &self,
-        request: GrpcRequest<WorkflowManagerDeleteScheduleRequest>,
+        request: GrpcRequest<DeleteWorkflowProviderScheduleRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
@@ -374,8 +398,8 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
 
     async fn pause_schedule(
         &self,
-        request: GrpcRequest<WorkflowManagerPauseScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
+        request: GrpcRequest<PauseWorkflowProviderScheduleRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowSchedule>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "pause".to_string(),
@@ -384,20 +408,18 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             trigger_id: String::new(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowSchedule {
+        Ok(GrpcResponse::new(BoundWorkflowSchedule {
             provider_name: "basic".to_string(),
-            schedule: Some(BoundWorkflowSchedule {
-                id: request.schedule_id,
-                paused: true,
-                ..Default::default()
-            }),
+            id: request.schedule_id,
+            paused: true,
+            ..Default::default()
         }))
     }
 
     async fn resume_schedule(
         &self,
-        request: GrpcRequest<WorkflowManagerResumeScheduleRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowSchedule>, Status> {
+        request: GrpcRequest<ResumeWorkflowProviderScheduleRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowSchedule>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "resume".to_string(),
@@ -406,52 +428,65 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             trigger_id: String::new(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowSchedule {
+        Ok(GrpcResponse::new(BoundWorkflowSchedule {
             provider_name: "basic".to_string(),
-            schedule: Some(BoundWorkflowSchedule {
-                id: request.schedule_id,
-                paused: false,
-                ..Default::default()
-            }),
+            id: request.schedule_id,
+            paused: false,
+            ..Default::default()
         }))
     }
 
-    async fn create_event_trigger(
+    async fn upsert_event_trigger(
         &self,
-        request: GrpcRequest<WorkflowManagerCreateEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
+        request: GrpcRequest<UpsertWorkflowProviderEventTriggerRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowEventTrigger>, Status> {
         let request = request.into_inner();
-        self.idempotency_keys
-            .lock()
-            .expect("lock idempotency keys")
-            .push(request.idempotency_key.clone());
+        if !request.idempotency_key.is_empty() {
+            self.idempotency_keys
+                .lock()
+                .expect("lock idempotency keys")
+                .push(request.idempotency_key.clone());
+        }
+        let is_create = request.trigger_id.is_empty();
+        let trigger_id = if is_create {
+            "trg-1".to_string()
+        } else {
+            request.trigger_id.clone()
+        };
         self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "create-trigger".to_string(),
+            method: if is_create {
+                "create-trigger"
+            } else {
+                "update-trigger"
+            }
+            .to_string(),
             invocation_token: request.invocation_token.clone(),
             schedule_id: String::new(),
-            trigger_id: String::new(),
+            trigger_id: if is_create {
+                String::new()
+            } else {
+                request.trigger_id.clone()
+            },
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
+        Ok(GrpcResponse::new(BoundWorkflowEventTrigger {
             provider_name: if request.provider_name.is_empty() {
                 "basic".to_string()
             } else {
                 request.provider_name
             },
-            trigger: Some(BoundWorkflowEventTrigger {
-                id: "trg-1".to_string(),
-                r#match: request.r#match,
-                target: request.target,
-                paused: request.paused,
-                ..Default::default()
-            }),
+            id: trigger_id,
+            r#match: request.r#match,
+            target: request.target,
+            paused: request.paused,
+            ..Default::default()
         }))
     }
 
     async fn get_event_trigger(
         &self,
-        request: GrpcRequest<WorkflowManagerGetEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
+        request: GrpcRequest<GetWorkflowProviderEventTriggerRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowEventTrigger>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "get-trigger".to_string(),
@@ -460,46 +495,25 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             trigger_id: request.trigger_id.clone(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
+        Ok(GrpcResponse::new(BoundWorkflowEventTrigger {
             provider_name: "basic".to_string(),
-            trigger: Some(BoundWorkflowEventTrigger {
-                id: request.trigger_id,
-                ..Default::default()
-            }),
+            id: request.trigger_id,
+            ..Default::default()
         }))
     }
 
-    async fn update_event_trigger(
+    async fn list_event_triggers(
         &self,
-        request: GrpcRequest<WorkflowManagerUpdateEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
-        let request = request.into_inner();
-        self.seen.lock().expect("lock seen").push(SeenRequest {
-            method: "update-trigger".to_string(),
-            invocation_token: request.invocation_token.clone(),
-            schedule_id: String::new(),
-            trigger_id: request.trigger_id.clone(),
-            event_type: String::new(),
-        });
-        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
-            provider_name: if request.provider_name.is_empty() {
-                "basic".to_string()
-            } else {
-                request.provider_name
-            },
-            trigger: Some(BoundWorkflowEventTrigger {
-                id: request.trigger_id,
-                r#match: request.r#match,
-                target: request.target,
-                paused: request.paused,
-                ..Default::default()
-            }),
-        }))
+        _request: GrpcRequest<ListWorkflowProviderEventTriggersRequest>,
+    ) -> std::result::Result<GrpcResponse<ListWorkflowProviderEventTriggersResponse>, Status> {
+        Ok(GrpcResponse::new(
+            ListWorkflowProviderEventTriggersResponse::default(),
+        ))
     }
 
     async fn delete_event_trigger(
         &self,
-        request: GrpcRequest<WorkflowManagerDeleteEventTriggerRequest>,
+        request: GrpcRequest<DeleteWorkflowProviderEventTriggerRequest>,
     ) -> std::result::Result<GrpcResponse<()>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
@@ -514,8 +528,8 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
 
     async fn pause_event_trigger(
         &self,
-        request: GrpcRequest<WorkflowManagerPauseEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
+        request: GrpcRequest<PauseWorkflowProviderEventTriggerRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowEventTrigger>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "pause-trigger".to_string(),
@@ -524,20 +538,18 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             trigger_id: request.trigger_id.clone(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
+        Ok(GrpcResponse::new(BoundWorkflowEventTrigger {
             provider_name: "basic".to_string(),
-            trigger: Some(BoundWorkflowEventTrigger {
-                id: request.trigger_id,
-                paused: true,
-                ..Default::default()
-            }),
+            id: request.trigger_id,
+            paused: true,
+            ..Default::default()
         }))
     }
 
     async fn resume_event_trigger(
         &self,
-        request: GrpcRequest<WorkflowManagerResumeEventTriggerRequest>,
-    ) -> std::result::Result<GrpcResponse<ManagedWorkflowEventTrigger>, Status> {
+        request: GrpcRequest<ResumeWorkflowProviderEventTriggerRequest>,
+    ) -> std::result::Result<GrpcResponse<BoundWorkflowEventTrigger>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "resume-trigger".to_string(),
@@ -546,19 +558,17 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             trigger_id: request.trigger_id.clone(),
             event_type: String::new(),
         });
-        Ok(GrpcResponse::new(ManagedWorkflowEventTrigger {
+        Ok(GrpcResponse::new(BoundWorkflowEventTrigger {
             provider_name: "basic".to_string(),
-            trigger: Some(BoundWorkflowEventTrigger {
-                id: request.trigger_id,
-                paused: false,
-                ..Default::default()
-            }),
+            id: request.trigger_id,
+            paused: false,
+            ..Default::default()
         }))
     }
 
     async fn publish_event(
         &self,
-        request: GrpcRequest<WorkflowManagerPublishEventRequest>,
+        request: GrpcRequest<PublishWorkflowProviderEventRequest>,
     ) -> std::result::Result<GrpcResponse<ProtoWorkflowEvent>, Status> {
         let request = request.into_inner();
         self.seen.lock().expect("lock seen").push(SeenRequest {
@@ -577,6 +587,34 @@ impl ProtoWorkflowManagerHost for TestWorkflowManagerServer {
             event.id = "evt-1".to_string();
         }
         Ok(GrpcResponse::new(event))
+    }
+
+    async fn put_execution_reference(
+        &self,
+        request: GrpcRequest<PutWorkflowExecutionReferenceRequest>,
+    ) -> std::result::Result<GrpcResponse<WorkflowExecutionReference>, Status> {
+        Ok(GrpcResponse::new(
+            request.into_inner().reference.unwrap_or_default(),
+        ))
+    }
+
+    async fn get_execution_reference(
+        &self,
+        request: GrpcRequest<GetWorkflowExecutionReferenceRequest>,
+    ) -> std::result::Result<GrpcResponse<WorkflowExecutionReference>, Status> {
+        Ok(GrpcResponse::new(WorkflowExecutionReference {
+            id: request.into_inner().id,
+            ..Default::default()
+        }))
+    }
+
+    async fn list_execution_references(
+        &self,
+        _request: GrpcRequest<ListWorkflowExecutionReferencesRequest>,
+    ) -> std::result::Result<GrpcResponse<ListWorkflowExecutionReferencesResponse>, Status> {
+        Ok(GrpcResponse::new(
+            ListWorkflowExecutionReferencesResponse::default(),
+        ))
     }
 }
 
@@ -1187,7 +1225,7 @@ async fn serve_workflow_manager(
     let listener = UnixListener::bind(socket).expect("bind unix listener");
 
     Server::builder()
-        .add_service(WorkflowManagerHostServer::new(server))
+        .add_service(WorkflowProviderServer::new(server))
         .serve_with_incoming(UnixListenerStream::new(listener))
         .await
 }
@@ -1197,7 +1235,7 @@ async fn serve_workflow_manager_tcp(
     listener: TcpListener,
 ) -> std::result::Result<(), tonic::transport::Error> {
     Server::builder()
-        .add_service(WorkflowManagerHostServer::new(server))
+        .add_service(WorkflowProviderServer::new(server))
         .serve_with_incoming(TcpListenerStream::new(listener))
         .await
 }

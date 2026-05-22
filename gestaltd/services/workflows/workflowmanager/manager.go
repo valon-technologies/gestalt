@@ -596,9 +596,10 @@ func (m *Manager) ListRuns(ctx context.Context, p *principal.Principal, req core
 			}
 			seenProviderTokens[providerPageToken] = struct{}{}
 			resp, err := provider.ListRuns(ctx, coreworkflow.ListRunsRequest{
-				PageSize:  pageSize,
-				PageToken: providerPageToken,
-				Status:    req.Status,
+				PageSize:     pageSize,
+				PageToken:    providerPageToken,
+				Status:       req.Status,
+				TargetPlugin: strings.TrimSpace(req.TargetPlugin),
 			})
 			if err != nil {
 				return nil, err
@@ -1409,12 +1410,16 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 			return coreworkflow.Event{}, err
 		}
 		audit.setProvider(providerName)
-		if err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
+		published, err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
 			PluginName:  pluginName,
 			Event:       event,
 			PublishedBy: publishedBy,
-		}); err != nil {
+		})
+		if err != nil {
 			return coreworkflow.Event{}, err
+		}
+		if published != nil {
+			return *published, nil
 		}
 		return event, nil
 	}
@@ -1432,11 +1437,12 @@ func (m *Manager) PublishEvent(ctx context.Context, p *principal.Principal, req 
 			providerAudit.finish(ctx, err)
 			return coreworkflow.Event{}, err
 		}
-		if err := provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
+		_, err = provider.PublishEvent(ctx, coreworkflow.PublishEventRequest{
 			PluginName:  pluginName,
 			Event:       event,
 			PublishedBy: publishedBy,
-		}); err != nil {
+		})
+		if err != nil {
 			providerAudit.finish(ctx, err)
 			return coreworkflow.Event{}, err
 		}

@@ -1,13 +1,18 @@
 import {
   WorkflowRunStatus,
+  boundWorkflowDefinition,
   boundWorkflowEventTrigger,
   boundWorkflowRun,
   boundWorkflowSchedule,
   boundWorkflowTarget,
   defineWorkflowProvider,
+  workflowEvent,
+  type BoundWorkflowDefinition,
   type BoundWorkflowTarget,
+  type DeleteWorkflowProviderDefinitionRequest,
   type DeleteWorkflowProviderEventTriggerRequest,
   type DeleteWorkflowProviderScheduleRequest,
+  type GetWorkflowProviderDefinitionRequest,
   type GetWorkflowProviderEventTriggerRequest,
   type GetWorkflowProviderRunRequest,
   type GetWorkflowProviderScheduleRequest,
@@ -16,6 +21,7 @@ import {
   type ResumeWorkflowProviderEventTriggerRequest,
   type ResumeWorkflowProviderScheduleRequest,
   type StartWorkflowProviderRunRequest,
+  type UpdateWorkflowProviderDefinitionRequest,
   type UpsertWorkflowProviderEventTriggerRequest,
   type UpsertWorkflowProviderScheduleRequest,
   type PublishWorkflowProviderEventRequest,
@@ -24,6 +30,7 @@ import {
 const runs = new Map<string, ReturnType<typeof createRun>>();
 const schedules = new Map<string, ReturnType<typeof createSchedule>>();
 const triggers = new Map<string, ReturnType<typeof createTrigger>>();
+const definitions = new Map<string, BoundWorkflowDefinition>();
 let publishCount = 0;
 
 function pluginTarget(pluginName: string, operation: string): BoundWorkflowTarget {
@@ -37,7 +44,33 @@ export const provider = defineWorkflowProvider({
     runs.clear();
     schedules.clear();
     triggers.clear();
+    definitions.clear();
     publishCount = 0;
+  },
+  async createDefinition(request) {
+    const definition = boundWorkflowDefinition({
+      id: request.idempotencyKey || `definition:${definitions.size + 1}`,
+      target: request.target,
+    });
+    definitions.set(definition.id ?? "", definition);
+    return definition;
+  },
+  async getDefinition(request) {
+    return requireDefinition(request);
+  },
+  async updateDefinition(request) {
+    const existing = requireDefinition(request);
+    const definition = boundWorkflowDefinition({
+      ...existing,
+      target: request.target,
+    });
+    definitions.set(request.definitionId, definition);
+    return definition;
+  },
+  async deleteDefinition(request) {
+    if (!definitions.delete(request.definitionId)) {
+      throw new Error(`unknown definition ${request.definitionId}`);
+    }
   },
   async startRun(request) {
     const plugin =
@@ -158,6 +191,11 @@ export const provider = defineWorkflowProvider({
       paused: false,
     });
     triggers.set(triggerId, trigger);
+    return workflowEvent({
+      id: `published:${publishCount}`,
+      type: request.event?.type ?? "",
+      source: request.event?.source ?? "",
+    });
   },
   warnings() {
     return publishCount > 0 ? [`published-events:${publishCount}`] : [];
@@ -170,6 +208,16 @@ function scheduleKey(request: UpsertWorkflowProviderScheduleRequest): string {
 
 function requireRun(request: GetWorkflowProviderRunRequest) {
   return requireRunByID(request.runId);
+}
+
+function requireDefinition(
+  request: GetWorkflowProviderDefinitionRequest | UpdateWorkflowProviderDefinitionRequest | DeleteWorkflowProviderDefinitionRequest,
+) {
+  const definition = definitions.get(request.definitionId);
+  if (!definition) {
+    throw new Error(`unknown definition ${request.definitionId}`);
+  }
+  return definition;
 }
 
 function requireSchedule(request: GetWorkflowProviderScheduleRequest) {

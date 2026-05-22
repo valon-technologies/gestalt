@@ -35,6 +35,26 @@ class WorkflowProviderStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.CreateDefinition = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/CreateDefinition',
+                request_serializer=v1_dot_workflow__pb2.CreateWorkflowProviderDefinitionRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.BoundWorkflowDefinition.FromString,
+                _registered_method=True)
+        self.GetDefinition = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/GetDefinition',
+                request_serializer=v1_dot_workflow__pb2.GetWorkflowProviderDefinitionRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.BoundWorkflowDefinition.FromString,
+                _registered_method=True)
+        self.UpdateDefinition = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/UpdateDefinition',
+                request_serializer=v1_dot_workflow__pb2.UpdateWorkflowProviderDefinitionRequest.SerializeToString,
+                response_deserializer=v1_dot_workflow__pb2.BoundWorkflowDefinition.FromString,
+                _registered_method=True)
+        self.DeleteDefinition = channel.unary_unary(
+                '/gestalt.provider.v1.WorkflowProvider/DeleteDefinition',
+                request_serializer=v1_dot_workflow__pb2.DeleteWorkflowProviderDefinitionRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                _registered_method=True)
         self.StartRun = channel.unary_unary(
                 '/gestalt.provider.v1.WorkflowProvider/StartRun',
                 request_serializer=v1_dot_workflow__pb2.StartWorkflowProviderRunRequest.SerializeToString,
@@ -143,12 +163,36 @@ class WorkflowProviderStub(object):
         self.PublishEvent = channel.unary_unary(
                 '/gestalt.provider.v1.WorkflowProvider/PublishEvent',
                 request_serializer=v1_dot_workflow__pb2.PublishWorkflowProviderEventRequest.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                response_deserializer=v1_dot_workflow__pb2.WorkflowEvent.FromString,
                 _registered_method=True)
 
 
 class WorkflowProviderServicer(object):
     """Missing associated documentation comment in .proto file."""
+
+    def CreateDefinition(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetDefinition(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateDefinition(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteDefinition(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
     def StartRun(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -285,6 +329,26 @@ class WorkflowProviderServicer(object):
 
 def add_WorkflowProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'CreateDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateDefinition,
+                    request_deserializer=v1_dot_workflow__pb2.CreateWorkflowProviderDefinitionRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.BoundWorkflowDefinition.SerializeToString,
+            ),
+            'GetDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetDefinition,
+                    request_deserializer=v1_dot_workflow__pb2.GetWorkflowProviderDefinitionRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.BoundWorkflowDefinition.SerializeToString,
+            ),
+            'UpdateDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateDefinition,
+                    request_deserializer=v1_dot_workflow__pb2.UpdateWorkflowProviderDefinitionRequest.FromString,
+                    response_serializer=v1_dot_workflow__pb2.BoundWorkflowDefinition.SerializeToString,
+            ),
+            'DeleteDefinition': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteDefinition,
+                    request_deserializer=v1_dot_workflow__pb2.DeleteWorkflowProviderDefinitionRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
             'StartRun': grpc.unary_unary_rpc_method_handler(
                     servicer.StartRun,
                     request_deserializer=v1_dot_workflow__pb2.StartWorkflowProviderRunRequest.FromString,
@@ -393,7 +457,7 @@ def add_WorkflowProviderServicer_to_server(servicer, server):
             'PublishEvent': grpc.unary_unary_rpc_method_handler(
                     servicer.PublishEvent,
                     request_deserializer=v1_dot_workflow__pb2.PublishWorkflowProviderEventRequest.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+                    response_serializer=v1_dot_workflow__pb2.WorkflowEvent.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -405,6 +469,114 @@ def add_WorkflowProviderServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class WorkflowProvider(object):
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def CreateDefinition(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowProvider/CreateDefinition',
+            v1_dot_workflow__pb2.CreateWorkflowProviderDefinitionRequest.SerializeToString,
+            v1_dot_workflow__pb2.BoundWorkflowDefinition.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetDefinition(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowProvider/GetDefinition',
+            v1_dot_workflow__pb2.GetWorkflowProviderDefinitionRequest.SerializeToString,
+            v1_dot_workflow__pb2.BoundWorkflowDefinition.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateDefinition(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowProvider/UpdateDefinition',
+            v1_dot_workflow__pb2.UpdateWorkflowProviderDefinitionRequest.SerializeToString,
+            v1_dot_workflow__pb2.BoundWorkflowDefinition.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteDefinition(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/gestalt.provider.v1.WorkflowProvider/DeleteDefinition',
+            v1_dot_workflow__pb2.DeleteWorkflowProviderDefinitionRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def StartRun(request,
@@ -989,7 +1161,7 @@ class WorkflowProvider(object):
             target,
             '/gestalt.provider.v1.WorkflowProvider/PublishEvent',
             v1_dot_workflow__pb2.PublishWorkflowProviderEventRequest.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            v1_dot_workflow__pb2.WorkflowEvent.FromString,
             options,
             channel_credentials,
             insecure,
@@ -1062,895 +1234,6 @@ class WorkflowHost(object):
             '/gestalt.provider.v1.WorkflowHost/InvokeOperation',
             v1_dot_workflow__pb2.InvokeWorkflowOperationRequest.SerializeToString,
             v1_dot_workflow__pb2.InvokeWorkflowOperationResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-
-class WorkflowManagerHostStub(object):
-    """Missing associated documentation comment in .proto file."""
-
-    def __init__(self, channel):
-        """Constructor.
-
-        Args:
-            channel: A grpc.Channel.
-        """
-        self.StartRun = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/StartRun',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerStartRunRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowRun.FromString,
-                _registered_method=True)
-        self.SignalRun = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/SignalRun',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerSignalRunRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowRunSignal.FromString,
-                _registered_method=True)
-        self.SignalOrStartRun = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/SignalOrStartRun',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerSignalOrStartRunRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowRunSignal.FromString,
-                _registered_method=True)
-        self.CreateDefinition = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/CreateDefinition',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerCreateDefinitionRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
-                _registered_method=True)
-        self.GetDefinition = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/GetDefinition',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerGetDefinitionRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
-                _registered_method=True)
-        self.UpdateDefinition = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/UpdateDefinition',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerUpdateDefinitionRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
-                _registered_method=True)
-        self.DeleteDefinition = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/DeleteDefinition',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerDeleteDefinitionRequest.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                _registered_method=True)
-        self.CreateSchedule = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/CreateSchedule',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerCreateScheduleRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowSchedule.FromString,
-                _registered_method=True)
-        self.GetSchedule = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/GetSchedule',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerGetScheduleRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowSchedule.FromString,
-                _registered_method=True)
-        self.UpdateSchedule = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/UpdateSchedule',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerUpdateScheduleRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowSchedule.FromString,
-                _registered_method=True)
-        self.DeleteSchedule = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/DeleteSchedule',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerDeleteScheduleRequest.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                _registered_method=True)
-        self.PauseSchedule = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/PauseSchedule',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerPauseScheduleRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowSchedule.FromString,
-                _registered_method=True)
-        self.ResumeSchedule = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/ResumeSchedule',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerResumeScheduleRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowSchedule.FromString,
-                _registered_method=True)
-        self.CreateEventTrigger = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/CreateEventTrigger',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerCreateEventTriggerRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.FromString,
-                _registered_method=True)
-        self.GetEventTrigger = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/GetEventTrigger',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerGetEventTriggerRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.FromString,
-                _registered_method=True)
-        self.UpdateEventTrigger = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/UpdateEventTrigger',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerUpdateEventTriggerRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.FromString,
-                _registered_method=True)
-        self.DeleteEventTrigger = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/DeleteEventTrigger',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerDeleteEventTriggerRequest.SerializeToString,
-                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-                _registered_method=True)
-        self.PauseEventTrigger = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/PauseEventTrigger',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerPauseEventTriggerRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.FromString,
-                _registered_method=True)
-        self.ResumeEventTrigger = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/ResumeEventTrigger',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerResumeEventTriggerRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.FromString,
-                _registered_method=True)
-        self.PublishEvent = channel.unary_unary(
-                '/gestalt.provider.v1.WorkflowManagerHost/PublishEvent',
-                request_serializer=v1_dot_workflow__pb2.WorkflowManagerPublishEventRequest.SerializeToString,
-                response_deserializer=v1_dot_workflow__pb2.WorkflowEvent.FromString,
-                _registered_method=True)
-
-
-class WorkflowManagerHostServicer(object):
-    """Missing associated documentation comment in .proto file."""
-
-    def StartRun(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SignalRun(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SignalOrStartRun(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def CreateDefinition(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetDefinition(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def UpdateDefinition(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def DeleteDefinition(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def CreateSchedule(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetSchedule(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def UpdateSchedule(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def DeleteSchedule(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def PauseSchedule(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ResumeSchedule(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def CreateEventTrigger(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetEventTrigger(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def UpdateEventTrigger(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def DeleteEventTrigger(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def PauseEventTrigger(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ResumeEventTrigger(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def PublishEvent(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-
-def add_WorkflowManagerHostServicer_to_server(servicer, server):
-    rpc_method_handlers = {
-            'StartRun': grpc.unary_unary_rpc_method_handler(
-                    servicer.StartRun,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerStartRunRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowRun.SerializeToString,
-            ),
-            'SignalRun': grpc.unary_unary_rpc_method_handler(
-                    servicer.SignalRun,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerSignalRunRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowRunSignal.SerializeToString,
-            ),
-            'SignalOrStartRun': grpc.unary_unary_rpc_method_handler(
-                    servicer.SignalOrStartRun,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerSignalOrStartRunRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowRunSignal.SerializeToString,
-            ),
-            'CreateDefinition': grpc.unary_unary_rpc_method_handler(
-                    servicer.CreateDefinition,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerCreateDefinitionRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.SerializeToString,
-            ),
-            'GetDefinition': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetDefinition,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerGetDefinitionRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.SerializeToString,
-            ),
-            'UpdateDefinition': grpc.unary_unary_rpc_method_handler(
-                    servicer.UpdateDefinition,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerUpdateDefinitionRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowDefinition.SerializeToString,
-            ),
-            'DeleteDefinition': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteDefinition,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerDeleteDefinitionRequest.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            ),
-            'CreateSchedule': grpc.unary_unary_rpc_method_handler(
-                    servicer.CreateSchedule,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerCreateScheduleRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowSchedule.SerializeToString,
-            ),
-            'GetSchedule': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetSchedule,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerGetScheduleRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowSchedule.SerializeToString,
-            ),
-            'UpdateSchedule': grpc.unary_unary_rpc_method_handler(
-                    servicer.UpdateSchedule,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerUpdateScheduleRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowSchedule.SerializeToString,
-            ),
-            'DeleteSchedule': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteSchedule,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerDeleteScheduleRequest.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            ),
-            'PauseSchedule': grpc.unary_unary_rpc_method_handler(
-                    servicer.PauseSchedule,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerPauseScheduleRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowSchedule.SerializeToString,
-            ),
-            'ResumeSchedule': grpc.unary_unary_rpc_method_handler(
-                    servicer.ResumeSchedule,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerResumeScheduleRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowSchedule.SerializeToString,
-            ),
-            'CreateEventTrigger': grpc.unary_unary_rpc_method_handler(
-                    servicer.CreateEventTrigger,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerCreateEventTriggerRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.SerializeToString,
-            ),
-            'GetEventTrigger': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetEventTrigger,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerGetEventTriggerRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.SerializeToString,
-            ),
-            'UpdateEventTrigger': grpc.unary_unary_rpc_method_handler(
-                    servicer.UpdateEventTrigger,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerUpdateEventTriggerRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.SerializeToString,
-            ),
-            'DeleteEventTrigger': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteEventTrigger,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerDeleteEventTriggerRequest.FromString,
-                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
-            ),
-            'PauseEventTrigger': grpc.unary_unary_rpc_method_handler(
-                    servicer.PauseEventTrigger,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerPauseEventTriggerRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.SerializeToString,
-            ),
-            'ResumeEventTrigger': grpc.unary_unary_rpc_method_handler(
-                    servicer.ResumeEventTrigger,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerResumeEventTriggerRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.SerializeToString,
-            ),
-            'PublishEvent': grpc.unary_unary_rpc_method_handler(
-                    servicer.PublishEvent,
-                    request_deserializer=v1_dot_workflow__pb2.WorkflowManagerPublishEventRequest.FromString,
-                    response_serializer=v1_dot_workflow__pb2.WorkflowEvent.SerializeToString,
-            ),
-    }
-    generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.provider.v1.WorkflowManagerHost', rpc_method_handlers)
-    server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.provider.v1.WorkflowManagerHost', rpc_method_handlers)
-
-
- # This class is part of an EXPERIMENTAL API.
-class WorkflowManagerHost(object):
-    """Missing associated documentation comment in .proto file."""
-
-    @staticmethod
-    def StartRun(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/StartRun',
-            v1_dot_workflow__pb2.WorkflowManagerStartRunRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowRun.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def SignalRun(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/SignalRun',
-            v1_dot_workflow__pb2.WorkflowManagerSignalRunRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowRunSignal.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def SignalOrStartRun(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/SignalOrStartRun',
-            v1_dot_workflow__pb2.WorkflowManagerSignalOrStartRunRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowRunSignal.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def CreateDefinition(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/CreateDefinition',
-            v1_dot_workflow__pb2.WorkflowManagerCreateDefinitionRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetDefinition(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/GetDefinition',
-            v1_dot_workflow__pb2.WorkflowManagerGetDefinitionRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def UpdateDefinition(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/UpdateDefinition',
-            v1_dot_workflow__pb2.WorkflowManagerUpdateDefinitionRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowDefinition.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def DeleteDefinition(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/DeleteDefinition',
-            v1_dot_workflow__pb2.WorkflowManagerDeleteDefinitionRequest.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def CreateSchedule(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/CreateSchedule',
-            v1_dot_workflow__pb2.WorkflowManagerCreateScheduleRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowSchedule.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetSchedule(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/GetSchedule',
-            v1_dot_workflow__pb2.WorkflowManagerGetScheduleRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowSchedule.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def UpdateSchedule(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/UpdateSchedule',
-            v1_dot_workflow__pb2.WorkflowManagerUpdateScheduleRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowSchedule.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def DeleteSchedule(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/DeleteSchedule',
-            v1_dot_workflow__pb2.WorkflowManagerDeleteScheduleRequest.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def PauseSchedule(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/PauseSchedule',
-            v1_dot_workflow__pb2.WorkflowManagerPauseScheduleRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowSchedule.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ResumeSchedule(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/ResumeSchedule',
-            v1_dot_workflow__pb2.WorkflowManagerResumeScheduleRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowSchedule.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def CreateEventTrigger(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/CreateEventTrigger',
-            v1_dot_workflow__pb2.WorkflowManagerCreateEventTriggerRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def GetEventTrigger(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/GetEventTrigger',
-            v1_dot_workflow__pb2.WorkflowManagerGetEventTriggerRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def UpdateEventTrigger(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/UpdateEventTrigger',
-            v1_dot_workflow__pb2.WorkflowManagerUpdateEventTriggerRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def DeleteEventTrigger(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/DeleteEventTrigger',
-            v1_dot_workflow__pb2.WorkflowManagerDeleteEventTriggerRequest.SerializeToString,
-            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def PauseEventTrigger(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/PauseEventTrigger',
-            v1_dot_workflow__pb2.WorkflowManagerPauseEventTriggerRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ResumeEventTrigger(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/ResumeEventTrigger',
-            v1_dot_workflow__pb2.WorkflowManagerResumeEventTriggerRequest.SerializeToString,
-            v1_dot_workflow__pb2.ManagedWorkflowEventTrigger.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def PublishEvent(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/gestalt.provider.v1.WorkflowManagerHost/PublishEvent',
-            v1_dot_workflow__pb2.WorkflowManagerPublishEventRequest.SerializeToString,
-            v1_dot_workflow__pb2.WorkflowEvent.FromString,
             options,
             channel_credentials,
             insecure,

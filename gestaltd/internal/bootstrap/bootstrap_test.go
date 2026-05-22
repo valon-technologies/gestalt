@@ -574,8 +574,8 @@ func (s *stubWorkflowProvider) PauseEventTrigger(context.Context, coreworkflow.P
 func (s *stubWorkflowProvider) ResumeEventTrigger(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
 	return &coreworkflow.EventTrigger{}, nil
 }
-func (s *stubWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
-	return nil
+func (s *stubWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
+	return &req.Event, nil
 }
 func (s *stubWorkflowProvider) Ping(context.Context) error { return nil }
 func (s *stubWorkflowProvider) Close() error               { return nil }
@@ -1499,8 +1499,8 @@ func (p *recordingWorkflowProvider) PauseEventTrigger(context.Context, coreworkf
 func (p *recordingWorkflowProvider) ResumeEventTrigger(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
 	return &coreworkflow.EventTrigger{}, nil
 }
-func (p *recordingWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
-	return nil
+func (p *recordingWorkflowProvider) PublishEvent(_ context.Context, req coreworkflow.PublishEventRequest) (*coreworkflow.Event, error) {
+	return &req.Event, nil
 }
 func (p *recordingWorkflowProvider) PutExecutionReference(_ context.Context, ref *coreworkflow.ExecutionReference) (*coreworkflow.ExecutionReference, error) {
 	if p.putExecutionReferenceErr != nil {
