@@ -1295,13 +1295,13 @@ func assertStartPluginEgressPolicy(t *testing.T, req pluginruntime.StartPluginRe
 	}
 }
 
-func assertStartPluginRelayEnv(t *testing.T, req pluginruntime.StartPluginRequest, wantEnvVar string) {
+func assertStartPluginRelayEnv(t *testing.T, req pluginruntime.StartPluginRequest, relayContext string) {
 	t.Helper()
 	if got := req.Env[runtimehost.DefaultHostServiceSocketEnv]; !strings.HasPrefix(got, "tls://") {
-		t.Fatalf("StartPlugin env %s = %q, want tls:// public relay target for %s", runtimehost.DefaultHostServiceSocketEnv, got, wantEnvVar)
+		t.Fatalf("StartPlugin env %s = %q, want tls:// public relay target for %s", runtimehost.DefaultHostServiceSocketEnv, got, relayContext)
 	}
 	if got := req.Env[runtimehost.DefaultHostServiceTokenEnv]; strings.TrimSpace(got) == "" {
-		t.Fatalf("StartPlugin env missing non-empty %s for %s", runtimehost.DefaultHostServiceTokenEnv, wantEnvVar)
+		t.Fatalf("StartPlugin env missing non-empty %s for %s", runtimehost.DefaultHostServiceTokenEnv, relayContext)
 	}
 }
 
@@ -6976,7 +6976,7 @@ func TestPluginRuntimePublicCacheRelayRoundTripsThroughHostedPlugin(t *testing.T
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_CACHE_SOCKET")
+	assertStartPluginRelayEnv(t, startRequests[0], "cache relay round-trip")
 }
 
 func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
@@ -7107,8 +7107,8 @@ func TestPluginRuntimePublicS3RelayRoundTripsThroughHostedPlugin(t *testing.T) {
 	if len(startRequests) != 1 {
 		t.Fatalf("StartPlugin requests = %d, want 1", len(startRequests))
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_S3_SOCKET")
-	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_S3_SOCKET_MAIN")
+	assertStartPluginRelayEnv(t, startRequests[0], "s3 relay round-trip")
+	assertStartPluginRelayEnv(t, startRequests[0], "s3 multi-binding relay")
 }
 
 func TestPluginRuntimePublicPluginInvokerRelayRoundTripsThroughHostedPlugin(t *testing.T) {
@@ -8354,7 +8354,7 @@ func TestPluginRuntimeConfigUsesPublicRelayAndEgressProxyWhenHostCanRelay(t *tes
 	if got := startRequests[0].Env["HTTPS_PROXY"]; !strings.Contains(got, "@gestalt.example.test") {
 		t.Fatalf("StartPlugin HTTPS_PROXY = %q, want public egress proxy on gestalt.example.test", got)
 	}
-	assertStartPluginRelayEnv(t, startRequests[0], "GESTALT_CACHE_SOCKET_SESSION")
+	assertStartPluginRelayEnv(t, startRequests[0], "cache session binding relay")
 	assertStartPluginEgressPolicy(t, startRequests[0], []string{"api.github.com", "gestalt.example.test"}, pluginruntime.PolicyDeny)
 }
 
