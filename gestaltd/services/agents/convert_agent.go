@@ -68,7 +68,13 @@ func subjectToProto(subject coreagent.SubjectContext) *proto.SubjectContext {
 	if subject == (coreagent.SubjectContext{}) {
 		return nil
 	}
-	return agentwire.RunAsSubjectToProto(&subject)
+	return &proto.SubjectContext{
+		Id:                  subject.SubjectID,
+		Kind:                subject.SubjectKind,
+		CredentialSubjectId: subject.CredentialSubjectID,
+		DisplayName:         subject.DisplayName,
+		AuthSource:          subject.AuthSource,
+	}
 }
 
 func agentWorkspaceFromProto(workspace *proto.AgentWorkspace) *coreagent.Workspace {
