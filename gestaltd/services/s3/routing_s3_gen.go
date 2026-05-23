@@ -48,3 +48,4 @@ func (s *routingS3Server) PresignObject(ctx context.Context, req *proto.PresignO
 	}
 	return server.PresignObject(ctx, req)
 }
+
