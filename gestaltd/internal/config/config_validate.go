@@ -2370,7 +2370,7 @@ func normalizeWorkflowTarget(cfg *Config, path string, target *WorkflowTargetCon
 			if err := validateWorkflowStepValueRefs(stepPath+".when.value", step.When.Value, seen); err != nil {
 				return err
 			}
-			if !step.When.equalsSet {
+			if !step.When.EqualsSet() {
 				return fmt.Errorf("config validation: %s.when.equals is required", stepPath)
 			}
 			if !jsonvalue.IsScalar(step.When.Equals) {

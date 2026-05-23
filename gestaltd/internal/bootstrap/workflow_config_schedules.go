@@ -357,7 +357,7 @@ func workflowConfigStepWhen(when *config.WorkflowStepWhenConfig) *coreworkflow.S
 	return &coreworkflow.StepWhen{
 		Value:     workflowConfigValue(when.Value),
 		Equals:    when.Equals,
-		EqualsSet: true,
+		EqualsSet: when.EqualsSet(),
 	}
 }
 

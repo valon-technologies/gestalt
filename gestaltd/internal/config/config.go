@@ -907,6 +907,10 @@ type WorkflowStepWhenConfig struct {
 	equalsSet bool
 }
 
+func (c WorkflowStepWhenConfig) EqualsSet() bool {
+	return c.equalsSet
+}
+
 func (c *WorkflowStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
 	type workflowStepWhenConfig struct {
 		Value  WorkflowValueConfig `yaml:"value,omitempty"`
