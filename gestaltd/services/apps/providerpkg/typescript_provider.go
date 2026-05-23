@@ -398,7 +398,7 @@ func normalizeTypeScriptProviderKind(value string) string {
 
 func formatTypeScriptRuntimeTarget(kind, target string) string {
 	if kind == "integration" {
-		return "plugin:" + strings.TrimSpace(target)
+		return "app:" + strings.TrimSpace(target)
 	}
 	return kind + ":" + strings.TrimSpace(target)
 }
