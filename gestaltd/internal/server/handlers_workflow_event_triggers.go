@@ -73,7 +73,7 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
+	if len(req.Target.Steps) == 0 {
 		writeError(w, http.StatusBadRequest, "workflow target.steps is required")
 		return
 	}
@@ -123,7 +123,7 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
+	if len(req.Target.Steps) == 0 {
 		writeError(w, http.StatusBadRequest, "workflow target.steps is required")
 		return
 	}

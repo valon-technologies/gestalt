@@ -357,7 +357,7 @@ func (s *Server) updateGlobalWorkflowSchedule(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
+	if len(req.Target.Steps) == 0 {
 		writeError(w, http.StatusBadRequest, "workflow target.steps is required")
 		return
 	}
@@ -448,10 +448,6 @@ func workflowScheduleTargetFromRequest(target workflowScheduleTargetRequest) cor
 		})
 	}
 	return coreworkflow.Target{Steps: steps}
-}
-
-func workflowScheduleTargetRequestHasOneKind(target workflowScheduleTargetRequest) bool {
-	return len(target.Steps) > 0
 }
 
 func decodeWorkflowJSONBody(r *http.Request, dst any) error {
