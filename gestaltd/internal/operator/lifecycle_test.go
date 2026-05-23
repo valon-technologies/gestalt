@@ -873,7 +873,7 @@ func TestPrepareAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
 	}
 }
 
-func TestPrepareAtPath_RejectsInvalidPluginWorkflowCapabilitiesShape(t *testing.T) {
+func TestPrepareAtPath_RejectsInvalidAppWorkflowCapabilitiesShape(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {

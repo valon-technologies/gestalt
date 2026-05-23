@@ -356,7 +356,7 @@ def _load_target(args: RuntimeArgs) -> App | AppProviderAdapter | AppProvider:
     ):
         return _app_runtime_runtime_plugin(target)
     if resolved_kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
-        return _workflow_runtime_plugin(target)
+        return _workflow_runtime_adapter(target)
     if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     if isinstance(target, AppProvider):
@@ -476,7 +476,7 @@ def _servable_target(
     if kind == ProviderKind.RUNTIME and isinstance(target, AppRuntimeProvider):
         return _app_runtime_runtime_plugin(target)
     if kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
-        return _workflow_runtime_plugin(target)
+        return _workflow_runtime_adapter(target)
     if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     raise RuntimeError("unsupported runtime target")
@@ -811,7 +811,7 @@ def _register_app_runtime_services(server: Any, provider: AppProvider) -> None:
     )
 
 
-def _workflow_runtime_plugin(provider: WorkflowProvider) -> AppProviderAdapter:
+def _workflow_runtime_adapter(provider: WorkflowProvider) -> AppProviderAdapter:
     return AppProviderAdapter(
         kind=ProviderKind.WORKFLOW,
         provider=provider,

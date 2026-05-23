@@ -1428,7 +1428,7 @@ class WorkflowRuntimeTests(unittest.TestCase):
         self.assertEqual(meta.name, "stub-workflow")
         self.assertEqual(list(meta.warnings), ["set WORKFLOW_ENDPOINT"])
 
-        adapter = _runtime._workflow_runtime_plugin(provider)
+        adapter = _runtime._workflow_runtime_adapter(provider)
         server = mock.Mock()
         with mock.patch.object(
             workflow_pb2_grpc,
