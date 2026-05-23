@@ -25,7 +25,7 @@ func ApplyAppScope(cfg *Config, apps []string) error {
 	for _, name := range names {
 		requestedApps[name] = struct{}{}
 	}
-	keptWorkflows := workflowsTargetingPluginClosure(cfg, requestedApps)
+	keptWorkflows := workflowsTargetingAppClosure(cfg, requestedApps)
 	keepApps := make(map[string]struct{}, len(names))
 	queue := append([]string(nil), names...)
 	for _, refs := range keptWorkflows {
@@ -99,7 +99,7 @@ func applyAppScopeNode(root *yaml.Node, apps []string) error {
 	for _, name := range names {
 		requestedApps[name] = struct{}{}
 	}
-	keptWorkflows := workflowNodesTargetingPluginClosure(doc, requestedApps)
+	keptWorkflows := workflowNodesTargetingAppClosure(doc, requestedApps)
 	keepApps := make(map[string]struct{}, len(names))
 	queue := append([]string(nil), names...)
 	for _, refs := range keptWorkflows {
@@ -111,12 +111,12 @@ func applyAppScopeNode(root *yaml.Node, apps []string) error {
 		if _, ok := keepApps[name]; ok {
 			continue
 		}
-		pluginNode := mappingValueNode(appsNode, name)
-		if pluginNode == nil {
+		appNode := mappingValueNode(appsNode, name)
+		if appNode == nil {
 			return fmt.Errorf("app scope references unknown app %q", name)
 		}
 		keepApps[name] = struct{}{}
-		queue = append(queue, pluginInvokeRefsFromNode(pluginNode)...)
+		queue = append(queue, appInvokeRefsFromNode(appNode)...)
 	}
 
 	providerScope, err := providerRefsForAppScopeNode(doc, keepApps, keptWorkflows)
@@ -160,8 +160,8 @@ func scalarStringNode(node *yaml.Node) string {
 	return strings.TrimSpace(node.Value)
 }
 
-func pluginInvokeRefsFromNode(pluginNode *yaml.Node) []string {
-	invokes := mappingValueNode(pluginNode, "invokes")
+func appInvokeRefsFromNode(appNode *yaml.Node) []string {
+	invokes := mappingValueNode(appNode, "invokes")
 	if invokes == nil || invokes.Kind != yaml.SequenceNode {
 		return nil
 	}
@@ -181,13 +181,13 @@ func uiEntriesForAppScopeNode(doc *yaml.Node, keepApps map[string]struct{}) map[
 	}
 	providersUI := mappingValueNode(mappingValueNode(doc, "providers"), "ui")
 	appsNode := mappingValueNode(doc, "apps")
-	for pluginName := range keepApps {
-		pluginNode := mappingValueNode(appsNode, pluginName)
-		if uiName := pluginUIBundleFromNode(pluginNode); uiName != "" {
+	for appName := range keepApps {
+		appNode := mappingValueNode(appsNode, appName)
+		if uiName := appUIBundleFromNode(appNode); uiName != "" {
 			keepUIs[uiName] = struct{}{}
 		}
-		if mappingValueNode(providersUI, pluginName) != nil {
-			keepUIs[pluginName] = struct{}{}
+		if mappingValueNode(providersUI, appName) != nil {
+			keepUIs[appName] = struct{}{}
 		}
 	}
 	for uiName, entry := range mappingNodeEntries(providersUI) {
@@ -198,8 +198,8 @@ func uiEntriesForAppScopeNode(doc *yaml.Node, keepApps map[string]struct{}) map[
 	return keepUIs
 }
 
-func pluginUIBundleFromNode(pluginNode *yaml.Node) string {
-	uiNode := mappingValueNode(pluginNode, "ui")
+func appUIBundleFromNode(appNode *yaml.Node) string {
+	uiNode := mappingValueNode(appNode, "ui")
 	if uiNode == nil {
 		return ""
 	}
@@ -209,16 +209,16 @@ func pluginUIBundleFromNode(pluginNode *yaml.Node) string {
 	return scalarStringNode(mappingValueNode(uiNode, "bundle"))
 }
 
-func workflowNodesTargetingPluginClosure(doc *yaml.Node, keepApps map[string]struct{}) map[string]workflowPluginRefs {
-	refsByName := map[string]workflowPluginRefs{}
+func workflowNodesTargetingAppClosure(doc *yaml.Node, keepApps map[string]struct{}) map[string]workflowAppRefs {
+	refsByName := map[string]workflowAppRefs{}
 	workflowsNode := mappingValueNode(doc, "workflows")
 	for name, schedule := range mappingNodeEntries(mappingValueNode(workflowsNode, "schedules")) {
-		if workflowTargetNodeInPluginClosure(mappingValueNode(schedule, "target"), keepApps) {
+		if workflowTargetNodeInAppClosure(mappingValueNode(schedule, "target"), keepApps) {
 			refsByName["schedule:"+name] = workflowRefsFromNode(schedule)
 		}
 	}
 	for name, trigger := range mappingNodeEntries(mappingValueNode(workflowsNode, "eventTriggers")) {
-		if workflowTargetNodeInPluginClosure(mappingValueNode(trigger, "target"), keepApps) {
+		if workflowTargetNodeInAppClosure(mappingValueNode(trigger, "target"), keepApps) {
 			refsByName["trigger:"+name] = workflowRefsFromNode(trigger)
 		}
 	}
@@ -241,27 +241,31 @@ func mappingNodeEntries(node *yaml.Node) map[string]*yaml.Node {
 	return out
 }
 
-func workflowTargetNodeInPluginClosure(targetNode *yaml.Node, keepApps map[string]struct{}) bool {
-	pluginName := scalarStringNode(mappingValueNode(mappingValueNode(targetNode, "app"), "name"))
-	if pluginName == "" {
-		return false
-	}
-	_, ok := keepApps[pluginName]
-	return ok
-}
-
-func workflowRefsFromNode(workflowNode *yaml.Node) workflowPluginRefs {
-	refs := workflowPluginRefs{}
-	targetNode := mappingValueNode(workflowNode, "target")
-	refs.Add(scalarStringNode(mappingValueNode(mappingValueNode(targetNode, "app"), "name")))
-	agentNode := mappingValueNode(targetNode, "agent")
-	if toolsNode := mappingValueNode(agentNode, "tools"); toolsNode != nil && toolsNode.Kind == yaml.SequenceNode {
-		for _, tool := range toolsNode.Content {
-			refs.Add(scalarStringNode(mappingValueNode(tool, "app")))
+func workflowTargetNodeInAppClosure(targetNode *yaml.Node, keepApps map[string]struct{}) bool {
+	for _, stepNode := range workflowStepNodesFromTargetNode(targetNode) {
+		appName := scalarStringNode(mappingValueNode(mappingValueNode(stepNode, "app"), "name"))
+		if appName == "" {
+			continue
+		}
+		if _, ok := keepApps[appName]; ok {
+			return true
 		}
 	}
-	addWorkflowDeliveryRefsFromNode(refs, mappingValueNode(agentNode, "outputDelivery"))
-	addWorkflowDeliveryRefsFromNode(refs, mappingValueNode(agentNode, "sessionReadyDelivery"))
+	return false
+}
+
+func workflowRefsFromNode(workflowNode *yaml.Node) workflowAppRefs {
+	refs := workflowAppRefs{}
+	targetNode := mappingValueNode(workflowNode, "target")
+	for _, stepNode := range workflowStepNodesFromTargetNode(targetNode) {
+		refs.Add(scalarStringNode(mappingValueNode(mappingValueNode(stepNode, "app"), "name")))
+		agentNode := mappingValueNode(stepNode, "agent")
+		if toolsNode := mappingValueNode(agentNode, "tools"); toolsNode != nil && toolsNode.Kind == yaml.SequenceNode {
+			for _, tool := range toolsNode.Content {
+				refs.Add(scalarStringNode(mappingValueNode(tool, "app")))
+			}
+		}
+	}
 	if invokesNode := mappingValueNode(workflowNode, "invokes"); invokesNode != nil && invokesNode.Kind == yaml.SequenceNode {
 		for _, invoke := range invokesNode.Content {
 			refs.Add(scalarStringNode(mappingValueNode(invoke, "app")))
@@ -275,11 +279,21 @@ func workflowRefsFromNode(workflowNode *yaml.Node) workflowPluginRefs {
 	return refs
 }
 
-func addWorkflowDeliveryRefsFromNode(refs workflowPluginRefs, deliveryNode *yaml.Node) {
-	refs.Add(scalarStringNode(mappingValueNode(mappingValueNode(deliveryNode, "target"), "name")))
+func workflowStepNodesFromTargetNode(targetNode *yaml.Node) []*yaml.Node {
+	stepsNode := mappingValueNode(targetNode, "steps")
+	if stepsNode == nil || stepsNode.Kind != yaml.SequenceNode {
+		return nil
+	}
+	out := make([]*yaml.Node, 0, len(stepsNode.Content))
+	for _, stepNode := range stepsNode.Content {
+		if stepNode != nil && stepNode.Kind == yaml.MappingNode {
+			out = append(out, stepNode)
+		}
+	}
+	return out
 }
 
-func filterWorkflowNodes(workflowsNode *yaml.Node, keep map[string]workflowPluginRefs) {
+func filterWorkflowNodes(workflowsNode *yaml.Node, keep map[string]workflowAppRefs) {
 	if workflowsNode == nil {
 		return
 	}
@@ -297,7 +311,7 @@ func filterWorkflowNodes(workflowsNode *yaml.Node, keep map[string]workflowPlugi
 	filterMappingNode(mappingValueNode(workflowsNode, "eventTriggers"), keepTriggers)
 }
 
-type pluginScopeProviderRefs struct {
+type appScopeProviderRefs struct {
 	Authentication      map[string]struct{}
 	Authorization       map[string]struct{}
 	ExternalCredentials map[string]struct{}
@@ -312,8 +326,8 @@ type pluginScopeProviderRefs struct {
 	Runtime             map[string]struct{}
 }
 
-func newAppScopeProviderRefs() pluginScopeProviderRefs {
-	return pluginScopeProviderRefs{
+func newAppScopeProviderRefs() appScopeProviderRefs {
+	return appScopeProviderRefs{
 		Authentication:      map[string]struct{}{},
 		Authorization:       map[string]struct{}{},
 		ExternalCredentials: map[string]struct{}{},
@@ -336,7 +350,7 @@ func addProviderRef(keep map[string]struct{}, name string) {
 	}
 }
 
-func providerRefsForAppScopeNode(doc *yaml.Node, keepApps map[string]struct{}, keptWorkflows map[string]workflowPluginRefs) (pluginScopeProviderRefs, error) {
+func providerRefsForAppScopeNode(doc *yaml.Node, keepApps map[string]struct{}, keptWorkflows map[string]workflowAppRefs) (appScopeProviderRefs, error) {
 	refs := newAppScopeProviderRefs()
 	addSelectedHostProviderRefFromNode(doc, "authentication", refs.Authentication)
 	addSelectedHostProviderRefFromNode(doc, "authorization", refs.Authorization)
@@ -347,12 +361,12 @@ func providerRefsForAppScopeNode(doc *yaml.Node, keepApps map[string]struct{}, k
 	addSelectedHostProviderRefFromNode(doc, "indexeddb", refs.IndexedDB)
 
 	appsNode := mappingValueNode(doc, "apps")
-	for pluginName := range keepApps {
-		pluginNode := mappingValueNode(appsNode, pluginName)
-		if pluginNode == nil {
+	for appName := range keepApps {
+		appNode := mappingValueNode(appsNode, appName)
+		if appNode == nil {
 			continue
 		}
-		addAppProviderRefsFromNode(doc, &refs, pluginNode)
+		addAppProviderRefsFromNode(doc, &refs, appNode)
 	}
 	for key := range keptWorkflows {
 		switch {
@@ -415,8 +429,8 @@ func scalarBoolNode(node *yaml.Node) bool {
 	return strings.EqualFold(value, "true") || strings.Contains(value, "${")
 }
 
-func addAppProviderRefsFromNode(doc *yaml.Node, refs *pluginScopeProviderRefs, pluginNode *yaml.Node) {
-	authProvider := scalarStringNode(mappingValueNode(mappingValueNode(pluginNode, "auth"), "provider"))
+func addAppProviderRefsFromNode(doc *yaml.Node, refs *appScopeProviderRefs, appNode *yaml.Node) {
+	authProvider := scalarStringNode(mappingValueNode(mappingValueNode(appNode, "auth"), "provider"))
 	switch authProvider {
 	case "":
 	case "server":
@@ -424,16 +438,16 @@ func addAppProviderRefsFromNode(doc *yaml.Node, refs *pluginScopeProviderRefs, p
 	default:
 		addProviderRef(refs.Authentication, authProvider)
 	}
-	if indexedDBNode := mappingValueNode(pluginNode, "indexeddb"); indexedDBNode != nil {
+	if indexedDBNode := mappingValueNode(appNode, "indexeddb"); indexedDBNode != nil {
 		if provider := scalarStringNode(mappingValueNode(indexedDBNode, "provider")); provider != "" {
 			addProviderRef(refs.IndexedDB, provider)
 		} else {
 			addSelectedHostProviderRefFromNode(doc, "indexeddb", refs.IndexedDB)
 		}
 	}
-	addSequenceRefsFromNode(refs.Cache, mappingValueNode(pluginNode, "cache"))
-	addSequenceRefsFromNode(refs.S3, mappingValueNode(pluginNode, "s3"))
-	addRuntimeProviderRefFromNode(doc, pluginNode, refs.Runtime)
+	addSequenceRefsFromNode(refs.Cache, mappingValueNode(appNode, "cache"))
+	addSequenceRefsFromNode(refs.S3, mappingValueNode(appNode, "s3"))
+	addRuntimeProviderRefFromNode(doc, appNode, refs.Runtime)
 }
 
 func addSequenceRefsFromNode(keep map[string]struct{}, seq *yaml.Node) {
@@ -460,7 +474,7 @@ func addRuntimeProviderRefFromNode(doc *yaml.Node, entryNode *yaml.Node, keep ma
 	}
 }
 
-func addWorkflowProviderRefsFromNode(doc *yaml.Node, refs *pluginScopeProviderRefs, workflowNode *yaml.Node) {
+func addWorkflowProviderRefsFromNode(doc *yaml.Node, refs *appScopeProviderRefs, workflowNode *yaml.Node) {
 	if workflowNode == nil {
 		return
 	}
@@ -471,20 +485,22 @@ func addWorkflowProviderRefsFromNode(doc *yaml.Node, refs *pluginScopeProviderRe
 			addProviderRef(refs.Workflow, name)
 		}
 	}
-	agentNode := mappingValueNode(mappingValueNode(workflowNode, "target"), "agent")
-	if agentNode == nil {
-		return
-	}
-	if provider := scalarStringNode(mappingValueNode(agentNode, "provider")); provider != "" {
-		addProviderRef(refs.Agent, provider)
-	} else {
-		for name := range selectedProviderNamesFromNode(mappingValueNode(mappingValueNode(doc, "providers"), "agent"), "") {
-			addProviderRef(refs.Agent, name)
+	for _, stepNode := range workflowStepNodesFromTargetNode(mappingValueNode(workflowNode, "target")) {
+		agentNode := mappingValueNode(stepNode, "agent")
+		if agentNode == nil {
+			continue
+		}
+		if provider := scalarStringNode(mappingValueNode(agentNode, "provider")); provider != "" {
+			addProviderRef(refs.Agent, provider)
+		} else {
+			for name := range selectedProviderNamesFromNode(mappingValueNode(mappingValueNode(doc, "providers"), "agent"), "") {
+				addProviderRef(refs.Agent, name)
+			}
 		}
 	}
 }
 
-func addProviderMapDependenciesFromNode(doc *yaml.Node, key string, keep map[string]struct{}, refs *pluginScopeProviderRefs) {
+func addProviderMapDependenciesFromNode(doc *yaml.Node, key string, keep map[string]struct{}, refs *appScopeProviderRefs) {
 	entriesNode := mappingValueNode(mappingValueNode(doc, "providers"), key)
 	for name := range keep {
 		entry := mappingValueNode(entriesNode, name)
@@ -498,7 +514,7 @@ func addProviderMapDependenciesFromNode(doc *yaml.Node, key string, keep map[str
 	}
 }
 
-func filterProviderNodesForAppScope(doc *yaml.Node, refs pluginScopeProviderRefs) {
+func filterProviderNodesForAppScope(doc *yaml.Node, refs appScopeProviderRefs) {
 	providersNode := mappingValueNode(doc, "providers")
 	if providersNode != nil {
 		filterMappingNode(mappingValueNode(providersNode, "authentication"), refs.Authentication)
@@ -516,7 +532,7 @@ func filterProviderNodesForAppScope(doc *yaml.Node, refs pluginScopeProviderRefs
 	filterMappingNode(mappingValueNode(mappingValueNode(doc, "runtime"), "providers"), refs.Runtime)
 }
 
-func expandSecretProviderRefsFromNode(doc *yaml.Node, keepApps map[string]struct{}, keptWorkflows map[string]workflowPluginRefs, refs *pluginScopeProviderRefs) error {
+func expandSecretProviderRefsFromNode(doc *yaml.Node, keepApps map[string]struct{}, keptWorkflows map[string]workflowAppRefs, refs *appScopeProviderRefs) error {
 	for {
 		before := len(refs.Secrets)
 		for _, entry := range retainedProviderEntryNodes(doc, keepApps, keptWorkflows, *refs) {
@@ -537,11 +553,11 @@ func expandSecretProviderRefsFromNode(doc *yaml.Node, keepApps map[string]struct
 	}
 }
 
-func retainedProviderEntryNodes(doc *yaml.Node, keepApps map[string]struct{}, keptWorkflows map[string]workflowPluginRefs, refs pluginScopeProviderRefs) []*yaml.Node {
+func retainedProviderEntryNodes(doc *yaml.Node, keepApps map[string]struct{}, keptWorkflows map[string]workflowAppRefs, refs appScopeProviderRefs) []*yaml.Node {
 	var entries []*yaml.Node
 	appsNode := mappingValueNode(doc, "apps")
-	for pluginName := range keepApps {
-		if entry := mappingValueNode(appsNode, pluginName); entry != nil {
+	for appName := range keepApps {
+		if entry := mappingValueNode(appsNode, appName); entry != nil {
 			entries = append(entries, entry)
 		}
 	}
@@ -696,16 +712,16 @@ func uiEntriesForAppScope(cfg *Config, keepApps map[string]struct{}) map[string]
 	if adminUI := strings.TrimSpace(cfg.Server.Admin.UI); adminUI != "" {
 		keepUIs[adminUI] = struct{}{}
 	}
-	for pluginName := range keepApps {
-		entry := cfg.Apps[pluginName]
+	for appName := range keepApps {
+		entry := cfg.Apps[appName]
 		if entry == nil {
 			continue
 		}
 		if uiName := strings.TrimSpace(entry.UI); uiName != "" {
 			keepUIs[uiName] = struct{}{}
 		}
-		if cfg.Providers.UI[pluginName] != nil {
-			keepUIs[pluginName] = struct{}{}
+		if cfg.Providers.UI[appName] != nil {
+			keepUIs[appName] = struct{}{}
 		}
 	}
 	for uiName, entry := range cfg.Providers.UI {
@@ -745,7 +761,7 @@ func filterRuntimeProviderEntries(entries map[string]*RuntimeProviderEntry, keep
 	return filtered
 }
 
-func providerRefsForAppScope(cfg *Config, keepApps map[string]struct{}, keptWorkflows map[string]workflowPluginRefs) (pluginScopeProviderRefs, error) {
+func providerRefsForAppScope(cfg *Config, keepApps map[string]struct{}, keptWorkflows map[string]workflowAppRefs) (appScopeProviderRefs, error) {
 	refs := newAppScopeProviderRefs()
 	if err := addSelectedHostProviderRef(cfg, HostProviderKindAuthentication, refs.Authentication); err != nil {
 		return refs, err
@@ -769,8 +785,8 @@ func providerRefsForAppScope(cfg *Config, keepApps map[string]struct{}, keptWork
 		return refs, err
 	}
 
-	for pluginName := range keepApps {
-		entry := cfg.Apps[pluginName]
+	for appName := range keepApps {
+		entry := cfg.Apps[appName]
 		if entry == nil {
 			continue
 		}
@@ -842,7 +858,7 @@ func addSelectedRuntimeProviderRef(cfg *Config, keep map[string]struct{}) error 
 	return nil
 }
 
-func addAppProviderRefs(cfg *Config, refs *pluginScopeProviderRefs, entry *ProviderEntry) error {
+func addAppProviderRefs(cfg *Config, refs *appScopeProviderRefs, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
 	}
@@ -884,23 +900,32 @@ func addRuntimeProviderRef(cfg *Config, keep map[string]struct{}, entry *Provide
 	return addSelectedRuntimeProviderRef(cfg, keep)
 }
 
-func addWorkflowProviderRefs(cfg *Config, refs *pluginScopeProviderRefs, workflowProvider string, target *WorkflowTargetConfig) error {
+func addWorkflowProviderRefs(cfg *Config, refs *appScopeProviderRefs, workflowProvider string, target *WorkflowTargetConfig) error {
 	if strings.TrimSpace(workflowProvider) != "" {
 		addProviderRef(refs.Workflow, workflowProvider)
 	} else if err := addSelectedWorkflowProviderRef(cfg, refs.Workflow); err != nil {
 		return err
 	}
-	if target == nil || target.Agent == nil {
+	if target == nil {
 		return nil
 	}
-	if strings.TrimSpace(target.Agent.Provider) != "" {
-		addProviderRef(refs.Agent, target.Agent.Provider)
-		return nil
+	for i := range target.Steps {
+		step := &target.Steps[i]
+		if step.Agent == nil {
+			continue
+		}
+		if strings.TrimSpace(step.Agent.Provider) != "" {
+			addProviderRef(refs.Agent, step.Agent.Provider)
+			continue
+		}
+		if err := addSelectedAgentProviderRef(cfg, refs.Agent); err != nil {
+			return err
+		}
 	}
-	return addSelectedAgentProviderRef(cfg, refs.Agent)
+	return nil
 }
 
-func addProviderEntryDependencies(cfg *Config, entries map[string]*ProviderEntry, keep map[string]struct{}, refs *pluginScopeProviderRefs) error {
+func addProviderEntryDependencies(cfg *Config, entries map[string]*ProviderEntry, keep map[string]struct{}, refs *appScopeProviderRefs) error {
 	for name := range keep {
 		entry := entries[name]
 		if entry == nil {
@@ -916,7 +941,7 @@ func addProviderEntryDependencies(cfg *Config, entries map[string]*ProviderEntry
 	return nil
 }
 
-func filterProvidersForAppScope(cfg *Config, refs pluginScopeProviderRefs) {
+func filterProvidersForAppScope(cfg *Config, refs appScopeProviderRefs) {
 	cfg.Providers.Authentication = filterProviderEntries(cfg.Providers.Authentication, refs.Authentication)
 	cfg.Providers.Authorization = filterProviderEntries(cfg.Providers.Authorization, refs.Authorization)
 	cfg.Providers.ExternalCredentials = filterProviderEntries(cfg.Providers.ExternalCredentials, refs.ExternalCredentials)
@@ -931,7 +956,7 @@ func filterProvidersForAppScope(cfg *Config, refs pluginScopeProviderRefs) {
 	cfg.Runtime.Providers = filterRuntimeProviderEntries(cfg.Runtime.Providers, refs.Runtime)
 }
 
-func expandSecretProviderRefs(cfg *Config, keepApps map[string]struct{}, keptWorkflows map[string]workflowPluginRefs, refs *pluginScopeProviderRefs) error {
+func expandSecretProviderRefs(cfg *Config, keepApps map[string]struct{}, keptWorkflows map[string]workflowAppRefs, refs *appScopeProviderRefs) error {
 	for {
 		before := len(refs.Secrets)
 		scoped := scopedConfigForSecretRefCollection(cfg, keepApps, keptWorkflows, *refs)
@@ -955,7 +980,7 @@ func expandSecretProviderRefs(cfg *Config, keepApps map[string]struct{}, keptWor
 	}
 }
 
-func scopedConfigForSecretRefCollection(cfg *Config, keepApps map[string]struct{}, keptWorkflows map[string]workflowPluginRefs, refs pluginScopeProviderRefs) Config {
+func scopedConfigForSecretRefCollection(cfg *Config, keepApps map[string]struct{}, keptWorkflows map[string]workflowAppRefs, refs appScopeProviderRefs) Config {
 	scoped := *cfg
 	scoped.Apps = filterProviderEntries(cfg.Apps, keepApps)
 	scoped.Providers.Authentication = filterProviderEntries(cfg.Providers.Authentication, refs.Authentication)
@@ -975,9 +1000,9 @@ func scopedConfigForSecretRefCollection(cfg *Config, keepApps map[string]struct{
 	return scoped
 }
 
-type workflowPluginRefs map[string]struct{}
+type workflowAppRefs map[string]struct{}
 
-func (r workflowPluginRefs) Add(name string) {
+func (r workflowAppRefs) Add(name string) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return
@@ -985,40 +1010,47 @@ func (r workflowPluginRefs) Add(name string) {
 	r[name] = struct{}{}
 }
 
-func (r workflowPluginRefs) Names() []string {
+func (r workflowAppRefs) Names() []string {
 	names := slices.Sorted(maps.Keys(r))
 	return names
 }
 
-func workflowsTargetingPluginClosure(cfg *Config, keepApps map[string]struct{}) map[string]workflowPluginRefs {
+func workflowsTargetingAppClosure(cfg *Config, keepApps map[string]struct{}) map[string]workflowAppRefs {
 	if cfg == nil {
 		return nil
 	}
-	refsByName := map[string]workflowPluginRefs{}
+	refsByName := map[string]workflowAppRefs{}
 	for name := range cfg.Workflows.Schedules {
 		schedule := cfg.Workflows.Schedules[name]
-		if workflowTargetInPluginClosure(schedule.Target, keepApps) {
-			refsByName["schedule:"+name] = workflowSchedulePluginRefs(schedule)
+		if workflowTargetInAppClosure(schedule.Target, keepApps) {
+			refsByName["schedule:"+name] = workflowScheduleAppRefs(schedule)
 		}
 	}
 	for name := range cfg.Workflows.EventTriggers {
 		trigger := cfg.Workflows.EventTriggers[name]
-		if workflowTargetInPluginClosure(trigger.Target, keepApps) {
-			refsByName["trigger:"+name] = workflowEventTriggerPluginRefs(trigger)
+		if workflowTargetInAppClosure(trigger.Target, keepApps) {
+			refsByName["trigger:"+name] = workflowEventTriggerAppRefs(trigger)
 		}
 	}
 	return refsByName
 }
 
-func workflowTargetInPluginClosure(target *WorkflowTargetConfig, keepApps map[string]struct{}) bool {
-	if target == nil || target.App == nil {
+func workflowTargetInAppClosure(target *WorkflowTargetConfig, keepApps map[string]struct{}) bool {
+	if target == nil {
 		return false
 	}
-	_, ok := keepApps[strings.TrimSpace(target.App.Name)]
-	return ok
+	for i := range target.Steps {
+		if target.Steps[i].App == nil {
+			continue
+		}
+		if _, ok := keepApps[strings.TrimSpace(target.Steps[i].App.Name)]; ok {
+			return true
+		}
+	}
+	return false
 }
 
-func filterWorkflowConfig(workflows *WorkflowsConfig, keep map[string]workflowPluginRefs) {
+func filterWorkflowConfig(workflows *WorkflowsConfig, keep map[string]workflowAppRefs) {
 	if workflows == nil {
 		return
 	}
@@ -1042,60 +1074,46 @@ func filterWorkflowConfig(workflows *WorkflowsConfig, keep map[string]workflowPl
 	}
 }
 
-func workflowSchedulePluginRefs(schedule WorkflowScheduleConfig) workflowPluginRefs {
-	refs := workflowPluginRefs{}
+func workflowScheduleAppRefs(schedule WorkflowScheduleConfig) workflowAppRefs {
+	refs := workflowAppRefs{}
 	addWorkflowTargetRefs(refs, schedule.Target)
 	addWorkflowInvokeRefs(refs, schedule.Invokes)
 	addPermissionRefs(refs, schedule.Permissions)
 	return refs
 }
 
-func workflowEventTriggerPluginRefs(trigger WorkflowEventTriggerConfig) workflowPluginRefs {
-	refs := workflowPluginRefs{}
+func workflowEventTriggerAppRefs(trigger WorkflowEventTriggerConfig) workflowAppRefs {
+	refs := workflowAppRefs{}
 	addWorkflowTargetRefs(refs, trigger.Target)
 	addWorkflowInvokeRefs(refs, trigger.Invokes)
 	addPermissionRefs(refs, trigger.Permissions)
 	return refs
 }
 
-func addWorkflowTargetRefs(refs workflowPluginRefs, target *WorkflowTargetConfig) {
+func addWorkflowTargetRefs(refs workflowAppRefs, target *WorkflowTargetConfig) {
 	if target == nil {
 		return
 	}
-	if target.App != nil {
-		refs.Add(target.App.Name)
-	}
-	if target.Agent == nil {
-		return
-	}
-	for _, tool := range target.Agent.Tools {
-		refs.Add(tool.App)
-	}
-	addWorkflowOutputDeliveryRefs(refs, target.Agent.OutputDelivery)
-	addWorkflowOutputDeliveryRefs(refs, target.Agent.SessionReadyDelivery)
-	for i := range target.Agent.Steps {
-		step := &target.Agent.Steps[i]
-		for _, tool := range step.Tools {
-			refs.Add(tool.App)
+	for i := range target.Steps {
+		step := &target.Steps[i]
+		if step.App != nil {
+			refs.Add(step.App.Name)
 		}
-		addWorkflowOutputDeliveryRefs(refs, step.OutputDelivery)
+		if step.Agent != nil {
+			for _, tool := range step.Agent.Tools {
+				refs.Add(tool.App)
+			}
+		}
 	}
 }
 
-func addWorkflowOutputDeliveryRefs(refs workflowPluginRefs, delivery *WorkflowOutputDeliveryConfig) {
-	if delivery == nil {
-		return
-	}
-	refs.Add(delivery.Target.Name)
-}
-
-func addWorkflowInvokeRefs(refs workflowPluginRefs, invokes []WorkflowInvokeConfig) {
+func addWorkflowInvokeRefs(refs workflowAppRefs, invokes []WorkflowInvokeConfig) {
 	for _, invoke := range invokes {
 		refs.Add(invoke.App)
 	}
 }
 
-func addPermissionRefs(refs workflowPluginRefs, permissions []core.AccessPermission) {
+func addPermissionRefs(refs workflowAppRefs, permissions []core.AccessPermission) {
 	for _, permission := range permissions {
 		refs.Add(permission.App)
 	}

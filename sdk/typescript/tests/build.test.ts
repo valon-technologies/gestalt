@@ -49,6 +49,7 @@ import {
 } from "../src/build.ts";
 import { Cache } from "../src/cache.ts";
 import { ENV_HOST_SERVICE_SOCKET } from "../src/host-service.ts";
+import { boundWorkflowTargetToProto } from "../src/workflow.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
   ENV_PROVIDER_SOCKET,
@@ -91,13 +92,10 @@ async function waitForSocket(
   }
 }
 
-function workflowPluginTarget(appName: string, operation: string) {
-  return {
-    kind: {
-      case: "app" as const,
-      value: { appName, operation },
-    },
-  };
+function workflowAppTarget(appName: string, operation: string) {
+  return boundWorkflowTargetToProto({
+    steps: [{ id: operation, app: { name: appName, operation } }],
+  });
 }
 
 test("build arg parsing validates required arguments", () => {
@@ -424,7 +422,7 @@ test("buildProviderBinary compiles a runnable app provider executable", async ()
   }
 }, 30_000);
 
-test("buildProviderBinary compiles an app provider executable without an explicit export name", async () => {
+test("buildProviderBinary compiles a app provider executable without an explicit export name", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
   const compileTarget = hostCompileTarget(goos, goarch);
   const tempDir = makeTempDir("gts-integration-fallback-");
@@ -898,13 +896,16 @@ test("buildProviderBinary compiles a runnable workflow provider executable", asy
 
     const run = await workflow.startRun(
       create(StartWorkflowProviderRunRequestSchema, {
-        target: workflowPluginTarget("roadmap", "sync"),
+        target: workflowAppTarget("roadmap", "sync"),
       }),
     );
-    if (run.target?.kind.case !== "app") {
-      throw new Error("workflow run target is not an app target");
+    const app = run.target?.steps[0]?.action.case === "app"
+      ? run.target.steps[0].action.value
+      : undefined;
+    if (app === undefined) {
+      throw new Error("workflow run target is not a app target");
     }
-    expect(run.target.kind.value.appName).toBe("roadmap");
+    expect(app.name).toBe("roadmap");
     expect(run.id).toBe("roadmap:sync:1");
   } finally {
     if (child) {

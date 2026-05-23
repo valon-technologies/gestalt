@@ -51,7 +51,8 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 		Arguments: map[string]any{
 			"cron":     "*/5 * * * *",
 			"timezone": "UTC",
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "sync",
 				"app": map[string]any{
 					"name":      "roadmap",
 					"operation": "sync",
@@ -59,7 +60,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 						"source": "agent",
 					},
 				},
-			},
+			}),
 		},
 	}
 	resp, err := runtime.ExecuteTool(context.Background(), req)
@@ -75,18 +76,19 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 			Cron     string `json:"cron"`
 			Timezone string `json:"timezone"`
 			Target   struct {
-				App struct {
-					Name      string         `json:"name"`
-					Operation string         `json:"operation"`
-					Input     map[string]any `json:"input"`
-				} `json:"app"`
+				Steps []struct {
+					App struct {
+						Name      string `json:"name"`
+						Operation string `json:"operation"`
+					} `json:"app"`
+				} `json:"steps"`
 			} `json:"target"`
 		} `json:"schedule"`
 	}
 	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}
-	if body.Schedule.Cron != "*/5 * * * *" || body.Schedule.Timezone != "UTC" || body.Schedule.Target.App.Name != "roadmap" || body.Schedule.Target.App.Operation != "sync" {
+	if body.Schedule.Cron != "*/5 * * * *" || body.Schedule.Timezone != "UTC" || len(body.Schedule.Target.Steps) != 1 || body.Schedule.Target.Steps[0].App.Name != "roadmap" || body.Schedule.Target.Steps[0].App.Operation != "sync" {
 		t.Fatalf("schedule response = %#v", body.Schedule)
 	}
 	secondResp, err := runtime.ExecuteTool(context.Background(), req)
@@ -121,7 +123,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
 	}
 	upsert := workflowProvider.upsertedSchedules[0]
-	if upsert.Target.App == nil || upsert.Target.App.AppName != "roadmap" || upsert.Target.App.Operation != "sync" {
+	if len(upsert.Target.Steps) != 1 || upsert.Target.Steps[0].App == nil || upsert.Target.Steps[0].App.Name != "roadmap" || upsert.Target.Steps[0].App.Operation != "sync" {
 		t.Fatalf("upsert target = %#v", upsert.Target)
 	}
 	ref, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
@@ -136,7 +138,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScopedSchedule(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeWorkflowSystemToolStartsRunWithInheritedOutputDelivery(t *testing.T) {
+func TestAgentRuntimeWorkflowSystemToolRejectsForwardStepOutputRefs(t *testing.T) {
 	t.Parallel()
 
 	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
@@ -144,310 +146,55 @@ func TestAgentRuntimeWorkflowSystemToolStartsRunWithInheritedOutputDelivery(t *t
 	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
 		CallerAppName: "slack",
 		Permissions: []core.AccessPermission{
-			{App: "managed"},
-			{App: "roadmap", Operations: []string{"sync"}},
+			{App: "github", Operations: []string{"createIssue"}},
 			{App: "notification", Operations: []string{"reply"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
-			{App: "roadmap", Operation: "sync"},
+			{App: "github", Operation: "createIssue"},
+			{App: "notification", Operation: "reply"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
-		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.AppTarget{
-				AppName:   "notification",
-				Operation: "reply",
-				Input:     map[string]any{"format": "plain"},
-			},
-			CredentialMode: core.ConnectionModeNone,
-			InputBindings: []coreworkflow.OutputBinding{
-				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-				{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{Literal: "signed-parent-reply-ref"}},
-			},
-		},
-	})
-
-	req := coreagent.ExecuteToolRequest{
-		ProviderName: "managed",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		ToolCallID:   "call-run-1",
-		ToolID:       workflowTool.ID,
-		RunGrant:     runGrant,
-		Arguments: map[string]any{
-			"workflowKey": "slack-child-run",
-			"target": map[string]any{
-				"agent": map[string]any{
-					"provider": "managed",
-					"prompt":   "Investigate the deployment and summarize the result.",
-					"toolRefs": []any{map[string]any{"app": "roadmap", "operation": "sync"}},
-				},
-			},
-			"deliverResultToCaller": true,
-		},
-	}
-	resp, err := agentRuntime.ExecuteTool(context.Background(), req)
-	if err != nil {
-		t.Fatalf("ExecuteTool: %v", err)
-	}
-	if resp == nil || resp.Status != http.StatusCreated {
-		t.Fatalf("response = %#v, want 201", resp)
-	}
-	if strings.Contains(resp.Body, "outputDelivery") || strings.Contains(resp.Body, "signed-parent-reply-ref") || strings.Contains(resp.Body, "notification") {
-		t.Fatalf("response leaked inherited delivery: %s", resp.Body)
-	}
-	var body struct {
-		Run struct {
-			ID          string `json:"id"`
-			WorkflowKey string `json:"workflowKey"`
-			Target      struct {
-				Agent struct {
-					Prompt string `json:"prompt"`
-				} `json:"agent"`
-			} `json:"target"`
-		} `json:"run"`
-	}
-	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
-		t.Fatalf("decode response body: %v", err)
-	}
-	if body.Run.ID == "" || body.Run.WorkflowKey != "slack-child-run" || body.Run.Target.Agent.Prompt == "" {
-		t.Fatalf("run response = %#v", body.Run)
-	}
-	if len(workflowProvider.startedRuns) != 1 {
-		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))
-	}
-	started := workflowProvider.startedRuns[0]
-	if started.Target.Agent == nil || started.Target.Agent.OutputDelivery == nil {
-		t.Fatalf("started target missing output delivery: %#v", started.Target)
-	}
-	if got := started.Target.Agent.OutputDelivery.InputBindings[1].Value.Literal; got != "signed-parent-reply-ref" {
-		t.Fatalf("inherited reply ref = %#v, want signed-parent-reply-ref", got)
-	}
-	ref, err := workflowProvider.GetExecutionReference(context.Background(), started.ExecutionRef)
-	if err != nil {
-		t.Fatalf("GetExecutionReference: %v", err)
-	}
-	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
-		{App: "managed"},
-		{App: "notification", Operations: []string{"reply"}},
-		{App: "roadmap", Operations: []string{"sync"}},
-	})
-	replayResp, err := agentRuntime.ExecuteTool(context.Background(), req)
-	if err != nil {
-		t.Fatalf("ExecuteTool replay: %v", err)
-	}
-	var replayBody struct {
-		Run struct {
-			ID string `json:"id"`
-		} `json:"run"`
-	}
-	if err := json.Unmarshal([]byte(replayResp.Body), &replayBody); err != nil {
-		t.Fatalf("decode replay body: %v", err)
-	}
-	if replayBody.Run.ID != body.Run.ID || len(workflowProvider.startedRuns) != 1 {
-		t.Fatalf("replay run id = %q startedRuns=%d, want %q and one provider start", replayBody.Run.ID, len(workflowProvider.startedRuns), body.Run.ID)
-	}
-	conflictingReq := req
-	conflictingReq.Arguments = maps.Clone(req.Arguments)
-	conflictingReq.Arguments["workflowKey"] = "different-slack-child-run"
-	_, err = agentRuntime.ExecuteTool(context.Background(), conflictingReq)
-	if err == nil {
-		t.Fatal("ExecuteTool conflicting workflow key replay succeeded, want provider idempotency conflict")
-	}
-
-	childAgentManager := &workflowRuntimeAgentManagerStub{}
-	childRuntime := &workflowRuntime{}
-	childRuntime.SetAgentManager(childAgentManager)
-	var gotDeliveryParams map[string]any
-	childRuntime.SetInvoker(funcInvoker{
-		invoke: func(_ context.Context, _ *principal.Principal, providerName, _ string, operation string, params map[string]any) (*core.OperationResult, error) {
-			if providerName != "notification" || operation != "reply" {
-				t.Fatalf("delivery target = %s.%s, want notification.reply", providerName, operation)
-			}
-			gotDeliveryParams = maps.Clone(params)
-			return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
-		},
-	})
-	p := principal.Canonicalize(&principal.Principal{
-		SubjectID: principal.UserSubjectID("ada"),
-		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
-			{App: "notification", Operations: []string{"reply"}},
-		}),
-	})
-	childResp, err := childRuntime.Invoke(principal.WithPrincipal(context.Background(), p), coreworkflow.InvokeOperationRequest{
-		ProviderName: "temporal",
-		RunID:        "child-run",
-		Target:       started.Target,
-	})
-	if err != nil {
-		t.Fatalf("Invoke child: %v", err)
-	}
-	if childResp.Status != http.StatusOK {
-		t.Fatalf("child response = %#v", childResp)
-	}
-	if gotDeliveryParams["text"] != "turn completed" || gotDeliveryParams["reply_ref"] != "signed-parent-reply-ref" || gotDeliveryParams["format"] != "plain" {
-		t.Fatalf("child delivery params = %#v", gotDeliveryParams)
-	}
-}
-
-func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithInheritedOutputDelivery(t *testing.T) {
-	t.Parallel()
-
-	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
-	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
-	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
-		CallerAppName: "slack",
-		Permissions: []core.AccessPermission{
-			{App: "managed"},
-			{App: "datadog", Operations: []string{"queryLogs"}},
-			{App: "github", Operations: []string{"createPullRequest"}},
-			{App: "notification", Operations: []string{"reply"}},
-		},
-		ToolRefs: []coreagent.ToolRef{
-			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
-			{App: "datadog", Operation: "queryLogs"},
-			{App: "github", Operation: "createPullRequest"},
-		},
-		Tools: []coreagent.Tool{workflowTool},
-		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.AppTarget{
-				AppName:   "notification",
-				Operation: "reply",
-			},
-			InputBindings: []coreworkflow.OutputBinding{
-				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-				{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{Literal: "signed-parent-reply-ref"}},
-			},
-		},
-	})
-
-	resp, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
-		ProviderName: "managed",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		ToolCallID:   "call-run-steps",
-		ToolID:       workflowTool.ID,
-		RunGrant:     runGrant,
-		Arguments: map[string]any{
-			"workflowKey": "slack-child-run-steps",
-			"target": map[string]any{
-				"agent": map[string]any{
-					"provider": "managed",
-					"steps": []any{
-						map[string]any{
-							"id":     "diagnosis",
-							"prompt": "Diagnose the Datadog alert.",
-							"toolRefs": []any{
-								map[string]any{"app": "datadog", "operation": "queryLogs"},
-							},
-						},
-						map[string]any{
-							"id":     "pr_fix",
-							"prompt": "Open a PR if the diagnosis is actionable.",
-							"toolRefs": []any{
-								map[string]any{"app": "github", "operation": "createPullRequest"},
-							},
-						},
-					},
-				},
-			},
-			"deliverResultToCaller": true,
-		},
-	})
-	if err != nil {
-		t.Fatalf("ExecuteTool: %v", err)
-	}
-	if resp == nil || resp.Status != http.StatusCreated {
-		t.Fatalf("response = %#v, want 201", resp)
-	}
-	if len(workflowProvider.startedRuns) != 1 {
-		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))
-	}
-	started := workflowProvider.startedRuns[0]
-	if started.Target.Agent == nil || len(started.Target.Agent.Steps) != 2 {
-		t.Fatalf("started target agent steps = %#v", started.Target.Agent)
-	}
-	if started.Target.Agent.OutputDelivery != nil {
-		t.Fatalf("top-level output delivery = %#v, want nil for stepped target", started.Target.Agent.OutputDelivery)
-	}
-	if started.Target.Agent.Steps[0].OutputDelivery != nil {
-		t.Fatalf("diagnosis inherited delivery = %#v, want nil", started.Target.Agent.Steps[0].OutputDelivery)
-	}
-	delivery := started.Target.Agent.Steps[1].OutputDelivery
-	if delivery == nil || delivery.Target.AppName != "notification" || delivery.Target.Operation != "reply" {
-		t.Fatalf("final step inherited delivery = %#v", delivery)
-	}
-	if got := delivery.InputBindings[1].Value.Literal; got != "signed-parent-reply-ref" {
-		t.Fatalf("final step inherited reply ref = %#v, want signed-parent-reply-ref", got)
-	}
-	ref, err := workflowProvider.GetExecutionReference(context.Background(), started.ExecutionRef)
-	if err != nil {
-		t.Fatalf("GetExecutionReference: %v", err)
-	}
-	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
-		{App: "datadog", Operations: []string{"queryLogs"}},
-		{App: "github", Operations: []string{"createPullRequest"}},
-		{App: "managed"},
-		{App: "notification", Operations: []string{"reply"}},
-	})
-}
-
-func TestAgentRuntimeWorkflowSystemToolRejectsInheritedOutputDeliveryForConditionalFinalStep(t *testing.T) {
-	t.Parallel()
-
-	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
-	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
-	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
-		CallerAppName: "slack",
-		Permissions: []core.AccessPermission{
-			{App: "managed"},
-			{App: "notification", Operations: []string{"reply"}},
-		},
-		ToolRefs: []coreagent.ToolRef{
-			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
-		},
-		Tools: []coreagent.Tool{workflowTool},
-		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.AppTarget{
-				AppName:   "notification",
-				Operation: "reply",
-			},
-			InputBindings: []coreworkflow.OutputBinding{
-				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-			},
-		},
 	})
 
 	_, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolCallID:   "call-run-conditional-final-delivery",
+		ToolCallID:   "call-run-forward-step-output",
 		ToolID:       workflowTool.ID,
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
-			"workflowKey": "slack-child-run-conditional-final-delivery",
-			"target": map[string]any{
-				"agent": map[string]any{
-					"provider": "managed",
-					"steps": []any{
-						map[string]any{
-							"id":     "diagnosis",
-							"prompt": "Diagnose the Datadog alert.",
-						},
-						map[string]any{
-							"id":     "pr_fix",
-							"prompt": "Open a PR if the diagnosis is actionable.",
-							"when": map[string]any{
-								"stepId":     "diagnosis",
-								"outputPath": "structured_output.actionable_for_pr",
-								"equals":     true,
+			"workflowKey": "slack-child-run-forward-step-output",
+			"target": workflowSystemToolTestTarget(
+				map[string]any{
+					"id": "create_issue",
+					"app": map[string]any{
+						"name":      "github",
+						"operation": "createIssue",
+						"input": map[string]any{
+							"object": map[string]any{
+								"title": map[string]any{
+									"stepOutput": map[string]any{
+										"stepId": "notify",
+										"path":   "app.body.text",
+									},
+								},
 							},
 						},
 					},
 				},
-			},
-			"deliverResultToCaller": true,
+				map[string]any{
+					"id": "notify",
+					"app": map[string]any{
+						"name":      "notification",
+						"operation": "reply",
+						"input": map[string]any{
+							"literal": map[string]any{"text": "created"},
+						},
+					},
+				},
+			),
 		},
 	})
 	if err == nil {
@@ -456,15 +203,15 @@ func TestAgentRuntimeWorkflowSystemToolRejectsInheritedOutputDeliveryForConditio
 	if !errors.Is(err, invocation.ErrInvalidInvocation) {
 		t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
 	}
-	if !strings.Contains(err.Error(), "unconditional final agent step") {
-		t.Fatalf("ExecuteTool error = %v, want conditional final step message", err)
+	if !strings.Contains(err.Error(), `target.steps[0].app.input.title.stepOutput.stepId "notify" must reference an earlier step`) {
+		t.Fatalf("ExecuteTool error = %v, want forward step output message", err)
 	}
 	if len(workflowProvider.startedRuns) != 0 {
 		t.Fatalf("started runs = %d, want none", len(workflowProvider.startedRuns))
 	}
 }
 
-func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithStepOutputDelivery(t *testing.T) {
+func TestAgentRuntimeWorkflowSystemToolRejectsDuplicateStepIDs(t *testing.T) {
 	t.Parallel()
 
 	agentRuntime, workflowProvider := newWorkflowSystemToolRuntime(t)
@@ -472,72 +219,110 @@ func TestAgentRuntimeWorkflowSystemToolStartsSteppedRunWithStepOutputDelivery(t 
 	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
 		CallerAppName: "slack",
 		Permissions: []core.AccessPermission{
-			{App: "managed"},
+			{App: "github", Operations: []string{"createIssue"}},
 			{App: "notification", Operations: []string{"reply"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
+			{App: "github", Operation: "createIssue"},
+			{App: "notification", Operation: "reply"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
 	})
 
-	resp, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
+	_, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
 		ProviderName: "managed",
 		SessionID:    "session-1",
 		TurnID:       "turn-1",
-		ToolCallID:   "call-run-step-delivery",
+		ToolCallID:   "call-run-duplicate-step-ids",
 		ToolID:       workflowTool.ID,
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
-			"workflowKey": "slack-child-run-step-delivery",
-			"target": map[string]any{
-				"agent": map[string]any{
-					"provider": "managed",
-					"steps": []any{
-						map[string]any{
-							"id":     "diagnosis",
-							"prompt": "Diagnose the Datadog alert.",
-							"outputDelivery": map[string]any{
-								"target": map[string]any{
-									"name":      "notification",
-									"operation": "reply",
-								},
-								"inputBindings": []any{
-									map[string]any{
-										"inputField": "text",
-										"value":      map[string]any{"agentOutput": "text"},
-									},
-									map[string]any{
-										"inputField": "reply_ref",
-										"value":      map[string]any{"literal": "explicit-reply-ref"},
-									},
-								},
-							},
+			"workflowKey": "slack-child-run-duplicate-step-ids",
+			"target": workflowSystemToolTestTarget(
+				map[string]any{
+					"id": "duplicate",
+					"app": map[string]any{
+						"name":      "github",
+						"operation": "createIssue",
+						"input": map[string]any{
+							"literal": map[string]any{"title": "create"},
 						},
 					},
 				},
+				map[string]any{
+					"id": "duplicate",
+					"app": map[string]any{
+						"name":      "notification",
+						"operation": "reply",
+						"input": map[string]any{
+							"literal": map[string]any{"text": "created"},
+						},
+					},
+				},
+			),
+		},
+	})
+	if err == nil {
+		t.Fatal("ExecuteTool succeeded, want invalid invocation")
+	}
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
+	}
+	if !strings.Contains(err.Error(), `target.steps[1].id "duplicate" is duplicated`) {
+		t.Fatalf("ExecuteTool error = %v, want duplicate step id message", err)
+	}
+	if len(workflowProvider.startedRuns) != 0 {
+		t.Fatalf("started runs = %d, want none", len(workflowProvider.startedRuns))
+	}
+}
+
+func TestWorkflowSystemToolStepsRejectsEmptyStepID(t *testing.T) {
+	t.Parallel()
+
+	_, err := workflowSystemToolStepsFromValue([]any{
+		map[string]any{
+			"app": map[string]any{
+				"name":      "github",
+				"operation": "createIssue",
 			},
 		},
 	})
-	if err != nil {
-		t.Fatalf("ExecuteTool: %v", err)
+	if err == nil {
+		t.Fatal("workflowSystemToolStepsFromValue succeeded, want invalid invocation")
 	}
-	if resp == nil || resp.Status != http.StatusCreated {
-		t.Fatalf("response = %#v, want 201", resp)
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("workflowSystemToolStepsFromValue error = %v, want invalid invocation", err)
 	}
-	if len(workflowProvider.startedRuns) != 1 {
-		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))
+	if !strings.Contains(err.Error(), "target.steps[0].id is required") {
+		t.Fatalf("workflowSystemToolStepsFromValue error = %v, want step id required message", err)
 	}
-	started := workflowProvider.startedRuns[0]
-	if started.Target.Agent == nil || len(started.Target.Agent.Steps) != 1 {
-		t.Fatalf("started target agent steps = %#v", started.Target.Agent)
+}
+
+func TestWorkflowSystemToolStepWhenRequiresValue(t *testing.T) {
+	t.Parallel()
+
+	_, err := workflowSystemToolStepWhenFromValue(map[string]any{"equals": "ready"}, "target.steps[0].when")
+	if err == nil {
+		t.Fatal("workflowSystemToolStepWhenFromValue succeeded, want invalid invocation")
 	}
-	delivery := started.Target.Agent.Steps[0].OutputDelivery
-	if delivery == nil || delivery.Target.AppName != "notification" || delivery.Target.Operation != "reply" {
-		t.Fatalf("step output delivery = %#v", delivery)
+	if !errors.Is(err, invocation.ErrInvalidInvocation) {
+		t.Fatalf("workflowSystemToolStepWhenFromValue error = %v, want invalid invocation", err)
 	}
-	if got := delivery.InputBindings[1].Value.Literal; got != "explicit-reply-ref" {
-		t.Fatalf("step output delivery literal = %#v, want explicit-reply-ref", got)
+	if !strings.Contains(err.Error(), "target.steps[0].when.value is required") {
+		t.Fatalf("workflowSystemToolStepWhenFromValue error = %v, want when.value required message", err)
+	}
+}
+
+func TestWorkflowSystemToolValueInfoTemplateRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	got := workflowSystemToolValueInfo(coreworkflow.Value{
+		Template: &coreworkflow.Text{Template: "${steps.first.app.issue_number}"},
+	})
+	want := map[string]any{"template": "${steps.first.app.issue_number}"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("workflowSystemToolValueInfo = %#v, want %#v", got, want)
 	}
 }
 
@@ -550,23 +335,12 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 		Permissions: []core.AccessPermission{
 			{App: "managed"},
 			{App: "datadog", Operations: []string{"queryLogs"}},
-			{App: "notification", Operations: []string{"reply"}},
 		},
 		ToolRefs: []coreagent.ToolRef{
 			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
 			{App: "datadog", Operation: "queryLogs"},
 		},
 		Tools: []coreagent.Tool{workflowTool},
-		InheritedOutputDelivery: &coreworkflow.OutputDelivery{
-			Target: coreworkflow.AppTarget{
-				AppName:   "notification",
-				Operation: "reply",
-			},
-			InputBindings: []coreworkflow.OutputBinding{
-				{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-				{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{Literal: "signed-parent-reply-ref"}},
-			},
-		},
 	})
 
 	resp, err := agentRuntime.ExecuteTool(context.Background(), coreagent.ExecuteToolRequest{
@@ -578,21 +352,16 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
 			"workflowKey": "slack-child-run-step-info",
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "diagnosis",
 				"agent": map[string]any{
 					"provider": "managed",
-					"steps": []any{
-						map[string]any{
-							"id":     "diagnosis",
-							"prompt": "Diagnose the Datadog alert.",
-							"toolRefs": []any{
-								map[string]any{"app": "datadog", "operation": "queryLogs"},
-							},
-						},
+					"prompt":   "Diagnose the Datadog alert.",
+					"tools": []any{
+						map[string]any{"app": "datadog", "operation": "queryLogs"},
 					},
 				},
-			},
-			"deliverResultToCaller": true,
+			}),
 		},
 	})
 	if err != nil {
@@ -601,33 +370,30 @@ func TestAgentRuntimeWorkflowSystemToolRunInfoIncludesSteps(t *testing.T) {
 	if resp == nil || resp.Status != http.StatusCreated {
 		t.Fatalf("response = %#v, want 201", resp)
 	}
-	if strings.Contains(resp.Body, "outputDelivery") || strings.Contains(resp.Body, "signed-parent-reply-ref") || strings.Contains(resp.Body, "notification") {
-		t.Fatalf("response leaked inherited delivery: %s", resp.Body)
-	}
 	var body struct {
 		Run struct {
 			Target struct {
-				Agent struct {
-					Steps []struct {
-						ID       string `json:"id"`
-						Prompt   string `json:"prompt"`
-						ToolRefs []struct {
+				Steps []struct {
+					ID    string `json:"id"`
+					Agent struct {
+						Prompt map[string]any `json:"prompt"`
+						Tools  []struct {
 							App       string `json:"app"`
 							Operation string `json:"operation"`
-						} `json:"toolRefs"`
-					} `json:"steps"`
-				} `json:"agent"`
+						} `json:"tools"`
+					} `json:"agent"`
+				} `json:"steps"`
 			} `json:"target"`
 		} `json:"run"`
 	}
 	if err := json.Unmarshal([]byte(resp.Body), &body); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}
-	if len(body.Run.Target.Agent.Steps) != 1 || body.Run.Target.Agent.Steps[0].ID != "diagnosis" || body.Run.Target.Agent.Steps[0].Prompt == "" {
-		t.Fatalf("run target steps = %#v", body.Run.Target.Agent.Steps)
+	if len(body.Run.Target.Steps) != 1 || body.Run.Target.Steps[0].ID != "diagnosis" || body.Run.Target.Steps[0].Agent.Prompt == nil {
+		t.Fatalf("run target steps = %#v", body.Run.Target.Steps)
 	}
-	if len(body.Run.Target.Agent.Steps[0].ToolRefs) != 1 || body.Run.Target.Agent.Steps[0].ToolRefs[0].App != "datadog" {
-		t.Fatalf("step tool refs = %#v", body.Run.Target.Agent.Steps[0].ToolRefs)
+	if len(body.Run.Target.Steps[0].Agent.Tools) != 1 || body.Run.Target.Steps[0].Agent.Tools[0].App != "datadog" {
+		t.Fatalf("step tools = %#v", body.Run.Target.Steps[0].Agent.Tools)
 	}
 	if len(workflowProvider.startedRuns) != 1 {
 		t.Fatalf("started runs = %d, want 1", len(workflowProvider.startedRuns))
@@ -664,8 +430,11 @@ func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 	if _, ok := targetTargetProps["app"]; ok {
 		t.Fatalf("runs.start target schema exposes app target: %#v", targetTargetProps)
 	}
-	if _, ok := targetTargetProps["agent"]; !ok {
-		t.Fatalf("runs.start target schema missing agent target: %#v", targetTargetProps)
+	if _, ok := targetTargetProps["agent"]; ok {
+		t.Fatalf("runs.start target schema exposes agent target: %#v", targetTargetProps)
+	}
+	if _, ok := targetTargetProps["steps"]; !ok {
+		t.Fatalf("runs.start target schema missing steps: %#v", targetTargetProps)
 	}
 	definitionBranch, ok := branches[1].(map[string]any)
 	if !ok {
@@ -677,79 +446,6 @@ func TestWorkflowSystemToolStartRunSchemaMatchesV1Contract(t *testing.T) {
 	}
 	if _, ok := definitionProps["target"]; ok {
 		t.Fatalf("definition branch exposes target: %#v", definitionProps)
-	}
-	if _, ok := definitionProps["deliverResultToCaller"]; ok {
-		t.Fatalf("definition branch exposes deliverResultToCaller: %#v", definitionProps)
-	}
-}
-
-func TestAgentRuntimeWorkflowSystemToolStartRunRejectsInvalidCallerDelivery(t *testing.T) {
-	t.Parallel()
-
-	agentRuntime, _ := newWorkflowSystemToolRuntime(t)
-	workflowTool := mustWorkflowSystemTool(t, agentRuntime, workflowSystemToolRunsStart)
-	runGrant := mustMintWorkflowSystemRunGrant(t, agentRuntime, workflowSystemRunGrantScope{
-		Permissions: []core.AccessPermission{{App: "roadmap", Operations: []string{"sync"}}},
-		ToolRefs: []coreagent.ToolRef{
-			{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolRunsStart},
-			{App: "roadmap", Operation: "sync"},
-		},
-		Tools: []coreagent.Tool{workflowTool},
-	})
-	baseReq := coreagent.ExecuteToolRequest{
-		ProviderName: "managed",
-		SessionID:    "session-1",
-		TurnID:       "turn-1",
-		ToolCallID:   "call-run-invalid",
-		ToolID:       workflowTool.ID,
-		RunGrant:     runGrant,
-	}
-	tests := []struct {
-		name string
-		args map[string]any
-	}{
-		{
-			name: "missing inherited output delivery",
-			args: map[string]any{
-				"deliverResultToCaller": true,
-				"target":                map[string]any{"agent": map[string]any{"prompt": "run", "toolRefs": []any{map[string]any{"app": "roadmap", "operation": "sync"}}}},
-			},
-		},
-		{
-			name: "definition callback",
-			args: map[string]any{
-				"definitionId":          "workflow_definition_abc",
-				"deliverResultToCaller": true,
-			},
-		},
-		{
-			name: "direct app target",
-			args: map[string]any{
-				"target": map[string]any{"app": map[string]any{"name": "roadmap", "operation": "sync"}},
-			},
-		},
-		{
-			name: "non boolean callback flag",
-			args: map[string]any{
-				"deliverResultToCaller": "true",
-				"target":                map[string]any{"agent": map[string]any{"prompt": "run", "toolRefs": []any{map[string]any{"app": "roadmap", "operation": "sync"}}}},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			req := baseReq
-			req.Arguments = tt.args
-			_, err := agentRuntime.ExecuteTool(context.Background(), req)
-			if err == nil {
-				t.Fatal("ExecuteTool succeeded, want invalid invocation")
-			}
-			if !errors.Is(err, invocation.ErrInvalidInvocation) {
-				t.Fatalf("ExecuteTool error = %v, want invalid invocation", err)
-			}
-		})
 	}
 }
 
@@ -782,16 +478,17 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 		ToolID:       definitionTool.ID,
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "agent",
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap and open the needed code changes.",
-					"toolRefs": []any{
+					"tools": []any{
 						map[string]any{"app": "roadmap", "operation": "sync"},
 						map[string]any{"system": coreagent.SystemToolWorkflow, "operation": workflowSystemToolSchedulesCreate},
 					},
 				},
-			},
+			}),
 		},
 	})
 	if err != nil {
@@ -805,10 +502,12 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 			ID       string `json:"id"`
 			Provider string `json:"provider"`
 			Target   struct {
-				Agent struct {
-					Provider string `json:"provider"`
-					Prompt   string `json:"prompt"`
-				} `json:"agent"`
+				Steps []struct {
+					Agent struct {
+						Provider string         `json:"provider"`
+						Prompt   map[string]any `json:"prompt"`
+					} `json:"agent"`
+				} `json:"steps"`
 			} `json:"target"`
 		} `json:"definition"`
 	}
@@ -816,7 +515,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 		t.Fatalf("decode definition response body: %v", err)
 	}
 	definitionID := definitionBody.Definition.ID
-	if definitionID == "" || definitionBody.Definition.Provider != "temporal" || definitionBody.Definition.Target.Agent.Provider != "managed" {
+	if definitionID == "" || definitionBody.Definition.Provider != "temporal" || len(definitionBody.Definition.Target.Steps) != 1 || definitionBody.Definition.Target.Steps[0].Agent.Provider != "managed" {
 		t.Fatalf("definition response = %#v", definitionBody.Definition)
 	}
 	definitionRef, err := workflowProvider.GetExecutionReference(context.Background(), definitionID)
@@ -852,16 +551,18 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionAndScheduleFromDefinitio
 			ID                 string `json:"id"`
 			SourceDefinitionID string `json:"sourceDefinitionId"`
 			Target             struct {
-				Agent struct {
-					Provider string `json:"provider"`
-				} `json:"agent"`
+				Steps []struct {
+					Agent struct {
+						Provider string `json:"provider"`
+					} `json:"agent"`
+				} `json:"steps"`
 			} `json:"target"`
 		} `json:"schedule"`
 	}
 	if err := json.Unmarshal([]byte(scheduleResp.Body), &scheduleBody); err != nil {
 		t.Fatalf("decode schedule response body: %v", err)
 	}
-	if scheduleBody.Schedule.ID == "" || scheduleBody.Schedule.SourceDefinitionID != definitionID || scheduleBody.Schedule.Target.Agent.Provider != "managed" {
+	if scheduleBody.Schedule.ID == "" || scheduleBody.Schedule.SourceDefinitionID != definitionID || len(scheduleBody.Schedule.Target.Steps) != 1 || scheduleBody.Schedule.Target.Steps[0].Agent.Provider != "managed" {
 		t.Fatalf("schedule response = %#v", scheduleBody.Schedule)
 	}
 	if len(workflowProvider.upsertedSchedules) != 1 {
@@ -948,12 +649,13 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRe
 		ToolID:       definitionTool.ID,
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "agent",
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap and post an update.",
 				},
-			},
+			}),
 		},
 	})
 	if err != nil {
@@ -974,7 +676,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRe
 	if err != nil {
 		t.Fatalf("GetExecutionReference(definition): %v", err)
 	}
-	if ref.Target.Agent == nil {
+	if len(ref.Target.Steps) != 1 || ref.Target.Steps[0].Agent == nil {
 		t.Fatalf("definition target = %#v, want agent", ref.Target)
 	}
 	wantRefs := []coreagent.ToolRef{
@@ -984,8 +686,8 @@ func TestAgentRuntimeWorkflowSystemToolCreatesDefinitionWithInheritedAgentToolRe
 		{App: "linear", Operation: "viewer"},
 		{App: "slack", Operation: "chat.postMessage"},
 	}
-	if !reflect.DeepEqual(ref.Target.Agent.ToolRefs, wantRefs) {
-		t.Fatalf("inherited tool refs = %#v, want %#v", ref.Target.Agent.ToolRefs, wantRefs)
+	if !reflect.DeepEqual(ref.Target.Steps[0].Agent.ToolRefs, wantRefs) {
+		t.Fatalf("inherited tool refs = %#v, want %#v", ref.Target.Steps[0].Agent.ToolRefs, wantRefs)
 	}
 	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
 		{App: "linear", Operations: []string{"viewer"}},
@@ -1022,12 +724,13 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs
 		Arguments: map[string]any{
 			"cron":     "*/5 * * * *",
 			"timezone": "UTC",
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "agent",
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap.",
 				},
-			},
+			}),
 		},
 	})
 	if err != nil {
@@ -1040,15 +743,15 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs
 		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
 	}
 	upsert := workflowProvider.upsertedSchedules[0]
-	if upsert.Target.Agent == nil {
+	if len(upsert.Target.Steps) != 1 || upsert.Target.Steps[0].Agent == nil {
 		t.Fatalf("schedule target = %#v, want agent", upsert.Target)
 	}
 	wantRefs := []coreagent.ToolRef{
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
 		{App: "roadmap", Operation: "sync"},
 	}
-	if !reflect.DeepEqual(upsert.Target.Agent.ToolRefs, wantRefs) {
-		t.Fatalf("inherited tool refs = %#v, want %#v", upsert.Target.Agent.ToolRefs, wantRefs)
+	if !reflect.DeepEqual(upsert.Target.Steps[0].Agent.ToolRefs, wantRefs) {
+		t.Fatalf("inherited tool refs = %#v, want %#v", upsert.Target.Steps[0].Agent.ToolRefs, wantRefs)
 	}
 }
 
@@ -1094,12 +797,13 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithDelegatedCallerToolRef
 		Arguments: map[string]any{
 			"cron":     "*/5 * * * *",
 			"timezone": "UTC",
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "agent",
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Open a GitHub pull request.",
 				},
-			},
+			}),
 		},
 	})
 	if err != nil {
@@ -1112,15 +816,15 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithDelegatedCallerToolRef
 		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
 	}
 	upsert := workflowProvider.upsertedSchedules[0]
-	if upsert.Target.Agent == nil {
+	if len(upsert.Target.Steps) != 1 || upsert.Target.Steps[0].Agent == nil {
 		t.Fatalf("schedule target = %#v, want agent", upsert.Target)
 	}
 	wantRefs := []coreagent.ToolRef{
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolSchedulesCreate},
 		{App: "github", Operation: "bot.createPullRequest"},
 	}
-	if !reflect.DeepEqual(upsert.Target.Agent.ToolRefs, wantRefs) {
-		t.Fatalf("inherited tool refs = %#v, want %#v", upsert.Target.Agent.ToolRefs, wantRefs)
+	if !reflect.DeepEqual(upsert.Target.Steps[0].Agent.ToolRefs, wantRefs) {
+		t.Fatalf("inherited tool refs = %#v, want %#v", upsert.Target.Steps[0].Agent.ToolRefs, wantRefs)
 	}
 	ref, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
 	if err != nil {
@@ -1158,13 +862,14 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithExplicitEmptyAgentTool
 		Arguments: map[string]any{
 			"cron":     "*/5 * * * *",
 			"timezone": "UTC",
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "agent",
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Run without tools.",
-					"toolRefs": []any{},
+					"tools":    []any{},
 				},
-			},
+			}),
 		},
 	})
 	if err != nil {
@@ -1177,11 +882,11 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithExplicitEmptyAgentTool
 		t.Fatalf("upserted schedules = %d, want 1", len(workflowProvider.upsertedSchedules))
 	}
 	upsert := workflowProvider.upsertedSchedules[0]
-	if upsert.Target.Agent == nil {
+	if len(upsert.Target.Steps) != 1 || upsert.Target.Steps[0].Agent == nil {
 		t.Fatalf("schedule target = %#v, want agent", upsert.Target)
 	}
-	if len(upsert.Target.Agent.ToolRefs) != 0 {
-		t.Fatalf("explicit empty tool refs = %#v, want empty slice", upsert.Target.Agent.ToolRefs)
+	if len(upsert.Target.Steps[0].Agent.ToolRefs) != 0 {
+		t.Fatalf("explicit empty tool refs = %#v, want empty slice", upsert.Target.Steps[0].Agent.ToolRefs)
 	}
 	ref, err := workflowProvider.GetExecutionReference(context.Background(), upsert.ExecutionRef)
 	if err != nil {
@@ -1218,12 +923,13 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 		ToolID:       createTool.ID,
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "agent",
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap.",
 				},
-			},
+			}),
 		},
 	})
 	if err != nil {
@@ -1251,12 +957,13 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
 			"definitionId": definitionID,
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "agent",
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap and summarize changes.",
 				},
-			},
+			}),
 		},
 	})
 	if err != nil {
@@ -1269,7 +976,7 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 	if err != nil {
 		t.Fatalf("GetExecutionReference(definition): %v", err)
 	}
-	if ref.Target.Agent == nil || ref.Target.Agent.Prompt != "Sync the roadmap and summarize changes." {
+	if len(ref.Target.Steps) != 1 || ref.Target.Steps[0].Agent == nil || ref.Target.Steps[0].Agent.Prompt.Template != "Sync the roadmap and summarize changes." {
 		t.Fatalf("definition target = %#v", ref.Target)
 	}
 	wantRefs := []coreagent.ToolRef{
@@ -1279,8 +986,8 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesDefinition(t *testing.T)
 		{System: coreagent.SystemToolWorkflow, Operation: workflowSystemToolDefinitionsDelete},
 		{App: "roadmap", Operation: "sync"},
 	}
-	if !reflect.DeepEqual(ref.Target.Agent.ToolRefs, wantRefs) {
-		t.Fatalf("updated definition inherited tool refs = %#v, want %#v", ref.Target.Agent.ToolRefs, wantRefs)
+	if !reflect.DeepEqual(ref.Target.Steps[0].Agent.ToolRefs, wantRefs) {
+		t.Fatalf("updated definition inherited tool refs = %#v, want %#v", ref.Target.Steps[0].Agent.ToolRefs, wantRefs)
 	}
 	assertWorkflowSystemPermissions(t, ref.Permissions, []core.AccessPermission{
 		{App: "managed"},
@@ -1362,12 +1069,13 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesSchedule(t *testing.T) {
 		ToolID:       definitionTool.ID,
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "agent",
 				"agent": map[string]any{
 					"provider": "managed",
 					"prompt":   "Sync the roadmap.",
 				},
-			},
+			}),
 		},
 	})
 	if err != nil {
@@ -1449,7 +1157,7 @@ func TestAgentRuntimeWorkflowSystemToolUpdatesAndDeletesSchedule(t *testing.T) {
 		t.Fatalf("upserted schedules = %d, want 2", len(workflowProvider.upsertedSchedules))
 	}
 	updateUpsert := workflowProvider.upsertedSchedules[1]
-	if updateUpsert.Target.Agent == nil || updateUpsert.Target.Agent.Prompt != "Sync the roadmap." {
+	if len(updateUpsert.Target.Steps) != 1 || updateUpsert.Target.Steps[0].Agent == nil || updateUpsert.Target.Steps[0].Agent.Prompt.Template != "Sync the roadmap." {
 		t.Fatalf("updated upsert target = %#v", updateUpsert.Target)
 	}
 	scheduleRef, err := workflowProvider.GetExecutionReference(context.Background(), updateUpsert.ExecutionRef)
@@ -1502,8 +1210,8 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 		},
 		Tools: []coreagent.Tool{listTool},
 	})
-	roadmapTarget := coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "roadmap", Operation: "sync"}}
-	notificationTarget := coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "notification", Operation: "reply"}}
+	roadmapTarget := workflowSystemToolTestAppTarget("roadmap", "sync")
+	notificationTarget := workflowSystemToolTestAppTarget("notification", "reply")
 	workflowProvider.runs = map[string]*coreworkflow.Run{
 		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, ExecutionRef: "ref-a"},
 		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, ExecutionRef: "ref-b"},
@@ -1603,28 +1311,30 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *tes
 		arguments map[string]any
 	}{
 		{
-			name: "plugin target",
+			name: "app target",
 			arguments: map[string]any{
-				"target": map[string]any{
+				"target": workflowSystemToolTestTarget(map[string]any{
+					"id": "sync",
 					"app": map[string]any{
 						"name":      "roadmap",
 						"operation": "sync",
 					},
-				},
+				}),
 			},
 		},
 		{
 			name: "future system ref",
 			arguments: map[string]any{
-				"target": map[string]any{
+				"target": workflowSystemToolTestTarget(map[string]any{
+					"id": "agent",
 					"agent": map[string]any{
 						"provider": "managed",
 						"prompt":   "Create another cron.",
-						"toolRefs": []any{
+						"tools": []any{
 							map[string]any{"system": coreagent.SystemToolWorkflow, "operation": workflowSystemToolSchedulesCreate},
 						},
 					},
-				},
+				}),
 			},
 		},
 	}
@@ -1673,12 +1383,13 @@ func TestAgentRuntimeWorkflowSystemToolRejectsInvalidScheduleDefinitionArguments
 			arguments: map[string]any{
 				"cron":         "*/5 * * * *",
 				"definitionId": "workflow_definition:def-1",
-				"target": map[string]any{
+				"target": workflowSystemToolTestTarget(map[string]any{
+					"id": "sync",
 					"app": map[string]any{
 						"name":      "roadmap",
 						"operation": "sync",
 					},
-				},
+				}),
 			},
 		},
 	}
@@ -1724,12 +1435,13 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testi
 		RunGrant:     runGrant,
 		Arguments: map[string]any{
 			"cron": "*/5 * * * *",
-			"target": map[string]any{
+			"target": workflowSystemToolTestTarget(map[string]any{
+				"id": "sync",
 				"app": map[string]any{
 					"name":      "roadmap",
 					"operation": "sync",
 				},
-			},
+			}),
 		},
 	})
 	if err == nil {
@@ -1765,11 +1477,12 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 			name: "credential mode",
 			arguments: map[string]any{
 				"cron": "*/5 * * * *",
-				"target": map[string]any{
+				"target": workflowSystemToolTestTarget(map[string]any{
+					"id": "agent",
 					"agent": map[string]any{
 						"provider": "managed",
 						"prompt":   "Sync roadmap",
-						"toolRefs": []any{
+						"tools": []any{
 							map[string]any{
 								"app":            "roadmap",
 								"operation":      "sync",
@@ -1777,22 +1490,23 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 							},
 						},
 					},
-				},
+				}),
 			},
 		},
 		{
-			name: "agent tools alias",
+			name: "agent toolRefs alias",
 			arguments: map[string]any{
 				"cron": "*/5 * * * *",
-				"target": map[string]any{
+				"target": workflowSystemToolTestTarget(map[string]any{
+					"id": "agent",
 					"agent": map[string]any{
 						"provider": "managed",
 						"prompt":   "Sync roadmap",
-						"tools": []any{
+						"toolRefs": []any{
 							map[string]any{"app": "roadmap", "operation": "sync"},
 						},
 					},
-				},
+				}),
 			},
 		},
 	}
@@ -1848,6 +1562,37 @@ func TestAgentRuntimeWorkflowSystemToolAllowsSystemOnlyTurn(t *testing.T) {
 	}
 	if len(body.Schedules) != 0 {
 		t.Fatalf("schedules = %#v, want empty", body.Schedules)
+	}
+}
+
+func TestWorkflowSystemToolTrustedAgentProviderChecksAllAgentSteps(t *testing.T) {
+	t.Parallel()
+
+	req := agentSystemToolExecutionRequest{ProviderName: "managed"}
+	target := coreworkflow.Target{Steps: []coreworkflow.Step{
+		{
+			ID: "first",
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "managed",
+				Prompt:       coreworkflow.Text{Template: "first"},
+			},
+		},
+		{
+			ID: "second",
+			Agent: &coreworkflow.AgentTurn{
+				ProviderName: "other",
+				Prompt:       coreworkflow.Text{Template: "second"},
+			},
+		},
+	}}
+
+	if got := workflowSystemToolTrustedAgentProvider(req, target); got != "" {
+		t.Fatalf("trusted provider = %q, want empty for mixed agent providers", got)
+	}
+
+	target.Steps[1].Agent.ProviderName = ""
+	if got := workflowSystemToolTrustedAgentProvider(req, target); got != "managed" {
+		t.Fatalf("trusted provider = %q, want managed when all agent steps use current/default provider", got)
 	}
 }
 
@@ -2005,7 +1750,7 @@ func (p *workflowSystemToolRecordingProvider) ListRuns(_ context.Context, req co
 	sort.Strings(ids)
 	for _, id := range ids {
 		run := p.runs[id]
-		if req.TargetApp != "" && (run.Target.App == nil || run.Target.App.AppName != req.TargetApp) {
+		if req.TargetApp != "" && workflowSystemToolTestTargetFirstApp(run.Target) != req.TargetApp {
 			continue
 		}
 		if req.Status != "" && run.Status != req.Status {
@@ -2035,6 +1780,25 @@ func (p *workflowSystemToolRecordingProvider) ListRuns(_ context.Context, req co
 		nextPageToken = strconv.Itoa(end)
 	}
 	return &coreworkflow.ListRunsResponse{Runs: out[start:end], NextPageToken: nextPageToken}, nil
+}
+
+func workflowSystemToolTestAppTarget(appName, operation string) coreworkflow.Target {
+	return coreworkflow.Target{Steps: []coreworkflow.Step{{
+		ID: "run",
+		App: &coreworkflow.AppCall{
+			Name:      appName,
+			Operation: operation,
+		},
+	}}}
+}
+
+func workflowSystemToolTestTargetFirstApp(target coreworkflow.Target) string {
+	for i := range target.Steps {
+		if target.Steps[i].App != nil {
+			return strings.TrimSpace(target.Steps[i].App.Name)
+		}
+	}
+	return ""
 }
 func (p *workflowSystemToolRecordingProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
 	return &coreworkflow.Run{}, nil
@@ -2138,11 +1902,10 @@ func (p *workflowSystemToolRecordingProvider) Ping(context.Context) error { retu
 func (p *workflowSystemToolRecordingProvider) Close() error               { return nil }
 
 type workflowSystemRunGrantScope struct {
-	CallerAppName           string
-	Permissions             []core.AccessPermission
-	ToolRefs                []coreagent.ToolRef
-	Tools                   []coreagent.Tool
-	InheritedOutputDelivery *coreworkflow.OutputDelivery
+	CallerAppName string
+	Permissions   []core.AccessPermission
+	ToolRefs      []coreagent.ToolRef
+	Tools         []coreagent.Tool
 }
 
 func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope workflowSystemRunGrantScope) string {
@@ -2150,17 +1913,16 @@ func mustMintWorkflowSystemRunGrant(t *testing.T, runtime *agentRuntime, scope w
 
 	grants := workflowSystemRunGrants(t, runtime)
 	grant, err := grants.Mint(agentgrant.Grant{
-		ProviderName:            "managed",
-		SessionID:               "session-1",
-		TurnID:                  "turn-1",
-		CallerAppName:           strings.TrimSpace(scope.CallerAppName),
-		SubjectID:               principal.UserSubjectID("ada"),
-		SubjectKind:             string(principal.KindUser),
-		CredentialSubjectID:     principal.UserSubjectID("ada"),
-		Permissions:             append([]core.AccessPermission(nil), scope.Permissions...),
-		ToolRefs:                append([]coreagent.ToolRef(nil), scope.ToolRefs...),
-		Tools:                   append([]coreagent.Tool(nil), scope.Tools...),
-		InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(scope.InheritedOutputDelivery),
+		ProviderName:        "managed",
+		SessionID:           "session-1",
+		TurnID:              "turn-1",
+		CallerAppName:       strings.TrimSpace(scope.CallerAppName),
+		SubjectID:           principal.UserSubjectID("ada"),
+		SubjectKind:         string(principal.KindUser),
+		CredentialSubjectID: principal.UserSubjectID("ada"),
+		Permissions:         append([]core.AccessPermission(nil), scope.Permissions...),
+		ToolRefs:            append([]coreagent.ToolRef(nil), scope.ToolRefs...),
+		Tools:               append([]coreagent.Tool(nil), scope.Tools...),
 	})
 	if err != nil {
 		t.Fatalf("Mint workflow system run grant: %v", err)
@@ -2178,6 +1940,14 @@ func workflowSystemRunGrants(t *testing.T, runtime *agentRuntime) *agentgrant.Ma
 		t.Fatal("runtime run grants are not configured")
 	}
 	return grants
+}
+
+func workflowSystemToolTestTarget(steps ...map[string]any) map[string]any {
+	items := make([]any, 0, len(steps))
+	for _, step := range steps {
+		items = append(items, step)
+	}
+	return map[string]any{"steps": items}
 }
 
 func mustWorkflowSystemTool(t *testing.T, runtime *agentRuntime, operation string) coreagent.Tool {

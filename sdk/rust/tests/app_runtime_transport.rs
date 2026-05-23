@@ -12,22 +12,21 @@ use std::time::{Duration, UNIX_EPOCH};
 use generated::v1::app_runtime_provider_client::AppRuntimeProviderClient;
 use generated::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use generated::v1::{
-    AgentWorkspace, AgentWorkspaceGitCheckout, ConfigureProviderRequest,
+    AgentWorkspace, AgentWorkspaceGitCheckout, AppRuntimeEgressMode as ProtoAppRuntimeEgressMode,
+    AppRuntimeImagePullAuth as ProtoAppRuntimeImagePullAuth, ConfigureProviderRequest,
     GetAppRuntimeSessionRequest as ProtoGetAppRuntimeSessionRequest,
-    ListAppRuntimeSessionsRequest as ProtoListAppRuntimeSessionsRequest,
-    AppRuntimeEgressMode as ProtoAppRuntimeEgressMode,
-    AppRuntimeImagePullAuth as ProtoAppRuntimeImagePullAuth, ProviderKind,
+    ListAppRuntimeSessionsRequest as ProtoListAppRuntimeSessionsRequest, ProviderKind,
     RemoveAppRuntimeWorkspaceRequest as ProtoRemoveAppRuntimeWorkspaceRequest,
-    StartHostedAppRequest as ProtoStartHostedAppRequest,
     StartAppRuntimeSessionRequest as ProtoStartAppRuntimeSessionRequest,
+    StartHostedAppRequest as ProtoStartHostedAppRequest,
     StopAppRuntimeSessionRequest as ProtoStopAppRuntimeSessionRequest,
 };
 use gestalt::{
-    AgentPreparedWorkspace, HostedApp, ListAppRuntimeSessionsRequest,
-    ListAppRuntimeSessionsResponse, AppRuntimeEgressMode, AppRuntimeProvider,
-    AppRuntimeSession, AppRuntimeSessionLifecycle, AppRuntimeSupport,
-    PrepareAppRuntimeWorkspaceRequest, PrepareAppRuntimeWorkspaceResponse, RuntimeMetadata,
-    StartHostedAppRequest, StartAppRuntimeSessionRequest, StopAppRuntimeSessionRequest,
+    AgentPreparedWorkspace, AppRuntimeEgressMode, AppRuntimeProvider, AppRuntimeSession,
+    AppRuntimeSessionLifecycle, AppRuntimeSupport, HostedApp, ListAppRuntimeSessionsRequest,
+    ListAppRuntimeSessionsResponse, PrepareAppRuntimeWorkspaceRequest,
+    PrepareAppRuntimeWorkspaceResponse, RuntimeMetadata, StartAppRuntimeSessionRequest,
+    StartHostedAppRequest, StopAppRuntimeSessionRequest,
 };
 use hyper_util::rt::TokioIo;
 use tokio::net::UnixStream;
@@ -170,10 +169,7 @@ impl AppRuntimeProvider for TestAppRuntimeProvider {
         Ok(())
     }
 
-    async fn start_plugin(
-        &self,
-        request: StartHostedAppRequest,
-    ) -> gestalt::Result<HostedApp> {
+    async fn start_plugin(&self, request: StartHostedAppRequest) -> gestalt::Result<HostedApp> {
         self.seen.lock().expect("lock seen").push(SeenRequest {
             method: "start-plugin".to_string(),
             session_id: request.session_id.clone(),

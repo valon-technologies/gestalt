@@ -12,7 +12,7 @@ const PROVIDER_KIND_DEFINITIONS = {
     tokens: ["app"],
     formatToken: "app",
     defaultExportNames: ["provider", "app"],
-    label: "plugin provider",
+    label: "app provider",
   },
   authentication: {
     tokens: ["authentication"],

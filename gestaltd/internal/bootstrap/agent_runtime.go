@@ -14,7 +14,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentmanager"
@@ -37,19 +36,19 @@ type agentRuntime struct {
 }
 
 type agentSystemToolExecutionRequest struct {
-	Principal               *principal.Principal
-	ProviderName            string
-	CallerAppName           string
-	SessionID               string
-	TurnID                  string
-	ToolCallID              string
-	ToolID                  string
-	Tool                    coreagent.Tool
-	Arguments               map[string]any
-	IdempotencyKey          string
-	ToolRefs                []coreagent.ToolRef
-	Tools                   []coreagent.Tool
-	InheritedOutputDelivery *coreworkflow.OutputDelivery
+	Principal      *principal.Principal
+	ProviderName   string
+	CallerAppName  string
+	SessionID      string
+	TurnID         string
+	ToolCallID     string
+	ToolID         string
+	Tool           coreagent.Tool
+	Arguments      map[string]any
+	IdempotencyKey string
+	ToolRefs       []coreagent.ToolRef
+	Tools          []coreagent.Tool
+	Permissions    []core.AccessPermission
 }
 
 type agentSystemToolExecutor interface {
@@ -356,19 +355,19 @@ func (r *agentRuntime) ExecuteTool(ctx context.Context, req coreagent.ExecuteToo
 			return nil, agentmanager.ErrAgentWorkflowToolsNotConfigured
 		}
 		return systemTools.ExecuteSystemTool(ctx, agentSystemToolExecutionRequest{
-			Principal:               principalValue,
-			ProviderName:            strings.TrimSpace(grant.ProviderName),
-			CallerAppName:           strings.TrimSpace(grant.CallerAppName),
-			SessionID:               strings.TrimSpace(req.SessionID),
-			TurnID:                  strings.TrimSpace(req.TurnID),
-			ToolCallID:              strings.TrimSpace(req.ToolCallID),
-			ToolID:                  strings.TrimSpace(req.ToolID),
-			Tool:                    resolvedTool,
-			Arguments:               maps.Clone(req.Arguments),
-			IdempotencyKey:          idempotencyKey,
-			ToolRefs:                append([]coreagent.ToolRef(nil), grant.ToolRefs...),
-			Tools:                   append([]coreagent.Tool(nil), grant.Tools...),
-			InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(grant.InheritedOutputDelivery),
+			Principal:      principalValue,
+			ProviderName:   strings.TrimSpace(grant.ProviderName),
+			CallerAppName:  strings.TrimSpace(grant.CallerAppName),
+			SessionID:      strings.TrimSpace(req.SessionID),
+			TurnID:         strings.TrimSpace(req.TurnID),
+			ToolCallID:     strings.TrimSpace(req.ToolCallID),
+			ToolID:         strings.TrimSpace(req.ToolID),
+			Tool:           resolvedTool,
+			Arguments:      maps.Clone(req.Arguments),
+			IdempotencyKey: idempotencyKey,
+			ToolRefs:       append([]coreagent.ToolRef(nil), grant.ToolRefs...),
+			Tools:          append([]coreagent.Tool(nil), grant.Tools...),
+			Permissions:    append([]core.AccessPermission(nil), grant.Permissions...),
 		})
 	}
 	if invoker == nil {
@@ -513,8 +512,8 @@ func agentToolRefsLogValue(refs []coreagent.ToolRef) []map[string]string {
 		if systemName := strings.TrimSpace(ref.System); systemName != "" {
 			value["system"] = systemName
 		}
-		if pluginName := strings.TrimSpace(ref.App); pluginName != "" {
-			value["app"] = pluginName
+		if appName := strings.TrimSpace(ref.App); appName != "" {
+			value["app"] = appName
 		}
 		if operation := strings.TrimSpace(ref.Operation); operation != "" {
 			value["operation"] = operation
@@ -893,11 +892,11 @@ func validateAgentToolTargetForGrant(grant agentgrant.Grant, principalValue *pri
 		}
 		return nil
 	}
-	pluginName := strings.TrimSpace(target.App)
-	if pluginName == "" || operation == "" {
+	appName := strings.TrimSpace(target.App)
+	if appName == "" || operation == "" {
 		return fmt.Errorf("%w: agent tool target is incomplete", invocation.ErrAuthorizationDenied)
 	}
-	if !principal.AllowsProviderPermission(principalValue, pluginName) || !principal.AllowsOperationPermission(principalValue, pluginName, operation) {
+	if !principal.AllowsProviderPermission(principalValue, appName) || !principal.AllowsOperationPermission(principalValue, appName, operation) {
 		return fmt.Errorf("%w: agent tool %q is not authorized", invocation.ErrAuthorizationDenied, rawToolID)
 	}
 	if len(grant.ToolRefs) > 0 && !agentToolMatchesRefs(target, grant.ToolRefs) {
@@ -959,11 +958,11 @@ func validateUnavailableAgentToolTarget(principalValue *principal.Principal, ref
 	if strings.TrimSpace(target.System) != "" || strings.TrimSpace(target.Operation) != "" {
 		return fmt.Errorf("%w: unavailable agent tool %q cannot target a concrete operation", invocation.ErrAuthorizationDenied, rawToolID)
 	}
-	pluginName := strings.TrimSpace(target.App)
-	if pluginName == "" {
+	appName := strings.TrimSpace(target.App)
+	if appName == "" {
 		return fmt.Errorf("%w: unavailable agent tool %q app is required", invocation.ErrAuthorizationDenied, rawToolID)
 	}
-	if !principal.AllowsProviderPermission(principalValue, pluginName) {
+	if !principal.AllowsProviderPermission(principalValue, appName) {
 		return fmt.Errorf("%w: unavailable agent tool %q is not authorized", invocation.ErrAuthorizationDenied, rawToolID)
 	}
 	if !agentUnavailableReasonAllowed(strings.TrimSpace(target.Unavailable.Reason)) {
@@ -1065,12 +1064,12 @@ func validateAgentListedTools(p *principal.Principal, refs []coreagent.ToolRef, 
 			}
 			continue
 		}
-		pluginName := strings.TrimSpace(target.App)
+		appName := strings.TrimSpace(target.App)
 		operation := strings.TrimSpace(target.Operation)
-		if pluginName == "" || operation == "" {
+		if appName == "" || operation == "" {
 			return fmt.Errorf("%w: listed agent tool target is incomplete", invocation.ErrAuthorizationDenied)
 		}
-		if !principal.AllowsProviderPermission(p, pluginName) || !principal.AllowsOperationPermission(p, pluginName, operation) {
+		if !principal.AllowsProviderPermission(p, appName) || !principal.AllowsOperationPermission(p, appName, operation) {
 			return fmt.Errorf("%w: listed agent tool %q is not authorized", invocation.ErrAuthorizationDenied, tools[i].ToolID)
 		}
 		if len(refs) > 0 && !agentToolMatchesRefs(target, refs) {

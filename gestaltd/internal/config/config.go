@@ -495,7 +495,7 @@ type ProviderEntry struct {
 	AuthorizationPolicy string                  `yaml:"authorizationPolicy,omitempty"`
 	Dev                 *ProviderEntryDevConfig `yaml:"dev,omitempty"`
 
-	// Plugin-specific runtime fields populated from the canonical ui object.
+	// App-specific runtime fields populated from the canonical ui object.
 	MountPath         string                        `yaml:"-"`
 	UI                string                        `yaml:"-"`
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
@@ -595,8 +595,8 @@ type providerEntryYAML struct {
 
 type providerEntryMarshalYAML struct {
 	providerEntryFields `yaml:",inline"`
-	Auth                *RouteAuthDef          `yaml:"auth,omitempty"`
-	UI                  *pluginUIBindingConfig `yaml:"ui,omitempty"`
+	Auth                *RouteAuthDef       `yaml:"auth,omitempty"`
+	UI                  *appUIBindingConfig `yaml:"ui,omitempty"`
 }
 
 type uiEntryYAML struct {
@@ -646,7 +646,7 @@ func (e ProviderEntry) MarshalYAML() (any, error) {
 		Auth:                cloneRouteAuthDef(e.RouteAuth),
 	}
 	if strings.TrimSpace(e.MountPath) != "" {
-		raw.UI = &pluginUIBindingConfig{
+		raw.UI = &appUIBindingConfig{
 			Bundle: strings.TrimSpace(e.UI),
 			Path:   strings.TrimSpace(e.MountPath),
 		}
@@ -670,7 +670,7 @@ type HostIndexedDBBindingConfig struct {
 	ObjectStores []string `yaml:"objectStores,omitempty"`
 }
 
-type pluginUIBindingConfig struct {
+type appUIBindingConfig struct {
 	Path   string `yaml:"path,omitempty"`
 	Bundle string `yaml:"bundle,omitempty"`
 }
@@ -838,68 +838,85 @@ type WorkflowInvokeConfig struct {
 }
 
 type WorkflowTargetConfig struct {
-	App   *WorkflowAppTargetConfig `yaml:"app,omitempty"`
-	Agent *WorkflowAgentConfig     `yaml:"agent,omitempty"`
+	Steps []WorkflowStepConfig `yaml:"steps,omitempty"`
 }
 
-type WorkflowAppTargetConfig struct {
+type WorkflowStepConfig struct {
+	ID       string                         `yaml:"id,omitempty"`
+	Inputs   map[string]WorkflowValueConfig `yaml:"inputs,omitempty"`
+	App      *WorkflowStepAppCallConfig     `yaml:"app,omitempty"`
+	Agent    *WorkflowStepAgentConfig       `yaml:"agent,omitempty"`
+	When     *WorkflowStepWhenConfig        `yaml:"when,omitempty"`
+	Timeout  string                         `yaml:"timeout,omitempty"`
+	Metadata map[string]any                 `yaml:"metadata,omitempty"`
+}
+
+type WorkflowStepAppCallConfig struct {
 	Name           string                            `yaml:"name,omitempty"`
 	Operation      string                            `yaml:"operation,omitempty"`
 	Connection     string                            `yaml:"connection,omitempty"`
 	Instance       string                            `yaml:"instance,omitempty"`
 	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
-	Input          map[string]any                    `yaml:"input,omitempty"`
+	Input          WorkflowValueConfig               `yaml:"input,omitempty"`
 }
 
-type WorkflowAgentConfig struct {
-	Provider             string                        `yaml:"provider,omitempty"`
-	Model                string                        `yaml:"model,omitempty"`
-	Prompt               string                        `yaml:"prompt,omitempty"`
-	Messages             []WorkflowAgentMessage        `yaml:"messages,omitempty"`
-	Tools                []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
-	OutputDelivery       *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
-	SessionReadyDelivery *WorkflowOutputDeliveryConfig `yaml:"sessionReadyDelivery,omitempty"`
-	ResponseSchema       map[string]any                `yaml:"responseSchema,omitempty"`
-	Metadata             map[string]any                `yaml:"metadata,omitempty"`
-	ModelOptions         map[string]any                `yaml:"modelOptions,omitempty"`
-	Timeout              string                        `yaml:"timeout,omitempty"`
-	Steps                []WorkflowAgentStepConfig     `yaml:"steps,omitempty"`
+type WorkflowStepAgentConfig struct {
+	Provider       string                 `yaml:"provider,omitempty"`
+	Model          string                 `yaml:"model,omitempty"`
+	SessionKey     string                 `yaml:"sessionKey,omitempty"`
+	Prompt         WorkflowTextConfig     `yaml:"prompt,omitempty"`
+	Messages       []WorkflowAgentMessage `yaml:"messages,omitempty"`
+	Tools          []WorkflowAgentToolRef `yaml:"tools,omitempty"`
+	ResponseSchema map[string]any         `yaml:"responseSchema,omitempty"`
+	ModelOptions   map[string]any         `yaml:"modelOptions,omitempty"`
 }
 
-type WorkflowAgentStepConfig struct {
-	ID             string                        `yaml:"id,omitempty"`
-	Prompt         string                        `yaml:"prompt,omitempty"`
-	Messages       []WorkflowAgentMessage        `yaml:"messages,omitempty"`
-	Tools          []WorkflowAgentToolRef        `yaml:"tools,omitempty"`
-	OutputDelivery *WorkflowOutputDeliveryConfig `yaml:"outputDelivery,omitempty"`
-	ResponseSchema map[string]any                `yaml:"responseSchema,omitempty"`
-	Metadata       map[string]any                `yaml:"metadata,omitempty"`
-	ModelOptions   map[string]any                `yaml:"modelOptions,omitempty"`
-	Timeout        string                        `yaml:"timeout,omitempty"`
-	When           *WorkflowAgentStepWhenConfig  `yaml:"when,omitempty"`
+type WorkflowAgentMessage struct {
+	Role     string             `yaml:"role,omitempty"`
+	Text     WorkflowTextConfig `yaml:"text,omitempty"`
+	Metadata map[string]any     `yaml:"metadata,omitempty"`
 }
 
-type WorkflowAgentStepWhenConfig struct {
-	StepID     string `yaml:"stepId,omitempty"`
-	OutputPath string `yaml:"outputPath,omitempty"`
-	Equals     any    `yaml:"equals,omitempty"`
+type WorkflowTextConfig struct {
+	Template string `yaml:"template,omitempty"`
+}
+
+func (c *WorkflowTextConfig) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		c.Template = value.Value
+		return nil
+	}
+	type workflowTextConfig WorkflowTextConfig
+	var out workflowTextConfig
+	if err := value.Decode(&out); err != nil {
+		return err
+	}
+	*c = WorkflowTextConfig(out)
+	return nil
+}
+
+type WorkflowStepWhenConfig struct {
+	Value  WorkflowValueConfig `yaml:"value,omitempty"`
+	Equals any                 `yaml:"equals,omitempty"`
 
 	equalsSet bool
 }
 
-func (c *WorkflowAgentStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
-	type workflowAgentStepWhenConfig struct {
-		StepID     string `yaml:"stepId,omitempty"`
-		OutputPath string `yaml:"outputPath,omitempty"`
-		Equals     any    `yaml:"equals,omitempty"`
+func (c WorkflowStepWhenConfig) EqualsSet() bool {
+	return c.equalsSet
+}
+
+func (c *WorkflowStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
+	type workflowStepWhenConfig struct {
+		Value  WorkflowValueConfig `yaml:"value,omitempty"`
+		Equals any                 `yaml:"equals,omitempty"`
 	}
-	var out workflowAgentStepWhenConfig
+	var out workflowStepWhenConfig
 	if err := value.Decode(&out); err != nil {
 		return err
 	}
 
-	c.StepID = out.StepID
-	c.OutputPath = out.OutputPath
+	c.Value = out.Value
 	c.Equals = out.Equals
 	c.equalsSet = false
 	if value.Kind != yaml.MappingNode {
@@ -914,29 +931,102 @@ func (c *WorkflowAgentStepWhenConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-type WorkflowOutputDeliveryConfig struct {
-	Target         WorkflowAppTargetConfig           `yaml:"target,omitempty"`
-	InputBindings  []WorkflowOutputBindingConfig     `yaml:"inputBindings,omitempty"`
-	CredentialMode providermanifestv1.ConnectionMode `yaml:"credentialMode,omitempty"`
+type WorkflowValueConfig struct {
+	Literal       any
+	LiteralSet    bool
+	Object        map[string]WorkflowValueConfig
+	Array         []WorkflowValueConfig
+	Template      *WorkflowTextConfig
+	RunInput      string
+	SignalPayload string
+	StepOutput    *WorkflowStepOutputSourceConfig
 }
 
-type WorkflowOutputBindingConfig struct {
-	InputField string                          `yaml:"inputField,omitempty"`
-	Value      WorkflowOutputValueSourceConfig `yaml:"value,omitempty"`
+type WorkflowStepOutputSourceConfig struct {
+	StepID string `yaml:"stepId,omitempty"`
+	Path   string `yaml:"path,omitempty"`
 }
 
-type WorkflowOutputValueSourceConfig struct {
-	AgentOutput    string `yaml:"agentOutput,omitempty"`
-	SignalPayload  string `yaml:"signalPayload,omitempty"`
-	SignalMetadata string `yaml:"signalMetadata,omitempty"`
-	AgentSession   string `yaml:"agentSession,omitempty"`
-	Literal        any    `yaml:"literal,omitempty"`
+func (c *WorkflowValueConfig) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.MappingNode:
+		if len(value.Content) == 2 {
+			key := value.Content[0].Value
+			node := value.Content[1]
+			switch key {
+			case "literal":
+				var out any
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.Literal = out
+				c.LiteralSet = true
+				return nil
+			case "object":
+				var out map[string]WorkflowValueConfig
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.Object = out
+				return nil
+			case "array":
+				var out []WorkflowValueConfig
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.Array = out
+				return nil
+			case "template":
+				var out WorkflowTextConfig
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.Template = &out
+				return nil
+			case "runInput":
+				return workflowValuePathSource(node, &c.RunInput)
+			case "signalPayload":
+				return workflowValuePathSource(node, &c.SignalPayload)
+			case "stepOutput":
+				var out WorkflowStepOutputSourceConfig
+				if err := node.Decode(&out); err != nil {
+					return err
+				}
+				c.StepOutput = &out
+				return nil
+			}
+		}
+		var out map[string]WorkflowValueConfig
+		if err := value.Decode(&out); err != nil {
+			return err
+		}
+		c.Object = out
+		return nil
+	case yaml.SequenceNode:
+		var out []WorkflowValueConfig
+		if err := value.Decode(&out); err != nil {
+			return err
+		}
+		c.Array = out
+		return nil
+	default:
+		var out any
+		if err := value.Decode(&out); err != nil {
+			return err
+		}
+		c.Literal = out
+		c.LiteralSet = true
+		return nil
+	}
 }
 
-type WorkflowAgentMessage struct {
-	Role     string         `yaml:"role,omitempty"`
-	Text     string         `yaml:"text,omitempty"`
-	Metadata map[string]any `yaml:"metadata,omitempty"`
+func workflowValuePathSource(node *yaml.Node, target *string) error {
+	var out string
+	if err := node.Decode(&out); err != nil {
+		return err
+	}
+	*target = out
+	return nil
 }
 
 type WorkflowAgentToolRef struct {
@@ -1056,7 +1146,7 @@ func cloneYAMLNode(node *yaml.Node) *yaml.Node {
 	return &cloned
 }
 
-func normalizeProviderEntryUINode(node *yaml.Node) (*pluginUIBindingConfig, error) {
+func normalizeProviderEntryUINode(node *yaml.Node) (*appUIBindingConfig, error) {
 	raw := documentValueNode(node)
 	if raw == nil || raw.Kind != yaml.MappingNode {
 		return nil, nil
@@ -1070,7 +1160,7 @@ func normalizeProviderEntryUINode(node *yaml.Node) (*pluginUIBindingConfig, erro
 		if value == nil || value.Kind != yaml.MappingNode {
 			return nil, fmt.Errorf("ui must be an object with path")
 		}
-		var binding pluginUIBindingConfig
+		var binding appUIBindingConfig
 		if err := decodeYAMLNodeKnownFields(value, &binding); err != nil {
 			return nil, err
 		}
@@ -2657,7 +2747,7 @@ func normalizeConfigShape(cfg *Config) error {
 	if err := normalizeConfigShapeForPartialLoad(cfg); err != nil {
 		return err
 	}
-	return applyPluginMountBindings(cfg)
+	return applyAppMountBindings(cfg)
 }
 
 func normalizeConfigShapeForPartialLoad(cfg *Config) error {
@@ -2732,11 +2822,15 @@ func normalizeProviderEntries(cfg *Config) {
 	}
 }
 
-func OverlayRemotePluginConfig(path string, cfg *Config) error {
-	return OverlayRemotePluginConfigPaths([]string{path}, cfg)
+func OverlayRemoteAppConfig(path string, cfg *Config) error {
+	return OverlayRemoteAppConfigPaths([]string{path}, cfg)
 }
 
-func OverlayRemotePluginConfigPaths(paths []string, cfg *Config) error {
+func OverlayRemotePluginConfig(path string, cfg *Config) error {
+	return OverlayRemoteAppConfig(path, cfg)
+}
+
+func OverlayRemoteAppConfigPaths(paths []string, cfg *Config) error {
 	root, err := loadMergedConfigRoot(paths, os.LookupEnv, envMissingPreserve, "")
 	if err != nil {
 		return err
@@ -2797,6 +2891,10 @@ func OverlayRemotePluginConfigPaths(paths []string, cfg *Config) error {
 		}
 	}
 	return nil
+}
+
+func OverlayRemotePluginConfigPaths(paths []string, cfg *Config) error {
+	return OverlayRemoteAppConfigPaths(paths, cfg)
 }
 
 type envMissingMode int
@@ -3892,17 +3990,17 @@ func normalizedSubjectPolicyDef(policy SubjectPolicyDef) SubjectPolicyDef {
 	return policy
 }
 
-func applyPluginMountBindings(cfg *Config) error {
+func applyAppMountBindings(cfg *Config) error {
 	if cfg == nil || len(cfg.Apps) == 0 {
 		return nil
 	}
 
-	pluginNames := slices.Sorted(maps.Keys(cfg.Apps))
-	seenUIs := make(map[string]string, len(pluginNames))
-	for _, pluginName := range pluginNames {
-		app := cfg.Apps[pluginName]
+	appNames := slices.Sorted(maps.Keys(cfg.Apps))
+	seenUIs := make(map[string]string, len(appNames))
+	for _, appName := range appNames {
+		app := cfg.Apps[appName]
 		if app == nil {
-			return fmt.Errorf("config validation: apps.%s is required", pluginName)
+			return fmt.Errorf("config validation: apps.%s is required", appName)
 		}
 		app.UI = strings.TrimSpace(app.UI)
 		app.MountPath = strings.TrimSpace(app.MountPath)
@@ -3910,41 +4008,41 @@ func applyPluginMountBindings(cfg *Config) error {
 
 		if app.MountPath == "" {
 			if app.UI != "" {
-				return fmt.Errorf("config validation: apps.%s.ui.bundle requires apps.%s.ui.path", pluginName, pluginName)
+				return fmt.Errorf("config validation: apps.%s.ui.bundle requires apps.%s.ui.path", appName, appName)
 			}
 			continue
 		}
 		normalizedPath, err := normalizeMountedUIPath(app.MountPath)
 		if err != nil {
-			return fmt.Errorf("config validation: apps.%s.ui.path: %w", pluginName, err)
+			return fmt.Errorf("config validation: apps.%s.ui.path: %w", appName, err)
 		}
 		app.MountPath = normalizedPath
-		if err := validateAuthorizationPolicyReference(cfg, "app", pluginName, app.AuthorizationPolicy); err != nil {
+		if err := validateAuthorizationPolicyReference(cfg, "app", appName, app.AuthorizationPolicy); err != nil {
 			return err
 		}
 		if app.UI == "" {
 			continue
 		}
-		if prev, exists := seenUIs[app.UI]; exists && prev != pluginName {
-			return fmt.Errorf("config validation: apps.%s.ui %q duplicates apps.%s", pluginName, app.UI, prev)
+		if prev, exists := seenUIs[app.UI]; exists && prev != appName {
+			return fmt.Errorf("config validation: apps.%s.ui %q duplicates apps.%s", appName, app.UI, prev)
 		}
 		ui := cfg.Providers.UI[app.UI]
 		if ui == nil {
-			return fmt.Errorf("config validation: apps.%s.ui references unknown ui %q", pluginName, app.UI)
+			return fmt.Errorf("config validation: apps.%s.ui references unknown ui %q", appName, app.UI)
 		}
 		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
-			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", pluginName, app.UI, app.UI)
+			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", appName, app.UI, app.UI)
 		}
 		if current := strings.TrimSpace(ui.Path); current != "" && current != app.MountPath {
-			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.path", pluginName, app.UI, app.UI)
+			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.path", appName, app.UI, app.UI)
 		}
-		if current := strings.TrimSpace(ui.OwnerApp); current != "" && current != pluginName {
-			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s owner", pluginName, app.UI, app.UI)
+		if current := strings.TrimSpace(ui.OwnerApp); current != "" && current != appName {
+			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s owner", appName, app.UI, app.UI)
 		}
 		ui.AuthorizationPolicy = app.AuthorizationPolicy
 		ui.Path = app.MountPath
-		ui.OwnerApp = pluginName
-		seenUIs[app.UI] = pluginName
+		ui.OwnerApp = appName
+		seenUIs[app.UI] = appName
 	}
 
 	return nil

@@ -74,7 +74,7 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
-		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of app or agent")
+		writeError(w, http.StatusBadRequest, "workflow target.steps is required")
 		return
 	}
 	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
@@ -92,7 +92,7 @@ func (s *Server) createGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		Paused:       req.Paused,
 	})
 	if err != nil {
-		s.writeWorkflowEventTriggerManagerError(w, r, workflowScheduleTargetErrorPlugin(req.Target), workflowScheduleTargetErrorOperation(req.Target), "", err)
+		s.writeWorkflowEventTriggerManagerError(w, r, workflowScheduleTargetErrorApp(req.Target), workflowScheduleTargetErrorOperation(req.Target), "", err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, workflowEventTriggerInfoFromManaged(managed))
@@ -124,7 +124,7 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		return
 	}
 	if !workflowScheduleTargetRequestHasOneKind(req.Target) {
-		writeError(w, http.StatusBadRequest, "workflow target must set exactly one of app or agent")
+		writeError(w, http.StatusBadRequest, "workflow target.steps is required")
 		return
 	}
 	if err := validatePublicWorkflowTargetRequest(req.Target); err != nil {
@@ -142,7 +142,7 @@ func (s *Server) updateGlobalWorkflowEventTrigger(w http.ResponseWriter, r *http
 		Paused:       req.Paused,
 	})
 	if err != nil {
-		s.writeWorkflowEventTriggerManagerError(w, r, workflowScheduleTargetErrorPlugin(req.Target), workflowScheduleTargetErrorOperation(req.Target), triggerID, err)
+		s.writeWorkflowEventTriggerManagerError(w, r, workflowScheduleTargetErrorApp(req.Target), workflowScheduleTargetErrorOperation(req.Target), triggerID, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, workflowEventTriggerInfoFromManaged(managed))
@@ -222,7 +222,7 @@ func workflowEventTriggerInfoFromCore(trigger *coreworkflow.EventTrigger, provid
 	return info
 }
 
-func (s *Server) writeWorkflowEventTriggerManagerError(w http.ResponseWriter, r *http.Request, pluginName, operation, triggerID string, err error) {
+func (s *Server) writeWorkflowEventTriggerManagerError(w http.ResponseWriter, r *http.Request, appName, operation, triggerID string, err error) {
 	switch {
 	case errors.Is(err, workflowmanager.ErrWorkflowNotConfigured),
 		errors.Is(err, workflowmanager.ErrExecutionRefsNotConfigured):
@@ -245,28 +245,28 @@ func (s *Server) writeWorkflowEventTriggerManagerError(w http.ResponseWriter, r 
 		errors.Is(err, invocation.ErrInvalidInvocation),
 		errors.Is(err, invocation.ErrInternal),
 		errors.Is(err, core.ErrMCPOnly):
-		s.writeWorkflowScheduleTargetError(w, r, pluginName, operation, err)
+		s.writeWorkflowScheduleTargetError(w, r, appName, operation, err)
 	case errors.Is(err, core.ErrNotFound):
-		s.writeWorkflowEventTriggerProviderError(r.Context(), w, pluginName, triggerID, err)
+		s.writeWorkflowEventTriggerProviderError(r.Context(), w, appName, triggerID, err)
 	default:
-		s.writeWorkflowEventTriggerProviderError(r.Context(), w, pluginName, triggerID, err)
+		s.writeWorkflowEventTriggerProviderError(r.Context(), w, appName, triggerID, err)
 	}
 }
 
-func (s *Server) writeWorkflowEventTriggerProviderError(ctx context.Context, w http.ResponseWriter, pluginName, triggerID string, err error) {
+func (s *Server) writeWorkflowEventTriggerProviderError(ctx context.Context, w http.ResponseWriter, appName, triggerID string, err error) {
 	switch {
 	case errors.Is(err, core.ErrNotFound):
 		writeError(w, http.StatusNotFound, fmt.Sprintf("workflow trigger %q not found", triggerID))
 	default:
 		slog.ErrorContext(ctx, "workflow trigger provider error",
-			"app", pluginName,
+			"app", appName,
 			"trigger_id", triggerID,
 			"error", err,
 		)
-		if strings.TrimSpace(pluginName) == "" {
+		if strings.TrimSpace(appName) == "" {
 			writeError(w, http.StatusInternalServerError, "workflow trigger request failed")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, fmt.Sprintf("workflow trigger request failed for integration %q", pluginName))
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("workflow trigger request failed for integration %q", appName))
 	}
 }

@@ -92,12 +92,13 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	run, err := workflowClient.StartRun(rpcCtx, &proto.StartWorkflowProviderRunRequest{
 		IdempotencyKey: "run-1",
 		Target: &proto.BoundWorkflowTarget{
-			Kind: &proto.BoundWorkflowTarget_App{
-				App: &proto.BoundWorkflowAppTarget{
-					AppName: "github",
-					Operation:  "issues.create",
-				},
-			},
+			Steps: []*proto.WorkflowStep{{
+				Id: "create_issue",
+				Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
+					Name:      "github",
+					Operation: "issues.create",
+				}},
+			}},
 		},
 	})
 	if err != nil {
@@ -110,12 +111,13 @@ func TestWorkflowProviderTypedTransportRoundTrip(t *testing.T) {
 	definition, err := workflowClient.CreateDefinition(rpcCtx, &proto.CreateWorkflowProviderDefinitionRequest{
 		IdempotencyKey: "definition-1",
 		Target: &proto.BoundWorkflowTarget{
-			Kind: &proto.BoundWorkflowTarget_App{
-				App: &proto.BoundWorkflowAppTarget{
-					AppName: "github",
-					Operation:  "issues.search",
-				},
-			},
+			Steps: []*proto.WorkflowStep{{
+				Id: "search_issues",
+				Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
+					Name:      "github",
+					Operation: "issues.search",
+				}},
+			}},
 		},
 	})
 	if err != nil {

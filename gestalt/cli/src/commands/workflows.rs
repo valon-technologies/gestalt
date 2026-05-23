@@ -9,17 +9,22 @@ use crate::cli::{
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
+use super::workflow_target::{
+    AppTargetUpdate, build_app_target, literal_input, merge_app_target_flags, target_app,
+    target_has_app, target_operation,
+};
+
 const EVENTS_PATH: &str = "/api/v1/workflow/events";
 const SCHEDULES_PATH: &str = "/api/v1/workflow/schedules";
 const TRIGGERS_PATH: &str = "/api/v1/workflow/event-triggers";
 const RUNS_PATH: &str = "/api/v1/workflow/runs";
 
-pub fn list(client: &ApiClient, plugin: Option<&str>, format: Format) -> Result<()> {
+pub fn list(client: &ApiClient, app: Option<&str>, format: Format) -> Result<()> {
     let resp = client
         .get(SCHEDULES_PATH)
         .context("failed to list workflow schedules")?;
-    let filtered = filter_by_app(resp, plugin);
-    print_schedules(&filtered, format);
+    let filtered = filter_by_app(resp, app);
+    print_schedules(&filtered, format, app);
     Ok(())
 }
 
@@ -33,6 +38,7 @@ pub fn get(client: &ApiClient, id: &str, format: Format) -> Result<()> {
 
 pub fn create(client: &ApiClient, args: &WorkflowScheduleCreateArgs, format: Format) -> Result<()> {
     let input = build_optional_map(&args.params, args.input_file.as_deref())?;
+    let input_value = input.as_ref().map(literal_input);
     let body = build_upsert_body(
         &args.cron,
         args.timezone.as_deref(),
@@ -40,7 +46,7 @@ pub fn create(client: &ApiClient, args: &WorkflowScheduleCreateArgs, format: For
         &args.operation,
         args.connection.as_deref(),
         args.instance.as_deref(),
-        input.as_ref(),
+        input_value.as_ref(),
         args.paused,
     );
 
@@ -93,15 +99,15 @@ pub fn resume(client: &ApiClient, id: &str, format: Format) -> Result<()> {
 
 pub fn list_triggers(
     client: &ApiClient,
-    plugin: Option<&str>,
+    app: Option<&str>,
     event_type: Option<&str>,
     format: Format,
 ) -> Result<()> {
     let resp = client
         .get(TRIGGERS_PATH)
         .context("failed to list workflow triggers")?;
-    let filtered = filter_triggers(resp, plugin, event_type);
-    print_triggers(&filtered, format);
+    let filtered = filter_triggers(resp, app, event_type);
+    print_triggers(&filtered, format, app);
     Ok(())
 }
 
@@ -181,26 +187,26 @@ pub fn resume_trigger(client: &ApiClient, id: &str, format: Format) -> Result<()
 
 pub fn list_runs(
     client: &ApiClient,
-    plugin: Option<&str>,
+    app: Option<&str>,
     status: Option<&str>,
     page_size: Option<u32>,
     page_token: Option<&str>,
     format: Format,
 ) -> Result<()> {
-    let path = runs_path(plugin, status, page_size, page_token)?;
+    let path = runs_path(app, status, page_size, page_token)?;
     let resp = client.get(&path).context("failed to list workflow runs")?;
-    print_runs(&resp, format);
+    print_runs(&resp, format, app);
     Ok(())
 }
 
 fn runs_path(
-    plugin: Option<&str>,
+    app: Option<&str>,
     status: Option<&str>,
     page_size: Option<u32>,
     page_token: Option<&str>,
 ) -> Result<String> {
     let mut params = Vec::new();
-    push_query_param(&mut params, "app", plugin);
+    push_query_param(&mut params, "app", app);
     push_query_param(&mut params, "status", status);
     if let Some(page_size) = page_size {
         params.push(("pageSize".to_string(), page_size.to_string()));
@@ -265,8 +271,8 @@ pub fn publish_event(
     Ok(())
 }
 
-fn filter_by_app(value: Value, plugin: Option<&str>) -> Value {
-    let Some(plugin) = plugin else {
+fn filter_by_app(value: Value, app: Option<&str>) -> Value {
+    let Some(app) = app else {
         return value;
     };
     let Value::Array(items) = value else {
@@ -275,12 +281,12 @@ fn filter_by_app(value: Value, plugin: Option<&str>) -> Value {
     Value::Array(
         items
             .into_iter()
-            .filter(|item| target_app(item) == Some(plugin))
+            .filter(|item| target_has_app(item, app))
             .collect(),
     )
 }
 
-fn filter_triggers(value: Value, plugin: Option<&str>, event_type: Option<&str>) -> Value {
+fn filter_triggers(value: Value, app: Option<&str>, event_type: Option<&str>) -> Value {
     let Value::Array(items) = value else {
         return value;
     };
@@ -288,9 +294,7 @@ fn filter_triggers(value: Value, plugin: Option<&str>, event_type: Option<&str>)
         items
             .into_iter()
             .filter(|item| {
-                plugin
-                    .map(|plugin| target_app(item) == Some(plugin))
-                    .unwrap_or(true)
+                app.map(|app| target_has_app(item, app)).unwrap_or(true)
                     && event_type
                         .map(|event_type| item["match"]["type"].as_str() == Some(event_type))
                         .unwrap_or(true)
@@ -364,11 +368,25 @@ fn build_event_publish_body(
 fn build_upsert_body(
     cron: &str,
     timezone: Option<&str>,
-    plugin: &str,
+    app: &str,
     operation: &str,
     connection: Option<&str>,
     instance: Option<&str>,
-    input: Option<&Map<String, Value>>,
+    input: Option<&Value>,
+    paused: bool,
+) -> Value {
+    build_schedule_upsert_body(
+        cron,
+        timezone,
+        build_app_target(app, operation, connection, instance, input),
+        paused,
+    )
+}
+
+fn build_schedule_upsert_body(
+    cron: &str,
+    timezone: Option<&str>,
+    target: Value,
     paused: bool,
 ) -> Value {
     let mut body = Map::new();
@@ -376,10 +394,7 @@ fn build_upsert_body(
     if let Some(timezone) = timezone {
         body.insert("timezone".to_string(), Value::String(timezone.to_string()));
     }
-    body.insert(
-        "target".to_string(),
-        build_target_object(plugin, operation, connection, instance, input),
-    );
+    body.insert("target".to_string(), target);
     body.insert("paused".to_string(), Value::Bool(paused));
     Value::Object(body)
 }
@@ -438,12 +453,13 @@ fn build_trigger_target(args: &WorkflowTriggerCreateArgs) -> Result<Value> {
         .as_deref()
         .ok_or_else(|| anyhow!("workflow trigger app target requires --operation"))?;
     let input = build_optional_map(&args.params, args.input_file.as_deref())?;
-    Ok(build_target_object(
+    let input_value = input.as_ref().map(literal_input);
+    Ok(build_app_target(
         app,
         operation,
         args.connection.as_deref(),
         args.instance.as_deref(),
-        input.as_ref(),
+        input_value.as_ref(),
     ))
 }
 
@@ -458,31 +474,7 @@ fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<V
 
     let timezone = resolve_optional_string(args.timezone.as_deref(), existing["timezone"].as_str());
 
-    let app = match args.app.as_deref() {
-        Some(value) => value.to_string(),
-        None => target_app(existing)
-            .ok_or_else(|| anyhow!("existing schedule is missing target.app.name; pass --app"))?
-            .to_string(),
-    };
-    let operation = match args.operation.as_deref() {
-        Some(value) => value.to_string(),
-        None => target_operation(existing)
-            .ok_or_else(|| {
-                anyhow!("existing schedule is missing target.app.operation; pass --operation")
-            })?
-            .to_string(),
-    };
-    let connection =
-        resolve_optional_string(args.connection.as_deref(), target_connection(existing));
-    let instance = resolve_optional_string(args.instance.as_deref(), target_instance(existing));
-
-    let input = if args.clear_input {
-        None
-    } else if !args.params.is_empty() || args.input_file.is_some() {
-        build_optional_map(&args.params, args.input_file.as_deref())?
-    } else {
-        target_input(existing).cloned()
-    };
+    let target = merge_schedule_target_update(args, existing)?;
 
     let paused = if args.paused {
         true
@@ -492,14 +484,10 @@ fn merge_update(args: &WorkflowScheduleUpdateArgs, existing: &Value) -> Result<V
         existing["paused"].as_bool().unwrap_or(false)
     };
 
-    Ok(build_upsert_body(
+    Ok(build_schedule_upsert_body(
         &cron,
         timezone.as_deref(),
-        &app,
-        &operation,
-        connection.as_deref(),
-        instance.as_deref(),
-        input.as_ref(),
+        target,
         paused,
     ))
 }
@@ -518,31 +506,7 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
         args.subject.as_deref(),
         existing["match"]["subject"].as_str(),
     );
-    let app = match args.app.as_deref() {
-        Some(value) => value.to_string(),
-        None => target_app(existing)
-            .ok_or_else(|| anyhow!("existing trigger is missing target.app.name; pass --app"))?
-            .to_string(),
-    };
-    let operation = match args.operation.as_deref() {
-        Some(value) => value.to_string(),
-        None => target_operation(existing)
-            .ok_or_else(|| {
-                anyhow!("existing trigger is missing target.app.operation; pass --operation")
-            })?
-            .to_string(),
-    };
-    let connection =
-        resolve_optional_string(args.connection.as_deref(), target_connection(existing));
-    let instance = resolve_optional_string(args.instance.as_deref(), target_instance(existing));
-
-    let input = if args.clear_input {
-        None
-    } else if !args.params.is_empty() || args.input_file.is_some() {
-        build_optional_map(&args.params, args.input_file.as_deref())?
-    } else {
-        target_input(existing).cloned()
-    };
+    let target = merge_trigger_target_update(args, existing)?;
 
     let paused = if args.paused {
         true
@@ -551,14 +515,6 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
     } else {
         existing["paused"].as_bool().unwrap_or(false)
     };
-
-    let target = build_target_object(
-        &app,
-        &operation,
-        connection.as_deref(),
-        instance.as_deref(),
-        input.as_ref(),
-    );
 
     Ok(build_trigger_upsert_body(
         existing["provider"].as_str(),
@@ -570,78 +526,65 @@ fn merge_trigger_update(args: &WorkflowTriggerUpdateArgs, existing: &Value) -> R
     ))
 }
 
+fn merge_schedule_target_update(
+    args: &WorkflowScheduleUpdateArgs,
+    existing: &Value,
+) -> Result<Value> {
+    let (input, replace_input) = target_input_update(&args.params, args.input_file.as_deref())?;
+    merge_app_target_flags(
+        existing,
+        AppTargetUpdate {
+            resource: "schedule",
+            app: args.app.as_deref(),
+            operation: args.operation.as_deref(),
+            connection: args.connection.as_deref(),
+            instance: args.instance.as_deref(),
+            clear_input: args.clear_input,
+            replace_input,
+            input: input.as_ref(),
+        },
+    )
+}
+
+fn merge_trigger_target_update(
+    args: &WorkflowTriggerUpdateArgs,
+    existing: &Value,
+) -> Result<Value> {
+    let (input, replace_input) = target_input_update(&args.params, args.input_file.as_deref())?;
+    merge_app_target_flags(
+        existing,
+        AppTargetUpdate {
+            resource: "trigger",
+            app: args.app.as_deref(),
+            operation: args.operation.as_deref(),
+            connection: args.connection.as_deref(),
+            instance: args.instance.as_deref(),
+            clear_input: args.clear_input,
+            replace_input,
+            input: input.as_ref(),
+        },
+    )
+}
+
+fn target_input_update(
+    params: &[ParamEntry],
+    input_file: Option<&str>,
+) -> Result<(Option<Value>, bool)> {
+    let replace_input = !params.is_empty() || input_file.is_some();
+    let input = if replace_input {
+        build_optional_map(params, input_file)?.map(|input| literal_input(&input))
+    } else {
+        None
+    };
+    Ok((input, replace_input))
+}
+
 fn resolve_optional_string(arg: Option<&str>, existing: Option<&str>) -> Option<String> {
     match arg {
         Some("") => None,
         Some(value) => Some(value.to_string()),
         None => existing.map(str::to_string),
     }
-}
-
-fn build_target_object(
-    plugin: &str,
-    operation: &str,
-    connection: Option<&str>,
-    instance: Option<&str>,
-    input: Option<&Map<String, Value>>,
-) -> Value {
-    let mut plugin_target = Map::new();
-    plugin_target.insert("name".to_string(), Value::String(plugin.to_string()));
-    plugin_target.insert(
-        "operation".to_string(),
-        Value::String(operation.to_string()),
-    );
-    if let Some(connection) = connection {
-        plugin_target.insert(
-            "connection".to_string(),
-            Value::String(connection.to_string()),
-        );
-    }
-    if let Some(instance) = instance {
-        plugin_target.insert("instance".to_string(), Value::String(instance.to_string()));
-    }
-    if let Some(input) = input {
-        plugin_target.insert("input".to_string(), Value::Object(input.clone()));
-    }
-    let mut target = Map::new();
-    target.insert("app".to_string(), Value::Object(plugin_target));
-    Value::Object(target)
-}
-
-fn target_app(value: &Value) -> Option<&str> {
-    value
-        .get("target")?
-        .get("app")?
-        .get("name")
-        .and_then(Value::as_str)
-}
-
-fn target_operation(value: &Value) -> Option<&str> {
-    target_app_field(value, "operation")
-}
-
-fn target_connection(value: &Value) -> Option<&str> {
-    target_app_field(value, "connection")
-}
-
-fn target_instance(value: &Value) -> Option<&str> {
-    target_app_field(value, "instance")
-}
-
-fn target_input(value: &Value) -> Option<&Map<String, Value>> {
-    value
-        .get("target")?
-        .get("app")?
-        .get("input")
-        .and_then(Value::as_object)
-}
-
-fn target_app_field<'a>(value: &'a Value, field: &str) -> Option<&'a str> {
-    value
-        .get("target")?
-        .get("app")?
-        .get(field)
-        .and_then(Value::as_str)
 }
 
 fn build_event_match(event_type: &str, source: Option<&str>, subject: Option<&str>) -> Value {
@@ -660,18 +603,21 @@ fn print_schedule(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let rows = vec![schedule_row(value)];
+            let rows = vec![schedule_row(value, None)];
             output::print_table(&schedule_headers(), &rows);
         }
     }
 }
 
-fn print_schedules(value: &Value, format: Format) {
+fn print_schedules(value: &Value, format: Format, preferred_app: Option<&str>) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
             let items = value.as_array().cloned().unwrap_or_default();
-            let rows: Vec<Vec<String>> = items.iter().map(schedule_row).collect();
+            let rows: Vec<Vec<String>> = items
+                .iter()
+                .map(|item| schedule_row(item, preferred_app))
+                .collect();
             output::print_table(&schedule_headers(), &rows);
         }
     }
@@ -681,18 +627,21 @@ fn print_trigger(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let rows = vec![trigger_row(value)];
+            let rows = vec![trigger_row(value, None)];
             output::print_table(&trigger_headers(), &rows);
         }
     }
 }
 
-fn print_triggers(value: &Value, format: Format) {
+fn print_triggers(value: &Value, format: Format, preferred_app: Option<&str>) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
             let items = value.as_array().cloned().unwrap_or_default();
-            let rows: Vec<Vec<String>> = items.iter().map(trigger_row).collect();
+            let rows: Vec<Vec<String>> = items
+                .iter()
+                .map(|item| trigger_row(item, preferred_app))
+                .collect();
             output::print_table(&trigger_headers(), &rows);
         }
     }
@@ -702,18 +651,21 @@ fn print_run(value: &Value, format: Format) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
-            let rows = vec![run_row(value)];
+            let rows = vec![run_row(value, None)];
             output::print_table(&run_headers(), &rows);
         }
     }
 }
 
-fn print_runs(value: &Value, format: Format) {
+fn print_runs(value: &Value, format: Format, preferred_app: Option<&str>) {
     match format {
         Format::Json => output::print_json(value),
         Format::Table => {
             let items = workflow_run_items(value);
-            let rows: Vec<Vec<String>> = items.iter().map(run_row).collect();
+            let rows: Vec<Vec<String>> = items
+                .iter()
+                .map(|item| run_row(item, preferred_app))
+                .collect();
             output::print_table(&run_headers(), &rows);
             if let Some(token) = next_page_token(value) {
                 eprintln!("Next page token: {token}");
@@ -756,14 +708,14 @@ fn trigger_headers() -> [&'static str; 8] {
         "Type",
         "Source",
         "Subject",
-        "Plugin",
+        "App",
         "Operation",
         "Paused",
         "Created",
     ]
 }
 
-fn trigger_row(value: &Value) -> Vec<String> {
+fn trigger_row(value: &Value, preferred_app: Option<&str>) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
         value["match"]["type"].as_str().unwrap_or("-").to_string(),
@@ -772,8 +724,10 @@ fn trigger_row(value: &Value) -> Vec<String> {
             .as_str()
             .unwrap_or("-")
             .to_string(),
-        target_app(value).unwrap_or("-").to_string(),
-        target_operation(value).unwrap_or("-").to_string(),
+        target_app(value, preferred_app).unwrap_or("-").to_string(),
+        target_operation(value, preferred_app)
+            .unwrap_or("-")
+            .to_string(),
         format_bool(value["paused"].as_bool()),
         value["createdAt"].as_str().unwrap_or("-").to_string(),
     ]
@@ -782,7 +736,7 @@ fn trigger_row(value: &Value) -> Vec<String> {
 fn schedule_headers() -> [&'static str; 8] {
     [
         "ID",
-        "Plugin",
+        "App",
         "Operation",
         "Cron",
         "TZ",
@@ -792,11 +746,13 @@ fn schedule_headers() -> [&'static str; 8] {
     ]
 }
 
-fn schedule_row(value: &Value) -> Vec<String> {
+fn schedule_row(value: &Value, preferred_app: Option<&str>) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
-        target_app(value).unwrap_or("-").to_string(),
-        target_operation(value).unwrap_or("-").to_string(),
+        target_app(value, preferred_app).unwrap_or("-").to_string(),
+        target_operation(value, preferred_app)
+            .unwrap_or("-")
+            .to_string(),
         value["cron"].as_str().unwrap_or("-").to_string(),
         value["timezone"].as_str().unwrap_or("-").to_string(),
         format_bool(value["paused"].as_bool()),
@@ -808,7 +764,7 @@ fn schedule_row(value: &Value) -> Vec<String> {
 fn run_headers() -> [&'static str; 7] {
     [
         "ID",
-        "Plugin",
+        "App",
         "Operation",
         "Status",
         "Trigger",
@@ -831,11 +787,13 @@ fn published_event_row(value: &Value) -> Vec<String> {
     ]
 }
 
-fn run_row(value: &Value) -> Vec<String> {
+fn run_row(value: &Value, preferred_app: Option<&str>) -> Vec<String> {
     vec![
         value["id"].as_str().unwrap_or("-").to_string(),
-        target_app(value).unwrap_or("-").to_string(),
-        target_operation(value).unwrap_or("-").to_string(),
+        target_app(value, preferred_app).unwrap_or("-").to_string(),
+        target_operation(value, preferred_app)
+            .unwrap_or("-")
+            .to_string(),
         value["status"].as_str().unwrap_or("-").to_string(),
         run_trigger_label(value),
         value["startedAt"]

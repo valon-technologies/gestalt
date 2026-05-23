@@ -17,20 +17,23 @@ from http import HTTPStatus
 from typing import Any, Final, cast
 
 from . import _agent as _agent_native
-from . import _authentication as _auth_native
 from . import _appruntime as _appruntime_native
+from . import _authentication as _auth_native
 from . import _s3 as _s3_native
 from . import _telemetry
 from . import _workflow as _workflow_native
 from ._api import Access, Credential, Error, ExternalIdentity, Host, Request, Subject
+from ._app import App, ConnectedToken, Plugin, _module_plugin
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._grpc_transport import INTERNAL_GRPC_MESSAGE_OPTIONS
 from ._http_subject import HTTPSubjectRequest, HTTPSubjectResolutionError
 from ._operations import INTERNAL_ERROR_MESSAGE
-from ._app import ConnectedToken, Plugin, _module_plugin
 from ._providers import (
     AgentProvider,
+    AppProvider,
+    AppProviderAdapter,
+    AppRuntimeProvider,
     AuthenticationProvider,
     AuthorizationProvider,
     CacheProvider,
@@ -38,9 +41,6 @@ from ._providers import (
     ExternalTokenValidator,
     HealthChecker,
     MetadataProvider,
-    AppProvider,
-    AppProviderAdapter,
-    AppRuntimeProvider,
     ProviderKind,
     ProviderMetadata,
     S3Provider,
@@ -120,16 +120,16 @@ def _ensure_grpc_runtime() -> None:
     from google.protobuf import json_format as _json_format
 
     from ._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
+    from ._gen.v1 import app_pb2 as _app_pb2
+    from ._gen.v1 import app_pb2_grpc as _app_pb2_grpc
+    from ._gen.v1 import appruntime_pb2 as _appruntime_pb2
+    from ._gen.v1 import appruntime_pb2_grpc as _appruntime_pb2_grpc
     from ._gen.v1 import authentication_pb2 as _authentication_pb2
     from ._gen.v1 import authentication_pb2_grpc as _authentication_pb2_grpc
     from ._gen.v1 import authorization_pb2 as _authorization_pb2
     from ._gen.v1 import authorization_pb2_grpc as _authorization_pb2_grpc
     from ._gen.v1 import cache_pb2 as _cache_pb2
     from ._gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
-    from ._gen.v1 import app_pb2 as _app_pb2
-    from ._gen.v1 import app_pb2_grpc as _app_pb2_grpc
-    from ._gen.v1 import appruntime_pb2 as _appruntime_pb2
-    from ._gen.v1 import appruntime_pb2_grpc as _appruntime_pb2_grpc
     from ._gen.v1 import runtime_pb2 as _runtime_pb2
     from ._gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
     from ._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
@@ -1626,8 +1626,8 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
         @_grpc_handler("provider metadata")
         def GetMetadata(self, _request: Any, _context: Any) -> Any:
             return app_pb2.ProviderMetadata(
-                supports_session_catalog=app.supports_session_catalog(),
-                supports_post_connect=app.supports_post_connect(),
+                supports_session_catalog=plugin.supports_session_catalog(),
+                supports_post_connect=plugin.supports_post_connect(),
                 min_protocol_version=CURRENT_PROTOCOL_VERSION,
                 max_protocol_version=CURRENT_PROTOCOL_VERSION,
             )
@@ -1636,7 +1636,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
         def StartProvider(self, request: Any, context: Any) -> Any:
             if _abort_if_protocol_version_mismatch(request.protocol_version, context):
                 return None
-            app.configure_provider(
+            plugin.configure_provider(
                 request.name,
                 _message_to_dict(
                     field_name="config",
@@ -1650,7 +1650,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
 
         def Execute(self, request: Any, _context: Any) -> Any:
             try:
-                result = app.execute(
+                result = plugin.execute(
                     request.operation,
                     _message_to_dict(
                         field_name="params",
@@ -1667,11 +1667,11 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
             return app_pb2.OperationResult(status=result.status, body=result.body)
 
         def ResolveHTTPSubject(self, request: Any, context: Any) -> Any:
-            if not app.supports_http_subject():
+            if not plugin.supports_http_subject():
                 return app_pb2.ResolveHTTPSubjectResponse()
 
             try:
-                subject = app.resolve_http_subject(
+                subject = plugin.resolve_http_subject(
                     _http_subject_request(getattr(request, "request", None)),
                     _plugin_request(request),
                 )
@@ -1701,14 +1701,14 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
             )
 
         def GetSessionCatalog(self, request: Any, context: Any) -> Any:
-            if not app.supports_session_catalog():
+            if not plugin.supports_session_catalog():
                 return context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,
                     "provider does not support session catalogs",
                 )
 
             try:
-                catalog = app.catalog_for_request(_plugin_request(request))
+                catalog = plugin.catalog_for_request(_plugin_request(request))
             except Exception as error:
                 return context.abort(
                     grpc.StatusCode.UNKNOWN,
@@ -1726,14 +1726,14 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
             return app_pb2.GetSessionCatalogResponse(catalog=proto_catalog)
 
         def PostConnect(self, request: Any, context: Any) -> Any:
-            if not app.supports_post_connect():
+            if not plugin.supports_post_connect():
                 return context.abort(
                     grpc.StatusCode.UNIMPLEMENTED,
                     "provider does not support post connect",
                 )
 
             try:
-                metadata = app.post_connect_metadata(_connected_token(request.token))
+                metadata = plugin.post_connect_metadata(_connected_token(request.token))
             except Exception as error:
                 return context.abort(
                     grpc.StatusCode.UNKNOWN,

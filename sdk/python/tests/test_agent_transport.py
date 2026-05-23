@@ -314,7 +314,7 @@ class _AgentHostServicer(agent_pb2_grpc.AgentHostServicer):
                     description="Send a direct message",
                     input_schema='{"type":"object"}',
                     ref=app_pb2.AgentToolRef(
-                        plugin="slack",
+                        app="slack",
                         operation="chat.postMessage",
                     ),
                 )

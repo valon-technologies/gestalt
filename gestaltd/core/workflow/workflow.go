@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"maps"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -28,82 +27,114 @@ const (
 type Actor = core.Actor
 
 type Target struct {
-	App   *AppTarget
-	Agent *AgentTarget
+	Steps []Step
 }
 
-type AppTarget struct {
-	AppName        string
+type Step struct {
+	ID             string
+	Inputs         map[string]Value
+	App            *AppCall
+	Agent          *AgentTurn
+	When           *StepWhen
+	TimeoutSeconds int
+	Metadata       map[string]any
+}
+
+type AppCall struct {
+	Name           string
 	Operation      string
 	Connection     string
 	Instance       string
 	CredentialMode core.ConnectionMode `json:",omitempty"`
-	Input          map[string]any
+	Input          Value
 }
 
-type AgentTarget struct {
-	ProviderName         string
-	Model                string
-	Prompt               string
-	Messages             []coreagent.Message
-	ToolRefs             []coreagent.ToolRef
-	ResponseSchema       map[string]any
-	ModelOptions         map[string]any
-	Metadata             map[string]any
-	TimeoutSeconds       int
-	OutputDelivery       *OutputDelivery
-	SessionReadyDelivery *OutputDelivery
-	Steps                []AgentStep
-}
-
-type AgentStep struct {
-	ID             string
-	Prompt         string
-	Messages       []coreagent.Message
+type AgentTurn struct {
+	ProviderName   string
+	Model          string
+	SessionKey     string
+	Prompt         Text
+	Messages       []AgentMessage
 	ToolRefs       []coreagent.ToolRef
 	ResponseSchema map[string]any
 	ModelOptions   map[string]any
-	Metadata       map[string]any
-	TimeoutSeconds int
-	OutputDelivery *OutputDelivery
-	When           *AgentStepWhen
 }
 
-type AgentStepWhen struct {
-	StepID     string
-	OutputPath string
-	Equals     any
-	EqualsSet  bool
+type AgentMessage struct {
+	Role     string
+	Text     Text
+	Metadata map[string]any
 }
 
-type OutputDelivery struct {
-	Target         AppTarget
-	InputBindings  []OutputBinding
-	CredentialMode core.ConnectionMode
+type Text struct {
+	Template string
 }
 
-// CloneOutputDelivery returns a detached shallow clone of delivery.
-func CloneOutputDelivery(delivery *OutputDelivery) *OutputDelivery {
-	if delivery == nil {
-		return nil
+type StepWhen struct {
+	Value     Value
+	EqualsSet bool
+	Equals    any
+}
+
+type Value struct {
+	Literal       any
+	LiteralSet    bool
+	Object        map[string]Value
+	Array         []Value
+	Template      *Text
+	RunInput      string
+	SignalPayload string
+	StepOutput    *StepOutputSource
+}
+
+type StepOutputSource struct {
+	StepID string
+	Path   string
+}
+
+func CloneValue(value Value) Value {
+	out := value
+	out.Literal = cloneLiteral(value.Literal)
+	if value.Object != nil {
+		out.Object = make(map[string]Value, len(value.Object))
+		for key := range value.Object {
+			out.Object[key] = CloneValue(value.Object[key])
+		}
 	}
-	out := *delivery
-	out.Target.Input = maps.Clone(delivery.Target.Input)
-	out.InputBindings = append([]OutputBinding(nil), delivery.InputBindings...)
-	return &out
+	if value.Array != nil {
+		out.Array = make([]Value, len(value.Array))
+		for i := range value.Array {
+			out.Array[i] = CloneValue(value.Array[i])
+		}
+	}
+	if value.Template != nil {
+		template := *value.Template
+		out.Template = &template
+	}
+	if value.StepOutput != nil {
+		source := *value.StepOutput
+		out.StepOutput = &source
+	}
+	return out
 }
 
-type OutputBinding struct {
-	InputField string
-	Value      OutputValueSource
-}
-
-type OutputValueSource struct {
-	AgentOutput    string
-	SignalPayload  string
-	SignalMetadata string
-	AgentSession   string
-	Literal        any
+func cloneLiteral(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, item := range typed {
+			out[key] = cloneLiteral(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(typed))
+		for i := range typed {
+			out[i] = cloneLiteral(typed[i])
+		}
+		return out
+	default:
+		return value
+	}
 }
 
 type ExecutionReference struct {
@@ -370,9 +401,6 @@ type Host interface {
 }
 
 func TargetsEqual(left, right Target) bool {
-	if (left.Agent != nil && left.App != nil) || (right.Agent != nil && right.App != nil) {
-		return false
-	}
 	leftJSON, leftErr := json.Marshal(normalizedTargetComparisonPayload(left))
 	if leftErr != nil {
 		return false
@@ -391,78 +419,77 @@ func TargetFingerprint(target Target) (string, error) {
 }
 
 type targetComparisonPayload struct {
-	App   *AppTarget
-	Agent *AgentTarget
+	Steps []Step
 }
 
 func normalizedTargetComparisonPayload(target Target) targetComparisonPayload {
-	out := targetComparisonPayload{}
-	if target.Agent != nil {
-		agentTarget := *target.Agent
-		if len(agentTarget.Messages) == 0 {
-			agentTarget.Messages = nil
-		}
-		if len(agentTarget.ToolRefs) == 0 {
-			agentTarget.ToolRefs = nil
-		}
-		if len(agentTarget.ResponseSchema) == 0 {
-			agentTarget.ResponseSchema = nil
-		}
-		if len(agentTarget.ModelOptions) == 0 {
-			agentTarget.ModelOptions = nil
-		}
-		if len(agentTarget.Metadata) == 0 {
-			agentTarget.Metadata = nil
-		}
-		agentTarget.OutputDelivery = normalizedOutputDelivery(agentTarget.OutputDelivery)
-		agentTarget.SessionReadyDelivery = normalizedOutputDelivery(agentTarget.SessionReadyDelivery)
-		if len(agentTarget.Steps) == 0 {
-			agentTarget.Steps = nil
+	out := targetComparisonPayload{Steps: append([]Step(nil), target.Steps...)}
+	for i := range out.Steps {
+		step := &out.Steps[i]
+		if len(step.Inputs) == 0 {
+			step.Inputs = nil
 		} else {
-			agentTarget.Steps = append([]AgentStep(nil), agentTarget.Steps...)
-			for i := range agentTarget.Steps {
-				step := &agentTarget.Steps[i]
-				if len(step.Messages) == 0 {
-					step.Messages = nil
-				}
-				if len(step.ToolRefs) == 0 {
-					step.ToolRefs = nil
-				}
-				if len(step.ResponseSchema) == 0 {
-					step.ResponseSchema = nil
-				}
-				if len(step.ModelOptions) == 0 {
-					step.ModelOptions = nil
-				}
-				if len(step.Metadata) == 0 {
-					step.Metadata = nil
-				}
-				step.OutputDelivery = normalizedOutputDelivery(step.OutputDelivery)
+			inputs := make(map[string]Value, len(step.Inputs))
+			for key, value := range step.Inputs {
+				inputs[key] = normalizedWorkflowValue(value)
 			}
+			step.Inputs = inputs
 		}
-		out.Agent = &agentTarget
-		return out
-	}
-	if target.App != nil {
-		pluginTarget := *target.App
-		if len(pluginTarget.Input) == 0 {
-			pluginTarget.Input = nil
+		if step.When != nil {
+			when := *step.When
+			when.Value = normalizedWorkflowValue(when.Value)
+			step.When = &when
 		}
-		out.App = &pluginTarget
+		if step.App != nil {
+			app := *step.App
+			app.Input = normalizedWorkflowValue(app.Input)
+			step.App = &app
+		}
+		if step.Agent != nil {
+			agent := *step.Agent
+			if len(agent.Messages) == 0 {
+				agent.Messages = nil
+			}
+			if len(agent.ToolRefs) == 0 {
+				agent.ToolRefs = nil
+			}
+			if len(agent.ResponseSchema) == 0 {
+				agent.ResponseSchema = nil
+			}
+			if len(agent.ModelOptions) == 0 {
+				agent.ModelOptions = nil
+			}
+			step.Agent = &agent
+		}
+		if len(step.Metadata) == 0 {
+			step.Metadata = nil
+		}
 	}
 	return out
 }
 
-func normalizedOutputDelivery(delivery *OutputDelivery) *OutputDelivery {
-	if delivery == nil {
-		return nil
+func normalizedWorkflowValue(value Value) Value {
+	if value.Object != nil {
+		if len(value.Object) == 0 {
+			value.Object = nil
+		} else {
+			object := make(map[string]Value, len(value.Object))
+			for key, item := range value.Object {
+				object[key] = normalizedWorkflowValue(item)
+			}
+			value.Object = object
+		}
 	}
-	out := *delivery
-	if len(out.Target.Input) == 0 {
-		out.Target.Input = nil
+	if value.Array != nil {
+		if len(value.Array) == 0 {
+			value.Array = nil
+		} else {
+			array := make([]Value, len(value.Array))
+			for i, item := range value.Array {
+				array[i] = normalizedWorkflowValue(item)
+			}
+			value.Array = array
+		}
 	}
-	if len(out.InputBindings) == 0 {
-		out.InputBindings = nil
-	}
-	return &out
+	return value
 }

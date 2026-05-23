@@ -5,6 +5,7 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::agent::AgentProvider;
 use crate::api::RuntimeMetadata;
+use crate::app_runtime::AppRuntimeProvider;
 use crate::auth::AuthenticationProvider;
 use crate::authorization::AuthorizationProvider;
 use crate::cache::CacheProvider;
@@ -14,7 +15,6 @@ use crate::generated::v1::{
     ConfigureProviderRequest, ConfigureProviderResponse, HealthCheckResponse, ProviderIdentity,
     ProviderKind, StartRuntimeProviderResponse,
 };
-use crate::app_runtime::AppRuntimeProvider;
 use crate::rpc_status::{require_protocol_version, rpc_error_message, rpc_status};
 use crate::secrets::SecretsProvider;
 use crate::{CURRENT_PROTOCOL_VERSION, Provider, S3Provider, WorkflowProvider};
@@ -128,7 +128,7 @@ impl RuntimeServer {
         P: Provider,
     {
         Self {
-            kind: ProviderKind::Integration,
+            kind: ProviderKind::App,
             provider: Arc::new(ProviderRuntime { provider }),
         }
     }

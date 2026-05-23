@@ -11,7 +11,7 @@ import {
 } from "./host-service.ts";
 
 /** Options that select the target connection for an operation invocation. */
-export interface PluginInvokeOptions {
+export interface AppInvokeOptions {
   /** Connected account id or name to invoke against. */
   connection?: string;
   /** Provider instance id or name to invoke against. */
@@ -19,6 +19,9 @@ export interface PluginInvokeOptions {
   /** Idempotency key forwarded to the target operation. */
   idempotencyKey?: string;
 }
+
+/** @deprecated Use {@link AppInvokeOptions}. */
+export type PluginInvokeOptions = AppInvokeOptions;
 
 /** Grant included when exchanging an invocation token for a child token. */
 export interface AppInvocationGrant {
@@ -33,10 +36,13 @@ export interface AppInvocationGrant {
 }
 
 /** Options for invoking an app GraphQL surface. */
-export interface PluginGraphQLInvokeOptions extends PluginInvokeOptions {
+export interface AppGraphQLInvokeOptions extends AppInvokeOptions {
   /** GraphQL variables encoded as a JSON object. */
   variables?: JsonObjectInput;
 }
+
+/** @deprecated Use {@link AppGraphQLInvokeOptions}. */
+export type PluginGraphQLInvokeOptions = AppGraphQLInvokeOptions;
 
 /**
  * Client for invoking sibling app operations through the host.
@@ -66,7 +72,7 @@ export class AppInvoker {
     app: string,
     operation: string,
     params: JsonObjectInput = {},
-    options?: PluginInvokeOptions,
+    options?: AppInvokeOptions,
   ): Promise<OperationResult> {
     const response = await this.client.invoke({
       invocationToken: this.invocationToken,
@@ -87,7 +93,7 @@ export class AppInvoker {
   async invokeGraphQL(
     app: string,
     document: string,
-    options?: PluginGraphQLInvokeOptions,
+    options?: AppGraphQLInvokeOptions,
   ): Promise<OperationResult> {
     const trimmedDocument = document.trim();
     if (!trimmedDocument) {

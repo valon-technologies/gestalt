@@ -13,7 +13,6 @@ import (
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	"github.com/valon-technologies/gestalt/server/services/identity/principal"
@@ -1130,87 +1129,6 @@ func TestManagerCreateTurnDefaultsToCatalogToolsForCatalogOnlyProvider(t *testin
 	}
 }
 
-func TestManagerCreateTurnCarriesInheritedOutputDeliveryInRunGrant(t *testing.T) {
-	t.Parallel()
-
-	alpha := newRouteCountingAgentProvider("alpha")
-	roadmap := &catalogCountingProvider{StubIntegration: coretesting.StubIntegration{
-		N:        "roadmap",
-		ConnMode: core.ConnectionModeNone,
-		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-			ID: "sync",
-		}}},
-	}}
-	notification := &catalogCountingProvider{StubIntegration: coretesting.StubIntegration{
-		N:        "notification",
-		ConnMode: core.ConnectionModeNone,
-		CatalogVal: &catalog.Catalog{Operations: []catalog.CatalogOperation{{
-			ID: "reply",
-		}}},
-	}}
-	grants := newAgentManagerTestRunGrants(t)
-	manager := newTestManager(t, Config{
-		Providers: testutil.NewProviderRegistry(t, roadmap, notification),
-		Agent: &routeCountingAgentControl{
-			defaultName: "alpha",
-			names:       []string{"alpha"},
-			providers: map[string]*routeCountingAgentProvider{
-				"alpha": alpha,
-			},
-		},
-		RunGrants: grants,
-	})
-	p := &principal.Principal{
-		SubjectID: principal.UserSubjectID("user-1"),
-		TokenPermissions: principal.CompilePermissions([]core.AccessPermission{
-			{App: "alpha"},
-			{App: "roadmap", Operations: []string{"sync"}},
-			{App: "notification", Operations: []string{"reply"}},
-		}),
-	}
-	session, err := manager.CreateSession(context.Background(), p, coreagent.ManagerCreateSessionRequest{
-		ProviderName: "alpha",
-		Model:        "test-model",
-	})
-	if err != nil {
-		t.Fatalf("CreateSession: %v", err)
-	}
-	ctx := WithInheritedOutputDelivery(context.Background(), &coreworkflow.OutputDelivery{
-		Target: coreworkflow.AppTarget{AppName: "notification", Operation: "reply"},
-		InputBindings: []coreworkflow.OutputBinding{
-			{InputField: "text", Value: coreworkflow.OutputValueSource{AgentOutput: "text"}},
-			{InputField: "reply_ref", Value: coreworkflow.OutputValueSource{Literal: "signed-ref"}},
-		},
-	})
-	_, err = manager.CreateTurn(ctx, p, coreagent.ManagerCreateTurnRequest{
-		SessionID: session.ID,
-		Model:     "test-model",
-		ToolRefs:  []coreagent.ToolRef{{App: "roadmap", Operation: "sync"}},
-	})
-	if err != nil {
-		t.Fatalf("CreateTurn: %v", err)
-	}
-	if len(alpha.createTurnReqs) != 1 {
-		t.Fatalf("CreateTurn requests = %d, want 1", len(alpha.createTurnReqs))
-	}
-	grant, err := grants.Resolve(alpha.createTurnReqs[0].RunGrant)
-	if err != nil {
-		t.Fatalf("Resolve run grant: %v", err)
-	}
-	if grant.InheritedOutputDelivery == nil || grant.InheritedOutputDelivery.Target.AppName != "notification" || grant.InheritedOutputDelivery.Target.Operation != "reply" {
-		t.Fatalf("inherited output delivery = %#v", grant.InheritedOutputDelivery)
-	}
-	if got := grant.ToolRefs; len(got) != 1 || got[0].App != "roadmap" || got[0].Operation != "sync" {
-		t.Fatalf("grant tool refs = %#v, want only visible roadmap tool", got)
-	}
-	if !reflect.DeepEqual(grant.Permissions, []core.AccessPermission{
-		{App: "notification", Operations: []string{"reply"}},
-		{App: "roadmap", Operations: []string{"sync"}},
-	}) {
-		t.Fatalf("grant permissions = %#v, want hidden delivery permission merged", grant.Permissions)
-	}
-}
-
 func TestManagerCreateTurnNarrowsImplicitDefaultCatalogRefsForLargeMentionedProvider(t *testing.T) {
 	t.Parallel()
 
@@ -1401,7 +1319,7 @@ func TestManagerCreateTurnDoesNotStemProviderMentionsForImplicitNarrowing(t *tes
 	}
 }
 
-func TestManagerCreateTurnKeepsImplicitWildcardForCallerPluginDefaults(t *testing.T) {
+func TestManagerCreateTurnKeepsImplicitWildcardForCallerAppDefaults(t *testing.T) {
 	t.Parallel()
 
 	threshold := 0
@@ -2221,7 +2139,7 @@ func TestResolveToolsReturnsEmptyWhenNoRefsDefined(t *testing.T) {
 	}
 }
 
-func TestResolveToolsExpandsPluginOnlyRefs(t *testing.T) {
+func TestResolveToolsExpandsAppOnlyRefs(t *testing.T) {
 	t.Parallel()
 
 	provider := &catalogCountingProvider{
@@ -2888,7 +2806,7 @@ func TestResolveToolsRejectsMismatchedRunAsExternalIdentity(t *testing.T) {
 	}
 }
 
-func TestManagerProjectsAgentFacingPluginToolSchemas(t *testing.T) {
+func TestManagerProjectsAgentFacingAppToolSchemas(t *testing.T) {
 	t.Parallel()
 
 	hidden := false

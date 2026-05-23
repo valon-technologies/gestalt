@@ -170,11 +170,9 @@ fn start_session_request_from_proto(
         template: value.template,
         image: value.image,
         metadata: value.metadata,
-        image_pull_auth: value
-            .image_pull_auth
-            .map(|auth| AppRuntimeImagePullAuth {
-                docker_config_json: auth.docker_config_json,
-            }),
+        image_pull_auth: value.image_pull_auth.map(|auth| AppRuntimeImagePullAuth {
+            docker_config_json: auth.docker_config_json,
+        }),
     }
 }
 
@@ -218,9 +216,7 @@ fn prepare_workspace_response_to_proto(
     }
 }
 
-fn start_plugin_request_from_proto(
-    value: pb::StartHostedAppRequest,
-) -> StartHostedAppRequest {
+fn start_plugin_request_from_proto(value: pb::StartHostedAppRequest) -> StartHostedAppRequest {
     StartHostedAppRequest {
         session_id: value.session_id,
         app_name: value.app_name,
@@ -345,10 +341,7 @@ pub trait AppRuntimeProvider: Send + Sync + 'static {
     }
 
     /// Starts one hosted app process inside a runtime session.
-    async fn start_plugin(
-        &self,
-        _request: StartHostedAppRequest,
-    ) -> ProviderResult<HostedApp> {
+    async fn start_plugin(&self, _request: StartHostedAppRequest) -> ProviderResult<HostedApp> {
         Err(crate::Error::unimplemented(
             "runtime start app is not implemented",
         ))
@@ -474,7 +467,7 @@ where
         Ok(GrpcResponse::new(()))
     }
 
-    async fn start_plugin(
+    async fn start_app(
         &self,
         request: GrpcRequest<pb::StartHostedAppRequest>,
     ) -> std::result::Result<GrpcResponse<pb::HostedApp>, Status> {
@@ -483,6 +476,6 @@ where
             .start_plugin(start_plugin_request_from_proto(request.into_inner()))
             .await
             .map_err(|error| rpc_status("runtime start plugin", error))?;
-        Ok(GrpcResponse::new(hosted_plugin_to_proto(plugin)))
+        Ok(GrpcResponse::new(hosted_plugin_to_proto(app)))
     }
 }

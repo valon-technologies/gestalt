@@ -18,6 +18,9 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
     AgentProvider,
+    AppProviderAdapter,
+    AppRuntimeProvider,
+    AppRuntimeSupport,
     AuthenticationProvider,
     BeginLoginRequest,
     BoundWorkflowDefinition,
@@ -41,9 +44,6 @@ from gestalt import (
     PauseWorkflowProviderEventTriggerRequest,
     PauseWorkflowProviderScheduleRequest,
     Plugin,
-    AppProviderAdapter,
-    AppRuntimeProvider,
-    AppRuntimeSupport,
     ProviderKind,
     ProviderMetadata,
     Request,
@@ -60,12 +60,12 @@ from gestalt import (
     _runtime,
 )
 from gestalt._gen.v1 import agent_pb2_grpc as _agent_pb2_grpc
-from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
-from gestalt._gen.v1 import cache_pb2 as _cache_pb2
 from gestalt._gen.v1 import app_pb2 as _app_pb2
 from gestalt._gen.v1 import app_pb2_grpc as _app_pb2_grpc
 from gestalt._gen.v1 import appruntime_pb2 as _appruntime_pb2
 from gestalt._gen.v1 import appruntime_pb2_grpc as _appruntime_pb2_grpc
+from gestalt._gen.v1 import authentication_pb2 as _authentication_pb2
+from gestalt._gen.v1 import cache_pb2 as _cache_pb2
 from gestalt._gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt._gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from gestalt._gen.v1 import workflow_pb2 as _workflow_pb2
@@ -176,6 +176,7 @@ class ParseRuntimeArgsTests(unittest.TestCase):
 class RuntimeServeTransportTests(unittest.TestCase):
     def test_runtime_serve_supports_tcp_provider_sockets(self) -> None:
         app = Plugin("tcp-runtime")
+        plugin = app
 
         @app.operation
         def ping(request: Request) -> dict[str, str]:
@@ -334,6 +335,7 @@ class RequestTests(unittest.TestCase):
 class MainEntrypointTests(unittest.TestCase):
     def test_writes_catalog_when_env_is_set(self) -> None:
         app = Plugin("test-plugin")
+        plugin = app
 
         @app.operation
         def noop() -> str:
@@ -360,6 +362,7 @@ class MainEntrypointTests(unittest.TestCase):
 
     def test_provider_servicer_reports_and_serves_session_catalogs(self) -> None:
         app = Plugin("source-name")
+        plugin = app
         configured: list[tuple[str, dict[str, Any]]] = []
 
         @app.configure
@@ -531,7 +534,7 @@ class MainEntrypointTests(unittest.TestCase):
                     workflow=execute_workflow,
                     tool_refs=[
                         app_pb2.AgentToolRef(
-                            plugin="github",
+                            app="github",
                             operation="bot.getPullRequest",
                             run_as=app_pb2.SubjectContext(
                                 id="service_account:github-review",
@@ -697,6 +700,7 @@ class MainEntrypointTests(unittest.TestCase):
 
     def test_provider_servicer_sanitizes_unhandled_execute_exceptions(self) -> None:
         app = Plugin("source-name")
+        plugin = app
 
         @app.operation
         def broken() -> None:
@@ -713,6 +717,7 @@ class MainEntrypointTests(unittest.TestCase):
 
     def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
         app = Plugin("source-name")
+        plugin = app
         servicer = _runtime._provider_servicer(plugin=plugin)
         context = mock.Mock()
 
@@ -725,6 +730,7 @@ class MainEntrypointTests(unittest.TestCase):
 
     def test_provider_servicer_rejects_missing_post_connect_support(self) -> None:
         app = Plugin("source-name")
+        plugin = app
         servicer = _runtime._provider_servicer(plugin=plugin)
         context = mock.Mock()
 
@@ -741,6 +747,7 @@ class MainEntrypointTests(unittest.TestCase):
                 raise RuntimeError("metadata exploded")
 
         app = BrokenMetadataPlugin("source-name")
+        plugin = app
         servicer = _runtime._provider_servicer(plugin=plugin)
         context = AbortContext()
 
@@ -1477,10 +1484,15 @@ class WorkflowRuntimeTests(unittest.TestCase):
         provider = Provider()
         wrapped = _runtime._workflow_provider_servicer(provider)
         target = workflow_pb2.BoundWorkflowTarget(
-            plugin=workflow_pb2.BoundWorkflowAppTarget(
-                app_name="demo",
-                operation="sync",
-            )
+            steps=[
+                workflow_pb2.WorkflowStep(
+                    id="sync",
+                    app=workflow_pb2.WorkflowStepAppCall(
+                        name="demo",
+                        operation="sync",
+                    ),
+                )
+            ]
         )
 
         created = wrapped.CreateDefinition(

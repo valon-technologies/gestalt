@@ -241,9 +241,9 @@ class AgentActor:
     auth_source: str = ""
 
 
-@dataclass(slots=True)
+@dataclass(init=False, slots=True)
 class AgentToolRef:
-    plugin: str = ""
+    app: str = ""
     operation: str = ""
     connection: str = ""
     instance: str = ""
@@ -252,6 +252,38 @@ class AgentToolRef:
     system: str = ""
     run_as: Subject | None = None
     run_as_external_identity: ExternalIdentity | None = None
+
+    def __init__(
+        self,
+        app: str = "",
+        operation: str = "",
+        connection: str = "",
+        instance: str = "",
+        title: str = "",
+        description: str = "",
+        system: str = "",
+        run_as: Subject | None = None,
+        run_as_external_identity: ExternalIdentity | None = None,
+        *,
+        plugin: str = "",
+    ) -> None:
+        self.app = app or plugin
+        self.operation = operation
+        self.connection = connection
+        self.instance = instance
+        self.title = title
+        self.description = description
+        self.system = system
+        self.run_as = run_as
+        self.run_as_external_identity = run_as_external_identity
+
+    @property
+    def plugin(self) -> str:
+        return self.app
+
+    @plugin.setter
+    def plugin(self, value: str) -> None:
+        self.app = value
 
 
 @dataclass(slots=True)
@@ -1125,7 +1157,7 @@ def resolved_agent_tool_from_proto(value: Any) -> ResolvedAgentTool:
 
 def agent_tool_ref_from_proto(value: Any) -> AgentToolRef:
     return AgentToolRef(
-        plugin=value.plugin,
+        app=value.app,
         operation=value.operation,
         connection=value.connection,
         instance=value.instance,
@@ -1150,7 +1182,7 @@ def agent_tool_ref_to_proto(
         return None
     ref = _coerce(value, AgentToolRef, "AgentToolRef")
     message = _app_pb.AgentToolRef(
-        plugin=ref.plugin,
+        app=ref.app,
         operation=ref.operation,
         connection=ref.connection,
         instance=ref.instance,
@@ -1593,7 +1625,7 @@ def agent_tool_ref_from_dict(value: Mapping[str, Any] | None) -> Any:
 
     data = dict(_mapping_value(value, "tool_ref")) if value is not None else {}
     return AgentToolRef(
-        plugin=data.get("app", ""),
+        app=data.get("app", data.get("plugin", "")),
         operation=data.get("operation", ""),
         connection=data.get("connection", ""),
         instance=data.get("instance", ""),

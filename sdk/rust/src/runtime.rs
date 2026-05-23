@@ -24,15 +24,15 @@ use crate::error::{Error, Result};
 #[cfg(unix)]
 use crate::generated::v1::agent_provider_server::AgentProviderServer as AgentRpcServer;
 #[cfg(unix)]
+use crate::generated::v1::app_provider_server::AppProviderServer;
+#[cfg(unix)]
+use crate::generated::v1::app_runtime_provider_server::AppRuntimeProviderServer;
+#[cfg(unix)]
 use crate::generated::v1::authentication_provider_server::AuthenticationProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::authorization_provider_server::AuthorizationProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::cache_server::CacheServer;
-#[cfg(unix)]
-use crate::generated::v1::integration_provider_server::AppProviderServer;
-#[cfg(unix)]
-use crate::generated::v1::app_runtime_provider_server::AppRuntimeProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
 #[cfg(unix)]
@@ -43,13 +43,13 @@ use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
 use crate::generated::v1::workflow_provider_server::WorkflowProviderServer as WorkflowRpcServer;
 use crate::provider_server::ProviderServer;
 use crate::{
-    AgentProvider, AuthenticationProvider, AuthorizationProvider, CacheProvider,
-    AppRuntimeProvider, Provider, Router, S3Provider, SecretsProvider, WorkflowProvider,
+    AgentProvider, AppRuntimeProvider, AuthenticationProvider, AuthorizationProvider,
+    CacheProvider, Provider, Router, S3Provider, SecretsProvider, WorkflowProvider,
 };
 #[cfg(unix)]
 use crate::{
-    agent::AgentServer, auth_server::AuthenticationServer, authorization::AuthorizationServer,
-    cache_server::CacheRpcServer, app_runtime::AppRuntimeServer,
+    agent::AgentServer, app_runtime::AppRuntimeServer, auth_server::AuthenticationServer,
+    authorization::AuthorizationServer, cache_server::CacheRpcServer,
     runtime_server::RuntimeServer, s3::S3RpcServer, secrets_server::SecretsServer,
     workflow::WorkflowServer,
 };

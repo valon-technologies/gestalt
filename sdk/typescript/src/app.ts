@@ -118,7 +118,7 @@ export type PostConnectHandler = (
 /**
  * Runtime hooks required to implement an app provider.
  */
-export interface PluginDefinitionOptions extends ProviderBaseOptions {
+export interface AppDefinitionOptions extends ProviderBaseOptions {
   connectionMode?: ConnectionMode;
   authTypes?: string[];
   connectionParams?: Record<string, ConnectionParamDefinition>;
@@ -128,6 +128,9 @@ export interface PluginDefinitionOptions extends ProviderBaseOptions {
   operations: Array<OperationDefinition<any, any>>;
   sessionCatalog?: SessionCatalogHandler;
 }
+
+/** @deprecated Use {@link AppDefinitionOptions}. */
+export type PluginDefinitionOptions = AppDefinitionOptions;
 
 /**
  * Normalizes an app operation definition.
@@ -182,7 +185,7 @@ export class AppProvider extends ProviderBase {
   private readonly postConnectHandler: PostConnectHandler | undefined;
   private readonly operations = new Map<string, OperationDefinition<any, any>>();
 
-  constructor(options: PluginDefinitionOptions) {
+  constructor(options: AppDefinitionOptions) {
     super(options);
     this.iconSvg = options.iconSvg?.trim() ?? "";
     this.connectionMode = options.connectionMode ?? "unspecified";
@@ -377,7 +380,7 @@ export class AppProvider extends ProviderBase {
  * Creates an app provider.
  */
 export function defineApp(
-  options: PluginDefinitionOptions,
+  options: AppDefinitionOptions,
 ): AppProvider {
   return new AppProvider(options);
 }

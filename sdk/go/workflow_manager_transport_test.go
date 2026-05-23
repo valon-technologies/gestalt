@@ -151,11 +151,14 @@ func TestTransport_WorkflowManagerSignalOrStartRunInjectsInvocationToken(t *test
 	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRun{
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
-		Target: &gestalt.BoundWorkflowTarget{Agent: &gestalt.BoundWorkflowAgentTarget{
-			ProviderName: "simple",
-			Model:        "gpt-5.5",
-			Prompt:       "Respond in thread.",
-		}},
+		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
+			ID: "respond",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider: "simple",
+				Model:    "gpt-5.5",
+				Prompt:   gestalt.WorkflowText{Template: "Respond in thread."},
+			},
+		}}},
 		IdempotencyKey: "slack-event-123",
 		Signal: &gestalt.WorkflowSignal{
 			Name:           "slack.message",
@@ -233,14 +236,17 @@ func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
 	resp, err := client.SignalOrStartRun(context.Background(), gestalt.WorkflowManagerSignalOrStartRun{
 		ProviderName: "local",
 		WorkflowKey:  "slack:T123:C123:1700000000.000001",
-		Target: &gestalt.BoundWorkflowTarget{Agent: &gestalt.BoundWorkflowAgentTarget{
-			ProviderName: "simple",
-			Model:        "gpt-5.5",
-			Messages: []gestalt.AgentMessage{{
-				Role: "user",
-				Text: "Respond in thread.",
-			}},
-		}},
+		Target: &gestalt.BoundWorkflowTarget{Steps: []gestalt.WorkflowStep{{
+			ID: "respond",
+			Agent: &gestalt.WorkflowStepAgentTurn{
+				Provider: "simple",
+				Model:    "gpt-5.5",
+				Messages: []gestalt.WorkflowAgentMessage{{
+					Role: "user",
+					Text: gestalt.WorkflowText{Template: "Respond in thread."},
+				}},
+			},
+		}}},
 		IdempotencyKey: "slack-event-123",
 		Signal: &gestalt.WorkflowSignal{
 			Name:           "slack.message",
@@ -265,8 +271,8 @@ func TestTransport_WorkflowManagerSignalOrStartRunNativeValues(t *testing.T) {
 	if got.GetInvocationToken() != "parent-token" {
 		t.Fatalf("invocation token = %q, want parent-token", got.GetInvocationToken())
 	}
-	if got.GetTarget().GetAgent().GetMessages()[0].GetText() != "Respond in thread." {
-		t.Fatalf("agent messages = %#v", got.GetTarget().GetAgent().GetMessages())
+	if got.GetTarget().GetSteps()[0].GetAgent().GetMessages()[0].GetText().GetTemplate() != "Respond in thread." {
+		t.Fatalf("agent messages = %#v", got.GetTarget().GetSteps()[0].GetAgent().GetMessages())
 	}
 	if payload := got.GetSignal().GetPayload().AsMap(); payload["ok"] != true {
 		t.Fatalf("signal payload = %#v", payload)

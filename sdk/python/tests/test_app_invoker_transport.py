@@ -48,7 +48,7 @@ class _AppInvokerServicer(app_pb2_grpc.AppInvokerServicer):
                 "parent_invocation_token": request.parent_invocation_token,
                 "grants": [
                     {
-                        "app": grant.plugin,
+                        "app": grant.app,
                         "operations": list(grant.operations),
                         "surfaces": list(grant.surfaces),
                         "all_operations": grant.all_operations,
@@ -87,7 +87,7 @@ class _AppInvokerServicer(app_pb2_grpc.AppInvokerServicer):
             body=json.dumps(
                 {
                     "invocation_token": request.invocation_token,
-                    "app": request.plugin,
+                    "app": request.app,
                     "operation": request.operation,
                     "params": params,
                     "params_present": request.HasField("params"),
@@ -110,7 +110,7 @@ class _AppInvokerServicer(app_pb2_grpc.AppInvokerServicer):
         _graphql_requests.append(
             {
                 "invocation_token": request.invocation_token,
-                "app": request.plugin,
+                "app": request.app,
                 "document": request.document,
                 "variables": variables,
                 "variables_present": request.HasField("variables"),
@@ -124,7 +124,7 @@ class _AppInvokerServicer(app_pb2_grpc.AppInvokerServicer):
             body=json.dumps(
                 {
                     "invocation_token": request.invocation_token,
-                    "app": request.plugin,
+                    "app": request.app,
                     "document": request.document,
                     "variables": variables,
                     "variables_present": request.HasField("variables"),

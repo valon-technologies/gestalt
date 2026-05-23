@@ -284,11 +284,11 @@ func invokeWorkflowHostDuringStartup(t *testing.T, hostServices []runtimehost.Ho
 
 func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
-	pluginTarget := target.App
-	if pluginTarget == nil {
-		t.Fatalf("workflow target app is nil: %#v", target)
+	if len(target.Steps) == 0 || target.Steps[0].App == nil {
+		t.Fatalf("workflow target app step is missing: %#v", target)
 		return ""
 	}
+	appTarget := target.Steps[0].App
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
 	if err != nil {
 		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
@@ -298,7 +298,7 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 		t.Fatalf("workflow provider %q does not support execution refs", providerName)
 	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, pluginTarget.Operation),
+		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, appTarget.Operation),
 		ProviderName: providerName,
 		Target:       target,
 		SubjectID:    "system:config",
@@ -352,12 +352,13 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedAppProvider(t *testing.T
 		executionRef := storeStartupExecutionRef(t, deps, name, testWorkflowAppTarget("roadmap", "status"))
 		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				Kind: &proto.BoundWorkflowTarget_App{
-					App: &proto.BoundWorkflowAppTarget{
-						AppName:   "roadmap",
+				Steps: []*proto.WorkflowStep{{
+					Id: "status",
+					Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
+						Name:      "roadmap",
 						Operation: "status",
-					},
-				},
+					}},
+				}},
 			},
 			ExecutionRef: executionRef,
 		})
@@ -484,12 +485,13 @@ func TestManagedWorkflowStartupCallbackRequiresExecutionRef(t *testing.T) {
 		}
 		_, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
-				Kind: &proto.BoundWorkflowTarget_App{
-					App: &proto.BoundWorkflowAppTarget{
-						AppName:   "roadmap",
+				Steps: []*proto.WorkflowStep{{
+					Id: "status",
+					Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{
+						Name:      "roadmap",
 						Operation: "status",
-					},
-				},
+					}},
+				}},
 			},
 		})
 		if err == nil {

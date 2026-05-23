@@ -26,6 +26,7 @@ const (
 
 	WorkflowTargetKindApp     = "app"
 	WorkflowTargetKindAgent   = "agent"
+	WorkflowTargetKindSteps   = "steps"
 	WorkflowTargetKindUnknown = "unknown"
 
 	WorkflowRunStatusPending   = "pending"

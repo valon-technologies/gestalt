@@ -35,7 +35,7 @@ import (
 const (
 	testOwner   = "testowner"
 	testRepo    = "testrepo"
-	testApp     = "testplugin"
+	testApp     = "testapp"
 	testVersion = "1.0.0"
 	testSource  = "github.com/" + testOwner + "/" + testRepo + "/apps/" + testApp
 	testBinary  = "fake-binary-content"
@@ -205,7 +205,7 @@ func TestLifecycleSyncLockedPreparesIndependentLocalUIsInParallel(t *testing.T) 
 	for _, tc := range []struct {
 		name      string
 		bound     bool
-		configure func(t *testing.T, dir string, plugins, uis map[string]string) (string, *Lockfile)
+		configure func(t *testing.T, dir string, apps, uis map[string]string) (string, *Lockfile)
 	}{
 		{
 			name: "standalone",
@@ -220,11 +220,11 @@ func TestLifecycleSyncLockedPreparesIndependentLocalUIsInParallel(t *testing.T) 
 			},
 		},
 		{
-			name:  "plugin-bound",
+			name:  "app-bound",
 			bound: true,
-			configure: func(t *testing.T, dir string, plugins, uis map[string]string) (string, *Lockfile) {
+			configure: func(t *testing.T, dir string, apps, uis map[string]string) (string, *Lockfile) {
 				t.Helper()
-				return writePluginBoundLocalUITestConfig(t, dir, plugins, uis)
+				return writeAppBoundLocalUITestConfig(t, dir, apps, uis)
 			},
 		},
 	} {
@@ -356,7 +356,7 @@ printf '<html>beta</html>\n' > dist/index.html
 printf 'beta end\n' >> %s
 `, logPath, logPath))
 
-	configPath, _ := writePluginBoundLocalUITestConfig(t, dir, map[string]string{
+	configPath, _ := writeAppBoundLocalUITestConfig(t, dir, map[string]string{
 		"alpha": filepath.Join(alphaApp, "manifest.yaml"),
 		"beta":  filepath.Join(betaApp, "manifest.yaml"),
 	}, map[string]string{
@@ -376,7 +376,7 @@ printf 'beta end\n' >> %s
 	}
 }
 
-func TestLifecycleSyncLockedParallelizesPluginOwnedUIs(t *testing.T) {
+func TestLifecycleSyncLockedParallelizesAppOwnedUIs(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == "windows" {
@@ -392,7 +392,7 @@ func TestLifecycleSyncLockedParallelizesPluginOwnedUIs(t *testing.T) {
 	betaApp := filepath.Join(dir, "apps", "beta")
 	alphaUI := filepath.Join(dir, "ui", "alpha")
 	betaUI := filepath.Join(dir, "ui", "beta")
-	alphaManifest := writeOwnedUISourcePluginTree(t, alphaApp, alphaUI, "alpha", fmt.Sprintf(`#!/bin/sh
+	alphaManifest := writeOwnedUISourceAppTree(t, alphaApp, alphaUI, "alpha", fmt.Sprintf(`#!/bin/sh
 set -eu
 touch %s/alpha.started
 i=0
@@ -407,7 +407,7 @@ done
 mkdir -p dist
 printf '<html>alpha</html>\n' > dist/index.html
 `, syncDir, syncDir))
-	betaManifest := writeOwnedUISourcePluginTree(t, betaApp, betaUI, "beta", fmt.Sprintf(`#!/bin/sh
+	betaManifest := writeOwnedUISourceAppTree(t, betaApp, betaUI, "beta", fmt.Sprintf(`#!/bin/sh
 set -eu
 touch %s/beta.started
 i=0
@@ -423,7 +423,7 @@ mkdir -p dist
 printf '<html>beta</html>\n' > dist/index.html
 `, syncDir, syncDir))
 
-	configPath := writeOwnedUIPluginTestConfig(t, dir, map[string]string{
+	configPath := writeOwnedUIAppTestConfig(t, dir, map[string]string{
 		"alpha": alphaManifest,
 		"beta":  betaManifest,
 	})
@@ -437,7 +437,7 @@ printf '<html>beta</html>\n' > dist/index.html
 	}
 }
 
-func TestLifecycleSyncLockedParallelismOnePreparesPluginOwnedUIsSequentially(t *testing.T) {
+func TestLifecycleSyncLockedParallelismOnePreparesAppOwnedUIsSequentially(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == "windows" {
@@ -446,14 +446,14 @@ func TestLifecycleSyncLockedParallelismOnePreparesPluginOwnedUIsSequentially(t *
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "build.log")
-	alphaManifest := writeOwnedUISourcePluginTree(t, filepath.Join(dir, "apps", "alpha"), filepath.Join(dir, "ui", "alpha"), "alpha", fmt.Sprintf(`#!/bin/sh
+	alphaManifest := writeOwnedUISourceAppTree(t, filepath.Join(dir, "apps", "alpha"), filepath.Join(dir, "ui", "alpha"), "alpha", fmt.Sprintf(`#!/bin/sh
 set -eu
 printf 'alpha start\n' >> %s
 mkdir -p dist
 printf '<html>alpha</html>\n' > dist/index.html
 printf 'alpha end\n' >> %s
 `, logPath, logPath))
-	betaManifest := writeOwnedUISourcePluginTree(t, filepath.Join(dir, "apps", "beta"), filepath.Join(dir, "ui", "beta"), "beta", fmt.Sprintf(`#!/bin/sh
+	betaManifest := writeOwnedUISourceAppTree(t, filepath.Join(dir, "apps", "beta"), filepath.Join(dir, "ui", "beta"), "beta", fmt.Sprintf(`#!/bin/sh
 set -eu
 printf 'beta start\n' >> %s
 mkdir -p dist
@@ -461,7 +461,7 @@ printf '<html>beta</html>\n' > dist/index.html
 printf 'beta end\n' >> %s
 `, logPath, logPath))
 
-	configPath := writeOwnedUIPluginTestConfig(t, dir, map[string]string{
+	configPath := writeOwnedUIAppTestConfig(t, dir, map[string]string{
 		"alpha": alphaManifest,
 		"beta":  betaManifest,
 	})
@@ -478,7 +478,7 @@ printf 'beta end\n' >> %s
 	}
 }
 
-func TestLifecycleSyncLockedSerializesPluginOwnedUIsWithSharedSource(t *testing.T) {
+func TestLifecycleSyncLockedSerializesAppOwnedUIsWithSharedSource(t *testing.T) {
 	t.Parallel()
 
 	if runtime.GOOS == "windows" {
@@ -502,10 +502,10 @@ mkdir -p dist
 printf '<html>shared</html>\n' > dist/index.html
 printf 'end\n' >> %s
 `, lockDir, logPath, lockDir, logPath, logPath))
-	alphaManifest := writeOwnedUISourcePluginForUI(t, filepath.Join(dir, "apps", "alpha"), filepath.Join(sharedUI, "manifest.yaml"), "alpha")
-	betaManifest := writeOwnedUISourcePluginForUI(t, filepath.Join(dir, "apps", "beta"), filepath.Join(sharedUI, "manifest.yaml"), "beta")
+	alphaManifest := writeOwnedUISourceAppForUI(t, filepath.Join(dir, "apps", "alpha"), filepath.Join(sharedUI, "manifest.yaml"), "alpha")
+	betaManifest := writeOwnedUISourceAppForUI(t, filepath.Join(dir, "apps", "beta"), filepath.Join(sharedUI, "manifest.yaml"), "beta")
 
-	configPath := writeOwnedUIPluginTestConfig(t, dir, map[string]string{
+	configPath := writeOwnedUIAppTestConfig(t, dir, map[string]string{
 		"alpha": alphaManifest,
 		"beta":  betaManifest,
 	})
@@ -604,13 +604,13 @@ func TestLifecycleLocalSourceLockedExecutionUsesPreparedArtifactsWithoutSourceTr
 
 	dir := t.TempDir()
 	const (
-		pluginSource = "github.com/acme/tools/apps/alpha"
-		uiSource     = "github.com/acme/tools/ui/roadmap"
-		version      = "1.2.3"
+		appSource = "github.com/acme/tools/apps/alpha"
+		uiSource  = "github.com/acme/tools/ui/roadmap"
+		version   = "1.2.3"
 	)
-	pluginDir := filepath.Join(dir, "apps", "alpha")
+	appDir := filepath.Join(dir, "apps", "alpha")
 	uiDir := filepath.Join(dir, "ui", "roadmap")
-	writeSourceProviderTree(t, pluginDir, pluginSource, version, "alpha-binary")
+	writeSourceProviderTree(t, appDir, appSource, version, "alpha-binary")
 	writeSourceUITree(t, uiDir, uiSource, version)
 
 	artifactsDir := filepath.Join(dir, "artifacts")
@@ -731,7 +731,7 @@ apps:
 		t.Fatalf("resolved app = %+v", app)
 	}
 	if got, want := filepath.ToSlash(app.Command), filepath.ToSlash(preparedProvider); got != want {
-		t.Fatalf("plugin command = %q, want %q", got, want)
+		t.Fatalf("app command = %q, want %q", got, want)
 	}
 	ui := cfg.Providers.UI["roadmap"]
 	if ui == nil || ui.ResolvedManifest == nil {
@@ -750,7 +750,7 @@ apps:
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("restore config after source tree removal: %v", err)
 	}
-	writeSourceProviderTree(t, pluginDir, pluginSource, version, "alpha-binary")
+	writeSourceProviderTree(t, appDir, appSource, version, "alpha-binary")
 	writeSourceUITree(t, uiDir, uiSource, version)
 	if err := os.Remove(preparedProviderMetadata); err != nil {
 		t.Fatalf("remove prepared provider lock metadata: %v", err)
@@ -956,16 +956,18 @@ connections:
     mode: none
     auth:
       type: none
-      token: ${GESTALT_SCOPED_PLUGIN_UNUSED_CONNECTION_MISSING_ENV}
+      token: ${GESTALT_SCOPED_APP_UNUSED_CONNECTION_MISSING_ENV}
 workflows:
   schedules:
     noisy:
       target:
-        app:
-          name: beta
-          operation: ping
+        steps:
+          - id: ping
+            app:
+              name: beta
+              operation: ping
       cron: "* * * * *"
-      paused: ${GESTALT_SCOPED_PLUGIN_DROPPED_WORKFLOW_BOOL_MISSING_ENV}
+      paused: ${GESTALT_SCOPED_APP_DROPPED_WORKFLOW_BOOL_MISSING_ENV}
       runAs:
         subject:
           id: test
@@ -980,7 +982,7 @@ workflows:
       source: env
     unused:
       source:
-        path: ${GESTALT_SCOPED_PLUGIN_UNUSED_PROVIDER_MISSING_ENV}
+        path: ${GESTALT_SCOPED_APP_UNUSED_PROVIDER_MISSING_ENV}
   cache:
     unused:
       source:
@@ -988,7 +990,7 @@ workflows:
   workflow:
     unused:
       source:
-        path: ${GESTALT_SCOPED_PLUGIN_UNUSED_WORKFLOW_PROVIDER_MISSING_ENV}
+        path: ${GESTALT_SCOPED_APP_UNUSED_WORKFLOW_PROVIDER_MISSING_ENV}
   ui:
     noisy:
       source:
@@ -1006,14 +1008,14 @@ apps:
     source:
       path: apps/alpha/manifest.yaml
   beta:
-    default: ${GESTALT_SCOPED_PLUGIN_DROPPED_BOOL_MISSING_ENV}
+    default: ${GESTALT_SCOPED_APP_DROPPED_BOOL_MISSING_ENV}
     source:
       path: apps/beta/manifest.yaml
     env:
-      UNRELATED_TOKEN: ${GESTALT_SCOPED_PLUGIN_TEST_MISSING_ENV}
+      UNRELATED_TOKEN: ${GESTALT_SCOPED_APP_TEST_MISSING_ENV}
     connections:
       default:
-        ref: ${GESTALT_SCOPED_PLUGIN_TEST_MISSING_CONNECTION_REF}
+        ref: ${GESTALT_SCOPED_APP_TEST_MISSING_CONNECTION_REF}
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), externalCredentialsManifestPath, filepath.ToSlash(artifactsDir))
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -1107,7 +1109,7 @@ apps:
 
 func TestLoadForExecutionAppScopeKeepsReferencedSecretsProvider(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("GESTALT_SCOPED_PLUGIN_REPO_TOKEN", "repo-token")
+	t.Setenv("GESTALT_SCOPED_APP_REPO_TOKEN", "repo-token")
 	writeSourceProviderTree(t, filepath.Join(dir, "apps", "alpha"), "github.com/acme/tools/apps/alpha", "1.2.3", "alpha-binary")
 
 	configPath := filepath.Join(dir, "gestaltd.yaml")
@@ -1121,7 +1123,7 @@ apiVersion: gestaltd.config/v6
       source: env
     unused:
       source:
-        path: ${GESTALT_SCOPED_PLUGIN_UNUSED_SECRET_PROVIDER_MISSING_ENV}
+        path: ${GESTALT_SCOPED_APP_UNUSED_SECRET_PROVIDER_MISSING_ENV}
 server:
   providers:
     indexeddb: sqlite
@@ -1136,7 +1138,7 @@ apps:
       TARGET_TOKEN:
         secret:
           provider: repo_auth
-          name: GESTALT_SCOPED_PLUGIN_REPO_TOKEN
+          name: GESTALT_SCOPED_APP_REPO_TOKEN
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -1208,7 +1210,7 @@ apps:
     source:
       path: apps/alpha/manifest.yaml
     env:
-      TARGET_TOKEN: ${GESTALT_SCOPED_PLUGIN_SELECTED_MISSING_ENV}
+      TARGET_TOKEN: ${GESTALT_SCOPED_APP_SELECTED_MISSING_ENV}
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -1218,7 +1220,7 @@ apps:
 	if err == nil {
 		t.Fatal("scoped load unexpectedly succeeded with missing selected app env")
 	}
-	if !strings.Contains(err.Error(), `environment variable "GESTALT_SCOPED_PLUGIN_SELECTED_MISSING_ENV" not set`) {
+	if !strings.Contains(err.Error(), `environment variable "GESTALT_SCOPED_APP_SELECTED_MISSING_ENV" not set`) {
 		t.Fatalf("error = %v, want selected missing env", err)
 	}
 }
@@ -1240,7 +1242,7 @@ server:
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 apps:
   alpha:
-    default: ${GESTALT_SCOPED_PLUGIN_SELECTED_BOOL_MISSING_ENV}
+    default: ${GESTALT_SCOPED_APP_SELECTED_BOOL_MISSING_ENV}
     source:
       path: apps/alpha/manifest.yaml
 `, requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")), filepath.ToSlash(filepath.Join(dir, "artifacts")))
@@ -1252,7 +1254,7 @@ apps:
 	if err == nil {
 		t.Fatal("scoped load unexpectedly succeeded with selected non-string missing env")
 	}
-	if !strings.Contains(err.Error(), `environment variable "GESTALT_SCOPED_PLUGIN_SELECTED_BOOL_MISSING_ENV" not set`) {
+	if !strings.Contains(err.Error(), `environment variable "GESTALT_SCOPED_APP_SELECTED_BOOL_MISSING_ENV" not set`) {
 		t.Fatalf("error = %v, want selected non-string missing env", err)
 	}
 }
@@ -1515,24 +1517,24 @@ func writeSourceProviderTree(t *testing.T, dir, source, version, binaryContent s
 	}
 }
 
-func writeOwnedUISourcePluginTree(t *testing.T, pluginDir, uiDir, name, uiBuildScript string) string {
+func writeOwnedUISourceAppTree(t *testing.T, appDir, uiDir, name, uiBuildScript string) string {
 	t.Helper()
 	writeBlockingSourceUITree(t, uiDir, "github.com/acme/ui/"+name, "1.2.3", uiBuildScript)
-	return writeOwnedUISourcePluginForUI(t, pluginDir, filepath.Join(uiDir, "manifest.yaml"), name)
+	return writeOwnedUISourceAppForUI(t, appDir, filepath.Join(uiDir, "manifest.yaml"), name)
 }
 
-func writeOwnedUISourcePluginForUI(t *testing.T, pluginDir, uiManifestPath, name string) string {
+func writeOwnedUISourceAppForUI(t *testing.T, appDir, uiManifestPath, name string) string {
 	t.Helper()
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
 		t.Fatalf("create source app dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "provider"), []byte(name+"-provider"), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(appDir, "provider"), []byte(name+"-provider"), 0o755); err != nil {
 		t.Fatalf("write provider binary: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "catalog.yaml"), []byte("name: "+name+"\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(appDir, "catalog.yaml"), []byte("name: "+name+"\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
 		t.Fatalf("write catalog: %v", err)
 	}
-	ownedUIPath, err := filepath.Rel(pluginDir, uiManifestPath)
+	ownedUIPath, err := filepath.Rel(appDir, uiManifestPath)
 	if err != nil {
 		t.Fatalf("relative owned ui path: %v", err)
 	}
@@ -1550,7 +1552,7 @@ func writeOwnedUISourcePluginForUI(t *testing.T, pluginDir, uiManifestPath, name
 	if err != nil {
 		t.Fatalf("encode app manifest: %v", err)
 	}
-	manifestPath := filepath.Join(pluginDir, "manifest.yaml")
+	manifestPath := filepath.Join(appDir, "manifest.yaml")
 	if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
 		t.Fatalf("write app manifest: %v", err)
 	}
@@ -1644,7 +1646,7 @@ func writeLocalUITestConfig(t *testing.T, dir string, uiManifests map[string]str
 	return configPath
 }
 
-func writeOwnedUIPluginTestConfig(t *testing.T, dir string, apps map[string]string) string {
+func writeOwnedUIAppTestConfig(t *testing.T, dir string, apps map[string]string) string {
 	t.Helper()
 	var b strings.Builder
 	b.WriteString("apiVersion: gestaltd.config/v6\n")
@@ -1673,7 +1675,7 @@ func writeOwnedUIPluginTestConfig(t *testing.T, dir string, apps map[string]stri
 	return configPath
 }
 
-func writePluginBoundLocalUITestConfig(t *testing.T, dir string, plugins, uiManifests map[string]string) (string, *Lockfile) {
+func writeAppBoundLocalUITestConfig(t *testing.T, dir string, apps, uiManifests map[string]string) (string, *Lockfile) {
 	t.Helper()
 	var b strings.Builder
 	b.WriteString("apiVersion: gestaltd.config/v6\n")
@@ -1685,10 +1687,10 @@ func writePluginBoundLocalUITestConfig(t *testing.T, dir string, plugins, uiMani
 		b.WriteString("        path: " + filepath.ToSlash(uiManifests[name]) + "\n")
 	}
 	b.WriteString("apps:\n")
-	for _, name := range slices.Sorted(maps.Keys(plugins)) {
+	for _, name := range slices.Sorted(maps.Keys(apps)) {
 		b.WriteString("  " + name + ":\n")
 		b.WriteString("    source:\n")
-		b.WriteString("      path: " + filepath.ToSlash(plugins[name]) + "\n")
+		b.WriteString("      path: " + filepath.ToSlash(apps[name]) + "\n")
 		b.WriteString("    ui:\n")
 		b.WriteString("      bundle: " + name + "\n")
 		b.WriteString("      path: /" + name + "\n")
@@ -1821,7 +1823,7 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 
 	archivePath := filepath.Join(dir, safeName+".tar.gz")
 	if err := providerpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir plugin: %v", err)
+		t.Fatalf("CreatePackageFromDir app: %v", err)
 	}
 
 	return archivePath
@@ -1949,7 +1951,7 @@ func buildExecutableArchiveWithConfigSchema(t *testing.T, dir, srcDirName, sourc
 
 	archivePath := filepath.Join(dir, srcDirName+".tar.gz")
 	if err := providerpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir plugin: %v", err)
+		t.Fatalf("CreatePackageFromDir app: %v", err)
 	}
 	return archivePath
 }
@@ -2007,7 +2009,7 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 
 	archivePath := filepath.Join(dir, srcDirName+".tar.gz")
 	if err := providerpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir plugin: %v", err)
+		t.Fatalf("CreatePackageFromDir app: %v", err)
 	}
 
 	return archivePath
@@ -2154,7 +2156,7 @@ func writeBootstrapSecretsManifest(t *testing.T, dir, source, version string) st
 	return manifestPath
 }
 
-func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
+func TestSourceAppMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -2176,7 +2178,7 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			dir := t.TempDir()
 			packageSource := "github.com/acme/tools/alpha"
 			version := "1.2.3"
-			currentArchivePath := buildV2Archive(t, dir, packageSource, version, "metadata-url-plugin-binary")
+			currentArchivePath := buildV2Archive(t, dir, packageSource, version, "metadata-url-app-binary")
 			currentArchiveData, err := os.ReadFile(currentArchivePath)
 			if err != nil {
 				t.Fatalf("read current archive: %v", err)
@@ -2523,7 +2525,7 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			}
 			diskEntry, ok := diskLock.Providers.App["alpha"]
 			if !ok {
-				t.Fatal(`disk lock providers.plugin["alpha"] not found`)
+				t.Fatal(`disk lock providers.app["alpha"] not found`)
 			}
 			if diskEntry.Package != packageSource {
 				t.Fatalf("disk lock package = %q, want %q", diskEntry.Package, packageSource)
@@ -2547,8 +2549,8 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 				t.Fatalf("disk lock extra archive URL = %q, want %q", got, wantExtraArchiveURL)
 			}
 
-			pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
-			if err := os.RemoveAll(pluginRoot); err != nil {
+			appRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+			if err := os.RemoveAll(appRoot); err != nil {
 				t.Fatalf("RemoveAll app root: %v", err)
 			}
 			if tc.tamperLocalArchive {
@@ -2606,7 +2608,7 @@ func TestSourcePluginMetadataURLPrepareAndLockedLoad(t *testing.T) {
 			}
 			executablePath := resolveLockPath(artifactsDir, entry.Executable)
 			if cfg.Apps["alpha"].Command != executablePath {
-				t.Fatalf("plugin command = %q, want %q", cfg.Apps["alpha"].Command, executablePath)
+				t.Fatalf("app command = %q, want %q", cfg.Apps["alpha"].Command, executablePath)
 			}
 			if tc.localSource {
 				writeProviderReleaseMetadataFile(t, localMetadataPath, providerReleaseMetadata{
@@ -2817,8 +2819,8 @@ packages:
 	if err := WriteLockfile(filepath.Join(dir, LockfileName), lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
-	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
-	if err := os.RemoveAll(pluginRoot); err != nil {
+	appRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+	if err := os.RemoveAll(appRoot); err != nil {
 		t.Fatalf("RemoveAll app root: %v", err)
 	}
 	failIndexAndMetadata.Store(true)
@@ -3568,7 +3570,7 @@ func TestSourceUIMetadataURLPrepareAndLockedLoad(t *testing.T) {
 	}
 }
 
-func TestSourcePluginPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) {
+func TestSourceAppPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -3646,7 +3648,7 @@ func TestSourcePluginPrepareRejectsMetadataSourceManifestMismatch(t *testing.T) 
 	}
 }
 
-func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
+func TestSourceAppMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -3654,7 +3656,7 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	const packageSource = testSource
 	const version = testVersion
 
-	currentArchivePath := buildV2Archive(t, dir, packageSource, version, "metadata-github-asset-plugin-binary")
+	currentArchivePath := buildV2Archive(t, dir, packageSource, version, "metadata-github-asset-app-binary")
 	currentArchiveData, err := os.ReadFile(currentArchivePath)
 	if err != nil {
 		t.Fatalf("read current archive: %v", err)
@@ -3790,8 +3792,8 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 		t.Fatalf("archive request count = %d, want 1", got)
 	}
 
-	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
-	if err := os.RemoveAll(pluginRoot); err != nil {
+	appRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+	if err := os.RemoveAll(appRoot); err != nil {
 		t.Fatalf("RemoveAll app root: %v", err)
 	}
 
@@ -3819,7 +3821,7 @@ func TestSourcePluginMetadataURLUsesGenericAuthenticatedFetch(t *testing.T) {
 	}
 }
 
-func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
+func TestSourceAppGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -3994,7 +3996,7 @@ func TestSourcePluginGitHubReleaseSourceUsesResolvedAssetURL(t *testing.T) {
 	}
 }
 
-func TestSourcePluginMetadataURLRetriesTransientRemoteMetadataFailure(t *testing.T) {
+func TestSourceAppMetadataURLRetriesTransientRemoteMetadataFailure(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -4104,7 +4106,7 @@ func TestSourcePluginMetadataURLRetriesTransientRemoteMetadataFailure(t *testing
 	}
 }
 
-func TestSourcePluginMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
+func TestSourceAppMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -4181,7 +4183,7 @@ func TestSourcePluginMetadataURLRejectsOversizedRemoteMetadata(t *testing.T) {
 	}
 }
 
-func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) {
+func TestSourceAppMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -4190,14 +4192,14 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 	const initialVersion = "1.0.0"
 	const updatedVersion = "1.0.1"
 
-	initialArchivePath := buildV2Archive(t, dir, packageSource, initialVersion, "metadata-mutable-plugin-v1")
+	initialArchivePath := buildV2Archive(t, dir, packageSource, initialVersion, "metadata-mutable-app-v1")
 	initialArchiveData, err := os.ReadFile(initialArchivePath)
 	if err != nil {
 		t.Fatalf("read initial archive: %v", err)
 	}
 	initialArchiveSHA := sha256.Sum256(initialArchiveData)
 
-	updatedArchivePath := buildV2Archive(t, dir, packageSource, updatedVersion, "metadata-mutable-plugin-v2")
+	updatedArchivePath := buildV2Archive(t, dir, packageSource, updatedVersion, "metadata-mutable-app-v2")
 	updatedArchiveData, err := os.ReadFile(updatedArchivePath)
 	if err != nil {
 		t.Fatalf("read updated archive: %v", err)
@@ -4426,7 +4428,7 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 	}
 }
 
-func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatchesLock(t *testing.T) {
+func TestSourceAppLoadForExecution_RehydratesWhenCachedManifestVersionMismatchesLock(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -4557,14 +4559,14 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 	}
 }
 
-func TestSourceAuthPluginLoadForExecution(t *testing.T) {
+func TestSourceAuthAppLoadForExecution(t *testing.T) {
 	dir := t.TempDir()
 	source := "github.com/acme/tools/auth-widget"
 	version := "2.0.0"
 	binaryContent := "fake-auth-binary"
 	bootstrapManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/bootstrap-secrets", "0.1.0")
 
-	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuthentication, "auth-plugin", binaryContent)
+	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuthentication, "auth-app", binaryContent)
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
 		t.Fatalf("read archive: %v", err)
@@ -4737,14 +4739,14 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	}
 }
 
-func TestSourceAuthPluginPrepareAllowsMissingEnvPlaceholderInNonStringField(t *testing.T) {
+func TestSourceAuthAppPrepareAllowsMissingEnvPlaceholderInNonStringField(t *testing.T) {
 	dir := t.TempDir()
 	source := "github.com/acme/tools/auth-widget"
 	version := "2.0.0"
 	portEnv := "GESTALT_TEST_PORT_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
 	bootstrapManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/bootstrap-secrets", "0.1.0")
 
-	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuthentication, "auth-plugin", "fake-auth-binary")
+	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuthentication, "auth-app", "fake-auth-binary")
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
 		t.Fatalf("read archive: %v", err)
@@ -4864,12 +4866,12 @@ func TestLockAndSyncSkipRuntimeOnlySecretRefs(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginSource := "github.com/acme/tools/runtime-secret-free-lock"
-	pluginManifestPath := writeExecutableSourceManifest(t, dir, "plugin-src", pluginSource, "1.0.0", providermanifestv1.KindApp, []localExecutableManifestArtifact{{
+	appSource := "github.com/acme/tools/runtime-secret-free-lock"
+	appManifestPath := writeExecutableSourceManifest(t, dir, "app-src", appSource, "1.0.0", providermanifestv1.KindApp, []localExecutableManifestArtifact{{
 		goos:       runtime.GOOS,
 		goarch:     runtime.GOARCH,
 		binaryName: "app",
-		data:       []byte("plugin-binary"),
+		data:       []byte("app-binary"),
 	}})
 	runtimeSecretsManifestPath := writeBootstrapSecretsManifest(t, dir, "github.com/acme/tools/runtime-secrets", "0.1.0")
 
@@ -4892,7 +4894,7 @@ func TestLockAndSyncSkipRuntimeOnlySecretRefs(t *testing.T) {
 		"apps:",
 		"  alpha:",
 		"    source:",
-		"      path: " + pluginManifestPath,
+		"      path: " + appManifestPath,
 	}, "\n") + "\n"
 
 	configPath := filepath.Join(dir, "gestalt.yaml")
@@ -5032,7 +5034,7 @@ func TestLoadForStaticValidationAppScopePreparesMissingCurrentPlatformLock(t *te
 		packageSource = "github.com/acme/tools/private"
 		version       = "0.0.1-alpha.1"
 	)
-	archivePath := buildExecutableArchive(t, dir, "private-src", packageSource, version, providermanifestv1.KindApp, "private-plugin", "private-plugin-binary")
+	archivePath := buildExecutableArchive(t, dir, "private-src", packageSource, version, providermanifestv1.KindApp, "private-app", "private-app-binary")
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
 		t.Fatalf("read archive: %v", err)
@@ -5137,8 +5139,8 @@ func TestLockAndSyncResolveSourceAuthSecretRefsFromPackageSecretsProvider(t *tes
 	const (
 		secretsSource  = "github.com/acme/tools/package-secrets"
 		secretsVersion = "0.1.0"
-		pluginSource   = "github.com/acme/tools/private-plugin"
-		pluginVersion  = "1.0.0"
+		appSource      = "github.com/acme/tools/private-app"
+		appVersion     = "1.0.0"
 		authToken      = "ghp_inline_auth_source_token"
 	)
 	secretsArchivePath := buildExecutableArchive(
@@ -5148,7 +5150,7 @@ func TestLockAndSyncResolveSourceAuthSecretRefsFromPackageSecretsProvider(t *tes
 		secretsSource,
 		secretsVersion,
 		providermanifestv1.KindSecrets,
-		"secrets-plugin",
+		"secrets-app",
 		"fake-secrets-binary",
 	)
 	secretsArchiveData, err := os.ReadFile(secretsArchivePath)
@@ -5157,18 +5159,18 @@ func TestLockAndSyncResolveSourceAuthSecretRefsFromPackageSecretsProvider(t *tes
 	}
 	secretsArchiveSum := sha256.Sum256(secretsArchiveData)
 
-	pluginArchivePath := buildExecutableArchive(t, dir, "private-package-auth-src", pluginSource, pluginVersion, providermanifestv1.KindApp, "private-plugin", "private-plugin-binary")
-	pluginArchiveData, err := os.ReadFile(pluginArchivePath)
+	appArchivePath := buildExecutableArchive(t, dir, "private-package-auth-src", appSource, appVersion, providermanifestv1.KindApp, "private-app", "private-app-binary")
+	appArchiveData, err := os.ReadFile(appArchivePath)
 	if err != nil {
 		t.Fatalf("read app archive: %v", err)
 	}
-	pluginArchiveSum := sha256.Sum256(pluginArchiveData)
+	appArchiveSum := sha256.Sum256(appArchiveData)
 
 	var indexCount atomic.Int64
 	var secretsMetadataCount atomic.Int64
 	var secretsArchiveCount atomic.Int64
-	var pluginMetadataCount atomic.Int64
-	var pluginArchiveCount atomic.Int64
+	var appMetadataCount atomic.Int64
+	var appArchiveCount atomic.Int64
 	handlerErrs := make(chan error, 8)
 	nextHandlerErr := func() error {
 		t.Helper()
@@ -5179,7 +5181,7 @@ func TestLockAndSyncResolveSourceAuthSecretRefsFromPackageSecretsProvider(t *tes
 			return nil
 		}
 	}
-	requirePluginAuth := func(w http.ResponseWriter, r *http.Request) bool {
+	requireAppAuth := func(w http.ResponseWriter, r *http.Request) bool {
 		t.Helper()
 		if got := r.Header.Get("Authorization"); got != "Bearer "+authToken {
 			handlerErrs <- fmt.Errorf("%s authorization = %q, want %q", r.URL.Path, got, "Bearer "+authToken)
@@ -5192,8 +5194,8 @@ func TestLockAndSyncResolveSourceAuthSecretRefsFromPackageSecretsProvider(t *tes
 	indexPath := "/provider-index.yaml"
 	secretsMetadataPath := "/providers/secrets/v0.1.0/provider-release.yaml"
 	secretsArchivePathURL := "/providers/secrets/v0.1.0/secrets.tar.gz"
-	pluginMetadataPath := "/providers/private/v1.0.0/provider-release.yaml"
-	pluginArchivePathURL := "/providers/private/v1.0.0/private.tar.gz"
+	appMetadataPath := "/providers/private/v1.0.0/provider-release.yaml"
+	appArchivePathURL := "/providers/private/v1.0.0/private.tar.gz"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case indexPath:
@@ -5242,22 +5244,22 @@ packages:
 			secretsArchiveCount.Add(1)
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = w.Write(secretsArchiveData)
-		case pluginMetadataPath:
-			pluginMetadataCount.Add(1)
-			if !requirePluginAuth(w, r) {
+		case appMetadataPath:
+			appMetadataCount.Add(1)
+			if !requireAppAuth(w, r) {
 				return
 			}
 			metadata := providerReleaseMetadata{
 				Schema:        providerReleaseSchemaName,
 				SchemaVersion: providerReleaseSchemaVersion,
-				Package:       pluginSource,
+				Package:       appSource,
 				Kind:          providermanifestv1.KindApp,
-				Version:       pluginVersion,
+				Version:       appVersion,
 				Runtime:       providerReleaseRuntimeExecutable,
 				Artifacts: map[string]providerReleaseArtifact{
 					providerpkg.CurrentPlatformString(): {
-						Path:   filepath.Base(pluginArchivePathURL),
-						SHA256: hex.EncodeToString(pluginArchiveSum[:]),
+						Path:   filepath.Base(appArchivePathURL),
+						SHA256: hex.EncodeToString(appArchiveSum[:]),
 					},
 				},
 			}
@@ -5269,13 +5271,13 @@ packages:
 			}
 			w.Header().Set("Content-Type", "application/yaml")
 			_, _ = w.Write(data)
-		case pluginArchivePathURL:
-			pluginArchiveCount.Add(1)
-			if !requirePluginAuth(w, r) {
+		case appArchivePathURL:
+			appArchiveCount.Add(1)
+			if !requireAppAuth(w, r) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
-			_, _ = w.Write(pluginArchiveData)
+			_, _ = w.Write(appArchiveData)
 		default:
 			http.NotFound(w, r)
 		}
@@ -5304,7 +5306,7 @@ packages:
 		"apps:",
 		"  private:",
 		"    source:",
-		"      url: " + srv.URL + pluginMetadataPath,
+		"      url: " + srv.URL + appMetadataPath,
 		"      auth:",
 		"        token:",
 		"          secret:",
@@ -5348,11 +5350,11 @@ packages:
 	if got := secretsArchiveCount.Load(); got != 1 {
 		t.Fatalf("secrets archive request count = %d, want 1", got)
 	}
-	if got := pluginMetadataCount.Load(); got != 1 {
-		t.Fatalf("plugin metadata request count = %d, want 1", got)
+	if got := appMetadataCount.Load(); got != 1 {
+		t.Fatalf("app metadata request count = %d, want 1", got)
 	}
-	if got := pluginArchiveCount.Load(); got != 1 {
-		t.Fatalf("plugin archive request count = %d, want 1", got)
+	if got := appArchiveCount.Load(); got != 1 {
+		t.Fatalf("app archive request count = %d, want 1", got)
 	}
 
 	if err := lc.CheckLockAtPathsWithStatePaths([]string{configPath}, StatePaths{}, nil); err != nil {
@@ -5389,9 +5391,9 @@ packages:
 	}
 	indexBefore := indexCount.Load()
 	secretsMetadataBefore := secretsMetadataCount.Load()
-	pluginMetadataBefore := pluginMetadataCount.Load()
+	appMetadataBefore := appMetadataCount.Load()
 	secretsArchivesBefore := secretsArchiveCount.Load()
-	pluginArchivesBefore := pluginArchiveCount.Load()
+	appArchivesBefore := appArchiveCount.Load()
 	if err := lc.SyncAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
 			t.Fatal(handlerErr)
@@ -5407,14 +5409,14 @@ packages:
 	if got := secretsMetadataCount.Load(); got != secretsMetadataBefore {
 		t.Fatalf("secrets metadata request count after sync = %d, want %d", got, secretsMetadataBefore)
 	}
-	if got := pluginMetadataCount.Load(); got != pluginMetadataBefore {
-		t.Fatalf("plugin metadata request count after sync = %d, want %d", got, pluginMetadataBefore)
+	if got := appMetadataCount.Load(); got != appMetadataBefore {
+		t.Fatalf("app metadata request count after sync = %d, want %d", got, appMetadataBefore)
 	}
 	if got := secretsArchiveCount.Load() - secretsArchivesBefore; got != 1 {
 		t.Fatalf("secrets archive requests during sync = %d, want 1", got)
 	}
-	if got := pluginArchiveCount.Load() - pluginArchivesBefore; got != 1 {
-		t.Fatalf("plugin archive requests during sync = %d, want 1", got)
+	if got := appArchiveCount.Load() - appArchivesBefore; got != 1 {
+		t.Fatalf("app archive requests during sync = %d, want 1", got)
 	}
 
 	validationLC := NewLifecycle().
@@ -5425,7 +5427,7 @@ packages:
 			return bootstrap.ResolveSourceAuthSecrets(ctx, cfg, factories)
 		}).
 		WithHTTPClient(srv.Client())
-	pluginMetadataBeforeValidation := pluginMetadataCount.Load()
+	appMetadataBeforeValidation := appMetadataCount.Load()
 	secretsArchivesBeforeValidation := secretsArchiveCount.Load()
 	if _, err := validationLC.LoadForValidationAtPathsWithStatePaths([]string{configPath}, StatePaths{}); err != nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -5436,7 +5438,7 @@ packages:
 	if handlerErr := nextHandlerErr(); handlerErr != nil {
 		t.Fatal(handlerErr)
 	}
-	if got := pluginMetadataCount.Load(); got == pluginMetadataBeforeValidation {
+	if got := appMetadataCount.Load(); got == appMetadataBeforeValidation {
 		t.Fatal("runtime validation did not fetch app metadata")
 	}
 	if got := secretsArchiveCount.Load() - secretsArchivesBeforeValidation; got != 1 {
@@ -5720,7 +5722,7 @@ func TestManagedCacheSourcesPrepareAtPathWithPlatformsHashesExtraPlatformArchive
 				extraPlatform = struct{ GOOS, GOARCH string }{GOOS: "darwin", GOARCH: "arm64"}
 			}
 			extraPlatformKey := providerpkg.PlatformString(extraPlatform.GOOS, extraPlatform.GOARCH)
-			currentArchivePath := buildExecutableArchive(t, dir, "cache-src", cacheSource, version, providermanifestv1.KindCache, "cache-plugin", "fake-cache-binary")
+			currentArchivePath := buildExecutableArchive(t, dir, "cache-src", cacheSource, version, providermanifestv1.KindCache, "cache-app", "fake-cache-binary")
 			currentArchiveData, err := os.ReadFile(currentArchivePath)
 			if err != nil {
 				t.Fatalf("read current archive: %v", err)
@@ -5888,7 +5890,7 @@ func TestManagedCacheSourcesPrepareAtPathWithPlatformsHashesExtraPlatformArchive
 	}
 }
 
-func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
+func TestSourceSecretsAppBootstrapsManagedAuthSourceToken(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -5933,7 +5935,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		secretsSource,
 		secretsVersion,
 		providermanifestv1.KindSecrets,
-		"secrets-plugin",
+		"secrets-app",
 		buildGoSourceSecretsBinary(t),
 	)
 	authArchivePath := buildExecutableArchive(
@@ -5943,7 +5945,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		authSource,
 		authVersion,
 		providermanifestv1.KindAuthentication,
-		"auth-plugin",
+		"auth-app",
 		"fake-auth-binary",
 	)
 
@@ -6215,7 +6217,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataPreparesOnce(t *testing
 		authSource,
 		authVersion,
 		providermanifestv1.KindAuthentication,
-		"auth-plugin",
+		"auth-app",
 		"fake-auth-binary",
 	)
 	authArchiveData, err := os.ReadFile(authArchivePath)
@@ -6369,7 +6371,7 @@ func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSec
 		secretsSource,
 		secretsVersion,
 		providermanifestv1.KindSecrets,
-		"secrets-plugin",
+		"secrets-app",
 		buildGoSourceSecretsBinary(t),
 	)
 	secretsArchiveData, err := os.ReadFile(secretsArchivePath)

@@ -17,7 +17,7 @@ The API reference is organized by the provider-authoring workflow:
 
 * :ref:`Core authoring types <python-core-authoring-types>` for models,
   request and response wrappers, and operation results.
-* :ref:`App authoring <python-plugin-authoring>` for executable plugin
+* :ref:`App authoring <python-app-authoring>` for executable app
   definitions, catalogs, session catalogs, and HTTP subject resolution.
 * :ref:`Workflow helpers <python-workflow-helpers>` for native workflow target,
   run, schedule, signal, and event values.

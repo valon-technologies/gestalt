@@ -12,7 +12,7 @@ use generated::v1::app_runtime_log_host_server::{
     AppRuntimeLogHost as ProtoAppRuntimeLogHost, AppRuntimeLogHostServer,
 };
 use generated::v1::{
-    AppendAppRuntimeLogsRequest, AppendAppRuntimeLogsResponse, AppRuntimeLogStream,
+    AppRuntimeLogStream, AppendAppRuntimeLogsRequest, AppendAppRuntimeLogsResponse,
 };
 use gestalt::{ENV_RUNTIME_SESSION_ID, RuntimeLogHost, RuntimeLogStream};
 use tokio::net::UnixListener;
@@ -46,9 +46,7 @@ impl ProtoAppRuntimeLogHost for TestRuntimeLogHostServer {
             .map(|entry| entry.source_seq)
             .unwrap_or_default();
         self.requests.lock().expect("lock requests").push(request);
-        Ok(GrpcResponse::new(AppendAppRuntimeLogsResponse {
-            last_seq,
-        }))
+        Ok(GrpcResponse::new(AppendAppRuntimeLogsResponse { last_seq }))
     }
 }
 

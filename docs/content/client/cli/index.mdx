@@ -23,8 +23,8 @@ asIndexPage: true
 | `gestalt init` | Run the interactive setup wizard. |
 | `gestalt config get\|set\|unset\|list` | Manage the local client config. |
 | `gestalt app list` | List apps from the server. |
-| `gestalt app connect NAME` | Connect an app through OAuth or interactive manual authentication. |
-| `gestalt app disconnect NAME` | Disconnect an app, removing stored credentials. |
+| `gestalt app connect NAME` | Connect a app through OAuth or interactive manual authentication. |
+| `gestalt app disconnect NAME` | Disconnect a app, removing stored credentials. |
 | `gestalt app invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt app describe NAME OPERATION` | Show one operation's parameter contract. |
 | `gestalt workflow schedules ...` | Create, list, inspect, update, pause, resume, or delete workflow schedules. |
@@ -93,7 +93,7 @@ gestalt app list
 gestalt app connect notion --connection MCP
 gestalt app describe slack chat.postMessage
 gestalt app invoke slack chat postMessage \
-  --connection plugin \
+  --connection app \
   -p channel=C123 \
   -p text='hello'
 gestalt workflow schedules create \
@@ -171,10 +171,11 @@ gestalt workflow triggers resume <trigger-id>
 gestalt workflow triggers delete <trigger-id>
 ```
 
-Trigger creation uses the same app target input conventions as schedules.
+Trigger creation uses the same single app-step input conventions as
+schedules.
 `--type` is required. `--source` and `--subject` are optional exact match
 fields. Use `--target-file file.json` when you want to pass the full workflow
-target object directly, for example an agent target.
+target object directly, for example a multi-step target or an agent step.
 
 ### Event publishing
 
@@ -235,7 +236,7 @@ cat <<'JSON' | gestalt --format json agent turns create session-1 --input -
     {"role": "user", "text": "Summarize the roadmap risk."}
   ],
   "toolRefs": [
-    {"app": "roadmap", "operation": "sync"}
+    {"appName": "roadmap", "operation": "sync"}
   ],
   "responseSchema": {
     "type": "object",

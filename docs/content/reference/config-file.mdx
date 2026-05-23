@@ -198,7 +198,7 @@ authorization:
 
 `apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `gestaltd sync --locked` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/reference/configuration) for the full `lock`/`sync`/`serve` lifecycle.
 
-`runtime.defaultProvider` selects the runtime provider used when an app, agent provider, or workflow provider opts into hosted execution without naming a provider. `runtime.relayBaseUrl` overrides the URL handed to hosted runtimes for Gestalt host-service callbacks and hostname egress proxying. It defaults to `server.baseUrl`; set it when hosted runtimes need to call back through a private listener or internal reverse proxy while browser and OAuth flows still use the public origin. The target may be the management listener when that listener is reachable from the hosted runtime network.
+`runtime.defaultProvider` selects the runtime provider used when a app, agent provider, or workflow provider opts into hosted execution without naming a provider. `runtime.relayBaseUrl` overrides the URL handed to hosted runtimes for Gestalt host-service callbacks and hostname egress proxying. It defaults to `server.baseUrl`; set it when hosted runtimes need to call back through a private listener or internal reverse proxy while browser and OAuth flows still use the public origin. The target may be the management listener when that listener is reachable from the hosted runtime network.
 
 `agent.defaultToolNarrowingThreshold` controls implicit default MCP catalog grants for agent providers that support the catalog. When the total visible catalog is larger than this threshold and the latest user message exactly names a provider, Gestalt grants that provider instead of a global wildcard. Omit it to use the server default; set it to `0` to narrow whenever any visible catalog tool exists.
 
@@ -241,7 +241,7 @@ authorization:
               relations: [viewer, editor, admin]
             manage:
               relations: [admin]
-        plugin/github/repository:
+        app/github/repository:
           relations:
             reader:
               allowedTargets:
@@ -267,11 +267,11 @@ authorization:
         id: authorization.relationships[0]
 ```
 
-Dynamic grants are app-scoped, not policy-scoped. When an app sets `authorizationPolicy`, built-in Gestalt admins can manage additional dynamic members from the admin UI at `/admin/?tab=members`, and callers with role `admin` on a specific app can manage dynamic members for that app through `/admin/api/v1/authorization/apps/{app}/members` or `gestalt authorization apps members ...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for subjects that already have static authorization on that app. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `service_account:<id>`, or another deployment-defined subject kind.
+Dynamic grants are app-scoped, not policy-scoped. When a app sets `authorizationPolicy`, built-in Gestalt admins can manage additional dynamic members from the admin UI at `/admin/?tab=members`, and callers with role `admin` on a specific app can manage dynamic members for that app through `/admin/api/v1/authorization/apps/{app}/members` or `gestalt authorization apps members ...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for subjects that already have static authorization on that app. The `email` write field is a user-only convenience alias; `subjectId` accepts any canonical non-system subject ID, such as `user:<id>`, `service_account:<id>`, or another deployment-defined subject kind.
 
 Non-human callers are modeled as [service account subjects](/service-accounts), typically `service_account:<id>`. Grant app access with `authorization.policies` or provider-backed dynamic memberships using the canonical subject ID, and store third-party credentials through the configured external credentials provider under the same subject ID.
 
-Apps without `authorizationPolicy` are open to any authenticated subject. Bind an app to a policy when non-human access should be explicit.
+Apps without `authorizationPolicy` are open to any authenticated subject. Bind a app to a policy when non-human access should be explicit.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -304,7 +304,7 @@ The management listener is intended to be protected by deployment infrastructure
 ## `runtime`
 
 `runtime.providers` defines named execution backends for runtime-placed providers.
-These backends are only used when an app, agent provider, or workflow provider opts into `runtime`.
+These backends are only used when a app, agent provider, or workflow provider opts into `runtime`.
 If a provider omits `runtime`, it still runs on the same machine as `gestaltd`.
 
 See [Providers > Runtime](/providers/runtime) for the lifecycle and capability
@@ -325,7 +325,7 @@ runtime:
 ```
 
 `server.runtime.defaultProvider` supplies the default runtime name for
-plugins, agent providers, or workflow providers that set `runtime` without an explicit
+apps, agent providers, or workflow providers that set `runtime` without an explicit
 `runtime.provider`.
 
 | Field | Description |
@@ -371,14 +371,14 @@ runtime:
 | `cloud` | Optional cloud selector passed through to Modal. |
 | `regions` | Optional region allowlist passed through to Modal. |
 
-When an app uses the Modal runtime provider,
+When a app uses the Modal runtime provider,
 `apps.<name>.runtime.image` is required. Modal can still run
 hosted apps that need Gestalt-owned services or hostname-based egress when
 the host is configured for the public relay and proxy path. In practice that
 means `server.baseUrl` (or `server.runtime.relayBaseUrl`) and
 `server.encryptionKey` must be set, and the runtime must report a compatible
 support profile. Without those prerequisites, Gestalt will reject Modal for
-plugins that need relay-backed host services,
+apps that need relay-backed host services,
 `egress.allowedHosts`, or a server-wide default-deny egress policy.
 When hosted runtimes cannot reach `server.baseUrl` directly, set
 `server.runtime.relayBaseUrl` to the private HTTP(S) origin they should use for
@@ -397,7 +397,7 @@ apps:
       version: 0.0.1-alpha.1
     runtime:
       provider: modal
-      image: ghcr.io/example/support-plugin@sha256:...
+      image: ghcr.io/example/support-app@sha256:...
 ```
 
 There is no separate launch source or runtime command override. If
@@ -466,7 +466,7 @@ Authentication providers use the same `ProviderEntry` shape under `providers.aut
 | `source.auth` | Optional metadata-fetch auth for package repositories, direct metadata URLs, local release metadata, and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authentication provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.indexeddb`
 
@@ -532,7 +532,7 @@ providers:
 
 Authorization providers are optional only when you are relying on static human
 policy members from config. When configured, Gestalt uses the selected
-provider for dynamic subject plugin/admin authorization, relationship storage,
+provider for dynamic subject app/admin authorization, relationship storage,
 model lifecycle, and the built-in admin authorization APIs under
 `/admin/api/v1/authorization/...`.
 
@@ -550,7 +550,7 @@ The exact config fields depend on the selected authorization provider package. T
 | `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
 | `config` | Provider-specific config passed into the authorization provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.workflow`
 
@@ -599,18 +599,22 @@ workflows:
         subject:
           id: service_account:roadmap-sync
       target:
-        app:
-          name: roadmap
-          operation: sync_items
+        steps:
+          - id: sync_items
+            app:
+              name: roadmap
+              operation: sync_items
   eventTriggers:
     item_updated:
       provider: local
       match:
         type: roadmap.item.updated
       target:
-        app:
-          name: roadmap
-          operation: sync_items
+        steps:
+          - id: sync_items
+            app:
+              name: roadmap
+              operation: sync_items
 ```
 
 `providers.workflow.<name>.indexeddb` is optional. When present, it binds a
@@ -662,7 +666,7 @@ runtime:
 | `indexeddb` | Optional host IndexedDB binding for the workflow provider, including `provider`, optional `db`, and optional `objectStores`. |
 | `env` | Extra environment variables passed to the provider process. |
 | `runtime` | Optional runtime placement for this workflow provider. Supports `provider`, `template`, `image`, `imagePullAuth`, `metadata`, and `pool`. `pool` contains hosted workflow worker lifecycle fields: `minReadyInstances`, `maxReadyInstances`, `startupTimeout`, `healthCheckInterval`, `restartPolicy`, and `drainTimeout`. |
-| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.agent`
 
@@ -741,7 +745,7 @@ through the platform shell.
 | `default` | Marks this named agent entry as the default selection when a session request omits `provider`. |
 | `source` | Package source, local provider manifest path, published `provider-release.yaml` metadata URL, `source.url`, or `source.githubRelease` for a GitHub-hosted release asset. |
 | `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
-| `indexeddb` | Optional agent IndexedDB config. `indexeddb.provider` selects the named `providers.indexeddb` entry backing the agent's single IndexedDB SDK socket; unlike plugins, agents do not inherit the selected/default host IndexedDB automatically. `indexeddb.db` overrides the provider-visible database name and defaults to the agent provider key. `indexeddb.objectStores` optionally allowlists logical object stores the agent may use. |
+| `indexeddb` | Optional agent IndexedDB config. `indexeddb.provider` selects the named `providers.indexeddb` entry backing the agent's single IndexedDB SDK socket; unlike apps, agents do not inherit the selected/default host IndexedDB automatically. `indexeddb.db` overrides the provider-visible database name and defaults to the agent provider key. `indexeddb.objectStores` optionally allowlists logical object stores the agent may use. |
 | `config` | Provider-specific config passed into the agent provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `defaultHarness` | Optional default local harness name used by `gestalt agent` and `gestalt agent doctor` when `--harness` is omitted. |
@@ -753,8 +757,8 @@ through the platform shell.
 
 Top-level `workflows` declares config-managed schedules and triggers.
 These objects are reconciled into the selected workflow provider at startup and
-invoke an explicit `target`. A target is exactly one of `target.app` or
-`target.agent`.
+invoke an explicit `target.steps` plan. Each step runs exactly one app call
+or one agent turn.
 
 Config-managed workflows are deployment-owned. They are created from YAML at
 startup, updated when config changes, and removed when deleted from config.
@@ -770,13 +774,16 @@ workflows:
       cron: "0 3 * * *"
       timezone: America/New_York
       target:
-        app:
-          name: roadmap
-          operation: sync_items
-          connection: default
-          instance: tenant-a
-          input:
-            mode: incremental
+        steps:
+          - id: sync_items
+            app:
+              name: roadmap
+              operation: sync_items
+              connection: default
+              instance: tenant-a
+              input:
+                literal:
+                  mode: incremental
       invokes:
         - app: slack
           operation: conversations.list
@@ -791,11 +798,14 @@ workflows:
         type: roadmap.item.updated
         source: roadmap
       target:
-        app:
-          name: roadmap
-          operation: sync_items
-          input:
-            reason: sync
+        steps:
+          - id: sync_items
+            app:
+              name: roadmap
+              operation: sync_items
+              input:
+                literal:
+                  reason: sync
       runAs:
         subject:
           id: service_account:roadmap-events
@@ -813,12 +823,15 @@ workflows:
 | Field | Description |
 | --- | --- |
 | `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
-| `target.app.name` | Target app key from `apps`. Required when `target.app` is used. |
-| `target.app.operation` | Target operation ID. Required when `target.app` is used. |
-| `target.app.connection` | Optional target connection name. |
-| `target.app.instance` | Optional target instance name. |
-| `target.app.input` | Optional static input merged into the invocation payload. |
-| `target.agent` | Optional agent target using the same shape as workflow agent requests: `provider`, `model`, `prompt`, `messages`, `tools`, `responseSchema`, `metadata`, `modelOptions`, and `timeout`. |
+| `target.steps` | Required ordered workflow steps. Each step has `id` and exactly one of `app` or `agent`. |
+| `target.steps[].inputs` | Optional named values available to the step. Values use the same source shape as app input values. |
+| `target.steps[].app.name` | Target app key from `apps`. Required for app steps. |
+| `target.steps[].app.operation` | Target operation ID. Required for app steps. |
+| `target.steps[].app.connection` | Optional target connection name. |
+| `target.steps[].app.instance` | Optional target instance name. |
+| `target.steps[].app.input` | Optional workflow value that must resolve to a JSON object. Use `literal` for static params. |
+| `target.steps[].agent` | Optional agent turn using `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `responseSchema`, and `modelOptions`. |
+| `target.steps[].when` | Optional guard with `value` and scalar `equals`; `value.stepOutput.stepId` may reference only earlier steps. |
 | `runAs.subject.id` | Optional service-account subject ID, such as `service_account:roadmap-sync`, used as the runtime principal and credential subject. Without [`runAs`](/service-accounts#runas), config-managed workflows run as `system:config` and cannot target subject-scoped credentials. |
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
 | `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
@@ -833,17 +846,15 @@ workflows:
 | Field | Description |
 | --- | --- |
 | `provider` | Optional named `providers.workflow` entry. When omitted, Gestalt uses the sole/default workflow provider. |
-| `target.app.name` | Target app key from `apps`. Required when `target.app` is used. |
-| `target.app.operation` | Target operation ID. Required when `target.app` is used. |
-| `target.app.connection` | Optional target connection name. |
-| `target.app.instance` | Optional target instance name. |
-| `target.app.input` | Optional static input merged into the invocation payload. |
+| `target.steps` | Required ordered workflow steps. Each step has `id` and exactly one of `app` or `agent`. |
+| `target.steps[].app` | App step call fields: `name`, `operation`, optional `connection`, optional `instance`, and optional workflow-value `input`. |
+| `target.steps[].agent` | Agent step turn fields: `provider`, `model`, `sessionKey`, `prompt`, `messages`, `tools`, `responseSchema`, and `modelOptions`. |
+| `target.steps[].when` | Optional guard with `value` and scalar `equals`; `value.stepOutput.stepId` may reference only earlier steps. |
 | `runAs.subject.id` | Optional service-account subject ID used as the runtime principal and credential subject. See [`runAs`](/service-accounts#runas). |
 | `runAs.subject.kind` | Optional subject kind. When set, it must match the kind in `runAs.subject.id`; declarative workflows currently support only `service_account`. |
 | `runAs.subject.displayName` / `runAs.subject.authSource` | Optional metadata copied into the runtime principal and run-as audit fields. |
 | `invokes` | Optional additional app-operation grants as `{ app, operation }` entries. The direct target operation is always included. These grants are a token permission ceiling; they do not create credentials or replace `apps.<target>.invokes` for nested app calls. |
 | `permissions` | Deprecated alias for `invokes` using `{ app, operations }`. Do not set both. |
-| `target.agent` | Optional agent target using the same shape as workflow agent requests. |
 | `match.type` | **Required.** Event type matcher. |
 | `match.source` | Optional event source matcher. |
 | `match.subject` | Optional event subject matcher. |
@@ -886,7 +897,7 @@ First-party cache providers are published at
 | `source.auth` | Optional inline source auth for package repositories, remote release sources, direct metadata URLs, and `source.githubRelease`. |
 | `config` | Arbitrary provider-specific config passed through to the cache provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.s3`
 
@@ -918,14 +929,14 @@ apps:
 The exact config fields depend on the selected S3 provider package. Gestalt's
 portable S3 contract covers `HeadObject`, `ReadObject`, `WriteObject`,
 `DeleteObject`, `ListObjects`, `CopyObject`, and `PresignObject`, so a single
-plugin can target AWS S3, MinIO, Cloudflare R2, GCS interoperability mode, or
+app can target AWS S3, MinIO, Cloudflare R2, GCS interoperability mode, or
 other S3-compatible backends without changing application code.
 
 Apps can also create host-mediated object access URLs for their scoped S3
 bindings with SDK helpers such as TypeScript `object.createAccessUrl(...)` and
 Go `object.CreateAccessURL(...)`. These URLs are served by gestaltd at
 `/api/v1/s3/object-access/{token}` and require `server.baseUrl` plus
-`server.encryptionKey`, because the host signs the logical plugin/binding/object
+`server.encryptionKey`, because the host signs the logical app/binding/object
 scope before streaming bytes through the configured S3 provider.
 
 ## `providers.secrets`
@@ -1202,7 +1213,7 @@ Disables audit output explicitly. `providers.audit.<name>.config` is not allowed
 
 ## `apps`
 
-Each entry in the `apps` map is a named app backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/apps`) as stable code surface, while the CLI uses the `app` command.
+Each entry in the `apps` map is a named app backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/integrations`) as stable code surface, while the CLI uses the singular `app` command.
 
 ```yaml
 apps:
@@ -1222,7 +1233,7 @@ apps:
         baseUrl: https://api.github.com
     indexeddb:
       provider: main
-      db: github_plugin
+      db: github_app
       objectStores:
         - tasks
         - snapshots
@@ -1249,7 +1260,7 @@ apps:
 | `ui` | Optional app-backed mounted UI binding. Use `ui.path` plus optional `ui.bundle`. `ui.bundle` names a `providers.ui` entry; omit it to mount the app manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#appssource) below. |
 | `source.auth` | Optional metadata-fetch auth for package repositories, `source.url`, `source.githubRelease`, `source.git`, or local `provider-release.yaml` metadata. |
-| `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on app HTTP operation routes (`/api/v1/apps/{name}/operations` and `/api/v1/{integration}/{operation}`) and on app-backed mounted UIs, including browser-login flows whose `next` path resolves into that app's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
+| `auth` | Optional app route auth reference. Use `auth.provider` to reference either the reserved `server` alias or a named entry from `providers.authentication`. Gestalt enforces this on app HTTP operation routes (`/api/v1/integrations/{name}/operations` and `/api/v1/{integration}/{operation}`) and on app-backed mounted UIs, including browser-login flows whose `next` path resolves into that app's mount. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `securitySchemes` | Optional hosted HTTP security scheme overrides merged over the app manifest's `spec.securitySchemes`. Use this for deployment-specific secrets or for deployment-local hosted HTTP bindings. |
 | `http` | Optional hosted HTTP binding overrides merged over the app manifest's `spec.http`. Use this only when a deployment intentionally changes the route path, request body, security scheme, target operation, or acknowledgment response. |
@@ -1258,7 +1269,7 @@ apps:
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
 | `dev.attach.allowedRoles` | Roles from this app's `authorizationPolicy` that may create private remote provider-dev attachments for this app. This is denied when omitted, empty, or when the app has no `authorizationPolicy`. |
 | `runtime` | Optional runtime placement for executable apps. Supports hosted runtime fields such as `provider`, `template`, `image`, `imagePullAuth`, and `metadata`. |
-| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
 | `indexeddb` | Optional app IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the app's single IndexedDB SDK socket; when omitted, the app inherits the selected/default host IndexedDB. `indexeddb.db` overrides the app-visible database name and defaults to the app key. Supported providers derive app scoping from that `db` name using provider-native namespace config; Gestalt does not rewrite object-store names at the SDK transport layer. `indexeddb.objectStores` optionally allowlists the logical object stores the app may use. Apps then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
 | `s3` | Optional list of named `providers.s3` bindings exposed to the executable app through the SDK transport. A single binding also populates the default S3 SDK env var for SDK clients. |
 
@@ -1336,7 +1347,7 @@ Canonical metadata-source auth lives under `source.auth`. For direct metadata UR
 source:
   url: https://github.com/valon-technologies/gestalt-providers/releases/download/apps/github/v1.2.3/provider-release.yaml
   auth:
-    token: ${PLUGIN_RELEASE_TOKEN}
+    token: ${APP_RELEASE_TOKEN}
 ```
 
 App route auth overrides are declared separately:
@@ -1383,11 +1394,11 @@ source: ./manifest.yaml
 
 When a remote `gestaltd` instance is running the provider-dev endpoints,
 authenticated developers can attach a local implementation for configured
-plugins that are registered on the remote server and that they are authorized to
+apps that are registered on the remote server and that they are authorized to
 access with `gestaltd serve --remote`. A path-only attach matches the
 local manifest `source` to the remote configured app and preserves the
 remote app config; layered `--config` files are only needed for explicit
-local config overrides or multi-plugin attach sessions.
+local config overrides or multi-app attach sessions.
 
 Remote provider attach is disabled by default on servers. Enable it explicitly
 on shared remotes:
@@ -1433,10 +1444,10 @@ verification code shown in the initiating terminal. The approving browser
 session must satisfy the app runtime grant. For non-interactive/API-token
 attach, the caller must satisfy both the app runtime grant and a token action
 grant. The runtime grant comes from
-`apps.<name>.dev.attach.allowedRoles` on an app with an
+`apps.<name>.dev.attach.allowedRoles` on a app with an
 `authorizationPolicy`, or from a runtime authorizer that explicitly grants the
 same action. API tokens must carry `permissions[].actions:
-["provider_dev.attach"]` for every attached plugin; normal provider scopes and
+["provider_dev.attach"]` for every attached app; normal provider scopes and
 operation permissions do not grant attach, and the attach action does not grant
 operation invocation.
 
@@ -1448,7 +1459,7 @@ release artifact.
 
 ```yaml
 kind: app
-source: github.com/acme/apps/my-plugin
+source: github.com/acme/apps/my-app
 version: 1.0.0
 build:
   command:
@@ -1476,11 +1487,11 @@ spec:
 | `source.auth` | Optional metadata-fetch auth for package repositories, direct metadata URLs, `source.githubRelease`, and local `provider-release.yaml` metadata. |
 | `auth` | Optional app route auth reference. Use `auth.provider` to reference either `server` or a named `providers.authentication` entry. Gestalt enforces this on app HTTP operation routes and on app-backed mounted UIs. Standalone `providers.ui` bundles, the built-in admin UI/admin API, and `/mcp` still use the server-wide auth provider in this phase. |
 | `env` | Extra environment variables passed to the provider process. |
-| `egress.allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
+| `egress.allowedHosts` | Outbound host allowlist. For executable apps, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `connections`
 
-Top-level `connections` declare reusable upstream credential definitions. Plugins
+Top-level `connections` declare reusable upstream credential definitions. Apps
 and agent providers bind those definitions under their local
 `apps.<name>.connections` or `providers.agent.<name>.connections` maps with
 `ref`. The top-level connection ID is the stable credential namespace used by
@@ -1578,7 +1589,7 @@ credentials, and `subject` stores credentials for the caller's effective subject
 For humans that is typically `user:<id>`; for non-human API token callers it can
 be `service_account:<id>` or another canonical non-system subject ID. Runtime
 surfaces can also supply system subjects such as
-`system:http_binding:<plugin>:<binding>` as the effective credential owner.
+`system:http_binding:<app>:<binding>` as the effective credential owner.
 
 Binding entries that use `ref` may set only binding metadata such as
 `displayName` and `credentialRefresh`; they cannot override `mode`, `auth`, or
@@ -1753,7 +1764,7 @@ connections:
 `server.egress` sets the server-wide default for outbound network access.
 Per-provider `egress.allowedHosts` lists declare which hosts each provider may
 reach.
-For executable plugins, that declaration is only a complete enforcement
+For executable apps, that declaration is only a complete enforcement
 boundary when the deployment is using a supported sandboxed runtime.
 
 ```yaml
@@ -1767,8 +1778,8 @@ apps:
       allowedHosts:
         - api.github.com
         - "*.github.com"
-  my-plugin:
-    source: ./apps/my-plugin/manifest.yaml
+  my-app:
+    source: ./apps/my-app/manifest.yaml
     egress:
       allowedHosts:
         - external-api.com
@@ -1782,7 +1793,7 @@ When `egress.allowedHosts` is set on a provider, Gestalt applies that allowlist
 to host-mediated outbound checks using exact matches and `*.suffix` wildcards.
 When `egress.allowedHosts` is empty, `defaultAction` decides: `allow` permits
 outbound requests, `deny` blocks them. Provider-level `allowedHosts` is no
-longer accepted; use `egress.allowedHosts`. For executable plugins, those rules
+longer accepted; use `egress.allowedHosts`. For executable apps, those rules
 are only a complete security boundary when the app is
 running inside a supported sandboxed runtime rather than relying on
 host-specific OS wrappers alone.
@@ -1801,7 +1812,7 @@ providers:
         brandName: Acme
 ```
 
-`providers.ui` is a map of `ui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `apps.<name>.ui.bundle` binds to `apps.<name>.ui.path`. When an app manifest declares `spec.ui`, `apps.<name>.ui.bundle` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the app-owned reference. `/admin` remains available regardless. A selected `server.admin.ui` bundle, or the root-mounted UI bundle when it contains `admin/index.html`, may also supply the static admin shell while Gestalt keeps the existing `/admin` auth and API semantics. Omit `providers.ui` entirely to run headless with no public UI bundles.
+`providers.ui` is a map of `ui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `apps.<name>.ui.bundle` binds to `apps.<name>.ui.path`. When a app manifest declares `spec.ui`, `apps.<name>.ui.bundle` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the app-owned reference. `/admin` remains available regardless. A selected `server.admin.ui` bundle, or the root-mounted UI bundle when it contains `admin/index.html`, may also supply the static admin shell while Gestalt keeps the existing `/admin` auth and API semantics. Omit `providers.ui` entirely to run headless with no public UI bundles.
 
 App-backed mounted UIs inherit the owning app's dynamic authorization grants when that app sets `authorizationPolicy`. Direct `providers.ui.<name>.authorizationPolicy` bindings remain static-only.
 
@@ -1836,7 +1847,7 @@ allowed when their corresponding source is set.
 Top-level connections cannot set `ref` or `exposure`. Connection bindings that
 set `ref` cannot also set `mode`, `auth`, or `params`. Subject-scoped inline
 connections that collect or exchange credentials are not supported; declare a
-top-level connection and reference it with `ref`. All connections in an app
+top-level connection and reference it with `ref`. All connections in a app
 must share the same mode.
 
 Each `providers.ui.<name>` entry must set `source` to exactly one loading mode:
@@ -1845,7 +1856,7 @@ metadata URL, `source.url`, or `source.githubRelease`.
 `providers.ui.<name>.config` is only allowed when
 `providers.ui.<name>.source` is set.
 
-Each `apps.<name>` entry may set `ui.path` to publish an app-backed UI. When `ui.bundle` is set, it must reference an existing UI bundle. When `ui.bundle` is omitted, the app manifest must declare `spec.ui`. A given UI may be bound by at most one app entry. `ui.path` must use the same path rules as a directly mounted UI.
+Each `apps.<name>` entry may set `ui.path` to publish a app-backed UI. When `ui.bundle` is set, it must reference an existing UI bundle. When `ui.bundle` is omitted, the app manifest must declare `spec.ui`. A given UI may be bound by at most one app entry. `ui.path` must use the same path rules as a directly mounted UI.
 
 When `server.admin.ui` is set, it must reference an existing `providers.ui.<name>` entry. Runtime startup then requires that entry's prepared asset root to include `admin/index.html`.
 

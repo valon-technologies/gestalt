@@ -17,7 +17,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	coreagent "github.com/valon-technologies/gestalt/server/core/agent"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/services/agents/agentgrant"
 	integration "github.com/valon-technologies/gestalt/server/services/apps/declarative"
 	"github.com/valon-technologies/gestalt/server/services/apps/registry"
@@ -35,7 +34,7 @@ var (
 	ErrAgentProviderRequired            = errors.New("agent provider is required")
 	ErrAgentProviderNotAvailable        = errors.New("agent provider is not available")
 	ErrAgentSubjectRequired             = errors.New("agent subject is required")
-	ErrAgentCallerPluginRequired        = errors.New("agent caller app is required for inherited tools")
+	ErrAgentCallerAppRequired           = errors.New("agent caller app is required for inherited tools")
 	ErrAgentInheritedSurfaceTool        = errors.New("agent inherited surface tools are not supported")
 	ErrAgentInteractionRequired         = errors.New("agent interaction is required")
 	ErrAgentInteractionNotFound         = errors.New("agent interaction is not found")
@@ -270,12 +269,12 @@ func (m *Manager) ResolveTools(ctx context.Context, p *principal.Principal, req 
 	if err != nil {
 		return nil, err
 	}
-	pluginTools, _, err := m.resolveAgentToolCandidates(ctx, p, candidates, 0, false)
+	appTools, _, err := m.resolveAgentToolCandidates(ctx, p, candidates, 0, false)
 	if err != nil {
 		return nil, err
 	}
 	tools = append([]coreagent.Tool(nil), systemTools...)
-	tools = append(tools, pluginTools...)
+	tools = append(tools, appTools...)
 	observability.SetSpanAttributes(ctx, observability.AttrAgentToolSource.String(string(toolSource)))
 	return tools, nil
 }
@@ -569,8 +568,7 @@ func (m *Manager) CreateTurn(ctx context.Context, p *principal.Principal, req co
 	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	turnID := newAgentTurnID(ownedSession.session.ID, idempotencyKey)
-	inheritedOutputDelivery := InheritedOutputDeliveryFromContext(ctx)
-	runGrant, err := m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerAppName, toolRefs, toolRefsSet, tools, toolSource, inheritedOutputDelivery)
+	runGrant, err := m.mintRunGrant(ctx, p, ownedSession.providerName, ownedSession.session.ID, turnID, req.CallerAppName, toolRefs, toolRefsSet, tools, toolSource)
 	if err != nil {
 		return nil, err
 	}
@@ -1222,34 +1220,32 @@ func agentProviderReadFallbackAllowed(err error) bool {
 	return false
 }
 
-func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerAppName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode, inheritedOutputDelivery *coreworkflow.OutputDelivery) (string, error) {
+func (m *Manager) mintRunGrant(ctx context.Context, p *principal.Principal, providerName, sessionID, turnID, callerAppName string, toolRefs []coreagent.ToolRef, toolRefsSet bool, tools []coreagent.Tool, toolSource coreagent.ToolSourceMode) (string, error) {
 	if m == nil || m.runGrants == nil {
 		return "", fmt.Errorf("%w: agent run grants are not configured", invocation.ErrInternal)
 	}
 	subject := agentSubjectFromPrincipal(p)
 	permissions := agentRunPermissions(ctx, p, callerAppName, toolRefs)
-	permissions = agentRunPermissionsWithInheritedOutputDelivery(p, permissions, inheritedOutputDelivery)
 	connections := m.agentConnectionBindings(providerName)
 	if toolSource == coreagent.ToolSourceModeNone {
 		connections = nil
 	}
 	return m.runGrants.Mint(agentgrant.Grant{
-		ProviderName:            providerName,
-		SessionID:               sessionID,
-		TurnID:                  turnID,
-		CallerAppName:           strings.TrimSpace(callerAppName),
-		SubjectID:               subject.SubjectID,
-		SubjectKind:             subject.SubjectKind,
-		CredentialSubjectID:     subject.CredentialSubjectID,
-		DisplayName:             subject.DisplayName,
-		AuthSource:              subject.AuthSource,
-		Permissions:             permissions,
-		ToolRefs:                append([]coreagent.ToolRef(nil), toolRefs...),
-		ToolRefsSet:             toolRefsSet,
-		Tools:                   append([]coreagent.Tool(nil), tools...),
-		ToolSource:              toolSource,
-		Connections:             connections,
-		InheritedOutputDelivery: coreworkflow.CloneOutputDelivery(inheritedOutputDelivery),
+		ProviderName:        providerName,
+		SessionID:           sessionID,
+		TurnID:              turnID,
+		CallerAppName:       strings.TrimSpace(callerAppName),
+		SubjectID:           subject.SubjectID,
+		SubjectKind:         subject.SubjectKind,
+		CredentialSubjectID: subject.CredentialSubjectID,
+		DisplayName:         subject.DisplayName,
+		AuthSource:          subject.AuthSource,
+		Permissions:         permissions,
+		ToolRefs:            append([]coreagent.ToolRef(nil), toolRefs...),
+		ToolRefsSet:         toolRefsSet,
+		Tools:               append([]coreagent.Tool(nil), tools...),
+		ToolSource:          toolSource,
+		Connections:         connections,
 	})
 }
 
@@ -1348,7 +1344,7 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 	}
 	for i := range candidates {
 		candidate := candidates[i]
-		listed, err := m.listedAgentPluginCandidateTool(candidate)
+		listed, err := m.listedAgentAppCandidateTool(candidate)
 		if err != nil {
 			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrProviderNotFound) || errors.Is(err, invocation.ErrOperationNotFound) {
 				continue
@@ -1366,7 +1362,7 @@ func (m *Manager) listTools(ctx context.Context, p *principal.Principal, req cor
 		out = append(out, listed)
 	}
 	for i := range unavailable {
-		listed, err := m.listedUnavailableAgentPluginTool(unavailable[i])
+		listed, err := m.listedUnavailableAgentAppTool(unavailable[i])
 		if err != nil {
 			return nil, err
 		}
@@ -1482,14 +1478,14 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if m == nil || m.providers == nil {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent providers are not configured", invocation.ErrInternal)
 	}
-	pluginName := strings.TrimSpace(ref.App)
-	if pluginName == "" {
+	appName := strings.TrimSpace(ref.App)
+	if appName == "" {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent tool app is required", invocation.ErrProviderNotFound)
 	}
-	prov, err := m.providers.Get(pluginName)
+	prov, err := m.providers.Get(appName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			return coreagent.Tool{}, fmt.Errorf("%w: %q", invocation.ErrProviderNotFound, pluginName)
+			return coreagent.Tool{}, fmt.Errorf("%w: %q", invocation.ErrProviderNotFound, appName)
 		}
 		return coreagent.Tool{}, fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 	}
@@ -1497,7 +1493,7 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 	if operation == "" {
 		return coreagent.Tool{}, fmt.Errorf("%w: agent tool operation is required", invocation.ErrOperationNotFound)
 	}
-	if !m.allowProvider(ctx, p, pluginName) || !m.allowOperation(ctx, p, pluginName, operation) {
+	if !m.allowProvider(ctx, p, appName) || !m.allowOperation(ctx, p, appName, operation) {
 		return coreagent.Tool{}, invocation.ErrAuthorizationDenied
 	}
 
@@ -1521,28 +1517,28 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		return coreagent.Tool{}, fmt.Errorf("%w: non-user subjects may not override connection or instance bindings", invocation.ErrAuthorizationDenied)
 	}
 
-	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, pluginName))
+	ctx = invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, appName))
 	var resolver invocation.TokenResolver
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	sessionConnections := m.catalogSelectorConfig().SessionCatalogConnections(pluginName, connection)
+	sessionConnections := m.catalogSelectorConfig().SessionCatalogConnections(appName, connection)
 	sessionInstance := instance
-	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, pluginName, resolver, p, operation, sessionConnections, sessionInstance)
+	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, appName, resolver, p, operation, sessionConnections, sessionInstance)
 	if err != nil {
 		return coreagent.Tool{}, err
 	}
-	if !principal.AllowsOperationPermission(p, pluginName, opMeta.ID) {
-		return coreagent.Tool{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, pluginName, opMeta.ID)
+	if !principal.AllowsOperationPermission(p, appName, opMeta.ID) {
+		return coreagent.Tool{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
 	}
-	if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, pluginName, opMeta) {
-		return coreagent.Tool{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, pluginName, opMeta.ID)
+	if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, appName, opMeta) {
+		return coreagent.Tool{}, fmt.Errorf("%w: %s.%s", invocation.ErrAuthorizationDenied, appName, opMeta.ID)
 	}
 	if connection == "" {
 		connection = resolvedConnection
 	}
 	if resolver != nil && sessionInstance == "" {
-		resolvedCtx, _, err := resolver.ResolveToken(ctx, p, pluginName, connection, sessionInstance)
+		resolvedCtx, _, err := resolver.ResolveToken(ctx, p, appName, connection, sessionInstance)
 		if err != nil {
 			return coreagent.Tool{}, err
 		}
@@ -1564,14 +1560,14 @@ func (m *Manager) resolveTool(ctx context.Context, p *principal.Principal, ref c
 		name = strings.TrimSpace(opMeta.Title)
 	}
 	if name == "" {
-		name = pluginName + "." + opMeta.ID
+		name = appName + "." + opMeta.ID
 	}
 	description := strings.TrimSpace(ref.Description)
 	if description == "" {
 		description = strings.TrimSpace(opMeta.Description)
 	}
 	target := coreagent.ToolTarget{
-		App:                   pluginName,
+		App:                   appName,
 		Operation:             opMeta.ID,
 		Connection:            connection,
 		Instance:              sessionInstance,
@@ -1615,7 +1611,7 @@ type agentToolSearchCatalog struct {
 
 type agentToolTargetKey struct {
 	system                string
-	plugin                string
+	app                   string
 	operation             string
 	connection            string
 	instance              string
@@ -1627,7 +1623,7 @@ type agentToolTargetKey struct {
 func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 	return agentToolTargetKey{
 		system:                strings.TrimSpace(ref.System),
-		plugin:                strings.TrimSpace(ref.App),
+		app:                   strings.TrimSpace(ref.App),
 		operation:             strings.TrimSpace(ref.Operation),
 		connection:            core.ResolveConnectionAlias(strings.TrimSpace(ref.Connection)),
 		instance:              strings.TrimSpace(ref.Instance),
@@ -1640,7 +1636,7 @@ func agentToolTargetKeyFromRef(ref coreagent.ToolRef) agentToolTargetKey {
 func agentToolTargetKeyFromTarget(target coreagent.ToolTarget) agentToolTargetKey {
 	return agentToolTargetKey{
 		system:                strings.TrimSpace(target.System),
-		plugin:                strings.TrimSpace(target.App),
+		app:                   strings.TrimSpace(target.App),
 		operation:             strings.TrimSpace(target.Operation),
 		connection:            core.ResolveConnectionAlias(strings.TrimSpace(target.Connection)),
 		instance:              strings.TrimSpace(target.Instance),
@@ -1654,7 +1650,7 @@ func (k agentToolTargetKey) String() string {
 	if k.system != "" {
 		return strings.Join([]string{"system", k.system, k.operation}, "/")
 	}
-	parts := []string{k.plugin, k.operation}
+	parts := []string{k.app, k.operation}
 	runAsKey := agentToolRunAsKeyString(k.runAs)
 	externalIdentityKey := agentToolExternalIdentityKeyString(k.runAsExternalIdentity)
 	if k.connection != "" || k.instance != "" || k.credentialMode != "" || runAsKey != "" || externalIdentityKey != "" {
@@ -1713,32 +1709,32 @@ func (m *Manager) visitToolSearchCandidates(
 	seenCandidates := false
 	seenUnavailable := false
 	var firstUnavailableErr error
-	for _, pluginName := range providerNames {
-		pluginName = strings.TrimSpace(pluginName)
-		if pluginName == "" {
+	for _, appName := range providerNames {
+		appName = strings.TrimSpace(appName)
+		if appName == "" {
 			continue
 		}
-		prov, err := m.providers.Get(pluginName)
+		prov, err := m.providers.Get(appName)
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
 				continue
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		if !m.allowProvider(ctx, p, pluginName) {
+		if !m.allowProvider(ctx, p, appName) {
 			continue
 		}
-		searchRefs := scope.refsForProvider(pluginName)
+		searchRefs := scope.refsForProvider(appName)
 		for i := range searchRefs {
 			searchRef := searchRefs[i]
-			searchCatalogs, err := m.catalogsForAgentToolSearch(ctx, p, prov, pluginName, searchRef)
+			searchCatalogs, err := m.catalogsForAgentToolSearch(ctx, p, prov, appName, searchRef)
 			if err != nil {
 				refSkipsUnavailable := skipUnavailable && agentToolSearchRefSkipsUnavailable(searchRef)
 				if refSkipsUnavailable && agentToolSearchUnavailable(err) {
 					if firstUnavailableErr == nil {
 						firstUnavailableErr = err
 					}
-					if principal.AllowsProviderPermission(p, pluginName) {
+					if principal.AllowsProviderPermission(p, appName) {
 						seenUnavailable = true
 						if visitUnavailable != nil {
 							keepGoing, visitErr := visitUnavailable(unavailableAgentToolCandidate(searchRef, err))
@@ -1769,10 +1765,10 @@ func (m *Manager) visitToolSearchCandidates(
 					if strings.TrimSpace(searchRef.Operation) == "" && !catalog.OperationVisibleByDefault(op) {
 						continue
 					}
-					if !m.allowOperation(ctx, p, pluginName, operation) || !principal.AllowsOperationPermission(p, pluginName, operation) {
+					if !m.allowOperation(ctx, p, appName, operation) || !principal.AllowsOperationPermission(p, appName, operation) {
 						continue
 					}
-					if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, pluginName, op) {
+					if m.authorizer != nil && !m.authorizer.AllowCatalogOperation(ctx, p, appName, op) {
 						continue
 					}
 					ref := searchCatalog.ref
@@ -1780,7 +1776,7 @@ func (m *Manager) visitToolSearchCandidates(
 						ref.Title = ""
 						ref.Description = ""
 					}
-					ref.App = pluginName
+					ref.App = appName
 					ref.Operation = operation
 					seenCandidates = true
 					if visitCandidate == nil {
@@ -1849,39 +1845,39 @@ func unavailableAgentToolReason(err error) string {
 	}
 }
 
-func unavailableAgentToolTitle(pluginName, reason string) string {
-	pluginName = strings.TrimSpace(pluginName)
+func unavailableAgentToolTitle(appName, reason string) string {
+	appName = strings.TrimSpace(appName)
 	switch reason {
 	case coreagent.ToolUnavailableReasonInstanceRequired:
-		return pluginName + " instance required"
+		return appName + " instance required"
 	case coreagent.ToolUnavailableReasonScopeDenied:
-		return pluginName + " scope denied"
+		return appName + " scope denied"
 	case coreagent.ToolUnavailableReasonNotAuthenticated:
-		return pluginName + " authentication required"
+		return appName + " authentication required"
 	case coreagent.ToolUnavailableReasonNoCredential:
-		return pluginName + " connection required"
+		return appName + " connection required"
 	default:
-		return pluginName + " reconnect required"
+		return appName + " reconnect required"
 	}
 }
 
-func unavailableAgentToolMessage(pluginName, reason string, err error) string {
-	pluginName = strings.TrimSpace(pluginName)
-	if pluginName == "" {
-		pluginName = "this integration"
+func unavailableAgentToolMessage(appName, reason string, err error) string {
+	appName = strings.TrimSpace(appName)
+	if appName == "" {
+		appName = "this integration"
 	}
 	switch reason {
 	case coreagent.ToolUnavailableReasonInstanceRequired:
-		return fmt.Sprintf("%s has multiple matching instances. Ask the user to choose or reconnect a specific instance before using these tools.", pluginName)
+		return fmt.Sprintf("%s has multiple matching instances. Ask the user to choose or reconnect a specific instance before using these tools.", appName)
 	case coreagent.ToolUnavailableReasonScopeDenied:
-		return fmt.Sprintf("%s is connected but is missing required OAuth scopes. Ask the user to reconnect %s with the required scopes before using these tools.", pluginName, pluginName)
+		return fmt.Sprintf("%s is connected but is missing required OAuth scopes. Ask the user to reconnect %s with the required scopes before using these tools.", appName, appName)
 	case coreagent.ToolUnavailableReasonNotAuthenticated, coreagent.ToolUnavailableReasonNoCredential, coreagent.ToolUnavailableReasonReconnectRequired:
-		return fmt.Sprintf("%s is not connected, its credentials expired, or refresh failed. Ask the user to reconnect %s before using these tools.", pluginName, pluginName)
+		return fmt.Sprintf("%s is not connected, its credentials expired, or refresh failed. Ask the user to reconnect %s before using these tools.", appName, appName)
 	default:
 		if err != nil {
 			return err.Error()
 		}
-		return fmt.Sprintf("%s is unavailable.", pluginName)
+		return fmt.Sprintf("%s is unavailable.", appName)
 	}
 }
 
@@ -1889,7 +1885,7 @@ func agentToolSearchRefSkipsUnavailable(ref coreagent.ToolRef) bool {
 	return strings.TrimSpace(ref.Operation) == ""
 }
 
-func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.Principal, prov core.Provider, pluginName string, ref coreagent.ToolRef) ([]agentToolSearchCatalog, error) {
+func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.Principal, prov core.Provider, appName string, ref coreagent.ToolRef) ([]agentToolSearchCatalog, error) {
 	connection := strings.TrimSpace(ref.Connection)
 	if connection != "" && !core.SafeConnectionValue(connection) {
 		return nil, fmt.Errorf("connection name contains invalid characters")
@@ -1912,13 +1908,13 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 	if tr, ok := m.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	catalogCtx := invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, pluginName))
-	targets := m.catalogSelectorConfig().SessionCatalogTargets(pluginName, connection, instance)
+	catalogCtx := invocation.WithAccessContext(ctx, m.providerAccessContext(ctx, p, appName))
+	targets := m.catalogSelectorConfig().SessionCatalogTargets(appName, connection, instance)
 	if !shouldExpandAgentToolSearchCatalogTargets(ref, credentialMode) {
 		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
 			catalogCtx,
 			prov,
-			pluginName,
+			appName,
 			resolver,
 			p,
 			targets,
@@ -1935,7 +1931,7 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
 			catalogCtx,
 			prov,
-			pluginName,
+			appName,
 			resolver,
 			p,
 			targets,
@@ -1946,7 +1942,7 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 		}
 		return []agentToolSearchCatalog{{ref: ref, catalog: cat}}, nil
 	}
-	targets, err = expander.ExpandCatalogTargets(catalogCtx, p, pluginName, targets)
+	targets, err = expander.ExpandCatalogTargets(catalogCtx, p, appName, targets)
 	if err != nil {
 		return nil, err
 	}
@@ -1968,7 +1964,7 @@ func (m *Manager) catalogsForAgentToolSearch(ctx context.Context, p *principal.P
 		cat, _, err := invocation.ResolveCatalogForTargetsWithMetadata(
 			catalogCtx,
 			prov,
-			pluginName,
+			appName,
 			resolver,
 			p,
 			[]invocation.CatalogResolutionTarget{target},
@@ -2022,24 +2018,24 @@ func newAgentToolSearchScope(refs []coreagent.ToolRef) agentToolSearchScope {
 		if strings.TrimSpace(ref.System) != "" {
 			continue
 		}
-		pluginName := strings.TrimSpace(ref.App)
-		if pluginName == "" {
+		appName := strings.TrimSpace(ref.App)
+		if appName == "" {
 			continue
 		}
-		ref.App = pluginName
+		ref.App = appName
 		ref.Operation = strings.TrimSpace(ref.Operation)
 		if ref.App == agentToolSearchAllApp {
 			scope.all = true
 			continue
 		}
 		if ref.Operation == "" {
-			scope.apps[pluginName] = append(scope.apps[pluginName], ref)
+			scope.apps[appName] = append(scope.apps[appName], ref)
 			continue
 		}
-		if scope.exactOps[pluginName] == nil {
-			scope.exactOps[pluginName] = map[string][]coreagent.ToolRef{}
+		if scope.exactOps[appName] == nil {
+			scope.exactOps[appName] = map[string][]coreagent.ToolRef{}
 		}
-		scope.exactOps[pluginName][ref.Operation] = append(scope.exactOps[pluginName][ref.Operation], ref)
+		scope.exactOps[appName][ref.Operation] = append(scope.exactOps[appName][ref.Operation], ref)
 	}
 	return scope
 }
@@ -2063,12 +2059,12 @@ func (s agentToolSearchScope) providerNames() []string {
 	return names
 }
 
-func (s agentToolSearchScope) refsForProvider(pluginName string) []coreagent.ToolRef {
+func (s agentToolSearchScope) refsForProvider(appName string) []coreagent.ToolRef {
 	refs := []coreagent.ToolRef{}
 	if s.all {
-		refs = append(refs, coreagent.ToolRef{App: pluginName})
+		refs = append(refs, coreagent.ToolRef{App: appName})
 	}
-	if ops := s.exactOps[pluginName]; len(ops) > 0 {
+	if ops := s.exactOps[appName]; len(ops) > 0 {
 		operations := make([]string, 0, len(ops))
 		for operation := range ops {
 			operations = append(operations, operation)
@@ -2078,7 +2074,7 @@ func (s agentToolSearchScope) refsForProvider(pluginName string) []coreagent.Too
 			refs = append(refs, ops[operation]...)
 		}
 	}
-	if appRefs := s.apps[pluginName]; len(appRefs) > 0 {
+	if appRefs := s.apps[appName]; len(appRefs) > 0 {
 		refs = append(refs, appRefs...)
 	}
 	return refs
@@ -2101,11 +2097,11 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 			}
 			continue
 		}
-		pluginName := strings.TrimSpace(ref.App)
-		if pluginName == "" {
+		appName := strings.TrimSpace(ref.App)
+		if appName == "" {
 			continue
 		}
-		if pluginName == agentToolSearchAllApp {
+		if appName == agentToolSearchAllApp {
 			continue
 		}
 		if strings.TrimSpace(ref.Operation) != "" {
@@ -2114,14 +2110,14 @@ func (m *Manager) authorizeToolRefs(ctx context.Context, p *principal.Principal,
 			}
 			continue
 		}
-		if _, err := m.providers.Get(pluginName); err != nil {
+		if _, err := m.providers.Get(appName); err != nil {
 			if errors.Is(err, core.ErrNotFound) {
-				return fmt.Errorf("%w: %q", invocation.ErrProviderNotFound, pluginName)
+				return fmt.Errorf("%w: %q", invocation.ErrProviderNotFound, appName)
 			}
 			return fmt.Errorf("%w: looking up provider: %v", invocation.ErrInternal, err)
 		}
-		if !m.allowsAgentProvider(ctx, p, pluginName) {
-			return fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, pluginName)
+		if !m.allowsAgentProvider(ctx, p, appName) {
+			return fmt.Errorf("%w: %s", invocation.ErrAuthorizationDenied, appName)
 		}
 		connection := strings.TrimSpace(ref.Connection)
 		if connection != "" && !core.SafeConnectionValue(connection) {
@@ -2758,7 +2754,7 @@ func listedAgentSystemTool(tool coreagent.Tool) (coreagent.ListedTool, error) {
 	}, nil
 }
 
-func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandidate) (coreagent.ListedTool, error) {
+func (m *Manager) listedAgentAppCandidateTool(candidate agentToolSearchCandidate) (coreagent.ListedTool, error) {
 	projectedOperation := projectAgentToolOperationForListing(candidate.operation)
 	projectedCandidate := candidate
 	projectedCandidate.operation = projectedOperation
@@ -2807,7 +2803,7 @@ func (m *Manager) listedAgentPluginCandidateTool(candidate agentToolSearchCandid
 	}, nil
 }
 
-func (m *Manager) listedUnavailableAgentPluginTool(candidate agentToolUnavailableCandidate) (coreagent.ListedTool, error) {
+func (m *Manager) listedUnavailableAgentAppTool(candidate agentToolUnavailableCandidate) (coreagent.ListedTool, error) {
 	ref := candidate.ref
 	ref.App = strings.TrimSpace(ref.App)
 	ref.Operation = ""
@@ -3079,13 +3075,13 @@ func (m *Manager) defaultAgentTurnToolRefs(ctx context.Context, p *principal.Pri
 	}
 
 	narrowedRefs := make([]coreagent.ToolRef, 0, len(mentionedProviders))
-	for _, pluginName := range mentionedProviders {
-		hasCandidate, err := m.agentToolVisibleCandidateCountExceeds(ctx, p, []coreagent.ToolRef{{App: pluginName}}, 0)
+	for _, appName := range mentionedProviders {
+		hasCandidate, err := m.agentToolVisibleCandidateCountExceeds(ctx, p, []coreagent.ToolRef{{App: appName}}, 0)
 		if err != nil {
 			return broadRefs
 		}
 		if hasCandidate {
-			narrowedRefs = append(narrowedRefs, coreagent.ToolRef{App: pluginName})
+			narrowedRefs = append(narrowedRefs, coreagent.ToolRef{App: appName})
 		}
 	}
 	if len(narrowedRefs) == 0 {
@@ -3124,25 +3120,25 @@ func (m *Manager) exactMentionedAgentToolProviders(ctx context.Context, p *princ
 		return nil
 	}
 	out := make([]string, 0)
-	for _, pluginName := range m.providers.List() {
-		pluginName = strings.TrimSpace(pluginName)
-		if pluginName == "" {
+	for _, appName := range m.providers.List() {
+		appName = strings.TrimSpace(appName)
+		if appName == "" {
 			continue
 		}
-		prov, err := m.providers.Get(pluginName)
+		prov, err := m.providers.Get(appName)
 		if err != nil {
 			continue
 		}
-		if !m.allowsAgentProvider(ctx, p, pluginName) {
+		if !m.allowsAgentProvider(ctx, p, appName) {
 			continue
 		}
-		aliases := []string{pluginName}
+		aliases := []string{appName}
 		if displayName := strings.TrimSpace(prov.DisplayName()); displayName != "" {
 			aliases = append(aliases, displayName)
 		}
 		for _, alias := range aliases {
 			if exactAgentToolMention(normalizedText, alias) {
-				out = append(out, pluginName)
+				out = append(out, appName)
 				break
 			}
 		}
@@ -3245,38 +3241,6 @@ func agentRunPermissions(ctx context.Context, p *principal.Principal, callerAppN
 	return principal.PermissionsToAccessPermissions(p.TokenPermissions)
 }
 
-func agentRunPermissionsWithInheritedOutputDelivery(p *principal.Principal, permissions []core.AccessPermission, delivery *coreworkflow.OutputDelivery) []core.AccessPermission {
-	if permissions == nil || delivery == nil {
-		return permissions
-	}
-	pluginName := strings.TrimSpace(delivery.Target.AppName)
-	operation := strings.TrimSpace(delivery.Target.Operation)
-	if pluginName == "" || operation == "" || !principal.AllowsOperationPermission(p, pluginName, operation) {
-		return permissions
-	}
-	compiled := principal.CompilePermissions(permissions)
-	if compiled == nil {
-		compiled = principal.PermissionSet{}
-	}
-	addAgentRunPermission(compiled, pluginName, operation)
-	return principal.PermissionsToAccessPermissions(compiled)
-}
-
-func addAgentRunPermission(permissions principal.PermissionSet, pluginName, operation string) {
-	if permissions == nil {
-		return
-	}
-	if operations, ok := permissions[pluginName]; ok && operations == nil {
-		return
-	}
-	operations := permissions[pluginName]
-	if operations == nil {
-		operations = map[string]struct{}{}
-		permissions[pluginName] = operations
-	}
-	operations[operation] = struct{}{}
-}
-
 func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.ToolRef) ([]core.AccessPermission, bool) {
 	if len(refs) == 0 {
 		return nil, false
@@ -3288,8 +3252,8 @@ func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.
 		if strings.TrimSpace(ref.System) != "" {
 			continue
 		}
-		appName := strings.TrimSpace(ref.App)
-		if appName == "" || appName == agentToolSearchAllApp || strings.Contains(appName, "*") {
+		app := strings.TrimSpace(ref.App)
+		if app == "" || app == agentToolSearchAllApp || strings.Contains(app, "*") {
 			return nil, false
 		}
 		operation := strings.TrimSpace(ref.Operation)
@@ -3297,42 +3261,42 @@ func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.
 			return nil, false
 		}
 		if operation == "" {
-			providerWide[appName] = struct{}{}
-			delete(operationsByApp, appName)
+			providerWide[app] = struct{}{}
+			delete(operationsByApp, app)
 			continue
 		}
-		if _, ok := providerWide[appName]; ok {
+		if _, ok := providerWide[app]; ok {
 			continue
 		}
-		ops := operationsByApp[appName]
+		ops := operationsByApp[app]
 		if ops == nil {
 			ops = map[string]struct{}{}
-			operationsByApp[appName] = ops
+			operationsByApp[app] = ops
 		}
 		ops[operation] = struct{}{}
 	}
 	if len(providerWide) == 0 && len(operationsByApp) == 0 {
 		return nil, false
 	}
-	appNames := make([]string, 0, len(providerWide)+len(operationsByApp))
-	for appName := range providerWide {
-		appNames = append(appNames, appName)
+	apps := make([]string, 0, len(providerWide)+len(operationsByApp))
+	for app := range providerWide {
+		apps = append(apps, app)
 	}
-	for appName := range operationsByApp {
-		if _, ok := providerWide[appName]; !ok {
-			appNames = append(appNames, appName)
+	for app := range operationsByApp {
+		if _, ok := providerWide[app]; !ok {
+			apps = append(apps, app)
 		}
 	}
-	sort.Strings(appNames)
-	out := make([]core.AccessPermission, 0, len(appNames))
-	for _, appName := range appNames {
-		if _, ok := providerWide[appName]; ok {
+	sort.Strings(apps)
+	out := make([]core.AccessPermission, 0, len(apps))
+	for _, app := range apps {
+		if _, ok := providerWide[app]; ok {
 			if p != nil && p.TokenPermissions != nil {
-				tokenOps, ok := p.TokenPermissions[appName]
+				tokenOps, ok := p.TokenPermissions[app]
 				if !ok {
 					return nil, false
 				}
-				perm := core.AccessPermission{App: appName}
+				perm := core.AccessPermission{App: app}
 				if len(tokenOps) > 0 {
 					ops := make([]string, 0, len(tokenOps))
 					for operation := range tokenOps {
@@ -3344,16 +3308,16 @@ func compactAgentRunPermissionsForRefs(p *principal.Principal, refs []coreagent.
 				out = append(out, perm)
 				continue
 			}
-			out = append(out, core.AccessPermission{App: appName})
+			out = append(out, core.AccessPermission{App: app})
 			continue
 		}
-		ops := make([]string, 0, len(operationsByApp[appName]))
-		for operation := range operationsByApp[appName] {
+		ops := make([]string, 0, len(operationsByApp[app]))
+		for operation := range operationsByApp[app] {
 			ops = append(ops, operation)
 		}
 		sort.Strings(ops)
 		out = append(out, core.AccessPermission{
-			App:        appName,
+			App:        app,
 			Operations: ops,
 		})
 	}
@@ -3452,9 +3416,9 @@ func (m *Manager) applyCallerInvokePolicies(callerAppName string, refs []coreage
 			if strings.TrimSpace(invoke.Surface) != "" {
 				continue
 			}
-			pluginName := strings.TrimSpace(invoke.App)
+			appName := strings.TrimSpace(invoke.App)
 			operation := strings.TrimSpace(invoke.Operation)
-			if pluginName == "" || operation == "" {
+			if appName == "" || operation == "" {
 				continue
 			}
 			mode, err := normalizeAgentToolCredentialMode(invoke.CredentialMode)
@@ -3462,10 +3426,10 @@ func (m *Manager) applyCallerInvokePolicies(callerAppName string, refs []coreage
 				return nil, err
 			}
 			if mode != "" {
-				modes[agentToolInvokeKey(pluginName, operation)] = mode
+				modes[agentToolInvokeKey(appName, operation)] = mode
 			}
 			if runAs := core.NormalizeRunAsSubject(invoke.RunAs); runAs != nil {
-				key := agentToolInvokeKey(pluginName, operation)
+				key := agentToolInvokeKey(appName, operation)
 				runAsSubjects[key] = runAs
 				runAsExplicitOnly[key] = invoke.RunAsExplicitOnly
 				if identity := core.NormalizeExternalIdentityRef(invoke.RunAsExternalIdentity); identity != nil {
@@ -3549,8 +3513,8 @@ func (m *Manager) applyCallerInvokePolicies(callerAppName string, refs []coreage
 	return out, nil
 }
 
-func agentToolInvokeKey(pluginName, operation string) string {
-	return strings.TrimSpace(pluginName) + "\x00" + strings.TrimSpace(operation)
+func agentToolInvokeKey(appName, operation string) string {
+	return strings.TrimSpace(appName) + "\x00" + strings.TrimSpace(operation)
 }
 
 func agentToolRunAsKey(subject *core.RunAsSubject) core.RunAsSubject {

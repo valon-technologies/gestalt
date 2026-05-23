@@ -9,14 +9,12 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use generated::v1::app_invoker_server::{
-    AppInvoker as ProtoAppInvoker, AppInvokerServer,
-};
+use generated::v1::app_invoker_server::{AppInvoker as ProtoAppInvoker, AppInvokerServer};
 use generated::v1::{
-    ExchangeInvocationTokenRequest, ExchangeInvocationTokenResponse, OperationResult,
-    AppInvocationGrant, PluginInvokeGraphQlRequest, AppInvokeRequest,
+    AppInvocationGrant, AppInvokeRequest, ExchangeInvocationTokenRequest,
+    ExchangeInvocationTokenResponse, OperationResult, PluginInvokeGraphQlRequest,
 };
-use gestalt::{InvocationGrant, InvokeOptions, AppInvoker, Request};
+use gestalt::{AppInvoker, InvocationGrant, InvokeOptions, Request};
 use prost_types::Struct;
 use serde::Serialize;
 use tokio::net::{TcpListener, UnixListener};

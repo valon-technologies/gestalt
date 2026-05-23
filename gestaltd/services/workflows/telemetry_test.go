@@ -165,8 +165,8 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 		call      func(context.Context, coreworkflow.Provider) error
 	}
 	calls := []workflowProviderMetricCall{
-		{"start run", observability.WorkflowOperationStartRun, workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindApp, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.StartRun(ctx, coreworkflow.StartRunRequest{Target: coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "ignored", Operation: "ignored"}}})
+		{"start run", observability.WorkflowOperationStartRun, workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.StartRun(ctx, coreworkflow.StartRunRequest{Target: telemetryCoreAppTarget()})
 			return err
 		}},
 		{"get run", observability.WorkflowOperationGetRun, workflowMetricAttrs(observability.WorkflowOperationGetRun), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -185,12 +185,12 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 			_, err := p.SignalRun(ctx, coreworkflow.SignalRunRequest{RunID: "run-1", Signal: coreworkflow.Signal{Name: "poke"}})
 			return err
 		}},
-		{"signal or start run", observability.WorkflowOperationSignalOrStartRun, workflowMetricAttrsWith(observability.WorkflowOperationSignalOrStartRun, observability.WorkflowTriggerKindSignal, observability.WorkflowTargetKindAgent, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.SignalOrStartRun(ctx, coreworkflow.SignalOrStartRunRequest{Target: coreworkflow.Target{Agent: &coreworkflow.AgentTarget{ProviderName: "ignored"}}, Signal: coreworkflow.Signal{Name: "poke"}})
+		{"signal or start run", observability.WorkflowOperationSignalOrStartRun, workflowMetricAttrsWith(observability.WorkflowOperationSignalOrStartRun, observability.WorkflowTriggerKindSignal, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.SignalOrStartRun(ctx, coreworkflow.SignalOrStartRunRequest{Target: telemetryCoreAgentTarget(nil), Signal: coreworkflow.Signal{Name: "poke"}})
 			return err
 		}},
-		{"upsert schedule", observability.WorkflowOperationUpsertSchedule, workflowMetricAttrsWith(observability.WorkflowOperationUpsertSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindApp, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{Target: coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "ignored", Operation: "ignored"}}})
+		{"upsert schedule", observability.WorkflowOperationUpsertSchedule, workflowMetricAttrsWith(observability.WorkflowOperationUpsertSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.UpsertSchedule(ctx, coreworkflow.UpsertScheduleRequest{Target: telemetryCoreAppTarget()})
 			return err
 		}},
 		{"get schedule", observability.WorkflowOperationGetSchedule, workflowMetricAttrsWith(observability.WorkflowOperationGetSchedule, observability.WorkflowTriggerKindSchedule, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -212,8 +212,8 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 			_, err := p.ResumeSchedule(ctx, coreworkflow.ResumeScheduleRequest{ScheduleID: "sched-1"})
 			return err
 		}},
-		{"upsert trigger", observability.WorkflowOperationUpsertEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationUpsertEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindApp, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
-			_, err := p.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{Target: coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "ignored", Operation: "ignored"}}})
+		{"upsert trigger", observability.WorkflowOperationUpsertEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationUpsertEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
+			_, err := p.UpsertEventTrigger(ctx, coreworkflow.UpsertEventTriggerRequest{Target: telemetryCoreAppTarget()})
 			return err
 		}},
 		{"get trigger", observability.WorkflowOperationGetEventTrigger, workflowMetricAttrsWith(observability.WorkflowOperationGetEventTrigger, observability.WorkflowTriggerKindEvent, observability.WorkflowTargetKindUnknown, observability.WorkflowRunStatusUnknown), func(ctx context.Context, p coreworkflow.Provider) error {
@@ -245,8 +245,8 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 	}
 	store := workflow.(coreworkflow.ExecutionReferenceStore)
 	calls = append(calls,
-		workflowProviderMetricCall{"put execution ref", observability.WorkflowOperationPutExecutionReference, workflowMetricAttrsWith(observability.WorkflowOperationPutExecutionReference, observability.WorkflowTriggerKindNone, observability.WorkflowTargetKindApp, observability.WorkflowRunStatusUnknown), func(ctx context.Context, _ coreworkflow.Provider) error {
-			_, err := store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{ID: "ref-1", Target: coreworkflow.Target{App: &coreworkflow.AppTarget{AppName: "ignored", Operation: "ignored"}}})
+		workflowProviderMetricCall{"put execution ref", observability.WorkflowOperationPutExecutionReference, workflowMetricAttrsWith(observability.WorkflowOperationPutExecutionReference, observability.WorkflowTriggerKindNone, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown), func(ctx context.Context, _ coreworkflow.Provider) error {
+			_, err := store.PutExecutionReference(ctx, &coreworkflow.ExecutionReference{ID: "ref-1", Target: telemetryCoreAppTarget()})
 			return err
 		}},
 		workflowProviderMetricCall{"get execution ref", observability.WorkflowOperationGetExecutionReference, workflowMetricAttrs(observability.WorkflowOperationGetExecutionReference), func(ctx context.Context, _ coreworkflow.Provider) error {
@@ -287,7 +287,7 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 		"gestaltd.workflow.provider.name":    "workflow-metrics",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindManual,
-		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindApp,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindSteps,
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusPending,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	})
@@ -295,11 +295,11 @@ func TestRemoteWorkflowRecordsProviderOperationMetricsAcrossTransport(t *testing
 		"gestaltd.workflow.provider.name":    "workflow-metrics",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
-		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindAgent,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindSteps,
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusPending,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	})
-	startRunAttrs := workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindApp, observability.WorkflowRunStatusUnknown)
+	startRunAttrs := workflowMetricAttrsWith(observability.WorkflowOperationStartRun, observability.WorkflowTriggerKindManual, observability.WorkflowTargetKindSteps, observability.WorkflowRunStatusUnknown)
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.run.id")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.execution_ref")
 	metrictest.RequireFloat64HistogramOmitsAttr(t, rm, "gestaltd.workflows.provider.operation.duration", startRunAttrs, "gestaltd.workflow.app.operation")
@@ -343,9 +343,7 @@ func TestWorkflowHostRecordsOperationMetricsAcrossTransport(t *testing.T) {
 		Trigger: &proto.WorkflowRunTrigger{Kind: &proto.WorkflowRunTrigger_Schedule{
 			Schedule: &proto.WorkflowScheduleTrigger{ScheduleId: "sched-1"},
 		}},
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
-			App: &proto.BoundWorkflowAppTarget{AppName: "ignored", Operation: "ignored"},
-		}},
+		Target: telemetryProtoAppTarget("ignored", "ignored"),
 	})
 	if err != nil {
 		t.Fatalf("InvokeOperation success: %v", err)
@@ -362,7 +360,7 @@ func TestWorkflowHostRecordsOperationMetricsAcrossTransport(t *testing.T) {
 		"gestaltd.workflow.provider.name":    "workflow-host-metrics",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationInvokeOperation,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSchedule,
-		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindApp,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindSteps,
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusUnknown,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	}
@@ -506,9 +504,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		IdempotencyKey:  "idem-invalid-target",
 		InvocationToken: token,
 		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
-			App: &proto.BoundWorkflowAppTarget{Operation: "run"},
-		}},
+		Target:          telemetryProtoAppTarget("", "run"),
 	})
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("SignalOrStartRun invalid target = %v, want InvalidArgument", err)
@@ -520,15 +516,9 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		IdempotencyKey:  "idem-principal-denied",
 		InvocationToken: principalDeniedToken,
 		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Agent{
-			Agent: &proto.BoundWorkflowAgentTarget{
-				ProviderName: "simple",
-				Prompt:       "handle the Slack message",
-				ToolRefs: []*proto.AgentToolRef{
-					{App: "github", Operation: "reviewPullRequest"},
-				},
-			},
-		}},
+		Target: telemetryProtoAgentTarget([]*proto.AgentToolRef{
+			{App: "github", Operation: "reviewPullRequest"},
+		}),
 	})
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("SignalOrStartRun principal denied = %v, want NotFound", err)
@@ -540,15 +530,9 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		IdempotencyKey:  "idem-authorizer-denied",
 		InvocationToken: authorizerDeniedToken,
 		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Agent{
-			Agent: &proto.BoundWorkflowAgentTarget{
-				ProviderName: "simple",
-				Prompt:       "handle the Slack message",
-				ToolRefs: []*proto.AgentToolRef{
-					{App: "datadog", Operation: "listAlerts"},
-				},
-			},
-		}},
+		Target: telemetryProtoAgentTarget([]*proto.AgentToolRef{
+			{App: "datadog", Operation: "listAlerts"},
+		}),
 	})
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("SignalOrStartRun authorizer denied = %v, want NotFound", err)
@@ -562,7 +546,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"gestaltd.workflow.provider.name":    "local",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
-		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindAgent,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindSteps,
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusRunning,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 	}
@@ -570,7 +554,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"gestaltd.workflow.provider.name":    "unknown",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
-		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindAgent,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindSteps,
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusUnknown,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 		"error.type":                         "grpc.failed_precondition",
@@ -579,7 +563,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"gestaltd.workflow.provider.name":    "unknown",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
-		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindApp,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindSteps,
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusUnknown,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 		"error.type":                         "grpc.invalid_argument",
@@ -588,7 +572,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"gestaltd.workflow.provider.name":    "unknown",
 		"gestaltd.workflow.operation.name":   observability.WorkflowOperationSignalOrStartRun,
 		"gestaltd.workflow.trigger.kind":     observability.WorkflowTriggerKindSignal,
-		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindAgent,
+		"gestaltd.workflow.target.kind":      observability.WorkflowTargetKindSteps,
 		"gestaltd.workflow.run.status":       observability.WorkflowRunStatusUnknown,
 		"gestaltd.workflow.telemetry.source": observability.WorkflowTelemetrySourceCore,
 		"error.type":                         "grpc.not_found",
@@ -677,7 +661,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"caller_plugin":        "slack",
 		"subject_id":           "user:user-123",
 		"subject_kind":         "user",
-		"workflow_target_kind": "agent",
+		"workflow_target_kind": "steps",
 	})
 	assertWorkflowAuditLog(t, auditOutput, failureKey, map[string]any{
 		"level":                "WARN",
@@ -691,7 +675,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"caller_plugin":        "slack",
 		"subject_id":           "user:user-123",
 		"subject_kind":         "user",
-		"workflow_target_kind": "agent",
+		"workflow_target_kind": "steps",
 	})
 	assertWorkflowAuditLog(t, auditOutput, principalDeniedKey, map[string]any{
 		"level":                     "WARN",
@@ -706,7 +690,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"caller_plugin":             "slack",
 		"subject_id":                "user:restricted",
 		"subject_kind":              "user",
-		"workflow_target_kind":      "agent",
+		"workflow_target_kind":      "steps",
 		"workflow_target_component": "agent_tool_ref",
 		"workflow_target_provider":  "github",
 		"workflow_target_operation": "reviewPullRequest",
@@ -724,7 +708,7 @@ func TestWorkflowProviderRecordsSignalOrStartMetricsAcrossTransport(t *testing.T
 		"caller_plugin":             "slack",
 		"subject_id":                "user:authorizer-denied",
 		"subject_kind":              "user",
-		"workflow_target_kind":      "agent",
+		"workflow_target_kind":      "steps",
 		"workflow_target_component": "agent_tool_ref",
 		"workflow_target_provider":  "datadog",
 		"workflow_target_operation": "listAlerts",
@@ -786,12 +770,7 @@ func workflowManagerTelemetrySignalOrStartRequest(token, workflowKey, idempotenc
 		IdempotencyKey:  idempotencyKey,
 		InvocationToken: token,
 		Signal:          &proto.WorkflowSignal{Name: "slack.message"},
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_Agent{
-			Agent: &proto.BoundWorkflowAgentTarget{
-				ProviderName: "simple",
-				Prompt:       "handle the Slack message",
-			},
-		}},
+		Target:          telemetryProtoAgentTarget(nil),
 	}
 }
 
@@ -1044,9 +1023,7 @@ func telemetryRun(id string, status proto.WorkflowRunStatus) *proto.BoundWorkflo
 		Id:        id,
 		Status:    status,
 		CreatedAt: timestamppb.Now(),
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
-			App: &proto.BoundWorkflowAppTarget{AppName: "ignored", Operation: "ignored"},
-		}},
+		Target:    telemetryProtoAppTarget("ignored", "ignored"),
 	}
 }
 
@@ -1055,9 +1032,7 @@ func telemetrySchedule(id string) *proto.BoundWorkflowSchedule {
 		Id:        id,
 		CreatedAt: timestamppb.Now(),
 		UpdatedAt: timestamppb.Now(),
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
-			App: &proto.BoundWorkflowAppTarget{AppName: "ignored", Operation: "ignored"},
-		}},
+		Target:    telemetryProtoAppTarget("ignored", "ignored"),
 	}
 }
 
@@ -1067,9 +1042,7 @@ func telemetryEventTrigger(id string) *proto.BoundWorkflowEventTrigger {
 		CreatedAt: timestamppb.Now(),
 		UpdatedAt: timestamppb.Now(),
 		Match:     &proto.WorkflowEventMatch{Type: "ignored"},
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
-			App: &proto.BoundWorkflowAppTarget{AppName: "ignored", Operation: "ignored"},
-		}},
+		Target:    telemetryProtoAppTarget("ignored", "ignored"),
 	}
 }
 
@@ -1077,10 +1050,46 @@ func telemetryExecutionReference() *proto.WorkflowExecutionReference {
 	return &proto.WorkflowExecutionReference{
 		Id:           "ref-1",
 		ProviderName: "workflow-metrics",
-		Target: &proto.BoundWorkflowTarget{Kind: &proto.BoundWorkflowTarget_App{
-			App: &proto.BoundWorkflowAppTarget{AppName: "ignored", Operation: "ignored"},
+		Target:       telemetryProtoAppTarget("ignored", "ignored"),
+		CreatedAt:    timestamppb.Now(),
+	}
+}
+
+func telemetryCoreAppTarget() coreworkflow.Target {
+	return coreworkflow.Target{
+		Steps: []coreworkflow.Step{{ID: "run", App: &coreworkflow.AppCall{Name: "ignored", Operation: "ignored"}}},
+	}
+}
+
+func telemetryCoreAgentTarget(tools []coreagent.ToolRef) coreworkflow.Target {
+	return coreworkflow.Target{
+		Steps: []coreworkflow.Step{{ID: "run", Agent: &coreworkflow.AgentTurn{
+			ProviderName: "simple",
+			Prompt:       coreworkflow.Text{Template: "handle the Slack message"},
+			ToolRefs:     tools,
+		}}},
+	}
+}
+
+func telemetryProtoAppTarget(appName, operation string) *proto.BoundWorkflowTarget {
+	return &proto.BoundWorkflowTarget{
+		Steps: []*proto.WorkflowStep{{
+			Id:     "run",
+			Action: &proto.WorkflowStep_App{App: &proto.WorkflowStepAppCall{Name: appName, Operation: operation}},
 		}},
-		CreatedAt: timestamppb.Now(),
+	}
+}
+
+func telemetryProtoAgentTarget(tools []*proto.AgentToolRef) *proto.BoundWorkflowTarget {
+	return &proto.BoundWorkflowTarget{
+		Steps: []*proto.WorkflowStep{{
+			Id: "run",
+			Action: &proto.WorkflowStep_Agent{Agent: &proto.WorkflowStepAgentTurn{
+				Provider: "simple",
+				Prompt:   &proto.WorkflowText{Template: "handle the Slack message"},
+				Tools:    tools,
+			}},
+		}},
 	}
 }
 

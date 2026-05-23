@@ -33,8 +33,10 @@ const triggers = new Map<string, ReturnType<typeof createTrigger>>();
 const definitions = new Map<string, BoundWorkflowDefinition>();
 let publishCount = 0;
 
-function pluginTarget(appName: string, operation: string): BoundWorkflowTarget {
-  return boundWorkflowTarget({ app: { appName, operation } });
+function appTarget(appName: string, operation: string): BoundWorkflowTarget {
+  return boundWorkflowTarget({
+    steps: [{ id: operation, app: { name: appName, operation } }],
+  });
 }
 
 export const provider = defineWorkflowProvider({
@@ -73,12 +75,9 @@ export const provider = defineWorkflowProvider({
     }
   },
   async startRun(request) {
-    const app =
-      request.target?.kind?.case === "app"
-        ? request.target.kind.value
-        : undefined;
+    const app = request.target?.steps?.[0]?.app;
     const run = createRun(
-      `${app?.appName ?? "app"}:${app?.operation ?? "operation"}:${runs.size + 1}`,
+      `${app?.name ?? "app"}:${app?.operation ?? "operation"}:${runs.size + 1}`,
       request,
       WorkflowRunStatus.PENDING,
       request.idempotencyKey ? `idempotency:${request.idempotencyKey}` : "",
@@ -187,7 +186,7 @@ export const provider = defineWorkflowProvider({
     const trigger = boundWorkflowEventTrigger({
       id: triggerId,
       ...(existing?.match ? { match: existing.match } : {}),
-      target: existing?.target ?? pluginTarget(request.appName, "published"),
+      target: existing?.target ?? appTarget(request.appName, "published"),
       paused: false,
     });
     triggers.set(triggerId, trigger);

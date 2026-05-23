@@ -29,16 +29,16 @@ func NewInvocationTokenManager(secret []byte) (*InvocationTokenManager, error) {
 type ProviderServer struct {
 	proto.UnimplementedWorkflowProviderServer
 
-	pluginName string
-	manager    ManagerService
-	tokens     *InvocationTokenManager
+	appName string
+	manager ManagerService
+	tokens  *InvocationTokenManager
 }
 
-func NewProviderServer(pluginName string, manager ManagerService, tokens *InvocationTokenManager) *ProviderServer {
+func NewProviderServer(appName string, manager ManagerService, tokens *InvocationTokenManager) *ProviderServer {
 	return &ProviderServer{
-		pluginName: pluginName,
-		manager:    manager,
-		tokens:     tokens,
+		appName: appName,
+		manager: manager,
+		tokens:  tokens,
 	}
 }
 
@@ -61,7 +61,7 @@ func (s *ProviderServer) CreateDefinition(ctx context.Context, req *proto.Create
 		ProviderName:   strings.TrimSpace(req.GetProviderName()),
 		Target:         target,
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
-		CallerAppName:  strings.TrimSpace(s.pluginName),
+		CallerAppName:  strings.TrimSpace(s.appName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -121,7 +121,7 @@ func (s *ProviderServer) UpdateDefinition(ctx context.Context, req *proto.Update
 	managed, err := s.manager.UpdateDefinition(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), definitionID, workflowmanager.DefinitionUpsert{
 		ProviderName:  strings.TrimSpace(req.GetProviderName()),
 		Target:        target,
-		CallerAppName: strings.TrimSpace(s.pluginName),
+		CallerAppName: strings.TrimSpace(s.appName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -181,7 +181,7 @@ func (s *ProviderServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWo
 	if err != nil {
 		return nil, err
 	}
-	upsert.CallerAppName = strings.TrimSpace(s.pluginName)
+	upsert.CallerAppName = strings.TrimSpace(s.appName)
 	upsert.IdempotencyKey = strings.TrimSpace(req.GetIdempotencyKey())
 	upsert.DefinitionID = strings.TrimSpace(req.GetDefinitionId())
 	var managed *workflowmanager.ManagedSchedule
@@ -221,7 +221,7 @@ func (s *ProviderServer) StartRun(ctx context.Context, req *proto.StartWorkflowP
 		DefinitionID:   strings.TrimSpace(req.GetDefinitionId()),
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
 		WorkflowKey:    strings.TrimSpace(req.GetWorkflowKey()),
-		CallerAppName:  strings.TrimSpace(s.pluginName),
+		CallerAppName:  strings.TrimSpace(s.appName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -294,7 +294,7 @@ func (s *ProviderServer) SignalOrStartRun(ctx context.Context, req *proto.Signal
 		DefinitionID:   strings.TrimSpace(req.GetDefinitionId()),
 		IdempotencyKey: strings.TrimSpace(req.GetIdempotencyKey()),
 		Signal:         workflowSignalFromProto(req.GetSignal()),
-		CallerAppName:  strings.TrimSpace(s.pluginName),
+		CallerAppName:  strings.TrimSpace(s.appName),
 	})
 	if err != nil {
 		return nil, workflowManagerStatusError(err)
@@ -431,7 +431,7 @@ func (s *ProviderServer) UpsertEventTrigger(ctx context.Context, req *proto.Upse
 	if err != nil {
 		return nil, err
 	}
-	upsert.CallerAppName = strings.TrimSpace(s.pluginName)
+	upsert.CallerAppName = strings.TrimSpace(s.appName)
 	upsert.IdempotencyKey = strings.TrimSpace(req.GetIdempotencyKey())
 	upsert.DefinitionID = strings.TrimSpace(req.GetDefinitionId())
 	var managed *workflowmanager.ManagedEventTrigger
@@ -566,7 +566,7 @@ func (s *ProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWor
 	}
 	published, err := s.manager.PublishEvent(appinvokerservice.RestoreTokenContext(ctx, tokenCtx, ""), tokenCtx.Principal(), workflowmanager.EventPublish{
 		ProviderName: strings.TrimSpace(req.GetProviderName()),
-		AppName:      strings.TrimSpace(s.pluginName),
+		AppName:      strings.TrimSpace(s.appName),
 		Event:        event,
 	})
 	if err != nil {
@@ -580,7 +580,7 @@ func (s *ProviderServer) PublishEvent(ctx context.Context, req *proto.PublishWor
 }
 
 func (s *ProviderServer) tokenContext(token string) (appinvokerservice.TokenContext, error) {
-	tokenCtx, err := s.tokens.ResolveToken(token, s.pluginName)
+	tokenCtx, err := s.tokens.ResolveToken(token, s.appName)
 	if err != nil {
 		return appinvokerservice.TokenContext{}, status.Error(codes.FailedPrecondition, err.Error())
 	}
@@ -591,7 +591,7 @@ func (s *ProviderServer) requireWorkflowGrant(tokenCtx appinvokerservice.TokenCo
 	if tokenCtx.AllowsWorkflowManagerOperation(operation) {
 		return nil
 	}
-	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, strings.TrimSpace(s.pluginName))
+	return status.Errorf(codes.PermissionDenied, "workflow manager operation %q is not allowed for app %q", operation, strings.TrimSpace(s.appName))
 }
 
 func workflowManagerSignalOrStartMetricDims(req *proto.SignalOrStartWorkflowProviderRunRequest, managed *workflowmanager.ManagedRunSignal) observability.WorkflowMetricDims {
@@ -652,24 +652,13 @@ func workflowManagerTargetOrDefinition(targetProto *proto.BoundWorkflowTarget, d
 }
 
 func workflowManagerTargetProtoIsSet(targetProto *proto.BoundWorkflowTarget) bool {
-	return targetProto != nil && (targetProto.GetApp() != nil || targetProto.GetAgent() != nil)
+	return targetProto != nil && len(targetProto.GetSteps()) > 0
 }
 
 func workflowManagerTarget(targetProto *proto.BoundWorkflowTarget) (coreworkflow.Target, error) {
 	target := workflowTargetFromProto(targetProto)
-	if target.Agent == nil {
-		if target.App == nil {
-			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.app.app_name is required")
-		}
-		pluginTarget := *target.App
-		if strings.TrimSpace(pluginTarget.AppName) == "" {
-			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.app.app_name is required")
-		}
-		if strings.TrimSpace(pluginTarget.Operation) == "" {
-			return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.app.operation is required")
-		}
-	} else if strings.TrimSpace(target.Agent.ProviderName) == "" {
-		return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.agent.provider_name is required")
+	if len(target.Steps) == 0 {
+		return coreworkflow.Target{}, status.Error(codes.InvalidArgument, "target.steps is required")
 	}
 	return target, nil
 }
