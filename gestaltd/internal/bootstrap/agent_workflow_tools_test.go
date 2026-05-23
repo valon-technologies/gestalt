@@ -718,7 +718,7 @@ func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithInheritedAgentToolRefs
 	}
 }
 
-func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithDelegatedCallerToolRefs(t *testing.T) {
+func TestAgentRuntimeWorkflowSystemToolCreatesScheduleWithGrantedCallerToolRefs(t *testing.T) {
 	t.Parallel()
 
 	runtime, workflowProvider := newWorkflowSystemToolRuntime(t)
@@ -1254,7 +1254,7 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 	}
 }
 
-func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedDefinitionTarget(t *testing.T) {
+func TestAgentRuntimeWorkflowSystemToolRejectsUngrantedDefinitionTarget(t *testing.T) {
 	t.Parallel()
 
 	runtime, _ := newWorkflowSystemToolRuntime(t)
@@ -1374,7 +1374,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsInvalidScheduleDefinitionArguments
 	}
 }
 
-func TestAgentRuntimeWorkflowSystemToolRejectsUndelegatedScheduleTarget(t *testing.T) {
+func TestAgentRuntimeWorkflowSystemToolRejectsUngrantedScheduleTarget(t *testing.T) {
 	t.Parallel()
 
 	runtime, _ := newWorkflowSystemToolRuntime(t)
@@ -1457,7 +1457,7 @@ func TestAgentRuntimeWorkflowSystemToolRejectsUnsupportedScheduleTargetFields(t 
 			},
 		},
 		{
-			name: "agent toolRefs alias",
+			name: "agent toolRefs rejected",
 			arguments: map[string]any{
 				"cron": "*/5 * * * *",
 				"target": workflowSystemToolTestTarget(map[string]any{
