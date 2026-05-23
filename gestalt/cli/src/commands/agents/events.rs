@@ -172,8 +172,7 @@ pub(crate) fn tool_info_summary(info: &ToolEventInfo) -> String {
             summary.push(' ');
             summary.push_str(&encoded);
         }
-    } else if matches!(info.phase, ToolPhase::Started)
-        && let Some(input) = info.input.as_ref()
+    } else if let Some(input) = info.input.as_ref()
         && let Ok(encoded) = super::fields::compact_json(input)
     {
         summary.push(' ');
@@ -235,5 +234,20 @@ mod tests {
             classify_turn_event(&event),
             ClassifiedTurnEvent::Private
         ));
+    }
+
+    #[test]
+    fn tool_info_summary_includes_input_when_no_output_or_error() {
+        let info = ToolEventInfo {
+            name: "grep".to_string(),
+            phase: ToolPhase::Completed,
+            status: None,
+            error: None,
+            input: Some(json!({"pattern": "foo"})),
+            output: None,
+        };
+        let summary = tool_info_summary(&info);
+        assert!(summary.contains("grep completed"));
+        assert!(summary.contains("pattern"));
     }
 }

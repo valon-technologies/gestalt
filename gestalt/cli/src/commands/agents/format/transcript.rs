@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use crate::commands::agents::events::{
-    ClassifiedTurnEvent, classify_turn_event, effect_data_summary,
+    ClassifiedTurnEvent, classify_data_event, classify_turn_event, effect_data_summary,
 };
 use crate::commands::agents::fields::{
     display_action, display_label, display_ref, display_status, display_text, display_tool_error,
@@ -27,7 +27,9 @@ pub(crate) fn fallback_turn_event_data_summary(value: &Value) -> String {
 pub(crate) fn turn_event_data_summary(event: &AgentTurnEventInfo) -> Option<String> {
     match classify_turn_event(event) {
         ClassifiedTurnEvent::Display { event, display } => {
-            turn_event_display_summary(event, display)
+            turn_event_display_summary(event, display).or_else(|| {
+                classify_data_event(event).and_then(|effect| effect_data_summary(&effect))
+            })
         }
         ClassifiedTurnEvent::Data(effect) => effect_data_summary(&effect),
         ClassifiedTurnEvent::Private => Some(String::new()),
@@ -135,4 +137,35 @@ pub(crate) fn tool_display_summary(display: &AgentTurnDisplayInfo) -> Option<Str
         summary.push_str(&super::super::fields::compact_json(input).ok()?);
     }
     Some(summary)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn turn_event_data_summary_falls_back_to_data_when_display_unrecognized() {
+        let event = AgentTurnEventInfo {
+            id: String::new(),
+            turn_id: String::new(),
+            seq: 0,
+            event_type: "tool.completed".to_string(),
+            source: String::new(),
+            visibility: "public".to_string(),
+            data: json!({"tool_name": "grep", "arguments": {"pattern": "foo"}})
+                .as_object()
+                .cloned()
+                .unwrap(),
+            display: Some(AgentTurnDisplayInfo {
+                kind: "unknown-kind".to_string(),
+                phase: "completed".to_string(),
+                ..AgentTurnDisplayInfo::from_value(json!({})).unwrap()
+            }),
+        };
+
+        let summary = turn_event_data_summary(&event).expect("summary");
+        assert!(summary.contains("grep"));
+        assert!(summary.contains("completed"));
+    }
 }
