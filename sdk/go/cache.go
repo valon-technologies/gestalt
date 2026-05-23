@@ -23,10 +23,11 @@ type CacheSetOptions struct {
 
 // CacheClient speaks to a running cache provider over the unified host-service socket.
 type CacheClient struct {
-	client proto.CacheClient
+	client  proto.CacheClient
+	binding hostBinding
 }
 
-var sharedCacheTransports sync.Map
+var sharedCacheGRPCClients sync.Map
 
 // Cache connects to the cache provider exposed by gestaltd.
 func Cache(name ...string) (*CacheClient, error) {
@@ -34,20 +35,14 @@ func Cache(name ...string) (*CacheClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	binding := firstCacheName(name)
-	transport := getSharedCacheTransport(binding)
+	binding := hostBinding(firstBindingName(name...))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, err := hostServiceTransportClient(ctx, "cache", target, token, binding, transport, proto.NewCacheClient)
+	client, err := cachedHostServiceGRPCClient(ctx, "cache", target, token, &sharedCacheGRPCClients, proto.NewCacheClient)
 	if err != nil {
 		return nil, fmt.Errorf("cache: connect to host: %w", err)
 	}
-	return &CacheClient{client: client}, nil
-}
-
-func getSharedCacheTransport(binding string) *sharedManagerTransport[proto.CacheClient] {
-	val, _ := sharedCacheTransports.LoadOrStore(binding, &sharedManagerTransport[proto.CacheClient]{})
-	return val.(*sharedManagerTransport[proto.CacheClient])
+	return &CacheClient{client: client, binding: binding}, nil
 }
 
 // Close is a no-op because this client uses shared transport.
@@ -55,7 +50,7 @@ func (c *CacheClient) Close() error { return nil }
 
 // Get loads one cached value.
 func (c *CacheClient) Get(ctx context.Context, key string) ([]byte, bool, error) {
-	resp, err := c.client.Get(ctx, &proto.CacheGetRequest{Key: key})
+	resp, err := c.client.Get(c.binding.rpcCtx(ctx), &proto.CacheGetRequest{Key: key})
 	if err != nil {
 		return nil, false, err
 	}
@@ -67,7 +62,7 @@ func (c *CacheClient) Get(ctx context.Context, key string) ([]byte, bool, error)
 
 // GetMany loads all present values for keys.
 func (c *CacheClient) GetMany(ctx context.Context, keys []string) (map[string][]byte, error) {
-	resp, err := c.client.GetMany(ctx, &proto.CacheGetManyRequest{Keys: keys})
+	resp, err := c.client.GetMany(c.binding.rpcCtx(ctx), &proto.CacheGetManyRequest{Keys: keys})
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +78,7 @@ func (c *CacheClient) GetMany(ctx context.Context, keys []string) (map[string][]
 
 // Set stores one value, replacing any existing entry at key.
 func (c *CacheClient) Set(ctx context.Context, key string, value []byte, opts CacheSetOptions) error {
-	_, err := c.client.Set(ctx, &proto.CacheSetRequest{
+	_, err := c.client.Set(c.binding.rpcCtx(ctx), &proto.CacheSetRequest{
 		Key:   key,
 		Value: append([]byte(nil), value...),
 		Ttl:   cacheTTLToProto(opts.TTL),
@@ -100,7 +95,7 @@ func (c *CacheClient) SetMany(ctx context.Context, entries []CacheEntry, opts Ca
 			Value: append([]byte(nil), entry.Value...),
 		})
 	}
-	_, err := c.client.SetMany(ctx, &proto.CacheSetManyRequest{
+	_, err := c.client.SetMany(c.binding.rpcCtx(ctx), &proto.CacheSetManyRequest{
 		Entries: protoEntries,
 		Ttl:     cacheTTLToProto(opts.TTL),
 	})
@@ -109,7 +104,7 @@ func (c *CacheClient) SetMany(ctx context.Context, entries []CacheEntry, opts Ca
 
 // Delete removes one cached value and reports whether it existed.
 func (c *CacheClient) Delete(ctx context.Context, key string) (bool, error) {
-	resp, err := c.client.Delete(ctx, &proto.CacheDeleteRequest{Key: key})
+	resp, err := c.client.Delete(c.binding.rpcCtx(ctx), &proto.CacheDeleteRequest{Key: key})
 	if err != nil {
 		return false, err
 	}
@@ -118,7 +113,7 @@ func (c *CacheClient) Delete(ctx context.Context, key string) (bool, error) {
 
 // DeleteMany removes multiple cached values and reports how many were deleted.
 func (c *CacheClient) DeleteMany(ctx context.Context, keys []string) (int64, error) {
-	resp, err := c.client.DeleteMany(ctx, &proto.CacheDeleteManyRequest{Keys: keys})
+	resp, err := c.client.DeleteMany(c.binding.rpcCtx(ctx), &proto.CacheDeleteManyRequest{Keys: keys})
 	if err != nil {
 		return 0, err
 	}
@@ -127,7 +122,7 @@ func (c *CacheClient) DeleteMany(ctx context.Context, keys []string) (int64, err
 
 // Touch updates the TTL for one cached value.
 func (c *CacheClient) Touch(ctx context.Context, key string, ttl time.Duration) (bool, error) {
-	resp, err := c.client.Touch(ctx, &proto.CacheTouchRequest{Key: key, Ttl: cacheTTLToProto(ttl)})
+	resp, err := c.client.Touch(c.binding.rpcCtx(ctx), &proto.CacheTouchRequest{Key: key, Ttl: cacheTTLToProto(ttl)})
 	if err != nil {
 		return false, err
 	}
@@ -139,11 +134,4 @@ func cacheTTLToProto(ttl time.Duration) *durationpb.Duration {
 		return nil
 	}
 	return durationpb.New(ttl)
-}
-
-func firstCacheName(name []string) string {
-	if len(name) == 0 {
-		return ""
-	}
-	return name[0]
 }

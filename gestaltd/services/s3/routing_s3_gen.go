@@ -7,6 +7,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/grpc"
 )
 
 func (s *routingS3Server) HeadObject(ctx context.Context, req *proto.HeadObjectRequest) (*proto.HeadObjectResponse, error) {
@@ -15,6 +16,22 @@ func (s *routingS3Server) HeadObject(ctx context.Context, req *proto.HeadObjectR
 		return nil, err
 	}
 	return server.HeadObject(ctx, req)
+}
+
+func (s *routingS3Server) ReadObject(req *proto.ReadObjectRequest, stream grpc.ServerStreamingServer[proto.ReadObjectChunk]) error {
+	server, err := s.server(stream.Context())
+	if err != nil {
+		return err
+	}
+	return server.ReadObject(req, stream)
+}
+
+func (s *routingS3Server) WriteObject(stream grpc.ClientStreamingServer[proto.WriteObjectRequest, proto.WriteObjectResponse]) error {
+	server, err := s.server(stream.Context())
+	if err != nil {
+		return err
+	}
+	return server.WriteObject(stream)
 }
 
 func (s *routingS3Server) DeleteObject(ctx context.Context, req *proto.DeleteObjectRequest) (*emptypb.Empty, error) {

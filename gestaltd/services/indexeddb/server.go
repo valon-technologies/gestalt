@@ -1,6 +1,6 @@
 package indexeddb
 
-//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/datastore_grpc.pb.go -service IndexedDBServer -receiver routingIndexedDBServer -binding indexeddb -package indexeddb -server-type proto.IndexedDBServer -output routing_indexeddb_gen.go
+//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/datastore_grpc.pb.go -service IndexedDBServer -receiver routingIndexedDBServer -package indexeddb -output routing_indexeddb_gen.go
 
 import (
 	"context"
@@ -73,22 +73,6 @@ func NewRoutingServer(bindings map[string]coreindexeddb.IndexedDB, defaultBindin
 
 func (s *routingIndexedDBServer) server(ctx context.Context) (proto.IndexedDBServer, error) {
 	return runtimehost.ResolveBinding(ctx, "indexeddb", s.defaultBinding, s.servers)
-}
-
-func (s *routingIndexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) error {
-	server, err := s.server(stream.Context())
-	if err != nil {
-		return err
-	}
-	return server.OpenCursor(stream)
-}
-
-func (s *routingIndexedDBServer) Transaction(stream proto.IndexedDB_TransactionServer) error {
-	server, err := s.server(stream.Context())
-	if err != nil {
-		return err
-	}
-	return server.Transaction(stream)
 }
 
 func (s *indexedDBServer) storeName(name string) string {

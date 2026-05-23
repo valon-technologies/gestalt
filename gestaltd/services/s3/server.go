@@ -1,7 +1,7 @@
 package s3
 
-//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/s3_grpc.pb.go -service S3Server -receiver routingS3Server -binding s3 -package s3 -server-type proto.S3Server -output routing_s3_gen.go
-//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/s3_grpc.pb.go -service S3ObjectAccessServer -receiver routingS3ObjectAccessServer -binding s3 -package s3 -server-type proto.S3ObjectAccessServer -output routing_s3_object_access_gen.go
+//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/s3_grpc.pb.go -service S3Server -receiver routingS3Server -package s3 -output routing_s3_gen.go
+//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/s3_grpc.pb.go -service S3ObjectAccessServer -receiver routingS3ObjectAccessServer -package s3 -output routing_s3_object_access_gen.go
 
 import (
 	"context"
@@ -88,22 +88,6 @@ func NewRoutingServers(clients map[string]s3store.Client, defaultBinding string,
 
 func (s *routingS3Server) server(ctx context.Context) (proto.S3Server, error) {
 	return runtimehost.ResolveBinding(ctx, "s3", s.defaultBinding, s.servers)
-}
-
-func (s *routingS3Server) ReadObject(req *proto.ReadObjectRequest, stream proto.S3_ReadObjectServer) error {
-	server, err := s.server(stream.Context())
-	if err != nil {
-		return err
-	}
-	return server.ReadObject(req, stream)
-}
-
-func (s *routingS3Server) WriteObject(stream proto.S3_WriteObjectServer) error {
-	server, err := s.server(stream.Context())
-	if err != nil {
-		return err
-	}
-	return server.WriteObject(stream)
 }
 
 func (s *routingS3ObjectAccessServer) server(ctx context.Context) (proto.S3ObjectAccessServer, error) {

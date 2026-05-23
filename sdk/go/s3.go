@@ -10,7 +10,6 @@ import (
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -136,19 +135,10 @@ type ObjectAccessURL = PresignResult
 type S3Client struct {
 	client             proto.S3Client
 	objectAccessClient proto.S3ObjectAccessClient
+	binding            hostBinding
 }
 
-type sharedS3Transport struct {
-	mu                 sync.Mutex
-	target             string
-	token              string
-	binding            string
-	conn               *grpc.ClientConn
-	client             proto.S3Client
-	objectAccessClient proto.S3ObjectAccessClient
-}
-
-var sharedS3Transports sync.Map
+var sharedS3GRPCClients sync.Map
 
 // S3 connects to the S3 provider exposed by gestaltd.
 func S3(name ...string) (*S3Client, error) {
@@ -156,64 +146,18 @@ func S3(name ...string) (*S3Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	binding := firstS3Name(name)
-	transport := getSharedS3Transport(binding)
+	binding := hostBinding(firstBindingName(name...))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, objectAccessClient, err := sharedS3Clients(ctx, target, token, binding, transport)
+	client, objectAccessClient, err := cachedS3GRPCClients(ctx, target, token, &sharedS3GRPCClients)
 	if err != nil {
 		return nil, fmt.Errorf("s3: connect to host: %w", err)
 	}
 	return &S3Client{
 		client:             client,
 		objectAccessClient: objectAccessClient,
+		binding:            binding,
 	}, nil
-}
-
-func getSharedS3Transport(binding string) *sharedS3Transport {
-	val, _ := sharedS3Transports.LoadOrStore(binding, &sharedS3Transport{})
-	return val.(*sharedS3Transport)
-}
-
-func sharedS3Clients(ctx context.Context, target, token, binding string, transport *sharedS3Transport) (proto.S3Client, proto.S3ObjectAccessClient, error) {
-	if transport == nil {
-		return nil, nil, fmt.Errorf("s3: shared transport is not initialized")
-	}
-
-	transport.mu.Lock()
-	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
-		client := transport.client
-		objectAccessClient := transport.objectAccessClient
-		transport.mu.Unlock()
-		return client, objectAccessClient, nil
-	}
-	transport.mu.Unlock()
-
-	conn, err := dialHostService(ctx, "s3", target, token, binding)
-	if err != nil {
-		return nil, nil, err
-	}
-	client := proto.NewS3Client(conn)
-	objectAccessClient := proto.NewS3ObjectAccessClient(conn)
-
-	transport.mu.Lock()
-	defer transport.mu.Unlock()
-
-	if transport.conn != nil && transport.target == target && transport.token == token && transport.binding == binding {
-		_ = conn.Close()
-		return transport.client, transport.objectAccessClient, nil
-	}
-	if transport.conn != nil {
-		_ = transport.conn.Close()
-	}
-
-	transport.target = target
-	transport.token = token
-	transport.binding = binding
-	transport.conn = conn
-	transport.client = client
-	transport.objectAccessClient = objectAccessClient
-	return client, objectAccessClient, nil
 }
 
 // Close is a no-op because this client uses shared transport.
@@ -231,7 +175,7 @@ func (c *S3Client) ObjectVersion(bucket, key, versionID string) *Object {
 
 // HeadObject fetches metadata for one object.
 func (c *S3Client) HeadObject(ctx context.Context, ref ObjectRef) (ObjectMeta, error) {
-	resp, err := c.client.HeadObject(ctx, &proto.HeadObjectRequest{Ref: objectRefToProto(ref)})
+	resp, err := c.client.HeadObject(c.binding.rpcCtx(ctx), &proto.HeadObjectRequest{Ref: objectRefToProto(ref)})
 	if err != nil {
 		return ObjectMeta{}, grpcS3Err(err)
 	}
@@ -243,7 +187,7 @@ func (c *S3Client) ReadObject(ctx context.Context, ref ObjectRef, opts *ReadOpti
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	readCtx, cancel := context.WithCancel(ctx)
+	readCtx, cancel := context.WithCancel(c.binding.rpcCtx(ctx))
 	req := &proto.ReadObjectRequest{
 		Ref: objectRefToProto(ref),
 	}
@@ -278,7 +222,7 @@ func (c *S3Client) ReadObject(ctx context.Context, ref ObjectRef, opts *ReadOpti
 
 // WriteObject uploads an object from body.
 func (c *S3Client) WriteObject(ctx context.Context, ref ObjectRef, body io.Reader, opts *WriteOptions) (ObjectMeta, error) {
-	stream, err := c.client.WriteObject(ctx)
+	stream, err := c.client.WriteObject(c.binding.rpcCtx(ctx))
 	if err != nil {
 		return ObjectMeta{}, grpcS3Err(err)
 	}
@@ -328,13 +272,13 @@ func (c *S3Client) WriteObject(ctx context.Context, ref ObjectRef, body io.Reade
 
 // DeleteObject removes one object.
 func (c *S3Client) DeleteObject(ctx context.Context, ref ObjectRef) error {
-	_, err := c.client.DeleteObject(ctx, &proto.DeleteObjectRequest{Ref: objectRefToProto(ref)})
+	_, err := c.client.DeleteObject(c.binding.rpcCtx(ctx), &proto.DeleteObjectRequest{Ref: objectRefToProto(ref)})
 	return grpcS3Err(err)
 }
 
 // ListObjects lists objects in a bucket.
 func (c *S3Client) ListObjects(ctx context.Context, opts ListOptions) (ListPage, error) {
-	resp, err := c.client.ListObjects(ctx, &proto.ListObjectsRequest{
+	resp, err := c.client.ListObjects(c.binding.rpcCtx(ctx), &proto.ListObjectsRequest{
 		Bucket:            opts.Bucket,
 		Prefix:            opts.Prefix,
 		Delimiter:         opts.Delimiter,
@@ -358,7 +302,7 @@ func (c *S3Client) CopyObject(ctx context.Context, source, destination ObjectRef
 		req.IfMatch = opts.IfMatch
 		req.IfNoneMatch = opts.IfNoneMatch
 	}
-	resp, err := c.client.CopyObject(ctx, req)
+	resp, err := c.client.CopyObject(c.binding.rpcCtx(ctx), req)
 	if err != nil {
 		return ObjectMeta{}, grpcS3Err(err)
 	}
@@ -379,7 +323,7 @@ func (c *S3Client) PresignObject(ctx context.Context, ref ObjectRef, opts *Presi
 		req.ContentDisposition = opts.ContentDisposition
 		req.Headers = cloneStringMap(opts.Headers)
 	}
-	resp, err := c.client.PresignObject(ctx, req)
+	resp, err := c.client.PresignObject(c.binding.rpcCtx(ctx), req)
 	if err != nil {
 		return PresignResult{}, grpcS3Err(err)
 	}
@@ -400,7 +344,7 @@ func (c *S3Client) CreateObjectAccessURL(ctx context.Context, ref ObjectRef, opt
 		req.ContentDisposition = opts.ContentDisposition
 		req.Headers = cloneStringMap(opts.Headers)
 	}
-	resp, err := c.objectAccessClient.CreateObjectAccessURL(ctx, req)
+	resp, err := c.objectAccessClient.CreateObjectAccessURL(c.binding.rpcCtx(ctx), req)
 	if err != nil {
 		return ObjectAccessURL{}, grpcS3Err(err)
 	}
@@ -840,13 +784,6 @@ func cloneStringMap(values map[string]string) map[string]string {
 		out[key] = value
 	}
 	return out
-}
-
-func firstS3Name(name []string) string {
-	if len(name) == 0 {
-		return ""
-	}
-	return name[0]
 }
 
 func grpcS3Err(err error) error {

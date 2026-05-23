@@ -1,6 +1,6 @@
 package cache
 
-//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/cache_grpc.pb.go -service CacheServer -receiver routingCacheServer -binding cache -package cache -server-type proto.CacheServer -output routing_cache_gen.go
+//go:generate go run ../../tools/routinggen -grpc ../../internal/gen/v1/cache_grpc.pb.go -service CacheServer -receiver routingCacheServer -package cache -output routing_cache_gen.go
 
 import (
 	"context"

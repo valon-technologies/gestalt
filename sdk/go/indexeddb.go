@@ -15,10 +15,11 @@ import (
 
 // IndexedDBClient speaks to a running IndexedDB provider over the unified host-service socket.
 type IndexedDBClient struct {
-	client proto.IndexedDBClient
+	client  proto.IndexedDBClient
+	binding hostBinding
 }
 
-var sharedIndexedDBTransports sync.Map
+var sharedIndexedDBGRPCClients sync.Map
 
 // IndexedDB connects to the IndexedDB provider exposed by gestaltd.
 func IndexedDB(name ...string) (*IndexedDBClient, error) {
@@ -26,27 +27,14 @@ func IndexedDB(name ...string) (*IndexedDBClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	binding := firstIndex(name)
-	transport := getSharedIndexedDBTransport(binding)
+	binding := hostBinding(firstBindingName(name...))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client, err := hostServiceTransportClient(ctx, "indexeddb", target, token, binding, transport, proto.NewIndexedDBClient)
+	client, err := cachedHostServiceGRPCClient(ctx, "indexeddb", target, token, &sharedIndexedDBGRPCClients, proto.NewIndexedDBClient)
 	if err != nil {
 		return nil, fmt.Errorf("indexeddb: connect to host: %w", err)
 	}
-	return &IndexedDBClient{client: client}, nil
-}
-
-func getSharedIndexedDBTransport(binding string) *sharedManagerTransport[proto.IndexedDBClient] {
-	val, _ := sharedIndexedDBTransports.LoadOrStore(binding, &sharedManagerTransport[proto.IndexedDBClient]{})
-	return val.(*sharedManagerTransport[proto.IndexedDBClient])
-}
-
-func firstIndex(name []string) string {
-	if len(name) == 0 {
-		return ""
-	}
-	return name[0]
+	return &IndexedDBClient{client: client, binding: binding}, nil
 }
 
 // Close is a no-op because this client uses shared transport.
@@ -176,7 +164,7 @@ func (db *IndexedDBClient) CreateObjectStore(ctx context.Context, name string, s
 			Unique:     col.Unique,
 		}
 	}
-	_, err := db.client.CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{
+	_, err := db.client.CreateObjectStore(db.binding.rpcCtx(ctx), &proto.CreateObjectStoreRequest{
 		Name: name, Schema: &proto.ObjectStoreSchema{Indexes: indexes, Columns: columns},
 	})
 	return grpcErr(err)
@@ -184,13 +172,13 @@ func (db *IndexedDBClient) CreateObjectStore(ctx context.Context, name string, s
 
 // DeleteObjectStore removes a named object store.
 func (db *IndexedDBClient) DeleteObjectStore(ctx context.Context, name string) error {
-	_, err := db.client.DeleteObjectStore(ctx, &proto.DeleteObjectStoreRequest{Name: name})
+	_, err := db.client.DeleteObjectStore(db.binding.rpcCtx(ctx), &proto.DeleteObjectStoreRequest{Name: name})
 	return grpcErr(err)
 }
 
 // ObjectStore returns a typed handle for working with one object store.
 func (db *IndexedDBClient) ObjectStore(name string) *ObjectStoreClient {
-	return &ObjectStoreClient{client: db.client, store: name}
+	return &ObjectStoreClient{client: db.client, store: name, binding: db.binding}
 }
 
 // Transaction starts an explicit IndexedDB transaction over the supplied object
@@ -199,7 +187,7 @@ func (db *IndexedDBClient) Transaction(ctx context.Context, stores []string, mod
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	streamCtx, cancel := context.WithCancel(ctx)
+	streamCtx, cancel := context.WithCancel(db.binding.rpcCtx(ctx))
 	stream, err := db.client.Transaction(streamCtx)
 	if err != nil {
 		cancel()
@@ -233,13 +221,14 @@ func (db *IndexedDBClient) Transaction(ctx context.Context, stores []string, mod
 // ObjectStoreClient provides CRUD, range-query, and cursor access to one
 // object store.
 type ObjectStoreClient struct {
-	client proto.IndexedDBClient
-	store  string
+	client  proto.IndexedDBClient
+	store   string
+	binding hostBinding
 }
 
 // Get loads one record by primary key.
 func (o *ObjectStoreClient) Get(ctx context.Context, id string) (Record, error) {
-	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
+	resp, err := o.client.Get(o.binding.rpcCtx(ctx), &proto.ObjectStoreRequest{Store: o.store, Id: id})
 	if err != nil {
 		return nil, grpcErr(err)
 	}
@@ -252,7 +241,7 @@ func (o *ObjectStoreClient) Get(ctx context.Context, id string) (Record, error) 
 
 // GetKey resolves the primary key for the supplied lookup id.
 func (o *ObjectStoreClient) GetKey(ctx context.Context, id string) (string, error) {
-	resp, err := o.client.GetKey(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
+	resp, err := o.client.GetKey(o.binding.rpcCtx(ctx), &proto.ObjectStoreRequest{Store: o.store, Id: id})
 	if err != nil {
 		return "", grpcErr(err)
 	}
@@ -265,7 +254,7 @@ func (o *ObjectStoreClient) Add(ctx context.Context, record Record) error {
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Add(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
+	_, err = o.client.Add(o.binding.rpcCtx(ctx), &proto.RecordRequest{Store: o.store, Record: pbRecord})
 	return grpcErr(err)
 }
 
@@ -275,19 +264,19 @@ func (o *ObjectStoreClient) Put(ctx context.Context, record Record) error {
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Put(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
+	_, err = o.client.Put(o.binding.rpcCtx(ctx), &proto.RecordRequest{Store: o.store, Record: pbRecord})
 	return grpcErr(err)
 }
 
 // Delete removes one record by primary key.
 func (o *ObjectStoreClient) Delete(ctx context.Context, id string) error {
-	_, err := o.client.Delete(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
+	_, err := o.client.Delete(o.binding.rpcCtx(ctx), &proto.ObjectStoreRequest{Store: o.store, Id: id})
 	return grpcErr(err)
 }
 
 // Clear removes every record from the object store.
 func (o *ObjectStoreClient) Clear(ctx context.Context) error {
-	_, err := o.client.Clear(ctx, &proto.ObjectStoreNameRequest{Store: o.store})
+	_, err := o.client.Clear(o.binding.rpcCtx(ctx), &proto.ObjectStoreNameRequest{Store: o.store})
 	return grpcErr(err)
 }
 
@@ -297,7 +286,7 @@ func (o *ObjectStoreClient) GetAll(ctx context.Context, r *KeyRange) ([]Record, 
 	if err != nil {
 		return nil, err
 	}
-	resp, err := o.client.GetAll(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.GetAll(o.binding.rpcCtx(ctx), &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
 	if err != nil {
 		return nil, grpcErr(err)
 	}
@@ -314,7 +303,7 @@ func (o *ObjectStoreClient) GetAllKeys(ctx context.Context, r *KeyRange) ([]stri
 	if err != nil {
 		return nil, err
 	}
-	resp, err := o.client.GetAllKeys(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.GetAllKeys(o.binding.rpcCtx(ctx), &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
 	if err != nil {
 		return nil, grpcErr(err)
 	}
@@ -327,7 +316,7 @@ func (o *ObjectStoreClient) Count(ctx context.Context, r *KeyRange) (int64, erro
 	if err != nil {
 		return 0, err
 	}
-	resp, err := o.client.Count(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.Count(o.binding.rpcCtx(ctx), &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
 	if err != nil {
 		return 0, grpcErr(err)
 	}
@@ -341,7 +330,7 @@ func (o *ObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64,
 	if err != nil {
 		return 0, err
 	}
-	resp, err := o.client.DeleteRange(ctx, &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
+	resp, err := o.client.DeleteRange(o.binding.rpcCtx(ctx), &proto.ObjectStoreRangeRequest{Store: o.store, Range: kr})
 	if err != nil {
 		return 0, grpcErr(err)
 	}
@@ -350,24 +339,25 @@ func (o *ObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64,
 
 // OpenCursor opens a full-value cursor over the object store.
 func (o *ObjectStoreClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
-	return openCursor(ctx, o.client, o.store, "", r, dir, false, nil)
+	return openCursor(o.binding.rpcCtx(ctx), o.client, o.store, "", r, dir, false, nil)
 }
 
 // OpenKeyCursor opens a key-only cursor over the object store.
 func (o *ObjectStoreClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
-	return openCursor(ctx, o.client, o.store, "", r, dir, true, nil)
+	return openCursor(o.binding.rpcCtx(ctx), o.client, o.store, "", r, dir, true, nil)
 }
 
 // Index returns a typed handle for a secondary index on the object store.
 func (o *ObjectStoreClient) Index(name string) *IndexClient {
-	return &IndexClient{client: o.client, store: o.store, index: name}
+	return &IndexClient{client: o.client, store: o.store, index: name, binding: o.binding}
 }
 
 // IndexClient provides lookup and cursor access through one secondary index.
 type IndexClient struct {
-	client proto.IndexedDBClient
-	store  string
-	index  string
+	client  proto.IndexedDBClient
+	store   string
+	index   string
+	binding hostBinding
 }
 
 // Get loads the first record that matches the supplied index key.
@@ -376,7 +366,7 @@ func (idx *IndexClient) Get(ctx context.Context, values ...any) (Record, error) 
 	if err != nil {
 		return nil, err
 	}
-	resp, err := idx.client.IndexGet(ctx, &proto.IndexQueryRequest{
+	resp, err := idx.client.IndexGet(idx.binding.rpcCtx(ctx), &proto.IndexQueryRequest{
 		Store: idx.store, Index: idx.index, Values: vals,
 	})
 	if err != nil {
@@ -395,7 +385,7 @@ func (idx *IndexClient) GetKey(ctx context.Context, values ...any) (string, erro
 	if err != nil {
 		return "", err
 	}
-	resp, err := idx.client.IndexGetKey(ctx, &proto.IndexQueryRequest{
+	resp, err := idx.client.IndexGetKey(idx.binding.rpcCtx(ctx), &proto.IndexQueryRequest{
 		Store: idx.store, Index: idx.index, Values: vals,
 	})
 	if err != nil {
@@ -414,7 +404,7 @@ func (idx *IndexClient) GetAll(ctx context.Context, r *KeyRange, values ...any) 
 	if err != nil {
 		return nil, err
 	}
-	resp, err := idx.client.IndexGetAll(ctx, &proto.IndexQueryRequest{
+	resp, err := idx.client.IndexGetAll(idx.binding.rpcCtx(ctx), &proto.IndexQueryRequest{
 		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
 	})
 	if err != nil {
@@ -437,7 +427,7 @@ func (idx *IndexClient) GetAllKeys(ctx context.Context, r *KeyRange, values ...a
 	if err != nil {
 		return nil, err
 	}
-	resp, err := idx.client.IndexGetAllKeys(ctx, &proto.IndexQueryRequest{
+	resp, err := idx.client.IndexGetAllKeys(idx.binding.rpcCtx(ctx), &proto.IndexQueryRequest{
 		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
 	})
 	if err != nil {
@@ -456,7 +446,7 @@ func (idx *IndexClient) Count(ctx context.Context, r *KeyRange, values ...any) (
 	if err != nil {
 		return 0, err
 	}
-	resp, err := idx.client.IndexCount(ctx, &proto.IndexQueryRequest{
+	resp, err := idx.client.IndexCount(idx.binding.rpcCtx(ctx), &proto.IndexQueryRequest{
 		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
 	})
 	if err != nil {
@@ -480,7 +470,7 @@ func (idx *IndexClient) DeleteRange(ctx context.Context, r *KeyRange, values ...
 	if err != nil {
 		return 0, err
 	}
-	resp, err := idx.client.IndexDelete(ctx, &proto.IndexQueryRequest{
+	resp, err := idx.client.IndexDelete(idx.binding.rpcCtx(ctx), &proto.IndexQueryRequest{
 		Store: idx.store, Index: idx.index, Values: vals, Range: kr,
 	})
 	if err != nil {
@@ -491,12 +481,12 @@ func (idx *IndexClient) DeleteRange(ctx context.Context, r *KeyRange, values ...
 
 // OpenCursor opens a full-value cursor over one secondary index.
 func (idx *IndexClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
-	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, false, values)
+	return openCursor(idx.binding.rpcCtx(ctx), idx.client, idx.store, idx.index, r, dir, false, values)
 }
 
 // OpenKeyCursor opens a key-only cursor over one secondary index.
 func (idx *IndexClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
-	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
+	return openCursor(idx.binding.rpcCtx(ctx), idx.client, idx.store, idx.index, r, dir, true, values)
 }
 
 // Transaction is an explicit IndexedDB transaction over a fixed store scope.

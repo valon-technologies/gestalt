@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
@@ -28,7 +29,7 @@ type InvocationGrant struct {
 	Operations []string
 	// Surfaces are the surface names allowed by the child token.
 	Surfaces []string
-	// AllOperations allows every operation on Plugin.
+	// AllOperations allows every operation on App.
 	AllOperations bool
 }
 
@@ -38,7 +39,7 @@ type InvokerClient struct {
 	invocationToken string
 }
 
-var sharedInvokerTransport sharedManagerTransport[proto.AppInvokerClient]
+var sharedInvokerClients sync.Map
 
 // Invoker returns a client that attaches invocationToken to every request.
 func Invoker(invocationToken string) (*InvokerClient, error) {
@@ -53,7 +54,7 @@ func Invoker(invocationToken string) (*InvokerClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "plugin invoker", target, token, &sharedInvokerTransport, proto.NewAppInvokerClient)
+	client, err := managerTransportClient(ctx, "plugin invoker", target, token, &sharedInvokerClients, proto.NewAppInvokerClient)
 	if err != nil {
 		return nil, err
 	}

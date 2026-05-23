@@ -2,6 +2,7 @@ package gestalt
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
@@ -12,7 +13,7 @@ type WorkflowHostClient struct {
 	client proto.WorkflowHostClient
 }
 
-var sharedWorkflowHostTransport sharedManagerTransport[proto.WorkflowHostClient]
+var sharedWorkflowHostClients sync.Map
 
 // InvokeWorkflowOperationInput requests invoking a workflow operation through
 // the host service.
@@ -59,7 +60,7 @@ func WorkflowHost() (*WorkflowHostClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "workflow host", target, token, &sharedWorkflowHostTransport, proto.NewWorkflowHostClient)
+	client, err := managerTransportClient(ctx, "workflow host", target, token, &sharedWorkflowHostClients, proto.NewWorkflowHostClient)
 	if err != nil {
 		return nil, err
 	}

@@ -16,7 +16,6 @@ import (
 
 type StartedHostService struct {
 	Name       string
-	EnvVar     string // always DefaultHostServiceSocketEnv; retained for callers expecting an env key
 	SocketPath string
 }
 
@@ -116,7 +115,6 @@ func (s *StartedHostServices) SocketBinding() StartedHostService {
 		return StartedHostService{}
 	}
 	return StartedHostService{
-		EnvVar:     DefaultHostServiceSocketEnv,
 		SocketPath: s.socketPath,
 	}
 }

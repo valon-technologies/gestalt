@@ -7,6 +7,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/server/internal/gen/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/grpc"
 )
 
 func (s *routingIndexedDBServer) CreateObjectStore(ctx context.Context, req *proto.CreateObjectStoreRequest) (*emptypb.Empty, error) {
@@ -151,5 +152,21 @@ func (s *routingIndexedDBServer) IndexDelete(ctx context.Context, req *proto.Ind
 		return nil, err
 	}
 	return server.IndexDelete(ctx, req)
+}
+
+func (s *routingIndexedDBServer) OpenCursor(stream grpc.BidiStreamingServer[proto.CursorClientMessage, proto.CursorResponse]) error {
+	server, err := s.server(stream.Context())
+	if err != nil {
+		return err
+	}
+	return server.OpenCursor(stream)
+}
+
+func (s *routingIndexedDBServer) Transaction(stream grpc.BidiStreamingServer[proto.TransactionClientMessage, proto.TransactionServerMessage]) error {
+	server, err := s.server(stream.Context())
+	if err != nil {
+		return err
+	}
+	return server.Transaction(stream)
 }
 

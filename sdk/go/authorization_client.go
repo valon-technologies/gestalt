@@ -3,6 +3,7 @@ package gestalt
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/internal/gen/v1"
@@ -17,7 +18,7 @@ type AuthorizationClient struct {
 	client proto.AuthorizationProviderClient
 }
 
-var sharedAuthorizationTransport sharedManagerTransport[proto.AuthorizationProviderClient]
+var sharedAuthorizationClients sync.Map
 
 // Authorization returns a shared authorization client.
 func Authorization() (*AuthorizationClient, error) {
@@ -29,7 +30,7 @@ func Authorization() (*AuthorizationClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	client, err := managerTransportClient(ctx, "authorization", target, token, &sharedAuthorizationTransport, proto.NewAuthorizationProviderClient)
+	client, err := managerTransportClient(ctx, "authorization", target, token, &sharedAuthorizationClients, proto.NewAuthorizationProviderClient)
 	if err != nil {
 		return nil, err
 	}
