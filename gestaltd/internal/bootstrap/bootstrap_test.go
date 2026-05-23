@@ -57,12 +57,12 @@ import (
 
 func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, providerName string, target coreworkflow.Target) string {
 	t.Helper()
-	var appTarget *coreworkflow.AppCall
+	var appStep *coreworkflow.AppCall
 	if len(target.Steps) > 0 {
-		appTarget = target.Steps[0].App
+		appStep = target.Steps[0].App
 	}
-	if appTarget == nil {
-		t.Fatalf("workflow target app is nil: %#v", target)
+	if appStep == nil {
+		t.Fatalf("workflow target app step is nil: %#v", target)
 		return ""
 	}
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
@@ -74,13 +74,13 @@ func storeWorkflowExecutionRefForTarget(t *testing.T, deps bootstrap.Deps, provi
 		t.Fatalf("workflow provider %q does not support execution refs", providerName)
 	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, appTarget.Operation),
+		ID:           fmt.Sprintf("test:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, appStep.Operation),
 		ProviderName: providerName,
 		Target:       target,
 		SubjectID:    "system:config",
 		Permissions: []core.AccessPermission{{
-			App:        appTarget.Name,
-			Operations: []string{appTarget.Operation},
+			App:        appStep.Name,
+			Operations: []string{appStep.Operation},
 		}},
 	})
 	if err != nil {
@@ -1951,21 +1951,21 @@ func workflowFixtureValue(input map[string]any) config.WorkflowValueConfig {
 	return config.WorkflowValueConfig{Object: fields}
 }
 
-func requireCoreWorkflowAppTarget(t *testing.T, target coreworkflow.Target) *coreworkflow.AppCall {
+func requireCoreWorkflowAppStep(t *testing.T, target coreworkflow.Target) *coreworkflow.AppCall {
 	t.Helper()
 	if len(target.Steps) == 0 || target.Steps[0].App == nil {
-		t.Fatalf("target app is nil: %#v", target)
+		t.Fatalf("target app step is nil: %#v", target)
 	}
 	return target.Steps[0].App
 }
 
-func coreWorkflowAppTarget(appName, operation string) coreworkflow.Target {
+func coreWorkflowAppStepTarget(appName, operation string) coreworkflow.Target {
 	return coreworkflow.Target{
 		Steps: []coreworkflow.Step{{ID: operation, App: &coreworkflow.AppCall{Name: appName, Operation: operation}}},
 	}
 }
 
-func protoWorkflowAppTarget(appName, operation string) *proto.BoundWorkflowTarget {
+func protoWorkflowAppStepTarget(appName, operation string) *proto.BoundWorkflowTarget {
 	return &proto.BoundWorkflowTarget{
 		Steps: []*proto.WorkflowStep{{
 			Id:     operation,
@@ -4616,7 +4616,7 @@ func TestBootstrapRoutesWorkflowIndexedDBHostServices(t *testing.T) {
 	if !ok {
 		t.Fatal("workflow provider with indexeddb cleanup does not preserve execution reference store")
 	}
-	target := coreWorkflowAppTarget("roadmap", "sync")
+	target := coreWorkflowAppStepTarget("roadmap", "sync")
 	if _, err := executionRefs.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
 		ID:           "workflow_schedule:sched-test:ref-test",
 		ProviderName: "basic",
@@ -4747,7 +4747,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
 	if got.Cron != "0 2 * * *" || got.Timezone != "America/New_York" {
 		t.Fatalf("schedule timing = %#v", got)
 	}
-	gotApp := requireCoreWorkflowAppTarget(t, got.Target)
+	gotApp := requireCoreWorkflowAppStep(t, got.Target)
 	if gotApp.Name != "roadmap" || gotApp.Operation != "sync" {
 		t.Fatalf("target = %#v", got.Target)
 	}
@@ -5094,7 +5094,7 @@ func TestBootstrapAllowsConfiguredWorkflowScheduleCredentialModeNoneForUserCrede
 	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
-	gotApp := requireCoreWorkflowAppTarget(t, recorder.upsertedSchedules[0].Target)
+	gotApp := requireCoreWorkflowAppStep(t, recorder.upsertedSchedules[0].Target)
 	if gotApp.CredentialMode != core.ConnectionModeNone {
 		t.Fatalf("target credential mode = %q, want %q", gotApp.CredentialMode, core.ConnectionModeNone)
 	}
@@ -5276,7 +5276,7 @@ func TestBootstrapAppliesConfiguredWorkflowSchedulesForRunAsConnectionOnUserDefa
 	if recorder == nil || len(recorder.upsertedSchedules) != 1 {
 		t.Fatalf("recorded schedules = %#v", recorders)
 	}
-	gotApp := requireCoreWorkflowAppTarget(t, recorder.upsertedSchedules[0].Target)
+	gotApp := requireCoreWorkflowAppStep(t, recorder.upsertedSchedules[0].Target)
 	if gotApp.Connection != "bot" {
 		t.Fatalf("target connection = %q, want bot", gotApp.Connection)
 	}
@@ -5786,7 +5786,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowScheduleID(t *testing.T) {
 			ID:       workflowConfigScheduleID("nightly_sync"),
 			Cron:     "0 2 * * *",
 			Timezone: "UTC",
-			Target:   coreWorkflowAppTarget("roadmap", "sync"),
+			Target:   coreWorkflowAppStepTarget("roadmap", "sync"),
 		},
 	}
 	factories := validFactories()
@@ -5889,7 +5889,7 @@ func TestBootstrapReplacesUnreadableConfiguredWorkflowExecutionRef(t *testing.T)
 				ID:           workflowConfigScheduleID("nightly_sync"),
 				Cron:         "0 2 * * *",
 				Timezone:     "UTC",
-				Target:       coreWorkflowAppTarget("roadmap", "sync"),
+				Target:       coreWorkflowAppStepTarget("roadmap", "sync"),
 				ExecutionRef: staleExecutionRef,
 				CreatedBy: coreworkflow.Actor{
 					SubjectID:   "system:config",
@@ -6282,7 +6282,7 @@ func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
 	if got.Match.Type != "task.updated" || got.Match.Source != "roadmap" || got.Match.Subject != "" {
 		t.Fatalf("match = %#v", got.Match)
 	}
-	gotApp := requireCoreWorkflowAppTarget(t, got.Target)
+	gotApp := requireCoreWorkflowAppStep(t, got.Target)
 	if gotApp.Name != "roadmap" || gotApp.Operation != "sync" {
 		t.Fatalf("target = %#v", got.Target)
 	}
@@ -6368,14 +6368,14 @@ func TestBootstrapConfiguredWorkflowEventTriggerRunAsAllowsUserCredentialedTarge
 	}
 }
 
-func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *testing.T) {
+func TestBootstrapConfigManagedAgentStepsPreserveWorkflowSystemToolRefs(t *testing.T) {
 	t.Parallel()
 
 	cfg := workflowStartupCallbackConfig("https://example.invalid")
 	cfg.Providers.Agent = map[string]*config.ProviderEntry{
 		"managed": {Source: config.ProviderSource{Path: "stub"}},
 	}
-	agentTarget := &config.WorkflowTargetConfig{Steps: []config.WorkflowStepConfig{{
+	agentStepTarget := &config.WorkflowTargetConfig{Steps: []config.WorkflowStepConfig{{
 		ID: "main",
 		Agent: &config.WorkflowStepAgentConfig{
 			Provider: "managed",
@@ -6391,7 +6391,7 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 			Provider: "temporal",
 			Cron:     "*/10 * * * *",
 			Timezone: "UTC",
-			Target:   agentTarget,
+			Target:   agentStepTarget,
 		},
 	}
 	cfg.Workflows.EventTriggers = map[string]config.WorkflowEventTriggerConfig{
@@ -6400,7 +6400,7 @@ func TestBootstrapConfigManagedAgentTargetsPreserveWorkflowSystemToolRefs(t *tes
 			Match: config.WorkflowEventMatch{
 				Type: "roadmap.updated",
 			},
-			Target: agentTarget,
+			Target: agentStepTarget,
 		},
 	}
 
@@ -6771,7 +6771,7 @@ func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerID(t *testing.T) {
 			Match: coreworkflow.EventMatch{
 				Type: "task.updated",
 			},
-			Target: coreWorkflowAppTarget("roadmap", "sync"),
+			Target: coreWorkflowAppStepTarget("roadmap", "sync"),
 		},
 	}
 	factories := validFactories()
@@ -6991,9 +6991,9 @@ func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppTarget("roadmap", "sync"))
+		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppStepTarget("roadmap", "sync"))
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target:       protoWorkflowAppTarget("roadmap", "sync"),
+			Target:       protoWorkflowAppStepTarget("roadmap", "sync"),
 			ExecutionRef: executionRef,
 		})
 		if err != nil {
@@ -7044,9 +7044,9 @@ func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppTarget("roadmap", "sync"))
+		executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppStepTarget("roadmap", "sync"))
 		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target:       protoWorkflowAppTarget("roadmap", "sync"),
+			Target:       protoWorkflowAppStepTarget("roadmap", "sync"),
 			ExecutionRef: executionRef,
 		})
 		if err != nil {
@@ -7104,7 +7104,7 @@ func TestBootstrapStartupWorkflowCallbackRequiresExecutionRef(t *testing.T) {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
 		_, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-			Target: protoWorkflowAppTarget("roadmap", "sync"),
+			Target: protoWorkflowAppStepTarget("roadmap", "sync"),
 		})
 		if err == nil {
 			return nil, fmt.Errorf("expected startup callback execution_ref failure")
@@ -7640,7 +7640,7 @@ func TestBootstrapConfiguredWorkflowScheduleExecutionRefInvokesPolicyProtectedAp
 		t.Fatal("execution ref is empty")
 	}
 	resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-		Target:       protoWorkflowAppTarget("roadmap", "sync"),
+		Target:       protoWorkflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: executionRef,
 	})
 	if err != nil {
@@ -7717,9 +7717,9 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 				}); err != nil {
 					return nil, fmt.Errorf("store startup token: %w", err)
 				}
-				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppTarget("roadmap", "sync"))
+				executionRef := storeWorkflowExecutionRefForTarget(t, deps, name, coreWorkflowAppStepTarget("roadmap", "sync"))
 				resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
-					Target:       protoWorkflowAppTarget("roadmap", "sync"),
+					Target:       protoWorkflowAppStepTarget("roadmap", "sync"),
 					ExecutionRef: executionRef,
 				})
 				if err != nil {
@@ -7812,7 +7812,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 		}
 		req := coreworkflow.InvokeOperationRequest{
 			ProviderName: name,
-			Target:       coreWorkflowAppTarget("roadmap", "sync"),
+			Target:       coreWorkflowAppStepTarget("roadmap", "sync"),
 		}
 		configPrincipal := &principal.Principal{
 			SubjectID:           "system:config",

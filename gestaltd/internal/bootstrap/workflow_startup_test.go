@@ -288,7 +288,7 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 		t.Fatalf("workflow target app step is missing: %#v", target)
 		return ""
 	}
-	appTarget := target.Steps[0].App
+	appStep := target.Steps[0].App
 	provider, err := deps.WorkflowRuntime.ResolveProvider(providerName)
 	if err != nil {
 		t.Fatalf("resolve workflow provider %q: %v", providerName, err)
@@ -298,7 +298,7 @@ func storeStartupExecutionRef(t *testing.T, deps Deps, providerName string, targ
 		t.Fatalf("workflow provider %q does not support execution refs", providerName)
 	}
 	ref, err := store.PutExecutionReference(context.Background(), &coreworkflow.ExecutionReference{
-		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, appTarget.Operation),
+		ID:           fmt.Sprintf("startup:%s:%s:%s", strings.ReplaceAll(t.Name(), "/", "_"), providerName, appStep.Operation),
 		ProviderName: providerName,
 		Target:       target,
 		SubjectID:    "system:config",
@@ -349,7 +349,7 @@ func TestBootstrapWorkflowStartupCallbackWaitsForDelayedAppProvider(t *testing.T
 		}); err != nil {
 			return nil, fmt.Errorf("store startup token: %w", err)
 		}
-		executionRef := storeStartupExecutionRef(t, deps, name, testWorkflowAppTarget("roadmap", "status"))
+		executionRef := storeStartupExecutionRef(t, deps, name, testWorkflowAppStepTarget("roadmap", "status"))
 		resp, err := invokeWorkflowHostDuringStartup(t, hostServices, &proto.InvokeWorkflowOperationRequest{
 			Target: &proto.BoundWorkflowTarget{
 				Steps: []*proto.WorkflowStep{{

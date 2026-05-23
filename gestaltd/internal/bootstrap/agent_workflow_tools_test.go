@@ -1173,8 +1173,8 @@ func TestAgentRuntimeWorkflowSystemToolListsRunsWithPaginationAndFilters(t *test
 		},
 		Tools: []coreagent.Tool{listTool},
 	})
-	roadmapTarget := workflowSystemToolTestAppTarget("roadmap", "sync")
-	notificationTarget := workflowSystemToolTestAppTarget("notification", "reply")
+	roadmapTarget := workflowSystemToolTestAppStepTarget("roadmap", "sync")
+	notificationTarget := workflowSystemToolTestAppStepTarget("notification", "reply")
 	workflowProvider.runs = map[string]*coreworkflow.Run{
 		"run-a": {ID: "run-a", Status: coreworkflow.RunStatusSucceeded, Target: roadmapTarget, ExecutionRef: "ref-a"},
 		"run-b": {ID: "run-b", Status: coreworkflow.RunStatusSucceeded, Target: notificationTarget, ExecutionRef: "ref-b"},
@@ -1745,7 +1745,7 @@ func (p *workflowSystemToolRecordingProvider) ListRuns(_ context.Context, req co
 	return &coreworkflow.ListRunsResponse{Runs: out[start:end], NextPageToken: nextPageToken}, nil
 }
 
-func workflowSystemToolTestAppTarget(appName, operation string) coreworkflow.Target {
+func workflowSystemToolTestAppStepTarget(appName, operation string) coreworkflow.Target {
 	return coreworkflow.Target{Steps: []coreworkflow.Step{{
 		ID: "run",
 		App: &coreworkflow.AppCall{

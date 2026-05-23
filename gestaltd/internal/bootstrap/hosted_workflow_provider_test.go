@@ -327,7 +327,7 @@ func TestWorkflowConfigReconciliationReconcilesReadyRuntimeProvidersIndependentl
 			Schedules: map[string]config.WorkflowScheduleConfig{
 				"ready_schedule": {
 					Provider: "ready",
-					Target:   workflowConfigTestAgentTarget(),
+					Target:   workflowConfigTestAgentStepTarget(),
 					Cron:     "* * * * *",
 				},
 			},
@@ -537,24 +537,24 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 			Schedules: map[string]config.WorkflowScheduleConfig{
 				"local_schedule": {
 					Provider: "local",
-					Target:   workflowConfigTestAgentTarget(),
+					Target:   workflowConfigTestAgentStepTarget(),
 					Cron:     "* * * * *",
 				},
 				"runtime_schedule": {
 					Provider: "runtime",
-					Target:   workflowConfigTestAgentTarget(),
+					Target:   workflowConfigTestAgentStepTarget(),
 					Cron:     "* * * * *",
 				},
 			},
 			EventTriggers: map[string]config.WorkflowEventTriggerConfig{
 				"local_trigger": {
 					Provider: "local",
-					Target:   workflowConfigTestAgentTarget(),
+					Target:   workflowConfigTestAgentStepTarget(),
 					Match:    config.WorkflowEventMatch{Type: "local.changed"},
 				},
 				"runtime_trigger": {
 					Provider: "runtime",
-					Target:   workflowConfigTestAgentTarget(),
+					Target:   workflowConfigTestAgentStepTarget(),
 					Match:    config.WorkflowEventMatch{Type: "runtime.changed"},
 				},
 			},
@@ -612,7 +612,7 @@ func TestWorkflowConfigReconciliationFiltersRuntimePlacedProviders(t *testing.T)
 	}
 }
 
-func workflowConfigTestAgentTarget() *config.WorkflowTargetConfig {
+func workflowConfigTestAgentStepTarget() *config.WorkflowTargetConfig {
 	return &config.WorkflowTargetConfig{
 		Steps: []config.WorkflowStepConfig{{
 			ID: "main",

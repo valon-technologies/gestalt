@@ -597,13 +597,13 @@ type workflowTargetResponse struct {
 }
 
 type workflowStepTargetResponse struct {
-	ID             string                       `json:"id"`
-	App            *workflowAppTargetResponse   `json:"app"`
-	Agent          *workflowAgentTargetResponse `json:"agent"`
-	TimeoutSeconds int                          `json:"timeoutSeconds"`
+	ID             string                     `json:"id"`
+	App            *workflowAppStepResponse   `json:"app"`
+	Agent          *workflowAgentStepResponse `json:"agent"`
+	TimeoutSeconds int                        `json:"timeoutSeconds"`
 }
 
-type workflowAppTargetResponse struct {
+type workflowAppStepResponse struct {
 	Name           string         `json:"name"`
 	Operation      string         `json:"operation"`
 	Connection     string         `json:"connection"`
@@ -612,7 +612,7 @@ type workflowAppTargetResponse struct {
 	Input          map[string]any `json:"input"`
 }
 
-type workflowAgentTargetResponse struct {
+type workflowAgentStepResponse struct {
 	ProviderName string `json:"provider"`
 	Model        string `json:"model"`
 	Prompt       *struct {
@@ -626,7 +626,7 @@ type workflowAgentTargetResponse struct {
 	} `json:"tools"`
 }
 
-func requireWorkflowAppTarget(t *testing.T, target workflowTargetResponse) *workflowAppTargetResponse {
+func requireWorkflowAppStep(t *testing.T, target workflowTargetResponse) *workflowAppStepResponse {
 	t.Helper()
 	for i := range target.Steps {
 		if target.Steps[i].App != nil {
@@ -648,7 +648,7 @@ func requireWorkflowAgentStep(t *testing.T, target workflowTargetResponse) workf
 	return workflowStepTargetResponse{}
 }
 
-func requireCanonicalAppTargetJSON(t *testing.T, body []byte) workflowAppTargetResponse {
+func requireCanonicalAppStepJSON(t *testing.T, body []byte) workflowAppStepResponse {
 	t.Helper()
 
 	var envelope struct {
@@ -673,9 +673,9 @@ func requireCanonicalAppTargetJSON(t *testing.T, body []byte) workflowAppTargetR
 	if err := json.Unmarshal(rawSteps, &steps); err != nil {
 		t.Fatalf("decode response target steps: %v", err)
 	}
-	app := requireWorkflowAppTarget(t, workflowTargetResponse{Steps: steps})
+	app := requireWorkflowAppStep(t, workflowTargetResponse{Steps: steps})
 	if app.Name == "" || app.Operation == "" {
-		t.Fatalf("response target app = %#v, want name and operation", app)
+		t.Fatalf("response app step = %#v, want name and operation", app)
 	}
 	return *app
 }
@@ -732,17 +732,17 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read create response: %v", err)
 	}
-	requireCanonicalAppTargetJSON(t, createRespBody)
+	requireCanonicalAppStepJSON(t, createRespBody)
 	var created workflowScheduleResponse
 	if err := json.Unmarshal(createRespBody, &created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	createdApp := requireWorkflowAppTarget(t, created.Target)
+	createdApp := requireWorkflowAppStep(t, created.Target)
 	if created.Provider != "basic" || createdApp.Operation != "sync" || createdApp.Connection != "analytics" || createdApp.Instance != "tenant-a" {
 		t.Fatalf("created schedule = %#v", created)
 	}
 	if createdApp.Name != "roadmap" {
-		t.Fatalf("created target app = %q, want roadmap", createdApp.Name)
+		t.Fatalf("created app step = %q, want roadmap", createdApp.Name)
 	}
 	if len(provider.upsertReqs) != 1 {
 		t.Fatalf("upsert requests = %d, want 1", len(provider.upsertReqs))
@@ -786,9 +786,9 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != created.ID {
 		t.Fatalf("listed schedules = %#v", listed)
 	}
-	listedApp := requireWorkflowAppTarget(t, listed[0].Target)
+	listedApp := requireWorkflowAppStep(t, listed[0].Target)
 	if listedApp.Name != "roadmap" {
-		t.Fatalf("listed target app = %q, want roadmap", listedApp.Name)
+		t.Fatalf("listed app step = %q, want roadmap", listedApp.Name)
 	}
 
 	updateBody := bytes.NewBufferString(`{"cron":"0 * * * *","timezone":"UTC","target":{"steps":[{"id":"app","app":{"name":"roadmap","operation":"sync","connection":"analytics","instance":"tenant-a","input":{"mode":"full"}}}]},"paused":true}`)
@@ -863,7 +863,7 @@ func TestWorkflowScheduleCRUD(t *testing.T) {
 	}
 }
 
-func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
+func TestWorkflowScheduleAgentStepCreateAndList(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
@@ -929,7 +929,7 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	if len(createdStep.Agent.ToolRefs) != 1 || createdStep.Agent.ToolRefs[0].App != "roadmap" || createdStep.Agent.ToolRefs[0].Operation != "sync" {
 		t.Fatalf("created agent tools = %#v", createdStep.Agent.ToolRefs)
 	}
-	createdApp := requireWorkflowAppTarget(t, created.Target)
+	createdApp := requireWorkflowAppStep(t, created.Target)
 	if createdApp.Name != "roadmap" || createdApp.Operation != "sync" {
 		t.Fatalf("created app step = %#v", createdApp)
 	}
@@ -975,13 +975,13 @@ func TestWorkflowScheduleAgentTargetCreateAndList(t *testing.T) {
 	if listedStep.Agent.Prompt == nil || listedStep.Agent.Prompt.Template != "Send the status summary" {
 		t.Fatalf("listed agent prompt = %#v", listedStep.Agent.Prompt)
 	}
-	listedApp := requireWorkflowAppTarget(t, listed[0].Target)
+	listedApp := requireWorkflowAppStep(t, listed[0].Target)
 	if listedApp.Operation != "sync" {
 		t.Fatalf("listed app step = %#v", listedApp)
 	}
 }
 
-func TestWorkflowScheduleAgentTargetPreservesWorkflowSystemToolRefs(t *testing.T) {
+func TestWorkflowScheduleAgentStepPreservesWorkflowSystemToolRefs(t *testing.T) {
 	t.Parallel()
 
 	services := testutil.NewStubServices(t)
@@ -1081,7 +1081,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	provider.schedules["sched-ada"] = &coreworkflow.Schedule{
 		ID:           "sched-ada",
 		Cron:         "*/5 * * * *",
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-ada:ref-ada",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1089,7 +1089,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	provider.schedules["sched-grace"] = &coreworkflow.Schedule{
 		ID:           "sched-grace",
 		Cron:         "0 * * * *",
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-grace:ref-grace",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1207,7 +1207,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	if listedAnalytics == nil {
 		t.Fatalf("listed schedules missing analytics schedule: %#v", listed)
 	}
-	if got := requireWorkflowAppTarget(t, listedAnalytics.Target).CredentialMode; got != string(core.ConnectionModeNone) {
+	if got := requireWorkflowAppStep(t, listedAnalytics.Target).CredentialMode; got != string(core.ConnectionModeNone) {
 		t.Fatalf("listed analytics credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 
@@ -1225,7 +1225,7 @@ func TestWorkflowScheduleListAndMutationsAreOwnerScoped(t *testing.T) {
 	if err := json.NewDecoder(getAnalyticsResp.Body).Decode(&analytics); err != nil {
 		t.Fatalf("decode analytics schedule: %v", err)
 	}
-	if got := requireWorkflowAppTarget(t, analytics.Target).CredentialMode; got != string(core.ConnectionModeNone) {
+	if got := requireWorkflowAppStep(t, analytics.Target).CredentialMode; got != string(core.ConnectionModeNone) {
 		t.Fatalf("analytics credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 
@@ -1404,7 +1404,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	provider.schedules["sched-sync"] = &coreworkflow.Schedule{
 		ID:           "sched-sync",
 		Cron:         "*/5 * * * *",
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-sync:ref-sync",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1412,7 +1412,7 @@ func TestWorkflowScheduleAPITokenScopeFiltersOperations(t *testing.T) {
 	provider.schedules["sched-export"] = &coreworkflow.Schedule{
 		ID:           "sched-export",
 		Cron:         "0 * * * *",
-		Target:       workflowAppTarget("roadmap", "export"),
+		Target:       workflowAppStepTarget("roadmap", "export"),
 		ExecutionRef: "workflow_schedule:sched-export:ref-export",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1755,7 +1755,7 @@ func TestWorkflowScheduleCreatePinsResolvedInstance(t *testing.T) {
 	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	createdApp := requireWorkflowAppTarget(t, created.Target)
+	createdApp := requireWorkflowAppStep(t, created.Target)
 	if createdApp.Instance != "tenant-a" {
 		t.Fatalf("created schedule target instance = %q, want tenant-a", createdApp.Instance)
 	}
@@ -1781,7 +1781,7 @@ func TestGlobalWorkflowScheduleLookupIgnoresUnrelatedProviderFailures(t *testing
 	basicProvider.schedules["sched-ada-basic"] = &coreworkflow.Schedule{
 		ID:           "sched-ada-basic",
 		Cron:         "*/5 * * * *",
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-ada-basic:ref-basic",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -1880,7 +1880,7 @@ func TestGlobalWorkflowScheduleRejectsDuplicateActiveExecutionRefs(t *testing.T)
 	schedule := &coreworkflow.Schedule{
 		ID:           "sched-ada",
 		Cron:         "*/5 * * * *",
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-ada:active-ref-1",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -2024,7 +2024,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if err := json.NewDecoder(createResp.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	createdApp := requireWorkflowAppTarget(t, created.Target)
+	createdApp := requireWorkflowAppStep(t, created.Target)
 	if created.Provider != "basic" || createdApp.Name != "roadmap" || createdApp.Operation != "sync" {
 		t.Fatalf("created schedule = %#v", created)
 	}
@@ -2054,7 +2054,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if len(listed) != 1 || listed[0].ID != created.ID || listed[0].Provider != "basic" {
 		t.Fatalf("listed schedules = %#v", listed)
 	}
-	listedApp := requireWorkflowAppTarget(t, listed[0].Target)
+	listedApp := requireWorkflowAppStep(t, listed[0].Target)
 	if listedApp.Name != "roadmap" {
 		t.Fatalf("listed schedules = %#v", listed)
 	}
@@ -2080,7 +2080,7 @@ func TestGlobalWorkflowScheduleCRUDAcrossProviders(t *testing.T) {
 	if err := json.NewDecoder(updateResp.Body).Decode(&updated); err != nil {
 		t.Fatalf("decode update response: %v", err)
 	}
-	updatedApp := requireWorkflowAppTarget(t, updated.Target)
+	updatedApp := requireWorkflowAppStep(t, updated.Target)
 	if updated.Provider != "advanced" || updatedApp.Name != "analytics" || !updated.Paused {
 		t.Fatalf("updated schedule = %#v", updated)
 	}
@@ -2171,7 +2171,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 	basicProvider.schedules["sched-ada-basic"] = &coreworkflow.Schedule{
 		ID:           "sched-ada-basic",
 		Cron:         "*/5 * * * *",
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_schedule:sched-ada-basic:ref-basic",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -2179,7 +2179,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 	advancedProvider.schedules["sched-ada-advanced"] = &coreworkflow.Schedule{
 		ID:           "sched-ada-advanced",
 		Cron:         "0 * * * *",
-		Target:       workflowAppTarget("analytics", "sync"),
+		Target:       workflowAppStepTarget("analytics", "sync"),
 		ExecutionRef: "workflow_schedule:sched-ada-advanced:ref-advanced",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -2187,7 +2187,7 @@ func TestGlobalWorkflowScheduleListAndMutationsAreOwnerScopedAcrossProviders(t *
 	advancedProvider.schedules["sched-grace-advanced"] = &coreworkflow.Schedule{
 		ID:           "sched-grace-advanced",
 		Cron:         "15 * * * *",
-		Target:       workflowAppTarget("analytics", "sync"),
+		Target:       workflowAppStepTarget("analytics", "sync"),
 		ExecutionRef: "workflow_schedule:sched-grace-advanced:ref-grace-advanced",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -2389,12 +2389,12 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read create response: %v", err)
 	}
-	requireCanonicalAppTargetJSON(t, createRespBody)
+	requireCanonicalAppStepJSON(t, createRespBody)
 	var created workflowEventTriggerResponse
 	if err := json.Unmarshal(createRespBody, &created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	createdApp := requireWorkflowAppTarget(t, created.Target)
+	createdApp := requireWorkflowAppStep(t, created.Target)
 	if created.Provider != "basic" || created.Match.Type != "roadmap.item.updated" || createdApp.Name != "roadmap" || createdApp.Operation != "sync" {
 		t.Fatalf("created trigger = %#v", created)
 	}
@@ -2446,7 +2446,7 @@ func TestGlobalWorkflowEventTriggerCRUDAcrossProviders(t *testing.T) {
 	if err := json.NewDecoder(updateResp.Body).Decode(&updated); err != nil {
 		t.Fatalf("decode update response: %v", err)
 	}
-	updatedApp := requireWorkflowAppTarget(t, updated.Target)
+	updatedApp := requireWorkflowAppStep(t, updated.Target)
 	if updated.Provider != "advanced" || updated.Match.Type != "analytics.item.synced" || updatedApp.Name != "analytics" || !updated.Paused {
 		t.Fatalf("updated trigger = %#v", updated)
 	}
@@ -2590,7 +2590,7 @@ func TestWorkflowEventTriggerAgentThenAppStepsCreateAndList(t *testing.T) {
 	if createdStep.Agent.ProviderName != "managed" || createdStep.Agent.Model != "deep" {
 		t.Fatalf("created agent step = %#v", createdStep.Agent)
 	}
-	createdApp := requireWorkflowAppTarget(t, created.Target)
+	createdApp := requireWorkflowAppStep(t, created.Target)
 	if createdApp.Name != "roadmap" || createdApp.Operation != "sync" {
 		t.Fatalf("created app step = %#v", createdApp)
 	}
@@ -2628,7 +2628,7 @@ func TestWorkflowEventTriggerAgentThenAppStepsCreateAndList(t *testing.T) {
 	if len(listed) != 1 {
 		t.Fatalf("listed triggers = %#v", listed)
 	}
-	listedApp := requireWorkflowAppTarget(t, listed[0].Target)
+	listedApp := requireWorkflowAppStep(t, listed[0].Target)
 	if listedApp.Operation != "sync" {
 		t.Fatalf("listed app step = %#v", listedApp)
 	}
@@ -2718,7 +2718,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 	basicProvider.triggers["trg-ada-basic"] = &coreworkflow.EventTrigger{
 		ID:           "trg-ada-basic",
 		Match:        coreworkflow.EventMatch{Type: "roadmap.item.updated"},
-		Target:       workflowAppTarget("roadmap", "sync"),
+		Target:       workflowAppStepTarget("roadmap", "sync"),
 		ExecutionRef: "workflow_event_trigger:trg-ada-basic:ref-basic",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -2741,7 +2741,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 	advancedProvider.triggers["trg-grace-advanced"] = &coreworkflow.EventTrigger{
 		ID:           "trg-grace-advanced",
 		Match:        coreworkflow.EventMatch{Type: "analytics.item.failed"},
-		Target:       workflowAppTarget("analytics", "sync"),
+		Target:       workflowAppStepTarget("analytics", "sync"),
 		ExecutionRef: "workflow_event_trigger:trg-grace-advanced:ref-grace-advanced",
 		CreatedAt:    &now,
 		UpdatedAt:    &now,
@@ -2854,7 +2854,7 @@ func TestGlobalWorkflowEventTriggerListAndMutationsAreOwnerScopedAcrossProviders
 	if listedAdvanced == nil {
 		t.Fatalf("listed triggers missing advanced trigger: %#v", listed)
 	}
-	if got := requireWorkflowAppTarget(t, listedAdvanced.Target).CredentialMode; got != string(core.ConnectionModeNone) {
+	if got := requireWorkflowAppStep(t, listedAdvanced.Target).CredentialMode; got != string(core.ConnectionModeNone) {
 		t.Fatalf("listed advanced trigger credential mode = %q, want %q", got, core.ConnectionModeNone)
 	}
 

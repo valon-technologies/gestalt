@@ -2123,9 +2123,9 @@ func cloneWorkflowTarget(value coreworkflow.Target) coreworkflow.Target {
 			}
 		}
 		if step.App != nil {
-			appTarget := *step.App
-			appTarget.Input = coreworkflow.CloneValue(appTarget.Input)
-			step.App = &appTarget
+			appStep := *step.App
+			appStep.Input = coreworkflow.CloneValue(appStep.Input)
+			step.App = &appStep
 		}
 		if step.Agent != nil {
 			agent := *step.Agent

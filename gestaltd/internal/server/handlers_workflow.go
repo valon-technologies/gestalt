@@ -26,7 +26,7 @@ type workflowScheduleTargetRequest struct {
 	Steps []workflowStepTargetRequest `json:"steps,omitempty"`
 }
 
-type workflowAppTargetRequest struct {
+type workflowAppStepRequest struct {
 	Name           string               `json:"name,omitempty"`
 	Operation      string               `json:"operation"`
 	Connection     string               `json:"connection,omitempty"`
@@ -35,7 +35,7 @@ type workflowAppTargetRequest struct {
 	Input          workflowValueRequest `json:"input,omitempty"`
 }
 
-type workflowAgentTargetRequest struct {
+type workflowAgentStepRequest struct {
 	ProviderName   string                   `json:"provider,omitempty"`
 	Model          string                   `json:"model,omitempty"`
 	SessionKey     string                   `json:"sessionKey,omitempty"`
@@ -49,8 +49,8 @@ type workflowAgentTargetRequest struct {
 type workflowStepTargetRequest struct {
 	ID             string                          `json:"id,omitempty"`
 	Inputs         map[string]workflowValueRequest `json:"inputs,omitempty"`
-	App            *workflowAppTargetRequest       `json:"app,omitempty"`
-	Agent          *workflowAgentTargetRequest     `json:"agent,omitempty"`
+	App            *workflowAppStepRequest         `json:"app,omitempty"`
+	Agent          *workflowAgentStepRequest       `json:"agent,omitempty"`
 	Metadata       map[string]any                  `json:"metadata,omitempty"`
 	TimeoutSeconds int                             `json:"timeoutSeconds,omitempty"`
 	When           *workflowStepWhenRequest        `json:"when,omitempty"`
@@ -213,7 +213,7 @@ type workflowScheduleTargetInfo struct {
 	Steps []workflowStepTargetInfo `json:"steps,omitempty"`
 }
 
-type workflowAppTargetInfo struct {
+type workflowAppStepInfo struct {
 	Name           string `json:"name"`
 	Operation      string `json:"operation"`
 	Connection     string `json:"connection,omitempty"`
@@ -222,7 +222,7 @@ type workflowAppTargetInfo struct {
 	Input          any    `json:"input,omitempty"`
 }
 
-type workflowAgentTargetInfo struct {
+type workflowAgentStepInfo struct {
 	ProviderName   string                `json:"provider,omitempty"`
 	Model          string                `json:"model,omitempty"`
 	SessionKey     string                `json:"sessionKey,omitempty"`
@@ -234,13 +234,13 @@ type workflowAgentTargetInfo struct {
 }
 
 type workflowStepTargetInfo struct {
-	ID             string                   `json:"id,omitempty"`
-	Inputs         map[string]any           `json:"inputs,omitempty"`
-	App            *workflowAppTargetInfo   `json:"app,omitempty"`
-	Agent          *workflowAgentTargetInfo `json:"agent,omitempty"`
-	Metadata       map[string]any           `json:"metadata,omitempty"`
-	TimeoutSeconds int                      `json:"timeoutSeconds,omitempty"`
-	When           *workflowStepWhenInfo    `json:"when,omitempty"`
+	ID             string                 `json:"id,omitempty"`
+	Inputs         map[string]any         `json:"inputs,omitempty"`
+	App            *workflowAppStepInfo   `json:"app,omitempty"`
+	Agent          *workflowAgentStepInfo `json:"agent,omitempty"`
+	Metadata       map[string]any         `json:"metadata,omitempty"`
+	TimeoutSeconds int                    `json:"timeoutSeconds,omitempty"`
+	When           *workflowStepWhenInfo  `json:"when,omitempty"`
 }
 
 type workflowTextInfo struct {
@@ -475,7 +475,7 @@ func validatePublicWorkflowTargetRequest(target workflowScheduleTargetRequest) e
 	return nil
 }
 
-func workflowAppCallFromRequest(target *workflowAppTargetRequest) *coreworkflow.AppCall {
+func workflowAppCallFromRequest(target *workflowAppStepRequest) *coreworkflow.AppCall {
 	if target == nil {
 		return nil
 	}
@@ -489,7 +489,7 @@ func workflowAppCallFromRequest(target *workflowAppTargetRequest) *coreworkflow.
 	}
 }
 
-func workflowAgentTurnFromRequest(target *workflowAgentTargetRequest) *coreworkflow.AgentTurn {
+func workflowAgentTurnFromRequest(target *workflowAgentStepRequest) *coreworkflow.AgentTurn {
 	if target == nil {
 		return nil
 	}
@@ -655,11 +655,11 @@ func workflowStepInfoFromCore(step coreworkflow.Step) workflowStepTargetInfo {
 	}
 }
 
-func workflowAppInfoFromCore(app *coreworkflow.AppCall) *workflowAppTargetInfo {
+func workflowAppInfoFromCore(app *coreworkflow.AppCall) *workflowAppStepInfo {
 	if app == nil {
 		return nil
 	}
-	return &workflowAppTargetInfo{
+	return &workflowAppStepInfo{
 		Name:           app.Name,
 		Operation:      app.Operation,
 		Connection:     userFacingConnectionName(app.Connection),
@@ -669,11 +669,11 @@ func workflowAppInfoFromCore(app *coreworkflow.AppCall) *workflowAppTargetInfo {
 	}
 }
 
-func workflowAgentInfoFromCore(agent *coreworkflow.AgentTurn) *workflowAgentTargetInfo {
+func workflowAgentInfoFromCore(agent *coreworkflow.AgentTurn) *workflowAgentStepInfo {
 	if agent == nil {
 		return nil
 	}
-	return &workflowAgentTargetInfo{
+	return &workflowAgentStepInfo{
 		ProviderName:   agent.ProviderName,
 		Model:          agent.Model,
 		SessionKey:     agent.SessionKey,

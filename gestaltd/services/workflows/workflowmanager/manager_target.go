@@ -148,7 +148,7 @@ func (m *Manager) resolveWorkflowStepApp(ctx context.Context, p *principal.Princ
 	if operation == "" {
 		return coreworkflow.AppCall{}, fmt.Errorf("%w: workflow target operation is required", invocation.ErrInvalidInvocation)
 	}
-	credentialMode, err := m.normalizeWorkflowAppTargetCredentialMode(target.CredentialMode, callerAppName, appName, operation)
+	credentialMode, err := m.normalizeWorkflowAppStepCredentialMode(target.CredentialMode, callerAppName, appName, operation)
 	if err != nil {
 		return coreworkflow.AppCall{}, err
 	}
@@ -253,7 +253,7 @@ func (m *Manager) resolveWorkflowStepAgent(ctx context.Context, p *principal.Pri
 	return target, nil
 }
 
-func (m *Manager) normalizeWorkflowAppTargetCredentialMode(mode core.ConnectionMode, callerAppName, appName, operation string) (core.ConnectionMode, error) {
+func (m *Manager) normalizeWorkflowAppStepCredentialMode(mode core.ConnectionMode, callerAppName, appName, operation string) (core.ConnectionMode, error) {
 	mode = core.NormalizeOptionalConnectionMode(mode)
 	switch mode {
 	case "":

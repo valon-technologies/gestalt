@@ -147,7 +147,7 @@ func workflowSystemToolValidateCreateScope(req agentSystemToolExecutionRequest, 
 	for stepIndex := range target.Steps {
 		step := target.Steps[stepIndex]
 		stepPath := fmt.Sprintf("target.steps[%d]", stepIndex)
-		if step.App != nil && !workflowSystemToolAppTargetAllowed(*step.App, req.ToolRefs, req.Tools) {
+		if step.App != nil && !workflowSystemToolAppStepAllowed(*step.App, req.ToolRefs, req.Tools) {
 			return fmt.Errorf("%w: %s.app %s.%s is outside the current agent tool scope", invocation.ErrScopeDenied, stepPath, step.App.Name, step.App.Operation)
 		}
 		if step.Agent == nil {
@@ -213,7 +213,7 @@ func workflowSystemToolAgentAppRefAllowed(target coreagent.ToolRef, refs []corea
 	return false
 }
 
-func workflowSystemToolAppTargetAllowed(target coreworkflow.AppCall, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
+func workflowSystemToolAppStepAllowed(target coreworkflow.AppCall, refs []coreagent.ToolRef, tools []coreagent.Tool) bool {
 	for i := range refs {
 		if workflowSystemToolAppRefMatchesTarget(refs[i], target) {
 			return true

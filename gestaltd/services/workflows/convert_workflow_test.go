@@ -19,7 +19,7 @@ func protoValueFromAnyMust(value any) *structpb.Value {
 	return out
 }
 
-func TestWorkflowTargetToProtoUsesStepAppTarget(t *testing.T) {
+func TestWorkflowTargetToProtoUsesAppStep(t *testing.T) {
 	t.Parallel()
 
 	target, err := workflowTargetToProto(coreworkflow.Target{
