@@ -62,7 +62,7 @@ pub(crate) fn rewrite_connect_error(
 
     match connect_error_kind(&err) {
         Some(ConnectErrorKind::NotConnected) => anyhow::anyhow!(
-            "plugin {:?} is not connected. Connect it first with `{}`",
+            "app {:?} is not connected. Connect it first with `{}`",
             plugin,
             connect_command,
         ),
@@ -76,7 +76,7 @@ pub(crate) fn rewrite_connect_error(
                 .map(anyhow::Error::msg)
                 .unwrap_or_else(|| {
                     anyhow::anyhow!(
-                        "plugin {:?} has multiple connected instances. Pass --connection and --instance to choose one",
+                        "app {:?} has multiple connected instances. Pass --connection and --instance to choose one",
                         plugin,
                     )
                 })
@@ -197,7 +197,7 @@ fn selector_resolution_from_pairs(
             .collect();
         let selectors = output::render_table(&["Connection", "Instance", "Example"], &rows);
         return SelectorResolution::Message(format!(
-            "plugin {:?} has multiple connected instances. Choose a connection and instance.\n\n{}",
+            "app {:?} has multiple connected instances. Choose a connection and instance.\n\n{}",
             plugin, selectors
         ));
     }

@@ -129,7 +129,7 @@ fn test_invoke_instance_selection_error_suggests_instance_flag() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "plugin \"slack\" has multiple connected instances.",
+            "app \"slack\" has multiple connected instances.",
         ))
         .stderr(predicate::str::contains(
             "Choose a connection and instance.",
