@@ -393,7 +393,7 @@ manifest entrypoint and passes the manifest entrypoint args:
 apps:
   support:
     source:
-      package: github.com/valon-technologies/gestalt-providers/apps/httpbin
+      package: github.com/valon-technologies/gestalt-providers/app/httpbin
       version: 0.0.1-alpha.1
     runtime:
       provider: modal
@@ -1221,7 +1221,7 @@ apps:
       path: /github
       bundle: github_console
     source:
-      package: github.com/valon-technologies/gestalt-providers/apps/github
+      package: github.com/valon-technologies/gestalt-providers/app/github
       version: 0.0.1-alpha.1
     surfaces:
       openapi:
@@ -1279,7 +1279,7 @@ For indexed providers, use a package source:
 
 ```yaml
 source:
-  package: github.com/valon-technologies/gestalt-providers/apps/github
+  package: github.com/valon-technologies/gestalt-providers/app/github
   version: ^1.2.0
 ```
 
@@ -1289,7 +1289,7 @@ when the package address exists in more than one repository:
 ```yaml
 source:
   repo: acme
-  package: github.com/acme/gestalt-providers/apps/support
+  package: github.com/acme/gestalt-providers/app/support
   version: ^1.3.0
 ```
 
@@ -1333,14 +1333,14 @@ apps:
 For exact published releases, point at a `provider-release.yaml` URL:
 
 ```yaml
-source: https://github.com/valon-technologies/gestalt-providers/releases/download/apps/github/v1.2.3/provider-release.yaml
+source: https://github.com/valon-technologies/gestalt-providers/releases/download/app/github/v1.2.3/provider-release.yaml
 ```
 
 Canonical metadata-source auth lives under `source.auth`. For direct metadata URLs:
 
 ```yaml
 source:
-  url: https://github.com/valon-technologies/gestalt-providers/releases/download/apps/github/v1.2.3/provider-release.yaml
+  url: https://github.com/valon-technologies/gestalt-providers/releases/download/app/github/v1.2.3/provider-release.yaml
   auth:
     token: ${APP_RELEASE_TOKEN}
 ```
