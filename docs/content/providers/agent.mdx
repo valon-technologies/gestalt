@@ -346,10 +346,9 @@ workflows:
               tools:
                 - app: roadmap
                   operation: items.get
-      permissions:
+      invokes:
         - app: roadmap
-          operations:
-            - items.get
+          operation: items.get
 ```
 
 For user-owned triggers, pass the full target object to the workflow CLI:
