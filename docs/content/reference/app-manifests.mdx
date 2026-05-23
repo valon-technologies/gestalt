@@ -128,7 +128,7 @@ Apps that back mounted apps may declare their UI artifact in the app manifest. D
 
 | Field  | Type   | Purpose                                                                                                                                                                         |
 | ------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path` | string | Relative path to a co-packaged `kind: ui` manifest. Source releases may point at sibling UI packages; `gestaltd provider release` rewrites them into the archive automatically. |
+| `path` | string | Relative path to a co-packaged `kind: ui` manifest. Source releases may point at sibling UI packages; `gestaltd provider package` rewrites them into the archive automatically. |
 
 When a deployment sets `apps.<name>.ui.path` and omits `apps.<name>.ui.bundle`, Gestalt synthesizes the mounted UI binding from this block.
 
@@ -326,7 +326,7 @@ spec:
 Hosted HTTP routes are declared in the manifest. Source apps written in Go,
 Python, Rust, or TypeScript implement the target operation in code, while
 `spec.securitySchemes` and `spec.http` remain the source of truth for mounted
-HTTP routes during local source execution and `gestaltd provider release`.
+HTTP routes during local source execution and `gestaltd provider package`.
 
 Gestalt parses query parameters into the operation input for every hosted HTTP
 binding. For request bodies, `application/json` object fields merge into the
@@ -614,7 +614,7 @@ The `artifacts` array lists platform-specific binaries included in the package.
 | `path`   | string | yes      | Path to the binary inside the package.              |
 | `sha256` | string | no       | SHA-256 hex digest for integrity verification.      |
 
-Declarative-only app packages do not require `artifacts`. Pure executable source manifests used with `apps.*.provider.source.path` or `gestaltd provider release` may omit them.
+Declarative-only app packages do not require `artifacts`. Pure executable source manifests used with `apps.*.provider.source.path` or `gestaltd provider package` may omit them.
 
 ## Full Example
 
@@ -911,15 +911,16 @@ providers declare their output with `spec.assetRoot`.
 
 ## Release
 
-Build a release from a provider source directory:
+Build release archives from a provider source directory, then finalize metadata:
 
 ```sh
-gestaltd provider release --version 1.2.3
+gestaltd provider package --version 1.2.3
+gestaltd provider release --dist-dir dist --version 1.2.3
 ```
 
-`gestaltd provider release` preserves the source manifest format, so
+`gestaltd provider package` preserves the source manifest format, so
 `manifest.yaml` stays YAML and `manifest.json` stays JSON in the release archive.
-For source manifests with object-form `build.command`, release runs the command
+For source manifests with object-form `build.command`, package runs the command
 before packaging. Executable providers must produce
 `entrypoint.artifactPath`; UI providers must produce `spec.assetRoot`. Released
 manifests strip `build` and `run`, then record the prepared `artifacts`
@@ -930,8 +931,8 @@ Executable source packages that are not SDK-native require `build.command` for
 release packaging and build the host-platform artifact by default.
 Platform-neutral packages, such as UI and declarative providers, produce a
 generic archive by default. Pass `--platform` for an explicit
-`os/arch[/libc]` target list, or `--platform all` in CI to build the full
+`os/arch` target list, or `--platform all` in CI to build the full
 supported release matrix. For explicit platforms, Gestalt sets target
 environment variables such as `GOOS`, `GOARCH`, `GESTALT_TARGET_OS`,
-`GESTALT_TARGET_ARCH`, and `GESTALT_TARGET_LIBC` for build scripts that need
+`GESTALT_TARGET_ARCH`, and `GESTALT_TARGET_PLATFORM` for build scripts that need
 them.

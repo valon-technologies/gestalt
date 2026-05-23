@@ -384,7 +384,8 @@ rejects indexes larger than 10 MiB.
 
 ## How to Develop Providers
 
-Build providers with the Gestalt SDKs and package them with
+Build providers with the Gestalt SDKs, create archives with
+`gestaltd provider package`, and finalize release metadata with
 `gestaltd provider release`.
 
 Implementation details live on each provider-kind page. Start with the kind you
@@ -439,7 +440,7 @@ Gestalt runs the command before source-manifest preparation, which lets UI
 packages generate static assets without checking built files into source
 control. The environment running
 `gestaltd lock`, `gestaltd sync --locked`, `gestaltd serve --path`, or
-`gestaltd provider release` must have the command's build tools available.
+`gestaltd provider package` must have the command's build tools available.
 `gestaltd serve --locked` only serves prepared static assets.
 
 ```yaml
@@ -504,22 +505,31 @@ spec:
 
 ### Build a release
 
-Use `gestaltd provider release` to build a provider release and produce release archives:
+Use `gestaltd provider package` to build provider release archives:
 
 ```sh
-gestaltd provider release --version 0.0.1-alpha.1
+gestaltd provider package --version 0.0.1-alpha.1
 ```
 
-Run it from the provider source directory. It writes release archives and
-checksums.
+Run it from the provider source directory. It writes release archives to `dist/`.
+Then finalize those archives:
 
-For source manifests that declare object-form `build.command`, release runs
+```sh
+gestaltd provider release --dist-dir dist --version 0.0.1-alpha.1
+```
+
+The release step validates the packaged archives, writes `checksums.txt`, and
+writes `provider-release.yaml` next to the archives. It does not run source
+build commands and can run after multiple platform-specific package jobs have
+collected their archives into one dist directory.
+
+For source manifests that declare object-form `build.command`, package runs
 that command, verifies that the declared output exists, strips `build` and
 `run` metadata from the packaged manifest, and records released artifacts. The
 build environment must provide whatever runtime or compiler the command invokes.
 When you pass `--platform`, Gestalt sets target environment variables such as
 `GOOS`, `GOARCH`, `GESTALT_TARGET_OS`, `GESTALT_TARGET_ARCH`, and
-`GESTALT_TARGET_LIBC` for build scripts that need them.
+`GESTALT_TARGET_PLATFORM` for build scripts that need them.
 
 ### Release archive layout
 

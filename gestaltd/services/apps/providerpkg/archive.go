@@ -9,6 +9,10 @@ func ReadPackageManifest(packagePath string) ([]byte, *providermanifestv1.Manife
 	return packageio.ReadPackageManifestIn(packagePath, ManifestFiles)
 }
 
+func InspectPackage(packagePath string) (*providermanifestv1.Manifest, error) {
+	return packageio.InspectPackageIn(packagePath, ManifestFiles)
+}
+
 func ReadManifestFile(p string) ([]byte, *providermanifestv1.Manifest, error) {
 	return packageio.ReadManifestFile(p)
 }

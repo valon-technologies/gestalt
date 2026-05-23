@@ -58,8 +58,9 @@ import { Callout } from 'nextra/components'
 | `gestaltd provider attach detach --remote URL ATTACH_ID` | Detach a stuck remote provider-dev attachment owned by your authenticated principal. |
 | `gestaltd provider validate --path PATH` | Validate a local source app or UI bundle inside the same synthesized Gestalt config used by `gestaltd serve --path`. |
 | `gestaltd provider validate --config PATH` | Validate the target provider together with selected supporting providers and `null` deletions from layered config overlays. |
-| `gestaltd provider release --version VERSION` | Build and package a provider release. Executable source providers use SDK-native source packages or `build.command` and default to the host platform; UI and declarative providers default to a generic archive. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
-| `gestaltd provider release --output DIR` | Output directory for the release archive. Defaults to `dist/`. |
+| `gestaltd provider package --version VERSION` | Build provider release archives from a source directory. Executable source providers use SDK-native source packages or `build.command` and default to the host platform; UI and declarative providers default to a generic archive. Pass `--platform ...` with `os/arch` targets or `--platform all` for multi-platform builds. |
+| `gestaltd provider package --output DIR` | Output directory for the release archives. Defaults to `dist/`. |
+| `gestaltd provider release --dist-dir DIR` | Finalize already-built release archives by validating them and writing `checksums.txt` and `provider-release.yaml` into the dist directory. |
 
 For config-free local development, inferred UI mount paths use the manifest
 `source` slug rather than the API-safe provider key. A source ending in
@@ -147,9 +148,10 @@ gestaltd serve --remote https://gestalt.example.com --config ./remote.yaml --con
 gestaltd provider attach list --remote https://gestalt.example.com
 gestaltd provider attach show --remote https://gestalt.example.com att_123
 gestaltd provider attach detach --remote https://gestalt.example.com att_123
-gestaltd provider release --version 0.0.1-alpha.1
-gestaltd provider release --version 0.0.1-alpha.1 --platform all
-gestaltd provider release --version 0.0.1-alpha.1 --platform linux/amd64,linux/arm64
+gestaltd provider package --version 0.0.1-alpha.1
+gestaltd provider package --version 0.0.1-alpha.1 --platform all
+gestaltd provider package --version 0.0.1-alpha.1 --platform linux/amd64,linux/arm64
+gestaltd provider release --dist-dir dist --version 0.0.1-alpha.1
 ```
 
 When repeated, `--config` files merge left-to-right. Maps deep-merge, later
